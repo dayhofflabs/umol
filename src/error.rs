@@ -4,7 +4,7 @@ use thiserror::Error;
 use crate::atom::Element;
 use crate::graph::{AtomIndex, BondIndex};
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum MoleculeError {
     #[error("Invalid element symbol: {0}")]
     InvalidElementSymbol(String),
