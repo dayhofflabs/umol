@@ -1,3 +1,10 @@
+# Summary
+
+* Value types for atom and bond types
+* Graph-centric API design always returns an atom index + atom type / bond index + bond type
+* Possible to create several convenience layers based on the graph-centric API
+* Molecule builder accepts atom type, returns atom index, same for bonds
+
 # Prompt
 Let's now reason through the identity and equality properties the GraphAtom and GraphBond types. These are value types with derived equality, which, in my understanding, means that every C atom (with the same change, ....) and every double bond, say, are not just equal but identical, correct? This is not quite consistent with the semantics of atom definitions in molecular graph definitions, in which atoms are distinguishable. Since the atoms are included in the graph data structure, it may be ok; in the end, the connectivity information makes the atoms distinct. However, I'm concerned that an atom itself does not have information about its environment. How can the API be designed so that one can always determine the environment whenever one is considering a given atom? Several scenarios come to mind:
 * Iterating over all atoms
@@ -125,14 +132,6 @@ I recommend the graph-centric API design (#1) as the foundation, with context-aw
 For substructure matching, the result would be a mapping of pattern atom indices to molecule atom indices, which preserves the context while allowing you to access the matched atoms.
 
 This approach aligns with Rust's ownership model and allows for clear reasoning about the lifetime of references to atoms and bonds.
-
-# Follow-Up
-
-Ok, this is great. I really like the approach of #1 and #2 as convenience layer. Moreover, #3 and #4 are built on top of #1, correct? In that case, it should always be possible to add them at a later stage.
-
-# Follow-Up
-
-Ok, this is great. I really like the approach of #1 and #2 as convenience layer. Moreover, #3 and #4 are built on top of #1, correct? In that case, it should always be possible to add them at a later stage.
 
 # Question
 

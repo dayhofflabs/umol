@@ -1,3 +1,7 @@
+# Summary
+
+* Completed 2025-03-12
+
 # Prompt
 
 With all of that, let's jump into the design process of the foundational Rust

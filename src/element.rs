@@ -1,13 +1,9 @@
-// Core AtomSite trait and Element enum
+// Element data and validation
 
-use crate::error::MoleculeError;
+use crate::error::Error;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
-
-pub trait AtomSite: Sized {
-    fn element(&self) -> Option<Element>;
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[rustfmt::skip]
@@ -180,11 +176,11 @@ impl Element {
         ELEMENT_DATA.get(self).unwrap().1
     }
 
-    pub fn validate_charge(&self, charge: i8) -> Result<(), MoleculeError> {
+    pub fn validate_charge(&self, charge: i8) -> Result<(), Error> {
         let (min_charge, max_charge) = ELEMENT_DATA.get(self).unwrap().3;
 
         if charge < min_charge || charge > max_charge {
-            return Err(MoleculeError::InvalidCharge {
+            return Err(Error::InvalidCharge {
                 element: *self,
                 charge,
                 min: min_charge,
@@ -194,11 +190,11 @@ impl Element {
         Ok(())
     }
 
-    pub fn validate_unpaired_electrons(&self, unpaired: u8) -> Result<(), MoleculeError> {
+    pub fn validate_unpaired_electrons(&self, unpaired: u8) -> Result<(), Error> {
         let max_unpaired = ELEMENT_DATA.get(self).unwrap().4;
 
         if unpaired > max_unpaired {
-            return Err(MoleculeError::InvalidUnpairedElectrons {
+            return Err(Error::InvalidUnpairedElectrons {
                 element: *self,
                 unpaired,
                 max: max_unpaired,

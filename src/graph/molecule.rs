@@ -2,8 +2,7 @@
 
 use super::types::{AtomIndex, BondIndex};
 use super::{bond::BondOrder, GraphAtom, GraphBond};
-use crate::atom::AtomSite;
-use crate::error::MoleculeError;
+use crate::{AtomSite, Error};
 use petgraph::stable_graph::StableGraph;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
@@ -187,20 +186,20 @@ impl GraphMoleculeBuilder {
         self.graph.add_node(atom.into()).into()
     }
 
-    pub fn add_bond(
+    pub fn add_bond<T: Into<GraphBond>>(
         &mut self,
         from: AtomIndex,
         to: AtomIndex,
-        order: BondOrder,
-    ) -> Result<BondIndex, MoleculeError> {
+        order: T,
+    ) -> Result<BondIndex, Error> {
         if !self.graph.contains_node(from.into()) {
-            return Err(MoleculeError::InvalidAtomIndex(from));
+            return Err(Error::InvalidAtomIndex(from));
         }
         if !self.graph.contains_node(to.into()) {
-            return Err(MoleculeError::InvalidAtomIndex(to));
+            return Err(Error::InvalidAtomIndex(to));
         }
 
-        let bond = GraphBond::new(order);
+        let bond = order.into();
         Ok(self
             .graph
             .add_edge(from.into(), to.into(), bond.into())
@@ -214,3 +213,218 @@ impl GraphMoleculeBuilder {
         }
     }
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::atom::Element;
+//     use crate::graph::atom::GraphAtom;
+//     use crate::graph::bond::{BondOrder, GraphBond};
+
+//     #[test]
+//     fn test_new_molecule() {
+//         let mol = GraphMolecule::new();
+//         assert_eq!(mol.atom_count(), 0);
+//         assert_eq!(mol.bond_count(), 0);
+//     }
+
+//     #[test]
+//     fn test_molecule_builder() {
+//         // Test building a simple molecule with the builder
+//         let mol = GraphMoleculeBuilder::new()
+//             .add_atom(GraphAtom::new(Element::C))
+//             .add_atom(GraphAtom::new(Element::O))
+//             .add_bond(0.into(), 1.into(), GraphBond::new(BondOrder::Double))
+//             .unwrap()
+//             .build();
+
+//         assert_eq!(mol.atom_count(), 2);
+//         assert_eq!(mol.bond_count(), 1);
+
+//         // Verify atom types
+//         let atoms: Vec<_> = mol.atoms().collect();
+//         for (idx, atom) in &atoms {
+//             if idx.index() == 0 {
+//                 assert_eq!(atom.element(), Some(Element::C));
+//             } else if idx.index() == 1 {
+//                 assert_eq!(atom.element(), Some(Element::O));
+//             }
+//         }
+
+//         // Verify bond
+//         let bonds: Vec<_> = mol.bonds().collect();
+//         assert_eq!(bonds.len(), 1);
+//         assert_eq!(bonds[0].1.order(), BondOrder::Double);
+//     }
+
+//     #[test]
+//     fn test_atom_access() {
+//         // Build a test molecule
+//         let mol = GraphMoleculeBuilder::new()
+//             .add_atom(GraphAtom::new(Element::C))
+//             .add_atom(GraphAtom::new(Element::O))
+//             .build();
+
+//         // Test atom retrieval by index
+//         let c_idx = AtomIndex::new(0);
+//         let o_idx = AtomIndex::new(1);
+
+//         let c_atom = mol.atom(c_idx).unwrap();
+//         let o_atom = mol.atom(o_idx).unwrap();
+
+//         assert_eq!(c_atom.element(), Some(Element::C));
+//         assert_eq!(o_atom.element(), Some(Element::O));
+
+//         // Test invalid atom index
+//         let invalid_idx = AtomIndex::new(999);
+//         assert!(mol.atom(invalid_idx).is_none());
+//     }
+
+//     #[test]
+//     fn test_bond_access() {
+//         // Build a test molecule with a bond
+//         let mut builder = GraphMoleculeBuilder::new();
+//         let c_idx = builder.add_atom(GraphAtom::new(Element::C));
+//         let o_idx = builder.add_atom(GraphAtom::new(Element::O));
+//         let bond_idx = builder.add_bond(c_idx, o_idx, GraphBond::new(BondOrder::Double)).unwrap();
+//         let mol = builder.build();
+
+//         // Test bond retrieval
+//         let bond = mol.bond(bond_idx).unwrap();
+//         assert_eq!(bond.order(), BondOrder::Double);
+
+//         // Test atoms connected by bond
+//         let (atom1, atom2) = mol.atoms_connected_by_bond(bond_idx).unwrap();
+//         assert!(
+//             (atom1 == c_idx && atom2 == o_idx) ||
+//             (atom1 == o_idx && atom2 == c_idx)
+//         );
+
+//         // Test invalid bond index
+//         let invalid_bond_idx = BondIndex::new(999);
+//         assert!(mol.bond(invalid_bond_idx).is_none());
+//         assert!(mol.atoms_connected_by_bond(invalid_bond_idx).is_none());
+//     }
+
+//     #[test]
+//     fn test_neighbors() {
+//         // Build a test molecule with a chain C-O-N
+//         let mut builder = GraphMoleculeBuilder::new();
+//         let c_idx = builder.add_atom(GraphAtom::new(Element::C));
+//         let o_idx = builder.add_atom(GraphAtom::new(Element::O));
+//         let n_idx = builder.add_atom(GraphAtom::new(Element::N));
+
+//         builder.add_bond(c_idx, o_idx, GraphBond::new(BondOrder::Single)).unwrap();
+//         builder.add_bond(o_idx, n_idx, GraphBond::new(BondOrder::Single)).unwrap();
+
+//         let mol = builder.build();
+
+//         // Test neighbors
+//         let c_neighbors = mol.neighbors(c_idx);
+//         assert_eq!(c_neighbors.len(), 1);
+//         assert_eq!(c_neighbors[0].0, o_idx);
+
+//         let o_neighbors = mol.neighbors(o_idx);
+//         assert_eq!(o_neighbors.len(), 2);
+//         assert!(o_neighbors.iter().any(|(idx, _)| *idx == c_idx));
+//         assert!(o_neighbors.iter().any(|(idx, _)| *idx == n_idx));
+
+//         // Test neighbors of invalid atom
+//         let invalid_idx = AtomIndex::new(999);
+//         assert!(mol.neighbors(invalid_idx).is_empty());
+//     }
+
+//     #[test]
+//     fn test_atom_iteration() {
+//         // Build a test molecule
+//         let mut builder = GraphMoleculeBuilder::new();
+//         let c_idx = builder.add_atom(GraphAtom::new(Element::C));
+//         let o_idx = builder.add_atom(GraphAtom::new(Element::O));
+//         let n_idx = builder.add_atom(GraphAtom::new(Element::N));
+//         let mol = builder.build();
+
+//         // Test atom iteration
+//         let atoms: Vec<_> = mol.atoms().collect();
+//         assert_eq!(atoms.len(), 3);
+
+//         // Check that all atoms are present
+//         let indices: Vec<_> = atoms.iter().map(|(idx, _)| *idx).collect();
+//         assert!(indices.contains(&c_idx));
+//         assert!(indices.contains(&o_idx));
+//         assert!(indices.contains(&n_idx));
+
+//         // Check that atoms match their indices
+//         for (idx, atom) in atoms {
+//             if idx == c_idx {
+//                 assert_eq!(atom.element(), Some(Element::C));
+//             } else if idx == o_idx {
+//                 assert_eq!(atom.element(), Some(Element::O));
+//             } else if idx == n_idx {
+//                 assert_eq!(atom.element(), Some(Element::N));
+//             }
+//         }
+//     }
+
+//     #[test]
+//     fn test_bond_iteration() {
+//         // Build a test molecule with bonds
+//         let mut builder = GraphMoleculeBuilder::new();
+//         let c_idx = builder.add_atom(GraphAtom::new(Element::C));
+//         let o_idx = builder.add_atom(GraphAtom::new(Element::O));
+//         let n_idx = builder.add_atom(GraphAtom::new(Element::N));
+
+//         let co_bond = builder.add_bond(c_idx, o_idx, GraphBond::new(BondOrder::Single)).unwrap();
+//         let on_bond = builder.add_bond(o_idx, n_idx, GraphBond::new(BondOrder::Double)).unwrap();
+
+//         let mol = builder.build();
+
+//         // Test bond iteration
+//         let bonds: Vec<_> = mol.bonds().collect();
+//         assert_eq!(bonds.len(), 2);
+
+//         // Check that all bonds are present with correct order
+//         let bond_indices: Vec<_> = bonds.iter().map(|(idx, _)| *idx).collect();
+//         assert!(bond_indices.contains(&co_bond));
+//         assert!(bond_indices.contains(&on_bond));
+
+//         for (idx, bond) in bonds {
+//             if idx == co_bond {
+//                 assert_eq!(bond.order(), BondOrder::Single);
+//             } else if idx == on_bond {
+//                 assert_eq!(bond.order(), BondOrder::Double);
+//             }
+//         }
+//     }
+
+//     #[test]
+//     fn test_formula() {
+//         // Test formula generation for a simple molecule
+//         let mol = GraphMoleculeBuilder::new()
+//             .add_atom(GraphAtom::new(Element::C))
+//             .add_atom(GraphAtom::new(Element::O))
+//             .add_atom(GraphAtom::new(Element::O))
+//             .add_atom(GraphAtom::new(Element::H))
+//             .add_atom(GraphAtom::new(Element::H))
+//             .build();
+
+//         assert_eq!(mol.formula(), "CH2O2");
+//     }
+
+//     #[test]
+//     fn test_display() {
+//         // Test string representation of a molecule
+//         let mut builder = GraphMoleculeBuilder::new();
+//         let c_idx = builder.add_atom(GraphAtom::new(Element::C));
+//         let o_idx = builder.add_atom(GraphAtom::new(Element::O));
+//         builder.add_bond(c_idx, o_idx, GraphBond::new(BondOrder::Double)).unwrap();
+
+//         let mol = builder.build();
+//         let display_str = format!("{}", mol);
+
+//         // Basic checks that the display output contains expected information
+//         assert!(display_str.contains("CO"));
+//         assert!(display_str.contains("2 atoms"));
+//         assert!(display_str.contains("C"));
+//         assert!(display_str.contains("O"));
+//     }
+// }

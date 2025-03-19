@@ -2,8 +2,8 @@
 
 use super::atom::GraphAtom;
 use super::types::AtomIndex;
-use crate::error::MoleculeError;
-use crate::link::AtomLink;
+use crate::error::Error;
+use crate::AtomLink;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
@@ -69,23 +69,23 @@ impl BondOrder {
 }
 
 impl TryFrom<&str> for BondOrder {
-    type Error = MoleculeError;
+    type Error = Error;
 
     fn try_from(symbol: &str) -> Result<Self, Self::Error> {
-        Self::from_symbol(symbol).ok_or_else(|| MoleculeError::InvalidBondOrder(symbol.to_string()))
+        Self::from_symbol(symbol).ok_or_else(|| Error::InvalidBondOrder(symbol.to_string()))
     }
 }
 
 impl TryFrom<u8> for BondOrder {
-    type Error = MoleculeError;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        Self::from_value(value).ok_or_else(|| MoleculeError::InvalidBondOrder(value.to_string()))
+        Self::from_value(value).ok_or_else(|| Error::InvalidBondOrder(value.to_string()))
     }
 }
 
 impl FromStr for BondOrder {
-    type Err = MoleculeError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::try_from(s)
@@ -148,7 +148,8 @@ impl Display for GraphBond {
     }
 }
 
-impl AtomLink<GraphAtom> for GraphBond {
+impl AtomLink for GraphBond {
+    type Site = GraphAtom;
     type SiteRef = AtomIndex;
 }
 
@@ -159,7 +160,7 @@ impl From<BondOrder> for GraphBond {
 }
 
 impl TryFrom<&str> for GraphBond {
-    type Error = MoleculeError;
+    type Error = Error;
 
     fn try_from(symbol: &str) -> Result<Self, Self::Error> {
         BondOrder::try_from(symbol).map(|order| order.into())

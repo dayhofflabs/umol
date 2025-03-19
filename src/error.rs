@@ -1,11 +1,11 @@
-// Error types for molecule validation
+// Error types
 
-use thiserror::Error;
-use crate::atom::Element;
 use crate::graph::{AtomIndex, BondIndex};
+use crate::Element;
+use thiserror;
 
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-pub enum MoleculeError {
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
+pub enum Error {
     #[error("Invalid element symbol: {0}")]
     InvalidElementSymbol(String),
     #[error("Invalid charge {charge} for element {element:?} (allowed range: {min} to {max})")]

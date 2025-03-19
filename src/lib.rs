@@ -1,12 +1,11 @@
 // Main library exports and documentation
 
-pub mod atom;
-pub mod link;
-pub mod molecule;
+pub mod element;
+pub mod error;
 pub mod graph;
 pub mod io;
-pub mod error;
+pub mod traits;
 
-pub use atom::{AtomSite, Element};
-pub use link::AtomLink;
-pub use molecule::Molecule;
+pub use element::Element;
+pub use error::Error;
+pub use traits::{AtomLink, AtomSite};

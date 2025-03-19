@@ -1,7 +1,7 @@
 // GraphAtom implementation
 
-use crate::atom::{AtomSite, Element};
-use crate::error::MoleculeError;
+use crate::Error;
+use crate::{AtomSite, Element};
 use std::fmt::{self, Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -23,7 +23,7 @@ impl GraphAtom {
         value.into()
     }
 
-    pub fn with_charge(mut self, charge: i8) -> Result<Self, MoleculeError> {
+    pub fn with_charge(mut self, charge: i8) -> Result<Self, Error> {
         if let Some(element) = self.element {
             element.validate_charge(charge)?;
         }
@@ -31,10 +31,7 @@ impl GraphAtom {
         Ok(self)
     }
 
-    pub fn with_unpaired_electrons(
-        mut self,
-        unpaired_electrons: u8,
-    ) -> Result<Self, MoleculeError> {
+    pub fn with_unpaired_electrons(mut self, unpaired_electrons: u8) -> Result<Self, Error> {
         if let Some(element) = self.element {
             element.validate_unpaired_electrons(unpaired_electrons)?;
         }
@@ -92,7 +89,7 @@ impl GraphAtomBuilder {
         self
     }
 
-    pub fn build(self) -> Result<GraphAtom, MoleculeError> {
+    pub fn build(self) -> Result<GraphAtom, Error> {
         let element = self.element.unwrap();
         if let Some(charge) = self.charge {
             element.validate_charge(charge)?;
@@ -122,12 +119,12 @@ impl From<Element> for GraphAtom {
 }
 
 impl TryFrom<&str> for GraphAtom {
-    type Error = MoleculeError;
+    type Error = Error;
 
     fn try_from(symbol: &str) -> Result<Self, Self::Error> {
         match Element::from_symbol(symbol) {
             Some(element) => Ok(element.into()),
-            None => Err(MoleculeError::InvalidElementSymbol(symbol.to_string())),
+            None => Err(Error::InvalidElementSymbol(symbol.to_string())),
         }
     }
 }
@@ -166,7 +163,7 @@ impl Display for GraphAtom {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atom::Element;
+    use crate::element::Element;
     use rstest::rstest;
 
     #[test]
@@ -231,9 +228,7 @@ mod tests {
     #[test]
     fn test_atom_builder_validation() {
         // Invalid charge
-        let result = GraphAtomBuilder::new(Element::H)
-            .charge(2)
-            .build();
+        let result = GraphAtomBuilder::new(Element::H).charge(2).build();
         assert!(result.is_err());
 
         // Invalid unpaired electrons
@@ -275,7 +270,7 @@ mod tests {
     #[case(Element::C, -1, 0, "[C-1]")]
     #[case(Element::C, 0, 2, "[C^2]")]
     #[case(Element::C, 1, 2, "[C+1^2]")]
-    #[case(Element::He, 0, 0, "[He]")]  // Two-letter element always gets brackets
+    #[case(Element::He, 0, 0, "[He]")] // Two-letter element always gets brackets
     fn test_atom_display(
         #[case] element: Element,
         #[case] charge: i8,
