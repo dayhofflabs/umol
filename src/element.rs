@@ -4,6 +4,7 @@ use crate::error::Error;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
+use map_macro::hash_map;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[rustfmt::skip]
@@ -19,126 +20,126 @@ pub enum Element {
 
 static ELEMENT_DATA: Lazy<HashMap<Element, (u8, f64, &'static str, (i8, i8), u8)>> =
     Lazy::new(|| {
-        let mut m = HashMap::new();
-        m.insert(Element::H, (1, 1.008, "H", (-1, 1), 1));
-        m.insert(Element::He, (2, 4.002602, "He", (0, 0), 0));
-        m.insert(Element::Li, (3, 6.94, "Li", (-1, 1), 1));
-        m.insert(Element::Be, (4, 9.0121831, "Be", (-2, 2), 2));
-        m.insert(Element::B, (5, 10.81, "B", (-3, 3), 3));
-        m.insert(Element::C, (6, 12.011, "C", (-4, 4), 4));
-        m.insert(Element::N, (7, 14.007, "N", (-3, 5), 3));
-        m.insert(Element::O, (8, 15.999, "O", (-2, 2), 2));
-        m.insert(Element::F, (9, 18.998403163, "F", (-1, 1), 1));
-        m.insert(Element::Ne, (10, 20.1797, "Ne", (0, 0), 0));
-        m.insert(Element::Na, (11, 22.98976928, "Na", (-1, 1), 1));
-        m.insert(Element::Mg, (12, 24.305, "Mg", (0, 2), 2));
-        m.insert(Element::Al, (13, 26.9815385, "Al", (-1, 3), 3));
-        m.insert(Element::Si, (14, 28.085, "Si", (-4, 4), 4));
-        m.insert(Element::P, (15, 30.973761998, "P", (-3, 5), 3));
-        m.insert(Element::S, (16, 32.06, "S", (-2, 6), 2));
-        m.insert(Element::Cl, (17, 35.45, "Cl", (-1, 7), 1));
-        m.insert(Element::Ar, (18, 39.948, "Ar", (0, 0), 0));
-        m.insert(Element::K, (19, 39.0983, "K", (-1, 1), 1));
-        m.insert(Element::Ca, (20, 40.078, "Ca", (0, 2), 2));
-        m.insert(Element::Sc, (21, 44.955908, "Sc", (-1, 3), 3));
-        m.insert(Element::Ti, (22, 47.867, "Ti", (-1, 4), 4));
-        m.insert(Element::V, (23, 50.9415, "V", (-1, 5), 5));
-        m.insert(Element::Cr, (24, 51.9961, "Cr", (-1, 6), 6));
-        m.insert(Element::Mn, (25, 54.938044, "Mn", (0, 7), 7));
-        m.insert(Element::Fe, (26, 55.845, "Fe", (-1, 6), 6));
-        m.insert(Element::Co, (27, 58.933194, "Co", (-1, 5), 5));
-        m.insert(Element::Ni, (28, 58.6934, "Ni", (-1, 4), 4));
-        m.insert(Element::Cu, (29, 63.546, "Cu", (-1, 3), 3));
-        m.insert(Element::Zn, (30, 65.38, "Zn", (0, 2), 2));
-        m.insert(Element::Ga, (31, 69.723, "Ga", (-1, 3), 3));
-        m.insert(Element::Ge, (32, 72.63, "Ge", (-4, 4), 4));
-        m.insert(Element::As, (33, 74.921595, "As", (-3, 5), 3));
-        m.insert(Element::Se, (34, 78.971, "Se", (-2, 6), 2));
-        m.insert(Element::Br, (35, 79.904, "Br", (-1, 7), 1));
-        m.insert(Element::Kr, (36, 83.798, "Kr", (0, 8), 2));
-        m.insert(Element::Rb, (37, 85.4678, "Rb", (-1, 1), 1));
-        m.insert(Element::Sr, (38, 87.62, "Sr", (0, 2), 2));
-        m.insert(Element::Y, (39, 88.90584, "Y", (-1, 3), 3));
-        m.insert(Element::Zr, (40, 91.224, "Zr", (-1, 4), 4));
-        m.insert(Element::Nb, (41, 92.90637, "Nb", (-1, 5), 5));
-        m.insert(Element::Mo, (42, 95.95, "Mo", (-1, 6), 6));
-        m.insert(Element::Tc, (43, 98.0, "Tc", (-1, 7), 7));
-        m.insert(Element::Ru, (44, 101.07, "Ru", (-1, 8), 6));
-        m.insert(Element::Rh, (45, 102.90550, "Rh", (-1, 6), 3));
-        m.insert(Element::Pd, (46, 106.42, "Pd", (-1, 4), 4));
-        m.insert(Element::Ag, (47, 107.8682, "Ag", (-1, 3), 3));
-        m.insert(Element::Cd, (48, 112.414, "Cd", (0, 2), 2));
-        m.insert(Element::In, (49, 114.818, "In", (-1, 3), 3));
-        m.insert(Element::Sn, (50, 118.710, "Sn", (-2, 4), 4));
-        m.insert(Element::Sb, (51, 121.760, "Sb", (-3, 5), 3));
-        m.insert(Element::Te, (52, 127.60, "Te", (-2, 6), 4));
-        m.insert(Element::I, (53, 126.90447, "I", (-1, 7), 1));
-        m.insert(Element::Xe, (54, 131.293, "Xe", (0, 8), 2));
-        m.insert(Element::Cs, (55, 132.90545196, "Cs", (-1, 1), 1));
-        m.insert(Element::Ba, (56, 137.327, "Ba", (0, 1), 1));
-        m.insert(Element::La, (57, 138.90547, "La", (-1, 3), 3));
-        m.insert(Element::Ce, (58, 140.116, "Ce", (-1, 4), 4));
-        m.insert(Element::Pr, (59, 140.90766, "Pr", (-1, 4), 5));
-        m.insert(Element::Nd, (60, 144.242, "Nd", (-1, 3), 6));
-        m.insert(Element::Pm, (61, 145.0, "Pm", (-1, 3), 5));
-        m.insert(Element::Sm, (62, 150.36, "Sm", (-1, 3), 6));
-        m.insert(Element::Eu, (63, 151.964, "Eu", (-1, 3), 9));
-        m.insert(Element::Gd, (64, 157.25, "Gd", (-1, 3), 10));
-        m.insert(Element::Tb, (65, 158.92535, "Tb", (-1, 4), 9));
-        m.insert(Element::Dy, (66, 162.500, "Dy", (-1, 3), 6));
-        m.insert(Element::Ho, (67, 164.93033, "Ho", (-1, 3), 5));
-        m.insert(Element::Er, (68, 167.259, "Er", (-1, 3), 6));
-        m.insert(Element::Tm, (69, 168.93422, "Tm", (-1, 3), 1));
-        m.insert(Element::Yb, (70, 173.045, "Yb", (-1, 3), 2));
-        m.insert(Element::Lu, (71, 174.9668, "Lu", (-1, 3), 3));
-        m.insert(Element::Hf, (72, 178.49, "Hf", (0, 4), 4));
-        m.insert(Element::Ta, (73, 180.94788, "Ta", (-1, 5), 5));
-        m.insert(Element::W, (74, 183.84, "W", (-1, 6), 6));
-        m.insert(Element::Re, (75, 186.207, "Re", (-1, 7), 7));
-        m.insert(Element::Os, (76, 190.23, "Os", (-1, 8), 6));
-        m.insert(Element::Ir, (77, 192.217, "Ir", (-1, 6), 5));
-        m.insert(Element::Pt, (78, 195.084, "Pt", (-1, 6), 4));
-        m.insert(Element::Au, (79, 196.966569, "Au", (-1, 3), 4));
-        m.insert(Element::Hg, (80, 200.592, "Hg", (0, 2), 2));
-        m.insert(Element::Tl, (81, 204.38, "Tl", (-1, 3), 3));
-        m.insert(Element::Pb, (82, 207.2, "Pb", (-2, 4), 4));
-        m.insert(Element::Bi, (83, 208.98040, "Bi", (-3, 3), 3));
-        m.insert(Element::Po, (84, 209.0, "Po", (-2, 6), 2));
-        m.insert(Element::At, (85, 210.0, "At", (-1, 7), 1));
-        m.insert(Element::Rn, (86, 222.0, "Rn", (0, 8), 2));
-        m.insert(Element::Fr, (87, 223.0, "Fr", (-1, 1), 1));
-        m.insert(Element::Ra, (88, 226.0, "Ra", (0, 2), 2));
-        m.insert(Element::Ac, (89, 227.0, "Ac", (0, 3), 3));
-        m.insert(Element::Th, (90, 232.0377, "Th", (0, 4), 4));
-        m.insert(Element::Pa, (91, 231.03588, "Pa", (0, 5), 3));
-        m.insert(Element::U, (92, 238.02891, "U", (0, 6), 4));
-        m.insert(Element::Np, (93, 237.0, "Np", (0, 7), 5));
-        m.insert(Element::Pu, (94, 244.0, "Pu", (0, 8), 6));
-        m.insert(Element::Am, (95, 243.0, "Am", (0, 7), 7));
-        m.insert(Element::Cm, (96, 247.0, "Cm", (0, 6), 8));
-        m.insert(Element::Bk, (97, 247.0, "Bk", (0, 5), 5));
-        m.insert(Element::Cf, (98, 251.0, "Cf", (0, 5), 4));
-        m.insert(Element::Es, (99, 252.0, "Es", (0, 4), 3));
-        m.insert(Element::Fm, (100, 257.0, "Fm", (0, 3), 2));
-        m.insert(Element::Md, (101, 258.0, "Md", (0, 3), 1));
-        m.insert(Element::No, (102, 259.0, "No", (0, 3), 0));
-        m.insert(Element::Lr, (103, 262.0, "Lr", (0, 3), 1));
-        m.insert(Element::Rf, (104, 267.0, "Rf", (0, 4), 2));
-        m.insert(Element::Db, (105, 270.0, "Db", (0, 5), 3));
-        m.insert(Element::Sg, (106, 271.0, "Sg", (0, 6), 4));
-        m.insert(Element::Bh, (107, 270.0, "Bh", (0, 7), 5));
-        m.insert(Element::Hs, (108, 277.0, "Hs", (0, 8), 6));
-        m.insert(Element::Mt, (109, 276.0, "Mt", (0, 6), 5));
-        m.insert(Element::Ds, (110, 281.0, "Ds", (0, 6), 4));
-        m.insert(Element::Rg, (111, 280.0, "Rg", (0, 5), 3));
-        m.insert(Element::Cn, (112, 285.0, "Cn", (0, 4), 2));
-        m.insert(Element::Nh, (113, 284.0, "Nh", (0, 0), 0));
-        m.insert(Element::Fl, (114, 289.0, "Fl", (0, 0), 0));
-        m.insert(Element::Mc, (115, 288.0, "Mc", (0, 0), 0));
-        m.insert(Element::Lv, (116, 293.0, "Lv", (0, 0), 0));
-        m.insert(Element::Ts, (117, 294.0, "Ts", (0, 0), 0));
-        m.insert(Element::Og, (118, 294.0, "Og", (0, 0), 0));
-        m
+        hash_map! {
+            Element::H => (1, 1.008, "H", (-1, 1), 1),
+            Element::He => (2, 4.002602, "He", (0, 0), 0),
+            Element::Li => (3, 6.94, "Li", (-1, 1), 1),
+            Element::Be => (4, 9.0121831, "Be", (-2, 2), 2),
+            Element::B => (5, 10.81, "B", (-3, 3), 3),
+            Element::C => (6, 12.011, "C", (-4, 4), 4),
+            Element::N => (7, 14.007, "N", (-3, 5), 3),
+            Element::O => (8, 15.999, "O", (-2, 2), 2),
+            Element::F => (9, 18.998403163, "F", (-1, 1), 1),
+            Element::Ne => (10, 20.1797, "Ne", (0, 0), 0),
+            Element::Na => (11, 22.98976928, "Na", (-1, 1), 1),
+            Element::Mg => (12, 24.305, "Mg", (0, 2), 2),
+            Element::Al => (13, 26.9815385, "Al", (-1, 3), 3),
+            Element::Si => (14, 28.085, "Si", (-4, 4), 4),
+            Element::P => (15, 30.973761998, "P", (-3, 5), 3),
+            Element::S => (16, 32.06, "S", (-2, 6), 2),
+            Element::Cl => (17, 35.45, "Cl", (-1, 7), 1),
+            Element::Ar => (18, 39.948, "Ar", (0, 0), 0),
+            Element::K => (19, 39.0983, "K", (-1, 1), 1),
+            Element::Ca => (20, 40.078, "Ca", (0, 2), 2),
+            Element::Sc => (21, 44.955908, "Sc", (-1, 3), 3),
+            Element::Ti => (22, 47.867, "Ti", (-1, 4), 4),
+            Element::V => (23, 50.9415, "V", (-1, 5), 5),
+            Element::Cr => (24, 51.9961, "Cr", (-1, 6), 6),
+            Element::Mn => (25, 54.938044, "Mn", (0, 7), 7),
+            Element::Fe => (26, 55.845, "Fe", (-1, 6), 6),
+            Element::Co => (27, 58.933194, "Co", (-1, 5), 5),
+            Element::Ni => (28, 58.6934, "Ni", (-1, 4), 4),
+            Element::Cu => (29, 63.546, "Cu", (-1, 3), 3),
+            Element::Zn => (30, 65.38, "Zn", (0, 2), 2),
+            Element::Ga => (31, 69.723, "Ga", (-1, 3), 3),
+            Element::Ge => (32, 72.63, "Ge", (-4, 4), 4),
+            Element::As => (33, 74.921595, "As", (-3, 5), 3),
+            Element::Se => (34, 78.971, "Se", (-2, 6), 2),
+            Element::Br => (35, 79.904, "Br", (-1, 7), 1),
+            Element::Kr => (36, 83.798, "Kr", (0, 8), 2),
+            Element::Rb => (37, 85.4678, "Rb", (-1, 1), 1),
+            Element::Sr => (38, 87.62, "Sr", (0, 2), 2),
+            Element::Y => (39, 88.90584, "Y", (-1, 3), 3),
+            Element::Zr => (40, 91.224, "Zr", (-1, 4), 4),
+            Element::Nb => (41, 92.90637, "Nb", (-1, 5), 5),
+            Element::Mo => (42, 95.95, "Mo", (-1, 6), 6),
+            Element::Tc => (43, 98.0, "Tc", (-1, 7), 7),
+            Element::Ru => (44, 101.07, "Ru", (-1, 8), 6),
+            Element::Rh => (45, 102.90550, "Rh", (-1, 6), 3),
+            Element::Pd => (46, 106.42, "Pd", (-1, 4), 4),
+            Element::Ag => (47, 107.8682, "Ag", (-1, 3), 3),
+            Element::Cd => (48, 112.414, "Cd", (0, 2), 2),
+            Element::In => (49, 114.818, "In", (-1, 3), 3),
+            Element::Sn => (50, 118.710, "Sn", (-2, 4), 4),
+            Element::Sb => (51, 121.760, "Sb", (-3, 5), 3),
+            Element::Te => (52, 127.60, "Te", (-2, 6), 4),
+            Element::I => (53, 126.90447, "I", (-1, 7), 1),
+            Element::Xe => (54, 131.293, "Xe", (0, 8), 2),
+            Element::Cs => (55, 132.90545196, "Cs", (-1, 1), 1),
+            Element::Ba => (56, 137.327, "Ba", (0, 2), 2),
+            Element::La => (57, 138.90547, "La", (-1, 3), 3),
+            Element::Ce => (58, 140.116, "Ce", (-1, 4), 4),
+            Element::Pr => (59, 140.90766, "Pr", (-1, 4), 5),
+            Element::Nd => (60, 144.242, "Nd", (-1, 3), 6),
+            Element::Pm => (61, 145.0, "Pm", (-1, 3), 5),
+            Element::Sm => (62, 150.36, "Sm", (-1, 3), 6),
+            Element::Eu => (63, 151.964, "Eu", (-1, 3), 9),
+            Element::Gd => (64, 157.25, "Gd", (-1, 3), 10),
+            Element::Tb => (65, 158.92535, "Tb", (-1, 4), 9),
+            Element::Dy => (66, 162.500, "Dy", (-1, 3), 6),
+            Element::Ho => (67, 164.93033, "Ho", (-1, 3), 5),
+            Element::Er => (68, 167.259, "Er", (-1, 3), 6),
+            Element::Tm => (69, 168.93422, "Tm", (-1, 3), 1),
+            Element::Yb => (70, 173.045, "Yb", (-1, 3), 2),
+            Element::Lu => (71, 174.9668, "Lu", (-1, 3), 3),
+            Element::Hf => (72, 178.49, "Hf", (0, 4), 4),
+            Element::Ta => (73, 180.94788, "Ta", (-1, 5), 5),
+            Element::W => (74, 183.84, "W", (-1, 6), 6),
+            Element::Re => (75, 186.207, "Re", (-1, 7), 7),
+            Element::Os => (76, 190.23, "Os", (-1, 8), 6),
+            Element::Ir => (77, 192.217, "Ir", (-1, 6), 5),
+            Element::Pt => (78, 195.084, "Pt", (-1, 6), 4),
+            Element::Au => (79, 196.966569, "Au", (-1, 3), 4),
+            Element::Hg => (80, 200.592, "Hg", (0, 2), 2),
+            Element::Tl => (81, 204.38, "Tl", (-1, 3), 3),
+            Element::Pb => (82, 207.2, "Pb", (-2, 4), 4),
+            Element::Bi => (83, 208.98040, "Bi", (-3, 3), 3),
+            Element::Po => (84, 209.0, "Po", (-2, 6), 2),
+            Element::At => (85, 210.0, "At", (-1, 7), 1),
+            Element::Rn => (86, 222.0, "Rn", (0, 8), 2),
+            Element::Fr => (87, 223.0, "Fr", (-1, 1), 1),
+            Element::Ra => (88, 226.0, "Ra", (0, 2), 2),
+            Element::Ac => (89, 227.0, "Ac", (0, 3), 3),
+            Element::Th => (90, 232.0377, "Th", (0, 4), 4),
+            Element::Pa => (91, 231.03588, "Pa", (0, 5), 3),
+            Element::U => (92, 238.02891, "U", (0, 6), 4),
+            Element::Np => (93, 237.0, "Np", (0, 7), 5),
+            Element::Pu => (94, 244.0, "Pu", (0, 8), 6),
+            Element::Am => (95, 243.0, "Am", (0, 7), 7),
+            Element::Cm => (96, 247.0, "Cm", (0, 6), 8),
+            Element::Bk => (97, 247.0, "Bk", (0, 5), 5),
+            Element::Cf => (98, 251.0, "Cf", (0, 5), 4),
+            Element::Es => (99, 252.0, "Es", (0, 4), 3),
+            Element::Fm => (100, 257.0, "Fm", (0, 3), 2),
+            Element::Md => (101, 258.0, "Md", (0, 3), 1),
+            Element::No => (102, 259.0, "No", (0, 3), 0),
+            Element::Lr => (103, 262.0, "Lr", (0, 3), 1),
+            Element::Rf => (104, 267.0, "Rf", (0, 4), 2),
+            Element::Db => (105, 270.0, "Db", (0, 5), 3),
+            Element::Sg => (106, 271.0, "Sg", (0, 6), 4),
+            Element::Bh => (107, 270.0, "Bh", (0, 7), 5),
+            Element::Hs => (108, 277.0, "Hs", (0, 8), 6),
+            Element::Mt => (109, 276.0, "Mt", (0, 6), 5),
+            Element::Ds => (110, 281.0, "Ds", (0, 6), 4),
+            Element::Rg => (111, 280.0, "Rg", (0, 5), 3),
+            Element::Cn => (112, 285.0, "Cn", (0, 4), 2),
+            Element::Nh => (113, 284.0, "Nh", (0, 0), 0),
+            Element::Fl => (114, 289.0, "Fl", (0, 0), 0),
+            Element::Mc => (115, 288.0, "Mc", (0, 0), 0),
+            Element::Lv => (116, 293.0, "Lv", (0, 0), 0),
+            Element::Ts => (117, 294.0, "Ts", (0, 0), 0),
+            Element::Og => (118, 294.0, "Og", (0, 0), 0),
+        }
     });
 
 static SYMBOL_TO_ELEMENT: Lazy<HashMap<&'static str, Element>> = Lazy::new(|| {
