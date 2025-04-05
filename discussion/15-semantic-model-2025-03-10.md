@@ -46,10 +46,10 @@ The semantic model consists of three sets of entities, each forming a graph stru
     collections of molecules, sets of reactants, sets of products.
   - Examples of transformations: changes in spatial structure (conformers), changes in bonding 
     (reactions, transition states), alchimical changes (library generation).
-  * Conversions between structures are usually not lossy?
-  * Structures may include unstable entities such as transition states.
-  * Transformations may be parameterized by continuous variables (e.g., reaction coordinates).
-  * Paths through the Structure Graph can represent complex reactions or processes.
+  - Conversions between structures are usually not lossy?
+  - Structures may include unstable entities such as transition states.
+  - Transformations may be parameterized by continuous variables (e.g., reaction coordinates).
+  - Paths through the Structure Graph can represent complex reactions or processes.
 * __Model Graph__. Nodes: models, edges: conversions between models
   - Represents different views of the chemical system.
   - Examples of models: sum formula, molecular graph with discrete bonds, three-dimensional

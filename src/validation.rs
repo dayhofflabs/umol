@@ -163,10 +163,7 @@ impl ValidationSet {
         if all_errors.is_empty() {
             Ok(())
         } else {
-            let error_strings = all_errors.iter()
-                .map(|e| format!("{}", e))
-                .collect();
-            Err(vec![Error::ValidationFailed(error_strings)])
+            Err(all_errors)
         }
     }
     

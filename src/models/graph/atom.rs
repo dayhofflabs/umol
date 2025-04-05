@@ -1,25 +1,26 @@
-// GraphAtom implementation
+// Graph atom implementation
 
-use crate::Error;
-use crate::{AtomSite, Element};
+use crate::error::Error;
+use crate::Element;
+use crate::core::types::AtomSite;
 use std::fmt::{self, Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct GraphAtom {
+pub struct Atom {
     element: Option<Element>,
     charge: i8,
     unpaired_electrons: u8,
     implicit_hydrogens: u8,
 }
 
-impl AtomSite for GraphAtom {
+impl AtomSite for Atom {
     fn element(&self) -> Option<Element> {
         self.element
     }
 }
 
-impl GraphAtom {
-    pub fn new<T: Into<GraphAtom>>(value: T) -> Self {
+impl Atom {
+    pub fn new<T: Into<Atom>>(value: T) -> Self {
         value.into()
     }
 
@@ -57,14 +58,14 @@ impl GraphAtom {
     }
 }
 
-pub struct GraphAtomBuilder {
+pub struct AtomBuilder {
     element: Option<Element>,
     charge: Option<i8>,
     unpaired_electrons: Option<u8>,
     implicit_hydrogens: Option<u8>,
 }
 
-impl GraphAtomBuilder {
+impl AtomBuilder {
     pub fn new(element: Element) -> Self {
         Self {
             element: Some(element),
@@ -89,7 +90,7 @@ impl GraphAtomBuilder {
         self
     }
 
-    pub fn build(self) -> Result<GraphAtom, Error> {
+    pub fn build(self) -> Result<Atom, Error> {
         let element = self.element.unwrap();
         if let Some(charge) = self.charge {
             element.validate_charge(charge)?;
@@ -98,7 +99,7 @@ impl GraphAtomBuilder {
             element.validate_unpaired_electrons(unpaired)?;
         }
 
-        Ok(GraphAtom {
+        Ok(Atom {
             element: self.element,
             charge: self.charge.unwrap_or(0),
             unpaired_electrons: self.unpaired_electrons.unwrap_or(0),
@@ -107,9 +108,9 @@ impl GraphAtomBuilder {
     }
 }
 
-impl From<Element> for GraphAtom {
+impl From<Element> for Atom {
     fn from(element: Element) -> Self {
-        GraphAtom {
+        Atom {
             element: Some(element),
             charge: 0,
             unpaired_electrons: 0,
@@ -118,7 +119,7 @@ impl From<Element> for GraphAtom {
     }
 }
 
-impl TryFrom<&str> for GraphAtom {
+impl TryFrom<&str> for Atom {
     type Error = Error;
 
     fn try_from(symbol: &str) -> Result<Self, Self::Error> {
@@ -129,7 +130,7 @@ impl TryFrom<&str> for GraphAtom {
     }
 }
 
-impl Display for GraphAtom {
+impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let element = self.element.unwrap();
         let symbol = element.symbol();
@@ -168,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_atom_new() {
-        let atom = GraphAtom::new(Element::C);
+        let atom = Atom::new(Element::C);
         assert_eq!(atom.element(), Some(Element::C));
         assert_eq!(atom.charge(), 0);
         assert_eq!(atom.unpaired_electrons(), 0);
@@ -177,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_atom_with_charge() {
-        let atom = GraphAtom::new(Element::C);
+        let atom = Atom::new(Element::C);
         let atom = atom.with_charge(1).unwrap();
         assert_eq!(atom.charge(), 1);
 
@@ -185,19 +186,19 @@ mod tests {
         assert_eq!(atom.charge(), -1);
 
         // Test validation
-        let atom = GraphAtom::new(Element::H);
+        let atom = Atom::new(Element::H);
         assert!(atom.with_charge(2).is_err());
         assert!(atom.with_charge(-2).is_err());
     }
 
     #[test]
     fn test_atom_with_unpaired_electrons() {
-        let atom = GraphAtom::new(Element::C);
+        let atom = Atom::new(Element::C);
         let atom = atom.with_unpaired_electrons(2).unwrap();
         assert_eq!(atom.unpaired_electrons(), 2);
 
         // Test validation
-        let atom = GraphAtom::new(Element::H);
+        let atom = Atom::new(Element::H);
         assert!(atom.with_unpaired_electrons(2).is_err());
         assert!(atom.with_unpaired_electrons(0).is_ok());
         assert!(atom.with_unpaired_electrons(1).is_ok());
@@ -205,14 +206,14 @@ mod tests {
 
     #[test]
     fn test_atom_with_implicit_hydrogens() {
-        let atom = GraphAtom::new(Element::C);
+        let atom = Atom::new(Element::C);
         let atom = atom.with_implicit_hydrogens(4);
         assert_eq!(atom.implicit_hydrogens(), 4);
     }
 
     #[test]
     fn test_atom_builder() {
-        let atom = GraphAtomBuilder::new(Element::N)
+        let atom = AtomBuilder::new(Element::N)
             .charge(-1)
             .unpaired_electrons(2)
             .implicit_hydrogens(1)
@@ -228,17 +229,17 @@ mod tests {
     #[test]
     fn test_atom_builder_validation() {
         // Invalid charge
-        let result = GraphAtomBuilder::new(Element::H).charge(2).build();
+        let result = AtomBuilder::new(Element::H).charge(2).build();
         assert!(result.is_err());
 
         // Invalid unpaired electrons
-        let result = GraphAtomBuilder::new(Element::H)
+        let result = AtomBuilder::new(Element::H)
             .unpaired_electrons(2)
             .build();
         assert!(result.is_err());
 
         // Valid combination
-        let result = GraphAtomBuilder::new(Element::C)
+        let result = AtomBuilder::new(Element::C)
             .charge(-1)
             .unpaired_electrons(3)
             .build();
@@ -247,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_atom_from_element() {
-        let atom: GraphAtom = Element::O.into();
+        let atom: Atom = Element::O.into();
         assert_eq!(atom.element(), Some(Element::O));
         assert_eq!(atom.charge(), 0);
         assert_eq!(atom.unpaired_electrons(), 0);
@@ -255,13 +256,13 @@ mod tests {
 
     #[test]
     fn test_atom_try_from_str() {
-        let atom = GraphAtom::try_from("C").unwrap();
+        let atom = Atom::try_from("C").unwrap();
         assert_eq!(atom.element(), Some(Element::C));
 
-        let atom = GraphAtom::try_from("N").unwrap();
+        let atom = Atom::try_from("N").unwrap();
         assert_eq!(atom.element(), Some(Element::N));
 
-        assert!(GraphAtom::try_from("Xx").is_err());
+        assert!(Atom::try_from("Xx").is_err());
     }
 
     #[rstest]
@@ -277,7 +278,7 @@ mod tests {
         #[case] unpaired: u8,
         #[case] expected: &str,
     ) {
-        let mut atom = GraphAtom::new(element);
+        let mut atom = Atom::new(element);
         if charge != 0 {
             atom = atom.with_charge(charge).unwrap();
         }
@@ -289,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_atom_site_trait() {
-        let atom = GraphAtom::new(Element::F);
+        let atom = Atom::new(Element::F);
         assert_eq!(atom.element(), Some(Element::F));
     }
 }

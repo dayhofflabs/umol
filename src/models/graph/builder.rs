@@ -3,10 +3,42 @@
 use crate::{Error, Element};
 use crate::graph::{GraphAtom, GraphBond, GraphMolecule, AtomIndex, BondIndex};
 use crate::graph::bond::BondOrder;
-use crate::graph::fragment::Fragment;
+use crate::graph::fragment::{MolecularEntity, Fragment};
 use crate::validation::ValidationSet;
 use petgraph::stable_graph::{StableGraph, NodeIndex, EdgeIndex};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
+use crate::core::types::{AtomIndex, BondIndex};
+use super::{Atom, Bond, Molecule};
+
+/// A builder for constructing molecules
+pub struct Builder {
+    molecule: Molecule,
+}
+
+impl Builder {
+    /// Create a new builder
+    pub fn new() -> Self {
+        Self {
+            molecule: Molecule::new(),
+        }
+    }
+
+    /// Add an atom to the molecule
+    pub fn add_atom(&mut self, atom: Atom) -> AtomIndex {
+        self.molecule.add_atom(atom)
+    }
+
+    /// Add a bond between two atoms
+    pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: Bond) -> BondIndex {
+        self.molecule.add_bond(a, b, bond)
+    }
+
+    /// Build the molecule
+    pub fn build(self) -> Molecule {
+        self.molecule
+    }
+}
 
 /// The main molecule builder
 pub struct MoleculeBuilder {
@@ -70,20 +102,33 @@ impl MoleculeBuilder {
         Ok(SelectionContext { builder: self, selected: vec![idx] })
     }
     
-    /// Add a molecular fragment at the active atom
-    pub fn add_fragment<F: Fragment>(self, fragment: F) -> Result<Self, Error> {
-        fragment.add_to_builder(self)
+    /// Add a molecular entity at the active atom
+    pub fn add_entity<E: MolecularEntity>(self, entity: &E) -> Result<Self, Error> {
+        entity.add_to_builder(self, self.active_atom)
+    }
+    
+    /// Add a fragment at the active atom
+    pub fn add_fragment<F: Fragment>(self, fragment: &F) -> Result<Self, Error> {
+        fragment.add_to_builder(self, self.active_atom)
     }
     
     /// Validate the molecule under construction
-    pub fn validate(&self) -> Result<(), Vec<Error>> {
+    pub fn validate(&self) -> Result<(), Vec<String>> {
         // Create a temporary molecule for validation
         let molecule = GraphMolecule {
             graph: self.graph.clone(),
             properties: HashMap::new(),
         };
         
-        self.validation_set.validate(&molecule)
+        match self.validation_set.validate(&molecule) {
+            Ok(()) => Ok(()),
+            Err(errors) => {
+                let error_strings = errors.iter()
+                    .map(|e| format!("{}", e))
+                    .collect();
+                Err(error_strings)
+            }
+        }
     }
     
     /// Finalize and build the molecule

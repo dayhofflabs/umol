@@ -1,13 +1,21 @@
 // Main library exports and documentation
 
+pub mod core;
 pub mod element;
-pub mod error;
-pub mod graph;
-pub mod io;
-pub mod traits;
+pub mod models;
 pub mod validation;
 
 pub use element::Element;
-pub use error::Error;
-pub use traits::{AtomLink, AtomSite};
+pub use core::error::{Error, Result};
 pub use validation::ValidationSet;
+
+// Re-export commonly used graph model types
+pub use models::graph::{
+    Atom,
+    Bond,
+    Molecule,
+    Builder,
+    Fragment,
+    Query,
+    Template,
+};

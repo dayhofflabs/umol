@@ -1,9 +1,9 @@
-// GraphBond implementation
+// Graph bond implementation
 
-use super::atom::GraphAtom;
+use super::atom::Atom;
 use super::types::AtomIndex;
 use crate::error::Error;
-use crate::AtomLink;
+use crate::core::types::AtomLink;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
@@ -104,14 +104,14 @@ impl Display for BondOrder {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct GraphBond {
+pub struct Bond {
     order: BondOrder,
     // Add a properties field if you want to support properties
 }
 
-impl GraphBond {
+impl Bond {
     pub fn new(order: BondOrder) -> Self {
-        GraphBond { order }
+        Bond { order }
     }
 
     pub fn single() -> Self {
@@ -142,24 +142,24 @@ impl GraphBond {
     // Add property methods if you want to support properties
 }
 
-impl Display for GraphBond {
+impl Display for Bond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.order)
     }
 }
 
-impl AtomLink for GraphBond {
-    type Site = GraphAtom;
+impl AtomLink for Bond {
+    type Site = Atom;
     type SiteRef = AtomIndex;
 }
 
-impl From<BondOrder> for GraphBond {
+impl From<BondOrder> for Bond {
     fn from(order: BondOrder) -> Self {
-        GraphBond::new(order)
+        Bond::new(order)
     }
 }
 
-impl TryFrom<&str> for GraphBond {
+impl TryFrom<&str> for Bond {
     type Error = Error;
 
     fn try_from(symbol: &str) -> Result<Self, Self::Error> {
@@ -167,7 +167,7 @@ impl TryFrom<&str> for GraphBond {
     }
 }
 
-// Add GraphBondBuilder if you want to support the builder pattern
+// Add BondBuilder if you want to support the builder pattern
 
 #[cfg(test)]
 mod tests {
@@ -176,19 +176,19 @@ mod tests {
 
     #[test]
     fn test_bond_new() {
-        let bond = GraphBond::new(BondOrder::Single);
+        let bond = Bond::new(BondOrder::Single);
         assert_eq!(bond.order(), BondOrder::Single);
 
-        let bond = GraphBond::new(BondOrder::Double);
+        let bond = Bond::new(BondOrder::Double);
         assert_eq!(bond.order(), BondOrder::Double);
 
-        let bond = GraphBond::new(BondOrder::Triple);
+        let bond = Bond::new(BondOrder::Triple);
         assert_eq!(bond.order(), BondOrder::Triple);
     }
 
     #[test]
     fn test_bond_with_order() {
-        let bond = GraphBond::new(BondOrder::Single);
+        let bond = Bond::new(BondOrder::Single);
         let bond = bond.with_order(BondOrder::Double);
         assert_eq!(bond.order(), BondOrder::Double);
 
@@ -225,10 +225,10 @@ mod tests {
 
     #[test]
     fn test_bond_display() {
-        let bond = GraphBond::new(BondOrder::Single);
+        let bond = Bond::new(BondOrder::Single);
         assert_eq!(format!("{}", bond), "-");
 
-        let bond = GraphBond::new(BondOrder::Double);
+        let bond = Bond::new(BondOrder::Double);
         assert_eq!(format!("{}", bond), "=");
     }
 
@@ -252,10 +252,10 @@ mod tests {
 
     #[test]
     fn test_bond_from_bond_order() {
-        let bond: GraphBond = BondOrder::Single.into();
+        let bond: Bond = BondOrder::Single.into();
         assert_eq!(bond.order(), BondOrder::Single);
 
-        let bond: GraphBond = BondOrder::Double.into();
+        let bond: Bond = BondOrder::Double.into();
         assert_eq!(bond.order(), BondOrder::Double);
     }
 
