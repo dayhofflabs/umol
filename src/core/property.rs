@@ -1,3 +1,11 @@
+//! Property definitions and calculations.
+//! 
+//! Properties are calculations that can be performed on models:
+//! - Property definitions with metadata
+//! - Capability requirements for calculations
+//! - Computation results and error handling
+//! - Property relationships and dependencies
+
 use std::collections::HashSet;
 use crate::core::{Capability, Entity, Instance, Model, Result};
 

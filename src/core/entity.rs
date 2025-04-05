@@ -1,3 +1,10 @@
+//! Entity traits and relationships.
+//! 
+//! Entities represent the semantic objects in molecular modeling:
+//! - Abstract entities (atoms, bonds, molecules)
+//! - Entity relationships (generalizes, specializes)
+//! - Identity and equality semantics
+
 use crate::core::Error;
 
 /// Represents entities in the chemical domain (structures, conformers, etc.)

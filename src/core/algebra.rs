@@ -1,4 +1,12 @@
-use crate::core::Model;
+//! Algebraic operations on molecular objects.
+//! 
+//! This module provides algebraic structures for molecular modeling:
+//! - Ensembles of molecular objects
+//! - Aggregation operations
+//! - Mathematical operations on models
+//! - Transformations and symmetries
+
+use crate::core::{Entity, Model, Result};
 
 /// Represents an ensemble of models with weights (e.g., conformers, resonance structures)
 pub trait Ensemble<M: Model> {

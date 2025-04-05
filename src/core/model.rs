@@ -1,3 +1,10 @@
+//! Core model traits and types.
+//! 
+//! This module defines the fundamental abstractions for molecular models:
+//! - Model trait for representing molecular systems
+//! - Capability system for describing model features
+//! - Basic model operations and validations
+
 use std::collections::HashSet;
 
 /// Capabilities that models can provide

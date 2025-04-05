@@ -1,22 +1,35 @@
+//! Error types and handling.
+//! 
+//! This module defines the error types used throughout umol:
+//! - Core error types and results
+//! - Plugin-related errors
+//! - Model and property errors
+//! - IO and conversion errors
+//! - Error conversion traits
+
 use thiserror::Error;
+use std::error::Error as StdError;
+use std::fmt;
+use semver::Version;
+use crate::core::Capability;
 
 /// Core error types for the molecular modeling framework
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("Entity error: {0}")]
-    Entity(#[from] EntityError),
+    Entity(EntityError),
 
     #[error("Model error: {0}")]
-    Model(#[from] ModelError),
+    Model(ModelError),
 
     #[error("Conversion error: {0}")]
-    Conversion(#[from] ConversionError),
+    Conversion(ConversionError),
 
     #[error("Operation error: {0}")]
-    Operation(#[from] OperationError),
+    Operation(OperationError),
 
     #[error("Property error: {0}")]
-    Property(#[from] PropertyError),
+    Property(PropertyError),
 
     #[error("Validation error: {0}")]
     ValidationError(String),
@@ -26,6 +39,78 @@ pub enum Error {
 
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+
+    // Plugin-related errors
+    #[error("Invalid capability format: {0}")]
+    InvalidCapability(String),
+    
+    #[error("Required plugin not found: {0}")]
+    MissingPlugin(String),
+    
+    #[error("Plugin {plugin} version mismatch: required {required}, found {found}")]
+    PluginVersionMismatch {
+        plugin: String,
+        required: Version,
+        found: Version,
+    },
+    
+    #[error("Required capability not found: {0}")]
+    MissingCapability(Capability),
+    
+    // Component-related errors
+    #[error("Property not found: {0}")]
+    PropertyNotFound(String),
+    
+    #[error("Model not found: {0}")]
+    ModelNotFound(String),
+    
+    #[error("No conversion found from {0} to {1}")]
+    ConversionNotFound(String, String),
+    
+    #[error("Format not found: {0}")]
+    FormatNotFound(String),
+    
+    // Initialization errors
+    #[error("Component initialization failed: {0}")]
+    ComponentInitError(#[from] Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::InvalidCapability(cap) => 
+                write!(f, "Invalid capability format: {}", cap),
+            Error::MissingPlugin(name) => 
+                write!(f, "Required plugin not found: {}", name),
+            Error::PluginVersionMismatch { plugin, required, found } => 
+                write!(f, "Plugin {} version mismatch: required {}, found {}", 
+                    plugin, required, found),
+            Error::MissingCapability(cap) => 
+                write!(f, "Required capability not found: {}", cap.to_string()),
+            Error::PropertyNotFound(name) => 
+                write!(f, "Property not found: {}", name),
+            Error::ModelNotFound(name) => 
+                write!(f, "Model not found: {}", name),
+            Error::ConversionNotFound(from, to) => 
+                write!(f, "No conversion found from {} to {}", from, to),
+            Error::FormatNotFound(name) => 
+                write!(f, "Format not found: {}", name),
+            Error::ComponentInitError(e) => 
+                write!(f, "Component initialization failed: {}", e),
+            Error::Other(e) => 
+                write!(f, "Error: {}", e),
+        }
+    }
+}
+
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            Error::ComponentInitError(e) => Some(e.as_ref()),
+            Error::Other(e) => Some(e.as_ref()),
+            _ => None,
+        }
+    }
 }
 
 /// Errors related to chemical entities

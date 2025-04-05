@@ -1,38 +1,45 @@
-// Core conversion trait
+// Core conversion traits
 
-use crate::error::Error;
-use crate::core::model::Model;
+use crate::core::{Error, Model, Result};
+use std::collections::HashMap;
 
-/// A trait for converting between different molecular models
+/// A trait for basic conversion between molecular models
 pub trait ConvertTo<M: Model> {
     /// Convert this model to another model
-    fn convert_to(&self) -> Result<M, Error>;
-}
-
-/// A trait for converting between different molecular models with metadata
-pub trait ConvertToWithMetadata<M: Model> {
-    /// The type of metadata associated with the conversion
-    type Metadata;
-
-    /// Convert this model to another model with metadata
-    fn convert_to_with_metadata(&self) -> Result<(M, Self::Metadata), Error>;
+    fn convert_to(&self) -> Result<M>;
 }
 
 /// Metadata about a model conversion
+#[derive(Debug, Clone, Default)]
 pub struct ConversionMetadata {
-    // Add fields as needed
+    /// Uncertainty information for the conversion
+    pub uncertainty: Option<f64>,
+    /// Any additional metadata as string key-value pairs
+    pub attributes: HashMap<String, String>,
 }
 
-/// Uncertainty information for a model conversion
-pub struct ConversionUncertainty {
-    // Add fields as needed
-}
-
-/// Explicit conversion between models
-pub trait Conversion<Source: Model, Target: Model> {
-    type Error;
+/// A trait for conversions that require parameters and provide metadata
+pub trait ConvertToWithMetadata<M: Model> {
+    /// Parameters required for the conversion
+    type Params: Default;
     
-    fn convert(&self, source: &Source) -> Result<Target, Self::Error>;
-    fn uncertainty(&self) -> ConversionUncertainty;
-    fn metadata(&self) -> ConversionMetadata;
+    /// Convert with specific parameters, returning both result and metadata
+    fn convert_to_with_metadata(
+        &self,
+        params: &Self::Params
+    ) -> Result<(M, ConversionMetadata)>;
 }
+
+// Convenience implementation - if something implements ConvertToWithMetadata,
+// it can also do basic conversion
+impl<T, M> ConvertTo<M> for T 
+where 
+    T: ConvertToWithMetadata<M>,
+    M: Model,
+{
+    fn convert_to(&self) -> Result<M> {
+        // Use default parameters and discard metadata
+        let (model, _) = self.convert_to_with_metadata(&Default::default())?;
+        Ok(model)
+    }
+} 
