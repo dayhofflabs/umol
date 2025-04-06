@@ -53,9 +53,6 @@ pub trait Model {
         self.capabilities().contains(capability)
     }
     
-    /// Get the entity type that this model can represent
-    fn entity_type(&self) -> &str;
-    
     /// Validate the model
     fn validate(&self) -> Result<()> {
         Ok(())

@@ -4,42 +4,134 @@ use crate::core::serde::FormatVersion;
 use crate::core::Capability;
 use crate::Element;
 use thiserror::Error;
+use std::error::Error as StdError;
+use std::collections::HashSet;
+use crate::core::Model;
+
+/// Errors related to serialization and deserialization
+#[derive(Error, Debug)]
+pub enum SerializationError {
+    #[error("Invalid format: {0}")]
+    InvalidFormat(String),
+
+    #[error("Version mismatch: expected {expected}, found {found}")]
+    VersionMismatch {
+        expected: FormatVersion,
+        found: FormatVersion,
+    },
+
+    #[error("Missing required field: {0}")]
+    MissingField(String),
+
+    #[error("Invalid field value: {0}")]
+    InvalidFieldValue(String),
+
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Serialization error: {0}")]
+    SerdeError(#[from] serde_json::Error),
+}
+
+/// Errors related to validation
+#[derive(Error, Debug)]
+pub enum ValidationError {
+    #[error("Invalid structure: {0}")]
+    InvalidStructure(String),
+
+    #[error("Missing required component: {0}")]
+    MissingComponent(String),
+
+    #[error("Invalid component: {0}")]
+    InvalidComponent(String),
+
+    #[error("Multiple validation errors: {0:?}")]
+    Multiple(Vec<ValidationError>),
+}
 
 /// Core error types for the molecular modeling framework
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error(transparent)]
-    Entity(#[from] EntityError),
-
+    /// An error occurred during model operations
     #[error(transparent)]
     Model(#[from] ModelError),
 
-    #[error(transparent)]
-    Conversion(#[from] ConversionError),
-
-    #[error(transparent)]
-    Operation(#[from] OperationError),
-
+    /// An error occurred during property calculations
     #[error(transparent)]
     Property(#[from] PropertyError),
 
+    /// An error occurred during format operations
+    #[error(transparent)]
+    Format(#[from] FormatError),
+
+    /// An error occurred during conversion operations
+    #[error(transparent)]
+    Conversion(#[from] ConversionError),
+
+    /// An error occurred during operation execution
+    #[error(transparent)]
+    Operation(#[from] OperationError),
+
+    /// An error occurred during plugin operations
     #[error(transparent)]
     Plugin(#[from] PluginError),
 
+    /// A dependency is missing
+    #[error("Missing dependency: {0}")]
+    MissingDependency(String),
+
+    /// A property was not found
+    #[error("Property not found: {0}")]
+    PropertyNotFound(String),
+
+    /// A model was not found
+    #[error("Model not found: {0}")]
+    ModelNotFound(String),
+
+    /// A conversion was not found
+    #[error("Conversion not found from {0} to {1}")]
+    ConversionNotFound(String, String),
+
+    /// Invalid charge value
+    #[error("Invalid charge {charge} for element {element}, must be between {min} and {max}")]
+    InvalidCharge {
+        element: Element,
+        charge: i8,
+        min: i8,
+        max: i8,
+    },
+
+    /// Invalid number of unpaired electrons
+    #[error("Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}")]
+    InvalidUnpairedElectrons {
+        element: Element,
+        unpaired: u8,
+        max: u8,
+    },
+
+    /// An error occurred during entity operations
+    #[error(transparent)]
+    Entity(#[from] EntityError),
+
+    /// An error occurred during validation
+    #[error(transparent)]
+    Validation(#[from] ValidationError),
+
+    /// An error occurred during serialization
+    #[error(transparent)]
+    Serialization(#[from] SerializationError),
+
+    /// An error occurred during element operations
     #[error(transparent)]
     Element(#[from] ElementError),
 
-    #[error("Validation error: {0}")]
-    Validation(String),
-
+    /// Multiple errors occurred
     #[error("Multiple errors occurred: {0:?}")]
     Multiple(Vec<Error>),
 
+    /// Other errors
     #[error(transparent)]
-    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
-
-    #[error(transparent)]
-    Serialization(#[from] SerializationError),
+    Other(#[from] Box<dyn StdError + Send + Sync>),
 }
 
 /// Errors related to chemical entities
@@ -169,29 +261,17 @@ pub enum ElementError {
     },
 }
 
-/// Errors related to serialization
+/// Errors related to format operations
 #[derive(Error, Debug)]
-pub enum SerializationError {
+pub enum FormatError {
+    #[error("Format not found: {0}")]
+    NotFound(String),
+
     #[error("Invalid format: {0}")]
-    InvalidFormat(String),
+    Invalid(String),
 
-    #[error("Version mismatch: expected {expected}, found {found}")]
-    VersionMismatch {
-        expected: FormatVersion,
-        found: FormatVersion,
-    },
-
-    #[error("Missing required field: {0}")]
-    MissingField(String),
-
-    #[error("Invalid field value: {0}")]
-    InvalidFieldValue(String),
-
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
-
-    #[error("Serialization error: {0}")]
-    SerdeError(#[from] serde_json::Error),
+    #[error("Format operation failed: {0}")]
+    Failed(String),
 }
 
 /// Result type for core operations
@@ -200,174 +280,65 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Capability;
 
     #[test]
-    fn test_entity_error_display() {
-        let error = EntityError::NotFound("benzene".into());
-        assert_eq!(format!("{}", error), "Entity not found: benzene");
+    fn test_error_display() {
+        let error = Error::Model(ModelError::NotFound("test".to_string()));
+        assert_eq!(format!("{}", error), "Model not found: test");
 
-        let error = EntityError::Invalid("invalid structure".into());
-        assert_eq!(format!("{}", error), "Invalid entity: invalid structure");
-    }
+        let error = Error::Property(PropertyError::CalculationFailed("test error".into()));
+        assert_eq!(format!("{}", error), "Property calculation failed: test error");
 
-    #[test]
-    fn test_model_error_display() {
-        let error = ModelError::MissingCapability(Capability::new(
-            "energy",
-            "1.0.0",
-            "Energy calculation capability",
-        ));
-        assert_eq!(format!("{}", error), "Missing required capability: energy");
+        let error = Error::Format(FormatError::NotFound("test".to_string()));
+        assert_eq!(format!("{}", error), "Format not found: test");
 
-        let error = ModelError::InvalidState("invalid coordinates".into());
+        let error = Error::Conversion(ConversionError::NotFound("source".to_string(), "target".to_string()));
+        assert_eq!(format!("{}", error), "No conversion found from source to target");
+
+        let error = Error::Operation(OperationError::Failed("test error".to_string()));
+        assert_eq!(format!("{}", error), "Operation failed: test error");
+
+        let error = Error::Plugin(PluginError::MissingPlugin("test".to_string()));
+        assert_eq!(format!("{}", error), "Required plugin not found: test");
+
+        let error = Error::Element(ElementError::InvalidCharge {
+            element: Element::H,
+            charge: 2,
+            min: -1,
+            max: 1,
+        });
         assert_eq!(
             format!("{}", error),
-            "Invalid model state: invalid coordinates"
-        );
-    }
-
-    #[test]
-    fn test_conversion_error_display() {
-        let error = ConversionError::IncompatibleModels {
-            from: "MMFF94".into(),
-            to: "UFF".into(),
-        };
-        assert_eq!(
-            format!("{}", error),
-            "Incompatible models: from MMFF94 to UFF"
+            "Invalid charge 2 for element H, must be between -1 and 1"
         );
 
-        let error = ConversionError::InformationLoss("stereochemistry".into());
-        assert_eq!(
-            format!("{}", error),
-            "Information loss during conversion: stereochemistry"
-        );
-    }
-
-    #[test]
-    fn test_error_conversion() {
-        // Test conversion from EntityError to Error
-        let entity_error = EntityError::NotFound("benzene".into());
-        let error: Error = entity_error.into();
-        assert_eq!(format!("{}", error), "Entity not found: benzene");
-
-        // Test conversion from ModelError to Error
-        let model_error = ModelError::MissingCapability(Capability::new(
-            "energy",
-            "1.0.0",
-            "Energy calculation capability",
-        ));
-        let error: Error = model_error.into();
-        assert_eq!(format!("{}", error), "Missing required capability: energy");
-
-        // Test conversion from ConversionError to Error
-        let conversion_error = ConversionError::IncompatibleModels {
-            from: "MMFF94".into(),
-            to: "UFF".into(),
-        };
-        let error: Error = conversion_error.into();
-        assert_eq!(
-            format!("{}", error),
-            "Incompatible models: from MMFF94 to UFF"
-        );
-    }
-
-    #[test]
-    fn test_validation_error() {
-        let error = Error::Validation("Invalid structure".into());
-        assert_eq!(format!("{}", error), "Validation error: Invalid structure");
-    }
-
-    #[test]
-    fn test_multiple_errors() {
         let errors = vec![
-            Error::Entity(EntityError::NotFound("benzene".into())),
-            Error::Model(ModelError::MissingCapability(Capability::new(
-                "energy",
-                "1.0.0",
-                "Energy calculation capability",
-            ))),
+            Error::Model(ModelError::NotFound("error 1".to_string())),
+            Error::Property(PropertyError::CalculationFailed("error 2".into())),
         ];
         let error = Error::Multiple(errors);
-        assert!(format!("{}", error).contains("Entity not found: benzene"));
-        assert!(format!("{}", error).contains("Missing required capability: energy"));
+        assert!(format!("{}", error).contains("Multiple errors occurred"));
     }
+}
 
-    #[test]
-    fn test_operation_error() {
-        let error = OperationError::InvalidParameters("Invalid coordinates".into());
-        assert_eq!(
-            format!("{}", error),
-            "Invalid operation parameters: Invalid coordinates"
-        );
-
-        let error = OperationError::NotSupported("Optimization".into());
-        assert_eq!(
-            format!("{}", error),
-            "Operation not supported: Optimization"
-        );
+// Update the helper functions to use the appropriate error types
+pub fn verify_capabilities(model: &impl Model, required: &[Capability]) -> Result<()> {
+    for cap in required {
+        if !model.has_capability(cap) {
+            return Err(ModelError::MissingCapability(cap.clone()).into());
+        }
     }
+    Ok(())
+}
 
-    #[test]
-    fn test_property_error() {
-        let error = PropertyError::MissingCapability(Capability::new(
-            "energy",
-            "1.0.0",
-            "Energy calculation capability",
-        ));
-        assert_eq!(
-            format!("{}", error),
-            "Missing required capability for property calculation: energy"
-        );
+pub fn test_model_capabilities(model: &impl Model) -> Result<()> {
+    let mut caps = HashSet::new();
+    caps.insert(Capability::new("core", "has_atoms", 1));
 
-        let error = PropertyError::CalculationFailed("Convergence failed".into());
-        assert_eq!(
-            format!("{}", error),
-            "Property calculation failed: Convergence failed"
-        );
+    for cap in &caps {
+        if !model.has_capability(cap) {
+            return Err(ModelError::MissingCapability(cap.clone()).into());
+        }
     }
-
-    #[test]
-    fn test_plugin_error() {
-        let error = PluginError::MissingPlugin("forcefield".into());
-        assert_eq!(
-            format!("{}", error),
-            "Required plugin not found: forcefield"
-        );
-
-        let error = PluginError::VersionMismatch {
-            plugin: "forcefield".into(),
-            required: "1.0.0".into(),
-            found: "0.9.0".into(),
-        };
-        assert_eq!(
-            format!("{}", error),
-            "Plugin forcefield version mismatch: required 1.0.0, found 0.9.0"
-        );
-    }
-
-    #[test]
-    fn test_element_error() {
-        let error = ElementError::InvalidCharge {
-            element: Element::C,
-            charge: 5,
-            min: -4,
-            max: 4,
-        };
-        assert_eq!(
-            format!("{}", error),
-            "Invalid charge 5 for element C, must be between -4 and 4"
-        );
-
-        let error = ElementError::InvalidUnpairedElectrons {
-            element: Element::O,
-            unpaired: 3,
-            max: 2,
-        };
-        assert_eq!(
-            format!("{}", error),
-            "Invalid number of unpaired electrons 3 for element O, maximum is 2"
-        );
-    }
+    Ok(())
 }

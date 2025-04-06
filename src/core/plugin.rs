@@ -55,7 +55,12 @@
 //! impl PropertyProvider for MyPlugin {}
 //! ```
 
-use crate::core::{ConversionMetadata, Entity, Error, Instance, Model, Property, Result};
+use crate::core::{
+    error::{
+        ModelError, PropertyError, ConversionError, PluginError, FormatError, Result
+    },
+    ConversionMetadata, Entity, Instance, Model,
+};
 use semver::Version;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -192,12 +197,12 @@ pub trait FormatProvider {}
 pub trait OntologyProvider {}
 
 /// Requirements for a plugin
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct PluginRequirements {
-    /// Required plugins and their versions
-    pub plugins: HashMap<String, Version>,
+    /// Required plugins
+    pub plugins: Vec<(String, Version)>,
     /// Required capabilities
-    pub capabilities: HashSet<Capability>,
+    pub capabilities: Vec<Capability>,
 }
 
 /// A lazy-initialized component that is created on first use
@@ -230,73 +235,49 @@ impl<T: ?Sized> LazyComponent<T> {
     }
 }
 
-/// Core trait that all plugins must implement.
-///
-/// A plugin can provide various components:
-/// - Properties for calculating molecular properties
-/// - Models for representing molecular systems
-/// - Conversions between different model types
-/// - File format handlers for IO operations
-///
-/// # Implementation Notes
-///
-/// 1. The `name` method should return a unique identifier for your plugin
-/// 2. Version numbers should follow semantic versioning
-/// 3. Use `requires` to specify dependencies on other plugins
-/// 4. Register all components in the `register` method
-///
-/// # Example
-///
-/// ```rust
-/// use umol::core::{Plugin, Registry, Version};
-///
-/// struct MyPlugin;
-///
-/// impl Plugin for MyPlugin {
-///     fn name(&self) -> &str { "my_plugin" }
-///     fn version(&self) -> Version { "1.0.0".parse().unwrap() }
-///     fn register(&self, registry: &mut Registry) {
-///         // Register your components here
-///     }
-/// }
-/// ```
-pub trait Plugin: Send + Sync {
-    /// Unique name of the plugin
+/// A plugin that provides additional functionality to the framework
+pub trait Plugin: Send + Sync + 'static {
+    /// Get the name of this plugin
     fn name(&self) -> &str;
 
-    /// Semantic version of the plugin
-    fn version(&self) -> Version;
+    /// Get the version of this plugin
+    fn version(&self) -> &str;
 
-    /// Specify plugin requirements
+    /// Get the capabilities provided by this plugin
+    fn capabilities(&self) -> Vec<Capability>;
+
+    /// Get the requirements of this plugin
     fn requires(&self) -> PluginRequirements {
         PluginRequirements::default()
     }
 
-    /// Register this plugin's components with the registry
-    fn register(&self, registry: &mut Registry);
+    /// Register this plugin's components
+    fn register(&self, _registry: &mut Registry) -> Result<()> {
+        todo!()
+    }
 
-    /// Check if this plugin provides models
-    fn provides_models(&self) -> bool {
+    /// Check if this plugin provides model functionality
+    fn is_model_provider(&self) -> bool {
         std::any::TypeId::of::<Self>() == std::any::TypeId::of::<dyn ModelProvider>()
     }
 
-    /// Check if this plugin provides properties
-    fn provides_properties(&self) -> bool {
+    /// Check if this plugin provides property functionality
+    fn is_property_provider(&self) -> bool {
         std::any::TypeId::of::<Self>() == std::any::TypeId::of::<dyn PropertyProvider>()
     }
 
-    /// Check if this plugin provides conversions
-    fn provides_conversions(&self) -> bool {
+    /// Check if this plugin provides conversion functionality
+    fn is_conversion_provider(&self) -> bool {
         std::any::TypeId::of::<Self>() == std::any::TypeId::of::<dyn ConversionProvider>()
     }
 
-    /// Check if this plugin provides formats
-    fn provides_formats(&self) -> bool {
+    /// Check if this plugin provides format functionality
+    fn is_format_provider(&self) -> bool {
         std::any::TypeId::of::<Self>() == std::any::TypeId::of::<dyn FormatProvider>()
     }
 
-    /// Check if this plugin provides ontology features
-    fn provides_ontology(&self) -> bool {
+    /// Check if this plugin provides ontology functionality
+    fn is_ontology_provider(&self) -> bool {
         std::any::TypeId::of::<Self>() == std::any::TypeId::of::<dyn OntologyProvider>()
     }
 }
@@ -374,37 +355,54 @@ impl Registry {
     /// Register a plugin
     pub fn register_plugin(&mut self, plugin: Box<dyn Plugin>) -> Result<()> {
         let name = plugin.name().to_string();
-        let version = plugin.version();
+        let version = plugin.version().parse::<Version>().unwrap();
 
         // Check requirements
         if !self.satisfies_requirements(plugin.requires()) {
-            return Err(Error::MissingDependency(name));
+            return Err(PluginError::MissingDependency(name).into());
         }
 
         // Track what the plugin provides
-        if plugin.provides_models() {
+        if plugin.is_model_provider() {
             self.model_providers.insert(name.clone());
         }
-        if plugin.provides_properties() {
+        if plugin.is_property_provider() {
             self.property_providers.insert(name.clone());
         }
-        if plugin.provides_conversions() {
+        if plugin.is_conversion_provider() {
             self.conversion_providers.insert(name.clone());
         }
-        if plugin.provides_formats() {
+        if plugin.is_format_provider() {
             self.format_providers.insert(name.clone());
         }
-        if plugin.provides_ontology() {
+        if plugin.is_ontology_provider() {
             self.ontology_providers.insert(name.clone());
         }
 
         // Register the plugin's components
-        plugin.register(self);
+        plugin.register(self)?;
 
         // Store the plugin
         self.plugins.insert(name, (version, plugin));
 
         Ok(())
+    }
+
+    /// Register a relation
+    pub fn register_relation(
+        &mut self,
+        name: String,
+        initializer: impl Fn() -> Result<Arc<dyn RelationDefinition>> + Send + Sync + 'static,
+    ) {
+        self.relations.insert(name, LazyComponent::new(initializer));
+    }
+
+    /// Get a relation by name
+    pub fn get_relation(&self, name: &str) -> Result<Arc<dyn RelationDefinition>> {
+        self.relations
+            .get(name)
+            .ok_or_else(|| PluginError::ComponentInit(format!("Relation not found: {}", name)).into())
+            .and_then(|component| component.get())
     }
 
     pub fn register_capability(&mut self, capability: Capability) {
@@ -414,16 +412,15 @@ impl Registry {
     pub fn register_property(
         &mut self,
         name: String,
-        initializer: impl Fn() -> Result<Box<dyn PropertyDefinition>> + Send + Sync + 'static,
+        initializer: impl Fn() -> Result<Arc<dyn PropertyDefinition>> + Send + Sync + 'static,
     ) {
-        self.properties
-            .insert(name, LazyComponent::new(initializer));
+        self.properties.insert(name, LazyComponent::new(initializer));
     }
 
     pub fn register_model(
         &mut self,
         name: String,
-        initializer: impl Fn() -> Result<Box<dyn ModelDefinition>> + Send + Sync + 'static,
+        initializer: impl Fn() -> Result<Arc<dyn ModelDefinition>> + Send + Sync + 'static,
     ) {
         self.models.insert(name, LazyComponent::new(initializer));
     }
@@ -432,7 +429,7 @@ impl Registry {
         &mut self,
         source: String,
         target: String,
-        initializer: impl Fn() -> Result<Box<dyn ConversionDefinition>> + Send + Sync + 'static,
+        initializer: impl Fn() -> Result<Arc<dyn ConversionDefinition>> + Send + Sync + 'static,
     ) {
         self.conversions
             .insert((source, target), LazyComponent::new(initializer));
@@ -441,41 +438,37 @@ impl Registry {
     pub fn register_format(
         &mut self,
         name: String,
-        initializer: impl Fn() -> Result<Box<dyn FormatHandler>> + Send + Sync + 'static,
+        initializer: impl Fn() -> Result<Arc<dyn FormatHandler>> + Send + Sync + 'static,
     ) {
         self.formats.insert(name, LazyComponent::new(initializer));
     }
 
     // Accessor methods
-    pub fn get_property(&self, name: &str) -> Result<Arc<Box<dyn PropertyDefinition>>> {
+    pub fn get_property(&self, name: &str) -> Result<Arc<dyn PropertyDefinition>> {
         self.properties
             .get(name)
-            .ok_or_else(|| Error::PropertyNotFound(name.to_string()))?
+            .ok_or_else(|| PropertyError::NotFound(name.to_string()))?
             .get()
     }
 
-    pub fn get_model(&self, name: &str) -> Result<Arc<Box<dyn ModelDefinition>>> {
+    pub fn get_model(&self, name: &str) -> Result<Arc<dyn ModelDefinition>> {
         self.models
             .get(name)
-            .ok_or_else(|| Error::ModelNotFound(name.to_string()))?
+            .ok_or_else(|| ModelError::NotFound(name.to_string()))?
             .get()
     }
 
-    pub fn get_conversion(
-        &self,
-        source: &str,
-        target: &str,
-    ) -> Result<Arc<Box<dyn ConversionDefinition>>> {
+    pub fn get_conversion(&self, source: &str, target: &str) -> Result<Arc<dyn ConversionDefinition>> {
         self.conversions
             .get(&(source.to_string(), target.to_string()))
-            .ok_or_else(|| Error::ConversionNotFound(source.to_string(), target.to_string()))?
+            .ok_or_else(|| ConversionError::NotFound(source.to_string(), target.to_string()))?
             .get()
     }
 
-    pub fn get_format(&self, name: &str) -> Result<Arc<Box<dyn FormatHandler>>> {
+    pub fn get_format(&self, name: &str) -> Result<Arc<dyn FormatHandler>> {
         self.formats
             .get(name)
-            .ok_or_else(|| Error::FormatNotFound(name.to_string()))?
+            .ok_or_else(|| FormatError::NotFound(name.to_string()))?
             .get()
     }
 

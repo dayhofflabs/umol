@@ -6,22 +6,25 @@
 //! - Instance relationships and transformations
 //! - Operation history tracking
 
-use crate::core::{Model, Result, Entity};
+use crate::core::{
+    error::{OperationError, Result},
+    Model, Entity,
+};
 use crate::core::conversion::ConvertTo;
 use crate::core::operation::Operation;
 
 /// An instance pairs an entity with its representation in a specific model
 pub struct Instance<M: Model> {
     /// The entity being represented
-    pub entity: Entity,
+    entity: Entity,
     /// The model used for representation
-    pub model: M,
+    model: M,
 }
 
 impl<M: Model> Instance<M> {
     /// Create a new instance
-    pub fn new(entity: Entity, model: M) -> Self {
-        Self { entity, model }
+    pub fn new(entity: Entity, model: M) -> Result<Self> {
+        Ok(Self { entity, model })
     }
 
     /// Get a reference to the entity
@@ -38,7 +41,7 @@ impl<M: Model> Instance<M> {
     pub fn convert_to<M2: Model>(&self) -> Result<Instance<M2>> 
     where M: ConvertTo<M2> {
         let new_model = self.model.convert_to()?;
-        Ok(Instance::new(self.entity.clone(), new_model))
+        Instance::new(self.entity.clone(), new_model)
     }
 
     /// Apply an operation to this instance
@@ -46,14 +49,12 @@ impl<M: Model> Instance<M> {
         &self,
         op: &O
     ) -> Result<Instance<M2>> {
+        // Validate that the operation is valid for this instance
+        if !op.is_valid_for(self)? {
+            return Err(OperationError::InvalidParameters(
+                "Operation is not valid for this instance".into()
+            ).into());
+        }
         op.apply(self)
-    }
-
-    /// Validate that the entity type is compatible with the model
-    pub fn validate(&self) -> Result<()> {
-        // Validate the entity itself
-        self.entity.validate()?;
-
-        Ok(())
     }
 } 
