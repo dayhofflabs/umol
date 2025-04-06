@@ -8,10 +8,8 @@
 //! - Error conversion traits
 
 use thiserror::Error;
-use std::error::Error as StdError;
-use std::fmt;
-use semver::Version;
 use crate::core::Capability;
+use crate::Element;
 
 /// Core error types for the molecular modeling framework
 #[derive(Debug, Error)]
@@ -50,8 +48,8 @@ pub enum Error {
     #[error("Plugin {plugin} version mismatch: required {required}, found {found}")]
     PluginVersionMismatch {
         plugin: String,
-        required: Version,
-        found: Version,
+        required: String,
+        found: String,
     },
     
     #[error("Required capability not found: {0}")]
@@ -72,45 +70,23 @@ pub enum Error {
     
     // Initialization errors
     #[error("Component initialization failed: {0}")]
-    ComponentInitError(#[from] Box<dyn std::error::Error + Send + Sync>),
-}
+    ComponentInitError(String),
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::InvalidCapability(cap) => 
-                write!(f, "Invalid capability format: {}", cap),
-            Error::MissingPlugin(name) => 
-                write!(f, "Required plugin not found: {}", name),
-            Error::PluginVersionMismatch { plugin, required, found } => 
-                write!(f, "Plugin {} version mismatch: required {}, found {}", 
-                    plugin, required, found),
-            Error::MissingCapability(cap) => 
-                write!(f, "Required capability not found: {}", cap.to_string()),
-            Error::PropertyNotFound(name) => 
-                write!(f, "Property not found: {}", name),
-            Error::ModelNotFound(name) => 
-                write!(f, "Model not found: {}", name),
-            Error::ConversionNotFound(from, to) => 
-                write!(f, "No conversion found from {} to {}", from, to),
-            Error::FormatNotFound(name) => 
-                write!(f, "Format not found: {}", name),
-            Error::ComponentInitError(e) => 
-                write!(f, "Component initialization failed: {}", e),
-            Error::Other(e) => 
-                write!(f, "Error: {}", e),
-        }
-    }
-}
+    // Element-related errors
+    #[error("Invalid charge {charge} for element {element}, must be between {min} and {max}")]
+    InvalidCharge {
+        element: Element,
+        charge: i8,
+        min: i8,
+        max: i8,
+    },
 
-impl StdError for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match self {
-            Error::ComponentInitError(e) => Some(e.as_ref()),
-            Error::Other(e) => Some(e.as_ref()),
-            _ => None,
-        }
-    }
+    #[error("Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}")]
+    InvalidUnpairedElectrons {
+        element: Element,
+        unpaired: u8,
+        max: u8,
+    },
 }
 
 /// Errors related to chemical entities

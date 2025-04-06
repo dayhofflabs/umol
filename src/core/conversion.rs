@@ -1,6 +1,11 @@
-// Core conversion traits
+//! Conversion traits and utilities.
+//! 
+//! This module provides traits and utilities for converting between models:
+//! - Basic conversion between models
+//! - Parameterized conversions with metadata
+//! - Conversion uncertainty and confidence
 
-use crate::core::{Error, Model, Result};
+use crate::core::{Model, Result};
 use std::collections::HashMap;
 
 /// A trait for basic conversion between molecular models
@@ -12,8 +17,6 @@ pub trait ConvertTo<M: Model> {
 /// Metadata about a model conversion
 #[derive(Debug, Clone, Default)]
 pub struct ConversionMetadata {
-    /// Uncertainty information for the conversion
-    pub uncertainty: Option<f64>,
     /// Any additional metadata as string key-value pairs
     pub attributes: HashMap<String, String>,
 }

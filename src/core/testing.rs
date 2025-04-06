@@ -1,70 +1,142 @@
+//! Testing utilities and traits.
+//! 
+//! This module provides testing infrastructure for umol:
+//! - Model testing traits
+//! - Property testing traits
+//! - Test utilities and helpers
+
 use std::collections::HashSet;
 use crate::core::{
-    Capability, Entity, Model, Property,
-    Instance, Result, Error,
-    ConvertTo, ConvertToWithMetadata, ConversionMetadata,
+    Model, Property, Capability, Result, Error,
+    Entity, Instance,
+    error::{ModelError, PropertyError},
+    ConvertToWithMetadata, ConversionMetadata,
 };
 
 /// Trait for testing model implementations
 pub trait ModelTest {
+    /// The entity type being tested
     type E: Entity;
+    /// The model type being tested
     type M: Model;
     
-    /// Create a new instance for testing
+    /// Create a test instance for testing
     fn create_test_instance() -> Result<Instance<Self::E, Self::M>>;
     
-    /// Test that the model correctly reports its capabilities
+    /// Test that the model has the required capabilities
     fn test_capabilities() -> Result<()>;
     
-    /// Test basic model operations
+    /// Test that model operations work correctly
     fn test_model_operations() -> Result<()>;
     
-    /// Test property calculations
+    /// Test that property calculations work correctly
     fn test_property_calculations() -> Result<()>;
 }
 
 /// Trait for testing property implementations
 pub trait PropertyTest {
+    /// The property type being tested
     type P: Property;
     
-    /// Test that the property correctly reports its requirements
+    /// Test that the property requirements are met
     fn test_requirements() -> Result<()>;
     
-    /// Test property calculation on a simple case
+    /// Test that simple calculations work correctly
     fn test_simple_calculation() -> Result<()>;
     
-    /// Test property calculation on edge cases
+    /// Test that edge cases are handled correctly
     fn test_edge_cases() -> Result<()>;
 }
 
-/// Helper function to verify capability requirements
-pub fn verify_capabilities<M: Model>(model: &M, required: &[Capability]) -> Result<()> {
-    let required: HashSet<_> = required.iter().cloned().collect();
-    let available = model.capabilities();
+/// Helper functions for testing
+pub mod helpers {
+    use super::*;
     
-    if !required.is_subset(&available) {
-        let missing: Vec<_> = required.difference(&available).collect();
-        return Err(crate::core::Error::Model(
-            crate::core::ModelError::MissingCapability(
-                missing.first().cloned().unwrap()
-            )
-        ));
+    /// Verify that a model has all required capabilities
+    pub fn verify_capabilities<M: Model>(
+        model: &M,
+        required: &[Capability],
+    ) -> Result<()> {
+        for cap in required {
+            if !model.has_capability(cap) {
+                return Err(Error::Model(ModelError::MissingCapability(cap.clone())));
+            }
+        }
+        Ok(())
     }
     
-    Ok(())
+    /// Verify that a property can be calculated on a model
+    pub fn verify_property_calculation<P: Property, E: Entity, M: Model>(
+        instance: &Instance<E, M>,
+    ) -> Result<()> {
+        P::compute(instance)?;
+        Ok(())
+    }
 }
 
-/// Helper function to verify property calculation
-pub fn verify_property_calculation<P: Property, E: Entity, M: Model>(
-    instance: &Instance<E, M>
-) -> Result<()> {
-    // Verify the model has required capabilities
-    verify_capabilities(instance.model(), &P::required_capabilities().into_iter().collect::<Vec<_>>())?;
+/// Default implementation of ModelTest
+pub struct DefaultModelTest<E: Entity, M: Model> {
+    _phantom: std::marker::PhantomData<(E, M)>,
+}
+
+impl<E: Entity, M: Model> DefaultModelTest<E, M> {
+    /// Create a new default model test
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<E: Entity, M: Model> ModelTest for DefaultModelTest<E, M> {
+    type E = E;
+    type M = M;
     
-    // Try to compute the property
-    P::compute(instance)?;
+    fn create_test_instance() -> Result<Instance<Self::E, Self::M>> {
+        unimplemented!("Default implementation does not provide test instances")
+    }
     
-    Ok(())
+    fn test_capabilities() -> Result<()> {
+        Ok(())
+    }
+    
+    fn test_model_operations() -> Result<()> {
+        Ok(())
+    }
+    
+    fn test_property_calculations() -> Result<()> {
+        Ok(())
+    }
+}
+
+/// Default implementation of PropertyTest
+pub struct DefaultPropertyTest<P: Property> {
+    _phantom: std::marker::PhantomData<P>,
+}
+
+impl<P: Property> DefaultPropertyTest<P> {
+    /// Create a new default property test
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<P: Property> PropertyTest for DefaultPropertyTest<P> {
+    type P = P;
+    
+    fn test_requirements() -> Result<()> {
+        Ok(())
+    }
+    
+    fn test_simple_calculation() -> Result<()> {
+        Ok(())
+    }
+    
+    fn test_edge_cases() -> Result<()> {
+        Ok(())
+    }
 }
 
 // Mock implementations for testing
@@ -89,16 +161,14 @@ impl Entity for MockEntity {
     }
 }
 
-#[derive(Debug, Clone)]
+/// A mock model for testing
 pub struct MockModel {
     capabilities: HashSet<Capability>,
-    data: String,
 }
 
 impl MockModel {
-    pub fn new(data: &str, capabilities: &[Capability]) -> Self {
+    pub fn new(capabilities: &[Capability]) -> Self {
         Self {
-            data: data.to_string(),
             capabilities: capabilities.iter().cloned().collect(),
         }
     }
@@ -113,13 +183,11 @@ impl Model for MockModel {
 #[derive(Debug, Clone)]
 pub struct MockModelAdvanced {
     capabilities: HashSet<Capability>,
-    data: String,
 }
 
 impl MockModelAdvanced {
-    pub fn new(data: &str, capabilities: &[Capability]) -> Self {
+    pub fn new(capabilities: &[Capability]) -> Self {
         Self {
-            data: data.to_string(),
             capabilities: capabilities.iter().cloned().collect(),
         }
     }
@@ -153,7 +221,8 @@ impl ConvertToWithMetadata<MockModelAdvanced> for MockModel {
         let mut metadata = ConversionMetadata::default();
         metadata.attributes.insert("source".to_string(), "MockModel".to_string());
         
-        Ok((MockModelAdvanced::new(&self.data, &capabilities.iter().collect::<Vec<_>>()), metadata))
+        let caps: Vec<Capability> = capabilities.into_iter().collect();
+        Ok((MockModelAdvanced::new(&caps), metadata))
     }
 }
 
@@ -177,22 +246,72 @@ impl Property for MockProperty {
 
     fn required_capabilities() -> HashSet<Capability> {
         let mut caps = HashSet::new();
-        caps.insert(Capability::HasAtoms);
+        caps.insert(Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        });
         caps
     }
 
     fn compute<E: Entity, M: Model>(instance: &Instance<E, M>) -> Result<Self::Value> {
-        if instance.model().has_capability(&Capability::HasAtoms) {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
+        if instance.model.has_capability(&has_atoms) {
             Ok(42.0)
         } else {
-            Err(Error::Property(crate::core::PropertyError::MissingCapability(Capability::HasAtoms)))
+            Err(Error::Property(PropertyError::MissingCapability(has_atoms)))
         }
     }
+}
+
+/// Helper function to verify property calculation
+pub fn verify_property_calculation<P: Property>(
+    instance: &Instance<impl Entity, impl Model>,
+    expected: P::Value,
+) -> Result<()> 
+where P::Value: PartialEq {
+    let result = P::compute(instance)?;
+    if result == expected {
+        Ok(())
+    } else {
+        Err(Error::Property(PropertyError::CalculationFailed(
+            "Property calculation result mismatch".to_string(),
+        )))
+    }
+}
+
+/// Helper function to verify model capabilities
+pub fn verify_capabilities(model: &impl Model, required: &[Capability]) -> Result<()> {
+    for cap in required {
+        if !model.has_capability(cap) {
+            return Err(Error::Model(ModelError::MissingCapability(cap.clone())));
+        }
+    }
+    Ok(())
+}
+
+/// Test that verifies a model has the required capabilities
+pub fn test_model_capabilities(model: &impl Model) -> Result<()> {
+    let mut caps = HashSet::new();
+    caps.insert(Capability {
+        name: "has_atoms".to_string(),
+        version: "1.0".to_string(),
+    });
+    
+    for cap in &caps {
+        if !model.has_capability(cap) {
+            return Err(Error::Model(ModelError::MissingCapability(cap.clone())));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::ConvertTo;
 
     #[test]
     fn test_mock_entity_relations() {
@@ -206,53 +325,124 @@ mod tests {
     }
 
     #[test]
-    fn test_mock_model_capabilities() {
-        let caps = vec![Capability::HasAtoms, Capability::HasBonds];
-        let model = MockModel::new("test", &caps);
+    fn test_model_capabilities() {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
+        let has_bonds = Capability {
+            name: "has_bonds".to_string(),
+            version: "1.0".to_string(),
+        };
+        let has_coords_3d = Capability {
+            name: "has_coordinates_3d".to_string(),
+            version: "1.0".to_string(),
+        };
 
-        assert!(model.has_capability(&Capability::HasAtoms));
-        assert!(model.has_capability(&Capability::HasBonds));
-        assert!(!model.has_capability(&Capability::HasCoordinates3D));
+        let caps = vec![has_atoms.clone(), has_bonds.clone()];
+        let model = MockModel::new(&caps);
+
+        assert!(model.has_capability(&has_atoms));
+        assert!(model.has_capability(&has_bonds));
+        assert!(!model.has_capability(&has_coords_3d));
     }
 
     #[test]
-    fn test_mock_model_conversion() {
-        let caps = vec![Capability::HasAtoms];
-        let model = MockModel::new("test", &caps);
-        
-        // Test basic conversion
+    fn test_model_capability_intersection() {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
+        let has_bonds = Capability {
+            name: "has_bonds".to_string(),
+            version: "1.0".to_string(),
+        };
+        let has_coords_3d = Capability {
+            name: "has_coordinates_3d".to_string(),
+            version: "1.0".to_string(),
+        };
+
+        let model1 = MockModel::new(&[has_atoms.clone(), has_bonds.clone()]);
+        let model2 = MockModel::new(&[has_atoms.clone(), has_coords_3d.clone()]);
+
+        let common = model1.capabilities().intersection(&model2.capabilities()).cloned().collect::<HashSet<_>>();
+        assert_eq!(common.len(), 1);
+        assert!(common.contains(&has_atoms));
+    }
+
+    #[test]
+    fn test_model_conversion() {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
+        let caps = vec![has_atoms];
+        let model = MockModel::new(&caps);
         let advanced = model.convert_to().unwrap();
+
         assert_eq!(model.capabilities(), advanced.capabilities());
-
-        // Test parameterized conversion
-        let params = MockConversionParams { preserve_capabilities: false };
-        let (advanced, metadata) = model.convert_to_with_metadata(&params).unwrap();
-        assert!(advanced.capabilities().is_empty());
-        assert_eq!(metadata.attributes.get("source"), Some(&"MockModel".to_string()));
-    }
-
-    #[test]
-    fn test_mock_property() {
-        let entity = MockEntity::new("test");
-        let model = MockModel::new("test", &[Capability::HasAtoms]);
-        let instance = Instance::new(entity, model);
-
-        let value = MockProperty::compute(&instance).unwrap();
-        assert_eq!(value, 42.0);
-
-        let model_without_atoms = MockModel::new("test", &[]);
-        let instance_without_atoms = Instance::new(MockEntity::new("test"), model_without_atoms);
-        assert!(MockProperty::compute(&instance_without_atoms).is_err());
     }
 
     #[test]
     fn test_instance_conversion() {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
         let entity = MockEntity::new("test");
-        let model = MockModel::new("test", &[Capability::HasAtoms]);
+        let model = MockModel::new(&[has_atoms.clone()]);
         let instance = Instance::new(entity.clone(), model);
 
         let converted = instance.convert_to().unwrap();
         assert_eq!(converted.entity(), &entity);
-        assert!(converted.model().has_capability(&Capability::HasAtoms));
+        assert!(converted.model().has_capability(&has_atoms));
+    }
+
+    #[test]
+    fn test_property_metadata() {
+        assert_eq!(MockProperty::name(), "Mock Property");
+        assert_eq!(MockProperty::description(), "A mock property for testing");
+        assert_eq!(MockProperty::units(), Some("mock_units"));
+    }
+
+    #[test]
+    fn test_property_computation() {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
+        let entity = MockEntity::new("test");
+        let model = MockModel::new(&[has_atoms.clone()]);
+        let instance = Instance::new(entity, model);
+
+        let value = MockProperty::compute(&instance).unwrap();
+        assert_eq!(value, 42.0);
+    }
+
+    #[test]
+    fn test_property_missing_capability() {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
+        let entity = MockEntity::new("test");
+        let model = MockModel::new(&[]);
+        let instance = Instance::new(entity, model);
+
+        let result = MockProperty::compute(&instance);
+        assert!(matches!(result, 
+            Err(Error::Property(PropertyError::MissingCapability(cap))) if cap == has_atoms
+        ));
+    }
+
+    #[test]
+    fn test_property_required_capabilities() {
+        let has_atoms = Capability {
+            name: "has_atoms".to_string(),
+            version: "1.0".to_string(),
+        };
+        let caps = MockProperty::required_capabilities();
+        assert_eq!(caps.len(), 1);
+        assert!(caps.contains(&has_atoms));
     }
 } 

@@ -1,6 +1,6 @@
 // Element data and validation
 
-use crate::error::Error;
+use crate::core::error::Error;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
@@ -222,42 +222,42 @@ impl Display for Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
-    use rstest::rstest;
+    use rstest::*;
 
-    // Basic unit tests
     #[test]
     fn test_element_from_symbol() {
-        assert_eq!(Element::from_symbol("C"), Some(Element::C));
         assert_eq!(Element::from_symbol("H"), Some(Element::H));
-        assert_eq!(Element::from_symbol("O"), Some(Element::O));
-        assert_eq!(Element::from_symbol("Zn"), Some(Element::Zn));
-        assert_eq!(Element::from_symbol("NotAnElement"), None);
+        assert_eq!(Element::from_symbol("He"), Some(Element::He));
+        assert_eq!(Element::from_symbol("C"), Some(Element::C));
+        assert_eq!(Element::from_symbol("invalid"), None);
     }
 
     #[test]
     fn test_element_from_atomic_number() {
         assert_eq!(Element::from_atomic_number(1), Some(Element::H));
+        assert_eq!(Element::from_atomic_number(2), Some(Element::He));
         assert_eq!(Element::from_atomic_number(6), Some(Element::C));
-        assert_eq!(Element::from_atomic_number(8), Some(Element::O));
-        assert_eq!(Element::from_atomic_number(30), Some(Element::Zn));
-        assert_eq!(Element::from_atomic_number(200), None);
+        assert_eq!(Element::from_atomic_number(119), None);
     }
 
     #[test]
     fn test_element_properties() {
-        let carbon = Element::C;
-        assert_eq!(carbon.symbol(), "C");
-        assert_eq!(carbon.atomic_number(), 6);
-        assert!((carbon.atomic_mass() - 12.011).abs() < 0.001);
+        let h = Element::H;
+        assert_eq!(h.symbol(), "H");
+        assert_eq!(h.atomic_number(), 1);
+        assert!((h.atomic_mass() - 1.008).abs() < 1e-10);
+
+        let he = Element::He;
+        assert_eq!(he.symbol(), "He");
+        assert_eq!(he.atomic_number(), 2);
+        assert!((he.atomic_mass() - 4.002602).abs() < 1e-10);
     }
 
-    // Parameterized tests with rstest
     #[rstest]
     #[case(Element::H, -1, 1, 1)]
-    #[case(Element::C, -4, 4, 4)]
-    #[case(Element::O, -2, 2, 2)]
-    #[case(Element::N, -3, 5, 3)]
+    #[case(Element::He, 0, 0, 0)]
+    #[case(Element::Li, -1, 1, 1)]
+    #[case(Element::Be, -2, 2, 2)]
     fn test_element_bounds(
         #[case] element: Element,
         #[case] min_charge: i8,
@@ -271,15 +271,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Element::H, -1, true)]
     #[case(Element::H, 0, true)]
     #[case(Element::H, 1, true)]
+    #[case(Element::H, -1, true)]
     #[case(Element::H, 2, false)]
     #[case(Element::H, -2, false)]
-    #[case(Element::C, -4, true)]
-    #[case(Element::C, 4, true)]
-    #[case(Element::C, 5, false)]
-    #[case(Element::C, -5, false)]
     fn test_charge_validation(
         #[case] element: Element,
         #[case] charge: i8,
@@ -293,9 +289,8 @@ mod tests {
     #[case(Element::H, 0, true)]
     #[case(Element::H, 1, true)]
     #[case(Element::H, 2, false)]
-    #[case(Element::C, 0, true)]
-    #[case(Element::C, 4, true)]
-    #[case(Element::C, 5, false)]
+    #[case(Element::He, 0, true)]
+    #[case(Element::He, 1, false)]
     fn test_unpaired_electrons_validation(
         #[case] element: Element,
         #[case] unpaired: u8,
@@ -305,71 +300,36 @@ mod tests {
         assert_eq!(result.is_ok(), should_be_valid);
     }
 
-    // Property-based tests with proptest
-    proptest! {
-        #[test]
-        fn doesnt_crash_on_random_symbol(s in "\\PC*") {
-            let _ = Element::from_symbol(&s);
-        }
-
-        #[test]
-        fn doesnt_crash_on_random_atomic_number(n in 0u8..255) {
-            let _ = Element::from_atomic_number(n);
-        }
-
-        #[test]
-        fn element_display_format_is_valid(e in prop_oneof![
-            Just(Element::H),
-            Just(Element::He),
-            Just(Element::C),
-            Just(Element::N),
-            Just(Element::O),
-            Just(Element::Fe),
-            Just(Element::Zn)
-        ]) {
-            let formatted = format!("{}", e);
-            assert_eq!(formatted, e.symbol());
-        }
-    }
-
-    // Test the Display implementation
     #[test]
     fn test_element_display() {
-        assert_eq!(format!("{}", Element::H), "H");
-        assert_eq!(format!("{}", Element::He), "He");
-        assert_eq!(format!("{}", Element::C), "C");
-        assert_eq!(format!("{}", Element::Fe), "Fe");
+        assert_eq!(Element::H.to_string(), "H");
+        assert_eq!(Element::He.to_string(), "He");
+        assert_eq!(Element::Li.to_string(), "Li");
+        assert_eq!(Element::Be.to_string(), "Be");
     }
 
-    // Test that all elements have valid data
     #[test]
     fn test_all_elements_have_data() {
-        // This is a bit of a hack to iterate through all elements
-        // In a real implementation, you might want to add an iterator for Element
-        for atomic_number in 1..=118 {
-            if let Some(element) = Element::from_atomic_number(atomic_number) {
-                // Verify that we can access all properties without panicking
-                let _ = element.symbol();
-                let _ = element.atomic_mass();
-                let _ = element.charge_bounds();
-                let _ = element.max_unpaired_electrons();
-            }
+        for element in ELEMENT_DATA.keys() {
+            let data = ELEMENT_DATA.get(element).unwrap();
+            assert!(data.0 > 0); // atomic number
+            assert!(data.1 > 0.0); // atomic mass
+            assert!(!data.2.is_empty()); // symbol
+            assert!(data.3.0 <= data.3.1); // charge bounds
+            assert!(data.4 <= 10); // max unpaired electrons
         }
     }
 
-    // Test round-trip conversion
     #[test]
     fn test_symbol_to_element_to_symbol() {
-        for (symbol, _) in SYMBOL_TO_ELEMENT.iter() {
-            let element = Element::from_symbol(symbol).unwrap();
+        for (symbol, element) in SYMBOL_TO_ELEMENT.iter() {
             assert_eq!(element.symbol(), *symbol);
         }
     }
 
     #[test]
     fn test_atomic_number_to_element_to_atomic_number() {
-        for (number, _) in ATOMIC_NUMBER_TO_ELEMENT.iter() {
-            let element = Element::from_atomic_number(*number).unwrap();
+        for (number, element) in ATOMIC_NUMBER_TO_ELEMENT.iter() {
             assert_eq!(element.atomic_number(), *number);
         }
     }

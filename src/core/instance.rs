@@ -10,11 +10,11 @@ use crate::core::{Entity, Model, ConvertTo, Result};
 
 /// An instance pairs an entity with its representation in a specific model
 pub struct Instance<E: Entity, M: Model> {
-    entity: E,
-    model: M,
+    pub entity: E,
+    pub model: M,
 }
 
-impl<E: Entity, M: Model> Instance<E, M> {
+impl<E: Entity + Clone, M: Model> Instance<E, M> {
     pub fn new(entity: E, model: M) -> Self {
         Self { entity, model }
     }
@@ -35,9 +35,7 @@ impl<E: Entity, M: Model> Instance<E, M> {
     }
 }
 
-/// Operations connect instances
+/// Operations are applied to instances
 pub trait Operation<E: Entity, M1: Model, M2: Model> {
-    type Error;
-    
-    fn connect(&self, source: &Instance<E, M1>) -> Result<Instance<E, M2>, Self::Error>;
+    fn apply(&self, instance: &Instance<E, M1>) -> Result<Instance<E, M2>>;
 } 
