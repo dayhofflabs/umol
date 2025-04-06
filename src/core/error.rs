@@ -8,6 +8,61 @@ use std::error::Error as StdError;
 use std::collections::HashSet;
 use crate::core::Model;
 
+
+/// Core error types for the molecular modeling framework
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Model operations errors
+    #[error(transparent)]
+    Model(#[from] ModelError),
+
+    /// Property calculations errors
+    #[error(transparent)]
+    Property(#[from] PropertyError),
+
+    /// Format operations errors
+    #[error(transparent)]
+    Format(#[from] FormatError),
+
+    /// Conversion operations errors
+    #[error(transparent)]
+    Conversion(#[from] ConversionError),
+
+    /// Operation execution errors
+    #[error(transparent)]
+    Operation(#[from] OperationError),
+
+    /// Plugin operations errors
+    #[error(transparent)]
+    Plugin(#[from] PluginError),
+
+
+
+    /// Entity operations errors
+    #[error(transparent)]
+    Entity(#[from] EntityError),
+
+    /// Validation errors
+    #[error(transparent)]
+    Validation(#[from] ValidationError),
+
+    /// Serialization errors
+    #[error(transparent)]
+    Serialization(#[from] SerializationError),
+
+    /// Data processing errors
+    #[error(transparent)]
+    Data(#[from] DataError),
+
+    /// Multiple errors occurred
+    #[error("Multiple errors occurred: {0:?}")]
+    Multiple(Vec<Error>),
+
+    /// Other errors
+    #[error(transparent)]
+    Other(#[from] Box<dyn StdError + Send + Sync>),
+}
+
 /// Errors related to serialization and deserialization
 #[derive(Error, Debug)]
 pub enum SerializationError {
@@ -49,90 +104,6 @@ pub enum ValidationError {
     Multiple(Vec<ValidationError>),
 }
 
-/// Core error types for the molecular modeling framework
-#[derive(Debug, Error)]
-pub enum Error {
-    /// An error occurred during model operations
-    #[error(transparent)]
-    Model(#[from] ModelError),
-
-    /// An error occurred during property calculations
-    #[error(transparent)]
-    Property(#[from] PropertyError),
-
-    /// An error occurred during format operations
-    #[error(transparent)]
-    Format(#[from] FormatError),
-
-    /// An error occurred during conversion operations
-    #[error(transparent)]
-    Conversion(#[from] ConversionError),
-
-    /// An error occurred during operation execution
-    #[error(transparent)]
-    Operation(#[from] OperationError),
-
-    /// An error occurred during plugin operations
-    #[error(transparent)]
-    Plugin(#[from] PluginError),
-
-    /// A dependency is missing
-    #[error("Missing dependency: {0}")]
-    MissingDependency(String),
-
-    /// A property was not found
-    #[error("Property not found: {0}")]
-    PropertyNotFound(String),
-
-    /// A model was not found
-    #[error("Model not found: {0}")]
-    ModelNotFound(String),
-
-    /// A conversion was not found
-    #[error("Conversion not found from {0} to {1}")]
-    ConversionNotFound(String, String),
-
-    /// Invalid charge value
-    #[error("Invalid charge {charge} for element {element}, must be between {min} and {max}")]
-    InvalidCharge {
-        element: Element,
-        charge: i8,
-        min: i8,
-        max: i8,
-    },
-
-    /// Invalid number of unpaired electrons
-    #[error("Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}")]
-    InvalidUnpairedElectrons {
-        element: Element,
-        unpaired: u8,
-        max: u8,
-    },
-
-    /// An error occurred during entity operations
-    #[error(transparent)]
-    Entity(#[from] EntityError),
-
-    /// An error occurred during validation
-    #[error(transparent)]
-    Validation(#[from] ValidationError),
-
-    /// An error occurred during serialization
-    #[error(transparent)]
-    Serialization(#[from] SerializationError),
-
-    /// An error occurred during element operations
-    #[error(transparent)]
-    Element(#[from] ElementError),
-
-    /// Multiple errors occurred
-    #[error("Multiple errors occurred: {0:?}")]
-    Multiple(Vec<Error>),
-
-    /// Other errors
-    #[error(transparent)]
-    Other(#[from] Box<dyn StdError + Send + Sync>),
-}
 
 /// Errors related to chemical entities
 #[derive(Error, Debug)]
@@ -217,11 +188,8 @@ pub enum PropertyError {
 /// Errors related to plugins and capabilities
 #[derive(Error, Debug)]
 pub enum PluginError {
-    #[error("Invalid capability format: {0}")]
-    InvalidCapability(String),
-
     #[error("Required plugin not found: {0}")]
-    MissingPlugin(String),
+    PluginNotFound(String),
 
     #[error("Plugin {plugin} version mismatch: required {required}, found {found}")]
     VersionMismatch {
@@ -230,19 +198,34 @@ pub enum PluginError {
         found: String,
     },
 
-    #[error("Required capability not found: {0}")]
-    MissingCapability(Capability),
-
     #[error("Component initialization failed: {0}")]
-    ComponentInit(String),
+    ComponentInit(String),    
+
+    #[error("Required capability not found: {0}")]
+    CapabilityNotFound(Capability),
+
+    #[error("Invalid capability format: {0}")]
+    InvalidCapability(String),
 
     #[error("Required dependency not found: {0}")]
-    MissingDependency(String),
+    DependencyNotFound(String),
+
+    /// Property not found
+    #[error("Property not found: {0}")]
+    PropertyNotFound(String),
+
+    /// Model not found
+    #[error("Model not found: {0}")]
+    ModelNotFound(String),
+
+    /// Conversion not found
+    #[error("Conversion not found from {0} to {1}")]
+    ConversionNotFound(String, String),
 }
 
-/// Errors related to chemical elements
+/// Errors related to data validation and operations
 #[derive(Error, Debug)]
-pub enum ElementError {
+pub enum DataError {
     #[error("Invalid charge {charge} for element {element}, must be between {min} and {max}")]
     InvalidCharge {
         element: Element,
@@ -251,9 +234,7 @@ pub enum ElementError {
         max: i8,
     },
 
-    #[error(
-        "Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}"
-    )]
+    #[error("Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}")]
     InvalidUnpairedElectrons {
         element: Element,
         unpaired: u8,
@@ -298,10 +279,10 @@ mod tests {
         let error = Error::Operation(OperationError::Failed("test error".to_string()));
         assert_eq!(format!("{}", error), "Operation failed: test error");
 
-        let error = Error::Plugin(PluginError::MissingPlugin("test".to_string()));
+        let error = Error::Plugin(PluginError::PluginNotFound("test".to_string()));
         assert_eq!(format!("{}", error), "Required plugin not found: test");
 
-        let error = Error::Element(ElementError::InvalidCharge {
+        let error = Error::Data(DataError::InvalidCharge {
             element: Element::H,
             charge: 2,
             min: -1,

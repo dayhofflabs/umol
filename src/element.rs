@@ -1,6 +1,9 @@
 // Element data and validation
 
-use crate::core::error::Error;
+use crate::core::{
+    error::{DataError, Error},
+    Result,
+};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
@@ -177,29 +180,29 @@ impl Element {
         ELEMENT_DATA.get(self).unwrap().1
     }
 
-    pub fn validate_charge(&self, charge: i8) -> Result<(), Error> {
+    pub fn validate_charge(&self, charge: i8) -> Result<()> {
         let (min_charge, max_charge) = ELEMENT_DATA.get(self).unwrap().3;
 
         if charge < min_charge || charge > max_charge {
-            return Err(Error::InvalidCharge {
+            return Err(Error::Data(DataError::InvalidCharge {
                 element: *self,
                 charge,
                 min: min_charge,
                 max: max_charge,
-            });
+            }));
         }
         Ok(())
     }
 
-    pub fn validate_unpaired_electrons(&self, unpaired: u8) -> Result<(), Error> {
+    pub fn validate_unpaired_electrons(&self, unpaired: u8) -> Result<()> {
         let max_unpaired = ELEMENT_DATA.get(self).unwrap().4;
 
         if unpaired > max_unpaired {
-            return Err(Error::InvalidUnpairedElectrons {
+            return Err(Error::Data(DataError::InvalidUnpairedElectrons {
                 element: *self,
                 unpaired,
                 max: max_unpaired,
-            });
+            }));
         }
         Ok(())
     }

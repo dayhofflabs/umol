@@ -359,7 +359,7 @@ impl Registry {
 
         // Check requirements
         if !self.satisfies_requirements(plugin.requires()) {
-            return Err(PluginError::MissingDependency(name).into());
+            return Err(PluginError::DependencyNotFound(name).into());
         }
 
         // Track what the plugin provides
