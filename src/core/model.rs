@@ -9,21 +9,24 @@ use std::collections::HashSet;
 use std::fmt;
 use crate::core::Result;
 
-/// A capability that a model can have
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A capability that a model can provide
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Capability {
+    /// The namespace of the capability
+    pub namespace: String,
     /// The name of the capability
     pub name: String,
     /// The version of the capability
-    pub version: String,
+    pub version: u32,
 }
 
 impl Capability {
-    /// Returns the capability for models that can represent atoms
-    pub fn has_atoms() -> Self {
+    /// Create a new capability
+    pub fn new(namespace: &str, name: &str, version: u32) -> Self {
         Self {
-            name: "has_atoms".to_string(),
-            version: "1.0".to_string(),
+            namespace: namespace.to_string(),
+            name: name.to_string(),
+            version,
         }
     }
 }
@@ -34,15 +37,24 @@ impl fmt::Display for Capability {
     }
 }
 
-/// Trait for molecular models
-pub trait Model: Sized {
-    /// Get the capabilities of this model
+/// A trait for molecular models
+pub trait Model {
+    /// The type of data stored in this model
+    type Data;
+    
+    /// Get a reference to the model's data
+    fn data(&self) -> &Self::Data;
+    
+    /// Get the capabilities provided by this model
     fn capabilities(&self) -> HashSet<Capability>;
     
-    /// Check if this model has a specific capability
+    /// Check if this model provides a specific capability
     fn has_capability(&self, capability: &Capability) -> bool {
         self.capabilities().contains(capability)
     }
+    
+    /// Get the entity type that this model can represent
+    fn entity_type(&self) -> &str;
     
     /// Validate the model
     fn validate(&self) -> Result<()> {

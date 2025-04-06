@@ -1,23 +1,22 @@
 //! Conversion traits and utilities.
-//! 
+//!
 //! This module provides traits and utilities for converting between models:
 //! - Basic conversion between models
 //! - Parameterized conversions with metadata
-//! - Conversion uncertainty and confidence
 
 use crate::core::{Model, Result};
 use std::collections::HashMap;
 
-/// A trait for basic conversion between molecular models
-pub trait ConvertTo<M: Model> {
+/// A trait for converting between models
+pub trait ConvertTo<M2: Model> {
     /// Convert this model to another model
-    fn convert_to(&self) -> Result<M>;
+    fn convert_to(&self) -> Result<M2>;
 }
 
-/// Metadata about a model conversion
+/// Metadata describing model conversion
 #[derive(Debug, Clone, Default)]
 pub struct ConversionMetadata {
-    /// Any additional metadata as string key-value pairs
+    /// Metadata as string key-value pairs
     pub attributes: HashMap<String, String>,
 }
 
@@ -25,18 +24,15 @@ pub struct ConversionMetadata {
 pub trait ConvertToWithMetadata<M: Model> {
     /// Parameters required for the conversion
     type Params: Default;
-    
+
     /// Convert with specific parameters, returning both result and metadata
-    fn convert_to_with_metadata(
-        &self,
-        params: &Self::Params
-    ) -> Result<(M, ConversionMetadata)>;
+    fn convert_to_with_metadata(&self, params: &Self::Params) -> Result<(M, ConversionMetadata)>;
 }
 
 // Convenience implementation - if something implements ConvertToWithMetadata,
 // it can also do basic conversion
-impl<T, M> ConvertTo<M> for T 
-where 
+impl<T, M> ConvertTo<M> for T
+where
     T: ConvertToWithMetadata<M>,
     M: Model,
 {
@@ -45,4 +41,4 @@ where
         let (model, _) = self.convert_to_with_metadata(&Default::default())?;
         Ok(model)
     }
-} 
+}

@@ -6,36 +6,54 @@
 //! - Instance relationships and transformations
 //! - Operation history tracking
 
-use crate::core::{Entity, Model, ConvertTo, Result};
+use crate::core::{Model, Result, Entity};
+use crate::core::conversion::ConvertTo;
+use crate::core::operation::Operation;
 
 /// An instance pairs an entity with its representation in a specific model
-pub struct Instance<E: Entity, M: Model> {
-    pub entity: E,
+pub struct Instance<M: Model> {
+    /// The entity being represented
+    pub entity: Entity,
+    /// The model used for representation
     pub model: M,
 }
 
-impl<E: Entity + Clone, M: Model> Instance<E, M> {
-    pub fn new(entity: E, model: M) -> Self {
+impl<M: Model> Instance<M> {
+    /// Create a new instance
+    pub fn new(entity: Entity, model: M) -> Self {
         Self { entity, model }
     }
 
-    pub fn entity(&self) -> &E {
+    /// Get a reference to the entity
+    pub fn entity(&self) -> &Entity {
         &self.entity
     }
 
+    /// Get a reference to the model
     pub fn model(&self) -> &M {
         &self.model
     }
 
     /// Convert this instance to use a different model
-    pub fn convert_to<M2: Model>(&self) -> Result<Instance<E, M2>> 
+    pub fn convert_to<M2: Model>(&self) -> Result<Instance<M2>> 
     where M: ConvertTo<M2> {
         let new_model = self.model.convert_to()?;
         Ok(Instance::new(self.entity.clone(), new_model))
     }
-}
 
-/// Operations are applied to instances
-pub trait Operation<E: Entity, M1: Model, M2: Model> {
-    fn apply(&self, instance: &Instance<E, M1>) -> Result<Instance<E, M2>>;
+    /// Apply an operation to this instance
+    pub fn apply<M2: Model, O: Operation<M, M2>>(
+        &self,
+        op: &O
+    ) -> Result<Instance<M2>> {
+        op.apply(self)
+    }
+
+    /// Validate that the entity type is compatible with the model
+    pub fn validate(&self) -> Result<()> {
+        // Validate the entity itself
+        self.entity.validate()?;
+
+        Ok(())
+    }
 } 

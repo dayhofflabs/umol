@@ -222,4 +222,55 @@ mod property_tests {
         assert_eq!(caps.len(), 1);
         assert!(caps.contains(&Capability::HasAtoms));
     }
+}
+
+mod instance_tests {
+    use super::*;
+
+    #[test]
+    fn test_instance_creation() {
+        let entity = MockEntity::new("test");
+        let model = MockModel::new("test", &[Capability::HasAtoms]);
+        let instance = Instance::new(entity.clone(), model);
+
+        assert_eq!(instance.entity(), &entity);
+        assert!(instance.model().has_capability(&Capability::HasAtoms));
+    }
+
+    #[test]
+    fn test_instance_validation() {
+        let entity = MockEntity::new("test");
+        let model = MockModel::new("test", &[Capability::HasAtoms]);
+        let instance = Instance::new(entity, model);
+
+        // Validation should pass for valid instances
+        assert!(instance.validate().is_ok());
+    }
+
+    #[test]
+    fn test_instance_conversion() {
+        let entity = MockEntity::new("test");
+        let model = MockModel::new("test", &[Capability::HasAtoms]);
+        let instance = Instance::new(entity.clone(), model);
+
+        // Convert to advanced model
+        let converted = instance.convert_to().unwrap();
+        assert_eq!(converted.entity(), &entity);
+        assert!(converted.model().has_capability(&Capability::HasAtoms));
+    }
+
+    #[test]
+    fn test_instance_operation() {
+        let entity = MockEntity::new("test");
+        let model = MockModel::new("test", &[Capability::HasAtoms]);
+        let instance = Instance::new(entity.clone(), model);
+
+        // Create a conversion operation
+        let op = ConversionOperation::<MockModelAdvanced>::new();
+        
+        // Apply the operation
+        let result = instance.apply(&op).unwrap();
+        assert_eq!(result.entity(), &entity);
+        assert!(result.model().has_capability(&Capability::HasAtoms));
+    }
 } 

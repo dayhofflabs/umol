@@ -85,6 +85,12 @@ pub trait SerializableModel: Model + Sized {
     }
 }
 
+/// Trait for models that can be created from their data
+pub trait FromModelData: Model {
+    /// Create a new model from its data
+    fn from_data(data: Self::Data) -> Self;
+}
+
 /// Trait for format-specific serialization implementations
 pub trait FormatSerializer<M: Model> {
     /// The format name
@@ -101,29 +107,4 @@ pub trait FormatSerializer<M: Model> {
     
     /// Validate the format of the input
     fn validate<R: Read>(&self, reader: R) -> Result<()>;
-}
-
-/// Errors specific to serialization
-#[derive(Debug, thiserror::Error)]
-pub enum SerializationError {
-    #[error("Invalid format: {0}")]
-    InvalidFormat(String),
-    
-    #[error("Version mismatch: expected {expected}, found {found}")]
-    VersionMismatch {
-        expected: FormatVersion,
-        found: FormatVersion,
-    },
-    
-    #[error("Missing required field: {0}")]
-    MissingField(String),
-    
-    #[error("Invalid field value: {0}")]
-    InvalidFieldValue(String),
-    
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
-    
-    #[error("Serialization error: {0}")]
-    SerdeError(#[from] serde_json::Error),
 } 
