@@ -286,7 +286,7 @@ pub fn test_model_capabilities(model: &impl Model) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{ConvertTo, Entity};
+    use crate::core::Entity;
 
     #[test]
     fn test_model_capabilities() {
@@ -325,7 +325,10 @@ mod tests {
         let has_atoms = Capability::new("core", "has_atoms", 1);
         let caps = vec![has_atoms];
         let model = MockModel::new(&caps);
-        let advanced = model.convert_to().unwrap();
+        let params = MockConversionParams {
+            preserve_capabilities: true,
+        };
+        let (advanced, _) = model.convert_to_with_metadata(&params).unwrap();
 
         assert_eq!(model.capabilities(), advanced.capabilities());
     }

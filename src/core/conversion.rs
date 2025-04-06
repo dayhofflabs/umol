@@ -1,8 +1,8 @@
 //! Conversion traits and utilities.
 //!
 //! This module provides traits and utilities for converting between models:
-//! - Basic conversion between models
-//! - Parameterized conversions with metadata
+//! - ConvertTo: Basic conversion between models
+//! - ConvertToWithMetadata: Parameterized conversions with metadata
 
 use crate::core::{Model, Result};
 use std::collections::HashMap;

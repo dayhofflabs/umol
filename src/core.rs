@@ -19,6 +19,8 @@ pub mod plugin;
 pub mod property;
 pub mod serde;
 pub mod testing;
+#[cfg(test)]
+pub mod tests;
 
 pub use error::{Error, Result};
 pub use model::Capability;

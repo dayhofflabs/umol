@@ -1,10 +1,6 @@
 //! Instance types and operations.
 //! 
-//! Instances combine entities with their model representations:
-//! - Instance creation and validation
-//! - Model-specific operations
-//! - Instance relationships and transformations
-//! - Operation history tracking
+//! Instances combine entities with their model representations.
 
 use crate::core::{
     error::{OperationError, Result},

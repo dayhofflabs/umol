@@ -1,6 +1,6 @@
-//! Algebraic operations on molecular objects.
+//! Model algebra.
 //!
-//! This module provides algebraic structures for molecular modeling:
+//! Algebraic operations on models:
 //! - Ensembles of chemical models (e.g., conformers, resonance structures,
 //!   positive fractional coefficients)
 //! - Aggregates of chemical models (e.g., mixtures, fixed-stoichiometry

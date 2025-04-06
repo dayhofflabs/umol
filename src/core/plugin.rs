@@ -20,40 +20,6 @@
 //!   - [`FormatProvider`]: Provides format handlers
 //!   - [`OntologyProvider`]: Provides ontology features
 //!
-//! # Example
-//!
-//! ```rust
-//! use umol::core::{Plugin, Registry, Capability, PluginRequirements, ModelProvider, PropertyProvider};
-//!
-//! struct MyPlugin;
-//!
-//! impl Plugin for MyPlugin {
-//!     fn name(&self) -> &str { "my_plugin" }
-//!     fn version(&self) -> Version { "1.0.0".parse().unwrap() }
-//!     
-//!     fn requires(&self) -> PluginRequirements {
-//!         PluginRequirements {
-//!             plugins: [("core", "1.0.0")].into_iter()
-//!                 .map(|(k, v)| (k.to_string(), v.parse().unwrap()))
-//!                 .collect(),
-//!             capabilities: [
-//!                 Capability::new("core", "has_atoms", 1)
-//!             ].into_iter().collect(),
-//!         }
-//!     }
-//!     
-//!     fn register(&self, registry: &mut Registry) {
-//!         // Register your components here
-//!         registry.register_capability(
-//!             Capability::new("my_plugin", "has_feature", 1)
-//!         );
-//!     }
-//! }
-//!
-//! // Indicate that this plugin provides models and properties
-//! impl ModelProvider for MyPlugin {}
-//! impl PropertyProvider for MyPlugin {}
-//! ```
 
 use crate::core::{
     error::{
@@ -474,5 +440,166 @@ impl Registry {
 
     pub fn has_capability(&self, capability: &Capability) -> bool {
         self.capabilities.contains(capability)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::error::{Error, PluginError, PropertyError};
+    use std::sync::Arc;
+
+    #[test]
+    fn test_plugin_example() {
+        struct MyPlugin;
+
+        impl Plugin for MyPlugin {
+            fn name(&self) -> &str { "my_plugin" }
+            fn version(&self) -> &str { "1.0.0" }
+            
+            fn capabilities(&self) -> Vec<Capability> {
+                vec![Capability::new("my_plugin", "has_feature")]
+            }
+            
+            fn requires(&self) -> PluginRequirements {
+                PluginRequirements {
+                    plugins: vec![("core".to_string(), "1.0.0".parse().unwrap())],
+                    capabilities: vec![Capability::new("core", "has_atoms")],
+                }
+            }
+            
+            fn register(&self, registry: &mut Registry) -> Result<()> {
+                registry.register_capability(Capability::new("my_plugin", "has_feature"));
+                Ok(())
+            }
+        }
+
+        impl ModelProvider for MyPlugin {}
+        impl PropertyProvider for MyPlugin {}
+
+        let plugin = MyPlugin;
+        let mut registry = Registry::new();
+        assert!(plugin.register(&mut registry).is_ok());
+        assert!(registry.has_capability(&Capability::new("my_plugin", "has_feature")));
+    }
+
+    #[test]
+    fn test_plugin_version_compatibility() {
+        struct TestPlugin;
+
+        impl Plugin for TestPlugin {
+            fn name(&self) -> &str { "test_plugin" }
+            fn version(&self) -> &str { "2.0.0" }
+            fn capabilities(&self) -> Vec<Capability> { vec![] }
+            fn requires(&self) -> PluginRequirements {
+                PluginRequirements {
+                    plugins: vec![("core".to_string(), "1.0.0".parse().unwrap())],
+                    capabilities: vec![],
+                }
+            }
+            fn register(&self, _: &mut Registry) -> Result<()> { Ok(()) }
+        }
+
+        let mut registry = Registry::new();
+        
+        // Register core plugin first
+        struct CorePlugin;
+        impl Plugin for CorePlugin {
+            fn name(&self) -> &str { "core" }
+            fn version(&self) -> &str { "0.9.0" }  // Lower version than required
+            fn capabilities(&self) -> Vec<Capability> { vec![] }
+            fn register(&self, _: &mut Registry) -> Result<()> { Ok(()) }
+        }
+
+        // Register core plugin
+        registry.register_plugin(Box::new(CorePlugin)).unwrap();
+
+        // Try to register test plugin - should fail due to version mismatch
+        let result = registry.register_plugin(Box::new(TestPlugin));
+        assert!(result.is_err());
+        if let Err(Error::Plugin(PluginError::DependencyNotFound(_))) = result {
+            // Expected error
+        } else {
+            panic!("Unexpected error: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_plugin_capability_dependencies() {
+        struct TestPlugin;
+
+        impl Plugin for TestPlugin {
+            fn name(&self) -> &str { "test_plugin" }
+            fn version(&self) -> &str { "1.0.0" }
+            fn capabilities(&self) -> Vec<Capability> { vec![] }
+            fn requires(&self) -> PluginRequirements {
+                PluginRequirements {
+                    plugins: vec![],
+                    capabilities: vec![Capability::new("core", "required_cap")],
+                }
+            }
+            fn register(&self, _: &mut Registry) -> Result<()> { Ok(()) }
+        }
+
+        let mut registry = Registry::new();
+        
+        // Try to register plugin without required capability
+        let result = registry.register_plugin(Box::new(TestPlugin));
+        assert!(result.is_err());
+        if let Err(Error::Plugin(PluginError::DependencyNotFound(_))) = result {
+            // Expected error
+        } else {
+            panic!("Unexpected error: {:?}", result);
+        }
+
+        // Add required capability
+        registry.register_capability(Capability::new("core", "required_cap"));
+
+        // Now registration should succeed
+        assert!(registry.register_plugin(Box::new(TestPlugin)).is_ok());
+    }
+
+    #[test]
+    fn test_lazy_component_initialization() {
+        let mut registry = Registry::new();
+        
+        // Register a property that fails to initialize
+        registry.register_property(
+            "failing_prop".to_string(),
+            || -> Result<Arc<dyn PropertyDefinition>> {
+                Err(Error::Property(PropertyError::NotFound("test".to_string())))
+            }
+        );
+
+        // Try to get the property - should fail
+        let result = registry.get_property("failing_prop");
+        assert!(result.is_err());
+        if let Err(Error::Property(PropertyError::NotFound(_))) = result {
+            // Expected error
+        } else {
+            panic!("Expected PropertyError::NotFound, got a different error");
+        }
+
+        // Register a successful property
+        struct TestProperty;
+        impl PropertyDefinition for TestProperty {
+            fn name(&self) -> &str { "test" }
+            fn description(&self) -> &str { "test" }
+            fn units(&self) -> Option<&str> { None }
+            fn required_capabilities(&self) -> HashSet<Capability> { HashSet::new() }
+        }
+
+        registry.register_property(
+            "success_prop".to_string(),
+            || Ok(Arc::new(TestProperty) as Arc<dyn PropertyDefinition>)
+        );
+
+        // First access should initialize
+        let prop1 = registry.get_property("success_prop");
+        assert!(prop1.is_ok());
+
+        // Second access should return cached value
+        let prop2 = registry.get_property("success_prop");
+        assert!(prop2.is_ok());
     }
 }
