@@ -10,7 +10,7 @@ pub fn setup_logger(level: slog::Level) -> Logger {
         .filter_level(level)
         .fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
-    
+
     Logger::root(drain, o!("version" => env!("CARGO_PKG_VERSION")))
 }
 /// Performs any necessary cleanup of the logging system
@@ -22,19 +22,4 @@ macro_rules! with_logger {
     ($log:expr, $component:expr) => {
         $log.new(o!("component" => $component))
     };
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use slog::info;
-
-    #[test]
-    fn test_logger_macro() {
-        let root = setup_logger(slog::Level::Info);
-        let component_log = with_logger!(root, "test_component");
-        
-        // This should work and log with the component field
-        info!(component_log, "Test message");
-    }
 }

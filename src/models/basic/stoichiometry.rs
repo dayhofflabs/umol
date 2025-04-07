@@ -2,6 +2,7 @@
 //!
 //! Simple model containing only atom counts
 
+use map_macro::hash_set;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -12,6 +13,7 @@ use std::str::FromStr;
 use crate::core::{Capability, Error, Model, Property, Result};
 use crate::element::Element;
 use crate::error::SerializationError;
+use crate::property;
 
 /// A stoichiometry model representing atom counts for elements
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,28 +37,15 @@ impl Stoichiometry {
     fn get_count(&self, element: Element) -> u32 {
         *self.counts.get(&element).unwrap_or(&0)
     }
-
-    // Singleton instances of properties
-    pub const ATOM_COUNT: AtomCount = AtomCount;
-    pub const MASS: Mass = Mass;
-
-    // Type-safe convenience methods
-    pub fn atom_count(&self, element: Element) -> Result<u32> {
-        self.compute_property(&Self::ATOM_COUNT, element)
-    }
-
-    pub fn mass(&self) -> Result<f64> {
-        self.compute_property(&Self::MASS, ())
-    }
 }
 
 impl Model for Stoichiometry {
     type Data = Self;
 
     fn capabilities(&self) -> HashSet<Capability> {
-        let mut caps = HashSet::new();
-        caps.insert(Capability::new("basic", "stoichiometry", 1));
-        caps
+        hash_set! {
+            Capability::new("basic", "stoichiometry", 1)
+        }
     }
 
     fn data(&self) -> &Self::Data {
@@ -227,71 +216,44 @@ impl PartialOrd for Stoichiometry {
     }
 }
 
-/// Property for getting the count of a specific element
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AtomCount;
-
-impl Property<Stoichiometry> for AtomCount {
-    type Value = u32;
-    type Args = Element;
-
-    fn name(&self) -> String {
-        "atom_count".to_string()
+// Define properties using the macro
+property!(
+    AtomCount for Stoichiometry,
+    args: Element,
+    value: u32,
+    {
+        name: "atom_count",
+        description: "Count of atoms of a specific element",
+        units: None,
+        capabilities: hash_set! {
+            Capability::local("basic.stoichiometry", 1)
+        },
+        compute: |model: &Stoichiometry, element: Element| Ok(model.get_count(element)),
+        method: atom_count
     }
+);
 
-    fn description(&self) -> String {
-        "Count of atoms of a specific element".to_string()
+property!(
+    Mass for Stoichiometry,
+    args: (),
+    value: f64,
+    {
+        name: "mass",
+        description: "Total mass",
+        units: Some("amu".to_string()),
+        capabilities: hash_set! {
+            Capability::local("basic.stoichiometry", 1)
+        },
+        compute: |model: &Stoichiometry, _: ()| {
+            Ok(model
+                .counts
+                .iter()
+                .map(|(&element, &count)| element.atomic_mass() * (count as f64))
+                .sum())
+        },
+        method: mass
     }
-
-    fn units(&self) -> Option<String> {
-        None
-    }
-
-    fn required_capabilities(&self) -> HashSet<Capability> {
-        let mut caps = HashSet::new();
-        caps.insert(Capability::local("basic.stoichiometry", 1));
-        caps
-    }
-
-    fn compute(&self, model: &Stoichiometry, element: Element) -> Result<u32> {
-        Ok(model.get_count(element))
-    }
-}
-
-/// Property for computing the total mass
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Mass;
-
-impl Property<Stoichiometry> for Mass {
-    type Value = f64;
-    type Args = ();
-
-    fn name(&self) -> String {
-        "mass".to_string()
-    }
-
-    fn description(&self) -> String {
-        "Total mass".to_string()
-    }
-
-    fn units(&self) -> Option<String> {
-        Some("amu".to_string())
-    }
-
-    fn required_capabilities(&self) -> HashSet<Capability> {
-        let mut caps = HashSet::new();
-        caps.insert(Capability::local("basic.stoichiometry", 1));
-        caps
-    }
-
-    fn compute(&self, model: &Stoichiometry, _: ()) -> Result<f64> {
-        Ok(model
-            .counts
-            .iter()
-            .map(|(&element, &count)| element.atomic_mass() * (count as f64))
-            .sum())
-    }
-}
+);
 
 #[cfg(test)]
 mod tests {
@@ -403,7 +365,7 @@ mod tests {
         // Test serialization and deserialization
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Stoichiometry = serde_json::from_str(&json).unwrap();
-        
+
         // Verify the counts match
         assert_eq!(deserialized.get_count(Element::C), 2);
         assert_eq!(deserialized.get_count(Element::H), 6);
@@ -453,7 +415,7 @@ mod tests {
         assert_eq!(s.atom_count(Element::O).unwrap(), 0);
 
         // Test mass property
-        let mass = s.mass().unwrap();
+        let mass = s.mass(()).unwrap();
         let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }
@@ -479,7 +441,7 @@ mod tests {
         assert_eq!(s.atom_count(Element::H).unwrap(), 6);
         assert_eq!(s.atom_count(Element::O).unwrap(), 0);
 
-        let mass = s.mass().unwrap();
+        let mass = s.mass(()).unwrap();
         let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }

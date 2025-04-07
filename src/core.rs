@@ -20,7 +20,7 @@ mod property;
 pub use algebra::{Aggregate, Ensemble, Process};
 pub use capability::Capability;
 pub use conversion::{ConversionMetadata, ConvertTo, ConvertToWithMetadata};
-pub use entity::{Entity, Relation};
+pub use entity::{AsEntity, Entity, Relation};
 pub use error::{Error, Result};
 pub use instance::Instance;
 pub use io::{FileSystem, FormatDetector, ReadSeek};

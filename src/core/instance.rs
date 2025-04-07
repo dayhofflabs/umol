@@ -3,7 +3,7 @@
 //! Instances combine entities with their model representations.
 
 use crate::core::error::Result;
-use crate::core::{Entity, Model, AsModel};
+use crate::core::{AsEntity, AsModel, Entity, Model};
 
 /// Core functionality for instances in the chemical domain
 pub trait Instance {
@@ -27,6 +27,13 @@ pub trait Instance {
 impl<M: Model, I: Instance<Model = M>> AsModel<M> for I {
     fn as_model(&self) -> &M {
         self.model()
+    }
+}
+
+// An instance with associated entity E can act as E
+impl<E: Entity, I: Instance<Entity = E>> AsEntity<E> for I {
+    fn as_entity(&self) -> &E {
+        self.entity()
     }
 }
 
@@ -83,11 +90,11 @@ mod tests {
 
     impl Model for AtomCount {
         type Data = AtomCountData;
-        
+
         fn data(&self) -> &Self::Data {
             &self.data
         }
-        
+
         fn capabilities(&self) -> HashSet<Capability> {
             let mut caps = HashSet::new();
             caps.insert(Capability::local("atom_count", 1));
@@ -98,7 +105,7 @@ mod tests {
     impl AtomCount {
         fn new(count: usize) -> Self {
             Self {
-                data: AtomCountData { count }
+                data: AtomCountData { count },
             }
         }
     }

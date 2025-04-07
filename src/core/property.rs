@@ -17,7 +17,6 @@ pub trait Property<M: Model>: Serialize {
     /// Get the name of this property
     fn name(&self) -> String;
 
-
     /// Get the description of this property
     fn description(&self) -> String;
 
@@ -31,14 +30,13 @@ pub trait Property<M: Model>: Serialize {
     fn compute(&self, model: &M, args: Self::Args) -> Result<Self::Value>;
 }
 
-
 /// Defines the input/output types and computation contract for a property
 pub trait PropertySpec<M: Model> {
     /// The type of value this property computes
     type Value: Serialize + for<'de> Deserialize<'de>;
     /// The type of arguments this property accepts
     type Args;
-    
+
     /// Compute the property value for a given model and arguments
     fn compute_spec(&self, model: &M, args: Self::Args) -> Result<Self::Value>;
 }
@@ -47,16 +45,124 @@ pub trait PropertySpec<M: Model> {
 impl<M: Model, P: Property<M>> PropertySpec<M> for P {
     type Value = P::Value;
     type Args = P::Args;
-    
+
     fn compute_spec(&self, model: &M, args: Self::Args) -> Result<Self::Value> {
         self.compute(model, args)
     }
 }
 
+/// Macro for defining properties with less boilerplate
+#[macro_export]
+macro_rules! property {
+    // Pattern with explicit args type
+    (
+        $property_name:ident for $model_type:ty,
+        args: $arg_type:ty,
+        value: $return_type:ty,
+        {
+            name: $prop_name:expr,
+            description: $description:expr,
+            units: $units:expr,
+            capabilities: $capabilities:expr,
+            compute: $compute:expr,
+            method: $method_name:ident
+        }
+    ) => {
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub struct $property_name;
+
+        impl Property<$model_type> for $property_name {
+            type Value = $return_type;
+            type Args = $arg_type;
+
+            fn name(&self) -> String {
+                $prop_name.to_string()
+            }
+
+            fn description(&self) -> String {
+                $description.to_string()
+            }
+
+            fn units(&self) -> Option<String> {
+                $units
+            }
+
+            fn required_capabilities(&self) -> HashSet<Capability> {
+                $capabilities
+            }
+
+            fn compute(&self, model: &$model_type, args: Self::Args) -> Result<$return_type> {
+                $compute(model, args)
+            }
+        }
+
+        #[allow(non_upper_case_globals)]
+        impl $model_type {
+            pub const $property_name: $property_name = $property_name;
+
+            pub fn $method_name(&self, args: $arg_type) -> Result<$return_type> {
+                self.compute_property(&Self::$property_name, args)
+            }
+        }
+    };
+
+    // Pattern with empty args
+    (
+        $property_name:ident for $model_type:ty,
+        args:,
+        value: $return_type:ty,
+        {
+            name: $prop_name:expr,
+            description: $description:expr,
+            units: $units:expr,
+            capabilities: $capabilities:expr,
+            compute: $compute:expr,
+            method: $method_name:ident
+        }
+    ) => {
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub struct $property_name;
+
+        impl Property<$model_type> for $property_name {
+            type Value = $return_type;
+            type Args = ();
+
+            fn name(&self) -> String {
+                $prop_name.to_string()
+            }
+
+            fn description(&self) -> String {
+                $description.to_string()
+            }
+
+            fn units(&self) -> Option<String> {
+                $units
+            }
+
+            fn required_capabilities(&self) -> HashSet<Capability> {
+                $capabilities
+            }
+
+            fn compute(&self, model: &$model_type, args: Self::Args) -> Result<$return_type> {
+                $compute(model, args)
+            }
+        }
+
+        #[allow(non_upper_case_globals)]
+        impl $model_type {
+            pub const $property_name: $property_name = $property_name;
+
+            pub fn $method_name(&self) -> Result<$return_type> {
+                self.compute_property(&Self::$property_name, ())
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{AsModel, Entity, Model, Instance};
+    use crate::core::{AsModel, Entity, Instance, Model};
     use serde::{Deserialize, Serialize};
     use serde_json;
 
@@ -212,13 +318,13 @@ mod tests {
 
         // Test computation for 1 carbon atom
         let mass = property.compute(&model, ()).unwrap();
-        assert!((mass - 12.011).abs() < 1e-6);  // Should be exactly 12.011 g/mol
+        assert!((mass - 12.011).abs() < 1e-6); // Should be exactly 12.011 g/mol
 
         // Test computation for 2 carbon atoms
         let model = AtomCount::new(2);
         let instance = SimpleInstance::from_components(entity.clone(), model).unwrap();
         let mass = property.compute(instance.as_model(), ()).unwrap();
-        assert!((mass - 24.022).abs() < 1e-6);  // Should be exactly 24.022 g/mol
+        assert!((mass - 24.022).abs() < 1e-6); // Should be exactly 24.022 g/mol
     }
 
     #[test]
@@ -236,7 +342,83 @@ mod tests {
         assert_eq!(deserialized.name, "molecular_mass");
         assert_eq!(deserialized.description, "Molecular mass in amu");
         assert_eq!(deserialized.units, Some("amu".to_string()));
-        assert!(deserialized.required_capabilities.contains(&Capability::local("atom_count", 1)));
+        assert!(deserialized
+            .required_capabilities
+            .contains(&Capability::local("atom_count", 1)));
         assert!((deserialized.atomic_mass - 12.011).abs() < 1e-6);
+    }
+
+    // A minimal model for testing
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct TestModel {
+        value: i32,
+    }
+
+    impl Model for TestModel {
+        type Data = Self;
+
+        fn data(&self) -> &Self::Data {
+            self
+        }
+
+        fn capabilities(&self) -> HashSet<Capability> {
+            HashSet::new()
+        }
+    }
+
+    // Test the property macro with arguments
+    property!(
+        TestPropertyWithArgs for TestModel,
+        args: i32,
+        value: i32,
+        {
+            name: "test_with_args",
+            description: "A test property with arguments",
+            units: None,
+            capabilities: HashSet::new(),
+            compute: |model: &TestModel, arg: i32| Ok(model.value + arg),
+            method: test_with_args
+        }
+    );
+
+    // Test the property macro without arguments
+    property!(
+        TestPropertyNoArgs for TestModel,
+        args:,
+        value: i32,
+        {
+            name: "test_no_args",
+            description: "A test property without arguments",
+            units: None,
+            capabilities: HashSet::new(),
+            compute: |model: &TestModel, _: ()| Ok(model.value),
+            method: test_no_args
+        }
+    );
+
+    #[test]
+    fn test_property_macro_with_args() {
+        let model = TestModel { value: 42 };
+        let property = TestPropertyWithArgs;
+
+        assert_eq!(property.name(), "test_with_args");
+        assert_eq!(property.description(), "A test property with arguments");
+        assert_eq!(property.units(), None);
+        assert!(property.required_capabilities().is_empty());
+        assert_eq!(property.compute(&model, 10).unwrap(), 52);
+        assert_eq!(model.test_with_args(10).unwrap(), 52);
+    }
+
+    #[test]
+    fn test_property_macro_no_args() {
+        let model = TestModel { value: 42 };
+        let property = TestPropertyNoArgs;
+
+        assert_eq!(property.name(), "test_no_args");
+        assert_eq!(property.description(), "A test property without arguments");
+        assert_eq!(property.units(), None);
+        assert!(property.required_capabilities().is_empty());
+        assert_eq!(property.compute(&model, ()).unwrap(), 42);
+        assert_eq!(model.test_no_args().unwrap(), 42);
     }
 }

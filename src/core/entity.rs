@@ -22,6 +22,11 @@ pub trait Entity: Serialize + for<'de> Deserialize<'de> {
     fn label(&self) -> &str;
 }
 
+pub trait AsEntity<E: Entity> {
+    /// Get a reference to the underlying entity
+    fn as_entity(&self) -> &E;
+}
+
 /// Core functionality for relationships between entities
 pub trait Relation: Serialize + for<'de> Deserialize<'de> {
     /// Entity type associated with this relation
