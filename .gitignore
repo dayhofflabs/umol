@@ -3,6 +3,7 @@
 
 # Specfics
 materials/
+scratch/
 
 ### Emacs ###
 # -*- mode: gitignore; -*-

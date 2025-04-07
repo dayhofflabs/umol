@@ -15,6 +15,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use Rust 2021 edition
 - Follow standard Rust naming conventions (snake_case for functions/variables, CamelCase for types)
 - Organize imports by external crates first, then internal modules
+- Don't use mod.rs modules, instead use the named modules one level up
+  (core.rs instead of core/mod.rs).
 - Use thiserror for error handling with descriptive error messages
 - Implement Display trait for user-facing types
 - Use builder pattern for complex object construction

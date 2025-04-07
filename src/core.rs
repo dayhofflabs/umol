@@ -6,16 +6,16 @@
 //! - Plugin system for extending functionality
 //! - Testing utilities for verifying implementations
 
-pub mod algebra;
-pub mod capability;
-pub mod conversion;
-pub mod entity;
+mod algebra;
+mod capability;
+mod conversion;
+mod entity;
 pub mod error;
-pub mod instance;
+mod instance;
 pub mod io;
-pub mod model;
-pub mod operation;
-pub mod property;
+mod model;
+mod operation;
+mod property;
 
 pub use algebra::{Aggregate, Ensemble, Process};
 pub use capability::Capability;
