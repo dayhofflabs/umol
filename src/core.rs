@@ -1,10 +1,9 @@
 //! Core functionality for umol
 //!
-//! This module provides the fundamental abstractions for molecular modeling:
-//! - Entity and Model traits for representing molecular systems
-//! - Property system for calculating molecular properties
-//! - Plugin system for extending functionality
-//! - Testing utilities for verifying implementations
+//! This module provides the fundamental abstractions for chemical modeling:
+//! - Entity, Model, and Instance traits for representing chemical systems
+//! - Capability and Property types for calculating chemical properties
+//! - Basic IO, logging, and error handling utilities
 
 mod algebra;
 mod capability;
@@ -13,6 +12,7 @@ mod entity;
 pub mod error;
 mod instance;
 pub mod io;
+pub mod logging;
 mod model;
 mod operation;
 mod property;
