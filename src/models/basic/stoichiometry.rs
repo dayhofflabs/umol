@@ -216,7 +216,7 @@ impl PartialOrd for Stoichiometry {
     }
 }
 
-// Define properties using the macro
+// Atom count property
 property!(
     AtomCount for Stoichiometry,
     args: Element,
@@ -233,6 +233,7 @@ property!(
     }
 );
 
+// Mass property
 property!(
     Mass for Stoichiometry,
     args:,
