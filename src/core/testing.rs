@@ -237,12 +237,12 @@ impl Property for MockProperty {
 
     fn required_capabilities() -> HashSet<Capability> {
         let mut caps = HashSet::new();
-        caps.insert(Capability::new("core", "has_atoms", 1));
+        caps.insert(Capability::local("has_atoms", 1));
         caps
     }
 
     fn compute<M: Model>(instance: &Instance<M>) -> Result<Self::Value> {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
+        let has_atoms = Capability::local("has_atoms", 1);
         if instance.model().has_capability(&has_atoms) {
             Ok(42.0)
         } else {
@@ -266,14 +266,15 @@ where
         Err(PropertyError::CalculationFailed(format!(
             "Property computation result mismatch: expected {}, got {}",
             expected, result
-        )).into())
+        ))
+        .into())
     }
 }
 
 /// Test that verifies a model has the required capabilities
 pub fn test_model_capabilities(model: &impl Model) -> Result<()> {
     let mut caps = HashSet::new();
-    caps.insert(Capability::new("core", "has_atoms", 1));
+    caps.insert(Capability::local("has_atoms", 1));
 
     for cap in &caps {
         if !model.has_capability(cap) {
@@ -290,9 +291,9 @@ mod tests {
 
     #[test]
     fn test_model_capabilities() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
-        let has_bonds = Capability::new("core", "has_bonds", 1);
-        let has_coords_3d = Capability::new("core", "has_coordinates_3d", 1);
+        let has_atoms = Capability::local("has_atoms", 1);
+        let has_bonds = Capability::local("has_bonds", 1);
+        let has_coords_3d = Capability::local("has_coordinates_3d", 1);
 
         let caps = vec![has_atoms.clone(), has_bonds.clone()];
         let model = MockModel::new(&caps);
@@ -304,9 +305,9 @@ mod tests {
 
     #[test]
     fn test_model_capability_intersection() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
-        let has_bonds = Capability::new("core", "has_bonds", 1);
-        let has_coords_3d = Capability::new("core", "has_coordinates_3d", 1);
+        let has_atoms = Capability::local("has_atoms", 1);
+        let has_bonds = Capability::local("has_bonds", 1);
+        let has_coords_3d = Capability::local("has_coordinates_3d", 1);
 
         let model1 = MockModel::new(&[has_atoms.clone(), has_bonds.clone()]);
         let model2 = MockModel::new(&[has_atoms.clone(), has_coords_3d.clone()]);
@@ -322,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_model_conversion() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
+        let has_atoms = Capability::local("has_atoms", 1);
         let caps = vec![has_atoms];
         let model = MockModel::new(&caps);
         let params = MockConversionParams {
@@ -335,8 +336,8 @@ mod tests {
 
     #[test]
     fn test_instance_creation() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
-        let entity = Entity::new("test", "test", None);
+        let has_atoms = Capability::local("has_atoms", 1);
+        let entity = Entity::local("test", "test");
         let model = MockModel::new(&[has_atoms.clone()]);
         let instance = Instance::new(entity, model).unwrap();
 
@@ -346,8 +347,8 @@ mod tests {
 
     #[test]
     fn test_instance_validation() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
-        let entity = Entity::new("test", "test", None);
+        let has_atoms = Capability::local("has_atoms", 1);
+        let entity = Entity::local("test", "test");
         let model = MockModel::new(&[has_atoms.clone()]);
         let instance = Instance::new(entity, model).unwrap();
 
@@ -356,8 +357,8 @@ mod tests {
 
     #[test]
     fn test_property_computation() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
-        let entity = Entity::new("test", "test", None);
+        let has_atoms = Capability::local("has_atoms", 1);
+        let entity = Entity::local("test", "test");
         let model = MockModel::new(&[has_atoms.clone()]);
         let instance = Instance::new(entity, model).unwrap();
 
@@ -368,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_model_conversion_with_metadata() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
+        let has_atoms = Capability::local("has_atoms", 1);
         let model = MockModel::new(&[has_atoms.clone()]);
 
         let params = MockConversionParams {
@@ -383,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_model_conversion_without_metadata() {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
+        let has_atoms = Capability::local("has_atoms", 1);
         let model = MockModel::new(&[has_atoms.clone()]);
 
         let params = MockConversionParams {
@@ -398,7 +399,7 @@ mod tests {
     #[test]
     fn test_property_required_capabilities_validation() {
         // let has_atoms = Capability::new("core", "has_atoms", 1);
-        let entity = Entity::new("test", "test", None);
+        let entity = Entity::local("test", "test");
         let model = MockModel::new(&[]); // No capabilities
         let instance = Instance::new(entity, model).unwrap();
 
@@ -416,7 +417,7 @@ mod tests {
             type M = MockModel;
 
             fn create_test_instance() -> Result<Instance<Self::M>> {
-                let entity = Entity::new("test", "test", None);
+                let entity = Entity::local("test", "test");
                 let model = MockModel::new(&[]);
                 Instance::new(entity, model)
             }

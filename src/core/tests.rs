@@ -1,3 +1,5 @@
+//! Core module tests.
+
 use crate::core::{
     error::{ModelError, PropertyError}, 
     Capability, ConvertTo, ConvertToWithMetadata, Error, Instance, Model, Property, Result,
@@ -80,12 +82,12 @@ impl Property for MockProperty {
 
     fn required_capabilities() -> HashSet<Capability> {
         let mut caps = HashSet::new();
-        caps.insert(Capability::new("core", "has_atoms", 1));
+        caps.insert(Capability::local("has_atoms", 1));
         caps
     }
 
     fn compute<M: Model>(instance: &Instance<M>) -> Result<Self::Value> {
-        let has_atoms = Capability::new("core", "has_atoms", 1);
+        let has_atoms = Capability::local("has_atoms", 1);
         if instance.model().has_capability(&has_atoms) {
             Ok(42.0)
         } else {
@@ -129,9 +131,9 @@ impl ConvertToWithMetadata<MockModelAdvanced> for MockModel {
 
 #[test]
 fn test_model_capabilities() {
-    let has_atoms = Capability::new("core", "has_atoms", 1);
-    let has_bonds = Capability::new("core", "has_bonds", 1);
-    let has_coords = Capability::new("core", "has_coordinates_3d", 1);
+    let has_atoms = Capability::local("has_atoms", 1);
+    let has_bonds = Capability::local("has_bonds", 1);
+    let has_coords = Capability::local("has_coordinates_3d", 1);
 
     let caps = vec![has_atoms.clone(), has_bonds.clone()];
     let model = MockModel::new("test", &caps);
@@ -143,9 +145,9 @@ fn test_model_capabilities() {
 
 #[test]
 fn test_model_capability_intersection() {
-    let has_atoms = Capability::new("core", "has_atoms", 1);
-    let has_bonds = Capability::new("core", "has_bonds", 1);
-    let has_coords = Capability::new("core", "has_coordinates_3d", 1);
+    let has_atoms = Capability::local("has_atoms", 1);
+    let has_bonds = Capability::local("has_bonds", 1);
+    let has_coords = Capability::local("has_coordinates_3d", 1);
 
     let model1 = MockModel::new("test", &[has_atoms.clone(), has_bonds.clone()]);
     let model2 = MockModel::new("test", &[has_atoms.clone(), has_coords.clone()]);
@@ -161,7 +163,7 @@ fn test_model_capability_intersection() {
 
 #[test]
 fn test_model_conversion() {
-    let has_atoms = Capability::new("core", "has_atoms", 1);
+    let has_atoms = Capability::local("has_atoms", 1);
     let caps = vec![has_atoms.clone()];
     let model = MockModel::new("test", &caps);
     let advanced = model.convert_to().unwrap();
@@ -172,8 +174,8 @@ fn test_model_conversion() {
 #[test]
 fn test_instance_conversion() {
     use crate::core::Entity;
-    let has_atoms = Capability::new("core", "has_atoms", 1);
-    let entity = Entity::new("test", "Test Entity", None);
+    let has_atoms = Capability::local("has_atoms", 1);
+    let entity = Entity::local("test", "Test Entity");
     let model = MockModel::new("test", &[has_atoms.clone()]);
     let instance: Instance<MockModel> = Instance::new(entity.clone(), model).unwrap();
 
@@ -192,8 +194,8 @@ fn test_property_metadata() {
 #[test]
 fn test_property_computation() {
     use crate::core::Entity;
-    let has_atoms = Capability::new("core", "has_atoms", 1);
-    let entity = Entity::new("test", "Test Entity", None);
+    let has_atoms = Capability::local("has_atoms", 1);
+    let entity = Entity::local("test", "Test Entity");
     let model = MockModel::new("test", &[has_atoms.clone()]);
     let instance = Instance::new(entity, model).unwrap();
 
@@ -204,8 +206,8 @@ fn test_property_computation() {
 #[test]
 fn test_property_missing_capability() {
     use crate::core::Entity;
-    let has_atoms = Capability::new("core", "has_atoms", 1);
-    let entity = Entity::new("test", "Test Entity", None);
+    let has_atoms = Capability::local("has_atoms", 1);
+    let entity = Entity::local("test", "Test Entity");
     let model = MockModel::new("test", &[]);
     let instance = Instance::new(entity, model).unwrap();
 
@@ -217,7 +219,7 @@ fn test_property_missing_capability() {
 
 #[test]
 fn test_property_required_capabilities() {
-    let has_atoms = Capability::new("core", "has_atoms", 1);
+    let has_atoms = Capability::local("has_atoms", 1);
     let caps = MockProperty::required_capabilities();
     assert_eq!(caps.len(), 1);
     assert!(caps.contains(&has_atoms));
@@ -298,9 +300,9 @@ fn test_complex_capability_requirements() {
 
         fn required_capabilities() -> HashSet<Capability> {
             let mut caps = HashSet::new();
-            caps.insert(Capability::new("core", "has_atoms", 1));
-            caps.insert(Capability::new("core", "has_bonds", 1));
-            caps.insert(Capability::new("core", "has_coordinates_3d", 1));
+            caps.insert(Capability::local("has_atoms", 1));
+            caps.insert(Capability::local("has_bonds", 1));
+            caps.insert(Capability::local("has_coordinates_3d", 1));
             caps
         }
 
@@ -322,21 +324,21 @@ fn test_complex_capability_requirements() {
 
     // Test with all required capabilities
     let all_caps = vec![
-        Capability::new("core", "has_atoms", 1),
-        Capability::new("core", "has_bonds", 1),
-        Capability::new("core", "has_coordinates_3d", 1),
+        Capability::local("has_atoms", 1),
+        Capability::local("has_bonds", 1),
+        Capability::local("has_coordinates_3d", 1),
     ];
     let model = MockModel::new("test", &all_caps);
-    let instance = Instance::new(Entity::new("test", "test", None), model).unwrap();
+    let instance = Instance::new(Entity::local("test", "test"), model).unwrap();
     assert!(ComplexProperty::compute(&instance).is_ok());
 
     // Test with missing capability
     let partial_caps = vec![
-        Capability::new("core", "has_atoms", 1),
-        Capability::new("core", "has_bonds", 1),
+        Capability::local("has_atoms", 1),
+        Capability::local("has_bonds", 1),
     ];
     let model = MockModel::new("test", &partial_caps);
-    let instance = Instance::new(Entity::new("test", "test", None), model).unwrap();
+    let instance = Instance::new(Entity::local("test", "test"), model).unwrap();
     let result = ComplexProperty::compute(&instance);
     assert!(result.is_err());
     if let Err(Error::Property(PropertyError::MissingCapability(cap))) = result {
@@ -351,7 +353,7 @@ fn test_conversion_metadata() {
     use crate::core::conversion::ConversionMetadata;
 
     // Test basic conversion with metadata
-    let has_atoms = Capability::new("core", "has_atoms", 1);
+    let has_atoms = Capability::local("has_atoms", 1);
     let caps = vec![has_atoms.clone()];
     let model = MockModel::new("test", &caps);
 

@@ -1,13 +1,10 @@
 //! Error types and handling.
 
-use crate::core::serde::FormatVersion;
-use crate::core::Capability;
+use crate::core::{Capability, FormatVersion, Model};
 use crate::Element;
-use thiserror::Error;
-use std::error::Error as StdError;
 use std::collections::HashSet;
-use crate::core::Model;
-
+use std::error::Error as StdError;
+use thiserror::Error;
 
 /// Core error types for the molecular modeling framework
 #[derive(Debug, Error)]
@@ -35,8 +32,6 @@ pub enum Error {
     /// Plugin operations errors
     #[error(transparent)]
     Plugin(#[from] PluginError),
-
-
 
     /// Entity operations errors
     #[error(transparent)]
@@ -103,7 +98,6 @@ pub enum ValidationError {
     #[error("Multiple validation errors: {0:?}")]
     Multiple(Vec<ValidationError>),
 }
-
 
 /// Errors related to chemical entities
 #[derive(Error, Debug)]
@@ -199,7 +193,7 @@ pub enum PluginError {
     },
 
     #[error("Component initialization failed: {0}")]
-    ComponentInit(String),    
+    ComponentInit(String),
 
     #[error("Required capability not found: {0}")]
     CapabilityNotFound(Capability),
@@ -234,7 +228,9 @@ pub enum DataError {
         max: i8,
     },
 
-    #[error("Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}")]
+    #[error(
+        "Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}"
+    )]
     InvalidUnpairedElectrons {
         element: Element,
         unpaired: u8,
@@ -268,13 +264,22 @@ mod tests {
         assert_eq!(format!("{}", error), "Model not found: test");
 
         let error = Error::Property(PropertyError::CalculationFailed("test error".into()));
-        assert_eq!(format!("{}", error), "Property calculation failed: test error");
+        assert_eq!(
+            format!("{}", error),
+            "Property calculation failed: test error"
+        );
 
         let error = Error::Format(FormatError::NotFound("test".to_string()));
         assert_eq!(format!("{}", error), "Format not found: test");
 
-        let error = Error::Conversion(ConversionError::NotFound("source".to_string(), "target".to_string()));
-        assert_eq!(format!("{}", error), "No conversion found from source to target");
+        let error = Error::Conversion(ConversionError::NotFound(
+            "source".to_string(),
+            "target".to_string(),
+        ));
+        assert_eq!(
+            format!("{}", error),
+            "No conversion found from source to target"
+        );
 
         let error = Error::Operation(OperationError::Failed("test error".to_string()));
         assert_eq!(format!("{}", error), "Operation failed: test error");
@@ -314,7 +319,7 @@ pub fn verify_capabilities(model: &impl Model, required: &[Capability]) -> Resul
 
 pub fn test_model_capabilities(model: &impl Model) -> Result<()> {
     let mut caps = HashSet::new();
-    caps.insert(Capability::new("core", "has_atoms", 1));
+    caps.insert(Capability::local("has_atoms", 1));
 
     for cap in &caps {
         if !model.has_capability(cap) {

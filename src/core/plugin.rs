@@ -25,26 +25,23 @@ use crate::core::{
     error::{
         ModelError, PropertyError, ConversionError, PluginError, FormatError, Result
     },
-    ConversionMetadata, Entity, Instance, Model,
+    ConversionMetadata, Entity, Instance, Model, Capability,
 };
 use semver::Version;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-/// A capability that a plugin provides or requires
+/// A feature that a plugin provides
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Capability {
-    /// The namespace of the capability (usually the plugin name)
-    pub namespace: String,
-    /// The name of the capability
+pub struct Feature {
+    /// The name of the feature
     pub name: String,
 }
 
-impl Capability {
-    /// Create a new capability
-    pub fn new(namespace: impl Into<String>, name: impl Into<String>) -> Self {
+impl Feature {
+    /// Create a new feature
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
-            namespace: namespace.into(),
             name: name.into(),
         }
     }
@@ -167,8 +164,8 @@ pub trait OntologyProvider {}
 pub struct PluginRequirements {
     /// Required plugins
     pub plugins: Vec<(String, Version)>,
-    /// Required capabilities
-    pub capabilities: Vec<Capability>,
+    /// Required features
+    pub features: Vec<Feature>,
 }
 
 /// A lazy-initialized component that is created on first use
@@ -209,8 +206,8 @@ pub trait Plugin: Send + Sync + 'static {
     /// Get the version of this plugin
     fn version(&self) -> &str;
 
-    /// Get the capabilities provided by this plugin
-    fn capabilities(&self) -> Vec<Capability>;
+    /// Get the features provided by this plugin
+    fn features(&self) -> Vec<Feature>;
 
     /// Get the requirements of this plugin
     fn requires(&self) -> PluginRequirements {
@@ -262,8 +259,8 @@ pub struct Registry {
     format_providers: HashSet<String>,
     /// Plugins that provide ontology features
     ontology_providers: HashSet<String>,
-    /// Registered capabilities
-    capabilities: HashSet<Capability>,
+    /// Registered features
+    features: HashSet<Feature>,
     /// Registered properties
     properties: HashMap<String, LazyComponent<dyn PropertyDefinition>>,
     /// Registered models
@@ -286,7 +283,7 @@ impl Registry {
             conversion_providers: HashSet::new(),
             format_providers: HashSet::new(),
             ontology_providers: HashSet::new(),
-            capabilities: HashSet::new(),
+            features: HashSet::new(),
             properties: HashMap::new(),
             models: HashMap::new(),
             conversions: HashMap::new(),
@@ -308,9 +305,9 @@ impl Registry {
             }
         }
 
-        // Check capability requirements
-        for cap in reqs.capabilities {
-            if !self.capabilities.contains(&cap) {
+        // Check feature requirements
+        for feature in reqs.features {
+            if !self.features.contains(&feature) {
                 return false;
             }
         }
@@ -371,8 +368,8 @@ impl Registry {
             .and_then(|component| component.get())
     }
 
-    pub fn register_capability(&mut self, capability: Capability) {
-        self.capabilities.insert(capability);
+    pub fn register_feature(&mut self, feature: Feature) {
+        self.features.insert(feature);
     }
 
     pub fn register_property(
@@ -438,8 +435,8 @@ impl Registry {
             .get()
     }
 
-    pub fn has_capability(&self, capability: &Capability) -> bool {
-        self.capabilities.contains(capability)
+    pub fn has_feature(&self, feature: &Feature) -> bool {
+        self.features.contains(feature)
     }
 }
 
@@ -457,19 +454,19 @@ mod tests {
             fn name(&self) -> &str { "my_plugin" }
             fn version(&self) -> &str { "1.0.0" }
             
-            fn capabilities(&self) -> Vec<Capability> {
-                vec![Capability::new("my_plugin", "has_feature")]
+            fn features(&self) -> Vec<Feature> {
+                vec![Feature::new("has_feature")]
             }
             
             fn requires(&self) -> PluginRequirements {
                 PluginRequirements {
                     plugins: vec![("core".to_string(), "1.0.0".parse().unwrap())],
-                    capabilities: vec![Capability::new("core", "has_atoms")],
+                    features: vec![Feature::new("has_atoms")],
                 }
             }
             
             fn register(&self, registry: &mut Registry) -> Result<()> {
-                registry.register_capability(Capability::new("my_plugin", "has_feature"));
+                registry.register_feature(Feature::new("has_feature"));
                 Ok(())
             }
         }
@@ -480,7 +477,7 @@ mod tests {
         let plugin = MyPlugin;
         let mut registry = Registry::new();
         assert!(plugin.register(&mut registry).is_ok());
-        assert!(registry.has_capability(&Capability::new("my_plugin", "has_feature")));
+        assert!(registry.has_feature(&Feature::new("has_feature")));
     }
 
     #[test]
@@ -490,11 +487,11 @@ mod tests {
         impl Plugin for TestPlugin {
             fn name(&self) -> &str { "test_plugin" }
             fn version(&self) -> &str { "2.0.0" }
-            fn capabilities(&self) -> Vec<Capability> { vec![] }
+            fn features(&self) -> Vec<Feature> { vec![] }
             fn requires(&self) -> PluginRequirements {
                 PluginRequirements {
                     plugins: vec![("core".to_string(), "1.0.0".parse().unwrap())],
-                    capabilities: vec![],
+                    features: vec![],
                 }
             }
             fn register(&self, _: &mut Registry) -> Result<()> { Ok(()) }
@@ -507,7 +504,7 @@ mod tests {
         impl Plugin for CorePlugin {
             fn name(&self) -> &str { "core" }
             fn version(&self) -> &str { "0.9.0" }  // Lower version than required
-            fn capabilities(&self) -> Vec<Capability> { vec![] }
+            fn features(&self) -> Vec<Feature> { vec![] }
             fn register(&self, _: &mut Registry) -> Result<()> { Ok(()) }
         }
 
@@ -525,17 +522,17 @@ mod tests {
     }
 
     #[test]
-    fn test_plugin_capability_dependencies() {
+    fn test_plugin_feature_dependencies() {
         struct TestPlugin;
 
         impl Plugin for TestPlugin {
             fn name(&self) -> &str { "test_plugin" }
             fn version(&self) -> &str { "1.0.0" }
-            fn capabilities(&self) -> Vec<Capability> { vec![] }
+            fn features(&self) -> Vec<Feature> { vec![] }
             fn requires(&self) -> PluginRequirements {
                 PluginRequirements {
                     plugins: vec![],
-                    capabilities: vec![Capability::new("core", "required_cap")],
+                    features: vec![Feature::new("required_feature")],
                 }
             }
             fn register(&self, _: &mut Registry) -> Result<()> { Ok(()) }
@@ -543,7 +540,7 @@ mod tests {
 
         let mut registry = Registry::new();
         
-        // Try to register plugin without required capability
+        // Try to register plugin without required feature
         let result = registry.register_plugin(Box::new(TestPlugin));
         assert!(result.is_err());
         if let Err(Error::Plugin(PluginError::DependencyNotFound(_))) = result {
@@ -552,8 +549,8 @@ mod tests {
             panic!("Unexpected error: {:?}", result);
         }
 
-        // Add required capability
-        registry.register_capability(Capability::new("core", "required_cap"));
+        // Add required feature
+        registry.register_feature(Feature::new("required_feature"));
 
         // Now registration should succeed
         assert!(registry.register_plugin(Box::new(TestPlugin)).is_ok());
