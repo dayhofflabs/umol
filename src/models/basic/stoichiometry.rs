@@ -235,7 +235,7 @@ property!(
 
 property!(
     Mass for Stoichiometry,
-    args: (),
+    args:,
     value: f64,
     {
         name: "mass",
@@ -415,7 +415,7 @@ mod tests {
         assert_eq!(s.atom_count(Element::O).unwrap(), 0);
 
         // Test mass property
-        let mass = s.mass(()).unwrap();
+        let mass = s.mass().unwrap();
         let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }
@@ -436,12 +436,11 @@ mod tests {
             Element::H => 6,
         });
 
-        // Test that properties can still be computed after deserialization
         assert_eq!(s.atom_count(Element::C).unwrap(), 2);
         assert_eq!(s.atom_count(Element::H).unwrap(), 6);
         assert_eq!(s.atom_count(Element::O).unwrap(), 0);
 
-        let mass = s.mass(()).unwrap();
+        let mass = s.mass().unwrap();
         let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }
