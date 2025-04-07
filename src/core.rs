@@ -24,6 +24,6 @@ pub use entity::{Entity, Relation};
 pub use error::{Error, Result};
 pub use instance::Instance;
 pub use io::{FileSystem, FormatDetector, ReadSeek};
-pub use model::Model;
+pub use model::{AsModel, Model};
 pub use operation::{ConversionOperation, Operation};
-pub use property::Property;
+pub use property::{Property, PropertySpec};

@@ -1,4 +1,4 @@
-// Graph-based implementation
+// Graph-based models
 
 pub mod atom;
 pub mod bond;

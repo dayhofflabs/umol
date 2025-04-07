@@ -3,7 +3,7 @@
 //! Instances combine entities with their model representations.
 
 use crate::core::error::Result;
-use crate::core::{Entity, Model};
+use crate::core::{Entity, Model, AsModel};
 
 /// Core functionality for instances in the chemical domain
 pub trait Instance {
@@ -21,6 +21,13 @@ pub trait Instance {
     fn from_components(entity: Self::Entity, model: Self::Model) -> Result<Self>
     where
         Self: Sized;
+}
+
+// An instance with associated model M can act as M
+impl<M: Model, I: Instance<Model = M>> AsModel<M> for I {
+    fn as_model(&self) -> &M {
+        self.model()
+    }
 }
 
 #[cfg(test)]

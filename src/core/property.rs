@@ -1,22 +1,22 @@
 //! Property definitions and calculations.
 //!
-//! Properties are calculations that can be performed on models:
-//! - Property definitions with metadata
-//! - Capability requirements for calculations
-//! - Computation results and error handling
-//! - Property relationships and dependencies
+//! Properties are calculations that can be performed on models.
+//! PropertySpec allows for type-safe property definitions.
 
-use crate::core::{Capability, Instance, Result};
+use crate::core::{Capability, Model, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Base trait for all properties
-pub trait Property<I: Instance>: Serialize {
+pub trait Property<M: Model>: Serialize {
     /// The type of value this property computes
     type Value: Serialize + for<'de> Deserialize<'de>;
+    /// The type of arguments this property accepts
+    type Args;
 
     /// Get the name of this property
     fn name(&self) -> String;
+
 
     /// Get the description of this property
     fn description(&self) -> String;
@@ -27,14 +27,36 @@ pub trait Property<I: Instance>: Serialize {
     /// Get the capabilities required to compute this property
     fn required_capabilities(&self) -> HashSet<Capability>;
 
-    /// Compute the property for a given instance
-    fn compute(&self, instance: &I) -> Result<Self::Value>;
+    /// Compute the property for a given model and arguments
+    fn compute(&self, model: &M, args: Self::Args) -> Result<Self::Value>;
+}
+
+
+/// Defines the input/output types and computation contract for a property
+pub trait PropertySpec<M: Model> {
+    /// The type of value this property computes
+    type Value: Serialize + for<'de> Deserialize<'de>;
+    /// The type of arguments this property accepts
+    type Args;
+    
+    /// Compute the property value for a given model and arguments
+    fn compute_spec(&self, model: &M, args: Self::Args) -> Result<Self::Value>;
+}
+
+// Implement PropertySpec for any Property
+impl<M: Model, P: Property<M>> PropertySpec<M> for P {
+    type Value = P::Value;
+    type Args = P::Args;
+    
+    fn compute_spec(&self, model: &M, args: Self::Args) -> Result<Self::Value> {
+        self.compute(model, args)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{Entity, Model};
+    use crate::core::{AsModel, Entity, Model, Instance};
     use serde::{Deserialize, Serialize};
     use serde_json;
 
@@ -127,7 +149,7 @@ mod tests {
         }
     }
 
-    /// A property that computes molecular mass for SimpleInstance
+    /// A property that computes molecular mass for AtomCount
     #[derive(Debug, Clone, Serialize, Deserialize)]
     struct MolecularMass {
         name: String,
@@ -145,16 +167,17 @@ mod tests {
 
             Self {
                 name: "molecular_mass".to_string(),
-                description: "The molecular mass of a molecule".to_string(),
-                units: Some("g/mol".to_string()),
+                description: "Molecular mass in amu".to_string(),
+                units: Some("amu".to_string()),
                 required_capabilities: caps,
                 atomic_mass,
             }
         }
     }
 
-    impl Property<SimpleInstance> for MolecularMass {
+    impl Property<AtomCount> for MolecularMass {
         type Value = f64;
+        type Args = ();
 
         fn name(&self) -> String {
             self.name.clone()
@@ -172,8 +195,7 @@ mod tests {
             self.required_capabilities.clone()
         }
 
-        fn compute(&self, instance: &SimpleInstance) -> Result<Self::Value> {
-            let model = instance.model();
+        fn compute(&self, model: &AtomCount, _args: Self::Args) -> Result<Self::Value> {
             let data = model.data();
             Ok(data.count as f64 * self.atomic_mass)
         }
@@ -184,19 +206,18 @@ mod tests {
         // Create a test instance with 1 carbon atom
         let entity = SimpleEntity::local("C1", "carbon");
         let model = AtomCount::new(1);
-        let instance = SimpleInstance::from_components(entity.clone(), model).unwrap();
 
         // Create the property with carbon's atomic mass
         let property = MolecularMass::new(12.011);
 
         // Test computation for 1 carbon atom
-        let mass = property.compute(&instance).unwrap();
+        let mass = property.compute(&model, ()).unwrap();
         assert!((mass - 12.011).abs() < 1e-6);  // Should be exactly 12.011 g/mol
 
         // Test computation for 2 carbon atoms
         let model = AtomCount::new(2);
         let instance = SimpleInstance::from_components(entity.clone(), model).unwrap();
-        let mass = property.compute(&instance).unwrap();
+        let mass = property.compute(instance.as_model(), ()).unwrap();
         assert!((mass - 24.022).abs() < 1e-6);  // Should be exactly 24.022 g/mol
     }
 
@@ -207,14 +228,14 @@ mod tests {
 
         // Test serialization
         let json = serde_json::to_string(&property).unwrap();
-        let expected_json = r#"{"name":"molecular_mass","description":"The molecular mass of a molecule","units":"g/mol","required_capabilities":[{"namespace":null,"name":"atom_count","version":1}],"atomic_mass":12.011}"#;
+        let expected_json = r#"{"name":"molecular_mass","description":"Molecular mass in amu","units":"amu","required_capabilities":[{"namespace":null,"name":"atom_count","version":1}],"atomic_mass":12.011}"#;
         assert_eq!(json, expected_json);
 
         // Test deserialization
         let deserialized: MolecularMass = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.name, "molecular_mass");
-        assert_eq!(deserialized.description, "The molecular mass of a molecule");
-        assert_eq!(deserialized.units, Some("g/mol".to_string()));
+        assert_eq!(deserialized.description, "Molecular mass in amu");
+        assert_eq!(deserialized.units, Some("amu".to_string()));
         assert!(deserialized.required_capabilities.contains(&Capability::local("atom_count", 1)));
         assert!((deserialized.atomic_mass - 12.011).abs() < 1e-6);
     }

@@ -1,7 +1,7 @@
 //! Error types and handling.
 
 use crate::core::{Capability, Model};
-use crate::Element;
+use crate::element::Element;
 use semver::Version;
 use std::collections::HashSet;
 use std::error::Error as StdError;
@@ -69,6 +69,9 @@ pub enum SerializationError {
 
     #[error("Invalid field value: {0}")]
     InvalidFieldValue(String),
+
+    #[error("Parse error: {0}")]
+    ParseError(String),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),

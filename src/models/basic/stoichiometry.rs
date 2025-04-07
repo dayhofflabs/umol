@@ -1,0 +1,486 @@
+//! Stoichiometry model
+//!
+//! Simple model containing only atom counts
+
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::ops::{Add, Mul};
+use std::str::FromStr;
+
+use crate::core::{Capability, Error, Model, Property, Result};
+use crate::element::Element;
+use crate::error::SerializationError;
+
+/// A stoichiometry model representing atom counts for elements
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Stoichiometry {
+    counts: HashMap<Element, u32>,
+}
+
+impl Stoichiometry {
+    /// Create a new empty stoichiometry
+    pub fn new() -> Self {
+        Self {
+            counts: HashMap::new(),
+        }
+    }
+
+    pub fn from_counts(counts: HashMap<Element, u32>) -> Self {
+        Self { counts }
+    }
+
+    /// Get the count of a specific element
+    fn get_count(&self, element: Element) -> u32 {
+        *self.counts.get(&element).unwrap_or(&0)
+    }
+
+    // Singleton instances of properties
+    pub const ATOM_COUNT: AtomCount = AtomCount;
+    pub const MASS: Mass = Mass;
+
+    // Type-safe convenience methods
+    pub fn atom_count(&self, element: Element) -> Result<u32> {
+        self.compute_property(&Self::ATOM_COUNT, element)
+    }
+
+    pub fn mass(&self) -> Result<f64> {
+        self.compute_property(&Self::MASS, ())
+    }
+}
+
+impl Model for Stoichiometry {
+    type Data = Self;
+
+    fn capabilities(&self) -> HashSet<Capability> {
+        let mut caps = HashSet::new();
+        caps.insert(Capability::new("basic", "stoichiometry", 1));
+        caps
+    }
+
+    fn data(&self) -> &Self::Data {
+        self
+    }
+}
+
+impl fmt::Display for Stoichiometry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut elements: Vec<_> = self.counts.iter().collect();
+
+        // Sort elements: C first, H second, then alphabetically
+        elements.sort_by(|(a, _), (b, _)| match (*a, *b) {
+            (Element::C, _) => Ordering::Less,
+            (_, Element::C) => Ordering::Greater,
+            (Element::H, _) => Ordering::Less,
+            (_, Element::H) => Ordering::Greater,
+            _ => a.symbol().cmp(b.symbol()),
+        });
+
+        for (element, &count) in elements {
+            if count == 1 {
+                write!(f, "{}", element.symbol())?;
+            } else {
+                write!(f, "{}{}", element.symbol(), count)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for Stoichiometry {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let mut counts = HashMap::new();
+        let mut current_element = None;
+        let mut current_count = String::new();
+
+        for c in s.chars() {
+            if c.is_uppercase() {
+                // If we have a previous element, add it to counts
+                if let Some(element) = current_element {
+                    let count = if current_count.is_empty() {
+                        1
+                    } else {
+                        current_count.parse().map_err(|_| {
+                            Error::Serialization(SerializationError::ParseError(format!(
+                                "Invalid count: {}",
+                                current_count
+                            )))
+                        })?
+                    };
+                    counts.insert(element, count);
+                    current_count.clear();
+                }
+
+                // Start new element
+                current_element = Some(Element::from_symbol(&c.to_string()).ok_or_else(|| {
+                    Error::Serialization(SerializationError::ParseError(format!(
+                        "Invalid element symbol: {}",
+                        c
+                    )))
+                })?);
+            } else if c.is_lowercase() {
+                // Append to current element symbol
+                if let Some(element) = current_element {
+                    let symbol = format!("{}{}", element.symbol(), c);
+                    current_element = Some(Element::from_symbol(&symbol).ok_or_else(|| {
+                        Error::Serialization(SerializationError::ParseError(format!(
+                            "Invalid element symbol: {}",
+                            symbol
+                        )))
+                    })?);
+                } else {
+                    return Err(Error::Serialization(SerializationError::ParseError(
+                        "Element symbol must start with uppercase letter".to_string(),
+                    )));
+                }
+            } else if c.is_ascii_digit() {
+                // Append to current count
+                current_count.push(c);
+            } else {
+                return Err(Error::Serialization(SerializationError::ParseError(
+                    format!("Invalid character in formula: {}", c),
+                )));
+            }
+        }
+
+        // Add the last element
+        if let Some(element) = current_element {
+            let count = if current_count.is_empty() {
+                1
+            } else {
+                current_count.parse().map_err(|_| {
+                    Error::Serialization(SerializationError::ParseError(format!(
+                        "Invalid count: {}",
+                        current_count
+                    )))
+                })?
+            };
+            counts.insert(element, count);
+        }
+
+        Ok(Self::from_counts(counts))
+    }
+}
+
+impl Add for Stoichiometry {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        let mut counts = self.counts;
+        for (element, count) in rhs.counts {
+            *counts.entry(element).or_insert(0) += count;
+        }
+        Self { counts }
+    }
+}
+
+impl Mul<u32> for Stoichiometry {
+    type Output = Self;
+
+    fn mul(self, rhs: u32) -> Self {
+        Self {
+            counts: self
+                .counts
+                .into_iter()
+                .map(|(element, count)| (element, count * rhs))
+                .collect(),
+        }
+    }
+}
+
+impl PartialEq for Stoichiometry {
+    fn eq(&self, other: &Self) -> bool {
+        self.counts == other.counts
+    }
+}
+
+impl PartialOrd for Stoichiometry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let mut all_elements: Vec<_> = self.counts.keys().chain(other.counts.keys()).collect();
+        all_elements.sort();
+        all_elements.dedup();
+
+        let mut ordering = Ordering::Equal;
+        for &element in all_elements {
+            let self_count = self.get_count(element);
+            let other_count = other.get_count(element);
+            match self_count.cmp(&other_count) {
+                Ordering::Less => {
+                    if ordering == Ordering::Greater {
+                        return None;
+                    }
+                    ordering = Ordering::Less;
+                }
+                Ordering::Greater => {
+                    if ordering == Ordering::Less {
+                        return None;
+                    }
+                    ordering = Ordering::Greater;
+                }
+                Ordering::Equal => {}
+            }
+        }
+        Some(ordering)
+    }
+}
+
+/// Property for getting the count of a specific element
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtomCount;
+
+impl Property<Stoichiometry> for AtomCount {
+    type Value = u32;
+    type Args = Element;
+
+    fn name(&self) -> String {
+        "atom_count".to_string()
+    }
+
+    fn description(&self) -> String {
+        "Count of atoms of a specific element".to_string()
+    }
+
+    fn units(&self) -> Option<String> {
+        None
+    }
+
+    fn required_capabilities(&self) -> HashSet<Capability> {
+        let mut caps = HashSet::new();
+        caps.insert(Capability::local("basic.stoichiometry", 1));
+        caps
+    }
+
+    fn compute(&self, model: &Stoichiometry, element: Element) -> Result<u32> {
+        Ok(model.get_count(element))
+    }
+}
+
+/// Property for computing the total mass
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Mass;
+
+impl Property<Stoichiometry> for Mass {
+    type Value = f64;
+    type Args = ();
+
+    fn name(&self) -> String {
+        "mass".to_string()
+    }
+
+    fn description(&self) -> String {
+        "Total mass".to_string()
+    }
+
+    fn units(&self) -> Option<String> {
+        Some("amu".to_string())
+    }
+
+    fn required_capabilities(&self) -> HashSet<Capability> {
+        let mut caps = HashSet::new();
+        caps.insert(Capability::local("basic.stoichiometry", 1));
+        caps
+    }
+
+    fn compute(&self, model: &Stoichiometry, _: ()) -> Result<f64> {
+        Ok(model
+            .counts
+            .iter()
+            .map(|(&element, &count)| element.atomic_mass() * (count as f64))
+            .sum())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use map_macro::hash_map;
+
+    #[test]
+    fn test_stoichiometry_creation() {
+        let s = Stoichiometry::new();
+        assert_eq!(s.get_count(Element::C), 0);
+    }
+
+    #[test]
+    fn test_stoichiometry_from_counts() {
+        let s = Stoichiometry::from_counts(hash_map! {
+            Element::C => 2,
+            Element::H => 6,
+            Element::O => 1,
+        });
+        assert_eq!(s.get_count(Element::C), 2);
+        assert_eq!(s.get_count(Element::H), 6);
+        assert_eq!(s.get_count(Element::O), 1);
+    }
+
+    #[test]
+    fn test_stoichiometry_display() {
+        let s = Stoichiometry::from_counts(hash_map! {
+            Element::C => 2,
+            Element::H => 6,
+            Element::O => 1,
+        });
+        assert_eq!(format!("{}", s), "C2H6O");
+    }
+
+    #[test]
+    fn test_stoichiometry_display_single_atom() {
+        let s = Stoichiometry::from_counts(hash_map! {
+            Element::C => 1,
+            Element::H => 1,
+        });
+
+        assert_eq!(format!("{}", s), "CH");
+    }
+
+    #[test]
+    fn test_stoichiometry_display_empty() {
+        let s = Stoichiometry::new();
+        assert_eq!(format!("{}", s), "");
+    }
+
+    #[test]
+    fn test_stoichiometry_parsing() {
+        // Test basic parsing
+        let s: Stoichiometry = "C2H6O".parse().unwrap();
+        assert_eq!(s.get_count(Element::C), 2);
+        assert_eq!(s.get_count(Element::H), 6);
+        assert_eq!(s.get_count(Element::O), 1);
+
+        // Test single atom without count
+        let s: Stoichiometry = "CH".parse().unwrap();
+        assert_eq!(s.get_count(Element::C), 1);
+        assert_eq!(s.get_count(Element::H), 1);
+
+        // Test multi-letter elements
+        let s: Stoichiometry = "NaCl".parse().unwrap();
+        assert_eq!(s.get_count(Element::Na), 1);
+        assert_eq!(s.get_count(Element::Cl), 1);
+
+        // Test empty string
+        let s: Stoichiometry = "".parse().unwrap();
+        assert_eq!(s.get_count(Element::C), 0);
+        assert_eq!(s.get_count(Element::H), 0);
+    }
+
+    #[test]
+    fn test_stoichiometry_parsing_errors() {
+        // Test invalid element symbol
+        assert!(matches!(
+            "X".parse::<Stoichiometry>(),
+            Err(Error::Serialization(SerializationError::ParseError(_)))
+        ));
+
+        // Test invalid count
+        assert!(matches!(
+            "C2H6O1.5".parse::<Stoichiometry>(),
+            Err(Error::Serialization(SerializationError::ParseError(_)))
+        ));
+
+        // Test invalid character
+        assert!(matches!(
+            "C2H6O!".parse::<Stoichiometry>(),
+            Err(Error::Serialization(SerializationError::ParseError(_)))
+        ));
+
+        // Test lowercase start
+        assert!(matches!(
+            "c2H6O".parse::<Stoichiometry>(),
+            Err(Error::Serialization(SerializationError::ParseError(_)))
+        ));
+    }
+
+    #[test]
+    fn test_stoichiometry_serialization() {
+        let s = Stoichiometry::from_counts(hash_map! {
+            Element::C => 2,
+            Element::H => 6,
+        });
+
+        // Test serialization and deserialization
+        let json = serde_json::to_string(&s).unwrap();
+        let deserialized: Stoichiometry = serde_json::from_str(&json).unwrap();
+        
+        // Verify the counts match
+        assert_eq!(deserialized.get_count(Element::C), 2);
+        assert_eq!(deserialized.get_count(Element::H), 6);
+        assert_eq!(deserialized.get_count(Element::O), 0);
+    }
+
+    #[test]
+    fn test_stoichiometry_addition() {
+        let s1 = Stoichiometry::from_counts(hash_map! {
+            Element::C => 1,
+            Element::H => 4,
+        });
+
+        let s2 = Stoichiometry::from_counts(hash_map! {
+            Element::C => 2,
+            Element::O => 1,
+        });
+
+        let sum = s1 + s2;
+        assert_eq!(sum.get_count(Element::C), 3);
+        assert_eq!(sum.get_count(Element::H), 4);
+        assert_eq!(sum.get_count(Element::O), 1);
+    }
+
+    #[test]
+    fn test_stoichiometry_multiplication() {
+        let s = Stoichiometry::from_counts(hash_map! {
+            Element::C => 1,
+            Element::H => 4,
+        });
+
+        let doubled = s * 2;
+        assert_eq!(doubled.get_count(Element::C), 2);
+        assert_eq!(doubled.get_count(Element::H), 8);
+    }
+
+    #[test]
+    fn test_property_access() {
+        let s = Stoichiometry::from_counts(hash_map! {
+            Element::C => 2,
+            Element::H => 6,
+        });
+
+        // Test atom count property
+        assert_eq!(s.atom_count(Element::C).unwrap(), 2);
+        assert_eq!(s.atom_count(Element::H).unwrap(), 6);
+        assert_eq!(s.atom_count(Element::O).unwrap(), 0);
+
+        // Test mass property
+        let mass = s.mass().unwrap();
+        let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
+        assert!((mass - expected_mass).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_property_capabilities() {
+        let s = Stoichiometry::new();
+        let caps = s.capabilities();
+
+        assert!(caps.contains(&Capability::new("basic", "stoichiometry", 1)));
+        assert_eq!(caps.len(), 1);
+    }
+
+    #[test]
+    fn test_property_computation() {
+        let s = Stoichiometry::from_counts(hash_map! {
+            Element::C => 2,
+            Element::H => 6,
+        });
+
+        // Test that properties can still be computed after deserialization
+        assert_eq!(s.atom_count(Element::C).unwrap(), 2);
+        assert_eq!(s.atom_count(Element::H).unwrap(), 6);
+        assert_eq!(s.atom_count(Element::O).unwrap(), 0);
+
+        let mass = s.mass().unwrap();
+        let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
+        assert!((mass - expected_mass).abs() < 1e-10);
+    }
+}

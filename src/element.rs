@@ -1,15 +1,14 @@
 // Element data and validation
 
-use crate::core::{
-    error::{DataError, Error},
-    Result,
-};
+use crate::core::{Error, Result};
+use crate::error::DataError;
+use map_macro::hash_map;
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{self, Display};
-use map_macro::hash_map;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 #[rustfmt::skip]
 pub enum Element {
     H, He, Li, Be, B, C, N, O, F, Ne, Na, Mg, Al, Si, P, S, Cl, Ar, K, Ca,
@@ -226,6 +225,7 @@ impl Display for Element {
 mod tests {
     use super::*;
     use rstest::*;
+    use serde_json;
 
     #[test]
     fn test_element_from_symbol() {
@@ -318,7 +318,7 @@ mod tests {
             assert!(data.0 > 0); // atomic number
             assert!(data.1 > 0.0); // atomic mass
             assert!(!data.2.is_empty()); // symbol
-            assert!(data.3.0 <= data.3.1); // charge bounds
+            assert!(data.3 .0 <= data.3 .1); // charge bounds
             assert!(data.4 <= 10); // max unpaired electrons
         }
     }
@@ -335,5 +335,74 @@ mod tests {
         for (number, element) in ATOMIC_NUMBER_TO_ELEMENT.iter() {
             assert_eq!(element.atomic_number(), *number);
         }
+    }
+
+    #[test]
+    fn test_element_ordering() {
+        // Test basic ordering
+        assert!(Element::H < Element::He);
+        assert!(Element::He < Element::Li);
+        assert!(Element::C < Element::N);
+        assert!(Element::N < Element::O);
+
+        // Test equality
+        assert!(Element::H == Element::H);
+        assert!(Element::C == Element::C);
+
+        // Test partial ordering
+        assert!(Element::H <= Element::H);
+        assert!(Element::H <= Element::He);
+        assert!(Element::He >= Element::H);
+    }
+
+    #[test]
+    fn test_element_serialization() {
+        // Test serialization of individual elements
+        assert_eq!(serde_json::to_string(&Element::H).unwrap(), r#""H""#);
+        assert_eq!(serde_json::to_string(&Element::He).unwrap(), r#""He""#);
+        assert_eq!(serde_json::to_string(&Element::C).unwrap(), r#""C""#);
+
+        // Test serialization of a vector of elements
+        let elements = vec![Element::H, Element::He, Element::C];
+        assert_eq!(
+            serde_json::to_string(&elements).unwrap(),
+            r#"["H","He","C"]"#
+        );
+    }
+
+    #[test]
+    fn test_element_deserialization() {
+        // Test deserialization of individual elements
+        assert_eq!(
+            serde_json::from_str::<Element>(r#""H""#).unwrap(),
+            Element::H
+        );
+        assert_eq!(
+            serde_json::from_str::<Element>(r#""He""#).unwrap(),
+            Element::He
+        );
+        assert_eq!(
+            serde_json::from_str::<Element>(r#""C""#).unwrap(),
+            Element::C
+        );
+
+        // Test deserialization of a vector of elements
+        let elements: Vec<Element> = serde_json::from_str(r#"["H","He","C"]"#).unwrap();
+        assert_eq!(elements, vec![Element::H, Element::He, Element::C]);
+
+        // Test error handling for invalid element symbols
+        assert!(serde_json::from_str::<Element>(r#""Invalid""#).is_err());
+        assert!(serde_json::from_str::<Element>(r#""123""#).is_err());
+    }
+
+    #[test]
+    fn test_element_roundtrip() {
+        // Test roundtrip serialization/deserialization
+        let elements = vec![Element::H, Element::He, Element::C, Element::N, Element::O];
+
+        let serialized = serde_json::to_string(&elements).unwrap();
+        let deserialized: Vec<Element> = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(elements, deserialized);
     }
 }

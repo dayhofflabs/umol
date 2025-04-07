@@ -1,7 +1,7 @@
 // Graph atom implementation
 
-use crate::error::Error;
-use crate::Element;
+use crate::core::{Error, Result};
+use crate::element::Element;
 use crate::core::types::AtomSite;
 use std::fmt::{self, Display};
 
