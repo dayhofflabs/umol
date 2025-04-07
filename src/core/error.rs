@@ -1,7 +1,8 @@
 //! Error types and handling.
 
-use crate::core::{Capability, FormatVersion, Model};
+use crate::core::{Capability, Model};
 use crate::Element;
+use semver::Version;
 use std::collections::HashSet;
 use std::error::Error as StdError;
 use thiserror::Error;
@@ -28,10 +29,6 @@ pub enum Error {
     /// Operation execution errors
     #[error(transparent)]
     Operation(#[from] OperationError),
-
-    /// Plugin operations errors
-    #[error(transparent)]
-    Plugin(#[from] PluginError),
 
     /// Entity operations errors
     #[error(transparent)]
@@ -65,10 +62,7 @@ pub enum SerializationError {
     InvalidFormat(String),
 
     #[error("Version mismatch: expected {expected}, found {found}")]
-    VersionMismatch {
-        expected: FormatVersion,
-        found: FormatVersion,
-    },
+    VersionMismatch { expected: Version, found: Version },
 
     #[error("Missing required field: {0}")]
     MissingField(String),
@@ -179,44 +173,6 @@ pub enum PropertyError {
     NotFound(String),
 }
 
-/// Errors related to plugins and capabilities
-#[derive(Error, Debug)]
-pub enum PluginError {
-    #[error("Required plugin not found: {0}")]
-    PluginNotFound(String),
-
-    #[error("Plugin {plugin} version mismatch: required {required}, found {found}")]
-    VersionMismatch {
-        plugin: String,
-        required: String,
-        found: String,
-    },
-
-    #[error("Component initialization failed: {0}")]
-    ComponentInit(String),
-
-    #[error("Required capability not found: {0}")]
-    CapabilityNotFound(Capability),
-
-    #[error("Invalid capability format: {0}")]
-    InvalidCapability(String),
-
-    #[error("Required dependency not found: {0}")]
-    DependencyNotFound(String),
-
-    /// Property not found
-    #[error("Property not found: {0}")]
-    PropertyNotFound(String),
-
-    /// Model not found
-    #[error("Model not found: {0}")]
-    ModelNotFound(String),
-
-    /// Conversion not found
-    #[error("Conversion not found from {0} to {1}")]
-    ConversionNotFound(String, String),
-}
-
 /// Errors related to data validation and operations
 #[derive(Error, Debug)]
 pub enum DataError {
@@ -260,47 +216,41 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let error = Error::Model(ModelError::NotFound("test".to_string()));
+        let error = ModelError::NotFound("test".to_string());
         assert_eq!(format!("{}", error), "Model not found: test");
 
-        let error = Error::Property(PropertyError::CalculationFailed("test error".into()));
+        let error = PropertyError::CalculationFailed("test error".into());
         assert_eq!(
             format!("{}", error),
             "Property calculation failed: test error"
         );
 
-        let error = Error::Format(FormatError::NotFound("test".to_string()));
+        let error = FormatError::NotFound("test".to_string());
         assert_eq!(format!("{}", error), "Format not found: test");
 
-        let error = Error::Conversion(ConversionError::NotFound(
-            "source".to_string(),
-            "target".to_string(),
-        ));
+        let error = ConversionError::NotFound("source".to_string(), "target".to_string());
         assert_eq!(
             format!("{}", error),
             "No conversion found from source to target"
         );
 
-        let error = Error::Operation(OperationError::Failed("test error".to_string()));
+        let error = OperationError::Failed("test error".to_string());
         assert_eq!(format!("{}", error), "Operation failed: test error");
 
-        let error = Error::Plugin(PluginError::PluginNotFound("test".to_string()));
-        assert_eq!(format!("{}", error), "Required plugin not found: test");
-
-        let error = Error::Data(DataError::InvalidCharge {
+        let error = DataError::InvalidCharge {
             element: Element::H,
             charge: 2,
             min: -1,
             max: 1,
-        });
+        };
         assert_eq!(
             format!("{}", error),
             "Invalid charge 2 for element H, must be between -1 and 1"
         );
 
-        let errors = vec![
-            Error::Model(ModelError::NotFound("error 1".to_string())),
-            Error::Property(PropertyError::CalculationFailed("error 2".into())),
+        let errors: Vec<Error> = vec![
+            ModelError::NotFound("error 1".to_string()).into(),
+            PropertyError::CalculationFailed("error 2".into()).into(),
         ];
         let error = Error::Multiple(errors);
         assert!(format!("{}", error).contains("Multiple errors occurred"));

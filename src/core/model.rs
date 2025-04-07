@@ -2,56 +2,16 @@
 //! 
 //! This module defines the fundamental abstractions for molecular models:
 //! - Model trait for representing molecular systems
-//! - Capability system for describing model features
 //! - Basic model operations and validations
 
 use std::collections::HashSet;
-use std::fmt;
-use crate::core::{ConversionMetadata, Result};
-
-/// A capability that a model can provide
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct Capability {
-    /// The namespace of the capability
-    pub namespace: Option<String>,
-    /// The name of the capability
-    pub name: String,
-    /// The version of the capability
-    pub version: u32,
-}
-
-impl Capability {
-    /// Create a new capability
-    pub fn new(namespace: impl Into<String>, name: impl Into<String>, version: u32) -> Self {
-        Self {
-            namespace: Some(namespace.into()),
-            name: name.into(),
-            version,
-        }
-    }
-    pub fn local(name: impl Into<String>, version: u32) -> Self {
-        Self {
-            namespace: None,
-            name: name.into(),
-            version,
-        }
-    }
-}
-
-impl fmt::Display for Capability {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(ref ns) = self.namespace {
-            write!(f, "{}:{}:{}", ns, self.name, self.version)
-        } else {
-            write!(f, "{}:{}", self.name, self.version)
-        }
-    }
-}
+use serde::{Serialize, Deserialize};
+use crate::core::{Result, Capability};
 
 /// A trait for molecular models
-pub trait Model {
+pub trait Model: Serialize + for<'de> Deserialize<'de> {
     /// The type of data stored in this model
-    type Data;
+    type Data: Serialize + for<'de> Deserialize<'de>;
     
     /// Get a reference to the model's data
     fn data(&self) -> &Self::Data;
@@ -70,17 +30,61 @@ pub trait Model {
     }
 }
 
-/// Trait for converting between models
-pub trait ConvertTo<M: Model> {
-    /// Convert this model to another model type
-    fn convert_to(&self) -> Result<M>;
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
 
-/// Trait for converting between models with parameters
-pub trait ConvertToWithMetadata<M: Model> {
-    /// The type of parameters needed for conversion
-    type Params;
-    
-    /// Convert this model to another model type with parameters
-    fn convert_to_with_metadata(&self, params: &Self::Params) -> Result<(M, ConversionMetadata)>;
+    /// A simple model that just counts atoms
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct AtomCount {
+        data: AtomCountData,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct AtomCountData {
+        count: usize,
+    }
+
+    impl Model for AtomCount {
+        type Data = AtomCountData;
+        
+        fn data(&self) -> &Self::Data {
+            &self.data
+        }
+        
+        fn capabilities(&self) -> HashSet<Capability> {
+            let mut caps = HashSet::new();
+            caps.insert(Capability::local("atom_count", 1));
+            caps
+        }
+    }
+
+    impl AtomCount {
+        pub fn new(count: usize) -> Self {
+            Self {
+                data: AtomCountData { count }
+            }
+        }
+    }
+
+    #[test]
+    fn test_atom_count_serialization() {
+        let model = AtomCount::new(42);
+        
+        // Serialize to JSON
+        let json = serde_json::to_string(&model).unwrap();
+        assert_eq!(json, r#"{"data":{"count":42}}"#);
+        
+        // Deserialize from JSON
+        let deserialized: AtomCount = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.data.count, 42);
+    }
+
+    #[test]
+    fn test_atom_count_capabilities() {
+        let model = AtomCount::new(42);
+        let caps = model.capabilities();
+        assert!(caps.contains(&Capability::local("atom_count", 1)));
+    }
 }

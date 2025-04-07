@@ -2,51 +2,141 @@
 //!
 //! Instances combine entities with their model representations.
 
-use crate::core::error::{OperationError, Result};
-use crate::core::{ConvertTo, Entity, Model, Operation};
+use crate::core::error::Result;
+use crate::core::{Entity, Model};
 
-/// An instance pairs an entity with its representation in a specific model
-pub struct Instance<M: Model> {
-    /// The entity being represented
-    entity: Entity,
-    /// The model used for representation
-    model: M,
-}
-
-impl<M: Model> Instance<M> {
-    /// Create a new instance
-    pub fn new(entity: Entity, model: M) -> Result<Self> {
-        Ok(Self { entity, model })
-    }
+/// Core functionality for instances in the chemical domain
+pub trait Instance {
+    /// The entity type associated with this instance
+    type Entity: Entity;
+    /// The model type used for representation
+    type Model: Model;
 
     /// Get a reference to the entity
-    pub fn entity(&self) -> &Entity {
-        &self.entity
-    }
-
+    fn entity(&self) -> &Self::Entity;
     /// Get a reference to the model
-    pub fn model(&self) -> &M {
-        &self.model
-    }
+    fn model(&self) -> &Self::Model;
 
-    /// Convert this instance to use a different model
-    pub fn convert_to<M2: Model>(&self) -> Result<Instance<M2>>
+    /// Create a new instance from its components
+    fn from_components(entity: Self::Entity, model: Self::Model) -> Result<Self>
     where
-        M: ConvertTo<M2>,
-    {
-        let new_model = self.model.convert_to()?;
-        Instance::new(self.entity.clone(), new_model)
+        Self: Sized;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::Capability;
+    use serde::{Deserialize, Serialize};
+    use serde_json;
+    use std::collections::HashSet;
+
+    // Test entity
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct SimpleEntity {
+        namespace: Option<String>,
+        id: String,
+        label: String,
     }
 
-    /// Apply an operation to this instance
-    pub fn apply<M2: Model, O: Operation<M, M2>>(&self, op: &O) -> Result<Instance<M2>> {
-        // Validate that the operation is valid for this instance
-        if !op.is_valid_for(self)? {
-            return Err(OperationError::InvalidParameters(
-                "Operation is not valid for this instance".into(),
-            )
-            .into());
+    impl SimpleEntity {
+        fn local(id: impl Into<String>, label: impl Into<String>) -> Self {
+            Self {
+                namespace: None,
+                id: id.into(),
+                label: label.into(),
+            }
         }
-        op.apply(self)
+    }
+
+    impl Entity for SimpleEntity {
+        fn namespace(&self) -> Option<&str> {
+            self.namespace.as_deref()
+        }
+
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn label(&self) -> &str {
+            &self.label
+        }
+    }
+
+    // Test model
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct AtomCount {
+        data: AtomCountData,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct AtomCountData {
+        count: usize,
+    }
+
+    impl Model for AtomCount {
+        type Data = AtomCountData;
+        
+        fn data(&self) -> &Self::Data {
+            &self.data
+        }
+        
+        fn capabilities(&self) -> HashSet<Capability> {
+            let mut caps = HashSet::new();
+            caps.insert(Capability::local("atom_count", 1));
+            caps
+        }
+    }
+
+    impl AtomCount {
+        fn new(count: usize) -> Self {
+            Self {
+                data: AtomCountData { count }
+            }
+        }
+    }
+
+    /// A simple instance combining SimpleEntity with AtomCount
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct SimpleInstance {
+        entity: SimpleEntity,
+        model: AtomCount,
+    }
+
+    impl Instance for SimpleInstance {
+        type Entity = SimpleEntity;
+        type Model = AtomCount;
+
+        fn entity(&self) -> &Self::Entity {
+            &self.entity
+        }
+
+        fn model(&self) -> &Self::Model {
+            &self.model
+        }
+
+        fn from_components(entity: Self::Entity, model: Self::Model) -> Result<Self> {
+            Ok(Self { entity, model })
+        }
+    }
+
+    #[test]
+    fn test_instance_serialization() {
+        let entity = SimpleEntity::local("C1", "carbon");
+        let model = AtomCount::new(1);
+        let instance = SimpleInstance::from_components(entity, model).unwrap();
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&instance).unwrap();
+        assert_eq!(
+            json,
+            r#"{"entity":{"namespace":null,"id":"C1","label":"carbon"},"model":{"data":{"count":1}}}"#
+        );
+
+        // Deserialize from JSON
+        let deserialized: SimpleInstance = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.entity.id, "C1");
+        assert_eq!(deserialized.entity.label, "carbon");
+        assert_eq!(deserialized.model.data.count, 1);
     }
 }
