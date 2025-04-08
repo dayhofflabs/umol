@@ -259,32 +259,33 @@ property!(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::e;
     use map_macro::hash_map;
 
     #[test]
     fn test_stoichiometry_creation() {
         let s = Stoichiometry::new();
-        assert_eq!(s.get_count(Element::C), 0);
+        assert_eq!(s.get_count(e!(C)), 0);
     }
 
     #[test]
     fn test_stoichiometry_from_counts() {
         let s = Stoichiometry::from_counts(hash_map! {
-            Element::C => 2,
-            Element::H => 6,
-            Element::O => 1,
+            e!(C) => 2,
+            e!(H) => 6,
+            e!(O) => 1,
         });
-        assert_eq!(s.get_count(Element::C), 2);
-        assert_eq!(s.get_count(Element::H), 6);
-        assert_eq!(s.get_count(Element::O), 1);
+        assert_eq!(s.get_count(e!(C)), 2);
+        assert_eq!(s.get_count(e!(H)), 6);
+        assert_eq!(s.get_count(e!(O)), 1);
     }
 
     #[test]
     fn test_stoichiometry_display() {
         let s = Stoichiometry::from_counts(hash_map! {
-            Element::C => 2,
-            Element::H => 6,
-            Element::O => 1,
+            e!(C) => 2,
+            e!(H) => 6,
+            e!(O) => 1,
         });
         assert_eq!(format!("{}", s), "C2H6O");
     }
@@ -292,8 +293,8 @@ mod tests {
     #[test]
     fn test_stoichiometry_display_single_atom() {
         let s = Stoichiometry::from_counts(hash_map! {
-            Element::C => 1,
-            Element::H => 1,
+            e!(C) => 1,
+            e!(H) => 1,
         });
 
         assert_eq!(format!("{}", s), "CH");
@@ -309,24 +310,24 @@ mod tests {
     fn test_stoichiometry_parsing() {
         // Test basic parsing
         let s: Stoichiometry = "C2H6O".parse().unwrap();
-        assert_eq!(s.get_count(Element::C), 2);
-        assert_eq!(s.get_count(Element::H), 6);
-        assert_eq!(s.get_count(Element::O), 1);
+        assert_eq!(s.get_count(e!(C)), 2);
+        assert_eq!(s.get_count(e!(H)), 6);
+        assert_eq!(s.get_count(e!(O)), 1);
 
         // Test single atom without count
         let s: Stoichiometry = "CH".parse().unwrap();
-        assert_eq!(s.get_count(Element::C), 1);
-        assert_eq!(s.get_count(Element::H), 1);
+        assert_eq!(s.get_count(e!(C)), 1);
+        assert_eq!(s.get_count(e!(H)), 1);
 
         // Test multi-letter elements
         let s: Stoichiometry = "NaCl".parse().unwrap();
-        assert_eq!(s.get_count(Element::Na), 1);
-        assert_eq!(s.get_count(Element::Cl), 1);
+        assert_eq!(s.get_count(e!(Na)), 1);
+        assert_eq!(s.get_count(e!(Cl)), 1);
 
         // Test empty string
         let s: Stoichiometry = "".parse().unwrap();
-        assert_eq!(s.get_count(Element::C), 0);
-        assert_eq!(s.get_count(Element::H), 0);
+        assert_eq!(s.get_count(e!(C)), 0);
+        assert_eq!(s.get_count(e!(H)), 0);
     }
 
     #[test]
@@ -359,8 +360,8 @@ mod tests {
     #[test]
     fn test_stoichiometry_serialization() {
         let s = Stoichiometry::from_counts(hash_map! {
-            Element::C => 2,
-            Element::H => 6,
+            e!(C) => 2,
+            e!(H) => 6,
         });
 
         // Test serialization and deserialization
@@ -368,56 +369,56 @@ mod tests {
         let deserialized: Stoichiometry = serde_json::from_str(&json).unwrap();
 
         // Verify the counts match
-        assert_eq!(deserialized.get_count(Element::C), 2);
-        assert_eq!(deserialized.get_count(Element::H), 6);
-        assert_eq!(deserialized.get_count(Element::O), 0);
+        assert_eq!(deserialized.get_count(e!(C)), 2);
+        assert_eq!(deserialized.get_count(e!(H)), 6);
+        assert_eq!(deserialized.get_count(e!(O)), 0);
     }
 
     #[test]
     fn test_stoichiometry_addition() {
         let s1 = Stoichiometry::from_counts(hash_map! {
-            Element::C => 1,
-            Element::H => 4,
+            e!(C) => 1,
+            e!(H) => 4,
         });
 
         let s2 = Stoichiometry::from_counts(hash_map! {
-            Element::C => 2,
-            Element::O => 1,
+            e!(C) => 2,
+            e!(O) => 1,
         });
 
         let sum = s1 + s2;
-        assert_eq!(sum.get_count(Element::C), 3);
-        assert_eq!(sum.get_count(Element::H), 4);
-        assert_eq!(sum.get_count(Element::O), 1);
+        assert_eq!(sum.get_count(e!(C)), 3);
+        assert_eq!(sum.get_count(e!(H)), 4);
+        assert_eq!(sum.get_count(e!(O)), 1);
     }
 
     #[test]
     fn test_stoichiometry_multiplication() {
         let s = Stoichiometry::from_counts(hash_map! {
-            Element::C => 1,
-            Element::H => 4,
+            e!(C) => 1,
+            e!(H) => 4,
         });
 
         let doubled = s * 2;
-        assert_eq!(doubled.get_count(Element::C), 2);
-        assert_eq!(doubled.get_count(Element::H), 8);
+        assert_eq!(doubled.get_count(e!(C)), 2);
+        assert_eq!(doubled.get_count(e!(H)), 8);
     }
 
     #[test]
     fn test_property_access() {
         let s = Stoichiometry::from_counts(hash_map! {
-            Element::C => 2,
-            Element::H => 6,
+            e!(C) => 2,
+            e!(H) => 6,
         });
 
         // Test atom count property
-        assert_eq!(s.atom_count(Element::C).unwrap(), 2);
-        assert_eq!(s.atom_count(Element::H).unwrap(), 6);
-        assert_eq!(s.atom_count(Element::O).unwrap(), 0);
+        assert_eq!(s.atom_count(e!(C)).unwrap(), 2);
+        assert_eq!(s.atom_count(e!(H)).unwrap(), 6);
+        assert_eq!(s.atom_count(e!(O)).unwrap(), 0);
 
         // Test mass property
         let mass = s.mass().unwrap();
-        let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
+        let expected_mass = 2.0 * e!(C).atomic_mass() + 6.0 * e!(H).atomic_mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }
 
@@ -433,16 +434,16 @@ mod tests {
     #[test]
     fn test_property_computation() {
         let s = Stoichiometry::from_counts(hash_map! {
-            Element::C => 2,
-            Element::H => 6,
+            e!(C) => 2,
+            e!(H) => 6,
         });
 
-        assert_eq!(s.atom_count(Element::C).unwrap(), 2);
-        assert_eq!(s.atom_count(Element::H).unwrap(), 6);
-        assert_eq!(s.atom_count(Element::O).unwrap(), 0);
+        assert_eq!(s.atom_count(e!(C)).unwrap(), 2);
+        assert_eq!(s.atom_count(e!(H)).unwrap(), 6);
+        assert_eq!(s.atom_count(e!(O)).unwrap(), 0);
 
         let mass = s.mass().unwrap();
-        let expected_mass = 2.0 * Element::C.atomic_mass() + 6.0 * Element::H.atomic_mass();
+        let expected_mass = 2.0 * e!(C).atomic_mass() + 6.0 * e!(H).atomic_mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }
 }

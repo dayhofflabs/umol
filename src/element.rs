@@ -221,6 +221,14 @@ impl Display for Element {
     }
 }
 
+/// Shorthand macro for element access
+#[macro_export]
+macro_rules! e {
+    ($elem:ident) => {
+        Element::$elem
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,5 +412,13 @@ mod tests {
         let deserialized: Vec<Element> = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(elements, deserialized);
+    }
+
+    #[test]
+    fn test_element_macro() {
+        assert_eq!(e!(H), Element::H);
+        assert_eq!(e!(C), Element::C);
+        assert_eq!(e!(O), Element::O);
+        assert_eq!(e!(Fe), Element::Fe);
     }
 }
