@@ -1,12 +1,11 @@
 //! Operation traits and types.
-//! 
+//!
 //! This module provides traits for operations on instances:
 //! - Basic operations
 //! - Conversion operations
 //! - Operation composition
 
-use crate::core::{Model, Instance, Result};
-use crate::core::conversion::ConvertTo;
+use crate::{ConvertTo, Instance, Model, Result};
 
 /// A trait for operations that transform instances
 pub trait Operation {
@@ -16,21 +15,29 @@ pub trait Operation {
     type Output: Model;
 
     /// Apply the operation to an instance
-    fn apply<I: Instance<Model = Self::Input>, J: Instance<Model = Self::Output, Entity = I::Entity>>(
+    fn apply<
+        I: Instance<Model = Self::Input>,
+        J: Instance<Model = Self::Output, Entity = I::Entity>,
+    >(
         &self,
         instance: &I,
     ) -> Result<J>
-    where I::Entity: Clone;
+    where
+        I::Entity: Clone;
 }
 
 /// A conversion operation that can be applied to instances
-pub struct ConversionOperation<M1: Model, M2: Model> 
-where M1: ConvertTo<M2> {
+pub struct ConversionOperation<M1: Model, M2: Model>
+where
+    M1: ConvertTo<M2>,
+{
     _phantom: std::marker::PhantomData<(M1, M2)>,
 }
 
-impl<M1: Model, M2: Model> ConversionOperation<M1, M2> 
-where M1: ConvertTo<M2> {
+impl<M1: Model, M2: Model> ConversionOperation<M1, M2>
+where
+    M1: ConvertTo<M2>,
+{
     /// Create a new conversion operation
     pub fn new() -> Self {
         Self {
@@ -39,16 +46,23 @@ where M1: ConvertTo<M2> {
     }
 }
 
-impl<M1: Model, M2: Model> Operation for ConversionOperation<M1, M2> 
-where M1: ConvertTo<M2> {
+impl<M1: Model, M2: Model> Operation for ConversionOperation<M1, M2>
+where
+    M1: ConvertTo<M2>,
+{
     type Input = M1;
     type Output = M2;
 
-    fn apply<I: Instance<Model = Self::Input>, J: Instance<Model = Self::Output, Entity = I::Entity>>(
+    fn apply<
+        I: Instance<Model = Self::Input>,
+        J: Instance<Model = Self::Output, Entity = I::Entity>,
+    >(
         &self,
         instance: &I,
     ) -> Result<J>
-    where I::Entity: Clone {
+    where
+        I::Entity: Clone,
+    {
         let new_model = instance.model().convert_to()?;
         let entity = instance.entity().clone();
         J::from_components(entity, new_model)
@@ -58,9 +72,9 @@ where M1: ConvertTo<M2> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Serialize, Deserialize};
+    use crate::{Capability, Entity};
+    use serde::{Deserialize, Serialize};
     use std::collections::HashSet;
-    use crate::core::{Entity, Capability};
 
     // Test models
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,11 +89,11 @@ mod tests {
 
     impl Model for SourceModel {
         type Data = SourceData;
-        
+
         fn data(&self) -> &Self::Data {
             &self.data
         }
-        
+
         fn capabilities(&self) -> HashSet<Capability> {
             let mut caps = HashSet::new();
             caps.insert(Capability::local("source", 1));
@@ -100,11 +114,11 @@ mod tests {
 
     impl Model for TargetModel {
         type Data = TargetData;
-        
+
         fn data(&self) -> &Self::Data {
             &self.data
         }
-        
+
         fn capabilities(&self) -> HashSet<Capability> {
             let mut caps = HashSet::new();
             caps.insert(Capability::local("target", 1));
@@ -198,11 +212,16 @@ mod tests {
         type Input = SourceModel;
         type Output = TargetModel;
 
-        fn apply<I: Instance<Model = Self::Input>, J: Instance<Model = Self::Output, Entity = I::Entity>>(
+        fn apply<
+            I: Instance<Model = Self::Input>,
+            J: Instance<Model = Self::Output, Entity = I::Entity>,
+        >(
             &self,
             instance: &I,
         ) -> Result<J>
-        where I::Entity: Clone {
+        where
+            I::Entity: Clone,
+        {
             let new_model = instance.model().convert_to()?;
             let entity = instance.entity().clone();
             J::from_components(entity, new_model)
@@ -214,18 +233,20 @@ mod tests {
         let source_model = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let entity = TestEntity {
             id: "test".to_string(),
         };
-        
+
         let source_instance = SourceInstance {
             entity: entity.clone(),
             model: source_model,
         };
 
         let operation = ConversionOperation::<SourceModel, TargetModel>::new();
-        let target_instance = operation.apply::<SourceInstance, TargetInstance>(&source_instance).unwrap();
+        let target_instance = operation
+            .apply::<SourceInstance, TargetInstance>(&source_instance)
+            .unwrap();
 
         assert_eq!(target_instance.entity().id(), "test");
         assert_eq!(target_instance.model().data.value, 42);
@@ -237,22 +258,27 @@ mod tests {
         let source_model = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let entity = TestEntity {
             id: "test".to_string(),
         };
-        
+
         let source_instance = SourceInstance {
             entity: entity.clone(),
             model: source_model,
         };
 
         let operation = ConversionOperation::<SourceModel, TargetModel>::new();
-        let target_instance = operation.apply::<SourceInstance, TargetInstance>(&source_instance).unwrap();
+        let target_instance = operation
+            .apply::<SourceInstance, TargetInstance>(&source_instance)
+            .unwrap();
 
         // Verify the entity is preserved
         assert_eq!(target_instance.entity().id(), source_instance.entity().id());
-        assert_eq!(target_instance.entity().label(), source_instance.entity().label());
+        assert_eq!(
+            target_instance.entity().label(),
+            source_instance.entity().label()
+        );
     }
 
     #[test]
@@ -260,18 +286,20 @@ mod tests {
         let source_model = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let entity = TestEntity {
             id: "test".to_string(),
         };
-        
+
         let source_instance = SourceInstance {
             entity: entity.clone(),
             model: source_model,
         };
 
         let operation = ConversionOperation::<SourceModel, TargetModel>::new();
-        let target_instance = operation.apply::<SourceInstance, TargetInstance>(&source_instance).unwrap();
+        let target_instance = operation
+            .apply::<SourceInstance, TargetInstance>(&source_instance)
+            .unwrap();
 
         // Verify target model has correct capabilities
         let caps = target_instance.model().capabilities();
@@ -284,21 +312,23 @@ mod tests {
         let source_model = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let entity = TestEntity {
             id: "test".to_string(),
         };
-        
+
         let source_instance = SourceInstance {
             entity: entity.clone(),
             model: source_model,
         };
 
         let operation = TestOperation;
-        let target_instance = operation.apply::<SourceInstance, TargetInstance>(&source_instance).unwrap();
+        let target_instance = operation
+            .apply::<SourceInstance, TargetInstance>(&source_instance)
+            .unwrap();
 
         assert_eq!(target_instance.entity().id(), "test");
         assert_eq!(target_instance.model().data.value, 42);
         assert!(!target_instance.model().data.processed);
     }
-} 
+}

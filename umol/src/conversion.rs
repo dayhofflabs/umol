@@ -4,7 +4,7 @@
 //! - ConvertTo: Basic conversion between models
 //! - ConvertToWithMetadata: Parameterized conversions with metadata
 
-use crate::core::{Model, Result};
+use crate::{Model, Result};
 use std::collections::HashMap;
 
 /// A trait for converting between models
@@ -46,7 +46,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Capability;
+    use crate::Capability;
     use serde::{Serialize, Deserialize};
     use std::collections::HashSet;
 

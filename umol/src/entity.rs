@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Core functionality for entities in the chemical domain
+/// Entities in the chemical domain
 pub trait Entity: Serialize + for<'de> Deserialize<'de> {
     /// Get the namespace of this entity
     fn namespace(&self) -> Option<&str>;
@@ -27,7 +27,7 @@ pub trait AsEntity<E: Entity> {
     fn as_entity(&self) -> &E;
 }
 
-/// Core functionality for relationships between entities
+/// Relationships between entities
 pub trait Relation: Serialize + for<'de> Deserialize<'de> {
     /// Entity type associated with this relation
     type Side: Entity;

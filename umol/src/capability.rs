@@ -53,6 +53,7 @@ impl fmt::Display for Capability {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json;
 
     #[test]
     fn test_capability_creation() {

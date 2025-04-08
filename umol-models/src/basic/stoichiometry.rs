@@ -10,10 +10,9 @@ use std::fmt;
 use std::ops::{Add, Mul};
 use std::str::FromStr;
 
-use crate::core::{Capability, Error, Model, Property, Result};
-use crate::element::Element;
-use crate::error::SerializationError;
-use crate::property;
+use umol::error::SerializationError;
+use umol::{property, Capability, Error, Model, Property, Result};
+use umol_data::Element;
 
 /// A stoichiometry model representing atom counts for elements
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,50 +216,50 @@ impl PartialOrd for Stoichiometry {
 }
 
 // Atom count property
-property!(
-    AtomCount for Stoichiometry,
-    method: atom_count,
-    args: Element,
-    value: u32,
-    {
-        name: "atom_count",
-        description: "Count of atoms of a specific element",
-        units: None,
-        capabilities: hash_set! {
-            Capability::local("basic.stoichiometry", 1)
-        },
-        compute: |model: &Stoichiometry, element: Element| Ok(model.get_count(element))
+
+struct AtomCount;
+
+#[property]
+impl Property<Stoichiometry> for AtomCount {
+    type Value = u32;
+    type Args = Element;
+
+    fn name(&self) -> String {
+        "atom_count".to_string()
     }
-);
+
+    fn compute(&self, model: &Stoichiometry, element: Self::Args) -> Result<Self::Value> {
+        Ok(model.get_count(element))
+    }
+}
 
 // Mass property
-property!(
-    Mass for Stoichiometry,
-    method: mass,
-    args:,
-    value: f64,
-    {
-        name: "mass",
-        description: "Total mass",
-        units: Some("amu".to_string()),
-        capabilities: hash_set! {
-            Capability::local("basic.stoichiometry", 1)
-        },
-        compute: |model: &Stoichiometry, _: ()| {
-            Ok(model
-                .counts
-                .iter()
-                .map(|(&element, &count)| element.atomic_mass() * (count as f64))
-                .sum())
-        }
+
+struct Mass;
+
+#[property]
+impl Property<Stoichiometry> for Mass {
+    type Value = f64;
+    type Args = ();
+
+    fn name(&self) -> String {
+        "mass".to_string()
     }
-);
+
+    fn compute(&self, model: &Stoichiometry, _args: Self::Args) -> Result<Self::Value> {
+        Ok(model
+            .counts
+            .iter()
+            .map(|(&element, &count)| element.atomic_mass() * (count as f64))
+            .sum())
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::e;
     use map_macro::hash_map;
+    use umol_data::e;
 
     #[test]
     fn test_stoichiometry_creation() {

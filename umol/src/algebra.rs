@@ -7,7 +7,7 @@
 //!   complexes, positive integer coefficients)
 //! - Processes (e.g., reactions, positive and negative integer coefficients)
 
-use crate::core::Model;
+use crate::Model;
 
 /// Represents an ensemble of models with weights (e.g., conformers, resonance
 /// structures, positive fractional coefficients)
@@ -63,7 +63,7 @@ pub trait Process<M: Model> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Capability;
+    use crate::Capability;
     use serde::{Deserialize, Serialize};
     use serde_json;
     use std::collections::HashSet;

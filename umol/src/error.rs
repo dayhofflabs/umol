@@ -1,13 +1,12 @@
 //! Error types and handling.
 
-use crate::core::{Capability, Model};
-use crate::element::Element;
+use crate::{Capability, Model};
 use semver::Version;
 use std::collections::HashSet;
 use std::error::Error as StdError;
 use thiserror::Error;
 
-/// Core error types for the molecular modeling framework
+/// umol error types
 #[derive(Debug, Error)]
 pub enum Error {
     /// Model operations errors
@@ -179,19 +178,19 @@ pub enum PropertyError {
 /// Errors related to data validation and operations
 #[derive(Error, Debug)]
 pub enum DataError {
-    #[error("Invalid charge {charge} for element {element}, must be between {min} and {max}")]
+    #[error("Invalid charge {charge} for element {symbol}, must be between {min} and {max}")]
     InvalidCharge {
-        element: Element,
+        symbol: String,
         charge: i8,
         min: i8,
         max: i8,
     },
 
     #[error(
-        "Invalid number of unpaired electrons {unpaired} for element {element}, maximum is {max}"
+        "Invalid number of unpaired electrons {unpaired} for element {symbol}, maximum is {max}"
     )]
     InvalidUnpairedElectrons {
-        element: Element,
+        symbol: String,
         unpaired: u8,
         max: u8,
     },
@@ -210,7 +209,7 @@ pub enum FormatError {
     Failed(String),
 }
 
-/// Result type for core operations
+/// umol result type
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
@@ -241,7 +240,7 @@ mod tests {
         assert_eq!(format!("{}", error), "Operation failed: test error");
 
         let error = DataError::InvalidCharge {
-            element: Element::H,
+            symbol: "H".to_string(),
             charge: 2,
             min: -1,
             max: 1,

@@ -2,10 +2,9 @@
 //!
 //! Instances combine entities with their model representations.
 
-use crate::core::error::Result;
-use crate::core::{AsEntity, AsModel, Entity, Model};
+use crate::{AsEntity, AsModel, Entity, Model, Result};
 
-/// Core functionality for instances in the chemical domain
+/// Instances in the chemical domain
 pub trait Instance {
     /// The entity type associated with this instance
     type Entity: Entity;
@@ -40,7 +39,7 @@ impl<E: Entity, I: Instance<Entity = E>> AsEntity<E> for I {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Capability;
+    use crate::Capability;
     use serde::{Deserialize, Serialize};
     use serde_json;
     use std::collections::HashSet;

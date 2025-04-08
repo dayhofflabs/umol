@@ -1,10 +1,10 @@
-//! Core model traits and types.
+//! Chemical models
 //!
 //! This module defines the fundamental abstractions for molecular models:
 //! - Model trait for representing molecular systems
 //! - Basic model operations and validations
 
-use crate::core::{Capability, Property, Result};
+use crate::{Capability, Property, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 

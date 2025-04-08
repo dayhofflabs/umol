@@ -1,12 +1,12 @@
 // Element data and validation
 
-use crate::core::{Error, Result};
-use crate::error::DataError;
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{self, Display};
+use umol::error::DataError;
+use umol::Result;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 #[rustfmt::skip]
@@ -183,12 +183,13 @@ impl Element {
         let (min_charge, max_charge) = ELEMENT_DATA.get(self).unwrap().3;
 
         if charge < min_charge || charge > max_charge {
-            return Err(Error::Data(DataError::InvalidCharge {
-                element: *self,
+            return Err(DataError::InvalidCharge {
+                symbol: self.symbol().to_string(),
                 charge,
                 min: min_charge,
                 max: max_charge,
-            }));
+            }
+            .into());
         }
         Ok(())
     }
@@ -197,11 +198,12 @@ impl Element {
         let max_unpaired = ELEMENT_DATA.get(self).unwrap().4;
 
         if unpaired > max_unpaired {
-            return Err(Error::Data(DataError::InvalidUnpairedElectrons {
-                element: *self,
+            return Err(DataError::InvalidUnpairedElectrons {
+                symbol: self.symbol().to_string(),
                 unpaired,
                 max: max_unpaired,
-            }));
+            }
+            .into());
         }
         Ok(())
     }
