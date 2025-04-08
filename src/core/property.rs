@@ -57,6 +57,7 @@ macro_rules! property {
     // Pattern with explicit args type
     (
         $property_name:ident for $model_type:ty,
+        method: $method_name:ident,
         args: $arg_type:ty,
         value: $return_type:ty,
         {
@@ -64,8 +65,7 @@ macro_rules! property {
             description: $description:expr,
             units: $units:expr,
             capabilities: $capabilities:expr,
-            compute: $compute:expr,
-            method: $method_name:ident
+            compute: $compute:expr
         }
     ) => {
         #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +109,7 @@ macro_rules! property {
     // Pattern with empty args
     (
         $property_name:ident for $model_type:ty,
+        method: $method_name:ident,
         args:,
         value: $return_type:ty,
         {
@@ -116,8 +117,7 @@ macro_rules! property {
             description: $description:expr,
             units: $units:expr,
             capabilities: $capabilities:expr,
-            compute: $compute:expr,
-            method: $method_name:ident
+            compute: $compute:expr
         }
     ) => {
         #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -369,6 +369,7 @@ mod tests {
     // Test the property macro with arguments
     property!(
         TestPropertyWithArgs for TestModel,
+        method: test_with_args,
         args: i32,
         value: i32,
         {
@@ -376,14 +377,14 @@ mod tests {
             description: "A test property with arguments",
             units: None,
             capabilities: HashSet::new(),
-            compute: |model: &TestModel, arg: i32| Ok(model.value + arg),
-            method: test_with_args
+            compute: |model: &TestModel, arg: i32| Ok(model.value + arg)
         }
     );
 
     // Test the property macro without arguments
     property!(
         TestPropertyNoArgs for TestModel,
+        method: test_no_args,
         args:,
         value: i32,
         {
@@ -391,8 +392,7 @@ mod tests {
             description: "A test property without arguments",
             units: None,
             capabilities: HashSet::new(),
-            compute: |model: &TestModel, _: ()| Ok(model.value),
-            method: test_no_args
+            compute: |model: &TestModel, _: ()| Ok(model.value)
         }
     );
 

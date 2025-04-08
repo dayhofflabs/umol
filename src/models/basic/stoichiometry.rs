@@ -219,6 +219,7 @@ impl PartialOrd for Stoichiometry {
 // Atom count property
 property!(
     AtomCount for Stoichiometry,
+    method: atom_count,
     args: Element,
     value: u32,
     {
@@ -228,14 +229,14 @@ property!(
         capabilities: hash_set! {
             Capability::local("basic.stoichiometry", 1)
         },
-        compute: |model: &Stoichiometry, element: Element| Ok(model.get_count(element)),
-        method: atom_count
+        compute: |model: &Stoichiometry, element: Element| Ok(model.get_count(element))
     }
 );
 
 // Mass property
 property!(
     Mass for Stoichiometry,
+    method: mass,
     args:,
     value: f64,
     {
@@ -251,8 +252,7 @@ property!(
                 .iter()
                 .map(|(&element, &count)| element.atomic_mass() * (count as f64))
                 .sum())
-        },
-        method: mass
+        }
     }
 );
 
