@@ -1,7 +1,6 @@
 //! Error types and handling.
 
 use crate::{Capability, Model};
-use semver::Version;
 use std::collections::HashSet;
 use std::error::Error as StdError;
 use thiserror::Error;
@@ -57,18 +56,6 @@ pub enum Error {
 /// Errors related to serialization and deserialization
 #[derive(Error, Debug)]
 pub enum SerializationError {
-    #[error("Invalid format: {0}")]
-    InvalidFormat(String),
-
-    #[error("Version mismatch: expected {expected}, found {found}")]
-    VersionMismatch { expected: Version, found: Version },
-
-    #[error("Missing required field: {0}")]
-    MissingField(String),
-
-    #[error("Invalid field value: {0}")]
-    InvalidFieldValue(String),
-
     #[error("Parse error: {0}")]
     ParseError(String),
 
@@ -106,9 +93,6 @@ pub enum EntityError {
 
     #[error("Invalid relationship between entities: {0}")]
     InvalidRelation(String),
-
-    #[error("Entity operation failed: {0}")]
-    OperationFailed(String),
 }
 
 /// Errors related to models
@@ -119,9 +103,6 @@ pub enum ModelError {
 
     #[error("Invalid model state: {0}")]
     InvalidState(String),
-
-    #[error("Model operation failed: {0}")]
-    OperationFailed(String),
 
     #[error("Model not found: {0}")]
     NotFound(String),
@@ -143,7 +124,7 @@ pub enum ConversionError {
     NotFound(String, String),
 }
 
-/// Errors related to operations on instances
+/// Errors related to operations on stuff
 #[derive(Error, Debug)]
 pub enum OperationError {
     #[error("Invalid operation parameters: {0}")]
@@ -185,7 +166,6 @@ pub enum DataError {
         min: i8,
         max: i8,
     },
-
     #[error(
         "Invalid number of unpaired electrons {unpaired} for element {symbol}, maximum is {max}"
     )]

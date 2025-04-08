@@ -60,7 +60,7 @@ impl<M: Model, P: Property<M>> PropertySpec<M> for P {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AsModel, Entity, Instance, Model};
+    use crate::{AsModel, Entity, Stuff, Model};
     use map_macro::hash_set;
     use serde::{Deserialize, Serialize};
     use umol_macros::property;
@@ -130,14 +130,14 @@ mod tests {
         }
     }
 
-    // Test instance
+    // Test stuff
     #[derive(Debug, Clone)]
-    struct SimpleInstance {
+    struct SimpleStuff {
         entity: SimpleEntity,
         model: SimpleModel,
     }
 
-    impl Instance for SimpleInstance {
+    impl Stuff for SimpleStuff {
         type Entity = SimpleEntity;
         type Model = SimpleModel;
 
@@ -213,10 +213,10 @@ mod tests {
         let value = property.compute(&model, ()).unwrap();
         assert!((value - 4.0).abs() < 1e-6);
 
-        // Test computation with an instance
+        // Test computation on stuff
         let model = SimpleModel::new(2);
-        let instance = SimpleInstance::from_components(entity.clone(), model).unwrap();
-        let value = property.compute(instance.as_model(), ()).unwrap();
+        let stuff = SimpleStuff::from_components(entity.clone(), model).unwrap();
+        let value = property.compute(stuff.as_model(), ()).unwrap();
         assert!((value - 8.0).abs() < 1e-6);
     }
 
