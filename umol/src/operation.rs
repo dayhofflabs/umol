@@ -5,7 +5,7 @@
 //! - Conversion operations
 //! - Operation composition
 
-use crate::{ConvertTo, Stuff, Model, Result};
+use crate::{ConvertTo, Model, Result, Stuff};
 
 /// A trait for operations that transform stuff
 pub trait Operation {
@@ -15,10 +15,7 @@ pub trait Operation {
     type Output: Model;
 
     /// Apply operation to stuff
-    fn apply<
-        SI: Stuff<Model = Self::Input>,
-        SO: Stuff<Model = Self::Output, Entity = SI::Entity>,
-    >(
+    fn apply<SI: Stuff<Model = Self::Input>, SO: Stuff<Model = Self::Output, Entity = SI::Entity>>(
         &self,
         stuff: &SI,
     ) -> Result<SO>
@@ -53,10 +50,7 @@ where
     type Input = M1;
     type Output = M2;
 
-    fn apply<
-        SI: Stuff<Model = Self::Input>,
-        SO: Stuff<Model = Self::Output, Entity = SI::Entity>,
-    >(
+    fn apply<SI: Stuff<Model = Self::Input>, SO: Stuff<Model = Self::Output, Entity = SI::Entity>>(
         &self,
         stuff: &SI,
     ) -> Result<SO>

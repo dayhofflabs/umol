@@ -60,7 +60,7 @@ impl<M: Model, P: Property<M>> PropertySpec<M> for P {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AsModel, Entity, Stuff, Model};
+    use crate::{AsModel, Entity, Model, Stuff};
     use map_macro::hash_set;
     use serde::{Deserialize, Serialize};
     use umol_macros::property;

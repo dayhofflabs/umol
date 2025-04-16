@@ -47,7 +47,7 @@ where
 mod tests {
     use super::*;
     use crate::Capability;
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
     use std::collections::HashSet;
 
     // Test models for conversion
@@ -63,11 +63,11 @@ mod tests {
 
     impl Model for SourceModel {
         type Data = SourceData;
-        
+
         fn data(&self) -> &Self::Data {
             &self.data
         }
-        
+
         fn capabilities(&self) -> HashSet<Capability> {
             let mut caps = HashSet::new();
             caps.insert(Capability::local("source", 1));
@@ -88,11 +88,11 @@ mod tests {
 
     impl Model for TargetModel {
         type Data = TargetData;
-        
+
         fn data(&self) -> &Self::Data {
             &self.data
         }
-        
+
         fn capabilities(&self) -> HashSet<Capability> {
             let mut caps = HashSet::new();
             caps.insert(Capability::local("target", 1));
@@ -110,17 +110,23 @@ mod tests {
     impl ConvertToWithMetadata<TargetModel> for SourceModel {
         type Params = ConversionParams;
 
-        fn convert_to_with_metadata(&self, params: &Self::Params) -> Result<(TargetModel, ConversionMetadata)> {
+        fn convert_to_with_metadata(
+            &self,
+            params: &Self::Params,
+        ) -> Result<(TargetModel, ConversionMetadata)> {
             let mut metadata = ConversionMetadata::default();
-            metadata.attributes.insert("conversion_type".to_string(), "source_to_target".to_string());
-            
+            metadata.attributes.insert(
+                "conversion_type".to_string(),
+                "source_to_target".to_string(),
+            );
+
             let target = TargetModel {
                 data: TargetData {
                     value: self.data.value,
                     processed: params.process,
                 },
             };
-            
+
             Ok((target, metadata))
         }
     }
@@ -130,7 +136,7 @@ mod tests {
         let source = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let target = source.convert_to().unwrap();
         assert_eq!(target.data.value, 42);
         assert!(!target.data.processed); // Should use default params
@@ -141,10 +147,10 @@ mod tests {
         let source = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let params = ConversionParams { process: true };
         let (target, metadata) = source.convert_to_with_metadata(&params).unwrap();
-        
+
         assert_eq!(target.data.value, 42);
         assert!(target.data.processed);
         assert_eq!(
@@ -159,10 +165,10 @@ mod tests {
         let source = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let target1 = source.convert_to().unwrap();
         let target2 = source.convert_to().unwrap();
-        
+
         assert_eq!(target1.data.value, target2.data.value);
         assert_eq!(target1.data.processed, target2.data.processed);
     }
@@ -172,10 +178,10 @@ mod tests {
         let source = SourceModel {
             data: SourceData { value: 42 },
         };
-        
+
         let params = ConversionParams { process: true };
         let (_, metadata) = source.convert_to_with_metadata(&params).unwrap();
-        
+
         assert_eq!(metadata.attributes.len(), 1);
         assert!(metadata.attributes.contains_key("conversion_type"));
     }

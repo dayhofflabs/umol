@@ -1,13 +1,13 @@
 //! Capability system for describing model features.
-//! 
+//!
 //! This module defines the `Capability` type which is used to describe
 //! what features a model can provide. A capability consists of:
 //! - An optional namespace
 //! - A name
 //! - A version number
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 /// A capability that a model can provide
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -86,4 +86,4 @@ mod tests {
         let deserialized: Capability = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, cap);
     }
-} 
+}

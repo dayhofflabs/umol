@@ -2,7 +2,6 @@
 
 use crate::{Capability, Model};
 use std::collections::HashSet;
-use std::error::Error as StdError;
 use thiserror::Error;
 
 /// umol error types
@@ -43,14 +42,6 @@ pub enum Error {
     /// Data processing errors
     #[error(transparent)]
     Data(#[from] DataError),
-
-    /// Multiple errors occurred
-    #[error("Multiple errors occurred: {0:?}")]
-    Multiple(Vec<Error>),
-
-    /// Other errors
-    #[error(transparent)]
-    Other(#[from] Box<dyn StdError + Send + Sync>),
 }
 
 /// Errors related to serialization and deserialization
@@ -77,9 +68,6 @@ pub enum ValidationError {
 
     #[error("Invalid component: {0}")]
     InvalidComponent(String),
-
-    #[error("Multiple validation errors: {0:?}")]
-    Multiple(Vec<ValidationError>),
 }
 
 /// Errors related to chemical entities
@@ -159,21 +147,61 @@ pub enum PropertyError {
 /// Errors related to data validation and operations
 #[derive(Error, Debug)]
 pub enum DataError {
-    #[error("Invalid charge {charge} for element {symbol}, must be between {min} and {max}")]
+    #[error("Invalid element: {0}")]
+    InvalidElement(String),
+
+    #[error("Invalid bond order: {0}")]
+    InvalidBondOrder(String),
+
+    #[error("Invalid charge {charge} for element {symbol}, must be between {min_charge} and {max_charge}")]
     InvalidCharge {
         symbol: String,
         charge: i8,
-        min: i8,
-        max: i8,
+        min_charge: i8,
+        max_charge: i8,
     },
     #[error(
-        "Invalid number of unpaired electrons {unpaired} for element {symbol}, maximum is {max}"
+        "Invalid number of unpaired electrons {unpaired_electrons} for element {symbol}, maximum is {max_unpaired_electrons}"
     )]
     InvalidUnpairedElectrons {
         symbol: String,
-        unpaired: u8,
-        max: u8,
+        unpaired_electrons: u8,
+        max_unpaired_electrons: u8,
     },
+
+    #[error("Invalid number of implicit hydrogens {implicit_hydrogens} for element {symbol}, maximum is {max_implicit_hydrogens}")]
+    InvalidImplicitHydrogens {
+        symbol: String,
+        implicit_hydrogens: u8,
+        max_implicit_hydrogens: u8,
+    },
+
+    #[error("Invalid valence {valence} for element {symbol}, maximum is {max_valence}")]
+    InvalidValence {
+        symbol: String,
+        valence: u8,
+        max_valence: u8,
+    },
+
+    #[error("Invalid occupation: {0}")]
+    InvalidOccupation(String),
+
+    #[error("Invalid spin state: {}{}{}", 
+        unpaired_electrons.map(|electrons| format!("{} unpaired electrons", electrons)).unwrap_or_default(),
+        multiplet_name.clone().unwrap_or_default(),
+        multiplicity.map(|multiplicity| format!("{} multiplicity", multiplicity)).unwrap_or_default(),
+    )]
+    InvalidSpinState {
+        unpaired_electrons: Option<u8>,
+        multiplet_name: Option<String>,
+        multiplicity: Option<u8>,
+    },
+
+    #[error("Duplicate original atom index found: {0}")]
+    DuplicateAtomIndex(usize),
+
+    #[error("Bond references original atom index {0} which was not provided")]
+    MissingAtomIndex(usize),
 }
 
 /// Errors related to format operations
@@ -222,20 +250,13 @@ mod tests {
         let error = DataError::InvalidCharge {
             symbol: "H".to_string(),
             charge: 2,
-            min: -1,
-            max: 1,
+            min_charge: -1,
+            max_charge: 1,
         };
         assert_eq!(
             format!("{}", error),
             "Invalid charge 2 for element H, must be between -1 and 1"
         );
-
-        let errors: Vec<Error> = vec![
-            ModelError::NotFound("error 1".to_string()).into(),
-            PropertyError::CalculationFailed("error 2".into()).into(),
-        ];
-        let error = Error::Multiple(errors);
-        assert!(format!("{}", error).contains("Multiple errors occurred"));
     }
 }
 
