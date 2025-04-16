@@ -1,7 +1,12 @@
-//! Electronic configuration
+//! Electronic configurations of atoms and atomic ions
+use crate::{e, occ};
 use crate::{Element, Occupation, SpinState, MAX_UNPAIRED_ELECTRONS};
+use map_macro::hash_map;
+use once_cell::sync::Lazy;
 use std::cmp;
+use std::collections::HashMap;
 use std::fmt::{self, Display};
+use std::str::FromStr;
 
 /// Electronic configuration of atom or ion, including occupation and spin state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -9,10 +14,27 @@ pub struct Configuration {
     element: Element,
     core_element: Option<Element>,
     valence_occupation: Occupation,
-    spin_state: SpinState,
 }
 
 impl Configuration {
+    /// Create new configuration
+    pub fn new(
+        element: Element,
+        core_element: Option<Element>,
+        valence_occupation: Occupation,
+    ) -> Self {
+        Self {
+            element,
+            core_element,
+            valence_occupation,
+        }
+    }
+
+    /// Compute ground state configuration
+    pub fn ground_state(element: Element) -> Self {
+        get_ground_state(element)
+    }
+
     /// Return element
     pub fn element(&self) -> Element {
         self.element
@@ -26,7 +48,7 @@ impl Configuration {
     /// Return core occupation
     pub fn core_occupation(&self) -> Option<Occupation> {
         self.core_element
-            .map(|core| compute_regular_configuration(core.atomic_number()).1)
+            .map(|core| get_total_occupation(core))
     }
 
     /// Return computed valence occupation
@@ -34,9 +56,9 @@ impl Configuration {
         self.valence_occupation
     }
 
-    /// Return computed spin state
-    pub fn spin_state(&self) -> SpinState {
-        self.spin_state
+    /// Return total occupation
+    pub fn total_occupation(&self) -> Occupation {
+        get_total_occupation(self.element)
     }
 
     /// Return core electron count
@@ -69,19 +91,27 @@ impl Configuration {
     pub fn charge(&self) -> i8 {
         self.atomic_number() as i8 - self.electron_count() as i8
     }
+
+    /// Return number of unpaired electrons (core holes are excluded)
+    pub fn unpaired_electrons(&self) -> u8 {
+        self.valence_occupation().unpaired_electrons()
+    }
+
+    /// Return computed spin state
+    pub fn spin_state(&self) -> SpinState {
+        SpinState::from_unpaired_electrons(self.unpaired_electrons()).unwrap()
+    }
 }
 
 impl Display for Configuration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}: {}{} ({})",
-            self.element.symbol(),
+            "{}{}",
             self.core_element()
                 .map(|core| format!("[{}] ", core.symbol()))
                 .unwrap_or("".to_string()),
             self.valence_occupation(),
-            self.spin_state().name()
         )
     }
 }
@@ -100,29 +130,78 @@ static MADELUNG_ORDER: [(u8, u8, u8, bool); 19] = [
     (5, 1, 6, true), (6, 0, 2, false), (4, 3, 14, false), (5, 2, 10, false), (6, 1, 6, true),
     (7, 0, 2, false), (5, 3, 14, false), (6, 2, 10, false), (7, 1, 6, true)];
 
+/// Exceptional configurations
+static EXCEPTIONAL_CONFIGURATIONS: Lazy<HashMap<Element, Configuration>> = Lazy::new(|| {
+    hash_map! {
+        Element::Cr => Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)),
+        Element::Cu => Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10)),
+        Element::Nb => Configuration::new(e!(Nb), Some(e!(Kr)), occ!(s1d4)),
+        Element::Mo => Configuration::new(e!(Mo), Some(e!(Kr)), occ!(s1d5)),
+        Element::Ru => Configuration::new(e!(Ru), Some(e!(Kr)), occ!(s1d7)),
+        Element::Rh => Configuration::new(e!(Rh), Some(e!(Kr)), occ!(s1d8)),
+        Element::Pd => Configuration::new(e!(Pd), Some(e!(Kr)), occ!(s1d10)),
+        Element::Ag => Configuration::new(e!(Ag), Some(e!(Kr)), occ!(s1d10)),
+        Element::La => Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1)),
+        Element::Ce => Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)),
+        Element::Gd => Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7)),
+        Element::Pt => Configuration::new(e!(Pt), Some(e!(Xe)), occ!(s1d9f14)),
+        Element::Au => Configuration::new(e!(Au), Some(e!(Xe)), occ!(s1d10f14)),
+        Element::Ac => Configuration::new(e!(Ac), Some(e!(Rn)), occ!(s2d1)),
+        Element::Th => Configuration::new(e!(Th), Some(e!(Rn)), occ!(s2d2)),
+        Element::Pa => Configuration::new(e!(Pa), Some(e!(Rn)), occ!(s2d1f2)),
+        Element::U => Configuration::new(e!(U), Some(e!(Rn)), occ!(s2d1f3)),
+        Element::Np => Configuration::new(e!(Np), Some(e!(Rn)), occ!(s2d1f4)),
+        Element::Cm => Configuration::new(e!(Cm), Some(e!(Rn)), occ!(s2d1f7)),
+    }
+});
+
+/// Compute ground state configuration
+fn get_ground_state(element: Element) -> Configuration {
+    if let Some(config) = EXCEPTIONAL_CONFIGURATIONS.get(&element) {
+        return config.clone();
+    } else {
+        get_aufbau_configuration(element)
+    }
+}
+
+/// Get total occupation
+fn get_total_occupation(element: Element) -> Occupation {
+    let mut remaining = element.atomic_number();
+    let mut occupations = [0; 4];
+    for (_, l, capacity, _) in MADELUNG_ORDER {
+        let occupation = cmp::min(remaining, capacity);
+        occupations[l as usize] += occupation;
+        remaining -= occupation;
+    }
+    Occupation::new(
+        occupations[0],
+        occupations[1],
+        occupations[2],
+        occupations[3],
+    )
+}
+
 /// Compute configurations from Aufbau principle, Madelung rule, and Hund's rules
-fn compute_regular_configuration(electron_count: u8) -> (Option<Element>, Occupation, SpinState) {
-    let mut remaining = electron_count;
+fn get_aufbau_configuration(element: Element) -> Configuration {
+    if EXCEPTIONAL_CONFIGURATIONS.contains_key(&element) {
+        // TODO: log warning
+        eprintln!("Element {} has exceptional configuration", element);
+    }
+    let mut remaining = element.atomic_number();
     let mut subshell_occupations = Vec::new();
     let mut closing_subshell = (0, 0, 0, false);
 
     for subshell @ (n, l, capacity, is_closing) in MADELUNG_ORDER {
-        println!("n: {}, l: {}, capacity: {}", n, l, capacity);
-
         let occupation = cmp::min(remaining, capacity);
         subshell_occupations.push((n, l, capacity, occupation));
         remaining -= occupation;
         if is_closing && remaining != 0 {
             closing_subshell = subshell;
         }
-        println!("subshell_occupations: {:?}", subshell_occupations);
-        println!("remaining: {}", remaining);
-
         if remaining == 0 {
             break;
         }
     }
-    println!("closing_subshell: {:?}", closing_subshell);
 
     // Add unpaired electrons from last partially filled subshell
     let mut unpaired = 0;
@@ -137,30 +216,24 @@ fn compute_regular_configuration(electron_count: u8) -> (Option<Element>, Occupa
             }
         }
     }
-    println!("unpaired: {}", unpaired);
-    println!("subshell_occupations: {:?}", subshell_occupations);
     debug_assert!(
         subshell_occupations
             .iter()
             .map(|counts| counts.3)
             .sum::<u8>()
-            == electron_count
+            == element.atomic_number()
     );
     debug_assert!(unpaired <= MAX_UNPAIRED_ELECTRONS);
     debug_assert!(closing_subshell.0 <= MAX_N_QUANTUM_NUMBER);
     debug_assert!(closing_subshell.1 <= MAX_L_QUANTUM_NUMBER);
 
-    let valence_occupation = compute_valence_occupation(subshell_occupations, closing_subshell);
-    let core_element = compute_core_element(closing_subshell);
-    let spin_state = SpinState::from_unpaired_electrons(unpaired).unwrap();
-    println!("core_element: {:?}", core_element);
-    println!("valence_occupation: {:?}", valence_occupation);
-    println!("spin_state: {:?}", spin_state);
-    (core_element, valence_occupation, spin_state)
+    let valence_occupation = get_valence_occupation(subshell_occupations, closing_subshell);
+    let core_element = get_core_element(closing_subshell);
+    Configuration::new(element, core_element, valence_occupation)
 }
 
 /// Compute core element
-fn compute_core_element(closing_subshell: (u8, u8, u8, bool)) -> Option<Element> {
+fn get_core_element(closing_subshell: (u8, u8, u8, bool)) -> Option<Element> {
     match closing_subshell {
         (0, 0, _, false) => None,
         (1, 0, _, true) => Some(Element::He),
@@ -175,26 +248,17 @@ fn compute_core_element(closing_subshell: (u8, u8, u8, bool)) -> Option<Element>
 }
 
 /// Compute valence occupation
-fn compute_valence_occupation(
+fn get_valence_occupation(
     subshell_counts: Vec<(u8, u8, u8, u8)>,
     closing_subshell: (u8, u8, u8, bool),
 ) -> Occupation {
     let mut valence_counts: [u8; 4] = [0; 4];
 
     let mut in_valence = closing_subshell == (0, 0, 0, false);
-    println!(
-        "before closing_subshell: {:?}, in_valence: {}",
-        closing_subshell, in_valence
-    );
     for (n, l, _, count) in subshell_counts {
         if count == 0 {
             break;
         }
-
-        println!(
-            "n: {}, l: {}, count: {}, in_valence: {}",
-            n, l, count, in_valence
-        );
 
         if in_valence {
             valence_counts[l as usize] += count;
@@ -216,53 +280,92 @@ fn compute_valence_occupation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{e, occ, spin};
     use rstest::*;
+    use std::str::FromStr;
 
     #[rstest]
-    #[case(1, (None, Occupation::new(1, 0, 0, 0), SpinState::Doublet))]
-    #[case(2, (None, Occupation::new(2, 0, 0, 0), SpinState::Singlet))]
-    #[case(3, (Some(Element::He), Occupation::new(1, 0, 0, 0), SpinState::Doublet))]
-    #[case(4, (Some(Element::He), Occupation::new(2, 0, 0, 0), SpinState::Singlet))]
-    #[case(5, (Some(Element::He), Occupation::new(2, 1, 0, 0), SpinState::Doublet))]
-    #[case(6, (Some(Element::He), Occupation::new(2, 2, 0, 0), SpinState::Triplet))]
-    #[case(7, (Some(Element::He), Occupation::new(2, 3, 0, 0), SpinState::Quartet))]
-    #[case(8, (Some(Element::He), Occupation::new(2, 4, 0, 0), SpinState::Triplet))]
-    #[case(9, (Some(Element::He), Occupation::new(2, 5, 0, 0), SpinState::Doublet))]
-    #[case(10, (Some(Element::He), Occupation::new(2, 6, 0, 0), SpinState::Singlet))]
-    #[case(11, (Some(Element::Ne), Occupation::new(1, 0, 0, 0), SpinState::Doublet))]
-    #[case(12, (Some(Element::Ne), Occupation::new(2, 0, 0, 0), SpinState::Singlet))]
-    #[case(13, (Some(Element::Ne), Occupation::new(2, 1, 0, 0), SpinState::Doublet))]
-    #[case(14, (Some(Element::Ne), Occupation::new(2, 2, 0, 0), SpinState::Triplet))]
-    #[case(15, (Some(Element::Ne), Occupation::new(2, 3, 0, 0), SpinState::Quartet))]
-    #[case(16, (Some(Element::Ne), Occupation::new(2, 4, 0, 0), SpinState::Triplet))]
-    #[case(17, (Some(Element::Ne), Occupation::new(2, 5, 0, 0), SpinState::Doublet))]
-    #[case(18, (Some(Element::Ne), Occupation::new(2, 6, 0, 0), SpinState::Singlet))]
-    #[case(19, (Some(Element::Ar), Occupation::new(1, 0, 0, 0), SpinState::Doublet))]
-    #[case(20, (Some(Element::Ar), Occupation::new(2, 0, 0, 0), SpinState::Singlet))]
-    #[case(21, (Some(Element::Ar), Occupation::new(2, 0, 1, 0), SpinState::Doublet))]
-    #[case(22, (Some(Element::Ar), Occupation::new(2, 0, 2, 0), SpinState::Triplet))]
-    #[case(23, (Some(Element::Ar), Occupation::new(2, 0, 3, 0), SpinState::Quartet))]
-    #[case(24, (Some(Element::Ar), Occupation::new(2, 0, 4, 0), SpinState::Quintet))] // Exception
-    #[case(25, (Some(Element::Ar), Occupation::new(2, 0, 5, 0), SpinState::Sextet))]
-    #[case(26, (Some(Element::Ar), Occupation::new(2, 0, 6, 0), SpinState::Quintet))]
-    #[case(27, (Some(Element::Ar), Occupation::new(2, 0, 7, 0), SpinState::Quartet))]
-    #[case(28, (Some(Element::Ar), Occupation::new(2, 0, 8, 0), SpinState::Triplet))]
-    #[case(29, (Some(Element::Ar), Occupation::new(2, 0, 9, 0), SpinState::Doublet))] // Exception
-    #[case(30, (Some(Element::Ar), Occupation::new(2, 0, 10, 0), SpinState::Singlet))]
-    fn test_compute_regular_configuration(
-        #[case] z: u8,
-        #[case] expected: (Option<Element>, Occupation, SpinState),
-    ) {
-        assert_eq!(compute_regular_configuration(z), expected);
+    #[case(e!(H), Configuration::new(e!(H), None, occ!(s1)))]
+    #[case(e!(He), Configuration::new(e!(He), None, occ!(s2)))]
+    #[case(e!(Li), Configuration::new(e!(Li), Some(e!(He)), occ!(s1)))]
+    #[case(e!(Be), Configuration::new(e!(Be), Some(e!(He)), occ!(s2)))]
+    #[case(e!(B), Configuration::new(e!(B), Some(e!(He)), occ!(s2p1)))]
+    #[case(e!(C), Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)))]
+    #[case(e!(N), Configuration::new(e!(N), Some(e!(He)), occ!(s2p3)))]
+    #[case(e!(O), Configuration::new(e!(O), Some(e!(He)), occ!(s2p4)))]
+    #[case(e!(F), Configuration::new(e!(F), Some(e!(He)), occ!(s2p5)))]
+    #[case(e!(Ne), Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)))]
+    #[case(e!(Na), Configuration::new(e!(Na), Some(e!(Ne)), occ!(s1)))]
+    #[case(e!(Mg), Configuration::new(e!(Mg), Some(e!(Ne)), occ!(s2)))]
+    #[case(e!(Al), Configuration::new(e!(Al), Some(e!(Ne)), occ!(s2p1)))]
+    #[case(e!(Si), Configuration::new(e!(Si), Some(e!(Ne)), occ!(s2p2)))]
+    #[case(e!(P), Configuration::new(e!(P), Some(e!(Ne)), occ!(s2p3)))]
+    #[case(e!(S), Configuration::new(e!(S), Some(e!(Ne)), occ!(s2p4)))]
+    #[case(e!(Cl), Configuration::new(e!(Cl), Some(e!(Ne)), occ!(s2p5)))]
+    #[case(e!(Ar), Configuration::new(e!(Ar), Some(e!(Ne)), occ!(s2p6)))]
+    #[case(e!(K), Configuration::new(e!(K), Some(e!(Ar)), occ!(s1)))]
+    #[case(e!(Ca), Configuration::new(e!(Ca), Some(e!(Ar)), occ!(s2)))]
+    #[case(e!(Sc), Configuration::new(e!(Sc), Some(e!(Ar)), occ!(s2d1)))]
+    #[case(e!(Ti), Configuration::new(e!(Ti), Some(e!(Ar)), occ!(s2d2)))]
+    #[case(e!(V), Configuration::new(e!(V), Some(e!(Ar)), occ!(s2d3)))]
+    #[case(e!(Cr), Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s2d4)))] // Exception
+    #[case(e!(Mn), Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5)))]
+    #[case(e!(Fe), Configuration::new(e!(Fe), Some(e!(Ar)), occ!(s2d6)))]
+    #[case(e!(Co), Configuration::new(e!(Co), Some(e!(Ar)), occ!(s2d7)))]
+    #[case(e!(Ni), Configuration::new(e!(Ni), Some(e!(Ar)), occ!(s2d8)))]
+    #[case(e!(Cu), Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s2d9)))] // Exception
+    #[case(e!(Zn), Configuration::new(e!(Zn), Some(e!(Ar)), occ!(s2d10)))]
+    #[case(e!(Ce), Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2f2)))] // Exception
+    #[case(e!(Eu), Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7)))]
+    #[case(e!(Gd), Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2f8)))] // Exception
+    #[case(e!(Xe), Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)))]
+    #[case(e!(Pb), Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14)))]
+    fn test_get_aufbau_configuration(#[case] element: Element, #[case] expected: Configuration) {
+        assert_eq!(get_aufbau_configuration(element), expected);
     }
 
-    // #[rstest]
-    // #[case(Configuration, "H s1 (doublet)")]
-    // #[case(Configuration, "s2 (singlet)")]
-    // #[case(Configuration, "[He] s1 (doublet)")]
-    // #[case(Configuration, "[He] s2 (singlet)")]
-    // #[case(Configuration, "[He] s2p1 (doublet)")]
-    // fn test_display(#[case] config: Configuration, #[case] expected: &str) {
-    //     assert_eq!(format!("{}", config), expected);
-    // }
+    #[rstest]
+    #[case(e!(H), Configuration::new(e!(H), None, occ!(s1)))]
+    #[case(e!(C), Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)))]
+    #[case(e!(Cr), Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)))] // Exception
+    #[case(e!(Mn), Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5)))]
+    #[case(e!(Cu), Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10)))] // Exception
+    #[case(e!(La), Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1)))] // Exception
+    #[case(e!(Eu), Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7)))]
+    #[case(e!(Gd), Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7)))] // Exception
+    #[case(e!(Xe), Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)))]
+    #[case(e!(Pb), Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14)))]
+    fn test_get_ground_state(#[case] element: Element, #[case] expected: Configuration) {
+        assert_eq!(get_ground_state(element), expected);
+    }
+
+    #[rstest]
+    #[case(Configuration::new(e!(H), None, occ!(s1)), None, occ!(s1), 1, spin!(Doublet))]
+    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1), 1, spin!(Doublet))]
+    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2), 0, spin!(Singlet))]
+    #[case(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)), Some(occ!(s2)), occ!(s2p2), 2, spin!(Triplet))]
+    #[case(Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)), Some(occ!(s2)), occ!(s2p6), 0, spin!(Singlet))]
+    #[case(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)), Some(occ!(s6p12)), occ!(s1d5), 6, spin!(Septet))]
+    #[case(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)), Some(occ!(s8p18d10)), occ!(s2p6d10), 0, spin!(Singlet))]
+    #[case(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)), Some(occ!(s10p24d20)), occ!(s2d1f1), 2, spin!(Triplet))]
+    fn test_configuration_properties(#[case] config: Configuration,
+    #[case] expected_core_occupation: Option<Occupation>,
+    #[case] expected_valence_occupation: Occupation,
+    #[case] expected_unpaired_electrons: u8,
+    #[case] expected_spin_state: SpinState) {
+        assert_eq!(config.core_occupation(), expected_core_occupation);
+        assert_eq!(config.valence_occupation(), expected_valence_occupation);
+        assert_eq!(config.unpaired_electrons(), expected_unpaired_electrons);
+        assert_eq!(config.spin_state(), expected_spin_state);
+    }
+
+    #[rstest]
+    #[case(Configuration::ground_state(Element::H), "s1")]
+    #[case(Configuration::ground_state(Element::He), "s2")]
+    #[case(Configuration::ground_state(Element::Li), "[He] s1")]
+    #[case(Configuration::ground_state(Element::Be), "[He] s2")]
+    #[case(Configuration::ground_state(Element::B), "[He] s2p1")]
+    fn test_display(#[case] config: Configuration, #[case] expected: &str) {
+        assert_eq!(format!("{}", config), expected);
+    }
 }

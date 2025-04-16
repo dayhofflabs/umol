@@ -50,33 +50,73 @@ impl Occupation {
     pub fn f(&self) -> u8 {
         self.f
     }
+
+    /// Number of unpaired s electrons (uses Hund's rules)
+    pub fn unpaired_s(&self) -> u8 {
+        self.s % 2
+    }
+
+    /// Number of unpaired p electrons (uses Hund's rules)
+    pub fn unpaired_p(&self) -> u8 {
+        let valence_p = self.p % 6;
+        if valence_p < 3 {
+            valence_p
+        } else {
+            6 - valence_p
+        }
+    }
+
+    /// Number of unpaired d electrons (uses Hund's rules)
+    pub fn unpaired_d(&self) -> u8 {
+        let valence_d = self.d % 10;
+        if valence_d < 5 {
+            valence_d
+        } else {
+            10 - valence_d
+        }
+    }
+
+    /// Number of unpaired f electrons (uses Hund's rules)
+    pub fn unpaired_f(&self) -> u8 {
+        let valence_f = self.f % 14;
+        if valence_f < 7 {
+            valence_f
+        } else {
+            14 - valence_f
+        }
+    }
+
+    /// Number of unpaired electrons (uses Hund's rules)
+    pub fn unpaired_electrons(&self) -> u8 {
+        self.unpaired_s() + self.unpaired_p() + self.unpaired_d() + self.unpaired_f()
+    }
 }
 
 impl Display for Occupation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut result = String::new();
-        
+
         if self.s > 0 {
             result.push_str(&format!("s{}", self.s));
         }
-        
+
         if self.p > 0 {
             result.push_str(&format!("p{}", self.p));
         }
-        
+
         if self.d > 0 {
             result.push_str(&format!("d{}", self.d));
         }
-        
+
         if self.f > 0 {
             result.push_str(&format!("f{}", self.f));
         }
-        
+
         // Handle empty case (all zeros)
         if result.is_empty() {
             result = "".to_string();
         }
-        
+
         write!(f, "{}", result)
     }
 }
@@ -97,23 +137,23 @@ impl FromStr for Occupation {
 
         // Occupation regex: s<num>p<num>d<num>f<num>, in any order
         let occ_block_pattern = Regex::new(r"([spdf])(\d+)").unwrap();
-        
+
         // Validate the string only contains valid orbital fragments
         if !occ_block_pattern.is_match(s) {
             return Err(DataError::InvalidOccupation(s.to_string()).into());
         }
-        
+
         // Initialize occupation values
         let mut s_val = 0;
         let mut p_val = 0;
         let mut d_val = 0;
         let mut f_val = 0;
-        
+
         // Process each capture
         for cap in occ_block_pattern.captures_iter(s) {
             let orbital_type = &cap[1];
             let count: u8 = cap[2].parse().unwrap_or(0);
-            
+
             match orbital_type {
                 "s" => s_val = count,
                 "p" => p_val = count,
@@ -141,7 +181,6 @@ macro_rules! occ {
     };
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,6 +206,17 @@ mod tests {
     #[case("s1p1d1f1x")]
     fn test_from_str_err(#[case] s: &str) {
         assert!(Occupation::from_str(s).is_err());
+    }
+
+    #[rstest]
+    #[case(Occupation::new(1, 0, 0, 0), 1)]
+    #[case(Occupation::new(0, 1, 0, 0), 1)]
+    #[case(Occupation::new(0, 0, 1, 0), 1)]
+    #[case(Occupation::new(0, 0, 0, 1), 1)]
+    #[case(Occupation::new(1, 0, 5, 0), 6)]
+    #[case(Occupation::new(4, 3, 0, 0), 3)]
+    fn test_unpaired_electrons(#[case] occupation: Occupation, #[case] expected: u8) {
+        assert_eq!(occupation.unpaired_electrons(), expected);
     }
 
     #[rstest]
