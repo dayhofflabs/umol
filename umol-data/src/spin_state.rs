@@ -119,8 +119,17 @@ impl FromStr for SpinState {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        Self::from_multiplet_name(s)
+        Self::from_multiplet_name(s.to_lowercase().as_str())
     }
+}
+
+/// Shorthand macro for spin states
+/// Allows using spin state names directly without quotes
+#[macro_export]
+macro_rules! spin {
+    ($state:ident) => {
+        SpinState::$state
+    };
 }
 
 #[cfg(test)]
@@ -151,6 +160,7 @@ mod tests {
     #[case("singlet", SpinState::Singlet)]
     #[case("doublet", SpinState::Doublet)]
     #[case("triplet", SpinState::Triplet)]
+    #[case("Singlet", SpinState::Singlet)]
     fn test_spin_state_from_multiplet_name(
         #[case] multiplet_name: &str,
         #[case] expected: SpinState,
@@ -215,5 +225,12 @@ mod tests {
     #[case(SpinState::Triplet, "triplet")]
     fn test_spin_state_display(#[case] spin_state: SpinState, #[case] expected: &str) {
         assert_eq!(format!("{}", spin_state), expected);
+    }
+
+    #[test]
+    fn test_spin_state_macro() {
+        assert_eq!(spin!(Singlet), SpinState::Singlet);
+        assert_eq!(spin!(Doublet), SpinState::Doublet);
+        assert_eq!(spin!(Triplet), SpinState::Triplet);
     }
 }

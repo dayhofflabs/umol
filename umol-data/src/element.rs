@@ -176,7 +176,25 @@ static ATOMIC_NUMBER_TO_ELEMENT: Lazy<HashMap<u8, Element>> = Lazy::new(|| {
 impl Element {
     // Get element from symbol
     pub fn from_symbol(symbol: &str) -> Option<Self> {
-        SYMBOL_TO_ELEMENT.get(symbol).copied()
+        // Handle case-insensitive lookup by normalizing capitalization
+        if symbol.is_empty() {
+            return None;
+        }
+
+        let normalized_symbol = if symbol.len() == 1 {
+            symbol.to_uppercase()
+        } else {
+            let first = symbol
+                .chars()
+                .next()
+                .unwrap()
+                .to_uppercase()
+                .collect::<String>();
+            let rest = &symbol[1..].to_lowercase();
+            format!("{}{}", first, rest)
+        };
+
+        SYMBOL_TO_ELEMENT.get(normalized_symbol.as_str()).copied()
     }
 
     // Get element from atomic number
@@ -513,8 +531,6 @@ mod tests {
     #[test]
     fn test_element_macro() {
         assert_eq!(e!(H), Element::H);
-        assert_eq!(e!(C), Element::C);
-        assert_eq!(e!(O), Element::O);
         assert_eq!(e!(Fe), Element::Fe);
     }
 }

@@ -16,7 +16,7 @@ pub struct Occupation {
     p: u8,
     /// d orbital occupation
     d: u8,
-
+    /// f orbital occupation
     f: u8,
 }
 
@@ -89,24 +89,39 @@ impl FromStr for Occupation {
             return Err(DataError::InvalidOccupation(s.to_string()).into());
         }
 
-        let pattern =
-            Regex::new(r"^(?:s(?<s>\d+))?(?:p(?<p>\d+))?(?:d(?<d>\d+))?(?:f(?<f>\d+))?$").unwrap();
-        let captures = pattern
-            .captures(s)
-            .ok_or_else::<Self::Err, _>(|| DataError::InvalidOccupation(s.to_string()).into())?;
+        // Check if occupation string is valid
+        let valid_occ_pattern = Regex::new(r"^([spdf](\d+))+$").unwrap();
+        if !valid_occ_pattern.is_match(s) {
+            return Err(DataError::InvalidOccupation(s.to_string()).into());
+        }
 
-        let s_val = captures
-            .name("s")
-            .map_or(0, |m| m.as_str().parse().unwrap());
-        let p_val = captures
-            .name("p")
-            .map_or(0, |m| m.as_str().parse().unwrap());
-        let d_val = captures
-            .name("d")
-            .map_or(0, |m| m.as_str().parse().unwrap());
-        let f_val = captures
-            .name("f")
-            .map_or(0, |m| m.as_str().parse().unwrap());
+        // Occupation regex: s<num>p<num>d<num>f<num>, in any order
+        let occ_block_pattern = Regex::new(r"([spdf])(\d+)").unwrap();
+        
+        // Validate the string only contains valid orbital fragments
+        if !occ_block_pattern.is_match(s) {
+            return Err(DataError::InvalidOccupation(s.to_string()).into());
+        }
+        
+        // Initialize occupation values
+        let mut s_val = 0;
+        let mut p_val = 0;
+        let mut d_val = 0;
+        let mut f_val = 0;
+        
+        // Process each capture
+        for cap in occ_block_pattern.captures_iter(s) {
+            let orbital_type = &cap[1];
+            let count: u8 = cap[2].parse().unwrap_or(0);
+            
+            match orbital_type {
+                "s" => s_val = count,
+                "p" => p_val = count,
+                "d" => d_val = count,
+                "f" => f_val = count,
+                _ => unreachable!(),
+            }
+        }
 
         Ok(Self {
             s: s_val,
@@ -116,6 +131,16 @@ impl FromStr for Occupation {
         })
     }
 }
+
+/// Shorthand macro for occupations
+/// Allows using occupation strings directly without quotes
+#[macro_export]
+macro_rules! occ {
+    ($occ:ident) => {
+        Occupation::from_str(stringify!($occ)).unwrap()
+    };
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -130,6 +155,8 @@ mod tests {
     #[case("d1", Occupation::new(0, 0, 1, 0))]
     #[case("f1", Occupation::new(0, 0, 0, 1))]
     #[case("s1d1", Occupation::new(1, 0, 1, 0))]
+    #[case("p2d2", Occupation::new(0, 2, 2, 0))]
+    #[case("d2p2", Occupation::new(0, 2, 2, 0))]
     #[case("s10p6", Occupation::new(10, 6, 0, 0))]
     fn test_from_str(#[case] s: &str, #[case] expected: Occupation) {
         assert_eq!(Occupation::from_str(s).unwrap(), expected);
@@ -138,7 +165,6 @@ mod tests {
     #[rstest]
     #[case("")]
     #[case("s1p1d1f1x")]
-    #[case("p1s1")]
     fn test_from_str_err(#[case] s: &str) {
         assert!(Occupation::from_str(s).is_err());
     }
@@ -152,5 +178,12 @@ mod tests {
     #[case(Occupation::new(0, 0, 0, 0), "")]
     fn test_display(#[case] occupation: Occupation, #[case] expected: &str) {
         assert_eq!(format!("{}", occupation), expected);
+    }
+
+    #[test]
+    fn test_macro() {
+        assert_eq!(occ!(s1p1d1f1), Occupation::new(1, 1, 1, 1));
+        assert_eq!(occ!(s0p0d0f0), Occupation::new(0, 0, 0, 0));
+        assert_eq!(occ!(s1), Occupation::new(1, 0, 0, 0));
     }
 }
