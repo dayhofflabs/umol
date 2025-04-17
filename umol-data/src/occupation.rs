@@ -98,6 +98,9 @@ impl Occupation {
 
     /// Lone p pairs
     pub fn lone_p_pairs(&self) -> u8 {
+        if self.p == 0 {
+            return 0;
+        }
         let valence_p = self.p % 6;
         if valence_p <= 3 {
             (self.p - valence_p) / 2
@@ -108,6 +111,9 @@ impl Occupation {
 
     /// Lone d pairs
     pub fn lone_d_pairs(&self) -> u8 {
+        if self.d == 0 {
+            return 0;
+        }
         let valence_d = self.d % 10;
         if valence_d <= 5 {
             (self.d - valence_d) / 2
@@ -118,6 +124,9 @@ impl Occupation {
 
     /// Lone f pairs
     pub fn lone_f_pairs(&self) -> u8 {
+        if self.f == 0 {
+            return 0;
+        }
         let valence_f = self.f % 14;
         if valence_f <= 7 {
             (self.f - valence_f) / 2

@@ -1,6 +1,6 @@
 //! Electronic configurations of atoms and atomic ions
 use crate::{e, occ};
-use crate::{Element, Occupation, SpinState, MAX_UNPAIRED_ELECTRONS};
+use crate::{Element, Occupation, SpinState, ELEMENTS, MAX_UNPAIRED_ELECTRONS};
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use std::cmp;
@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-/// Electronic configuration of atom or ion, including occupation and spin state
+/// Electronic configuration of atom or atomic ion
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Configuration {
     element: Element,
@@ -32,7 +32,7 @@ impl Configuration {
 
     /// Compute ground state configuration
     pub fn ground_state(element: Element) -> Self {
-        get_ground_state(element)
+        GROUND_STATES.get(&element).unwrap().clone()
     }
 
     /// Return element
@@ -96,7 +96,7 @@ impl Configuration {
         self.valence_occupation().unpaired_electrons()
     }
 
-    /// Return number of lone pairs (core holes are excluded)
+    /// Return number of valence lone pairs
     pub fn lone_pairs(&self) -> u8 {
         self.valence_occupation().lone_pairs()
     }
@@ -134,8 +134,8 @@ static MADELUNG_ORDER: [(u8, u8, u8, bool); 19] = [
     (5, 1, 6, true), (6, 0, 2, false), (4, 3, 14, false), (5, 2, 10, false), (6, 1, 6, true),
     (7, 0, 2, false), (5, 3, 14, false), (6, 2, 10, false), (7, 1, 6, true)];
 
-/// Exceptional configurations
-static EXCEPTIONAL_CONFIGURATIONS: Lazy<HashMap<Element, Configuration>> = Lazy::new(|| {
+/// Atomic ground state exceptions
+static GROUND_STATE_EXCEPTIONS: Lazy<HashMap<Element, Configuration>> = Lazy::new(|| {
     hash_map! {
         Element::Cr => Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)),
         Element::Cu => Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10)),
@@ -159,9 +159,18 @@ static EXCEPTIONAL_CONFIGURATIONS: Lazy<HashMap<Element, Configuration>> = Lazy:
     }
 });
 
+/// Atomic ground states
+static GROUND_STATES: Lazy<HashMap<Element, Configuration>> = Lazy::new(|| {
+    let mut map = HashMap::new();
+    for element in ELEMENTS {
+        map.insert(element, get_ground_state(element));
+    }
+    map
+});
+
 /// Compute ground state configuration
 fn get_ground_state(element: Element) -> Configuration {
-    if let Some(config) = EXCEPTIONAL_CONFIGURATIONS.get(&element) {
+    if let Some(config) = GROUND_STATE_EXCEPTIONS.get(&element) {
         return config.clone();
     } else {
         get_aufbau_configuration(element)
@@ -187,7 +196,7 @@ fn get_total_occupation(element: Element) -> Occupation {
 
 /// Compute configurations from Aufbau principle, Madelung rule, and Hund's rules
 fn get_aufbau_configuration(element: Element) -> Configuration {
-    if EXCEPTIONAL_CONFIGURATIONS.contains_key(&element) {
+    if GROUND_STATE_EXCEPTIONS.contains_key(&element) {
         // TODO: log warning
         eprintln!("Element {} has exceptional configuration", element);
     }
@@ -345,19 +354,19 @@ mod tests {
 
     #[rstest]
     #[case(Configuration::new(e!(H), None, occ!(s1)), None, occ!(s1), 1, 0, spin!(Doublet))]
-    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1), 1, 1, spin!(Doublet))]
-    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2), 0, 2, spin!(Singlet))]
-    #[case(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)), Some(occ!(s2)), occ!(s2p2), 2, 2, spin!(Triplet))]
+    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1), 1, 0, spin!(Doublet))]
+    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2), 0, 1, spin!(Singlet))]
+    #[case(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)), Some(occ!(s2)), occ!(s2p2), 2, 1, spin!(Triplet))]
     #[case(Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)), Some(occ!(s2)), occ!(s2p6), 0, 4, spin!(Singlet))]
-    #[case(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)), Some(occ!(s6p12)), occ!(s1d5), 6, 6, spin!(Septet))]
-    #[case(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)), Some(occ!(s8p18d10)), occ!(s2p6d10), 0, 18, spin!(Singlet))]
-    #[case(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)), Some(occ!(s10p24d20)), occ!(s2d1f1), 2,  27, spin!(Triplet))]
+    #[case(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)), Some(occ!(s6p12)), occ!(s1d5), 6, 0, spin!(Septet))]
+    #[case(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)), Some(occ!(s8p18d10)), occ!(s2p6d10), 0, 9, spin!(Singlet))]
+    #[case(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)), Some(occ!(s10p24d20)), occ!(s2d1f1), 2,  1, spin!(Triplet))]
     fn test_configuration_properties(
         #[case] config: Configuration,
         #[case] expected_core_occupation: Option<Occupation>,
         #[case] expected_valence_occupation: Occupation,
-        #[case] expected_lone_pairs: u8,
         #[case] expected_unpaired_electrons: u8,
+        #[case] expected_lone_pairs: u8,
         #[case] expected_spin_state: SpinState,
     ) {
         assert_eq!(config.core_occupation(), expected_core_occupation);
