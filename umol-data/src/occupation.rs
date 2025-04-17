@@ -59,7 +59,7 @@ impl Occupation {
     /// Number of unpaired p electrons (uses Hund's rules)
     pub fn unpaired_p(&self) -> u8 {
         let valence_p = self.p % 6;
-        if valence_p < 3 {
+        if valence_p <= 3 {
             valence_p
         } else {
             6 - valence_p
@@ -69,7 +69,7 @@ impl Occupation {
     /// Number of unpaired d electrons (uses Hund's rules)
     pub fn unpaired_d(&self) -> u8 {
         let valence_d = self.d % 10;
-        if valence_d < 5 {
+        if valence_d <= 5 {
             valence_d
         } else {
             10 - valence_d
@@ -79,7 +79,7 @@ impl Occupation {
     /// Number of unpaired f electrons (uses Hund's rules)
     pub fn unpaired_f(&self) -> u8 {
         let valence_f = self.f % 14;
-        if valence_f < 7 {
+        if valence_f <= 7 {
             valence_f
         } else {
             14 - valence_f
@@ -89,6 +89,46 @@ impl Occupation {
     /// Number of unpaired electrons (uses Hund's rules)
     pub fn unpaired_electrons(&self) -> u8 {
         self.unpaired_s() + self.unpaired_p() + self.unpaired_d() + self.unpaired_f()
+    }
+
+    /// Lone s pairs
+    pub fn lone_s_pairs(&self) -> u8 {
+        self.s / 2
+    }
+
+    /// Lone p pairs
+    pub fn lone_p_pairs(&self) -> u8 {
+        let valence_p = self.p % 6;
+        if valence_p <= 3 {
+            (self.p - valence_p) / 2
+        } else {
+            (self.p + valence_p) / 2 - 3
+        }
+    }
+
+    /// Lone d pairs
+    pub fn lone_d_pairs(&self) -> u8 {
+        let valence_d = self.d % 10;
+        if valence_d <= 5 {
+            (self.d - valence_d) / 2
+        } else {
+            (self.d + valence_d) / 2 - 5
+        }
+    }
+
+    /// Lone f pairs
+    pub fn lone_f_pairs(&self) -> u8 {
+        let valence_f = self.f % 14;
+        if valence_f <= 7 {
+            (self.f - valence_f) / 2
+        } else {
+            (self.f + valence_f) / 2 - 7
+        }
+    }
+
+    /// Lone pairs
+    pub fn lone_pairs(&self) -> u8 {
+        self.lone_s_pairs() + self.lone_p_pairs() + self.lone_d_pairs() + self.lone_f_pairs()
     }
 }
 
@@ -217,6 +257,16 @@ mod tests {
     #[case(Occupation::new(4, 3, 0, 0), 3)]
     fn test_unpaired_electrons(#[case] occupation: Occupation, #[case] expected: u8) {
         assert_eq!(occupation.unpaired_electrons(), expected);
+    }
+
+    #[rstest]
+    #[case(Occupation::new(1, 0, 0, 0), 0)]
+    #[case(Occupation::new(2, 0, 0, 0), 1)]
+    #[case(Occupation::new(0, 0, 5, 0), 0)]
+    #[case(Occupation::new(0, 0, 6, 0), 1)]
+    #[case(Occupation::new(0, 0, 0, 14), 7)]
+    fn test_lone_pairs(#[case] occupation: Occupation, #[case] expected: u8) {
+        assert_eq!(occupation.lone_pairs(), expected);
     }
 
     #[rstest]
