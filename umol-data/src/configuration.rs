@@ -1,6 +1,6 @@
 //! Electronic configurations of atoms and atomic ions
 use crate::{e, occ};
-use crate::{Element, Occupation, SpinState, MAX_UNPAIRED_ELECTRONS};
+use crate::{Element, Occupation, MAX_UNPAIRED_ELECTRONS};
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use std::cmp;
@@ -86,21 +86,6 @@ impl Configuration {
     pub fn charge(&self) -> i8 {
         self.atomic_number() as i8 - self.electron_count() as i8
     }
-
-    /// Return number of unpaired electrons (core holes are excluded)
-    pub fn unpaired_electrons(&self) -> u8 {
-        self.valence_occupation().unpaired_electrons()
-    }
-
-    /// Return number of valence lone pairs
-    pub fn lone_pairs(&self) -> u8 {
-        self.valence_occupation().lone_pairs()
-    }
-
-    /// Return computed spin state
-    pub fn spin_state(&self) -> SpinState {
-        SpinState::from_unpaired_electrons(self.unpaired_electrons()).unwrap()
-    }
 }
 
 impl Display for Configuration {
@@ -150,13 +135,6 @@ impl Into<Configuration> for GroundState {
     }
 }
 
-// pub struct ValenceState(Configuration);
-
-// impl ValenceState {
-//     // TODO: implement
-// }
-
-/// Maximum n quantum number
 pub const MAX_N_QUANTUM_NUMBER: u8 = 7;
 /// Maximum l quantum number
 pub const MAX_L_QUANTUM_NUMBER: u8 = 3;
@@ -310,7 +288,7 @@ fn get_valence_occupation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{e, occ, spin};
+    use crate::{e, occ};
     use rstest::*;
     use std::str::FromStr;
 
@@ -355,27 +333,21 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Configuration::new(e!(H), None, occ!(s1)), None, occ!(s1), 1, 0, spin!(Doublet))]
-    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1), 1, 0, spin!(Doublet))]
-    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2), 0, 1, spin!(Singlet))]
-    #[case(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)), Some(occ!(s2)), occ!(s2p2), 2, 1, spin!(Triplet))]
-    #[case(Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)), Some(occ!(s2)), occ!(s2p6), 0, 4, spin!(Singlet))]
-    #[case(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)), Some(occ!(s6p12)), occ!(s1d5), 6, 0, spin!(Septet))]
-    #[case(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)), Some(occ!(s8p18d10)), occ!(s2p6d10), 0, 9, spin!(Singlet))]
-    #[case(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)), Some(occ!(s10p24d20)), occ!(s2d1f1), 2,  1, spin!(Triplet))]
+    #[case(Configuration::new(e!(H), None, occ!(s1)), None, occ!(s1))]
+    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1))]
+    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2))]
+    #[case(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)), Some(occ!(s2)), occ!(s2p2))]
+    #[case(Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)), Some(occ!(s2)), occ!(s2p6))]
+    #[case(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)), Some(occ!(s6p12)), occ!(s1d5))]
+    #[case(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)), Some(occ!(s8p18d10)), occ!(s2p6d10))]
+    #[case(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)), Some(occ!(s10p24d20)), occ!(s2d1f1))]
     fn test_configuration_properties(
         #[case] config: Configuration,
         #[case] expected_core_occupation: Option<Occupation>,
         #[case] expected_valence_occupation: Occupation,
-        #[case] expected_unpaired_electrons: u8,
-        #[case] expected_lone_pairs: u8,
-        #[case] expected_spin_state: SpinState,
     ) {
         assert_eq!(config.core_occupation(), expected_core_occupation);
         assert_eq!(config.valence_occupation(), expected_valence_occupation);
-        assert_eq!(config.unpaired_electrons(), expected_unpaired_electrons);
-        assert_eq!(config.lone_pairs(), expected_lone_pairs);
-        assert_eq!(config.spin_state(), expected_spin_state);
     }
 
     #[rstest]
