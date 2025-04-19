@@ -139,6 +139,52 @@ impl Occupation {
     pub fn lone_pairs(&self) -> u8 {
         self.lone_s_pairs() + self.lone_p_pairs() + self.lone_d_pairs() + self.lone_f_pairs()
     }
+
+    /// s hole count
+    pub fn s_holes(&self) -> u8 {
+        self.s % 2
+    }
+
+    /// p hole count
+    pub fn p_holes(&self) -> u8 {
+        if self.p == 0 {
+            0
+        } else {
+            6 - self.p % 6
+        }
+    }
+
+    /// d hole count
+    pub fn d_holes(&self) -> u8 {
+        if self.d == 0 {
+            0
+        } else {
+            10 - self.d % 10
+        }
+    }
+
+    /// f hole count
+    pub fn f_holes(&self) -> u8 {
+        if self.f == 0 {
+            0
+        } else {
+            14 - self.f % 14
+        }
+    }
+
+    /// Hole count
+    pub fn holes(&self) -> u8 {
+        self.s_holes() + self.p_holes() + self.d_holes() + self.f_holes()
+    }
+
+    /// Split one lone p pair into two unpaired p electrons
+    pub fn unpair_p(&self) -> Option<Self> {
+        if self.p == 0 {
+            None
+        } else {
+            Some(Self::new(self.s, self.p - 1, self.d, self.f))
+        }
+    }
 }
 
 impl Display for Occupation {
@@ -193,10 +239,10 @@ impl FromStr for Occupation {
         }
 
         // Initialize occupation values
-        let mut s_val = 0;
-        let mut p_val = 0;
-        let mut d_val = 0;
-        let mut f_val = 0;
+        let mut s_occ = 0;
+        let mut p_occ = 0;
+        let mut d_occ = 0;
+        let mut f_occ = 0;
 
         // Process each capture
         for cap in occ_block_pattern.captures_iter(s) {
@@ -204,19 +250,19 @@ impl FromStr for Occupation {
             let count: u8 = cap[2].parse().unwrap_or(0);
 
             match orbital_type {
-                "s" => s_val = count,
-                "p" => p_val = count,
-                "d" => d_val = count,
-                "f" => f_val = count,
+                "s" => s_occ = count,
+                "p" => p_occ = count,
+                "d" => d_occ = count,
+                "f" => f_occ = count,
                 _ => unreachable!(),
             }
         }
 
         Ok(Self {
-            s: s_val,
-            p: p_val,
-            d: d_val,
-            f: f_val,
+            s: s_occ,
+            p: p_occ,
+            d: d_occ,
+            f: f_occ,
         })
     }
 }
@@ -276,6 +322,16 @@ mod tests {
     #[case(Occupation::new(0, 0, 0, 14), 7)]
     fn test_lone_pairs(#[case] occupation: Occupation, #[case] expected: u8) {
         assert_eq!(occupation.lone_pairs(), expected);
+    }
+
+    #[rstest]
+    #[case(Occupation::new(1, 0, 0, 0), 1)]
+    #[case(Occupation::new(2, 0, 0, 0), 0)]
+    #[case(Occupation::new(0, 0, 5, 0), 5)]
+    #[case(Occupation::new(0, 0, 6, 0), 4)]
+    #[case(Occupation::new(0, 0, 0, 7), 7)]
+    fn test_holes(#[case] occupation: Occupation, #[case] expected: u8) {
+        assert_eq!(occupation.holes(), expected);
     }
 
     #[rstest]

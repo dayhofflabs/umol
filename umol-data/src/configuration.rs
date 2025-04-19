@@ -1,11 +1,12 @@
 //! Electronic configurations of atoms and atomic ions
 use crate::{e, occ};
-use crate::{Element, Occupation, SpinState, ELEMENTS, MAX_UNPAIRED_ELECTRONS};
+use crate::{Element, Occupation, SpinState, MAX_UNPAIRED_ELECTRONS};
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
+use std::ops::Deref;
 use std::str::FromStr;
 
 /// Electronic configuration of atom or atomic ion
@@ -28,11 +29,6 @@ impl Configuration {
             core_element,
             valence_occupation,
         }
-    }
-
-    /// Compute ground state configuration
-    pub fn ground_state(element: Element) -> Self {
-        GROUND_STATES.get(&element).unwrap().clone()
     }
 
     /// Return element
@@ -120,6 +116,46 @@ impl Display for Configuration {
     }
 }
 
+/// Ground state configuration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GroundState(Configuration);
+
+impl GroundState {
+    pub fn new(element: Element) -> Self {
+        if let Some(gs) = GROUND_STATE_EXCEPTIONS.get(&element) {
+            return gs.clone();
+        } else {
+            GroundState(get_aufbau_configuration(element))
+        }
+    }
+}
+
+impl Display for GroundState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for GroundState {
+    type Target = Configuration;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Into<Configuration> for GroundState {
+    fn into(self) -> Configuration {
+        self.0
+    }
+}
+
+// pub struct ValenceState(Configuration);
+
+// impl ValenceState {
+//     // TODO: implement
+// }
+
 /// Maximum n quantum number
 pub const MAX_N_QUANTUM_NUMBER: u8 = 7;
 /// Maximum l quantum number
@@ -135,47 +171,29 @@ static MADELUNG_ORDER: [(u8, u8, u8, bool); 19] = [
     (7, 0, 2, false), (5, 3, 14, false), (6, 2, 10, false), (7, 1, 6, true)];
 
 /// Atomic ground state exceptions
-static GROUND_STATE_EXCEPTIONS: Lazy<HashMap<Element, Configuration>> = Lazy::new(|| {
+static GROUND_STATE_EXCEPTIONS: Lazy<HashMap<Element, GroundState>> = Lazy::new(|| {
     hash_map! {
-        Element::Cr => Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)),
-        Element::Cu => Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10)),
-        Element::Nb => Configuration::new(e!(Nb), Some(e!(Kr)), occ!(s1d4)),
-        Element::Mo => Configuration::new(e!(Mo), Some(e!(Kr)), occ!(s1d5)),
-        Element::Ru => Configuration::new(e!(Ru), Some(e!(Kr)), occ!(s1d7)),
-        Element::Rh => Configuration::new(e!(Rh), Some(e!(Kr)), occ!(s1d8)),
-        Element::Pd => Configuration::new(e!(Pd), Some(e!(Kr)), occ!(s1d10)),
-        Element::Ag => Configuration::new(e!(Ag), Some(e!(Kr)), occ!(s1d10)),
-        Element::La => Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1)),
-        Element::Ce => Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)),
-        Element::Gd => Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7)),
-        Element::Pt => Configuration::new(e!(Pt), Some(e!(Xe)), occ!(s1d9f14)),
-        Element::Au => Configuration::new(e!(Au), Some(e!(Xe)), occ!(s1d10f14)),
-        Element::Ac => Configuration::new(e!(Ac), Some(e!(Rn)), occ!(s2d1)),
-        Element::Th => Configuration::new(e!(Th), Some(e!(Rn)), occ!(s2d2)),
-        Element::Pa => Configuration::new(e!(Pa), Some(e!(Rn)), occ!(s2d1f2)),
-        Element::U => Configuration::new(e!(U), Some(e!(Rn)), occ!(s2d1f3)),
-        Element::Np => Configuration::new(e!(Np), Some(e!(Rn)), occ!(s2d1f4)),
-        Element::Cm => Configuration::new(e!(Cm), Some(e!(Rn)), occ!(s2d1f7)),
+        Element::Cr => GroundState(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5))),
+        Element::Cu => GroundState(Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10))),
+        Element::Nb => GroundState(Configuration::new(e!(Nb), Some(e!(Kr)), occ!(s1d4))),
+        Element::Mo => GroundState(Configuration::new(e!(Mo), Some(e!(Kr)), occ!(s1d5))),
+        Element::Ru => GroundState(Configuration::new(e!(Ru), Some(e!(Kr)), occ!(s1d7))),
+        Element::Rh => GroundState(Configuration::new(e!(Rh), Some(e!(Kr)), occ!(s1d8))),
+        Element::Pd => GroundState(Configuration::new(e!(Pd), Some(e!(Kr)), occ!(s1d10))),
+        Element::Ag => GroundState(Configuration::new(e!(Ag), Some(e!(Kr)), occ!(s1d10))),
+        Element::La => GroundState(Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1))),
+        Element::Ce => GroundState(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1))),
+        Element::Gd => GroundState(Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7))),
+        Element::Pt => GroundState(Configuration::new(e!(Pt), Some(e!(Xe)), occ!(s1d9f14))),
+        Element::Au => GroundState(Configuration::new(e!(Au), Some(e!(Xe)), occ!(s1d10f14))),
+        Element::Ac => GroundState(Configuration::new(e!(Ac), Some(e!(Rn)), occ!(s2d1))),
+        Element::Th => GroundState(Configuration::new(e!(Th), Some(e!(Rn)), occ!(s2d2))),
+        Element::Pa => GroundState(Configuration::new(e!(Pa), Some(e!(Rn)), occ!(s2d1f2))),
+        Element::U => GroundState(Configuration::new(e!(U), Some(e!(Rn)), occ!(s2d1f3))),
+        Element::Np => GroundState(Configuration::new(e!(Np), Some(e!(Rn)), occ!(s2d1f4))),
+        Element::Cm => GroundState(Configuration::new(e!(Cm), Some(e!(Rn)), occ!(s2d1f7))),
     }
 });
-
-/// Atomic ground states
-static GROUND_STATES: Lazy<HashMap<Element, Configuration>> = Lazy::new(|| {
-    let mut map = HashMap::new();
-    for element in ELEMENTS {
-        map.insert(element, get_ground_state(element));
-    }
-    map
-});
-
-/// Compute ground state configuration
-fn get_ground_state(element: Element) -> Configuration {
-    if let Some(config) = GROUND_STATE_EXCEPTIONS.get(&element) {
-        return config.clone();
-    } else {
-        get_aufbau_configuration(element)
-    }
-}
 
 /// Get total occupation
 fn get_total_occupation(element: Element) -> Occupation {
@@ -241,21 +259,20 @@ fn get_aufbau_configuration(element: Element) -> Configuration {
     debug_assert!(closing_subshell.1 <= MAX_L_QUANTUM_NUMBER);
 
     let valence_occupation = get_valence_occupation(subshell_occupations, closing_subshell);
-    let core_element = get_core_element(closing_subshell);
+    let core_element = get_core_element(element);
     Configuration::new(element, core_element, valence_occupation)
 }
 
 /// Compute core element
-fn get_core_element(closing_subshell: (u8, u8, u8, bool)) -> Option<Element> {
-    match closing_subshell {
-        (0, 0, _, false) => None,
-        (1, 0, _, true) => Some(Element::He),
-        (2, 1, _, true) => Some(Element::Ne),
-        (3, 1, _, true) => Some(Element::Ar),
-        (4, 1, _, true) => Some(Element::Kr),
-        (5, 1, _, true) => Some(Element::Xe),
-        (6, 1, _, true) => Some(Element::Rn),
-        (7, 1, _, true) => Some(Element::Og),
+fn get_core_element(element: Element) -> Option<Element> {
+    match element.atomic_number() {
+        1..=2 => None,
+        3..=10 => Some(Element::He),
+        11..=18 => Some(Element::Ne),
+        19..=36 => Some(Element::Ar),
+        37..=54 => Some(Element::Kr),
+        55..=86 => Some(Element::Xe),
+        87..=118 => Some(Element::Rn),
         _ => unreachable!(),
     }
 }
@@ -338,21 +355,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case(e!(H), Configuration::new(e!(H), None, occ!(s1)))]
-    #[case(e!(C), Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)))]
-    #[case(e!(Cr), Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)))] // Exception
-    #[case(e!(Mn), Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5)))]
-    #[case(e!(Cu), Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10)))] // Exception
-    #[case(e!(La), Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1)))] // Exception
-    #[case(e!(Eu), Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7)))]
-    #[case(e!(Gd), Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7)))] // Exception
-    #[case(e!(Xe), Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)))]
-    #[case(e!(Pb), Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14)))]
-    fn test_get_ground_state(#[case] element: Element, #[case] expected: Configuration) {
-        assert_eq!(get_ground_state(element), expected);
-    }
-
-    #[rstest]
     #[case(Configuration::new(e!(H), None, occ!(s1)), None, occ!(s1), 1, 0, spin!(Doublet))]
     #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1), 1, 0, spin!(Doublet))]
     #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2), 0, 1, spin!(Singlet))]
@@ -377,12 +379,36 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Configuration::ground_state(Element::H), "s1")]
-    #[case(Configuration::ground_state(Element::He), "s2")]
-    #[case(Configuration::ground_state(Element::Li), "[He] s1")]
-    #[case(Configuration::ground_state(Element::Be), "[He] s2")]
-    #[case(Configuration::ground_state(Element::B), "[He] s2p1")]
-    fn test_display(#[case] config: Configuration, #[case] expected: &str) {
+    #[case(Configuration::new(e!(H), None, occ!(s1)), "s1")]
+    #[case(Configuration::new(e!(He), None, occ!(s2)), "s2")]
+    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), "[He] s1")]
+    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), "[He] s2")]
+    #[case(Configuration::new(e!(B), Some(e!(He)), occ!(s2p1)), "[He] s2p1")]
+    fn test_configuration_display(#[case] config: Configuration, #[case] expected: &str) {
         assert_eq!(format!("{}", config), expected);
+    }
+    #[rstest]
+    #[case(e!(H), GroundState(Configuration::new(e!(H), None, occ!(s1))))]
+    #[case(e!(C), GroundState(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2))))]
+    #[case(e!(Cr), GroundState(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5))))] // Exception
+    #[case(e!(Mn), GroundState(Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5))))]
+    #[case(e!(Cu), GroundState(Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10))))] // Exception
+    #[case(e!(La), GroundState(Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1))))] // Exception
+    #[case(e!(Eu), GroundState(Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7))))]
+    #[case(e!(Gd), GroundState(Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7))))] // Exception
+    #[case(e!(Xe), GroundState(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10))))]
+    #[case(e!(Pb), GroundState(Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14))))]
+    fn test_ground_state_new(#[case] element: Element, #[case] expected: GroundState) {
+        assert_eq!(GroundState::new(element), expected);
+    }
+
+    #[rstest]
+    #[case(GroundState::new(Element::H), "s1")]
+    #[case(GroundState::new(Element::He), "s2")]
+    #[case(GroundState::new(Element::Li), "[He] s1")]
+    #[case(GroundState::new(Element::Be), "[He] s2")]
+    #[case(GroundState::new(Element::B), "[He] s2p1")]
+    fn test_ground_state_display(#[case] gs: GroundState, #[case] expected: &str) {
+        assert_eq!(format!("{}", gs), expected);
     }
 }
