@@ -28,8 +28,12 @@
 //! - `[Fe+2/1^4*5v6]` -> Fe, charge=+2, lp=1, unpaired=4, mult=5, valence=6
 //! - `[O-/1^1]` -> O, charge=-1, lp=1, unpaired=1, mult=2 (default), valence=0
 
+use crate::e;
 use crate::Element;
+use map_macro::hash_map;
+use once_cell::sync::Lazy;
 use regex::Regex;
+use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 use umol::error::DataError;
@@ -62,7 +66,8 @@ impl ValenceState {
     ) -> Self {
         debug_assert!(multiplicity >= 1 && multiplicity <= unpaired_electrons + 1);
         debug_assert!((unpaired_electrons + 1 - multiplicity) % 2 == 0);
-        debug_assert!(element.valence_electrons() as i8 - charge >= 0);
+        debug_assert!((element.valence_electrons() as i8 - charge) >= 0);
+        debug_assert!(element.max_valence() >= valence);
         Self {
             element,
             charge,
@@ -284,6 +289,79 @@ macro_rules! vs {
     };
 }
 
+// Valence state data by element and charge
+#[allow(dead_code)]
+static VALENCE_STATE_DATA: Lazy<HashMap<(Element, i8), Vec<ValenceState>>> = Lazy::new(|| {
+    hash_map! {
+        (e!(H), 0) => vec![
+            vs!("[H+0v1]"), // H-X
+            vs!("[H+0^1v0]"), // H atom
+            ],
+        (e!(H), 1) => vec![vs!("[H+1v0]")], // H+ cation
+        (e!(H), -1) => vec![vs!("[H-1/1v0]")], // H- anion
+        (e!(He), 0) => vec![vs!("[He+0v0]")], // He atom
+        (e!(Li), 0) => vec![
+            vs!("[Li+0v1]"), // Li-X
+            vs!("[Li+0^1v0]"), // Li atom
+        ],
+        (e!(Li), 1) => vec![vs!("[Li+1v0]")], // Li+ cation
+        (e!(Be), 0) => vec![
+            vs!("[Be+0v2]"), // X-Be-X
+            vs!("[Be+0/1v0"), // Be atom
+        ],
+        (e!(Be), 2) => vec![vs!("[Be+2v0]")], // Be+2 cation
+        (e!(B), 0) => vec![
+            vs!("[B+0v3]"), // X-B(-X)-X
+            vs!("[B+0^1v2]"), // X-B^-X
+            vs!("[B+0/1v1]"), // |B-X
+            vs!("[B+0/1^1v0]"), // B atom
+        ],
+        (e!(B), -1) => vec![vs!("[B-1v4]")], // [X-B(-X)(-X)-X]- anion
+        (e!(C), 0) => vec![
+            vs!("[C+0v4]"), // X-C(-X)(-X)-X
+            vs!("[C+0^1v3]"), // X-C^(-X)-X
+            vs!("[C+0/1^2v2]"), // |C(-X)-X triplet
+            vs!("[C+0/1^2*1v2]"), // |C(-X)-X singlet
+            vs!("[C+0/1^2v0]"), // C atom
+            vs!("[C+0/1^2*0v0]"), // C atom singlet
+        ],
+        (e!(C), 1) => vec![vs!("[C+1^3v3]")], // X-C+(-X)-X cation
+        (e!(C), -1) => vec![vs!("[C-1/1v3]")], // [X-C-(-X)-X]- anion
+        (e!(N), 0) => vec![
+            vs!("[N+0/1v3]"), // X-N(-X)-X
+            vs!("[N+0/1^1v2]"), // X-N^-X
+            vs!("[N+0/2^1v1]"), // ||N-X triplet
+            vs!("[N+0/2^1*0v1]"), // ||N-X singlet
+            vs!("[N+0/1^3v0]"), // N atom
+            vs!("[N+0/1^3*2v0]"), // N atom doublet
+        ],
+        (e!(N), 1) => vec![
+            vs!("[N+1v4]"), // X-N+(-X)(-X)-X cation
+            vs!("[N+1/1v2]"), // X-N+^-X cation
+        ],
+        (e!(N), -1) => vec![ vs!("[N-1/2v2]")], // [X-N(-)-X]- anion
+        (e!(N), -3) => vec![ vs!("[N-3/4v0]")], // N(-3) anion
+        (e!(O), 0) => vec![
+            vs!("[O+0/2v2]"), // X-O-X
+            vs!("[O+0/2^1v1]"), // O^-X
+            vs!("[O+0/2^2v0]"), // O atom
+            vs!("[O+0/2^2*0v0]"), // O atom singlet
+        ],
+        (e!(O), 1) => vec![
+            vs!("[O+1/1v3]"), // X-O+(-X)-X cation
+            vs!("[O+1/2v1]"), // O+-X cation
+        ],
+        (e!(O), -1) => vec![vs!("[O-1/3v1]")], // O(-)-X anion
+        (e!(O), -2) => vec![vs!("[O-2/4v0]")], // O(-2) anion
+        (e!(F), 0) => vec![
+            vs!("[F+0/3v1]"), // F-X
+            vs!("[F+0/3^1v0]"), // F atom
+        ],
+        (e!(F), -1) => vec![vs!("[F-1/4v0]")], // F- anion
+        (e!(Ne), 0) => vec![vs!("[Ne+0/4v0]")], // Ne atom
+    }
+});
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,6 +442,9 @@ mod tests {
 
     #[test]
     fn test_valence_state_macro() {
-        assert_eq!(vs!("[C+0/1^2*3v4]"), ValenceState::new(e!(C), 0, 1, 2, 3, 4));
+        assert_eq!(
+            vs!("[C+0/1^2*3v4]"),
+            ValenceState::new(e!(C), 0, 1, 2, 3, 4)
+        );
     }
 }
