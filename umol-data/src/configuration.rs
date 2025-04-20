@@ -7,7 +7,6 @@ use std::cmp;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::Deref;
-use std::str::FromStr;
 
 /// Electronic configuration of atom or atomic ion
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -290,7 +289,6 @@ mod tests {
     use super::*;
     use crate::{e, occ};
     use rstest::*;
-    use std::str::FromStr;
 
     #[rstest]
     #[case(e!(H), Configuration::new(e!(H), None, occ!(s1)))]

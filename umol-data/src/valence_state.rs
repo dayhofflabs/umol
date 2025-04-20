@@ -19,7 +19,7 @@
 //! - **Charge:** `[+-]\d*` (e.g., `+1`, `-2`, `+`). If sign is present without a number (`+`, `-`), assumes `1`. Defaults to `0` if omitted.
 //! - **Lone Pairs:** `/\d*` (e.g., `/1`, `/0`). If `/` is present without a number, assumes `1`. Defaults to `0` if omitted.
 //! - **Unpaired Electrons:** `\^\d*` (e.g., `^2`, `^0`). If `^` is present without a number, assumes `1`. Defaults to `0` if omitted.
-//! - **Multiplicity:** `\*\d+` (e.g., `*1`, `*3`). Must include a number if present. Defaults based on unpaired electrons (`unpaired + 1`, or `1` if unpaired is `0`) if omitted. The `*` allows overriding the default.
+//! - **Multiplicity:** `\*\d+` (e.g., `*1`, `*3`). Must include a number if present. Defaults to (`unpaired + 1`, or `1` if unpaired is `0`) if omitted.
 //! - **Valence:** `v\d+` (e.g., `v4`, `v6`). Must include a number if present. Defaults to `0` if omitted (use with caution, usually should be specified).
 //!
 //! ### Examples (Illustrative for Parsing):
@@ -38,6 +38,8 @@ use umol::{Error, Result};
 /// Valence state describes the fictitious state of an atom involved in bond formation
 /// Defined by element, charge, number of lone pairs, unpaired electrons, and valence
 /// Does not uniquely define an atomic term symbol
+/// Valence is used to validate ValenceAtom objects according to:
+/// `valence = unpaired_electrons + sum(bond_orders) + num_implicit_hydrogens`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ValenceState {
     element: Element,
@@ -45,16 +47,12 @@ pub struct ValenceState {
     lone_pairs: u8,
     unpaired_electrons: u8,
     multiplicity: u8,
-    valence: u8, // Target valence for check formula
+    valence: u8,
 }
 
 impl ValenceState {
     /// Creates a new ValenceState.
-    ///
-    /// Note: It's the caller's responsibility to ensure the provided multiplicity
-    /// is consistent with the number of unpaired electrons (multiplicity = unpaired + 1,
-    /// or 1 if unpaired is 0) or represents a valid state if different.
-    pub const fn new(
+    pub fn new(
         element: Element,
         charge: i8,
         lone_pairs: u8,
@@ -62,11 +60,9 @@ impl ValenceState {
         multiplicity: u8,
         valence: u8,
     ) -> Self {
-        // Add const assertions for consistency?
-        // const_assert!(multiplicity > 0);
-        // const_assert!((unpaired_electrons == 0 && multiplicity == 1) || (unpaired_electrons > 0 && multiplicity >= unpaired_electrons + 1)); // Basic check
-        // const_assert!(multiplicity % 2 == (unpaired_electrons + 1) % 2); // Parity check
-
+        debug_assert!(multiplicity >= 1 && multiplicity <= unpaired_electrons + 1);
+        debug_assert!((unpaired_electrons + 1 - multiplicity) % 2 == 0);
+        debug_assert!(element.valence_electrons() as i8 - charge >= 0);
         Self {
             element,
             charge,
@@ -93,8 +89,6 @@ impl ValenceState {
         self.unpaired_electrons
     }
 
-    /// Calculated total valence electron count contributing to lone pairs and unpaired electrons.
-    /// This is *not* the same as the total valence electrons of the neutral atom.
     pub fn electron_count(&self) -> u8 {
         2 * self.lone_pairs + self.unpaired_electrons
     }
@@ -147,7 +141,6 @@ impl FromStr for ValenceState {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        println!("s: {:?}", s);
         if s.is_empty() {
             return Err(DataError::InvalidValenceState("Empty string".to_string()).into());
         }
@@ -166,7 +159,6 @@ impl FromStr for ValenceState {
             return Ok(ValenceState::new(element, 0, 0, 0, 1, 0));
         }
         let properties = properties.unwrap().as_str();
-        println!("properties: {:?}", properties);
 
         let property_pattern = Regex::new(r"([-+/*v^])(\d*)").unwrap();
         let mut pos_charge = None;
@@ -179,11 +171,9 @@ impl FromStr for ValenceState {
         for cap in property_pattern.captures_iter(properties) {
             let property = &cap[1];
             let value = &cap[2];
-            println!("property: {:?}", property);
-            println!("value: {:?}", value);
             match property {
                 "+" => {
-                    if pos_charge.is_some() {
+                    if pos_charge.is_some() || neg_charge.is_some() {
                         return Err(
                             DataError::InvalidValenceState("Duplicate charge".to_string()).into(),
                         );
@@ -196,7 +186,7 @@ impl FromStr for ValenceState {
                     }
                 }
                 "-" => {
-                    if neg_charge.is_some() {
+                    if neg_charge.is_some() || pos_charge.is_some() {
                         return Err(
                             DataError::InvalidValenceState("Duplicate charge".to_string()).into(),
                         );
@@ -268,16 +258,6 @@ impl FromStr for ValenceState {
             }
         }
 
-        println!("pos_charge: {:?}", pos_charge);
-        println!("neg_charge: {:?}", neg_charge);
-        println!("lone_pairs: {:?}", lone_pairs);
-        println!("unpaired: {:?}", unpaired);
-        println!("multiplicity: {:?}", multiplicity);
-        println!("valence: {:?}", valence);
-
-        if pos_charge.is_some() && neg_charge.is_some() {
-            return Err(DataError::InvalidValenceState("Duplicate charge".to_string()).into());
-        }
         let charge = pos_charge.unwrap_or(neg_charge.unwrap_or(0));
         let lone_pairs = lone_pairs.unwrap_or(0);
         let unpaired = unpaired.unwrap_or(0);
@@ -294,6 +274,14 @@ impl FromStr for ValenceState {
             valence,
         ))
     }
+}
+
+/// Shorthand macro for valence state parsing
+#[macro_export]
+macro_rules! vs {
+    ($s:expr) => {
+        $s.parse::<ValenceState>().unwrap()
+    };
 }
 
 #[cfg(test)]
@@ -338,8 +326,8 @@ mod tests {
     #[case("[Li+]", ValenceState::new(e!(Li), 1, 0, 0, 1, 0))] // Only positive charge
     #[case("[F-]", ValenceState::new(e!(F), -1, 0, 0, 1, 0))] // Only negative charge
     #[case("[C/1]", ValenceState::new(e!(C), 0, 1, 0, 1, 0))] // Only lone pair
-    #[case("[Na^1]", ValenceState::new(e!(Na), 0, 0, 1, 2, 0))] // Only unpaired
-    #[case("[N*4]", ValenceState::new(e!(N), 0, 0, 0, 4, 0))] // Only multiplicity
+    #[case("[Na^1]", ValenceState::new(e!(Na), 0, 0, 1, 2, 0))] // Unpaired, default multiplicity
+    #[case("[N^3*4]", ValenceState::new(e!(N), 0, 0, 3, 4, 0))] // Unpaired, explicit multiplicity
     #[case("[Cv4]", ValenceState::new(e!(C), 0, 0, 0, 1, 4))] // Only valence
     #[case("[C+v3]", ValenceState::new(e!(C), 1, 0, 0, 1, 3))] // Charge +1 default
     #[case("[O-/2^1]", ValenceState::new(e!(O), -1, 2, 1, 2, 0))] // Charge -1 default, lp 2, unpaired 1, mult default 2
@@ -372,5 +360,10 @@ mod tests {
     #[case("[C+1.0]")] // Non-integer
     fn test_from_str_invalid(#[case] s: &str) {
         assert!(ValenceState::from_str(s).is_err());
+    }
+
+    #[test]
+    fn test_valence_state_macro() {
+        assert_eq!(vs!("[C+0/1^2*3v4]"), ValenceState::new(e!(C), 0, 1, 2, 3, 4));
     }
 }

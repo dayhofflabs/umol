@@ -26,130 +26,131 @@ pub enum Element {
 // 1. atomic mass
 // 2. symbol
 // 3. valence electrons (includes all electrons in valence subshells)
-// 4. max, min charge
-// 5. max unpaired electrons
-// 6. max implicit hydrogens
-static ELEMENT_DATA: Lazy<HashMap<Element, (u8, f64, &'static str, u8, (i8, i8), u8, u8)>> =
+// 4. max valence
+// 5. max, min charge
+// 6. max unpaired electrons
+// 7. max implicit hydrogens
+static ELEMENT_DATA: Lazy<HashMap<Element, (u8, f64, &'static str, u8, u8, (i8, i8), u8, u8)>> =
     Lazy::new(|| {
         hash_map! {
-            Element::H => (1, 1.008, "H", 1, (-1, 1), 1, 0),
-            Element::He => (2, 4.002602, "He", 0, (0, 0), 0, 0), // No valence electrons
-            Element::Li => (3, 6.94, "Li", 1, (-1, 1), 1, 0),
-            Element::Be => (4, 9.0121831, "Be", 2, (-2, 2), 2, 0),
-            Element::B => (5, 10.81, "B", 3, (-3, 3), 3, 3),
-            Element::C => (6, 12.011, "C", 4, (-4, 4), 4, 4),
-            Element::N => (7, 14.007, "N", 5, (-3, 5), 3, 3),
-            Element::O => (8, 15.999, "O", 6, (-2, 2), 2, 2),
-            Element::F => (9, 18.998403163, "F", 7, (-1, 1), 1, 1),
-            Element::Ne => (10, 20.1797, "Ne", 0, (0, 0), 0, 0),
-            Element::Na => (11, 22.98976928, "Na", 1, (-1, 1), 1, 0),
-            Element::Mg => (12, 24.305, "Mg", 2, (0, 2), 2, 0),
-            Element::Al => (13, 26.9815385, "Al", 3, (-1, 3), 3, 0),
-            Element::Si => (14, 28.085, "Si", 4, (-4, 4), 4, 4),
-            Element::P => (15, 30.973761998, "P", 5, (-3, 5), 3, 3),
-            Element::S => (16, 32.06, "S", 6, (-2, 6), 2, 2),
-            Element::Cl => (17, 35.45, "Cl", 7, (-1, 7), 1, 1),
-            Element::Ar => (18, 39.948, "Ar", 0, (0, 0), 0, 0), // No valence electrons
-            Element::K => (19, 39.0983, "K", 1, (-1, 1), 1, 0),
-            Element::Ca => (20, 40.078, "Ca", 2, (0, 2), 2, 0),
-            Element::Sc => (21, 44.955908, "Sc", 3, (0, 3), 3, 0),
-            Element::Ti => (22, 47.867, "Ti", 4, (0, 4), 4, 0),
-            Element::V => (23, 50.9415, "V", 5, (0, 5), 5, 0),
-            Element::Cr => (24, 51.9961, "Cr", 6, (0, 6), 6, 0),
-            Element::Mn => (25, 54.938044, "Mn", 7, (0, 7), 7, 0),
-            Element::Fe => (26, 55.845, "Fe", 8, (-1, 6), 6, 0),
-            Element::Co => (27, 58.933194, "Co", 9, (-1, 5), 5, 0),
-            Element::Ni => (28, 58.6934, "Ni", 10, (-1, 4), 4, 0),
-            Element::Cu => (29, 63.546, "Cu", 11, (-1, 3), 3, 0),
-            Element::Zn => (30, 65.38, "Zn", 12, (0, 2), 2, 0),
-            Element::Ga => (31, 69.723, "Ga", 13, (-1, 3), 3, 0),
-            Element::Ge => (32, 72.63, "Ge", 14, (-4, 4), 4, 0),
-            Element::As => (33, 74.921595, "As", 15, (-3, 5), 3, 3),
-            Element::Se => (34, 78.971, "Se", 16, (-2, 6), 2, 2),
-            Element::Br => (35, 79.904, "Br", 17, (-1, 7), 1, 1),
-            Element::Kr => (36, 83.798, "Kr", 18, (0, 8), 2, 0), // Allow Kr compounds
-            Element::Rb => (37, 85.4678, "Rb", 1, (-1, 1), 1, 0),
-            Element::Sr => (38, 87.62, "Sr", 2, (0, 2), 2, 0),
-            Element::Y => (39, 88.90584, "Y", 3, (-1, 3), 3, 0),
-            Element::Zr => (40, 91.224, "Zr", 4, (-1, 4), 4, 0),
-            Element::Nb => (41, 92.90637, "Nb", 5, (0, 5), 5, 0),
-            Element::Mo => (42, 95.95, "Mo", 6, (0, 6), 6, 0),
-            Element::Tc => (43, 98.0, "Tc", 7, (0, 7), 7, 0),
-            Element::Ru => (44, 101.07, "Ru", 8, (-1, 8), 8, 0),
-            Element::Rh => (45, 102.90550, "Rh", 9, (-1, 6), 6, 0),
-            Element::Pd => (46, 106.42, "Pd", 10, (-1, 5), 5, 0),
-            Element::Ag => (47, 107.8682, "Ag", 11, (-1, 3), 3, 0),
-            Element::Cd => (48, 112.414, "Cd", 12, (0, 2), 2, 0),
-            Element::In => (49, 114.818, "In", 13, (-1, 3), 3, 0),
-            Element::Sn => (50, 118.710, "Sn", 14, (-4, 4), 4, 4),
-            Element::Sb => (51, 121.760, "Sb", 15, (-3, 5), 3, 3),
-            Element::Te => (52, 127.60, "Te", 16, (-2, 6), 2, 2),
-            Element::I => (53, 126.90447, "I", 17, (-1, 7), 1, 1),
-            Element::Xe => (54, 131.293, "Xe", 18, (0, 8), 2, 0), // Allow Xe compounds
-            Element::Cs => (55, 132.90545196, "Cs", 1, (-1, 1), 1, 0),
-            Element::Ba => (56, 137.327, "Ba", 2, (0, 2), 2, 0),
-            Element::La => (57, 138.90547, "La", 3, (-1, 3), 3, 0),
-            Element::Ce => (58, 140.116, "Ce", 4, (-1, 4), 4, 0),
-            Element::Pr => (59, 140.90766, "Pr", 5, (-1, 4), 4, 0),
-            Element::Nd => (60, 144.242, "Nd", 6, (-1, 3), 3, 0),
-            Element::Pm => (61, 145.0, "Pm", 7, (-1, 3), 3, 0),
-            Element::Sm => (62, 150.36, "Sm", 8, (-1, 3), 3, 0),
-            Element::Eu => (63, 151.964, "Eu", 9, (-1, 3), 3, 0),
-            Element::Gd => (64, 157.25, "Gd", 10, (-1, 3), 3, 0),
-            Element::Tb => (65, 158.92535, "Tb", 11, (-1, 4), 4, 0),
-            Element::Dy => (66, 162.500, "Dy", 12,(-1, 3), 3, 0),
-            Element::Ho => (67, 164.93033, "Ho", 13, (-1, 3), 3, 0),
-            Element::Er => (68, 167.259, "Er", 14, (-1, 3), 3, 0),
-            Element::Tm => (69, 168.93422, "Tm", 15, (-1, 3), 3, 0),
-            Element::Yb => (70, 173.045, "Yb", 16, (-1, 3), 3, 0),
-            Element::Lu => (71, 174.9668, "Lu", 17, (-1, 3), 3, 0),
-            Element::Hf => (72, 178.49, "Hf", 18, (-1, 4), 4, 0),
-            Element::Ta => (73, 180.94788, "Ta", 19, (-1, 5), 5, 0),
-            Element::W => (74, 183.84, "W", 20, (-1, 6), 6, 0),
-            Element::Re => (75, 186.207, "Re", 21, (-1, 7), 7, 0),
-            Element::Os => (76, 190.23, "Os", 22, (-1, 8), 8, 0),
-            Element::Ir => (77, 192.217, "Ir", 23, (-1, 6), 6, 0),
-            Element::Pt => (78, 195.084, "Pt", 24, (-1, 6), 4, 0),
-            Element::Au => (79, 196.966569, "Au", 25, (-1, 5), 1, 0),
-            Element::Hg => (80, 200.592, "Hg", 26, (0, 2), 2, 0),
-            Element::Tl => (81, 204.38, "Tl", 27, (-1, 3), 3, 0),
-            Element::Pb => (82, 207.2, "Pb", 28, (-2, 4), 4, 0),
-            Element::Bi => (83, 208.98040, "Bi", 29, (-3, 3), 3, 3),
-            Element::Po => (84, 209.0, "Po", 30, (-2, 6), 2, 2),
-            Element::At => (85, 210.0, "At", 31, (-1, 7), 1, 1),
-            Element::Rn => (86, 222.0, "Rn", 32, (0, 8), 2, 0),
-            Element::Fr => (87, 223.0, "Fr", 1, (-1, 1), 1, 0),
-            Element::Ra => (88, 226.0, "Ra", 2, (0, 2), 2, 0),
-            Element::Ac => (89, 227.0, "Ac", 3, (-1, 3), 3, 0),
-            Element::Th => (90, 232.0377, "Th", 4, (0, 4), 4, 0),
-            Element::Pa => (91, 231.03588, "Pa", 5, (-1, 5), 3, 0),
-            Element::U => (92, 238.02891, "U", 6, (0, 6), 4, 0),
-            Element::Np => (93, 237.0, "Np", 7, (0, 7), 5, 0),
-            Element::Pu => (94, 244.0, "Pu", 8, (0, 8), 6, 0),
-            Element::Am => (95, 243.0, "Am", 9, (0, 7), 7, 0),
-            Element::Cm => (96, 247.0, "Cm", 10, (0, 6), 8, 0),
-            Element::Bk => (97, 247.0, "Bk", 11, (0, 5), 5, 0),
-            Element::Cf => (98, 251.0, "Cf", 12, (0, 5), 4, 0),
-            Element::Es => (99, 252.0, "Es", 13, (0, 4), 3, 0),
-            Element::Fm => (100, 257.0, "Fm", 14, (0, 3), 2, 0),
-            Element::Md => (101, 258.0, "Md", 15, (0, 3), 1, 0),
-            Element::No => (102, 259.0, "No", 16, (0, 3), 0, 0),
-            Element::Lr => (103, 262.0, "Lr", 17, (0, 3), 1, 0),
-            Element::Rf => (104, 267.0, "Rf", 18, (0, 4), 2, 0),
-            Element::Db => (105, 270.0, "Db", 19, (0, 5), 3, 0),
-            Element::Sg => (106, 271.0, "Sg", 20, (0, 6), 4, 0),
-            Element::Bh => (107, 270.0, "Bh", 21, (0, 7), 5, 0),
-            Element::Hs => (108, 277.0, "Hs", 22, (0, 8), 6, 0),
-            Element::Mt => (109, 276.0, "Mt", 23, (0, 6), 5, 0),
-            Element::Ds => (110, 281.0, "Ds", 24, (0, 6), 4, 0),
-            Element::Rg => (111, 280.0, "Rg", 25, (0, 5), 3, 0),
-            Element::Cn => (112, 285.0, "Cn", 26, (0, 4), 2, 0),
-            Element::Nh => (113, 284.0, "Nh", 27, (0, 3), 1, 0),
-            Element::Fl => (114, 289.0, "Fl", 28, (0, 2), 0, 0),
-            Element::Mc => (115, 288.0, "Mc", 29, (0, 0), 0, 0),
-            Element::Lv => (116, 293.0, "Lv", 30, (0, 0), 0, 0),
-            Element::Ts => (117, 294.0, "Ts", 31, (0, 0), 0, 0),
-            Element::Og => (118, 294.0, "Og", 32, (0, 0), 0, 0),
+            Element::H => (1, 1.008, "H", 1, 2, (-1, 1), 1, 0),
+            Element::He => (2, 4.002602, "He", 0, 0, (0, 0), 0, 0), // No valence electrons
+            Element::Li => (3, 6.94, "Li", 1, 2, (-1, 1), 1, 0),
+            Element::Be => (4, 9.0121831, "Be", 2, 2, (-2, 2), 2, 0),
+            Element::B => (5, 10.81, "B", 3, 8, (-3, 3), 3, 3),
+            Element::C => (6, 12.011, "C", 4, 8, (-4, 4), 4, 4),
+            Element::N => (7, 14.007, "N", 5, 8, (-3, 5), 3, 3),
+            Element::O => (8, 15.999, "O", 6, 8, (-2, 6), 2, 2),
+            Element::F => (9, 18.998403163, "F", 7, 8, (-1, 7), 1, 1),
+            Element::Ne => (10, 20.1797, "Ne", 0, 0, (0, 0), 0, 0), // No valence electrons
+            Element::Na => (11, 22.98976928, "Na", 1, 2, (-1, 1), 1, 0),
+            Element::Mg => (12, 24.305, "Mg", 2, 2, (0, 2), 2, 0),
+            Element::Al => (13, 26.9815385, "Al", 3, 8, (-1, 3), 3, 0),
+            Element::Si => (14, 28.085, "Si", 4, 8, (-4, 4), 4, 4),
+            Element::P => (15, 30.973761998, "P", 5, 8, (-3, 5), 3, 3),
+            Element::S => (16, 32.06, "S", 6, 8, (-2, 6), 2, 2),
+            Element::Cl => (17, 35.45, "Cl", 7, 8, (-1, 7), 1, 1),
+            Element::Ar => (18, 39.948, "Ar", 0, 0, (0, 0), 0, 0), // No valence electrons
+            Element::K => (19, 39.0983, "K", 1, 2, (-1, 1), 1, 0),
+            Element::Ca => (20, 40.078, "Ca", 2, 2, (0, 2), 2, 0),
+            Element::Sc => (21, 44.955908, "Sc", 3, 12, (0, 3), 3, 0),
+            Element::Ti => (22, 47.867, "Ti", 4, 18, (0, 4), 4, 0),
+            Element::V => (23, 50.9415, "V", 5, 18, (0, 5), 5, 0),
+            Element::Cr => (24, 51.9961, "Cr", 6, 18, (0, 6), 6, 0),
+            Element::Mn => (25, 54.938044, "Mn", 7, 18, (0, 7), 7, 0),
+            Element::Fe => (26, 55.845, "Fe", 8, 18, (0, 6), 6, 0),
+            Element::Co => (27, 58.933194, "Co", 9, 18, (0, 5), 5, 0),
+            Element::Ni => (28, 58.6934, "Ni", 10, 18, (0, 4), 4, 0),
+            Element::Cu => (29, 63.546, "Cu", 11, 18, (0, 3), 3, 0),
+            Element::Zn => (30, 65.38, "Zn", 12, 18, (0, 2), 2, 0),
+            Element::Ga => (31, 69.723, "Ga", 13, 18, (0, 3), 3, 0),
+            Element::Ge => (32, 72.63, "Ge", 14, 18, (0, 4), 4, 0),
+            Element::As => (33, 74.921595, "As", 15, 18, (0, 3), 3, 3),
+            Element::Se => (34, 78.971, "Se", 16, 18, (0, 2), 2, 2),
+            Element::Br => (35, 79.904, "Br", 17, 18, (0, 1), 1, 1),
+            Element::Kr => (36, 83.798, "Kr", 18, 18, (0, 0), 0, 0), // Allow Kr compounds
+            Element::Rb => (37, 85.4678, "Rb", 1, 2, (-1, 1), 1, 0),
+            Element::Sr => (38, 87.62, "Sr", 2, 2, (0, 2), 2, 0),
+            Element::Y => (39, 88.90584, "Y", 3, 12, (0, 3), 3, 0),
+            Element::Zr => (40, 91.224, "Zr", 4, 18, (0, 4), 4, 0),
+            Element::Nb => (41, 92.90637, "Nb", 5, 18, (0, 5), 5, 0),
+            Element::Mo => (42, 95.95, "Mo", 6, 18, (0, 6), 6, 0),
+            Element::Tc => (43, 98.0, "Tc", 7, 18, (0, 7), 7, 0),
+            Element::Ru => (44, 101.07, "Ru", 8, 18, (0, 8), 8, 0),
+            Element::Rh => (45, 102.90550, "Rh", 9, 18, (0, 6), 6, 0),
+            Element::Pd => (46, 106.42, "Pd", 10, 18, (0, 5), 5, 0),
+            Element::Ag => (47, 107.8682, "Ag", 11, 18, (0, 3), 3, 0),
+            Element::Cd => (48, 112.414, "Cd", 12, 18, (0, 2), 2, 0),
+            Element::In => (49, 114.818, "In", 13, 18, (0, 3), 3, 0),
+            Element::Sn => (50, 118.710, "Sn", 14, 18, (0, 4), 4, 4),
+            Element::Sb => (51, 121.760, "Sb", 15, 18, (0, 3), 3, 3),
+            Element::Te => (52, 127.60, "Te", 16, 18, (0, 2), 2, 2),
+            Element::I => (53, 126.90447, "I", 17, 18, (0, 1), 1, 1),
+            Element::Xe => (54, 131.293, "Xe", 18, 18, (0, 0), 0, 0), // Allow Xe compounds
+            Element::Cs => (55, 132.90545196, "Cs", 1, 2, (-1, 1), 1, 0),
+            Element::Ba => (56, 137.327, "Ba", 2, 2, (0, 2), 2, 0),
+            Element::La => (57, 138.90547, "La", 3, 18, (0, 3), 3, 0),
+            Element::Ce => (58, 140.116, "Ce", 4, 20, (0, 4), 4, 0),
+            Element::Pr => (59, 140.90766, "Pr", 5, 20, (0, 4), 4, 0),
+            Element::Nd => (60, 144.242, "Nd", 6, 22, (-1, 3), 3, 0),
+            Element::Pm => (61, 145.0, "Pm", 7, 22, (-1, 3), 3, 0),
+            Element::Sm => (62, 150.36, "Sm", 8, 24, (-1, 3), 3, 0),
+            Element::Eu => (63, 151.964, "Eu", 9, 24, (-1, 3), 3, 0),
+            Element::Gd => (64, 157.25, "Gd", 10, 26, (-1, 3), 3, 0),
+            Element::Tb => (65, 158.92535, "Tb", 11, 26, (-1, 4), 4, 0),
+            Element::Dy => (66, 162.500, "Dy", 12, 28, (-1, 3), 3, 0),
+            Element::Ho => (67, 164.93033, "Ho", 13, 28, (-1, 3), 3, 0),
+            Element::Er => (68, 167.259, "Er", 14, 30, (-1, 3), 3, 0),
+            Element::Tm => (69, 168.93422, "Tm", 15, 30, (-1, 3), 3, 0),
+            Element::Yb => (70, 173.045, "Yb", 16, 32, (-1, 3), 3, 0),
+            Element::Lu => (71, 174.9668, "Lu", 17, 32, (-1, 3), 3, 0),
+            Element::Hf => (72, 178.49, "Hf", 18, 32, (0, 4), 4, 0),
+            Element::Ta => (73, 180.94788, "Ta", 19, 32, (0, 5), 5, 0),
+            Element::W => (74, 183.84, "W", 20, 32, (0, 6), 6, 0),
+            Element::Re => (75, 186.207, "Re", 21, 32, (0, 7), 7, 0),
+            Element::Os => (76, 190.23, "Os", 22, 32, (0, 8), 8, 0),
+            Element::Ir => (77, 192.217, "Ir", 23, 32, (0, 6), 6, 0),
+            Element::Pt => (78, 195.084, "Pt", 24, 32, (0, 6), 4, 0),
+            Element::Au => (79, 196.966569, "Au", 25, 32, (0, 5), 1, 0),
+            Element::Hg => (80, 200.592, "Hg", 26, 32, (0, 2), 2, 0),
+            Element::Tl => (81, 204.38, "Tl", 27, 32, (0, 3), 3, 0),
+            Element::Pb => (82, 207.2, "Pb", 28, 32, (0, 4), 4, 0),
+            Element::Bi => (83, 208.98040, "Bi", 29, 32, (0, 3), 3, 3),
+            Element::Po => (84, 209.0, "Po", 30, 32, (0, 2), 2, 2),
+            Element::At => (85, 210.0, "At", 31, 32, (0, 7), 1, 1),
+            Element::Rn => (86, 222.0, "Rn", 32, 32, (0, 8), 2, 0),
+            Element::Fr => (87, 223.0, "Fr", 1, 2, (0, 1), 1, 0),
+            Element::Ra => (88, 226.0, "Ra", 2, 2, (0, 2), 2, 0),
+            Element::Ac => (89, 227.0, "Ac", 3, 18, (0, 3), 3, 0),
+            Element::Th => (90, 232.0377, "Th", 4, 20, (0, 4), 4, 0),
+            Element::Pa => (91, 231.03588, "Pa", 5, 20, (0, 5), 3, 0),
+            Element::U => (92, 238.02891, "U", 6, 22, (0, 6), 4, 0),
+            Element::Np => (93, 237.0, "Np", 7, 22, (0, 7), 5, 0),
+            Element::Pu => (94, 244.0, "Pu", 8, 24, (0, 8), 6, 0),
+            Element::Am => (95, 243.0, "Am", 9, 24, (0, 7), 7, 0),
+            Element::Cm => (96, 247.0, "Cm", 10, 26, (0, 6), 8, 0),
+            Element::Bk => (97, 247.0, "Bk", 11, 26, (0, 5), 5, 0),
+            Element::Cf => (98, 251.0, "Cf", 12, 28, (0, 5), 4, 0),
+            Element::Es => (99, 252.0, "Es", 13, 28, (0, 4), 3, 0),
+            Element::Fm => (100, 257.0, "Fm", 14, 30, (0, 3), 2, 0),
+            Element::Md => (101, 258.0, "Md", 15, 30, (0, 3), 1, 0),
+            Element::No => (102, 259.0, "No", 16, 32, (0, 3), 0, 0),
+            Element::Lr => (103, 262.0, "Lr", 17, 32, (0, 3), 1, 0),
+            Element::Rf => (104, 267.0, "Rf", 18, 32, (0, 4), 2, 0),
+            Element::Db => (105, 270.0, "Db", 19, 32, (0, 5), 3, 0),
+            Element::Sg => (106, 271.0, "Sg", 20, 32, (0, 6), 4, 0),
+            Element::Bh => (107, 270.0, "Bh", 21, 32, (0, 7), 5, 0),
+            Element::Hs => (108, 277.0, "Hs", 22, 32, (0, 8), 6, 0),
+            Element::Mt => (109, 276.0, "Mt", 23, 32, (0, 6), 5, 0),
+            Element::Ds => (110, 281.0, "Ds", 24, 32, (0, 6), 4, 0),
+            Element::Rg => (111, 280.0, "Rg", 25, 32, (0, 5), 3, 0),
+            Element::Cn => (112, 285.0, "Cn", 26, 32, (0, 4), 2, 0),
+            Element::Nh => (113, 284.0, "Nh", 27, 32, (0, 3), 1, 0),
+            Element::Fl => (114, 289.0, "Fl", 28, 32, (0, 2), 0, 0),
+            Element::Mc => (115, 288.0, "Mc", 29, 32, (0, 0), 0, 0),
+            Element::Lv => (116, 293.0, "Lv", 30, 32, (0, 0), 0, 0),
+            Element::Ts => (117, 294.0, "Ts", 31, 32, (0, 0), 0, 0),
+            Element::Og => (118, 294.0, "Og", 32, 32, (0, 0), 0, 0),
         }
     });
 
@@ -247,24 +248,29 @@ impl Element {
         ELEMENT_DATA.get(self).unwrap().3
     }
 
+    // Get max valence for element
+    pub fn max_valence(&self) -> u8 {
+        ELEMENT_DATA.get(self).unwrap().4
+    }
+
     // Get minimum and maximum charge for element
     pub fn charge_bounds(&self) -> (i8, i8) {
-        ELEMENT_DATA.get(self).unwrap().4
+        ELEMENT_DATA.get(self).unwrap().5
     }
 
     // Get maximum number of unpaired electrons for element
     pub fn max_unpaired_electrons(&self) -> u8 {
-        ELEMENT_DATA.get(self).unwrap().5
+        ELEMENT_DATA.get(self).unwrap().6
     }
 
     // Get maximum number of implicit hydrogens for element
     pub fn max_implicit_hydrogens(&self) -> u8 {
-        ELEMENT_DATA.get(self).unwrap().6
+        ELEMENT_DATA.get(self).unwrap().7
     }
 
     // Validate charge against minimum and maximum charge for element
     pub fn validate_charge(&self, charge: i8) -> Result<()> {
-        let (min_charge, max_charge) = ELEMENT_DATA.get(self).unwrap().4;
+        let (min_charge, max_charge) = ELEMENT_DATA.get(self).unwrap().5;
 
         if charge < min_charge || charge > max_charge {
             return Err(DataError::InvalidCharge {
@@ -372,19 +378,21 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Element::H, "H", 1, 1.008, 1)]
-    #[case(Element::He, "He", 2, 4.002602, 2)]
+    #[case(Element::H, "H", 1, 1.008, 1, 2)]
+    #[case(Element::He, "He", 2, 4.002602, 0, 0)]
     fn test_element_properties(
         #[case] element: Element,
         #[case] symbol: &str,
         #[case] atomic_number: u8,
         #[case] atomic_mass: f64,
         #[case] valence_electrons: u8,
+        #[case] max_valence: u8,
     ) {
         assert_eq!(element.symbol(), symbol);
         assert_eq!(element.atomic_number(), atomic_number);
         assert!((element.atomic_mass() - atomic_mass).abs() < 1e-10);
         assert_eq!(element.valence_electrons(), valence_electrons);
+        assert_eq!(element.max_valence(), max_valence);
     }
 
     #[rstest]
@@ -467,9 +475,10 @@ mod tests {
             assert!(data.1 > 0.0); // atomic mass
             assert!(!data.2.is_empty()); // symbol
             assert!(data.3 <= 32); // valence electrons
-            assert!(data.4 .0 <= data.4 .1); // charge bounds
-            assert!(data.5 <= 10); // max unpaired electrons
-            assert!(data.6 <= 4); // max implicit hydrogens
+            assert!(data.4 <= 32); // max valence
+            assert!(data.5 .0 <= data.5 .1); // charge bounds
+            assert!(data.6 <= 10); // max unpaired electrons
+            assert!(data.7 <= 4); // max implicit hydrogens
         }
     }
 

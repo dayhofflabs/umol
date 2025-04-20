@@ -137,7 +137,7 @@ impl FromStr for Occupation {
 #[macro_export]
 macro_rules! occ {
     ($occ:ident) => {
-        Occupation::from_str(stringify!($occ)).unwrap()
+        stringify!($occ).parse::<Occupation>().unwrap()
     };
 }
 
