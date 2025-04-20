@@ -197,6 +197,9 @@ pub enum DataError {
         multiplicity: Option<u8>,
     },
 
+    #[error("Invalid valence state: {0}")]
+    InvalidValenceState(String),
+
     #[error("Duplicate original atom index found: {0}")]
     DuplicateAtomIndex(usize),
 
