@@ -28,8 +28,7 @@
 //! - `[Fe+2/1^4*5v6]` -> Fe, charge=+2, lp=1, unpaired=4, mult=5, valence=6
 //! - `[O-/1^1]` -> O, charge=-1, lp=1, unpaired=1, mult=2 (default), valence=0
 
-use crate::e;
-use crate::Element;
+use crate::{e, Element};
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -38,13 +37,14 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 use umol::error::DataError;
 use umol::{Error, Result};
+use serde::{Serialize, Deserialize};
 
 /// Valence state describes the fictitious state of an atom involved in bond formation
 /// Defined by element, charge, number of lone pairs, unpaired electrons, and valence
 /// Does not uniquely define an atomic term symbol
 /// Valence is used to validate ValenceAtom objects according to:
 /// `valence = unpaired_electrons + sum(bond_orders) + num_implicit_hydrogens`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ValenceState {
     element: Element,
     charge: i8,
@@ -103,15 +103,11 @@ impl ValenceState {
     }
 
     /// Target valence number used in the check formula:
-    /// `valence = unpaired_electrons + sum(bond_orders) + num_implicit_hydrogens`
+    /// `valence = bond_sum + implicit_hydrogens`
     pub fn valence(&self) -> u8 {
         self.valence
     }
 
-    /// Calculates the default multiplicity (unpaired + 1)
-    pub fn default_multiplicity(&self) -> u8 {
-        self.unpaired_electrons + 1
-    }
 }
 
 impl Display for ValenceState {
@@ -132,7 +128,7 @@ impl Display for ValenceState {
             write!(f, "^{}", self.unpaired_electrons)?;
         }
         // Only display multiplicity if it's non-default
-        if self.multiplicity != self.default_multiplicity() {
+        if self.multiplicity != self.unpaired_electrons + 1 {
             write!(f, "*{}", self.multiplicity)?;
         }
         if self.valence > 0 {
@@ -142,10 +138,10 @@ impl Display for ValenceState {
     }
 }
 
-impl FromStr for ValenceState {
-    type Err = Error;
+impl TryFrom<&str> for ValenceState {
+    type Error = Error;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn try_from(s: &str) -> Result<Self> {
         if s.is_empty() {
             return Err(DataError::InvalidValenceState("Empty string".to_string()).into());
         }
@@ -281,6 +277,13 @@ impl FromStr for ValenceState {
     }
 }
 
+impl FromStr for ValenceState {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::try_from(s)
+    }
+}
 /// Shorthand macro for valence state parsing
 #[macro_export]
 macro_rules! vs {
@@ -438,6 +441,20 @@ mod tests {
     #[case("[C+1.0]")] // Non-integer
     fn test_from_str_invalid(#[case] s: &str) {
         assert!(ValenceState::from_str(s).is_err());
+    }
+
+    #[test]
+    fn test_valence_state_serialize() {
+        let vs = ValenceState::new(e!(C), 0, 1, 2, 3, 4);
+        let serialized = serde_json::to_string(&vs).unwrap();
+        assert_eq!(serialized, r#"{"element":"C","charge":0,"lone_pairs":1,"unpaired_electrons":2,"multiplicity":3,"valence":4}"#);
+    }
+
+    #[test]
+    fn test_valence_state_deserialize() {
+        let serialized = r#"{"element":"C","charge":0,"lone_pairs":1,"unpaired_electrons":2,"multiplicity":3,"valence":4}"#;
+        let vs = serde_json::from_str::<ValenceState>(serialized).unwrap();
+        assert_eq!(vs, ValenceState::new(e!(C), 0, 1, 2, 3, 4));
     }
 
     #[test]

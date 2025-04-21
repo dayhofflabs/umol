@@ -81,10 +81,10 @@ impl Display for Occupation {
     }
 }
 
-impl FromStr for Occupation {
-    type Err = Error;
+impl TryFrom<&str> for Occupation {
+    type Error = Error;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn try_from(s: &str) -> Result<Self> {
         if s.is_empty() {
             return Err(DataError::InvalidOccupation(s.to_string()).into());
         }
@@ -131,6 +131,16 @@ impl FromStr for Occupation {
         })
     }
 }
+
+impl FromStr for Occupation {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::try_from(s)
+    }
+}
+
+// TODO: Implement Serialize, Deserialize for Occupation
 
 /// Shorthand macro for occupations
 /// Allows using occupation strings directly without quotes

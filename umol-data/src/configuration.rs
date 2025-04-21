@@ -100,6 +100,9 @@ impl Display for Configuration {
     }
 }
 
+// TODO: Implement TryFrom<&str>, FromStr for Configuration
+// TODO: Implement Serialize, Deserialize for Configuration
+
 /// Ground state configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GroundState(Configuration);
@@ -192,7 +195,7 @@ fn get_total_occupation(element: Element) -> Occupation {
 /// Compute configurations from Aufbau principle, Madelung rule, and Hund's rules
 fn get_aufbau_configuration(element: Element) -> Configuration {
     if GROUND_STATE_EXCEPTIONS.contains_key(&element) {
-        // TODO: log warning
+        // TODO: Add warning when logging is implemented
         eprintln!("Element {} has exceptional configuration", element);
     }
     let mut remaining = element.atomic_number();

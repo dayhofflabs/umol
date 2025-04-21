@@ -27,59 +27,42 @@ pub const MAX_UNPAIRED_ELECTRONS: u8 = 9;
 
 impl SpinState {
     /// Create a spin state from the number of unpaired electrons
-    pub fn from_unpaired_electrons(unpaired_electrons: u8) -> Result<Self> {
+    pub fn from_unpaired_electrons(unpaired_electrons: u8) -> Option<Self> {
         match unpaired_electrons {
-            0 => Ok(SpinState::Singlet),
-            1 => Ok(SpinState::Doublet),
-            2 => Ok(SpinState::Triplet),
-            3 => Ok(SpinState::Quartet),
-            4 => Ok(SpinState::Quintet),
-            5 => Ok(SpinState::Sextet),
-            6 => Ok(SpinState::Septet),
-            7 => Ok(SpinState::Octet),
-            8 => Ok(SpinState::Nonet),
-            9 => Ok(SpinState::Decet),
-            _ => Err(DataError::InvalidSpinState {
-                unpaired_electrons: Some(unpaired_electrons),
-                multiplet_name: None,
-                multiplicity: None,
-            }
-            .into()),
+            0 => Some(SpinState::Singlet),
+            1 => Some(SpinState::Doublet),
+            2 => Some(SpinState::Triplet),
+            3 => Some(SpinState::Quartet),
+            4 => Some(SpinState::Quintet),
+            5 => Some(SpinState::Sextet),
+            6 => Some(SpinState::Septet),
+            7 => Some(SpinState::Octet),
+            8 => Some(SpinState::Nonet),
+            9 => Some(SpinState::Decet),
+            _ => None,
         }
     }
 
     /// Create spin state from the multiplet name
-    pub fn from_multiplet_name(name: &str) -> Result<Self> {
+    pub fn from_multiplet_name(name: &str) -> Option<Self> {
         match name.to_lowercase().as_str() {
-            "singlet" => Ok(SpinState::Singlet),
-            "doublet" => Ok(SpinState::Doublet),
-            "triplet" => Ok(SpinState::Triplet),
-            "quartet" => Ok(SpinState::Quartet),
-            "quintet" => Ok(SpinState::Quintet),
-            "sextet" => Ok(SpinState::Sextet),
-            "septet" => Ok(SpinState::Septet),
-            "octet" => Ok(SpinState::Octet),
-            "nonet" => Ok(SpinState::Nonet),
-            "decet" => Ok(SpinState::Decet),
-            _ => Err(DataError::InvalidSpinState {
-                unpaired_electrons: None,
-                multiplet_name: Some(name.to_string()),
-                multiplicity: None,
-            }
-            .into()),
+            "singlet" => Some(SpinState::Singlet),
+            "doublet" => Some(SpinState::Doublet),
+            "triplet" => Some(SpinState::Triplet),
+            "quartet" => Some(SpinState::Quartet),
+            "quintet" => Some(SpinState::Quintet),
+            "sextet" => Some(SpinState::Sextet),
+            "septet" => Some(SpinState::Septet),
+            "octet" => Some(SpinState::Octet),
+            "nonet" => Some(SpinState::Nonet),
+            "decet" => Some(SpinState::Decet),
+            _ => None,
         }
     }
 
     /// Create spin state from multiplicity
-    pub fn from_multiplicity(multiplicity: u8) -> Result<Self> {
-        Self::from_unpaired_electrons(multiplicity - 1).map_err(|_| {
-            DataError::InvalidSpinState {
-                unpaired_electrons: None,
-                multiplet_name: None,
-                multiplicity: Some(multiplicity),
-            }
-            .into()
-        })
+    pub fn from_multiplicity(multiplicity: u8) -> Option<Self> {
+        Self::from_unpaired_electrons(multiplicity - 1)
     }
 
     /// Get number of unpaired electrons
@@ -115,11 +98,26 @@ impl Display for SpinState {
     }
 }
 
+impl TryFrom<&str> for SpinState {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self> {
+        Self::from_multiplet_name(s.to_lowercase().as_str()).ok_or_else(|| {
+            DataError::InvalidSpinState {
+                unpaired_electrons: None,
+                multiplet_name: Some(s.to_string()),
+                multiplicity: None,
+            }
+            .into()
+        })
+    }
+}
+
 impl FromStr for SpinState {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        Self::from_multiplet_name(s.to_lowercase().as_str())
+        Self::try_from(s)
     }
 }
 
@@ -131,6 +129,8 @@ macro_rules! spin {
         SpinState::$state
     };
 }
+
+// TODO: Implement Serialize, Deserialize for SpinState
 
 #[cfg(test)]
 mod tests {
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_spin_state_from_unpaired_electrons_error() {
-        assert!(matches!(SpinState::from_unpaired_electrons(10), Err(_)));
+        assert!(SpinState::from_unpaired_electrons(10).is_none());
     }
 
     #[rstest]
@@ -173,10 +173,7 @@ mod tests {
 
     #[test]
     fn test_spin_state_from_multiplet_name_error() {
-        assert!(matches!(
-            SpinState::from_multiplet_name("nosuchplet"),
-            Err(_)
-        ));
+        assert!(SpinState::from_multiplet_name("nosuchplet").is_none());
     }
 
     #[rstest]
@@ -192,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_spin_state_from_multiplicity_error() {
-        assert!(matches!(SpinState::from_multiplicity(11), Err(_)));
+        assert!(SpinState::from_multiplicity(11).is_none());
     }
 
     #[rstest]

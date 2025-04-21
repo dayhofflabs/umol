@@ -153,6 +153,12 @@ pub enum DataError {
     #[error("Invalid bond order: {0}")]
     InvalidBondOrder(String),
 
+    #[error("Invalid bond donation: {0}")]
+    InvalidBondDonation(String),
+
+    #[error("Invalid covalent bond: {0}")]
+    InvalidCovalentBond(String),
+
     #[error("Invalid charge {charge} for element {symbol}, must be between {min_charge} and {max_charge}")]
     InvalidCharge {
         symbol: String,
@@ -205,6 +211,12 @@ pub enum DataError {
 
     #[error("Bond references original atom index {0} which was not provided")]
     MissingAtomIndex(usize),
+
+    #[error("Invalid valence atom: {0}")]
+    InvalidValenceAtom(String),
+
+    #[error("Invalid valence bond: {0}")]
+    InvalidValenceBond(String),
 }
 
 /// Errors related to format operations
