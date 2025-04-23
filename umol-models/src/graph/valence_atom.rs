@@ -5,11 +5,8 @@
 //! implicit hydrogens, and lone pairs.
 
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::{self, Display},
-    str::FromStr,
-};
-use umol::{Error, Result};
+use std::fmt::{self, Display};
+use umol::Result;
 use umol_data::{Element, ValenceState};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -24,26 +21,6 @@ pub struct ValenceAtom {
 }
 
 impl ValenceAtom {
-    pub fn new(
-        element: Element,
-        charge: i8,
-        lone_pairs: u8,
-        unpaired_electrons: u8,
-        multiplicity: u8,
-        implicit_hydrogens: u8,
-        bond_sum: u8,
-    ) -> Self {
-        ValenceAtom {
-            element,
-            charge,
-            lone_pairs,
-            unpaired_electrons,
-            multiplicity,
-            implicit_hydrogens,
-            bond_sum,
-        }
-    }
-
     pub fn element(&self) -> Element {
         self.element
     }
@@ -75,141 +52,113 @@ impl ValenceAtom {
     pub fn valence(&self) -> u8 {
         self.bond_sum + self.implicit_hydrogens
     }
+}
 
-    pub fn from_element(element: Element) -> Self {
-        Self::new(element, 0, 0, 0, 1, 0, 0)
+impl Display for ValenceAtom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        ValenceState::new(
+            self.element,
+            self.charge,
+            self.lone_pairs,
+            self.unpaired_electrons,
+            self.multiplicity,
+            self.implicit_hydrogens,
+        )
+        .fmt(f)
     }
 }
 
+#[derive(Debug)]
 pub struct ValenceAtomBuilder {
-    element: Element,
-    charge: i8,
-    lone_pairs: u8,
-    unpaired_electrons: u8,
-    multiplicity: u8,
-    implicit_hydrogens: u8,
-    bond_sum: u8,
+    element: Option<Element>,
+    charge: Option<i8>,
+    lone_pairs: Option<u8>,
+    unpaired_electrons: Option<u8>,
+    multiplicity: Option<u8>,
+    implicit_hydrogens: Option<u8>,
+    bond_sum: Option<u8>,
 }
 
 impl ValenceAtomBuilder {
     pub fn new(element: Element) -> Self {
         Self {
-            element,
-            charge: 0,
-            lone_pairs: 0,
-            unpaired_electrons: 0,
-            multiplicity: 1,
-            implicit_hydrogens: 0,
-            bond_sum: 0,
+            element: Some(element),
+            charge: None,
+            lone_pairs: None,
+            unpaired_electrons: None,
+            multiplicity: None,
+            implicit_hydrogens: None,
+            bond_sum: None,
         }
     }
 
-    pub fn charge(mut self, charge: i8) -> Self {
-        self.charge = charge;
+    pub fn element(&mut self, element: Element) -> &mut Self {
+        self.element = Some(element);
         self
     }
 
-    pub fn lone_pairs(mut self, lone_pairs: u8) -> Self {
-        self.lone_pairs = lone_pairs;
+    pub fn charge(&mut self, charge: i8) -> &mut Self {
+        self.charge = Some(charge);
         self
     }
 
-    pub fn unpaired_electrons(mut self, unpaired_electrons: u8) -> Self {
-        self.unpaired_electrons = unpaired_electrons;
+    pub fn lone_pairs(&mut self, lone_pairs: u8) -> &mut Self {
+        self.lone_pairs = Some(lone_pairs);
         self
     }
 
-    pub fn multiplicity(mut self, multiplicity: u8) -> Self {
-        self.multiplicity = multiplicity;
+    pub fn unpaired_electrons(&mut self, unpaired_electrons: u8) -> &mut Self {
+        self.unpaired_electrons = Some(unpaired_electrons);
         self
     }
 
-    pub fn implicit_hydrogens(mut self, implicit_hydrogens: u8) -> Self {
-        self.implicit_hydrogens = implicit_hydrogens;
+    pub fn multiplicity(&mut self, multiplicity: u8) -> &mut Self {
+        self.multiplicity = Some(multiplicity);
         self
     }
 
-    pub fn bond_sum(mut self, bond_sum: u8) -> Self {
-        self.bond_sum = bond_sum;
+    pub fn implicit_hydrogens(&mut self, implicit_hydrogens: u8) -> &mut Self {
+        self.implicit_hydrogens = Some(implicit_hydrogens);
+        self
+    }
+
+    pub fn bond_sum(&mut self, bond_sum: u8) -> &mut Self {
+        self.bond_sum = Some(bond_sum);
         self
     }
 
     pub fn build(self) -> Result<ValenceAtom> {
+        self.validate()?;
+        self.infer_type()
+    }
+
+    fn validate(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn infer_type(self) -> Result<ValenceAtom> {
         Ok(ValenceAtom {
-            element: self.element,
-            charge: self.charge,
-            lone_pairs: self.lone_pairs,
-            unpaired_electrons: self.unpaired_electrons,
-            multiplicity: self.multiplicity,
-            implicit_hydrogens: self.implicit_hydrogens,
-            bond_sum: self.bond_sum,
+            element: self.element.unwrap(),
+            charge: self.charge.unwrap_or(0),
+            lone_pairs: self.lone_pairs.unwrap_or(0),
+            unpaired_electrons: self.unpaired_electrons.unwrap_or(0),
+            multiplicity: self.multiplicity.unwrap_or(0),
+            implicit_hydrogens: self.implicit_hydrogens.unwrap_or(0),
+            bond_sum: self.bond_sum.unwrap_or(0),
         })
     }
 }
 
-impl From<Element> for ValenceAtom {
-    fn from(element: Element) -> Self {
-        ValenceAtom::from_element(element)
-    }
-}
-
-impl From<ValenceState> for ValenceAtom {
+impl From<ValenceState> for ValenceAtomBuilder {
     fn from(state: ValenceState) -> Self {
-        ValenceAtom::new(
-            state.element(),
-            state.charge(),
-            state.lone_pairs(),
-            state.unpaired_electrons(),
-            state.multiplicity(),
-            0,
-            state.valence(),
-        )
-    }
-}
-
-impl TryFrom<&str> for ValenceAtom {
-    type Error = Error;
-
-    fn try_from(symbol: &str) -> Result<Self> {
-        Element::try_from(symbol).map(|element| element.into())
-    }
-}
-
-impl FromStr for ValenceAtom {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        ValenceAtom::try_from(s)
-    }
-}
-
-impl Display for ValenceAtom {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let symbol = self.element.symbol();
-
-        // Use SMILES-compatible notation (except for unpaired electrons)
-        // Always use brackets if:
-        // - Symbol is 2 characters
-        // - Has charge
-        // - Has unpaired electrons
-        let needs_brackets = symbol.len() == 2 || self.charge != 0 || self.unpaired_electrons > 0;
-
-        if needs_brackets {
-            write!(f, "[{}", symbol)?;
-
-            if self.charge > 0 {
-                write!(f, "+{}", self.charge)?;
-            } else if self.charge < 0 {
-                write!(f, "{}", self.charge)?; // Negative sign included automatically
-            }
-
-            if self.unpaired_electrons > 0 {
-                write!(f, "^{}", self.unpaired_electrons)?;
-            }
-
-            write!(f, "]")
-        } else {
-            write!(f, "{}", symbol)
+        ValenceAtomBuilder {
+            element: Some(state.element()),
+            charge: Some(state.charge()),
+            lone_pairs: Some(state.lone_pairs()),
+            unpaired_electrons: Some(state.unpaired_electrons()),
+            multiplicity: Some(state.multiplicity()),
+            implicit_hydrogens: None,
+            bond_sum: None,
         }
     }
 }
@@ -217,47 +166,55 @@ impl Display for ValenceAtom {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::*;
-    use umol_data::Element;
+    use umol_data::{Element, ValenceState};
 
     #[test]
-    fn test_valence_atom_new() {
-        let atom = ValenceAtom::new(Element::C, 0, 1, 2, 3, 0, 4);
-        assert_eq!(atom.element(), Element::C);
-        assert_eq!(atom.charge(), 0);
-        assert_eq!(atom.unpaired_electrons(), 2);
-        assert_eq!(atom.implicit_hydrogens(), 0);
-        assert_eq!(atom.lone_pairs(), 1);
-        assert_eq!(atom.multiplicity(), 3);
-        assert_eq!(atom.bond_sum(), 4);
+    fn test_valence_atom_display() {
+        let mut builder = ValenceAtomBuilder::new(Element::C);
+        builder
+            .charge(0)
+            .lone_pairs(1)
+            .unpaired_electrons(2)
+            .multiplicity(3)
+            .implicit_hydrogens(0)
+            .bond_sum(0);
+
+        let atom = builder.build().unwrap();
+        assert_eq!(format!("{}", atom), "[C/1^2]");
     }
 
     #[test]
-    fn test_valence_atom_from_valence_state() {
-        let state = ValenceState::new(Element::C, 0, 1, 2, 3, 4);
-        let atom = ValenceAtom::from(state);
-        assert_eq!(atom, ValenceAtom::new(Element::C, 0, 1, 2, 3, 0, 4));
-    }
+    fn test_valence_atom_serialize() {
+        let mut builder = ValenceAtomBuilder::new(Element::C);
+        builder
+            .charge(0)
+            .lone_pairs(1)
+            .unpaired_electrons(2)
+            .multiplicity(3)
+            .implicit_hydrogens(0)
+            .bond_sum(0);
 
-    #[test]
-    fn test_valence_atom_from_element() {
-        let atom: ValenceAtom = Element::O.into();
-        assert_eq!(atom.element(), Element::O);
-        assert_eq!(atom.charge(), 0);
-        assert_eq!(atom.unpaired_electrons(), 0);
+        let atom = builder.build().unwrap();
+        let serialized = serde_json::to_string(&atom).unwrap();
+        assert_eq!(serialized, "{\"element\":\"C\",\"charge\":0,\"lone_pairs\":1,\"unpaired_electrons\":2,\"multiplicity\":3,\"implicit_hydrogens\":0,\"bond_sum\":0}");
+
+        let deserialized: ValenceAtom = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, atom);
     }
 
     #[test]
     fn test_valence_atom_builder() {
-        let atom = ValenceAtomBuilder::new(Element::N)
+        let mut builder = ValenceAtomBuilder::new(Element::N);
+
+        builder
             .charge(-1)
             .lone_pairs(1)
             .unpaired_electrons(2)
             .multiplicity(3)
             .implicit_hydrogens(0)
-            .bond_sum(1)
-            .build()
-            .unwrap();
+            .bond_sum(1);
+
+        let atom = builder.build().unwrap();
 
         assert_eq!(atom.element(), Element::N);
         assert_eq!(atom.charge(), -1);
@@ -270,39 +227,23 @@ mod tests {
 
     #[test]
     fn test_valence_atom_builder_validation() {
-        // Valid combination
-        let result = ValenceAtomBuilder::new(Element::C)
-            .charge(-1)
-            .unpaired_electrons(3)
-            .build();
+        let mut builder = ValenceAtomBuilder::new(Element::C);
+        builder.charge(-1);
+        builder.unpaired_electrons(3);
+        builder.implicit_hydrogens(0);
+        let result = builder.build();
         assert!(result.is_ok());
     }
 
     #[test]
-    fn test_valence_atom_try_from_str() {
-        let atom = ValenceAtom::try_from("C").unwrap();
-        assert_eq!(atom, ValenceAtom::from_element(Element::C));
-
-        let atom = ValenceAtom::try_from("N").unwrap();
-        assert_eq!(atom, ValenceAtom::from_element(Element::N));
-
-        assert!(ValenceAtom::try_from("Xx").is_err());
-    }
-
-    #[rstest]
-    #[case(Element::C, 0, 0, "C")]
-    #[case(Element::C, 1, 0, "[C+1]")]
-    #[case(Element::C, -1, 0, "[C-1]")]
-    #[case(Element::C, 0, 2, "[C^2]")]
-    #[case(Element::C, 1, 2, "[C+1^2]")]
-    #[case(Element::He, 0, 0, "[He]")] // Two-letter element always gets brackets
-    fn test_valence_atom_display(
-        #[case] element: Element,
-        #[case] charge: i8,
-        #[case] unpaired: u8,
-        #[case] expected: &str,
-    ) {
-        let atom = ValenceAtom::new(element, charge, 0, unpaired, 1, 0, 0);
-        assert_eq!(format!("{}", atom), expected);
+    fn test_valence_atom_builder_from_valence_state() {
+        let atom: ValenceAtomBuilder = ValenceState::new(Element::C, 0, 1, 2, 3, 4).into();
+        assert_eq!(atom.element, Some(Element::C));
+        assert_eq!(atom.charge, Some(0));
+        assert_eq!(atom.lone_pairs, Some(1));
+        assert_eq!(atom.unpaired_electrons, Some(2));
+        assert_eq!(atom.multiplicity, Some(3));
+        assert_eq!(atom.implicit_hydrogens, None);
+        assert_eq!(atom.bond_sum, None);
     }
 }
