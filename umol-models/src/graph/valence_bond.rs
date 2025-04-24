@@ -22,6 +22,10 @@ impl ValenceBond {
     pub fn donation(&self) -> BondDonation {
         self.donation
     }
+
+    pub fn to_builder(self) -> ValenceBondBuilder {
+        ValenceBondBuilder::from(self)
+    }
 }
 
 impl Display for ValenceBond {
@@ -32,28 +36,52 @@ impl Display for ValenceBond {
 
 #[derive(Debug)]
 pub struct ValenceBondBuilder {
-    order: BondOrder,
-    donation: BondDonation,
+    order: Option<BondOrder>,
+    donation: Option<BondDonation>,
 }
 
 impl ValenceBondBuilder {
     pub fn new(order: BondOrder) -> Self {
         Self {
-            order,
-            donation: BondDonation::Shared,
+            order: Some(order),
+            donation: Some(BondDonation::Shared),
         }
     }
 
-    pub fn order(&mut self, order: BondOrder) -> &mut Self {
-        self.order = order;
+    pub fn from_covalent_bond(bond: CovalentBond) -> Self {
+        Self {
+            order: Some(bond.order()),
+            donation: Some(bond.donation()),
+        }
+    }
+
+    pub fn order(&self) -> Option<BondOrder> {
+        self.order
+    }
+
+    pub fn donation(&self) -> Option<BondDonation> {
+        self.donation
+    }
+
+    pub fn set_order(&mut self, order: BondOrder) -> &mut Self {
+        self.order = Some(order);
         self
     }
 
-    pub fn donation(&mut self, donation: BondDonation) -> &mut Self {
-        self.donation = donation;
+    pub fn set_donation(&mut self, donation: BondDonation) -> &mut Self {
+        self.donation = Some(donation);
         self
     }
 
+    pub fn update_order(&mut self, f: impl FnOnce(BondOrder) -> BondOrder) -> &mut Self {
+        self.order = Some(f(self.order.unwrap()));
+        self
+    }
+
+    pub fn update_donation(&mut self, f: impl FnOnce(BondDonation) -> BondDonation) -> &mut Self {
+        self.donation = Some(f(self.donation.unwrap_or(BondDonation::Shared)));
+        self
+    }
     pub fn build(self) -> Result<ValenceBond> {
         self.validate()?;
         self.infer_type()
@@ -65,8 +93,8 @@ impl ValenceBondBuilder {
 
     fn infer_type(self) -> Result<ValenceBond> {
         Ok(ValenceBond {
-            order: self.order,
-            donation: self.donation,
+            order: self.order.unwrap(),
+            donation: self.donation.unwrap(),
         })
     }
 }
@@ -74,9 +102,15 @@ impl ValenceBondBuilder {
 impl From<CovalentBond> for ValenceBondBuilder {
     fn from(bond: CovalentBond) -> Self {
         ValenceBondBuilder {
-            order: bond.order(),
-            donation: bond.donation(),
+            order: Some(bond.order()),
+            donation: Some(bond.donation()),
         }
+    }
+}
+
+impl From<ValenceBond> for ValenceBondBuilder {
+    fn from(bond: ValenceBond) -> Self {
+        ValenceBondBuilder::from_covalent_bond(CovalentBond::new(bond.order(), bond.donation()))
     }
 }
 
@@ -91,15 +125,73 @@ mod tests {
     }
 
     #[test]
-    fn test_valence_bond_builder() {
+    fn test_valence_bond_serialize() {
+        let bond = ValenceBondBuilder::new(BondOrder::Single).build().unwrap();
+        let serialized = serde_json::to_string(&bond).unwrap();
+        assert_eq!(serialized, "{\"order\":\"Single\",\"donation\":\"Shared\"}");
+    }
+
+    #[test]
+    fn test_valence_bond_to_builder() {
+        let bond = ValenceBondBuilder::new(BondOrder::Single).build().unwrap();
+        let builder = bond.to_builder();
+        assert_eq!(builder.order(), Some(BondOrder::Single));
+        assert_eq!(builder.donation(), Some(BondDonation::Shared));
+    }
+
+    #[test]
+    fn test_valence_bond_builder_new() {
         let bond = ValenceBondBuilder::new(BondOrder::Single).build().unwrap();
         assert_eq!(bond.order(), BondOrder::Single);
         assert_eq!(bond.donation(), BondDonation::Shared);
+    }
 
+    #[test]
+    fn test_valence_bond_builder_from_covalent_bond() {
+        let bond = CovalentBond::new(BondOrder::Single, BondDonation::Shared);
+        let builder = ValenceBondBuilder::from_covalent_bond(bond);
+        assert_eq!(builder.order(), Some(BondOrder::Single));
+        assert_eq!(builder.donation(), Some(BondDonation::Shared));
+    }
+
+    #[test]
+    fn test_valence_bond_builder_properties() {
+        let builder = ValenceBondBuilder::new(BondOrder::Single);
+        assert_eq!(builder.order(), Some(BondOrder::Single));
+        assert_eq!(builder.donation(), Some(BondDonation::Shared));
+    }
+
+    #[test]
+    fn test_valence_bond_builder_set() {
+        let mut builder = ValenceBondBuilder::new(BondOrder::Single);
+        builder.set_order(BondOrder::Double);
+        builder.set_donation(BondDonation::Donating);
+
+        let bond = builder.build().unwrap();
+        assert_eq!(bond.order(), BondOrder::Double);
+        assert_eq!(bond.donation(), BondDonation::Donating);
+    }
+
+    #[test]
+    fn test_valence_bond_builder_update() {
         let mut builder = ValenceBondBuilder::new(BondOrder::Single);
         builder
-            .order(BondOrder::Double)
-            .donation(BondDonation::Donating);
+            .set_donation(BondDonation::Accepting)
+            .update_order(|x| x.increase().unwrap())
+            .update_donation(|x| x.reverse().unwrap());
+
+        let bond = builder.build().unwrap();
+        assert_eq!(bond.order(), BondOrder::Double);
+        assert_eq!(bond.donation(), BondDonation::Donating);
+    }
+
+    #[test]
+    fn test_valence_bond_builder_build() {
+        let mut builder = ValenceBondBuilder::new(BondOrder::Single);
+        builder
+            .set_order(BondOrder::Double)
+            .set_donation(BondDonation::Donating);
+
         let bond = builder.build().unwrap();
         assert_eq!(bond.order(), BondOrder::Double);
         assert_eq!(bond.donation(), BondDonation::Donating);
@@ -112,5 +204,21 @@ mod tests {
         let result = builder.build();
         println!("{:?}", result);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_covalent_bond_into_valence_bond_builder() {
+        let bond = CovalentBond::new(BondOrder::Single, BondDonation::Shared);
+        let builder: ValenceBondBuilder = bond.into();
+        assert_eq!(builder.order(), Some(BondOrder::Single));
+        assert_eq!(builder.donation(), Some(BondDonation::Shared));
+    }
+
+    #[test]
+    fn test_valence_bond_into_valence_bond_builder() {
+        let bond = ValenceBondBuilder::new(BondOrder::Single).build().unwrap();
+        let builder: ValenceBondBuilder = bond.into();
+        assert_eq!(builder.order(), Some(BondOrder::Single));
+        assert_eq!(builder.donation(), Some(BondDonation::Shared));
     }
 }
