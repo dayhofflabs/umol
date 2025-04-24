@@ -68,6 +68,24 @@ impl BondOrder {
         // Return the first (canonical) symbol for this bond order
         BOND_DATA.get(self).unwrap().1[0]
     }
+
+    pub fn increase(self) -> Option<Self> {
+        match self {
+            BondOrder::Single => Some(BondOrder::Double),
+            BondOrder::Double => Some(BondOrder::Triple),
+            BondOrder::Triple => Some(BondOrder::Quadruple),
+            BondOrder::Quadruple => None,
+        }
+    }
+
+    pub fn decrease(self) -> Option<Self> {
+        match self {
+            BondOrder::Single => None,
+            BondOrder::Double => Some(BondOrder::Single),
+            BondOrder::Triple => Some(BondOrder::Double),
+            BondOrder::Quadruple => Some(BondOrder::Triple),
+        }
+    }
 }
 
 impl TryFrom<&str> for BondOrder {
@@ -130,6 +148,14 @@ impl BondDonation {
             BondDonation::Accepting => "<",
         }
     }
+
+    pub fn reverse(self) -> Option<Self> {
+        match self {
+            BondDonation::Shared => None,
+            BondDonation::Donating => Some(BondDonation::Accepting),
+            BondDonation::Accepting => Some(BondDonation::Donating),
+        }
+    }
 }
 
 impl Display for BondDonation {
@@ -170,12 +196,57 @@ impl CovalentBond {
         Self { order, donation }
     }
 
+    pub fn from_symbol(symbol: &str) -> Option<Self> {
+        if symbol.is_empty() {
+            return None;
+        }
+
+        let bond_pattern = Regex::new(r"^([-=:#$])([<>|])?$").unwrap();
+        if !bond_pattern.is_match(symbol) {
+            return None;
+        }
+
+        let caps = bond_pattern.captures(symbol).unwrap();
+        let order = caps[1].parse::<BondOrder>().unwrap();
+        let donation = caps
+            .get(2)
+            .map(|m| BondDonation::from_symbol(m.as_str()).unwrap());
+        Some(CovalentBond::new(
+            order,
+            donation.unwrap_or(BondDonation::Shared),
+        ))
+    }
+
     pub fn order(&self) -> BondOrder {
         self.order
     }
 
     pub fn donation(&self) -> BondDonation {
         self.donation
+    }
+
+    pub fn increase(self) -> Option<Self> {
+        if let Some(order) = self.order.increase() {
+            Some(CovalentBond::new(order, self.donation))
+        } else {
+            None
+        }
+    }
+
+    pub fn decrease(self) -> Option<Self> {
+        if let Some(order) = self.order.decrease() {
+            Some(CovalentBond::new(order, self.donation))
+        } else {
+            None
+        }
+    }
+
+    pub fn reverse(self) -> Option<Self> {
+        if let Some(donation) = self.donation.reverse() {
+            Some(CovalentBond::new(self.order, donation))
+        } else {
+            None
+        }
     }
 }
 
@@ -198,24 +269,7 @@ impl TryFrom<&str> for CovalentBond {
     type Error = Error;
 
     fn try_from(s: &str) -> Result<Self> {
-        if s.is_empty() {
-            return Err(DataError::InvalidCovalentBond("Empty string".to_string()).into());
-        }
-
-        let bond_pattern = Regex::new(r"^([-=:#$])([<>|])?$").unwrap();
-        if !bond_pattern.is_match(s) {
-            return Err(
-                DataError::InvalidCovalentBond(format!("Invalid covalent bond: {}", s)).into(),
-            );
-        }
-
-        let caps = bond_pattern.captures(s).unwrap();
-        let order = caps[1].parse::<BondOrder>()?;
-        if caps.get(2).is_none() {
-            return Ok(CovalentBond::new(order, BondDonation::Shared));
-        }
-        let donation = caps[2].parse::<BondDonation>()?;
-        Ok(CovalentBond::new(order, donation))
+        Self::from_symbol(s).ok_or_else(|| DataError::InvalidCovalentBond(s.to_string()).into())
     }
 }
 
@@ -360,6 +414,30 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondOrder::Single, Some(BondOrder::Double))]
+    #[case(BondOrder::Double, Some(BondOrder::Triple))]
+    #[case(BondOrder::Triple, Some(BondOrder::Quadruple))]
+    #[case(BondOrder::Quadruple, None)]
+    fn test_bond_order_increase(
+        #[case] bond_order: BondOrder,
+        #[case] expected: Option<BondOrder>,
+    ) {
+        assert_eq!(bond_order.increase(), expected);
+    }
+
+    #[rstest]
+    #[case(BondOrder::Single, None)]
+    #[case(BondOrder::Double, Some(BondOrder::Single))]
+    #[case(BondOrder::Triple, Some(BondOrder::Double))]
+    #[case(BondOrder::Quadruple, Some(BondOrder::Triple))]
+    fn test_bond_order_decrease(
+        #[case] bond_order: BondOrder,
+        #[case] expected: Option<BondOrder>,
+    ) {
+        assert_eq!(bond_order.decrease(), expected);
+    }
+
+    #[rstest]
     #[case(BondDonation::Donating, ">")]
     #[case(BondDonation::Accepting, "<")]
     #[case(BondDonation::Shared, "|")]
@@ -413,6 +491,17 @@ mod tests {
                 BondDonation::Shared
             ]
         );
+    }
+
+    #[rstest]
+    #[case(BondDonation::Donating, Some(BondDonation::Accepting))]
+    #[case(BondDonation::Accepting, Some(BondDonation::Donating))]
+    #[case(BondDonation::Shared, None)]
+    fn test_bond_donation_reverse(
+        #[case] donation: BondDonation,
+        #[case] expected: Option<BondDonation>,
+    ) {
+        assert_eq!(donation.reverse(), expected);
     }
 
     #[rstest]
@@ -490,6 +579,39 @@ mod tests {
                 CovalentBond::new(BondOrder::Quadruple, BondDonation::Shared),
             ]
         );
+    }
+
+    #[rstest]
+    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared },
+        Some(CovalentBond { order: BondOrder::Double, donation: BondDonation::Shared }))]
+    fn test_covalent_bond_increase(
+        #[case] bond: CovalentBond,
+        #[case] expected: Option<CovalentBond>,
+    ) {
+        assert_eq!(bond.increase(), expected);
+    }
+
+    #[rstest]
+    #[case(CovalentBond { order: BondOrder::Double, donation: BondDonation::Shared },
+        Some(CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared }))]
+    fn test_covalent_bond_decrease(
+        #[case] bond: CovalentBond,
+        #[case] expected: Option<CovalentBond>,
+    ) {
+        assert_eq!(bond.decrease(), expected);
+    }
+
+    #[rstest]
+    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared }, None)]
+    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Donating },
+        Some(CovalentBond { order: BondOrder::Single, donation: BondDonation::Accepting }))]
+    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Accepting },
+        Some(CovalentBond { order: BondOrder::Single, donation: BondDonation::Donating }))]
+    fn test_covalent_bond_reverse(
+        #[case] bond: CovalentBond,
+        #[case] expected: Option<CovalentBond>,
+    ) {
+        assert_eq!(bond.reverse(), expected);
     }
 
     #[rstest]

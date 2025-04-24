@@ -102,14 +102,8 @@ impl TryFrom<&str> for SpinState {
     type Error = Error;
 
     fn try_from(s: &str) -> Result<Self> {
-        Self::from_multiplet_name(s.to_lowercase().as_str()).ok_or_else(|| {
-            DataError::InvalidSpinState {
-                unpaired_electrons: None,
-                multiplet_name: Some(s.to_string()),
-                multiplicity: None,
-            }
-            .into()
-        })
+        Self::from_multiplet_name(s.to_lowercase().as_str())
+            .ok_or_else(|| DataError::InvalidSpinState(s.to_string()).into())
     }
 }
 

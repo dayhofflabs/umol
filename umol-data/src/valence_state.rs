@@ -292,6 +292,24 @@ macro_rules! vs {
     };
 }
 
+// pub fn infer_types(
+//     element: Element,
+//     charge: Option<i8>,
+//     lone_pairs: Option<u8>,
+//     unpaired_electrons: Option<u8>,
+//     multiplicity: Option<u8>,
+// ) -> Result<Vec<ValenceState>> {
+//     eprintln!(
+//         "Warning: Using placeholder find_matching_states({:?}, {:?}, {:?}, {:?}, {:?})",
+//         element, charge, lone_pairs, unpaired_electrons, multiplicity
+//     );
+//     if element == umol_data::Element::C {
+//         Ok(vec![ValenceState::new(element, 0, 0, 0, 1, 4)])
+//     } else {
+//         Ok(vec![])
+//     }
+// }
+
 // Valence state data by element and charge
 #[allow(dead_code)]
 static VALENCE_STATE_DATA: Lazy<HashMap<(Element, i8), Vec<ValenceState>>> = Lazy::new(|| {

@@ -192,31 +192,38 @@ pub enum DataError {
     #[error("Invalid occupation: {0}")]
     InvalidOccupation(String),
 
-    #[error("Invalid spin state: {}{}{}", 
-        unpaired_electrons.map(|electrons| format!("{} unpaired electrons", electrons)).unwrap_or_default(),
-        multiplet_name.clone().unwrap_or_default(),
-        multiplicity.map(|multiplicity| format!("{} multiplicity", multiplicity)).unwrap_or_default(),
-    )]
-    InvalidSpinState {
-        unpaired_electrons: Option<u8>,
-        multiplet_name: Option<String>,
-        multiplicity: Option<u8>,
-    },
+    #[error("Invalid spin state: {0}")]
+    InvalidSpinState(String),
 
     #[error("Invalid valence state: {0}")]
     InvalidValenceState(String),
-
-    #[error("Duplicate original atom index found: {0}")]
-    DuplicateAtomIndex(usize),
-
-    #[error("Bond references original atom index {0} which was not provided")]
-    MissingAtomIndex(usize),
 
     #[error("Invalid valence atom: {0}")]
     InvalidValenceAtom(String),
 
     #[error("Invalid valence bond: {0}")]
     InvalidValenceBond(String),
+
+    #[error("Missing atom index: {0}")]
+    MissingAtomIndex(usize),
+
+    #[error("Duplicate atom index: {0}")]
+    DuplicateAtomIndex(usize),
+
+    #[error("Missing bond index: {0}")]
+    MissingBondIndex(usize),
+
+    #[error("Duplicate bond index: {0}")]
+    DuplicateBondIndex(usize),
+
+    #[error("Loop bond: {0}")]
+    LoopBond(usize),
+
+    #[error("Missing property {0} for atom {1}")]
+    MissingAtomProperty(String, usize),
+
+    #[error("Missing property {0} for bond {1}")]
+    MissingBondProperty(String, usize),
 }
 
 /// Errors related to format operations
