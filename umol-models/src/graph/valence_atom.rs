@@ -14,6 +14,8 @@ pub struct ValenceAtom {
     element: Element,
     charge: i8,
     lone_pairs: u8,
+    donated_pairs: u8,
+    accepted_pairs: u8,
     unpaired_electrons: u8,
     multiplicity: u8,
     implicit_hydrogens: u8,
@@ -31,6 +33,14 @@ impl ValenceAtom {
 
     pub fn lone_pairs(&self) -> u8 {
         self.lone_pairs
+    }
+
+    pub fn donated_pairs(&self) -> u8 {
+        self.donated_pairs
+    }
+
+    pub fn accepted_pairs(&self) -> u8 {
+        self.accepted_pairs
     }
 
     pub fn unpaired_electrons(&self) -> u8 {
@@ -64,9 +74,11 @@ impl Display for ValenceAtom {
             self.element,
             self.charge,
             self.lone_pairs,
+            self.donated_pairs,
+            self.accepted_pairs,
             self.unpaired_electrons,
             self.multiplicity,
-            self.implicit_hydrogens,
+            self.bond_sum + self.implicit_hydrogens,
         )
         .fmt(f)
     }
@@ -77,6 +89,8 @@ pub struct ValenceAtomBuilder {
     element: Option<Element>,
     charge: Option<i8>,
     lone_pairs: Option<u8>,
+    donated_pairs: Option<u8>,
+    accepted_pairs: Option<u8>,
     unpaired_electrons: Option<u8>,
     multiplicity: Option<u8>,
     implicit_hydrogens: Option<u8>,
@@ -89,6 +103,8 @@ impl ValenceAtomBuilder {
             element: Some(element),
             charge: None,
             lone_pairs: None,
+            donated_pairs: None,
+            accepted_pairs: None,
             unpaired_electrons: None,
             multiplicity: None,
             implicit_hydrogens: None,
@@ -101,6 +117,8 @@ impl ValenceAtomBuilder {
             element: Some(state.element()),
             charge: Some(state.charge()),
             lone_pairs: Some(state.lone_pairs()),
+            donated_pairs: Some(state.donated_pairs()),
+            accepted_pairs: Some(state.accepted_pairs()),
             unpaired_electrons: Some(state.unpaired_electrons()),
             multiplicity: Some(state.multiplicity()),
             implicit_hydrogens: None,
@@ -118,6 +136,14 @@ impl ValenceAtomBuilder {
 
     pub fn lone_pairs(&self) -> Option<u8> {
         self.lone_pairs
+    }
+
+    pub fn donated_pairs(&self) -> Option<u8> {
+        self.donated_pairs
+    }
+
+    pub fn accepted_pairs(&self) -> Option<u8> {
+        self.accepted_pairs
     }
 
     pub fn unpaired_electrons(&self) -> Option<u8> {
@@ -148,6 +174,16 @@ impl ValenceAtomBuilder {
 
     pub fn set_lone_pairs(&mut self, lone_pairs: u8) -> &mut Self {
         self.lone_pairs = Some(lone_pairs);
+        self
+    }
+
+    pub fn set_donated_pairs(&mut self, donated_pairs: u8) -> &mut Self {
+        self.donated_pairs = Some(donated_pairs);
+        self
+    }
+
+    pub fn set_accepted_pairs(&mut self, accepted_pairs: u8) -> &mut Self {
+        self.accepted_pairs = Some(accepted_pairs);
         self
     }
 
@@ -186,6 +222,16 @@ impl ValenceAtomBuilder {
         self
     }
 
+    pub fn update_donated_pairs(&mut self, f: impl FnOnce(u8) -> u8) -> &mut Self {
+        self.donated_pairs = Some(f(self.donated_pairs.unwrap_or(0)));
+        self
+    }
+
+    pub fn update_accepted_pairs(&mut self, f: impl FnOnce(u8) -> u8) -> &mut Self {
+        self.accepted_pairs = Some(f(self.accepted_pairs.unwrap_or(0)));
+        self
+    }
+
     pub fn update_unpaired_electrons(&mut self, f: impl FnOnce(u8) -> u8) -> &mut Self {
         self.unpaired_electrons = Some(f(self.unpaired_electrons.unwrap_or(0)));
         self
@@ -220,6 +266,8 @@ impl ValenceAtomBuilder {
             element: self.element.unwrap(),
             charge: self.charge.unwrap_or(0),
             lone_pairs: self.lone_pairs.unwrap_or(0),
+            donated_pairs: self.donated_pairs.unwrap_or(0),
+            accepted_pairs: self.accepted_pairs.unwrap_or(0),
             unpaired_electrons: self.unpaired_electrons.unwrap_or(0),
             multiplicity: self.multiplicity.unwrap_or(0),
             implicit_hydrogens: self.implicit_hydrogens.unwrap_or(0),
@@ -240,6 +288,8 @@ impl From<ValenceAtom> for ValenceAtomBuilder {
             element: Some(atom.element()),
             charge: Some(atom.charge()),
             lone_pairs: Some(atom.lone_pairs()),
+            donated_pairs: Some(atom.donated_pairs()),
+            accepted_pairs: Some(atom.accepted_pairs()),
             unpaired_electrons: Some(atom.unpaired_electrons()),
             multiplicity: Some(atom.multiplicity()),
             implicit_hydrogens: Some(atom.implicit_hydrogens()),
@@ -259,13 +309,15 @@ mod tests {
         builder
             .set_charge(0)
             .set_lone_pairs(1)
+            .set_donated_pairs(0)
+            .set_accepted_pairs(0)
             .set_unpaired_electrons(2)
             .set_multiplicity(3)
             .set_implicit_hydrogens(0)
             .set_bond_sum(0);
 
         let atom = builder.build().unwrap();
-        assert_eq!(format!("{}", atom), "[C/1^2]");
+        assert_eq!(format!("{}", atom), "[C/^2]");
     }
 
     #[test]
@@ -274,6 +326,8 @@ mod tests {
         builder
             .set_charge(0)
             .set_lone_pairs(1)
+            .set_donated_pairs(0)
+            .set_accepted_pairs(0)
             .set_unpaired_electrons(2)
             .set_multiplicity(3)
             .set_implicit_hydrogens(0)
@@ -281,7 +335,10 @@ mod tests {
 
         let atom = builder.build().unwrap();
         let serialized = serde_json::to_string(&atom).unwrap();
-        assert_eq!(serialized, "{\"element\":\"C\",\"charge\":0,\"lone_pairs\":1,\"unpaired_electrons\":2,\"multiplicity\":3,\"implicit_hydrogens\":0,\"bond_sum\":0}");
+        assert_eq!(
+            serialized,
+            "{\"element\":\"C\",\"charge\":0,\"lone_pairs\":1,\"donated_pairs\":0,\"accepted_pairs\":0,\"unpaired_electrons\":2,\"multiplicity\":3,\"implicit_hydrogens\":0,\"bond_sum\":0}"
+        );
 
         let deserialized: ValenceAtom = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized, atom);
@@ -294,6 +351,8 @@ mod tests {
         assert_eq!(builder.element(), Some(Element::C));
         assert_eq!(builder.charge(), Some(0));
         assert_eq!(builder.lone_pairs(), Some(0));
+        assert_eq!(builder.donated_pairs(), Some(0));
+        assert_eq!(builder.accepted_pairs(), Some(0));
         assert_eq!(builder.unpaired_electrons(), Some(0));
         assert_eq!(builder.multiplicity(), Some(0));
         assert_eq!(builder.implicit_hydrogens(), Some(0));
@@ -306,6 +365,8 @@ mod tests {
         assert_eq!(atom.element(), Element::C);
         assert_eq!(atom.charge(), 0);
         assert_eq!(atom.lone_pairs(), 0);
+        assert_eq!(atom.donated_pairs(), 0);
+        assert_eq!(atom.accepted_pairs(), 0);
         assert_eq!(atom.unpaired_electrons(), 0);
         assert_eq!(atom.multiplicity(), 0);
         assert_eq!(atom.implicit_hydrogens(), 0);
@@ -314,11 +375,13 @@ mod tests {
 
     #[test]
     fn test_valence_atom_builder_from_valence_state() {
-        let state = ValenceState::new(Element::C, 0, 1, 2, 3, 4);
+        let state = ValenceState::new(Element::C, 0, 1, 0, 0, 2, 3, 4);
         let builder = ValenceAtomBuilder::from_valence_state(state);
         assert_eq!(builder.element(), Some(Element::C));
         assert_eq!(builder.charge(), Some(0));
         assert_eq!(builder.lone_pairs(), Some(1));
+        assert_eq!(builder.donated_pairs(), Some(0));
+        assert_eq!(builder.accepted_pairs(), Some(0));
         assert_eq!(builder.unpaired_electrons(), Some(2));
         assert_eq!(builder.multiplicity(), Some(3));
         assert_eq!(builder.implicit_hydrogens(), None);
@@ -331,6 +394,8 @@ mod tests {
         builder
             .set_charge(-1)
             .set_lone_pairs(1)
+            .set_donated_pairs(0)
+            .set_accepted_pairs(0)
             .set_unpaired_electrons(2)
             .set_multiplicity(3)
             .set_implicit_hydrogens(0)
@@ -339,6 +404,8 @@ mod tests {
         assert_eq!(builder.element(), Some(Element::N));
         assert_eq!(builder.charge(), Some(-1));
         assert_eq!(builder.lone_pairs(), Some(1));
+        assert_eq!(builder.donated_pairs(), Some(0));
+        assert_eq!(builder.accepted_pairs(), Some(0));
         assert_eq!(builder.unpaired_electrons(), Some(2));
         assert_eq!(builder.multiplicity(), Some(3));
         assert_eq!(builder.implicit_hydrogens(), Some(0));
@@ -350,6 +417,8 @@ mod tests {
         let mut builder = ValenceAtomBuilder::new(Element::C);
         builder.set_charge(0);
         builder.set_lone_pairs(1);
+        builder.set_donated_pairs(0);
+        builder.set_accepted_pairs(0);
         builder.set_unpaired_electrons(2);
         builder.set_multiplicity(3);
         builder.set_implicit_hydrogens(0);
@@ -359,6 +428,8 @@ mod tests {
         assert_eq!(atom.element(), Element::C);
         assert_eq!(atom.charge(), 0);
         assert_eq!(atom.lone_pairs(), 1);
+        assert_eq!(atom.donated_pairs(), 0);
+        assert_eq!(atom.accepted_pairs(), 0);
         assert_eq!(atom.unpaired_electrons(), 2);
         assert_eq!(atom.multiplicity(), 3);
         assert_eq!(atom.implicit_hydrogens(), 0);
@@ -370,14 +441,16 @@ mod tests {
         let mut builder = ValenceAtomBuilder::new(Element::C);
         builder.update_element(|x| x.next().unwrap());
         builder.update_charge(|x| x + 1);
-        builder.update_lone_pairs(|x| x + 2);
+        builder.update_lone_pairs(|x| x + 1);
+        builder.update_donated_pairs(|x| x + 1);
         builder.update_implicit_hydrogens(|x| x + 1);
         builder.update_bond_sum(|x| x + 2);
 
         let atom = builder.build().unwrap();
         assert_eq!(atom.element(), Element::N);
         assert_eq!(atom.charge(), 1);
-        assert_eq!(atom.lone_pairs(), 2);
+        assert_eq!(atom.lone_pairs(), 1);
+        assert_eq!(atom.donated_pairs(), 1);
         assert_eq!(atom.implicit_hydrogens(), 1);
         assert_eq!(atom.bond_sum(), 2);
     }
@@ -388,6 +461,8 @@ mod tests {
         builder
             .set_charge(-1)
             .set_lone_pairs(1)
+            .set_donated_pairs(0)
+            .set_accepted_pairs(0)
             .set_unpaired_electrons(2)
             .set_multiplicity(3)
             .set_implicit_hydrogens(0)
@@ -397,6 +472,8 @@ mod tests {
         assert_eq!(atom.element(), Element::N);
         assert_eq!(atom.charge(), -1);
         assert_eq!(atom.lone_pairs(), 1);
+        assert_eq!(atom.donated_pairs(), 0);
+        assert_eq!(atom.accepted_pairs(), 0);
         assert_eq!(atom.unpaired_electrons(), 2);
         assert_eq!(atom.multiplicity(), 3);
         assert_eq!(atom.implicit_hydrogens(), 0);
@@ -415,10 +492,12 @@ mod tests {
 
     #[test]
     fn test_valence_state_into_valence_atom_builder() {
-        let atom: ValenceAtomBuilder = ValenceState::new(Element::C, 0, 1, 2, 3, 4).into();
+        let atom: ValenceAtomBuilder = ValenceState::new(Element::C, 0, 1, 0, 0, 2, 3, 4).into();
         assert_eq!(atom.element(), Some(Element::C));
         assert_eq!(atom.charge(), Some(0));
         assert_eq!(atom.lone_pairs(), Some(1));
+        assert_eq!(atom.donated_pairs(), Some(0));
+        assert_eq!(atom.accepted_pairs(), Some(0));
         assert_eq!(atom.unpaired_electrons(), Some(2));
         assert_eq!(atom.multiplicity(), Some(3));
         assert_eq!(atom.implicit_hydrogens(), None);
@@ -432,6 +511,8 @@ mod tests {
         assert_eq!(builder.element(), Some(Element::C));
         assert_eq!(builder.charge(), Some(0));
         assert_eq!(builder.lone_pairs(), Some(0));
+        assert_eq!(builder.donated_pairs(), Some(0));
+        assert_eq!(builder.accepted_pairs(), Some(0));
         assert_eq!(builder.unpaired_electrons(), Some(0));
         assert_eq!(builder.multiplicity(), Some(0));
         assert_eq!(builder.implicit_hydrogens(), Some(0));

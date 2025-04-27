@@ -132,12 +132,28 @@ pub enum BondDonation {
 }
 
 impl BondDonation {
+    pub fn from_value(value: i8) -> Option<Self> {
+        match value {
+            0 => Some(BondDonation::Shared),
+            -1 => Some(BondDonation::Donating),
+            1 => Some(BondDonation::Accepting),
+            _ => None,
+        }
+    }
     pub fn from_symbol(symbol: &str) -> Option<Self> {
         match symbol {
             "|" => Some(BondDonation::Shared),
             ">" => Some(BondDonation::Donating),
             "<" => Some(BondDonation::Accepting),
             _ => None,
+        }
+    }
+
+    pub fn value(&self) -> i8 {
+        match self {
+            BondDonation::Shared => 0,
+            BondDonation::Donating => -1,
+            BondDonation::Accepting => 1,
         }
     }
 
@@ -435,6 +451,14 @@ mod tests {
         #[case] expected: Option<BondOrder>,
     ) {
         assert_eq!(bond_order.decrease(), expected);
+    }
+
+    #[rstest]
+    #[case(BondDonation::Donating, -1)]
+    #[case(BondDonation::Accepting, 1)]
+    #[case(BondDonation::Shared, 0)]
+    fn test_bond_donation_value(#[case] donation: BondDonation, #[case] value: i8) {
+        assert_eq!(donation.value(), value);
     }
 
     #[rstest]

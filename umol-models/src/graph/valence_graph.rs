@@ -95,6 +95,7 @@ impl ValenceGraph {
     ) -> impl Iterator<Item = AtomIndex> + 'graph {
         self.data.neighbors(index)
     }
+    // TODO: Add methods for converting some atoms/bonds to builders
 }
 
 impl fmt::Display for ValenceGraph {
@@ -191,11 +192,13 @@ impl ValenceGraphBuilder {
         Ok(indices)
     }
 
+    // TODO: Review naming
     fn atom_builder_mut(&mut self, idx: usize) -> Result<&mut ValenceAtomBuilder> {
         self.atom_builders.get_mut(&idx)
             .ok_or(DataError::MissingAtomIndex(idx).into())
     }
 
+    // TODO: Review naming
     fn bond_builder_mut(&mut self, idx: usize) -> Result<&mut ValenceBondBuilder> {
         self.bond_builders.get_mut(&idx)
             .ok_or(DataError::MissingBondIndex(idx).into())
@@ -259,24 +262,31 @@ impl ValenceGraphBuilder {
         let mut atom_builders = self.atom_builders;
 
         // Update bond sums and lone pairs
-        for (_, idx1, idx2, ref bond_builder) in &self.bond_builders {
-            if let Some(bond_order) = bond_builder.order() {
-                let bond_order = bond_order.value();
+        for (idx, idx1, idx2, ref bond_builder) in &self.bond_builders {
+            let bond_order = bond_builder.order().ok_or_else(
+                || Error::Data(DataError::MissingBondProperty(*idx, "order".to_string())))?;
+            let bond_donation = bond_builder.donation().unwrap_or(BondDonation::Shared).value();
 
             let builder1 = atom_builders.get_mut(idx1)
                 .ok_or_else(|| Error::Data(DataError::MissingAtomIndex(*idx1)))?;
-            builder1.set_bond_sum(builder1.bond_sum() + bond_order);
+            builder1.update_bond_sum(|sum| sum + bond_order);
+            if bond_donation != 0 {
+                builder1.update_lone_pairs(|lp| lp + bond_donation * bond_order);
+            }
 
-            // Update second atom's bond sum
-            let builder2 = atom_builders.get_mut(orig_idx2)
-                .ok_or_else(|| Error::Data(DataError::MissingBondAtomIndex(*orig_idx2, *orig_bond_idx)))?;
-            builder2.increment_bond_sum(bond_order_value);
+            let builder2 = atom_builders.get_mut(idx2)
+                .ok_or_else(|| Error::Data(DataError::MissingAtomIndex(*idx2)))?;
+            builder2.update_bond_sum(|sum| sum + bond_order);
+            if bond_donation != 0 {
+                builder2.update_lone_pairs(|lp| lp + bond_donation * bond_order);
+            }
         }
 
-        // --- Step 5: Atom Validation & Finalization --- 
-        let mut final_atoms: Vec<(usize, ValenceAtom)> = Vec::with_capacity(atom_builders.len());
-        for (orig_idx, builder) in atom_builders {
-            let element = builder.element().ok_or_else(|| Error::Data(DataError::MissingAtomProperty(orig_idx, "element".to_string())))?;
+        // Validate and finalize atoms
+        let mut atoms: Vec<(usize, ValenceAtom)> = Vec::with_capacity(atom_builders.len());
+        for (idx, builder) in atom_builders {
+            let element = builder.element().ok_or_else(
+                || Error::Data(DataError::MissingAtomProperty(idx, "element".to_string())))?;
             let charge = builder.charge();
             let lone_pairs = builder.lone_pairs();
             let unpaired_electrons = builder.unpaired_electrons();
