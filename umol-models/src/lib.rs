@@ -1,5 +1,5 @@
 pub mod basic;
-pub mod graph;
+pub mod valence_graph;
 
 pub use basic::*;
-pub use graph::*;
+pub use valence_graph::*;

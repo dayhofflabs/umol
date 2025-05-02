@@ -150,59 +150,59 @@ pub enum DataError {
     #[error("Invalid element: {0}")]
     InvalidElement(String),
 
-    #[error("Invalid bond order: {0}")]
-    InvalidBondOrder(String),
-
-    #[error("Invalid bond donation: {0}")]
-    InvalidBondDonation(String),
-
-    #[error("Invalid covalent bond: {0}")]
-    InvalidCovalentBond(String),
-
-    #[error("Invalid charge {charge} for element {symbol}, must be between {min_charge} and {max_charge}")]
-    InvalidCharge {
-        symbol: String,
-        charge: i8,
-        min_charge: i8,
-        max_charge: i8,
-    },
-    #[error(
-        "Invalid number of unpaired electrons {unpaired_electrons} for element {symbol}, maximum is {max_unpaired_electrons}"
-    )]
-    InvalidUnpairedElectrons {
-        symbol: String,
-        unpaired_electrons: u8,
-        max_unpaired_electrons: u8,
-    },
-
-    #[error("Invalid number of implicit hydrogens {implicit_hydrogens} for element {symbol}, maximum is {max_implicit_hydrogens}")]
-    InvalidImplicitHydrogens {
-        symbol: String,
-        implicit_hydrogens: u8,
-        max_implicit_hydrogens: u8,
-    },
-
-    #[error("Invalid valence {valence} for element {symbol}, maximum is {max_valence}")]
-    InvalidValence {
-        symbol: String,
-        valence: u8,
-        max_valence: u8,
-    },
-
     #[error("Invalid occupation: {0}")]
     InvalidOccupation(String),
 
     #[error("Invalid spin state: {0}")]
     InvalidSpinState(String),
 
-    #[error("Invalid valence state: {0}")]
-    InvalidValenceState(String),
+    #[error("Invalid atom: {0}")]
+    InvalidAtom(String),
 
-    #[error("Invalid valence atom: {0}")]
-    InvalidValenceAtom(String),
+    #[error("Invalid atom spec: {0}")]
+    InvalidAtomSpec(String),
 
-    #[error("Invalid valence bond: {0}")]
-    InvalidValenceBond(String),
+    #[error("Invalid atom charge: {0}")]
+    InvalidAtomCharge(String),
+
+    #[error("Invalid atom lone pair specification: {0}")]
+    InvalidAtomLonePairs(String),
+
+    #[error("Invalid atom donated pair specification: {0}")]
+    InvalidAtomDonatedPairs(String),
+
+    #[error("Invalid atom accepted pair specification: {0}")]
+    InvalidAtomAcceptedPairs(String),
+
+    #[error("Invalid atom unpaired electron specification: {0}")]
+    InvalidAtomUnpairedElectrons(String),
+
+    #[error("Invalid atom spin multiplicity: {0}")]
+    InvalidAtomMultiplicity(String),
+
+    #[error("Invalid atom implicit hydrogen specification: {0}")]
+    InvalidAtomImplicitHydrogens(String),
+
+    #[error("Invalid atom valence: {0}")]
+    InvalidAtomValence(String),
+
+    #[error("No matching atom spec found: {0}")]
+    NoAtomSpec(String),
+
+    #[error("Multiple matching atom specs found: {0}")]
+    MultipleAtomSpecs(String),
+
+    #[error("Invalid bond: {0}")]
+    InvalidBond(String),
+
+    #[error("Invalid bond order: {0}")]
+    InvalidBondOrder(String),
+
+    #[error("Invalid bond donation: {0}")]
+    InvalidBondDonation(String),
+
+    #[error("Invalid bond spec: {0}")]
+    InvalidBondSpec(String),
 
     #[error("Missing atom index: {0}")]
     MissingAtomIndex(usize),
@@ -269,15 +269,19 @@ mod tests {
         let error = OperationError::Failed("test error".to_string());
         assert_eq!(format!("{}", error), "Operation failed: test error");
 
-        let error = DataError::InvalidCharge {
-            symbol: "H".to_string(),
-            charge: 2,
-            min_charge: -1,
-            max_charge: 1,
-        };
+        let error = DataError::InvalidAtomCharge(format!("{}", 2));
+        assert_eq!(format!("{}", error), "Invalid atom charge: 2");
+
+        let error = DataError::InvalidAtomUnpairedElectrons(format!("{}", 2));
         assert_eq!(
             format!("{}", error),
-            "Invalid charge 2 for element H, must be between -1 and 1"
+            "Invalid atom unpaired electron specification: 2"
+        );
+
+        let error = DataError::InvalidAtomImplicitHydrogens(format!("{}", 2));
+        assert_eq!(
+            format!("{}", error),
+            "Invalid atom implicit hydrogen specification: 2"
         );
     }
 }

@@ -1,4 +1,4 @@
-//! Element data and validation
+//! Element data
 
 use convert_case::{Case, Casing};
 use map_macro::hash_map;
@@ -343,52 +343,6 @@ impl Element {
             Self::from_period_group(self.period(), self.group() - 1)
         }
     }
-
-    // Validate charge against minimum and maximum charge for element
-    pub fn validate_charge(&self, charge: i8) -> Result<()> {
-        let (min_charge, max_charge) = self.charge_bounds();
-
-        if charge < min_charge || charge > max_charge {
-            return Err(DataError::InvalidCharge {
-                symbol: self.symbol().to_string(),
-                charge,
-                min_charge,
-                max_charge,
-            }
-            .into());
-        }
-        Ok(())
-    }
-
-    // Validate number of unpaired electrons for element
-    pub fn validate_unpaired_electrons(&self, unpaired: u8) -> Result<()> {
-        let max_unpaired = self.max_unpaired_electrons();
-
-        if unpaired > max_unpaired {
-            return Err(DataError::InvalidUnpairedElectrons {
-                symbol: self.symbol().to_string(),
-                unpaired_electrons: unpaired,
-                max_unpaired_electrons: max_unpaired,
-            }
-            .into());
-        }
-        Ok(())
-    }
-
-    // Validate number of implicit hydrogens for element
-    pub fn validate_implicit_hydrogens(&self, implicit_hydrogens: u8) -> Result<()> {
-        let max_implicit_hydrogens = self.max_implicit_hydrogens();
-
-        if implicit_hydrogens > max_implicit_hydrogens {
-            return Err(DataError::InvalidImplicitHydrogens {
-                symbol: self.symbol().to_string(),
-                implicit_hydrogens,
-                max_implicit_hydrogens,
-            }
-            .into());
-        }
-        Ok(())
-    }
 }
 
 impl TryFrom<&str> for Element {
@@ -498,51 +452,6 @@ mod tests {
         assert_eq!(actual_max, max_charge);
         assert_eq!(element.max_unpaired_electrons(), max_unpaired);
         assert_eq!(element.max_implicit_hydrogens(), max_implicit_hydrogens);
-    }
-
-    #[rstest]
-    #[case(Element::H, 0, true)]
-    #[case(Element::H, 1, true)]
-    #[case(Element::H, -1, true)]
-    #[case(Element::H, 2, false)]
-    #[case(Element::H, -2, false)]
-    fn test_charge_validation(
-        #[case] element: Element,
-        #[case] charge: i8,
-        #[case] should_be_valid: bool,
-    ) {
-        let result = element.validate_charge(charge);
-        assert_eq!(result.is_ok(), should_be_valid);
-    }
-
-    #[rstest]
-    #[case(Element::H, 0, true)]
-    #[case(Element::H, 1, true)]
-    #[case(Element::H, 2, false)]
-    #[case(Element::He, 0, true)]
-    #[case(Element::He, 1, false)]
-    fn test_unpaired_electrons_validation(
-        #[case] element: Element,
-        #[case] unpaired: u8,
-        #[case] should_be_valid: bool,
-    ) {
-        let result = element.validate_unpaired_electrons(unpaired);
-        assert_eq!(result.is_ok(), should_be_valid);
-    }
-
-    #[rstest]
-    #[case(Element::O, 0, true)]
-    #[case(Element::O, 1, true)]
-    #[case(Element::O, 2, true)]
-    #[case(Element::O, 3, false)]
-    #[case(Element::H, 1, false)]
-    fn test_implicit_hydrogens_validation(
-        #[case] element: Element,
-        #[case] implicit_hydrogens: u8,
-        #[case] should_be_valid: bool,
-    ) {
-        let result = element.validate_implicit_hydrogens(implicit_hydrogens);
-        assert_eq!(result.is_ok(), should_be_valid);
     }
 
     #[test]

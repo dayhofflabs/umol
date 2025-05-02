@@ -1,9 +1,29 @@
-//! Covalent bond data and validation
+//! Bond spec
 //!
-//! Uses a slightly extended SMILES notation for bond representation
-//! Bond order: "-": single, "=": double, "#": triple, "$": quadruple
-//! Donation: "|": shared, ">": donating, "<": accepting
-//! If bond donation is not specified, it is assumed to be shared
+//! Defines bond specs for strictly typed molecular valence graphs and an internal
+//! string notation, primarily intended for easy definition within data files or
+//! code, not for general exchange.
+//!
+//! ## Internal Notation Format for Bond Specs
+//!
+//! The notation resembles SMARTS bond primitives with an additional notation for
+//! bond donation (for dative bonds).
+//!
+//! The format is: `[BondOrder][Donation]`
+//!
+//! - `Bond order`: ".": zero, "-": single, "=": double, "#": triple, "$": quadruple
+//! - `Donation`: "|": shared, ">": donating, "<": accepting
+//!
+//! If bond donation is not specified, it is assumed to be shared.
+//!
+//! ### Examples
+//! - `.` -> zero (no) bond
+//! - `-` -> single bond
+//! - `=` -> double bond
+//! - `#` -> triple bond
+//! - `$` -> quadruple bond
+//! - `->` -> single bond with donating atom
+//! - `-<` -> single bond with accepting atom
 
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
@@ -17,6 +37,7 @@ use umol::{Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum BondOrder {
+    Zero,
     Single,
     Double,
     Triple,
@@ -28,6 +49,7 @@ pub const MAX_BOND_ORDER: u8 = 4;
 // Static data for bond orders
 static BOND_DATA: Lazy<HashMap<BondOrder, (u8, &'static [&'static str; 5])>> = Lazy::new(|| {
     hash_map! {
+        BondOrder::Zero => (0, &[".", "·", "0", "N", "none"]),
         BondOrder::Single => (1, &["-", "–", "1", "S", "single"]),
         BondOrder::Double => (2, &["=", "⹀", "2", "D", "double"]),
         BondOrder::Triple => (3, &["#", "≡", "3", "T", "triple"]),
@@ -71,6 +93,7 @@ impl BondOrder {
 
     pub fn increase(self) -> Option<Self> {
         match self {
+            BondOrder::Zero => Some(BondOrder::Single),
             BondOrder::Single => Some(BondOrder::Double),
             BondOrder::Double => Some(BondOrder::Triple),
             BondOrder::Triple => Some(BondOrder::Quadruple),
@@ -80,7 +103,8 @@ impl BondOrder {
 
     pub fn decrease(self) -> Option<Self> {
         match self {
-            BondOrder::Single => None,
+            BondOrder::Zero => None,
+            BondOrder::Single => Some(BondOrder::Zero),
             BondOrder::Double => Some(BondOrder::Single),
             BondOrder::Triple => Some(BondOrder::Double),
             BondOrder::Quadruple => Some(BondOrder::Triple),
@@ -116,6 +140,7 @@ impl FromStr for BondOrder {
 impl Display for BondOrder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            BondOrder::Zero => write!(f, "."),
             BondOrder::Single => write!(f, "-"),
             BondOrder::Double => write!(f, "="),
             BondOrder::Triple => write!(f, "#"),
@@ -202,12 +227,12 @@ impl FromStr for BondDonation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CovalentBond {
+pub struct BondSpec {
     order: BondOrder,
     donation: BondDonation,
 }
 
-impl CovalentBond {
+impl BondSpec {
     pub fn new(order: BondOrder, donation: BondDonation) -> Self {
         Self { order, donation }
     }
@@ -217,7 +242,7 @@ impl CovalentBond {
             return None;
         }
 
-        let bond_pattern = Regex::new(r"^([-=:#$])([<>|])?$").unwrap();
+        let bond_pattern = Regex::new(r"^([-.=:#$])([<>|])?$").unwrap();
         if !bond_pattern.is_match(symbol) {
             return None;
         }
@@ -227,7 +252,7 @@ impl CovalentBond {
         let donation = caps
             .get(2)
             .map(|m| BondDonation::from_symbol(m.as_str()).unwrap());
-        Some(CovalentBond::new(
+        Some(BondSpec::new(
             order,
             donation.unwrap_or(BondDonation::Shared),
         ))
@@ -243,7 +268,7 @@ impl CovalentBond {
 
     pub fn increase(self) -> Option<Self> {
         if let Some(order) = self.order.increase() {
-            Some(CovalentBond::new(order, self.donation))
+            Some(BondSpec::new(order, self.donation))
         } else {
             None
         }
@@ -251,7 +276,7 @@ impl CovalentBond {
 
     pub fn decrease(self) -> Option<Self> {
         if let Some(order) = self.order.decrease() {
-            Some(CovalentBond::new(order, self.donation))
+            Some(BondSpec::new(order, self.donation))
         } else {
             None
         }
@@ -259,14 +284,14 @@ impl CovalentBond {
 
     pub fn reverse(self) -> Option<Self> {
         if let Some(donation) = self.donation.reverse() {
-            Some(CovalentBond::new(self.order, donation))
+            Some(BondSpec::new(self.order, donation))
         } else {
             None
         }
     }
 }
 
-impl Display for CovalentBond {
+impl Display for BondSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -281,15 +306,15 @@ impl Display for CovalentBond {
     }
 }
 
-impl TryFrom<&str> for CovalentBond {
+impl TryFrom<&str> for BondSpec {
     type Error = Error;
 
     fn try_from(s: &str) -> Result<Self> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidCovalentBond(s.to_string()).into())
+        Self::from_symbol(s).ok_or_else(|| DataError::InvalidBondSpec(s.to_string()).into())
     }
 }
 
-impl FromStr for CovalentBond {
+impl FromStr for BondSpec {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
@@ -297,7 +322,7 @@ impl FromStr for CovalentBond {
     }
 }
 
-impl From<BondOrder> for CovalentBond {
+impl From<BondOrder> for BondSpec {
     fn from(order: BondOrder) -> Self {
         Self {
             order,
@@ -306,7 +331,7 @@ impl From<BondOrder> for CovalentBond {
     }
 }
 
-impl From<BondDonation> for CovalentBond {
+impl From<BondDonation> for BondSpec {
     fn from(donation: BondDonation) -> Self {
         Self {
             order: BondOrder::Single,
@@ -315,23 +340,23 @@ impl From<BondDonation> for CovalentBond {
     }
 }
 
-impl From<CovalentBond> for BondOrder {
-    fn from(bond: CovalentBond) -> Self {
+impl From<BondSpec> for BondOrder {
+    fn from(bond: BondSpec) -> Self {
         bond.order
     }
 }
 
-impl From<CovalentBond> for BondDonation {
-    fn from(bond: CovalentBond) -> Self {
+impl From<BondSpec> for BondDonation {
+    fn from(bond: BondSpec) -> Self {
         bond.donation
     }
 }
 
-/// Shorthand macro for covalent bond access
+/// Shorthand macro for bond spec parsing
 #[macro_export]
 macro_rules! b {
-    ($bond:expr) => {
-        $bond.parse::<CovalentBond>().unwrap()
+    ($s:expr) => {
+        $s.parse::<BondSpec>().unwrap()
     };
 }
 
@@ -342,6 +367,7 @@ mod tests {
     use serde_json;
 
     #[rstest]
+    #[case(BondOrder::Zero, "none")]
     #[case(BondOrder::Single, "single")]
     #[case(BondOrder::Double, "double")]
     #[case(BondOrder::Triple, "triple")]
@@ -351,6 +377,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondOrder::Zero, 0)]
     #[case(BondOrder::Single, 1)]
     #[case(BondOrder::Double, 2)]
     #[case(BondOrder::Triple, 3)]
@@ -360,6 +387,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondOrder::Zero, "none")]
     #[case(BondOrder::Single, "single")]
     #[case(BondOrder::Double, "double")]
     #[case(BondOrder::Triple, "triple")]
@@ -369,6 +397,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondOrder::Zero, ".")]
     #[case(BondOrder::Single, "-")]
     #[case(BondOrder::Double, "=")]
     #[case(BondOrder::Triple, "#")]
@@ -378,6 +407,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondOrder::Zero, ".")]
     #[case(BondOrder::Single, "-")]
     #[case(BondOrder::Double, "=")]
     #[case(BondOrder::Triple, "#")]
@@ -387,6 +417,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondOrder::Zero, 0)]
     #[case(BondOrder::Single, 1)]
     #[case(BondOrder::Double, 2)]
     #[case(BondOrder::Triple, 3)]
@@ -397,6 +428,7 @@ mod tests {
 
     #[test]
     fn test_bond_order_ordering() {
+        assert!(BondOrder::Zero < BondOrder::Single);
         assert!(BondOrder::Single < BondOrder::Double);
         assert!(BondOrder::Double < BondOrder::Triple);
         assert!(BondOrder::Triple < BondOrder::Quadruple);
@@ -405,22 +437,27 @@ mod tests {
     #[test]
     fn test_bond_order_serialization() {
         let bonds = vec![
+            BondOrder::Zero,
             BondOrder::Single,
             BondOrder::Double,
             BondOrder::Triple,
             BondOrder::Quadruple,
         ];
         let serialized = serde_json::to_string(&bonds).unwrap();
-        assert_eq!(serialized, r#"["Single","Double","Triple","Quadruple"]"#);
+        assert_eq!(
+            serialized,
+            r#"["Zero","Single","Double","Triple","Quadruple"]"#
+        );
     }
 
     #[test]
     fn test_bond_order_deserialization() {
-        let serialized = r#"["Single","Double","Triple","Quadruple"]"#;
+        let serialized = r#"["Zero","Single","Double","Triple","Quadruple"]"#;
         let bonds: Vec<BondOrder> = serde_json::from_str(serialized).unwrap();
         assert_eq!(
             bonds,
             vec![
+                BondOrder::Zero,
                 BondOrder::Single,
                 BondOrder::Double,
                 BondOrder::Triple,
@@ -430,6 +467,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case(BondOrder::Zero, Some(BondOrder::Single))]
     #[case(BondOrder::Single, Some(BondOrder::Double))]
     #[case(BondOrder::Double, Some(BondOrder::Triple))]
     #[case(BondOrder::Triple, Some(BondOrder::Quadruple))]
@@ -442,7 +480,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(BondOrder::Single, None)]
+    #[case(BondOrder::Zero, None)]
+    #[case(BondOrder::Single, Some(BondOrder::Zero))]
     #[case(BondOrder::Double, Some(BondOrder::Single))]
     #[case(BondOrder::Triple, Some(BondOrder::Double))]
     #[case(BondOrder::Quadruple, Some(BondOrder::Triple))]
@@ -529,129 +568,135 @@ mod tests {
     }
 
     #[rstest]
-    #[case("-", CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared })]
-    #[case("-|", CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared })]
-    #[case("->", CovalentBond { order: BondOrder::Single, donation: BondDonation::Donating })]
-    #[case("-<", CovalentBond { order: BondOrder::Single, donation: BondDonation::Accepting })]
-    #[case("=", CovalentBond { order: BondOrder::Double, donation: BondDonation::Shared })]
-    #[case("=|", CovalentBond { order: BondOrder::Double, donation: BondDonation::Shared })]
-    #[case("=>", CovalentBond { order: BondOrder::Double, donation: BondDonation::Donating })]
-    #[case("=<", CovalentBond { order: BondOrder::Double, donation: BondDonation::Accepting })]
-    #[case("#", CovalentBond { order: BondOrder::Triple, donation: BondDonation::Shared })]
-    #[case("#|", CovalentBond { order: BondOrder::Triple, donation: BondDonation::Shared })]
-    #[case("#>", CovalentBond { order: BondOrder::Triple, donation: BondDonation::Donating })]
-    #[case("#<", CovalentBond { order: BondOrder::Triple, donation: BondDonation::Accepting })]
-    #[case("$", CovalentBond { order: BondOrder::Quadruple, donation: BondDonation::Shared })]
-    #[case("$|", CovalentBond { order: BondOrder::Quadruple, donation: BondDonation::Shared })]
-    #[case("$>", CovalentBond { order: BondOrder::Quadruple, donation: BondDonation::Donating })]
-    #[case("$<", CovalentBond { order: BondOrder::Quadruple, donation: BondDonation::Accepting })]
-    fn test_covalent_bond_from_str(#[case] s: &str, #[case] bond: CovalentBond) {
-        assert_eq!(CovalentBond::from_str(s).unwrap(), bond);
+    #[case(".", BondSpec { order: BondOrder::Zero, donation: BondDonation::Shared })]
+    #[case("-", BondSpec { order: BondOrder::Single, donation: BondDonation::Shared })]
+    #[case("-|", BondSpec { order: BondOrder::Single, donation: BondDonation::Shared })]
+    #[case("->", BondSpec { order: BondOrder::Single, donation: BondDonation::Donating })]
+    #[case("-<", BondSpec { order: BondOrder::Single, donation: BondDonation::Accepting })]
+    #[case("=", BondSpec { order: BondOrder::Double, donation: BondDonation::Shared })]
+    #[case("=|", BondSpec { order: BondOrder::Double, donation: BondDonation::Shared })]
+    #[case("=>", BondSpec { order: BondOrder::Double, donation: BondDonation::Donating })]
+    #[case("=<", BondSpec { order: BondOrder::Double, donation: BondDonation::Accepting })]
+    #[case("#", BondSpec { order: BondOrder::Triple, donation: BondDonation::Shared })]
+    #[case("#|", BondSpec { order: BondOrder::Triple, donation: BondDonation::Shared })]
+    #[case("#>", BondSpec { order: BondOrder::Triple, donation: BondDonation::Donating })]
+    #[case("#<", BondSpec { order: BondOrder::Triple, donation: BondDonation::Accepting })]
+    #[case("$", BondSpec { order: BondOrder::Quadruple, donation: BondDonation::Shared })]
+    #[case("$|", BondSpec { order: BondOrder::Quadruple, donation: BondDonation::Shared })]
+    #[case("$>", BondSpec { order: BondOrder::Quadruple, donation: BondDonation::Donating })]
+    #[case("$<", BondSpec { order: BondOrder::Quadruple, donation: BondDonation::Accepting })]
+    fn test_bond_spec_from_str(#[case] s: &str, #[case] bond: BondSpec) {
+        assert_eq!(BondSpec::from_str(s).unwrap(), bond);
     }
 
     #[test]
-    fn test_covalent_bond_from_str_invalid() {
-        assert!(CovalentBond::from_str("invalid").is_err());
+    fn test_bond_spec_from_str_invalid() {
+        assert!(BondSpec::from_str("invalid").is_err());
     }
 
     #[rstest]
-    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared }, "-")]
-    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Donating }, "->")]
-    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Accepting }, "-<")]
-    #[case(CovalentBond { order: BondOrder::Double, donation: BondDonation::Shared }, "=")]
-    #[case(CovalentBond { order: BondOrder::Double, donation: BondDonation::Donating }, "=>")]
-    #[case(CovalentBond { order: BondOrder::Double, donation: BondDonation::Accepting }, "=<")]
-    #[case(CovalentBond { order: BondOrder::Triple, donation: BondDonation::Shared }, "#")]
-    #[case(CovalentBond { order: BondOrder::Triple, donation: BondDonation::Donating }, "#>")]
-    #[case(CovalentBond { order: BondOrder::Triple, donation: BondDonation::Accepting }, "#<")]
-    #[case(CovalentBond { order: BondOrder::Quadruple, donation: BondDonation::Shared }, "$")]
-    #[case(CovalentBond { order: BondOrder::Quadruple, donation: BondDonation::Donating }, "$>")]
-    #[case(CovalentBond { order: BondOrder::Quadruple, donation: BondDonation::Accepting }, "$<")]
-    fn test_covalent_bond_display(#[case] bond: CovalentBond, #[case] symbol: &str) {
+    #[case(BondSpec::new(BondOrder::Zero, BondDonation::Shared), ".")]
+    #[case(BondSpec::new(BondOrder::Single, BondDonation::Shared), "-")]
+    #[case(BondSpec::new(BondOrder::Single, BondDonation::Donating), "->")]
+    #[case(BondSpec::new(BondOrder::Single, BondDonation::Accepting), "-<")]
+    #[case(BondSpec::new(BondOrder::Double, BondDonation::Shared), "=")]
+    #[case(BondSpec::new(BondOrder::Double, BondDonation::Donating), "=>")]
+    #[case(BondSpec::new(BondOrder::Double, BondDonation::Accepting), "=<")]
+    #[case(BondSpec::new(BondOrder::Triple, BondDonation::Shared), "#")]
+    #[case(BondSpec::new(BondOrder::Triple, BondDonation::Donating), "#>")]
+    #[case(BondSpec::new(BondOrder::Triple, BondDonation::Accepting), "#<")]
+    #[case(BondSpec::new(BondOrder::Quadruple, BondDonation::Shared), "$")]
+    #[case(BondSpec::new(BondOrder::Quadruple, BondDonation::Donating), "$>")]
+    #[case(BondSpec::new(BondOrder::Quadruple, BondDonation::Accepting), "$<")]
+    fn test_bond_spec_display(#[case] bond: BondSpec, #[case] symbol: &str) {
         assert_eq!(bond.to_string(), symbol);
     }
 
     #[test]
-    fn test_covalent_bond_serialization() {
+    fn test_bond_spec_serialization() {
         let bonds = vec![
-            CovalentBond::new(BondOrder::Single, BondDonation::Shared),
-            CovalentBond::new(BondOrder::Double, BondDonation::Donating),
-            CovalentBond::new(BondOrder::Triple, BondDonation::Accepting),
-            CovalentBond::new(BondOrder::Quadruple, BondDonation::Shared),
+            BondSpec::new(BondOrder::Zero, BondDonation::Shared),
+            BondSpec::new(BondOrder::Single, BondDonation::Shared),
+            BondSpec::new(BondOrder::Double, BondDonation::Donating),
+            BondSpec::new(BondOrder::Triple, BondDonation::Accepting),
+            BondSpec::new(BondOrder::Quadruple, BondDonation::Shared),
         ];
         let serialized = serde_json::to_string(&bonds).unwrap();
         let expected = concat!(
-            r#"[{"order":"Single","donation":"Shared"},{"order":"Double","donation":"Donating"},"#,
-            r#"{"order":"Triple","donation":"Accepting"},{"order":"Quadruple","donation":"Shared"}]"#
+            r#"[{"order":"Zero","donation":"Shared"},{"order":"Single","donation":"Shared"},"#,
+            r#"{"order":"Double","donation":"Donating"},{"order":"Triple","donation":"Accepting"},"#,
+            r#"{"order":"Quadruple","donation":"Shared"}]"#
         );
         assert_eq!(serialized, expected);
     }
 
     #[test]
-    fn test_covalent_bond_deserialization() {
+    fn test_bond_spec_deserialization() {
         let serialized = concat!(
-            r#"[{"order":"Single","donation":"Shared"},{"order":"Double","donation":"Donating"},"#,
-            r#"{"order":"Triple","donation":"Accepting"},{"order":"Quadruple","donation":"Shared"}]"#
+            r#"[{"order":"Zero","donation":"Shared"},{"order":"Single","donation":"Shared"},"#,
+            r#"{"order":"Double","donation":"Donating"},{"order":"Triple","donation":"Accepting"},"#,
+            r#"{"order":"Quadruple","donation":"Shared"}]"#
         );
-        let bonds: Vec<CovalentBond> = serde_json::from_str(serialized).unwrap();
+        let bonds: Vec<BondSpec> = serde_json::from_str(serialized).unwrap();
         assert_eq!(
             bonds,
             vec![
-                CovalentBond::new(BondOrder::Single, BondDonation::Shared),
-                CovalentBond::new(BondOrder::Double, BondDonation::Donating),
-                CovalentBond::new(BondOrder::Triple, BondDonation::Accepting),
-                CovalentBond::new(BondOrder::Quadruple, BondDonation::Shared),
+                BondSpec::new(BondOrder::Zero, BondDonation::Shared),
+                BondSpec::new(BondOrder::Single, BondDonation::Shared),
+                BondSpec::new(BondOrder::Double, BondDonation::Donating),
+                BondSpec::new(BondOrder::Triple, BondDonation::Accepting),
+                BondSpec::new(BondOrder::Quadruple, BondDonation::Shared),
             ]
         );
     }
 
     #[rstest]
-    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared },
-        Some(CovalentBond { order: BondOrder::Double, donation: BondDonation::Shared }))]
-    fn test_covalent_bond_increase(
-        #[case] bond: CovalentBond,
-        #[case] expected: Option<CovalentBond>,
-    ) {
+    #[case(
+        BondSpec::new(BondOrder::Single, BondDonation::Shared),
+        Some(BondSpec::new(BondOrder::Double, BondDonation::Shared))
+    )]
+    fn test_bond_spec_increase(#[case] bond: BondSpec, #[case] expected: Option<BondSpec>) {
         assert_eq!(bond.increase(), expected);
     }
 
     #[rstest]
-    #[case(CovalentBond { order: BondOrder::Double, donation: BondDonation::Shared },
-        Some(CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared }))]
-    fn test_covalent_bond_decrease(
-        #[case] bond: CovalentBond,
-        #[case] expected: Option<CovalentBond>,
-    ) {
+    #[case(
+        BondSpec::new(BondOrder::Double, BondDonation::Shared),
+        Some(BondSpec::new(BondOrder::Single, BondDonation::Shared))
+    )]
+    fn test_bond_spec_decrease(#[case] bond: BondSpec, #[case] expected: Option<BondSpec>) {
         assert_eq!(bond.decrease(), expected);
     }
 
     #[rstest]
-    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Shared }, None)]
-    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Donating },
-        Some(CovalentBond { order: BondOrder::Single, donation: BondDonation::Accepting }))]
-    #[case(CovalentBond { order: BondOrder::Single, donation: BondDonation::Accepting },
-        Some(CovalentBond { order: BondOrder::Single, donation: BondDonation::Donating }))]
-    fn test_covalent_bond_reverse(
-        #[case] bond: CovalentBond,
-        #[case] expected: Option<CovalentBond>,
-    ) {
+    #[case(BondSpec::new(BondOrder::Single, BondDonation::Shared), None)]
+    #[case(
+        BondSpec::new(BondOrder::Single, BondDonation::Donating),
+        Some(BondSpec::new(BondOrder::Single, BondDonation::Accepting))
+    )]
+    #[case(
+        BondSpec::new(BondOrder::Single, BondDonation::Accepting),
+        Some(BondSpec::new(BondOrder::Single, BondDonation::Donating))
+    )]
+    fn test_bond_spec_reverse(#[case] bond: BondSpec, #[case] expected: Option<BondSpec>) {
         assert_eq!(bond.reverse(), expected);
     }
 
     #[rstest]
-    #[case(b!("-"), CovalentBond::new(BondOrder::Single, BondDonation::Shared))]
-    #[case(b!("="), CovalentBond::new(BondOrder::Double, BondDonation::Shared))]
-    #[case(b!("#"), CovalentBond::new(BondOrder::Triple, BondDonation::Shared))]
-    #[case(b!("$"), CovalentBond::new(BondOrder::Quadruple, BondDonation::Shared))]
-    #[case(b!("->"), CovalentBond::new(BondOrder::Single, BondDonation::Donating))]
-    #[case(b!("-<"), CovalentBond::new(BondOrder::Single, BondDonation::Accepting))]
-    #[case(b!("=>"), CovalentBond::new(BondOrder::Double, BondDonation::Donating))]
-    #[case(b!("=<"), CovalentBond::new(BondOrder::Double, BondDonation::Accepting))]
-    #[case(b!("#<"), CovalentBond::new(BondOrder::Triple, BondDonation::Accepting))]
-    #[case(b!("#>"), CovalentBond::new(BondOrder::Triple, BondDonation::Donating))]
-    #[case(b!("$<"), CovalentBond::new(BondOrder::Quadruple, BondDonation::Accepting))]
-    #[case(b!("$>"), CovalentBond::new(BondOrder::Quadruple, BondDonation::Donating))]
-    fn test_covalent_bond_macro(#[case] bond: CovalentBond, #[case] expected: CovalentBond) {
+    #[case(b!("."), BondSpec::new(BondOrder::Zero, BondDonation::Shared))]
+    #[case(b!("-"), BondSpec::new(BondOrder::Single, BondDonation::Shared))]
+    #[case(b!("="), BondSpec::new(BondOrder::Double, BondDonation::Shared))]
+    #[case(b!("#"), BondSpec::new(BondOrder::Triple, BondDonation::Shared))]
+    #[case(b!("$"), BondSpec::new(BondOrder::Quadruple, BondDonation::Shared))]
+    #[case(b!("->"), BondSpec::new(BondOrder::Single, BondDonation::Donating))]
+    #[case(b!("-<"), BondSpec::new(BondOrder::Single, BondDonation::Accepting))]
+    #[case(b!("=>"), BondSpec::new(BondOrder::Double, BondDonation::Donating))]
+    #[case(b!("=<"), BondSpec::new(BondOrder::Double, BondDonation::Accepting))]
+    #[case(b!("#<"), BondSpec::new(BondOrder::Triple, BondDonation::Accepting))]
+    #[case(b!("#>"), BondSpec::new(BondOrder::Triple, BondDonation::Donating))]
+    #[case(b!("$<"), BondSpec::new(BondOrder::Quadruple, BondDonation::Accepting))]
+    #[case(b!("$>"), BondSpec::new(BondOrder::Quadruple, BondDonation::Donating))]
+    fn test_bond_spec_macro(#[case] bond: BondSpec, #[case] expected: BondSpec) {
         assert_eq!(bond, expected);
     }
 }
