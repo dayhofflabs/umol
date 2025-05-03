@@ -1,15 +1,12 @@
-//! Valence graph model
-//!
-//! Graph model of atoms and bonds, with valence constraints
+//! Molecular representation as valence graph
 
-use crate::graph::{ValenceAtom, ValenceBond, ValenceAtomBuilder, ValenceBondBuilder};
+use super::{Atom, Bond};
 use petgraph::prelude::*;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
+use std::{fmt, Display};
 use umol::error::DataError;
 use umol::{Error, Result};
 use umol_data::{BondOrder, BondDonation, ValenceState, Element};
-// use crate::graph::find_matching_states;
 
 /// The type used for internal atom indices.
 pub type AtomIndex = NodeIndex<usize>;
@@ -18,20 +15,20 @@ pub type BondIndex = EdgeIndex<usize>;
 
 /// Graph model of atoms and bonds, with valence constraints
 #[derive(Debug, Clone)]
-pub struct ValenceGraph {
-    data: StableGraph<ValenceAtom, ValenceBond, Undirected, usize>,
+pub struct Molecule {
+    data: StableGraph<Atom, Bond, Undirected, usize>,
 }
 
-impl ValenceGraph {
+impl Molecule {
     pub fn atom_count(&self) -> usize {
         self.data.node_count()
     }
 
-    pub fn atoms<'graph>(&'graph self) -> impl Iterator<Item = &'graph ValenceAtom> + 'graph {
+    pub fn atoms<'graph>(&'graph self) -> impl Iterator<Item = &'graph Atom> + 'graph {
         self.data.node_weights()
     }
 
-    pub fn atom<'graph>(&'graph self, index: AtomIndex) -> Option<&'graph ValenceAtom> {
+    pub fn atom<'graph>(&'graph self, index: AtomIndex) -> Option<&'graph Atom> {
         self.data.node_weight(index)
     }
 
@@ -39,18 +36,19 @@ impl ValenceGraph {
         self.data.edge_count()
     }
 
-    pub fn bonds<'graph>(&'graph self) -> impl Iterator<Item = &'graph ValenceBond> + 'graph {
+    pub fn bonds<'graph>(&'graph self) -> impl Iterator<Item = &'graph Bond> + 'graph {
         self.data.edge_weights()
     }
 
-    pub fn bond<'graph>(&'graph self, index: BondIndex) -> Option<&'graph ValenceBond> {
+    pub fn bond<'graph>(&'graph self, index: BondIndex) -> Option<&'graph Bond> {
         self.data.edge_weight(index)
     }
 
+    // TODO: Review naming
     pub fn bond_atoms<'graph>(
         &'graph self,
         index: BondIndex,
-    ) -> Option<(&'graph ValenceAtom, &'graph ValenceAtom)> {
+    ) -> Option<(&'graph Atom, &'graph Atom)> {
         self.data.edge_endpoints(index).map(|(a, b)| {
             (
                 self.data.node_weight(a).unwrap(),
@@ -59,6 +57,7 @@ impl ValenceGraph {
         })
     }
 
+    // TODO: Review naming
     pub fn bond_atom_indices<'graph>(
         &'graph self,
         index: BondIndex,
@@ -66,13 +65,15 @@ impl ValenceGraph {
         self.data.edge_endpoints(index)
     }
 
+    // TODO: Review naming
     pub fn atom_bonds<'graph>(
         &'graph self,
         index: AtomIndex,
-    ) -> impl Iterator<Item = &'graph ValenceBond> + 'graph {
+    ) -> impl Iterator<Item = &'graph Bond> + 'graph {
         self.data.edges(index).map(|e| e.weight())
     }
 
+    // TODO: Review naming
     pub fn atom_bond_indices<'graph>(
         &'graph self,
         index: AtomIndex,
@@ -83,7 +84,7 @@ impl ValenceGraph {
     pub fn atom_neighbors<'graph>(
         &'graph self,
         index: AtomIndex,
-    ) -> impl Iterator<Item = &'graph ValenceAtom> + 'graph {
+    ) -> impl Iterator<Item = &'graph Atom> + 'graph {
         self.data
             .neighbors(index)
             .map(|n| self.data.node_weight(n).unwrap())
@@ -98,7 +99,7 @@ impl ValenceGraph {
     // TODO: Add methods for converting some atoms/bonds to builders
 }
 
-impl fmt::Display for ValenceGraph {
+impl Display for Molecule {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(
             f,
@@ -119,12 +120,12 @@ impl fmt::Display for ValenceGraph {
 }
 
 /// Builder type for ValenceGraphs, allowing incremental construction and validation.
-pub struct ValenceGraphBuilder {
-    atom_builders: Vec<(usize, ValenceAtomBuilder)>,
-    bond_builders: Vec<(usize, usize, usize, ValenceBondBuilder)>,
+pub struct MoleculeBuilder {
+    atom_builders: Vec<(usize, AtomBuilder)>,
+    bond_builders: Vec<(usize, usize, usize, BondBuilder)>,
 }
 
-impl ValenceGraphBuilder {
+impl MoleculeBuilder {
     pub fn new() -> Self {
         Self {
             atom_builders: Vec::new(),
@@ -141,16 +142,16 @@ impl ValenceGraphBuilder {
 
     pub fn add_atom(
         &mut self,
-        atom: Into<ValenceAtom>,
+        atom: Into<Atom>,
     ) -> Result<usize> {
-        let builder = ValenceAtomBuilder::from(atom);
+        let builder = AtomBuilder::from(atom);
         let idx = self.atom_builders.len();
         self.atom_builders.push((idx, builder));
         Ok(idx)
     }
 
-    pub fn add_atoms(&mut self, atoms: impl IntoIterator<Item = ValenceAtom>) -> Result<Vec<usize>> {
-        let builders = atoms.into_iter().map(|atom| ValenceAtomBuilder::from(atom));
+    pub fn add_atoms(&mut self, atoms: impl IntoIterator<Item = Atom>) -> Result<Vec<usize>> {
+        let builders = atoms.into_iter().map(|atom| AtomBuilder::from(atom));
         let atom_count = self.atom_builders.len();
         let mut indices = Vec::with_capacity(atom_count);   
         for (idx, builder) in (atom_count..).zip(builders) {
@@ -164,7 +165,7 @@ impl ValenceGraphBuilder {
         &mut self,
         idx1: usize,
         idx2: usize,
-        bond: Into<ValenceBond>,
+        bond: Into<Bond>,
     ) -> Result<usize> {
         if idx1 == idx2 {
             return Err(DataError::LoopBond(idx1).into());
@@ -172,14 +173,14 @@ impl ValenceGraphBuilder {
         if idx1 >= self.atom_builders.len() || idx2 >= self.atom_builders.len() {
             return Err(DataError::MissingAtomIndex(idx1).into());
         }
-        let builder = ValenceBondBuilder::from(bond);
+        let builder = BondBuilder::from(bond);
         let idx = self.bond_builders.len();
         self.bond_builders.push((idx, idx1, idx2, builder));
         Ok(idx)
     }
 
-    pub fn add_bonds(&mut self, bonds: impl IntoIterator<Item = (usize, usize, ValenceBond)>) -> Result<Vec<usize>> {
-        let builders = bonds.into_iter().map(|(idx1, idx2, bond)| (idx1, idx2, ValenceBondBuilder::from(bond)));
+    pub fn add_bonds(&mut self, bonds: impl IntoIterator<Item = (usize, usize, Bond)>) -> Result<Vec<usize>> {
+        let builders = bonds.into_iter().map(|(idx1, idx2, bond)| (idx1, idx2, BondBuilder::from(bond)));
         let bond_count = self.bond_builders.len();
         let mut indices = Vec::with_capacity(bond_count);
         for (idx, (idx1, idx2, builder)) in (bond_count..).zip(builders) {
@@ -258,7 +259,7 @@ impl ValenceGraphBuilder {
         Ok(builder)
     }
 
-    pub fn build(self) -> Result<ValenceGraph> {
+    pub fn build(self) -> Result<Molecule> {
         let mut atom_builders = self.atom_builders;
 
         // Update bond sums and lone pairs
@@ -283,7 +284,7 @@ impl ValenceGraphBuilder {
         }
 
         // Validate and finalize atoms
-        let mut atoms: Vec<(usize, ValenceAtom)> = Vec::with_capacity(atom_builders.len());
+        let mut atoms: Vec<(usize, Atom)> = Vec::with_capacity(atom_builders.len());
         for (idx, builder) in atom_builders {
             let element = builder.element().ok_or_else(
                 || Error::Data(DataError::MissingAtomProperty(idx, "element".to_string())))?;
@@ -325,7 +326,7 @@ impl ValenceGraphBuilder {
             if valid_assignments.len() == 1 {
                 let (final_state, final_implicit_h) = valid_assignments[0];
                 
-                let final_atom = ValenceAtom {
+                let final_atom = Atom {
                     element: final_state.element(),
                     charge: final_state.charge(),
                     lone_pairs: final_state.lone_pairs(),
@@ -343,13 +344,12 @@ impl ValenceGraphBuilder {
         }
 
         // --- Step 6: Finalize Bonds & Construct Graph --- 
-        let mut final_bonds: Vec<(usize, usize, usize, ValenceBond)> = Vec::with_capacity(self.bond_builders.len());
+        let mut final_bonds: Vec<(usize, usize, usize, Bond)> = Vec::with_capacity(self.bond_builders.len());
         for (orig_bond_idx, orig_idx1, orig_idx2, bond_builder) in self.bond_builders {
             let final_bond = bond_builder.build()?;
             final_bonds.push((orig_bond_idx, orig_idx1, orig_idx2, final_bond));
         }
         
-        // Ok(ValenceGraph { data: StableGraph::new() })
         todo!()
     }
 }

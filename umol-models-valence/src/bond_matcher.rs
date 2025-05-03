@@ -1,10 +1,8 @@
 //! Bond matchers
 
-use crate::{BondBuilder, BondDonation, BondSpec};
+use crate::{BondBuilder, BondDonation, BondSpec, BondSpecRegistry};
 use once_cell::sync::Lazy;
 use umol::Result;
-
-use super::BondSpecRegistry;
 
 pub struct BondMatcher {
     matcher: Box<dyn Fn(&BondBuilder) -> Result<Vec<BondSpec>> + Send + Sync>,

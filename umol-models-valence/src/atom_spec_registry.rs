@@ -1,6 +1,6 @@
 //! Registry of default atom specs to be used for atom spec matching
 
-use crate::{a, AtomSpec};
+use crate::{AtomSpec, a};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use umol_data::{e, Element};

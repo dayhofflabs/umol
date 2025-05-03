@@ -103,7 +103,7 @@ pub static ALWAYS_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::alway
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{a, AtomBuilder};
+    use crate::a;
     use umol_data::{e, Element};
 
     #[test]
