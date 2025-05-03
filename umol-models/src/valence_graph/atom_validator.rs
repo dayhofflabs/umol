@@ -73,6 +73,10 @@ impl AtomValidator {
         })])
     }
 
+    pub fn always() -> Self {
+        Self::new(vec![Box::new(|_| Ok(()))])
+    }
+
     pub fn with_validator(
         mut self,
         validator: impl Fn(&AtomBuilder) -> Result<()> + Send + Sync + 'static,
@@ -95,7 +99,8 @@ impl Default for AtomValidator {
     }
 }
 
-pub(super) static DEFAULT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::default);
+pub static DEFAULT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::default);
+pub static ALWAYS_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::always);
 
 #[cfg(test)]
 mod tests {
@@ -222,8 +227,22 @@ mod tests {
     }
 
     #[test]
-    fn test_default_atom_validator() {
+    fn test_atom_validator_always() {
+        let validator = AtomValidator::always();
+        let builder = AtomBuilder::new(e!(C));
+        let result = validator.validate(&builder);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_default_atom_validator_lazy_static() {
         let validator = DEFAULT_ATOM_VALIDATOR.validate(&AtomBuilder::new(e!(C)));
+        assert!(validator.is_ok());
+    }
+
+    #[test]
+    fn test_always_atom_validator_lazy_static() {
+        let validator = ALWAYS_ATOM_VALIDATOR.validate(&AtomBuilder::new(e!(C)));
         assert!(validator.is_ok());
     }
 }

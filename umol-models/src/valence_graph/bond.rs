@@ -3,10 +3,10 @@
 //! Valence bond is the edge type of valence graphs and is defined by its bond order and bond donation.
 //! It should be created using the `ValenceBondBuilder`.
 
-use crate::{BondDonation, BondOrder, BondSpec};
+use crate::{AtomBuilder, BondDonation, BondMatcher, BondOrder, BondSpec, DEFAULT_BOND_MATCHER};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
-use umol::Result;
+use umol::{error::DataError, Result};
 
 /// Valence bond type including strict typing. Cannot be created directly, but only through
 /// the `BondBuilder` type, which performs validation of the bond properties. Mutations are
@@ -28,19 +28,19 @@ impl Bond {
 
     pub fn to_builder(self) -> BondBuilder {
         BondBuilder {
-            order: Some(self.order),
+            order: self.order,
             donation: Some(self.donation),
         }
     }
 
-    pub fn to_type(self) -> BondSpec {
+    pub fn to_spec(self) -> BondSpec {
         BondSpec::new(self.order, self.donation)
     }
 }
 
 impl Display for Bond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_type())
+        write!(f, "{}", self.to_spec())
     }
 }
 
@@ -54,26 +54,26 @@ impl From<Bond> for BondBuilder {
 /// The resulting `Bond` objects must match the predefined `BondSpec` types.
 #[derive(Debug)]
 pub struct BondBuilder {
-    order: Option<BondOrder>,
+    order: BondOrder,
     donation: Option<BondDonation>,
 }
 
 impl BondBuilder {
     pub fn new(order: BondOrder) -> Self {
         Self {
-            order: Some(order),
-            donation: Some(BondDonation::Shared),
+            order,
+            donation: None,
         }
     }
 
-    pub fn from_type(bond_type: BondSpec) -> Self {
+    pub fn from_spec(bond_spec: BondSpec) -> Self {
         Self {
-            order: Some(bond_type.order()),
-            donation: Some(bond_type.donation()),
+            order: bond_spec.order(),
+            donation: Some(bond_spec.donation()),
         }
     }
 
-    pub fn order(&self) -> Option<BondOrder> {
+    pub fn order(&self) -> BondOrder {
         self.order
     }
 
@@ -82,7 +82,7 @@ impl BondBuilder {
     }
 
     pub fn set_order(&mut self, order: BondOrder) -> &mut Self {
-        self.order = Some(order);
+        self.order = order;
         self
     }
 
@@ -92,75 +92,106 @@ impl BondBuilder {
     }
 
     pub fn update_order(&mut self, f: impl FnOnce(BondOrder) -> BondOrder) -> &mut Self {
-        self.order = Some(f(self.order.unwrap()));
+        self.order = f(self.order);
         self
     }
 
     pub fn update_donation(&mut self, f: impl FnOnce(BondDonation) -> BondDonation) -> &mut Self {
-        self.donation = Some(f(self.donation.unwrap()));
+        self.donation = Some(f(self.donation.unwrap_or(BondDonation::Shared)));
         self
     }
 
-    pub fn build(self) -> Result<Bond> {
+    pub fn build_between(self, atom1: &mut AtomBuilder, atom2: &mut AtomBuilder) -> Result<Bond> {
+        self.build_with_between(&DEFAULT_BOND_MATCHER, atom1, atom2)
+    }
+
+    pub fn build_with_between(
+        self,
+        matcher: &BondMatcher,
+        atom1: &mut AtomBuilder,
+        atom2: &mut AtomBuilder,
+    ) -> Result<Bond> {
+        let bond_specs = matcher.find(&self)?;
+        if bond_specs.is_empty() {
+            return Err(DataError::NoBondSpec(format!("{:?}", self)).into());
+        } else if bond_specs.len() > 1 {
+            return Err(DataError::MultipleBondSpecs(format!("{:?}", self)).into());
+        }
+        let bond_spec = bond_specs.first().unwrap();
+        let valence = bond_spec.order().value();
+        atom1.update_valence(|v| v + valence);
+        atom2.update_valence(|v| v + valence);
         Ok(Bond {
-            order: self.order.unwrap(),
-            donation: self.donation.unwrap(),
+            order: bond_spec.order(),
+            donation: bond_spec.donation(),
         })
     }
 }
 
 impl From<BondSpec> for BondBuilder {
-    fn from(bond_type: BondSpec) -> Self {
-        BondBuilder::from_type(bond_type)
+    fn from(bond_spec: BondSpec) -> Self {
+        BondBuilder::from_spec(bond_spec)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{b, ALWAYS_BOND_MATCHER};
+    use umol_data::{e, Element};
 
     #[test]
     fn test_bond_display() {
-        let bond = BondBuilder::new(BondOrder::Single).build().unwrap();
+        let mut builder = BondBuilder::new(BondOrder::Single);
+        builder.set_donation(BondDonation::Shared);
+        let bond = builder
+            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
+            .unwrap();
         assert_eq!(format!("{}", bond), "-");
     }
 
     #[test]
     fn test_bond_serialize() {
-        let bond = BondBuilder::new(BondOrder::Single).build().unwrap();
+        let mut builder = BondBuilder::new(BondOrder::Single);
+        builder.set_donation(BondDonation::Shared);
+        let bond = builder
+            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
+            .unwrap();
         let serialized = serde_json::to_string(&bond).unwrap();
         assert_eq!(serialized, "{\"order\":\"Single\",\"donation\":\"Shared\"}");
     }
 
     #[test]
     fn test_bond_to_builder() {
-        let bond = BondBuilder::new(BondOrder::Single).build().unwrap();
+        let mut builder = BondBuilder::new(BondOrder::Single);
+        builder.set_donation(BondDonation::Shared);
+        let bond = builder
+            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
+            .unwrap();
         let builder = bond.to_builder();
-        assert_eq!(builder.order(), Some(BondOrder::Single));
+        assert_eq!(builder.order(), BondOrder::Single);
         assert_eq!(builder.donation(), Some(BondDonation::Shared));
     }
 
     #[test]
     fn test_bond_builder_new() {
-        let bond = BondBuilder::new(BondOrder::Single).build().unwrap();
-        assert_eq!(bond.order(), BondOrder::Single);
-        assert_eq!(bond.donation(), BondDonation::Shared);
+        let builder = BondBuilder::new(BondOrder::Single);
+        assert_eq!(builder.order(), BondOrder::Single);
+        assert_eq!(builder.donation(), None);
     }
 
     #[test]
-    fn test_bond_builder_from_type() {
-        let bond = BondSpec::new(BondOrder::Single, BondDonation::Shared);
-        let builder = BondBuilder::from_type(bond);
-        assert_eq!(builder.order(), Some(BondOrder::Single));
-        assert_eq!(builder.donation(), Some(BondDonation::Shared));
+    fn test_bond_builder_from_spec() {
+        let builder = BondBuilder::from_spec(b!("->"));
+        assert_eq!(builder.order(), BondOrder::Single);
+        assert_eq!(builder.donation(), Some(BondDonation::Donating));
     }
 
     #[test]
     fn test_bond_builder_properties() {
         let builder = BondBuilder::new(BondOrder::Single);
-        assert_eq!(builder.order(), Some(BondOrder::Single));
-        assert_eq!(builder.donation(), Some(BondDonation::Shared));
+        assert_eq!(builder.order(), BondOrder::Single);
+        assert_eq!(builder.donation(), None);
     }
 
     #[test]
@@ -169,9 +200,8 @@ mod tests {
         builder.set_order(BondOrder::Double);
         builder.set_donation(BondDonation::Donating);
 
-        let bond = builder.build().unwrap();
-        assert_eq!(bond.order(), BondOrder::Double);
-        assert_eq!(bond.donation(), BondDonation::Donating);
+        assert_eq!(builder.order(), BondOrder::Double);
+        assert_eq!(builder.donation(), Some(BondDonation::Donating));
     }
 
     #[test]
@@ -182,45 +212,57 @@ mod tests {
             .update_order(|x| x.increase().unwrap())
             .update_donation(|x| x.reverse().unwrap());
 
-        let bond = builder.build().unwrap();
-        assert_eq!(bond.order(), BondOrder::Double);
-        assert_eq!(bond.donation(), BondDonation::Donating);
+        assert_eq!(builder.order(), BondOrder::Double);
+        assert_eq!(builder.donation(), Some(BondDonation::Donating));
     }
 
     #[test]
-    fn test_bond_builder_build() {
+    fn test_bond_builder_build_between() {
         let mut builder = BondBuilder::new(BondOrder::Single);
         builder
             .set_order(BondOrder::Double)
             .set_donation(BondDonation::Donating);
 
-        let bond = builder.build().unwrap();
+        let bond = builder
+            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
+            .unwrap();
         assert_eq!(bond.order(), BondOrder::Double);
         assert_eq!(bond.donation(), BondDonation::Donating);
     }
 
     #[test]
-    fn test_bond_builder_validation() {
+    fn test_bond_builder_build_with_between() {
         let builder = BondBuilder::new(BondOrder::Quadruple);
-        println!("{:?}", builder);
-        let result = builder.build();
-        println!("{:?}", result);
-        assert!(result.is_ok());
+
+        let bond = builder
+            .build_with_between(
+                &ALWAYS_BOND_MATCHER,
+                &mut AtomBuilder::new(e!(C)),
+                &mut AtomBuilder::new(e!(C)),
+            )
+            .unwrap();
+        assert_eq!(bond.order(), BondOrder::Quadruple);
+        assert_eq!(bond.donation(), BondDonation::Shared);
     }
 
     #[test]
-    fn test_bond_type_into_bond_builder() {
-        let bond = BondSpec::new(BondOrder::Single, BondDonation::Shared);
-        let builder: BondBuilder = bond.into();
-        assert_eq!(builder.order(), Some(BondOrder::Single));
+    fn test_bond_spec_into_bond_builder() {
+        let bond_spec = BondSpec::new(BondOrder::Single, BondDonation::Shared);
+        let builder: BondBuilder = bond_spec.into();
+        assert_eq!(builder.order(), BondOrder::Single);
         assert_eq!(builder.donation(), Some(BondDonation::Shared));
     }
 
     #[test]
     fn test_bond_into_bond_builder() {
-        let bond = BondBuilder::new(BondOrder::Single).build().unwrap();
+        let mut builder = BondBuilder::new(BondOrder::Single);
+        builder.set_donation(BondDonation::Accepting);
+
+        let bond = builder
+            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
+            .unwrap();
         let builder: BondBuilder = bond.into();
-        assert_eq!(builder.order(), Some(BondOrder::Single));
-        assert_eq!(builder.donation(), Some(BondDonation::Shared));
+        assert_eq!(builder.order(), BondOrder::Single);
+        assert_eq!(builder.donation(), Some(BondDonation::Accepting));
     }
 }

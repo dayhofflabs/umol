@@ -5,13 +5,11 @@
 //! atom specs. It cannot be created directly, but only through the `AtomBuilder` type,
 //! which ensures correct typing.
 
-use crate::AtomSpec;
+use crate::{AtomMatcher, AtomSpec, AtomValidator, DEFAULT_ATOM_MATCHER, DEFAULT_ATOM_VALIDATOR};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use umol::{error::DataError, Result};
 use umol_data::Element;
-
-use super::{AtomMatcher, AtomValidator, DEFAULT_ATOM_MATCHER, DEFAULT_ATOM_VALIDATOR};
 
 /// Valence atom type including strict typing. Cannot be created directly, but only through
 /// the `AtomBuilder` type, which performs validation of the atom properties. Mutations are
@@ -322,7 +320,7 @@ impl From<AtomSpec> for AtomBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AtomSpec;
+    use crate::{AtomSpec, ALWAYS_ATOM_MATCHER, ALWAYS_ATOM_VALIDATOR};
     use umol_data::e;
 
     #[test]
@@ -396,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn test_atom_builder_from_atom_type() {
+    fn test_atom_builder_from_atom_spec() {
         let state = AtomSpec::new(e!(C), 0, 1, 0, 0, 2, 3, 0, 4);
         let builder = AtomBuilder::from_spec(state);
         assert_eq!(builder.element(), e!(C));
@@ -446,7 +444,64 @@ mod tests {
         builder.set_implicit_hydrogens(0);
         builder.set_valence(2);
 
+        assert_eq!(builder.element(), e!(C));
+        assert_eq!(builder.charge(), Some(0));
+        assert_eq!(builder.lone_pairs(), Some(1));
+        assert_eq!(builder.donated_pairs(), Some(0));
+        assert_eq!(builder.accepted_pairs(), Some(0));
+        assert_eq!(builder.unpaired_electrons(), Some(2));
+        assert_eq!(builder.multiplicity(), Some(3));
+        assert_eq!(builder.implicit_hydrogens(), Some(0));
+        assert_eq!(builder.valence(), Some(2));
+    }
+
+    #[test]
+    fn test_atom_builder_update() {
+        let mut builder = AtomBuilder::new(e!(C));
+        builder.update_element(|elem| elem.next().unwrap());
+        builder.update_charge(|x| x + 1);
+        builder.update_valence(|x| x + 4);
+
+        assert_eq!(builder.element(), e!(N));
+        assert_eq!(builder.charge(), Some(1));
+        assert_eq!(builder.lone_pairs(), None);
+        assert_eq!(builder.donated_pairs(), None);
+        assert_eq!(builder.accepted_pairs(), None);
+        assert_eq!(builder.unpaired_electrons(), None);
+        assert_eq!(builder.multiplicity(), None);
+        assert_eq!(builder.implicit_hydrogens(), None);
+        assert_eq!(builder.valence(), Some(4));
+    }
+
+    #[test]
+    fn test_atom_builder_build() {
+        let mut builder = AtomBuilder::new(e!(N));
+        builder.set_charge(1).set_valence(4);
+
         let atom = builder.build().unwrap();
+        assert_eq!(atom.element(), e!(N));
+        assert_eq!(atom.charge(), 1);
+        assert_eq!(atom.lone_pairs(), 0);
+        assert_eq!(atom.donated_pairs(), 0);
+        assert_eq!(atom.accepted_pairs(), 0);
+        assert_eq!(atom.unpaired_electrons(), 0);
+        assert_eq!(atom.multiplicity(), 1);
+        assert_eq!(atom.implicit_hydrogens(), 0);
+        assert_eq!(atom.valence(), 4);
+    }
+
+    #[test]
+    fn test_atom_builder_build_with() {
+        let mut builder = AtomBuilder::new(e!(C));
+        builder
+            .set_lone_pairs(1)
+            .set_unpaired_electrons(2)
+            .set_multiplicity(3)
+            .set_valence(2);
+
+        let atom = builder
+            .build_with(&ALWAYS_ATOM_VALIDATOR, &ALWAYS_ATOM_MATCHER)
+            .unwrap();
         assert_eq!(atom.element(), e!(C));
         assert_eq!(atom.charge(), 0);
         assert_eq!(atom.lone_pairs(), 1);
@@ -459,71 +514,26 @@ mod tests {
     }
 
     #[test]
-    fn test_atom_builder_update() {
-        let mut builder = AtomBuilder::new(e!(C));
-        builder.update_element(|elem| elem.next().unwrap());
-        builder.update_charge(|x| x + 1);
-        builder.update_valence(|x| x + 4);
-
-        let atom = builder.build().unwrap();
-        assert_eq!(atom.element(), e!(N));
-        assert_eq!(atom.charge(), 1);
-        assert_eq!(atom.lone_pairs(), 0);
-        assert_eq!(atom.donated_pairs(), 0);
-        assert_eq!(atom.accepted_pairs(), 0);
-        assert_eq!(atom.unpaired_electrons(), 0);
-        assert_eq!(atom.multiplicity(), 1);
-        assert_eq!(atom.implicit_hydrogens(), 0);
-        assert_eq!(atom.valence(), 4);
-    }
-
-    #[test]
-    fn test_atom_builder_build() {
-        let mut builder = AtomBuilder::new(e!(N));
-        builder
-            .set_charge(1)
-            .set_valence(4);
-
-        let atom = builder.build().unwrap();
-        assert_eq!(atom.element(), e!(N));
-        assert_eq!(atom.charge(), 1);
-        assert_eq!(atom.lone_pairs(), 0);
-        assert_eq!(atom.donated_pairs(), 0);
-        assert_eq!(atom.accepted_pairs(), 0);
-        assert_eq!(atom.unpaired_electrons(), 0);
-        assert_eq!(atom.multiplicity(), 1);
-        assert_eq!(atom.implicit_hydrogens(), 0);
-        assert_eq!(atom.valence(), 4);
-    }
-
-    #[test]
-    fn test_atom_builder_validation() {
-        let mut builder = AtomBuilder::new(e!(C));
-        builder.set_unpaired_electrons(3);
-        let result = builder.build();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_atom_type_into_atom_builder() {
-        let atom: AtomBuilder = AtomSpec::new(e!(C), 0, 1, 0, 0, 2, 3, 0, 4).into();
-        assert_eq!(atom.element(), e!(C));
-        assert_eq!(atom.charge(), Some(0));
-        assert_eq!(atom.lone_pairs(), Some(1));
-        assert_eq!(atom.donated_pairs(), Some(0));
-        assert_eq!(atom.accepted_pairs(), Some(0));
-        assert_eq!(atom.unpaired_electrons(), Some(2));
-        assert_eq!(atom.multiplicity(), Some(3));
-        assert_eq!(atom.implicit_hydrogens(), Some(0));
-        assert_eq!(atom.valence(), Some(4));
+    fn test_atom_spec_into_atom_builder() {
+        let atom_spec = AtomSpec::new(e!(C), 0, 1, 0, 0, 2, 3, 0, 4);
+        let builder: AtomBuilder = atom_spec.into();
+        assert_eq!(builder.element(), e!(C));
+        assert_eq!(builder.charge(), Some(0));
+        assert_eq!(builder.lone_pairs(), Some(1));
+        assert_eq!(builder.donated_pairs(), Some(0));
+        assert_eq!(builder.accepted_pairs(), Some(0));
+        assert_eq!(builder.unpaired_electrons(), Some(2));
+        assert_eq!(builder.multiplicity(), Some(3));
+        assert_eq!(builder.implicit_hydrogens(), Some(0));
+        assert_eq!(builder.valence(), Some(4));
     }
 
     #[test]
     fn test_atom_into_atom_builder() {
         let mut atom = AtomBuilder::new(e!(C));
-        atom.set_unpaired_electrons(2);
-        atom.set_multiplicity(3);
-        atom.set_valence(2);
+        atom.set_unpaired_electrons(2)
+            .set_multiplicity(3)
+            .set_valence(2);
         let atom = atom.build().unwrap();
         let builder: AtomBuilder = atom.into();
         assert_eq!(builder.element(), e!(C));

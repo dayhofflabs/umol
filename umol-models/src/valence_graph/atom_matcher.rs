@@ -15,6 +15,7 @@ impl AtomMatcher {
         Self { matcher }
     }
 
+    /// Default matcher that uses the `AtomSpecRegistry` to match atom builders.
     pub fn default() -> Self {
         Self::new(Box::new(|builder| {
             let element = builder.element();
@@ -32,19 +33,48 @@ impl AtomMatcher {
             let matches = candidates
                 .iter() // Iterate over the collected Vec<&AtomSpec>
                 .filter(|spec| {
-                    builder.charge().map_or(true, |c| c == spec.charge()) &&
-                    builder.lone_pairs().map_or(true, |lp| lp == spec.lone_pairs()) &&
-                    builder.donated_pairs().map_or(true, |dp| dp == spec.donated_pairs()) &&
-                    builder.accepted_pairs().map_or(true, |ap| ap == spec.accepted_pairs()) &&
-                    builder.unpaired_electrons().map_or(true, |u| u == spec.unpaired_electrons()) &&
-                    builder.multiplicity().map_or(true, |m| m == spec.multiplicity()) &&
-                    builder.implicit_hydrogens().map_or(true, |h| h == spec.implicit_hydrogens()) &&
-                    builder.valence().map_or(true, |v| v == spec.valence())
+                    builder.charge().map_or(true, |c| c == spec.charge())
+                        && builder
+                            .lone_pairs()
+                            .map_or(true, |lp| lp == spec.lone_pairs())
+                        && builder
+                            .donated_pairs()
+                            .map_or(true, |dp| dp == spec.donated_pairs())
+                        && builder
+                            .accepted_pairs()
+                            .map_or(true, |ap| ap == spec.accepted_pairs())
+                        && builder
+                            .unpaired_electrons()
+                            .map_or(true, |u| u == spec.unpaired_electrons())
+                        && builder
+                            .multiplicity()
+                            .map_or(true, |m| m == spec.multiplicity())
+                        && builder
+                            .implicit_hydrogens()
+                            .map_or(true, |h| h == spec.implicit_hydrogens())
+                        && builder.valence().map_or(true, |v| v == spec.valence())
                 })
                 .cloned() // Clone the matching &AtomSpec to AtomSpec
                 .collect::<Vec<AtomSpec>>();
 
             Ok(matches)
+        }))
+    }
+
+    /// Trivial matcher that matches all atom builders.
+    pub fn always() -> Self {
+        Self::new(Box::new(|builder| {
+            Ok(vec![AtomSpec::new(
+                builder.element(),
+                builder.charge().unwrap_or(0),
+                builder.lone_pairs().unwrap_or(0),
+                builder.donated_pairs().unwrap_or(0),
+                builder.accepted_pairs().unwrap_or(0),
+                builder.unpaired_electrons().unwrap_or(0),
+                builder.multiplicity().unwrap_or(1),
+                builder.implicit_hydrogens().unwrap_or(0),
+                builder.valence().unwrap_or(0),
+            )])
         }))
     }
 
@@ -67,7 +97,8 @@ impl Default for AtomMatcher {
     }
 }
 
-pub(super) static DEFAULT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::default);
+pub static DEFAULT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::default);
+pub static ALWAYS_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::always);
 
 #[cfg(test)]
 mod tests {
@@ -122,7 +153,9 @@ mod tests {
         let matches = matcher.find(&builder).unwrap();
         // Should match only specs for C(0)
         assert_eq!(matches.len(), 6);
-        assert!(matches.iter().all(|spec| spec.element() == e!(C) && spec.charge() == 0));
+        assert!(matches
+            .iter()
+            .all(|spec| spec.element() == e!(C) && spec.charge() == 0));
     }
 
     #[test]
@@ -178,9 +211,25 @@ mod tests {
     }
 
     #[test]
+    fn test_always_atom_matcher() {
+        let matcher = AtomMatcher::always();
+        let builder = AtomBuilder::new(e!(C));
+        let matches = matcher.find(&builder).unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0], a!("[C]"));
+    }
+
+    #[test]
     fn test_default_atom_matcher_lazy_static() {
         let atom_builder = AtomBuilder::new(e!(C));
         let atom_types = DEFAULT_ATOM_MATCHER.find(&atom_builder).unwrap();
         assert_eq!(atom_types.len(), 8);
+    }
+
+    #[test]
+    fn test_always_atom_matcher_lazy_static() {
+        let atom_builder = AtomBuilder::new(e!(C));
+        let atom_types = ALWAYS_ATOM_MATCHER.find(&atom_builder).unwrap();
+        assert_eq!(atom_types.len(), 1);
     }
 }
