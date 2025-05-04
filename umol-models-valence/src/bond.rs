@@ -3,7 +3,7 @@
 //! Valence bond is the edge type of valence graphs and is defined by its bond order and bond donation.
 //! It should be created using the `ValenceBondBuilder`.
 
-use crate::{AtomBuilder, BondDonation, BondMatcher, BondOrder, BondSpec, DEFAULT_BOND_MATCHER};
+use crate::{BondDonation, BondMatcher, BondOrder, BondSpec, DEFAULT_BOND_MATCHER};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use umol::{error::DataError, Result};
@@ -101,16 +101,11 @@ impl BondBuilder {
         self
     }
 
-    pub fn build_between(self, atom1: &mut AtomBuilder, atom2: &mut AtomBuilder) -> Result<Bond> {
-        self.build_with_between(&DEFAULT_BOND_MATCHER, atom1, atom2)
+    pub fn build(self) -> Result<Bond> {
+        self.build_with(&DEFAULT_BOND_MATCHER)
     }
 
-    pub fn build_with_between(
-        self,
-        matcher: &BondMatcher,
-        atom1: &mut AtomBuilder,
-        atom2: &mut AtomBuilder,
-    ) -> Result<Bond> {
+    pub fn build_with(self, matcher: &BondMatcher) -> Result<Bond> {
         let bond_specs = matcher.find(&self)?;
         if bond_specs.is_empty() {
             return Err(DataError::NoBondSpec(format!("{:?}", self)).into());
@@ -118,9 +113,6 @@ impl BondBuilder {
             return Err(DataError::MultipleBondSpecs(format!("{:?}", self)).into());
         }
         let bond_spec = bond_specs.first().unwrap();
-        let valence = bond_spec.order().value();
-        atom1.update_valence(|v| v + valence);
-        atom2.update_valence(|v| v + valence);
         Ok(Bond {
             order: bond_spec.order(),
             donation: bond_spec.donation(),
@@ -134,19 +126,22 @@ impl From<BondSpec> for BondBuilder {
     }
 }
 
+impl From<BondOrder> for BondBuilder {
+    fn from(order: BondOrder) -> Self {
+        BondBuilder::new(order)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{b, ALWAYS_BOND_MATCHER};
-    use umol_data::{e, Element};
 
     #[test]
     fn test_bond_display() {
         let mut builder = BondBuilder::new(BondOrder::Single);
         builder.set_donation(BondDonation::Shared);
-        let bond = builder
-            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
-            .unwrap();
+        let bond = builder.build().unwrap();
         assert_eq!(format!("{}", bond), "-");
     }
 
@@ -154,9 +149,7 @@ mod tests {
     fn test_bond_serialize() {
         let mut builder = BondBuilder::new(BondOrder::Single);
         builder.set_donation(BondDonation::Shared);
-        let bond = builder
-            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
-            .unwrap();
+        let bond = builder.build().unwrap();
         let serialized = serde_json::to_string(&bond).unwrap();
         assert_eq!(serialized, "{\"order\":\"Single\",\"donation\":\"Shared\"}");
     }
@@ -165,9 +158,7 @@ mod tests {
     fn test_bond_to_builder() {
         let mut builder = BondBuilder::new(BondOrder::Single);
         builder.set_donation(BondDonation::Shared);
-        let bond = builder
-            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
-            .unwrap();
+        let bond = builder.build().unwrap();
         let builder = bond.to_builder();
         assert_eq!(builder.order(), BondOrder::Single);
         assert_eq!(builder.donation(), Some(BondDonation::Shared));
@@ -217,30 +208,22 @@ mod tests {
     }
 
     #[test]
-    fn test_bond_builder_build_between() {
+    fn test_bond_builder_build() {
         let mut builder = BondBuilder::new(BondOrder::Single);
         builder
             .set_order(BondOrder::Double)
             .set_donation(BondDonation::Donating);
 
-        let bond = builder
-            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
-            .unwrap();
+        let bond = builder.build().unwrap();
         assert_eq!(bond.order(), BondOrder::Double);
         assert_eq!(bond.donation(), BondDonation::Donating);
     }
 
     #[test]
-    fn test_bond_builder_build_with_between() {
+    fn test_bond_builder_build_with() {
         let builder = BondBuilder::new(BondOrder::Quadruple);
 
-        let bond = builder
-            .build_with_between(
-                &ALWAYS_BOND_MATCHER,
-                &mut AtomBuilder::new(e!(C)),
-                &mut AtomBuilder::new(e!(C)),
-            )
-            .unwrap();
+        let bond = builder.build_with(&ALWAYS_BOND_MATCHER).unwrap();
         assert_eq!(bond.order(), BondOrder::Quadruple);
         assert_eq!(bond.donation(), BondDonation::Shared);
     }
@@ -258,11 +241,16 @@ mod tests {
         let mut builder = BondBuilder::new(BondOrder::Single);
         builder.set_donation(BondDonation::Accepting);
 
-        let bond = builder
-            .build_between(&mut AtomBuilder::new(e!(C)), &mut AtomBuilder::new(e!(C)))
-            .unwrap();
+        let bond = builder.build().unwrap();
         let builder: BondBuilder = bond.into();
         assert_eq!(builder.order(), BondOrder::Single);
         assert_eq!(builder.donation(), Some(BondDonation::Accepting));
+    }
+
+    #[test]
+    fn test_bond_order_into_bond_builder() {
+        let builder: BondBuilder = BondOrder::Single.into();
+        assert_eq!(builder.order(), BondOrder::Single);
+        assert_eq!(builder.donation(), None);
     }
 }

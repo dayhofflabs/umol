@@ -219,8 +219,8 @@ pub enum DataError {
     #[error("Missing bond index: {0}")]
     MissingBondIndex(usize),
 
-    #[error("Duplicate bond index: {0}")]
-    DuplicateBondIndex(usize),
+    #[error("Duplicate bond index: ({0}, {1})")]
+    DuplicateBondIndex(usize, usize),
 
     #[error("Loop bond: {0}")]
     LoopBond(usize),

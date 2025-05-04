@@ -317,6 +317,12 @@ impl From<AtomSpec> for AtomBuilder {
     }
 }
 
+impl From<Element> for AtomBuilder {
+    fn from(element: Element) -> Self {
+        AtomBuilder::new(element)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -514,21 +520,6 @@ mod tests {
     }
 
     #[test]
-    fn test_atom_spec_into_atom_builder() {
-        let atom_spec = AtomSpec::new(e!(C), 0, 1, 0, 0, 2, 3, 0, 4);
-        let builder: AtomBuilder = atom_spec.into();
-        assert_eq!(builder.element(), e!(C));
-        assert_eq!(builder.charge(), Some(0));
-        assert_eq!(builder.lone_pairs(), Some(1));
-        assert_eq!(builder.donated_pairs(), Some(0));
-        assert_eq!(builder.accepted_pairs(), Some(0));
-        assert_eq!(builder.unpaired_electrons(), Some(2));
-        assert_eq!(builder.multiplicity(), Some(3));
-        assert_eq!(builder.implicit_hydrogens(), Some(0));
-        assert_eq!(builder.valence(), Some(4));
-    }
-
-    #[test]
     fn test_atom_into_atom_builder() {
         let mut atom = AtomBuilder::new(e!(C));
         atom.set_unpaired_electrons(2)
@@ -545,5 +536,35 @@ mod tests {
         assert_eq!(builder.multiplicity(), Some(3));
         assert_eq!(builder.implicit_hydrogens(), Some(0));
         assert_eq!(builder.valence(), Some(2));
+    }
+
+    #[test]
+    fn test_atom_spec_into_atom_builder() {
+        let atom_spec = AtomSpec::new(e!(C), 0, 1, 0, 0, 2, 3, 0, 4);
+        let builder: AtomBuilder = atom_spec.into();
+        assert_eq!(builder.element(), e!(C));
+        assert_eq!(builder.charge(), Some(0));
+        assert_eq!(builder.lone_pairs(), Some(1));
+        assert_eq!(builder.donated_pairs(), Some(0));
+        assert_eq!(builder.accepted_pairs(), Some(0));
+        assert_eq!(builder.unpaired_electrons(), Some(2));
+        assert_eq!(builder.multiplicity(), Some(3));
+        assert_eq!(builder.implicit_hydrogens(), Some(0));
+        assert_eq!(builder.valence(), Some(4));
+    }
+
+    #[test]
+    fn test_element_into_atom_builder() {
+        let element = e!(C);
+        let builder: AtomBuilder = element.into();
+        assert_eq!(builder.element(), e!(C));
+        assert_eq!(builder.charge(), None);
+        assert_eq!(builder.lone_pairs(), None);
+        assert_eq!(builder.donated_pairs(), None);
+        assert_eq!(builder.accepted_pairs(), None);
+        assert_eq!(builder.unpaired_electrons(), None);
+        assert_eq!(builder.multiplicity(), None);
+        assert_eq!(builder.implicit_hydrogens(), None);
+        assert_eq!(builder.valence(), None);
     }
 }

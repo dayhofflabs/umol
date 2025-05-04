@@ -1,16 +1,18 @@
 //! Molecular representation as valence graph
 
-use super::{Atom, Bond};
+use crate::{Atom, AtomBuilder, Bond, BondBuilder};
+use indexmap::IndexMap;
+use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
-use std::collections::{HashMap, HashSet};
-use std::{fmt, Display};
+use petgraph::stable_graph::StableGraph;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::fmt::{self, Display};
 use umol::error::DataError;
-use umol::{Error, Result};
-use umol_data::{BondOrder, BondDonation, ValenceState, Element};
+use umol::Result;
 
-/// The type used for internal atom indices.
+/// Internal atom and bond indices
 pub type AtomIndex = NodeIndex<usize>;
-/// The type used for internal bond indices.
 pub type BondIndex = EdgeIndex<usize>;
 
 /// Graph model of atoms and bonds, with valence constraints
@@ -112,347 +114,505 @@ impl Display for Molecule {
         }
         for (i, bond) in self.bonds().enumerate() {
             if let Some((a, b)) = self.bond_atoms(BondIndex::new(i)) {
-                writeln!(f, "  Bond {}: {} between atoms {:?} and {:?}", i, bond, a, b)?;
+                writeln!(
+                    f,
+                    "  Bond {}: {} between atoms {:?} and {:?}",
+                    i, bond, a, b
+                )?;
             }
         }
         Ok(())
     }
 }
 
-/// Builder type for ValenceGraphs, allowing incremental construction and validation.
+/// Builder type for ValenceGraphs, allowing incremental construction and strict validation.
 pub struct MoleculeBuilder {
-    atom_builders: Vec<(usize, AtomBuilder)>,
-    bond_builders: Vec<(usize, usize, usize, BondBuilder)>,
+    atom_builders: HashMap<usize, AtomBuilder>,
+    bond_builders: HashMap<(usize, usize), BondBuilder>,
 }
 
 impl MoleculeBuilder {
     pub fn new() -> Self {
         Self {
-            atom_builders: Vec::new(),
-            bond_builders: Vec::new(),
+            atom_builders: HashMap::new(),
+            bond_builders: HashMap::new(),
         }
     }
 
     pub fn with_capacity(atom_capacity: usize, bond_capacity: usize) -> Self {
         Self {
-            atom_builders: Vec::with_capacity(atom_capacity),
-            bond_builders: Vec::with_capacity(bond_capacity),
+            atom_builders: HashMap::with_capacity(atom_capacity),
+            bond_builders: HashMap::with_capacity(bond_capacity),
         }
     }
 
-    pub fn add_atom(
-        &mut self,
-        atom: Into<Atom>,
-    ) -> Result<usize> {
-        let builder = AtomBuilder::from(atom);
+    pub fn create_atom<A: Into<AtomBuilder>>(&mut self, atom: A) -> (usize, &mut AtomBuilder) {
+        let builder = atom.into();
         let idx = self.atom_builders.len();
-        self.atom_builders.push((idx, builder));
-        Ok(idx)
+        self.atom_builders.insert(idx, builder);
+        (idx, self.atom_builders.get_mut(&idx).unwrap())
     }
 
-    pub fn add_atoms(&mut self, atoms: impl IntoIterator<Item = Atom>) -> Result<Vec<usize>> {
-        let builders = atoms.into_iter().map(|atom| AtomBuilder::from(atom));
-        let atom_count = self.atom_builders.len();
-        let mut indices = Vec::with_capacity(atom_count);   
-        for (idx, builder) in (atom_count..).zip(builders) {
-            self.atom_builders.push((idx, builder));
+    pub fn create_atoms<A: Into<AtomBuilder>>(
+        &mut self,
+        atoms: impl IntoIterator<Item = A>,
+    ) -> impl Iterator<Item = usize> {
+        let builders_iter = atoms.into_iter().map(|atom| atom.into());
+        let (lbound, _ubound) = builders_iter.size_hint();
+        let offset = self.atom_builders.len();
+        let indices = builders_iter.enumerate().fold(
+            Vec::with_capacity(lbound),
+            |mut acc, (idx, builder)| {
+                self.atom_builders.insert(offset + idx, builder);
+                acc.push(offset + idx);
+                acc
+            },
+        );
+        indices.into_iter()
+    }
+
+    pub fn add_atom<A: Into<AtomBuilder>>(
+        &mut self,
+        idx: usize,
+        atom: A,
+    ) -> Result<(usize, &mut AtomBuilder)> {
+        let builder = atom.into();
+        if self.atom_builders.contains_key(&idx) {
+            return Err(DataError::DuplicateAtomIndex(idx).into());
+        }
+        self.atom_builders.insert(idx, builder);
+        Ok((idx, self.atom_builders.get_mut(&idx).unwrap()))
+    }
+
+    pub fn add_atoms<A: Into<AtomBuilder>>(
+        &mut self,
+        atoms: impl IntoIterator<Item = (usize, A)>,
+    ) -> Result<impl Iterator<Item = usize>> {
+        // Collect input into a temporary Vec and validate
+        let staged_atoms: Vec<(usize, AtomBuilder)> = atoms
+            .into_iter()
+            .map(|(idx, atom)| (idx, atom.into()))
+            .collect();
+        let mut seen_indices = HashSet::with_capacity(staged_atoms.len());
+        for (idx, _) in &staged_atoms {
+            if !seen_indices.insert(*idx) {
+                return Err(DataError::DuplicateAtomIndex(*idx).into());
+            }
+            if self.atom_builders.contains_key(idx) {
+                return Err(DataError::DuplicateAtomIndex(*idx).into());
+            }
+        }
+
+        // Commit changes
+        let mut indices = Vec::with_capacity(staged_atoms.len());
+        for (idx, builder) in staged_atoms {
+            self.atom_builders.insert(idx, builder);
             indices.push(idx);
         }
-        Ok(indices)
+
+        Ok(indices.into_iter())
     }
 
-    pub fn add_bond(
+    pub fn add_bond<B: Into<BondBuilder>>(
         &mut self,
         idx1: usize,
         idx2: usize,
-        bond: Into<Bond>,
-    ) -> Result<usize> {
+        bond: B,
+    ) -> Result<(usize, usize, &mut BondBuilder)> {
         if idx1 == idx2 {
             return Err(DataError::LoopBond(idx1).into());
         }
-        if idx1 >= self.atom_builders.len() || idx2 >= self.atom_builders.len() {
+        if !self.atom_builders.contains_key(&idx1) {
             return Err(DataError::MissingAtomIndex(idx1).into());
         }
-        let builder = BondBuilder::from(bond);
-        let idx = self.bond_builders.len();
-        self.bond_builders.push((idx, idx1, idx2, builder));
-        Ok(idx)
-    }
-
-    pub fn add_bonds(&mut self, bonds: impl IntoIterator<Item = (usize, usize, Bond)>) -> Result<Vec<usize>> {
-        let builders = bonds.into_iter().map(|(idx1, idx2, bond)| (idx1, idx2, BondBuilder::from(bond)));
-        let bond_count = self.bond_builders.len();
-        let mut indices = Vec::with_capacity(bond_count);
-        for (idx, (idx1, idx2, builder)) in (bond_count..).zip(builders) {
-            if idx1 >= self.atom_builders.len() || idx2 >= self.atom_builders.len() {
-                return Err(DataError::MissingAtomIndex(idx1).into());
-            }   
-            self.bond_builders.push((idx, idx1, idx2, builder));
-            indices.push(idx);
+        if !self.atom_builders.contains_key(&idx2) {
+            return Err(DataError::MissingAtomIndex(idx2).into());
         }
-        Ok(indices)
+        let builder = bond.into();
+        if self.bond_builders.contains_key(&(idx1, idx2)) {
+            return Err(DataError::DuplicateBondIndex(idx1, idx2).into());
+        }
+        self.bond_builders.insert((idx1, idx2), builder);
+        Ok((
+            idx1,
+            idx2,
+            self.bond_builders.get_mut(&(idx1, idx2)).unwrap(),
+        ))
     }
 
-    // TODO: Review naming
-    fn atom_builder_mut(&mut self, idx: usize) -> Result<&mut ValenceAtomBuilder> {
-        self.atom_builders.get_mut(&idx)
-            .ok_or(DataError::MissingAtomIndex(idx).into())
-    }
+    pub fn add_bonds<B: Into<BondBuilder>>(
+        &mut self,
+        bonds: impl IntoIterator<Item = (usize, usize, B)>,
+    ) -> Result<impl Iterator<Item = (usize, usize)>> {
+        // Helper for canonical keys
+        let canonical_bond_key = |idx1: usize, idx2: usize| (idx1.min(idx2), idx1.max(idx2));
 
-    // TODO: Review naming
-    fn bond_builder_mut(&mut self, idx: usize) -> Result<&mut ValenceBondBuilder> {
-        self.bond_builders.get_mut(&idx)
-            .ok_or(DataError::MissingBondIndex(idx).into())
-    }
+        // Collect input into a temporary Vec and validate
+        let staged_bonds: Vec<(usize, usize, BondBuilder)> = bonds
+            .into_iter()
+            .map(|(idx1, idx2, bond)| (idx1, idx2, bond.into()))
+            .collect();
+        let mut seen_keys = HashSet::with_capacity(staged_bonds.len());
+        for (idx1, idx2, _builder) in &staged_bonds {
+            if idx1 == idx2 {
+                return Err(DataError::LoopBond(*idx1).into());
+            }
+            if !self.atom_builders.contains_key(idx1) {
+                return Err(DataError::MissingAtomIndex(*idx1).into());
+            }
+            if !self.atom_builders.contains_key(idx2) {
+                return Err(DataError::MissingAtomIndex(*idx2).into());
+            }
 
-    pub fn set_atom_element(&mut self, idx: usize, element: Element) -> Result<&mut ValenceAtomBuilder> {
-        let builder = self.atom_builder_mut(idx)?;
-        builder.set_element(element);
-        Ok(builder)
-    }
+            let key = canonical_bond_key(*idx1, *idx2);
+            if !seen_keys.insert(key) {
+                return Err(DataError::DuplicateBondIndex(*idx1, *idx2).into());
+            }
+            if self.bond_builders.contains_key(&key) {
+                return Err(DataError::DuplicateBondIndex(*idx1, *idx2).into());
+            }
+        }
 
-    pub fn set_atom_charge(&mut self, idx: usize, charge: i8) -> Result<&mut ValenceAtomBuilder> {
-        let builder = self.atom_builder_mut(idx)?;
-        builder.set_charge(charge);
-        Ok(builder)
-    }
+        // Commit changes
+        let mut indices = Vec::with_capacity(staged_bonds.len());
+        for (idx1, idx2, builder) in staged_bonds {
+            let key = canonical_bond_key(idx1, idx2);
+            self.bond_builders.insert(key, builder);
+            indices.push((idx1, idx2));
+        }
 
-    pub fn set_atom_lone_pairs(&mut self, idx: usize, lp: u8) -> Result<&mut ValenceAtomBuilder> {
-         let builder = self.atom_builder_mut(idx)?;
-         builder.set_lone_pairs(lp);
-         Ok(builder)
-    }
-
-    pub fn set_atom_unpaired_electrons(&mut self, idx: usize, unpaired: u8) -> Result<&mut ValenceAtomBuilder> {
-         let builder = self.atom_builder_mut(idx)?;
-         builder.set_unpaired_electrons(unpaired);
-         Ok(builder)
-    }
-
-    pub fn set_atom_multiplicity(&mut self, idx: usize, mult: u8) -> Result<&mut ValenceAtomBuilder> {
-         let builder = self.atom_builder_mut(idx)?;
-         builder.set_multiplicity(mult);
-         Ok(builder)
-    }
-
-    pub fn set_atom_implicit_hydrogens(&mut self, idx: usize, count: u8) -> Result<&mut ValenceAtomBuilder> {
-         let builder = self.atom_builder_mut(idx)?;
-         builder.set_implicit_hydrogens(count);
-         Ok(builder)
-    }
-
-    pub fn set_atom_bond_sum(&mut self, idx: usize, sum: u8) -> Result<&mut ValenceAtomBuilder> {
-         let builder = self.atom_builder_mut(idx)?;
-         builder.with_bond_sum(sum);
-         Ok(builder)
-    }
-
-    pub fn set_bond_order(&mut self, idx: usize, order: BondOrder) -> Result<&mut ValenceBondBuilder> {
-        let builder = self.bond_builder_mut(idx)?;
-        builder.with_order(order);
-        Ok(builder)
-    }
-
-    pub fn set_bond_donation(&mut self, idx: usize, donation: BondDonation) -> Result<&mut ValenceBondBuilder> {
-        let builder = self.bond_builder_mut(idx)?;
-        builder.with_donation(donation);
-        Ok(builder)
+        Ok(indices.into_iter())
     }
 
     pub fn build(self) -> Result<Molecule> {
         let mut atom_builders = self.atom_builders;
+        let bond_builders = self.bond_builders;
+        let mut built_bonds = HashMap::with_capacity(bond_builders.len());
 
-        // Update bond sums and lone pairs
-        for (idx, idx1, idx2, ref bond_builder) in &self.bond_builders {
-            let bond_order = bond_builder.order().ok_or_else(
-                || Error::Data(DataError::MissingBondProperty(*idx, "order".to_string())))?;
-            let bond_donation = bond_builder.donation().unwrap_or(BondDonation::Shared).value();
+        // Build bonds and update atom valences
+        for (key @ (idx1, idx2), bond_builder) in bond_builders {
+            let bond = bond_builder.build()?;
+            let valence = bond.order().value();
 
-            let builder1 = atom_builders.get_mut(idx1)
-                .ok_or_else(|| Error::Data(DataError::MissingAtomIndex(*idx1)))?;
-            builder1.update_bond_sum(|sum| sum + bond_order);
-            if bond_donation != 0 {
-                builder1.update_lone_pairs(|lp| lp + bond_donation * bond_order);
-            }
+            let atom1_builder = atom_builders
+                .get_mut(&idx1)
+                .expect("Atom builder missing for idx1 during build");
+            atom1_builder.update_valence(|v| v + valence);
 
-            let builder2 = atom_builders.get_mut(idx2)
-                .ok_or_else(|| Error::Data(DataError::MissingAtomIndex(*idx2)))?;
-            builder2.update_bond_sum(|sum| sum + bond_order);
-            if bond_donation != 0 {
-                builder2.update_lone_pairs(|lp| lp + bond_donation * bond_order);
-            }
+            let atom2_builder = atom_builders
+                .get_mut(&idx2)
+                .expect("Atom builder missing for idx2 during build");
+            atom2_builder.update_valence(|v| v + valence);
+            built_bonds.insert(key, bond);
         }
 
-        // Validate and finalize atoms
-        let mut atoms: Vec<(usize, Atom)> = Vec::with_capacity(atom_builders.len());
-        for (idx, builder) in atom_builders {
-            let element = builder.element().ok_or_else(
-                || Error::Data(DataError::MissingAtomProperty(idx, "element".to_string())))?;
-            let charge = builder.charge();
-            let lone_pairs = builder.lone_pairs();
-            let unpaired_electrons = builder.unpaired_electrons();
-            let multiplicity = builder.multiplicity();
-            let explicit_implicit_h = builder.explicit_implicit_h();
-            let bond_sum = builder.bond_sum();
-            
-            let candidate_states = infer_types(
-                element, 
-                charge, 
-                lone_pairs, 
-                unpaired_electrons, 
-                multiplicity
-            )?;
-
-            let mut valid_assignments = Vec::new();
-
-            for state in candidate_states {
-                let required_valence = state.valence();
-
-                if required_valence < bond_sum {
-                    continue;
-                }
-
-                let calculated_implicit_h = required_valence - bond_sum;
-                
-                if let Some(explicit_h) = explicit_implicit_h {
-                    if explicit_h != calculated_implicit_h {
-                        continue;
-                    }
-                }
-                
-                valid_assignments.push((state, calculated_implicit_h));
-            }
-
-            if valid_assignments.len() == 1 {
-                let (final_state, final_implicit_h) = valid_assignments[0];
-                
-                let final_atom = Atom {
-                    element: final_state.element(),
-                    charge: final_state.charge(),
-                    lone_pairs: final_state.lone_pairs(),
-                    unpaired_electrons: final_state.unpaired_electrons(),
-                    multiplicity: final_state.multiplicity(),
-                    implicit_hydrogens: final_implicit_h,
-                    bond_sum: bond_sum,
-                };
-                final_atoms.push((orig_idx, final_atom));
-            } else {
-                return Err(Error::Data(DataError::InvalidValenceAtom(
-                    format!("Invalid valence atom {}: {:?}", orig_idx, valid_assignments)
-                ).into());
-            }
+        // Build atoms
+        let mut built_atoms = IndexMap::with_capacity(atom_builders.len());
+        for (idx, atom_builder) in atom_builders {
+            let atom = atom_builder.build()?;
+            built_atoms.insert(idx, atom);
         }
 
-        // --- Step 6: Finalize Bonds & Construct Graph --- 
-        let mut final_bonds: Vec<(usize, usize, usize, Bond)> = Vec::with_capacity(self.bond_builders.len());
-        for (orig_bond_idx, orig_idx1, orig_idx2, bond_builder) in self.bond_builders {
-            let final_bond = bond_builder.build()?;
-            final_bonds.push((orig_bond_idx, orig_idx1, orig_idx2, final_bond));
+        // Initialize graph and add atoms
+        let mut graph = StableGraph::with_capacity(built_atoms.len(), built_bonds.len());
+        let mut atom_indices = HashMap::with_capacity(built_atoms.len());
+        for (idx, atom) in built_atoms {
+            let node_index = graph.add_node(atom);
+            atom_indices.insert(idx, node_index);
         }
-        
-        todo!()
+
+        // Add bonds to graph
+        for ((idx1, idx2), bond) in built_bonds {
+            let node1 = *atom_indices
+                .get(&idx1)
+                .expect("Node index map missing mapping for idx1 in step 5");
+            let node2 = *atom_indices
+                .get(&idx2)
+                .expect("Node index map missing mapping for idx2 in step 5");
+            graph.add_edge(node1, node2, bond);
+        }
+
+        Ok(Molecule { data: graph })
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::BondOrder;
+    use crate::{AtomBuilder, BondBuilder};
+    use umol::Error;
+    use umol_data::Element;
 
+    #[test]
+    fn test_builder_new() {
+        let builder = MoleculeBuilder::new();
+        assert!(builder.atom_builders.is_empty());
+        assert!(builder.bond_builders.is_empty());
+    }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::{ValenceAtom, ValenceBond};
-//     use umol_data::{BondOrder, Element};
+    #[test]
+    fn test_builder_with_capacity() {
+        let builder = MoleculeBuilder::with_capacity(10, 20);
+        assert!(builder.atom_builders.is_empty());
+        assert!(builder.bond_builders.is_empty());
+    }
 
-//     #[test]
-//     fn test_valence_graph_from_atoms_bonds() {
-//         let atoms = vec![
-//             (1, ValenceAtom::new(Element::H)),
-//             (2, ValenceAtom::new(Element::H)),
-//         ];
-//         let bonds = vec![(1, 1, 2, ValenceBond::new(BondOrder::Single))];
-//         let graph = ValenceGraph::from_atoms_bonds(atoms, bonds);
-//         assert_eq!(graph.atom_count(), 2);
-//         assert_eq!(graph.bond_count(), 1);
-//     }
+    #[test]
+    fn test_builder_create_atom() {
+        let mut builder = MoleculeBuilder::new();
+        let (idx0, atom0_builder) = builder.create_atom(Element::C);
+        atom0_builder.set_charge(1);
+        assert_eq!(idx0, 0);
+        assert!(builder.atom_builders.contains_key(&0));
+        assert_eq!(builder.atom_builders.len(), 1);
+        assert_eq!(builder.atom_builders[&0].charge(), Some(1));
 
-//     #[test]
-//     #[should_panic]
-//     fn test_valence_graph_from_atoms_bonds_duplicate_atom_index() {
-//         let atoms = vec![
-//             (1, ValenceAtom::new(Element::H)),
-//             (1, ValenceAtom::new(Element::H)),
-//         ];
-//         let bonds = vec![(1, 1, 2, ValenceBond::new(BondOrder::Single))];
-//         ValenceGraph::from_atoms_bonds(atoms, bonds);
-//     }
+        let (idx1, _) = builder.create_atom(Element::O);
+        assert_eq!(idx1, 1);
+        assert_eq!(builder.atom_builders.len(), 2);
+        assert!(builder.atom_builders.contains_key(&1));
+    }
 
-//     #[test]
-//     #[should_panic]
-//     fn test_valence_graph_from_atoms_bonds_missing_atom_index() {
-//         let atoms = vec![
-//             (1, ValenceAtom::new(Element::H)),
-//             (2, ValenceAtom::new(Element::H)),
-//         ];
-//         let bonds = vec![(1, 1, 3, ValenceBond::new(BondOrder::Single))];
-//         ValenceGraph::from_atoms_bonds(atoms, bonds);
-//     }
+    #[test]
+    fn test_builder_create_atoms() {
+        let mut builder = MoleculeBuilder::new();
+        let atoms_to_add = vec![AtomBuilder::new(Element::H), AtomBuilder::new(Element::H)];
+        let indices: Vec<_> = builder.create_atoms(atoms_to_add).collect();
 
-//     #[test]
-//     fn test_valence_graph_try_from_atoms_bonds() {
-//         let atoms = vec![
-//             (7, ValenceAtom::new(Element::H)),
-//             (12, ValenceAtom::new(Element::O)),
-//             (1, ValenceAtom::new(Element::H)),
-//         ];
-//         let bonds = vec![
-//             (2, 7, 12, ValenceBond::new(BondOrder::Single)),
-//             (0, 1, 7, ValenceBond::new(BondOrder::Single)),
-//         ];
-//         let graph = ValenceGraph::try_from_atoms_bonds(atoms, bonds);
-//         assert!(graph.is_ok());
-//         let graph = graph.unwrap();
-//         assert_eq!(graph.atom_count(), 3);
-//         assert_eq!(graph.bond_count(), 2);
-//     }
+        assert_eq!(indices, vec![0, 1]);
+        assert_eq!(builder.atom_builders.len(), 2);
+        assert!(builder.atom_builders.contains_key(&0));
+        assert_eq!(builder.atom_builders[&0].element(), Element::H);
+        assert!(builder.atom_builders.contains_key(&1));
+        assert_eq!(builder.atom_builders[&1].element(), Element::H);
 
-//     #[test]
-//     fn test_valence_graph_try_from_atoms_bonds_duplicate_atom_index() {
-//         let atoms = vec![
-//             (1, ValenceAtom::new(Element::H)),
-//             (1, ValenceAtom::new(Element::H)),
-//         ];
-//         let bonds = vec![(1, 1, 2, ValenceBond::new(BondOrder::Single))];
-//         let graph = ValenceGraph::try_from_atoms_bonds(atoms, bonds);
-//         assert!(graph.is_err());
-//         assert!(matches!(
-//             graph,
-//             Err(Error::Data(DataError::DuplicateAtomIndex(1)))
-//         ));
-//     }
-//     #[test]
-//     fn test_valence_graph_try_from_atoms_bonds_missing_atom_index() {
-//         let atoms = vec![
-//             (1, ValenceAtom::new(Element::H)),
-//             (2, ValenceAtom::new(Element::H)),
-//         ];
-//         let bonds = vec![(1, 1, 3, ValenceBond::new(BondOrder::Single))];
-//         let graph = ValenceGraph::try_from_atoms_bonds(atoms, bonds);
-//         assert!(graph.is_err());
-//         assert!(matches!(
-//             graph,
-//             Err(Error::Data(DataError::MissingAtomIndex(3)))
-//         ));
-//     }
+        // Add more atoms to existing builder
+        let more_atoms = vec![AtomBuilder::new(Element::O)];
+        let indices2: Vec<_> = builder.create_atoms(more_atoms).collect();
+        assert_eq!(indices2, vec![2]);
+        assert_eq!(builder.atom_builders.len(), 3);
+        assert!(builder.atom_builders.contains_key(&2));
+        assert_eq!(builder.atom_builders[&2].element(), Element::O);
+    }
 
-//     #[test]
-//     fn test_valence_graph_atoms() {
-//         let atoms = vec![
-//             (1, ValenceAtom::new(Element::H)),
-//             (2, ValenceAtom::new(Element::H)),
-//         ];
-//         let bonds = vec![(1, 1, 2, ValenceBond::new(BondOrder::Single))];
-//         let graph = ValenceGraph::from_atoms_bonds(atoms, bonds);
-//         assert_eq!(graph.atom_count(), 2);
-//         assert_eq!(graph.atom(AtomIndex::new(0)).unwrap().element(), Element::H);
-//         assert_eq!(graph.atom(AtomIndex::new(1)).unwrap().element(), Element::H);
-//     }
-// }
+    #[test]
+    fn test_builder_add_atom() {
+        let mut builder = MoleculeBuilder::new();
+        let (idx5, atom5_builder) = builder.add_atom(5, Element::N).unwrap();
+        atom5_builder.set_lone_pairs(1);
+        assert_eq!(idx5, 5);
+        assert_eq!(builder.atom_builders.len(), 1);
+        assert!(builder.atom_builders.contains_key(&5));
+        assert_eq!(builder.atom_builders[&5].lone_pairs(), Some(1));
+
+        let result = builder.add_atom(5, Element::C);
+        assert!(result.is_err());
+        match result {
+            Err(Error::Data(DataError::DuplicateAtomIndex(idx))) => assert_eq!(idx, 5),
+            _ => panic!("Expected DuplicateAtomIndex error"),
+        }
+    }
+
+    #[test]
+    fn test_builder_add_atoms() {
+        let mut builder = MoleculeBuilder::new();
+        builder.create_atom(Element::C); // index 0
+
+        let atoms_to_add = vec![
+            (2, AtomBuilder::new(Element::O)),
+            (1, AtomBuilder::new(Element::N)),
+        ];
+        let result = builder.add_atoms(atoms_to_add);
+        assert!(result.is_ok());
+        let indices: Vec<_> = result.unwrap().collect();
+        assert_eq!(indices.len(), 2);
+        assert!(indices.contains(&1));
+        assert!(indices.contains(&2));
+
+        assert_eq!(builder.atom_builders.len(), 3);
+        assert!(builder.atom_builders.contains_key(&1));
+        assert_eq!(builder.atom_builders[&1].element(), Element::N);
+        assert!(builder.atom_builders.contains_key(&2));
+        assert_eq!(builder.atom_builders[&2].element(), Element::O);
+
+        // Test duplicate index within input
+        let current_atom_count = builder.atom_builders.len(); // Should be 3
+        let duplicate_indices = vec![
+            (3, AtomBuilder::new(Element::H)),
+            (3, AtomBuilder::new(Element::H)),
+        ];
+        let result_dup = builder.add_atoms(duplicate_indices);
+        assert!(result_dup.is_err());
+        match result_dup {
+            Err(Error::Data(DataError::DuplicateAtomIndex(idx))) => assert_eq!(idx, 3),
+            _ => panic!("Expected DuplicateAtomIndex error"),
+        }
+        // Atomicity check: length should be unchanged after failed batch add
+        assert_eq!(builder.atom_builders.len(), current_atom_count);
+
+        // Test duplicate index conflicting with existing
+        let current_atom_count_before_conflict = builder.atom_builders.len(); // Should still be 3
+        let conflict_indices = vec![
+            (4, AtomBuilder::new(Element::F)),
+            (0, AtomBuilder::new(Element::P)), // Conflicts with existing index 0
+        ];
+        let result_conf = builder.add_atoms(conflict_indices);
+        assert!(result_conf.is_err());
+        match result_conf {
+            Err(Error::Data(DataError::DuplicateAtomIndex(idx))) => assert_eq!(idx, 0),
+            _ => panic!("Expected DuplicateAtomIndex error for existing index"),
+        }
+        // Atomicity check: length should be unchanged after failed batch add
+        assert_eq!(
+            builder.atom_builders.len(),
+            current_atom_count_before_conflict
+        );
+    }
+
+    #[test]
+    fn test_builder_add_bond() {
+        let mut builder = MoleculeBuilder::new();
+        builder.create_atom(Element::C); // 0
+        builder.create_atom(Element::O); // 1
+        builder.create_atom(Element::N); // 2
+
+        let (idx1, idx2, bond_builder) = builder.add_bond(0, 1, BondOrder::Single).unwrap();
+        bond_builder.set_order(BondOrder::Double);
+        assert_eq!((idx1, idx2), (0, 1));
+        assert_eq!(builder.bond_builders.len(), 1);
+        assert!(builder.bond_builders.contains_key(&(0, 1)));
+        assert_eq!(builder.bond_builders[&(0, 1)].order(), BondOrder::Double);
+
+        // Test loop bond
+        let res_loop = builder.add_bond(2, 2, BondOrder::Single);
+        assert!(matches!(res_loop, Err(Error::Data(DataError::LoopBond(2)))));
+
+        // Test missing atom 1
+        let res_missing1 = builder.add_bond(99, 1, BondOrder::Single);
+        assert!(matches!(
+            res_missing1,
+            Err(Error::Data(DataError::MissingAtomIndex(99)))
+        ));
+
+        // Test missing atom 2
+        let res_missing2 = builder.add_bond(0, 98, BondOrder::Single);
+        assert!(matches!(
+            res_missing2,
+            Err(Error::Data(DataError::MissingAtomIndex(98)))
+        ));
+
+        // Test duplicate bond
+        let res_dup = builder.add_bond(0, 1, BondOrder::Triple);
+        assert!(matches!(
+            res_dup,
+            Err(Error::Data(DataError::DuplicateBondIndex(0, 1)))
+        ));
+    }
+
+    #[test]
+    fn test_builder_add_bonds() {
+        let mut builder = MoleculeBuilder::new();
+        builder.create_atom(Element::C); // 0
+        builder.create_atom(Element::O); // 1
+        builder.create_atom(Element::N); // 2
+        builder.create_atom(Element::H); // 3
+
+        let bonds_to_add = vec![
+            (0, 1, BondBuilder::new(BondOrder::Single)),
+            (1, 2, BondBuilder::new(BondOrder::Double)),
+        ];
+        let result = builder.add_bonds(bonds_to_add);
+        assert!(result.is_ok());
+        let indices: Vec<_> = result.unwrap().collect();
+        assert_eq!(indices.len(), 2);
+        assert!(indices.contains(&(0, 1)));
+        assert!(indices.contains(&(1, 2)));
+
+        assert_eq!(builder.bond_builders.len(), 2);
+        assert!(builder.bond_builders.contains_key(&(0, 1)));
+        assert!(builder.bond_builders.contains_key(&(1, 2)));
+        assert_eq!(builder.bond_builders[&(0, 1)].order(), BondOrder::Single);
+        assert_eq!(builder.bond_builders[&(1, 2)].order(), BondOrder::Double);
+
+        // Test duplicate within input
+        let current_bond_count = builder.bond_builders.len(); // Should be 2
+        let bonds_dup = vec![
+            (2, 3, BondBuilder::new(BondOrder::Single)),
+            (2, 3, BondBuilder::new(BondOrder::Triple)), // Duplicate key (canonical)
+        ];
+        let res_dup = builder.add_bonds(bonds_dup);
+        assert!(matches!(
+            res_dup,
+            Err(Error::Data(DataError::DuplicateBondIndex(2, 3)))
+        ));
+        // Atomicity check: length should be unchanged after failed batch add
+        assert_eq!(builder.bond_builders.len(), current_bond_count);
+
+        // Test conflict with existing
+        let current_bond_count_before_conflict = builder.bond_builders.len(); // Should still be 2
+        let bonds_conf = vec![
+            (3, 0, BondBuilder::new(BondOrder::Single)),
+            (0, 1, BondBuilder::new(BondOrder::Single)), // Conflicts with existing (0,1)
+        ];
+        let res_conf = builder.add_bonds(bonds_conf);
+        assert!(matches!(
+            res_conf,
+            Err(Error::Data(DataError::DuplicateBondIndex(0, 1)))
+        ));
+        // Atomicity check: length should be unchanged after failed batch add
+        assert_eq!(
+            builder.bond_builders.len(),
+            current_bond_count_before_conflict
+        );
+
+        // Test missing atom
+        let bonds_missing = vec![(0, 99, BondBuilder::new(BondOrder::Single))];
+        let res_missing = builder.add_bonds(bonds_missing);
+        assert!(matches!(
+            res_missing,
+            Err(Error::Data(DataError::MissingAtomIndex(99)))
+        ));
+
+        // Test loop bond
+        let bonds_loop = vec![(3, 3, BondBuilder::new(BondOrder::Single))];
+        let res_loop = builder.add_bonds(bonds_loop);
+        assert!(matches!(res_loop, Err(Error::Data(DataError::LoopBond(3)))));
+
+        // Test Canonical Key Handling
+        let current_bond_count_before_canonical_test = builder.bond_builders.len(); // Should be 2
+
+        // Test conflict with existing bond (0,1) but adding (1,0)
+        let bond_conf_reversed = vec![
+            (1, 0, BondBuilder::new(BondOrder::Single)), // Conflicts with existing (0,1) via canonical key
+        ];
+        let res_conf_rev = builder.add_bonds(bond_conf_reversed);
+        assert!(matches!(
+            res_conf_rev,
+            Err(Error::Data(DataError::DuplicateBondIndex(1, 0)))
+                | Err(Error::Data(DataError::DuplicateBondIndex(0, 1)))
+        ));
+        assert_eq!(
+            builder.bond_builders.len(),
+            current_bond_count_before_canonical_test
+        );
+
+        // Test duplicate within batch using reversed indices
+        builder.create_atom(Element::F); // Atom 4
+        builder.create_atom(Element::Cl); // Atom 5
+        let bonds_dup_reversed = vec![
+            (4, 5, BondBuilder::new(BondOrder::Single)),
+            (5, 4, BondBuilder::new(BondOrder::Double)), // Duplicate via canonical key
+        ];
+        let res_dup_rev = builder.add_bonds(bonds_dup_reversed);
+        assert!(matches!(
+            res_dup_rev,
+            Err(Error::Data(DataError::DuplicateBondIndex(5, 4)))
+                | Err(Error::Data(DataError::DuplicateBondIndex(4, 5)))
+        ));
+        assert_eq!(
+            builder.bond_builders.len(),
+            current_bond_count_before_canonical_test
+        ); // Should still be 2, as (4,5)/(5,4) batch failed
+    }
+}
