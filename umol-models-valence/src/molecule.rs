@@ -610,9 +610,59 @@ mod tests {
             Err(Error::Data(DataError::DuplicateBondIndex(5, 4)))
                 | Err(Error::Data(DataError::DuplicateBondIndex(4, 5)))
         ));
-        assert_eq!(
-            builder.bond_builders.len(),
-            current_bond_count_before_canonical_test
-        ); // Should still be 2, as (4,5)/(5,4) batch failed
+        assert_eq!(builder.bond_builders.len(), current_bond_count_before_canonical_test); // Should still be 2, as (4,5)/(5,4) batch failed
+    }
+
+    #[test]
+    fn test_builder_build_success() {
+        let mut builder = MoleculeBuilder::new();
+        let h1 = builder.create_atom(Element::H).0;
+        let o = builder.create_atom(Element::O).0;
+        let h2 = builder.create_atom(Element::H).0;
+
+        builder.add_bond(h1, o, BondOrder::Single).unwrap();
+        builder.add_bond(o, h2, BondOrder::Single).unwrap();
+
+        let result = builder.build();
+        assert!(result.is_ok());
+
+        let molecule = result.unwrap();
+        assert_eq!(molecule.atom_count(), 3);
+        assert_eq!(molecule.bond_count(), 2);
+
+        let oxygen = molecule.atoms().find(|a| a.element() == Element::O).unwrap();
+        assert_eq!(oxygen.implicit_hydrogens(), 0);
+        assert_eq!(oxygen.valence(), 2); 
+    }
+
+    #[test]
+    fn test_builder_build_fail_atom_valence() {
+        let mut builder = MoleculeBuilder::new();
+        let c = builder.create_atom(Element::C).0;
+        let h1 = builder.create_atom(Element::H).0;
+        let h2 = builder.create_atom(Element::H).0;
+        let h3 = builder.create_atom(Element::H).0;
+        let h4 = builder.create_atom(Element::H).0;
+        let h5 = builder.create_atom(Element::H).0; // The problematic 5th hydrogen
+
+        builder.add_bond(c, h1, BondOrder::Single).unwrap();
+        builder.add_bond(c, h2, BondOrder::Single).unwrap();
+        builder.add_bond(c, h3, BondOrder::Single).unwrap();
+        builder.add_bond(c, h4, BondOrder::Single).unwrap();
+        builder.add_bond(c, h5, BondOrder::Single).unwrap(); // 5th bond
+
+        let result = builder.build();
+        assert!(result.is_err());
+
+        // Check for an appropriate error, likely stemming from AtomBuilder::build validation
+        match result {
+            Err(Error::Data(DataError::NoAtomSpec(msg))) => {
+                // Check if the error message relates to the Carbon atom
+                assert!(msg.contains("element: C"));
+                assert!(msg.contains("valence: Some(5)")); // AtomBuilder accumulated valence 5
+            }
+            Err(e) => panic!("Expected NoAtomSpec error due to invalid valence, got {:?}", e),
+            Ok(_) => panic!("Build succeeded unexpectedly for invalid molecule"),
+        }
     }
 }

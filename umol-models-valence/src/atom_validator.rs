@@ -20,7 +20,7 @@ impl AtomValidator {
         Self { validators }
     }
 
-    pub fn default() -> Self {
+    pub fn strict() -> Self {
         Self::new(vec![Box::new(|builder| {
             let element = builder.element();
             let (min_charge, max_charge) = element.charge_bounds();
@@ -73,6 +73,14 @@ impl AtomValidator {
         })])
     }
 
+    pub fn default() -> Self {
+        Self::strict()
+    }
+
+    pub fn lenient() -> Self {
+        Self::always()
+    }
+
     pub fn always() -> Self {
         Self::new(vec![Box::new(|_| Ok(()))])
     }
@@ -100,6 +108,8 @@ impl Default for AtomValidator {
 }
 
 pub static DEFAULT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::default);
+pub static STRICT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::strict);
+pub static LENIENT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::lenient);
 pub static ALWAYS_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::always);
 
 #[cfg(test)]

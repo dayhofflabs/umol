@@ -15,8 +15,8 @@ impl AtomMatcher {
         Self { matcher }
     }
 
-    /// Default matcher that uses the `AtomSpecRegistry` to match atom builders.
-    pub fn default() -> Self {
+    /// Strict matcher that uses the `AtomSpecRegistry` to match atom builders.
+    pub fn strict() -> Self {
         Self::new(Box::new(|builder| {
             let element = builder.element();
 
@@ -61,6 +61,16 @@ impl AtomMatcher {
         }))
     }
 
+    /// Atom matching defaults to strict matching.
+    pub fn default() -> Self {
+        Self::strict()
+    }
+
+    /// Lenient matcher that matches all atom builders.
+    pub fn lenient() -> Self {
+        Self::always()
+    }
+
     /// Trivial matcher that matches all atom builders.
     pub fn always() -> Self {
         Self::new(Box::new(|builder| {
@@ -98,6 +108,8 @@ impl Default for AtomMatcher {
 }
 
 pub static DEFAULT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::default);
+pub static STRICT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::strict);
+pub static LENIENT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::lenient);
 pub static ALWAYS_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::always);
 
 #[cfg(test)]
@@ -113,23 +125,6 @@ mod tests {
         atom_builder.set_charge(0);
         let atom_types = matcher.find(&atom_builder);
         assert_eq!(atom_types.unwrap().len(), 6);
-    }
-
-    #[test]
-    fn test_atom_matcher_custom() {
-        let matcher = AtomMatcher::default().with_matcher(|_| Ok(vec![a!("[C]")]));
-        let mut atom_builder = AtomBuilder::new(Element::C);
-        atom_builder.set_charge(0);
-        let atom_types = matcher.find(&atom_builder).unwrap();
-        assert_eq!(atom_types.len(), 1);
-        assert_eq!(atom_types[0].to_string(), "[C]");
-    }
-
-    #[test]
-    fn test_default_atom_matcher() {
-        let atom_builder = AtomBuilder::new(Element::C);
-        let atom_types = DEFAULT_ATOM_MATCHER.find(&atom_builder).unwrap();
-        assert_eq!(atom_types.len(), 8);
     }
 
     #[test]
@@ -208,6 +203,37 @@ mod tests {
         let builder = AtomBuilder::new(e!(Og));
         let matches = matcher.find(&builder).unwrap();
         assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn test_atom_matcher_custom() {
+        let matcher = AtomMatcher::default().with_matcher(|_| Ok(vec![a!("[C]")]));
+        let mut atom_builder = AtomBuilder::new(Element::C);
+        atom_builder.set_charge(0);
+        let atom_types = matcher.find(&atom_builder).unwrap();
+        assert_eq!(atom_types.len(), 1);
+        assert_eq!(atom_types[0].to_string(), "[C]");
+    }
+
+    #[test]
+    fn test_default_atom_matcher() {
+        let atom_builder = AtomBuilder::new(Element::C);
+        let atom_types = DEFAULT_ATOM_MATCHER.find(&atom_builder).unwrap();
+        assert_eq!(atom_types.len(), 8);
+    }
+
+    #[test]
+    fn test_strict_atom_matcher() {
+        let atom_builder = AtomBuilder::new(Element::C);
+        let atom_types = STRICT_ATOM_MATCHER.find(&atom_builder).unwrap();
+        assert_eq!(atom_types.len(), 8);
+    }
+
+    #[test]
+    fn test_lenient_atom_matcher() {
+        let atom_builder = AtomBuilder::new(Element::C);
+        let atom_types = LENIENT_ATOM_MATCHER.find(&atom_builder).unwrap();
+        assert_eq!(atom_types.len(), 1);
     }
 
     #[test]

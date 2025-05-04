@@ -13,7 +13,7 @@ impl BondMatcher {
         Self { matcher }
     }
 
-    pub fn default() -> Self {
+    pub fn strict() -> Self {
         Self::new(Box::new(|builder| {
             let order = builder.order();
             let candidates = BondSpecRegistry::by_order(order);
@@ -25,6 +25,14 @@ impl BondMatcher {
 
             Ok(matches)
         }))
+    }
+
+    pub fn default() -> Self {
+        Self::always()
+    }
+
+    pub fn lenient() -> Self {
+        Self::always()
     }
 
     pub fn always() -> Self {
@@ -56,6 +64,8 @@ impl Default for BondMatcher {
 }
 
 pub static DEFAULT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::default);
+pub static STRICT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::strict);
+pub static LENIENT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::lenient);
 pub static ALWAYS_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::always);
 
 #[cfg(test)]
@@ -68,15 +78,15 @@ mod tests {
         let matcher = BondMatcher::default();
         let bond_builder = BondBuilder::new(BondOrder::Single);
         let matches = matcher.find(&bond_builder).unwrap();
-        assert_eq!(matches.len(), 3);
+        assert_eq!(matches.len(), 1);
     }
 
     #[test]
     fn test_bond_matcher_custom() {
-        let matcher = BondMatcher::default().with_matcher(|_| Ok(vec![b!("-")]));
+        let matcher = BondMatcher::default().with_matcher(|_| Ok(vec![b!("-"), b!("->"), b!("-<")]));
         let bond_builder = BondBuilder::new(BondOrder::Single);
         let matches = matcher.find(&bond_builder).unwrap();
-        assert_eq!(matches.len(), 1);
+        assert_eq!(matches.len(), 3);
     }
 
     #[test]
@@ -84,7 +94,23 @@ mod tests {
         let matcher = BondMatcher::default();
         let bond_builder = BondBuilder::new(BondOrder::Single);
         let matches = matcher.find(&bond_builder).unwrap();
+        assert_eq!(matches.len(), 1);
+    }
+
+    #[test]
+    fn test_strict_bond_matcher() {
+        let matcher = BondMatcher::strict();
+        let bond_builder = BondBuilder::new(BondOrder::Single);
+        let matches = matcher.find(&bond_builder).unwrap();
         assert_eq!(matches.len(), 3);
+    }
+
+    #[test]
+    fn test_lenient_bond_matcher() {
+        let matcher = BondMatcher::lenient();
+        let bond_builder = BondBuilder::new(BondOrder::Single);
+        let matches = matcher.find(&bond_builder).unwrap();
+        assert_eq!(matches.len(), 1);
     }
 
     #[test]
@@ -99,7 +125,7 @@ mod tests {
     fn test_default_bond_matcher_lazy_static() {
         let bond_builder = BondBuilder::new(BondOrder::Single);
         let matches = DEFAULT_BOND_MATCHER.find(&bond_builder).unwrap();
-        assert_eq!(matches.len(), 3);
+        assert_eq!(matches.len(), 1);
     }
 
     #[test]
