@@ -1,4 +1,4 @@
-//! Logging utilities for the umol project
+//! Logging utilities for the umol project.
 
 use slog::{o, Drain, Logger};
 

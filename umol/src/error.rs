@@ -230,6 +230,9 @@ pub enum DataError {
 
     #[error("Missing property {0} for bond {1}")]
     MissingBondProperty(String, usize),
+
+    #[error("Invalid conformer definition: {0}")]
+    InvalidConformerDefinition(String),
 }
 
 /// Errors related to format operations
@@ -238,11 +241,17 @@ pub enum FormatError {
     #[error("Format not found: {0}")]
     NotFound(String),
 
-    #[error("Invalid format: {0}")]
-    Invalid(String),
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Unkown format: {0}")]
+    Unknown(String),
 
     #[error("Format operation failed: {0}")]
     Failed(String),
+
+    #[error("Invalid MOL format: {0}")]
+    InvalidMolFormat(String),
 }
 
 /// umol result type

@@ -1,4 +1,4 @@
-//! Chemical models
+//! Chemical models.
 //!
 //! This module defines the fundamental abstractions for molecular models:
 //! - Model trait for representing molecular systems

@@ -5,5 +5,6 @@ members = [
     "umol-macros",
     "umol-models",
     "umol-models-valence",
+    "umol-models-graph",
 ]
 resolver = "2"

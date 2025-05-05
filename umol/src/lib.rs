@@ -1,4 +1,5 @@
-// umol - warning: may have substance
+//! umol - Warning: May have substance!
+
 mod algebra;
 mod capability;
 mod conversion;

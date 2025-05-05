@@ -1,4 +1,4 @@
-//! Stuff type
+//! Stuff type.
 //!
 //! Stuff combines entities with their model representations.
 
