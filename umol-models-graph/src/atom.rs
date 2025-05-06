@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use umol_data::Element;
 
-/// Represents tetrahedral chirality specified in MOL files.
+/// Tetrahedral chirality specified in MOL files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AtomStereoParity {
     /// Corresponds to MOL code 1, RDKit `CHI_TETRAHEDRAL_CW` (Clockwise / R).
@@ -14,7 +14,7 @@ pub enum AtomStereoParity {
     Either,
 }
 
-/// Represents an atom in a graph-based molecular model, mirroring key RDKit properties.
+/// Atom
 #[derive(Debug, Clone)]
 pub struct Atom {
     /// The chemical element.
@@ -39,7 +39,7 @@ pub struct Atom {
 }
 
 impl Atom {
-    /// Creates a new Atom with default properties for the given element.
+    /// Create new Atom with default properties for given element
     pub fn new(element: Element) -> Self {
         Self {
             element,

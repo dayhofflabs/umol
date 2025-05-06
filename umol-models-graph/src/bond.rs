@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-/// Represents bond order, mapping common MOL V2000 codes.
+/// Bond order, mapping common MOL V2000 codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BondType {
     Single,   // MOL code 1
@@ -16,7 +16,7 @@ pub enum BondType {
     Any, // MOL code 8
 }
 
-/// Represents double bond stereochemistry specified in MOL V2000 files.
+/// Double bond stereochemistry specified in MOL V2000 files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BondStereo {
     Cis,   // MOL code 1
@@ -24,14 +24,14 @@ pub enum BondStereo {
     Either, // MOL code 3
 }
 
-/// Represents single bond wedging specified in MOL V2000 files.
+/// Single bond wedging specified in MOL V2000 files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BondDir {
     Wedge, // MOL code 1 (Up / Begin Wedge)
     Dash,  // MOL code 6 (Down / Begin Dash)
 }
 
-/// Represents a bond in a graph-based molecular model, mirroring key RDKit properties.
+/// Bond
 #[derive(Debug, Clone)]
 pub struct Bond {
     /// The type/order of the bond.
@@ -45,7 +45,7 @@ pub struct Bond {
 }
 
 impl Bond {
-    /// Creates a new Bond with default properties for the given BondType.
+    /// Create new Bond with default properties for given BondType
     pub fn new(bond_type: BondType) -> Self {
         Self {
             bond_type,

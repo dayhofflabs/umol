@@ -4,13 +4,13 @@ use crate::atom::{Atom, AtomStereoParity};
 use crate::bond::{Bond, BondDir, BondStereo, BondType};
 use crate::conformer::{Conformer, Point3D};
 use crate::molecule::Molecule;
+use crate::sgroup::{SGroup, SGroupType};
 use fixed_width::{FieldSet, FixedWidth, LineBreak, Reader};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::result::Result as StdResult;
 use umol::error::{DataError, FormatError};
-
 use umol::{Error, Result};
 use umol_data::Element;
 
@@ -85,6 +85,7 @@ impl FixedWidth for AtomLine {
             FieldSet::new_field(0..10).name("x"),
             FieldSet::new_field(10..20).name("y"),
             FieldSet::new_field(20..30).name("z"),
+            // Position 30 is a space
             FieldSet::new_field(31..34).name("symbol"),
             FieldSet::new_field(34..36).name("mass_diff"),
             FieldSet::new_field(36..39).name("charge"),
@@ -92,10 +93,10 @@ impl FixedWidth for AtomLine {
             FieldSet::new_field(42..45).name("hydrogen_count"),
             FieldSet::new_field(45..48).name("stereo_care"),
             FieldSet::new_field(48..51).name("valence"),
-            // Skipping fields at positions 51-57 (HHH, rrr, iii)
-            FieldSet::new_field(57..60).name("atom_mapping"),
-            FieldSet::new_field(60..63).name("inversion"),
-            FieldSet::new_field(63..66).name("exact_change"),
+            // Skipping fields at positions 51-60 (HHH, rrr, iii)
+            FieldSet::new_field(60..63).name("atom_mapping"),
+            FieldSet::new_field(63..66).name("inversion"),
+            FieldSet::new_field(66..69).name("exact_change"),
         ])
     }
 }
@@ -189,6 +190,19 @@ fn parse_charge_code(code: i8) -> Result<i8> {
     }
 }
 
+fn parse_radical_code(code: i8) -> Result<Option<u8>> {
+    // Check 'ccc' field specifically for radical code 4
+    match code {
+        4 => Ok(Some(2)),                      // Code 4 is doublet radical
+        0 | 1 | 2 | 3 | 5 | 6 | 7 => Ok(None), // Other valid charge codes are not radicals by default
+        _ => Err(FormatError::InvalidMolFormat(format!(
+            "Invalid code '{}' passed to parse_radical_code",
+            code
+        ))
+        .into()),
+    }
+}
+
 fn parse_stereo_parity_code(code: i8) -> Result<Option<AtomStereoParity>> {
     // 'sss' field - 0 = not stereo, 1 = odd, 2 = even, 3 = either or unmarked
     match code {
@@ -204,6 +218,7 @@ fn parse_stereo_parity_code(code: i8) -> Result<Option<AtomStereoParity>> {
 
 fn parse_hydrogen_count_code(code: i8) -> Result<Option<u8>> {
     match code {
+        0 => Ok(None), // 0 in non-query atoms
         1 => Ok(Some(0)),
         2 => Ok(Some(1)),
         3 => Ok(Some(2)),
@@ -308,8 +323,14 @@ fn parse_m_pairs(parts: &[&str], entry_size: usize) -> Result<Vec<(usize, i64)>>
     Ok(pairs)
 }
 
-/// Type for M line parsers
-type MParserFn = fn(&mut Vec<Atom>, &[&str]) -> Result<()>;
+/// Type for M line parsers for atom properties
+type MAtomParserFn = fn(&mut Vec<Atom>, &[&str]) -> Result<()>;
+/// Type for M line SGroup property parsers
+type MSGroupParserFn = fn(
+    sgroups: &mut Vec<SGroup>, // Changed to Vec<SGroup>
+    parts: &[&str],
+    bonds_data: &[(usize, usize, Bond)],
+) -> Result<()>;
 
 /// Charge property parser
 fn parse_m_chg(atoms: &mut Vec<Atom>, parts: &[&str]) -> Result<()> {
@@ -424,6 +445,309 @@ fn parse_m_rad(atoms: &mut Vec<Atom>, parts: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// SGroup type parser
+fn parse_m_sty(
+    sgroups: &mut Vec<SGroup>,
+    parts: &[&str],
+    _bonds_data: &[(usize, usize, Bond)],
+) -> Result<()> {
+    if parts.len() < 4 {
+        return Err(Error::from(FormatError::InvalidMolFormat(
+            "M STY line too short".to_string(),
+        )));
+    }
+    let sg_id: usize = parts[2].parse().map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Invalid SGroup ID '{}' in M STY line",
+            parts[2]
+        )))
+    })?;
+
+    // Enforce sequential ID (1-based index must match vector length + 1)
+    let expected_id = sgroups.len() + 1;
+    if sg_id != expected_id {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "Out-of-sequence SGroup ID {} found in M STY line (expected {})",
+            sg_id, expected_id
+        ))));
+    }
+
+    let type_str = parts[3];
+    let group_type = match type_str {
+        "GEN" => SGroupType::Generic,
+        "MUL" => SGroupType::MultipleGroup,
+        "SRU" => SGroupType::SRU,
+        "SUP" => SGroupType::Superatom,
+        "DAT" => SGroupType::Data,
+        _ => SGroupType::Unknown(type_str.to_string()),
+    };
+
+    // Create and push the new SGroup
+    sgroups.push(SGroup {
+        id: sg_id,
+        group_type,
+        label: None,
+        subscript: None,
+        atom_indices: Vec::new(),
+        bond_endpoint_pairs: Vec::new(),
+    });
+
+    Ok(())
+}
+
+/// SGroup atom list parser
+fn parse_m_sal(
+    sgroups: &mut Vec<SGroup>,
+    parts: &[&str],
+    _bonds_data: &[(usize, usize, Bond)],
+) -> Result<()> {
+    if parts.len() < 4 {
+        return Err(Error::from(FormatError::InvalidMolFormat(
+            "M SAL line too short".to_string(),
+        )));
+    }
+    let sg_id: usize = parts[2].parse().map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Invalid SGroup ID '{}' in M SAL line",
+            parts[2]
+        )))
+    })?;
+
+    // Check bounds (using 0-based index for Vec access)
+    let vec_idx = sg_id.checked_sub(1).ok_or_else(|| {
+        Error::from(FormatError::InvalidMolFormat(
+            "SGroup ID cannot be zero in M SAL line".to_string(),
+        ))
+    })?;
+    if vec_idx >= sgroups.len() {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "M SAL encountered for undefined or out-of-sequence SGroup ID {}",
+            sg_id
+        ))));
+    }
+
+    let count: usize = parts[3].parse().map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Invalid atom count '{}' in M SAL line for SGroup {}",
+            parts[3], sg_id
+        )))
+    })?;
+
+    if parts.len() < 4 + count {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "Insufficient atom indices in M SAL line for SGroup {} (expected {}, found {})",
+            sg_id,
+            count,
+            parts.len() - 4
+        ))));
+    }
+
+    // Retrieve the mutable SGroup using 0-based index
+    let sgroup = &mut sgroups[vec_idx];
+
+    for i in 0..count {
+        let atom_idx_str = parts[4 + i];
+        let atom_idx: usize = atom_idx_str.parse().map_err(|_| {
+            Error::from(FormatError::InvalidMolFormat(format!(
+                "Invalid atom index '{}' in M SAL line for SGroup {}",
+                atom_idx_str, sg_id
+            )))
+        })?;
+        if atom_idx == 0 {
+            return Err(Error::from(FormatError::InvalidMolFormat(
+                "Atom index cannot be zero in M SAL line".to_string(),
+            )));
+        }
+        // TODO: Validate atom_idx against num_atoms
+        sgroup.atom_indices.push(atom_idx);
+    }
+
+    Ok(())
+}
+
+/// SGroup bond list parser
+fn parse_m_sbl(
+    sgroups: &mut Vec<SGroup>,
+    parts: &[&str],
+    bonds_data: &[(usize, usize, Bond)],
+) -> Result<()> {
+    if parts.len() < 4 {
+        return Err(Error::from(FormatError::InvalidMolFormat(
+            "M SBL line too short".to_string(),
+        )));
+    }
+    let sg_id: usize = parts[2].parse().map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Invalid SGroup ID '{}' in M SBL line",
+            parts[2]
+        )))
+    })?;
+
+    // Check bounds (using 0-based index for Vec access)
+    let vec_idx = sg_id.checked_sub(1).ok_or_else(|| {
+        Error::from(FormatError::InvalidMolFormat(
+            "SGroup ID cannot be zero in M SBL line".to_string(),
+        ))
+    })?;
+    if vec_idx >= sgroups.len() {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "M SBL encountered for undefined or out-of-sequence SGroup ID {}",
+            sg_id
+        ))));
+    }
+
+    let count: usize = parts[3].parse().map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Invalid bond count '{}' in M SBL line for SGroup {}",
+            parts[3], sg_id
+        )))
+    })?;
+
+    if parts.len() < 4 + count {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "Insufficient bond indices in M SBL line for SGroup {} (expected {}, found {})",
+            sg_id,
+            count,
+            parts.len() - 4
+        ))));
+    }
+
+    // Retrieve the mutable SGroup using 0-based index
+    let sgroup = &mut sgroups[vec_idx];
+
+    let num_bonds_parsed = bonds_data.len();
+    for i in 0..count {
+        let bond_idx_str = parts[4 + i];
+        let bond_idx: usize = bond_idx_str.parse().map_err(|_| {
+            Error::from(FormatError::InvalidMolFormat(format!(
+                "Invalid bond index '{}' in M SBL line for SGroup {}",
+                bond_idx_str, sg_id
+            )))
+        })?;
+
+        if bond_idx == 0 || bond_idx > num_bonds_parsed {
+            return Err(Error::from(FormatError::InvalidMolFormat(format!(
+                "Bond index {} out of range (1..={}) in M SBL line for SGroup {}",
+                bond_idx, num_bonds_parsed, sg_id
+            ))));
+        }
+
+        // Look up the bond using 1-based index
+        let (idx1, idx2, _) = bonds_data[bond_idx - 1];
+        sgroup.bond_endpoint_pairs.push((idx1, idx2));
+    }
+
+    Ok(())
+}
+
+/// SGroup label parser (M SLB)
+fn parse_m_slb(
+    sgroups: &mut Vec<SGroup>,
+    parts: &[&str],
+    _bonds_data: &[(usize, usize, Bond)],
+) -> Result<()> {
+    // M SLB format: M  SLB sss vvv (where vvv is the label)
+    // Expecting at least 4 parts: "M", "SLB", sss, vvv...
+    if parts.len() < 4 {
+        return Err(Error::from(FormatError::InvalidMolFormat(
+            "M SLB line too short".to_string(),
+        )));
+    }
+    let sg_id: usize = parts[2].parse().map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Invalid SGroup ID '{}' in M SLB line",
+            parts[2]
+        )))
+    })?;
+
+    // Check bounds (using 0-based index for Vec access)
+    let vec_idx = sg_id.checked_sub(1).ok_or_else(|| {
+        Error::from(FormatError::InvalidMolFormat(
+            "SGroup ID cannot be zero in M SLB line".to_string(),
+        ))
+    })?;
+    if vec_idx >= sgroups.len() {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "M SLB encountered for undefined or out-of-sequence SGroup ID {}",
+            sg_id
+        ))));
+    }
+
+    // Retrieve the mutable SGroup using 0-based index
+    let sgroup = &mut sgroups[vec_idx];
+
+    // The label is the rest of the line after the ID, joined back together.
+    // parts[3] should be the start of the label.
+    let label = parts[3..].join(" "); // Join parts with spaces
+    let trimmed_label = label.trim(); // Trim leading/trailing whitespace
+
+    if trimmed_label.is_empty() {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "Empty label found in M SLB line for SGroup {}",
+            sg_id
+        ))));
+    }
+
+    // Store the label
+    sgroup.label = Some(trimmed_label.to_string());
+
+    Ok(())
+}
+
+/// SGroup subscript parser (M SMT)
+fn parse_m_smt(
+    sgroups: &mut Vec<SGroup>,
+    parts: &[&str],
+    _bonds_data: &[(usize, usize, Bond)],
+) -> Result<()> {
+    // M SMT format: M  SMT sss m... (where m... is the subscript text)
+    // Expecting at least 4 parts: "M", "SMT", sss, m...
+    if parts.len() < 4 {
+        return Err(Error::from(FormatError::InvalidMolFormat(
+            "M SMT line too short".to_string(),
+        )));
+    }
+    let sg_id: usize = parts[2].parse().map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Invalid SGroup ID '{}' in M SMT line",
+            parts[2]
+        )))
+    })?;
+
+    // Check bounds (using 0-based index for Vec access)
+    let vec_idx = sg_id.checked_sub(1).ok_or_else(|| {
+        Error::from(FormatError::InvalidMolFormat(
+            "SGroup ID cannot be zero in M SMT line".to_string(),
+        ))
+    })?;
+    if vec_idx >= sgroups.len() {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "M SMT encountered for undefined or out-of-sequence SGroup ID {}",
+            sg_id
+        ))));
+    }
+
+    // Retrieve the mutable SGroup using 0-based index
+    let sgroup = &mut sgroups[vec_idx];
+
+    // The subscript is the rest of the line after the ID.
+    // parts[3] should be the start of the subscript text.
+    let subscript_text = parts[3..].join(" "); // Join parts with spaces if needed
+    let trimmed_subscript = subscript_text.trim(); // Trim leading/trailing whitespace
+
+    if trimmed_subscript.is_empty() {
+        return Err(Error::from(FormatError::InvalidMolFormat(format!(
+            "Empty subscript found in M SMT line for SGroup {}",
+            sg_id
+        ))));
+    }
+
+    // Store the subscript
+    sgroup.subscript = Some(trimmed_subscript.to_string());
+
+    Ok(())
+}
+
 fn is_3d(positions: &[Point3D]) -> bool {
     positions
         .iter()
@@ -441,27 +765,57 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
         .read_line(&mut name_line)
         .map_err(|e| Error::from(FormatError::IoError(e)))?;
     if !name_line.trim().is_empty() {
-        molecule.set_prop("mol_name".to_string(), name_line.to_string());
+        molecule.set_prop("mol_name".to_string(), name_line.trim_end().to_string());
+        // Trim newline
     }
     let mut _line_buffer = String::new();
-    for _ in 0..1 {
+    // Read and discard info line and comment line
+    for _ in 0..2 {
         reader
             .read_line(&mut _line_buffer)
             .map_err(|e| Error::from(FormatError::IoError(e)))?;
         _line_buffer.clear();
     }
 
+    println!("DEBUG: BEFORE COUNTS LINE");
+    println!(
+        "DEBUG: BUFFER: {:?}",
+        String::from_utf8_lossy(reader.fill_buf().unwrap())
+    );
+
     // Counts line
     const COUNTS_LINE_WIDTH: usize = 39;
-    let counts_data = Reader::from_reader(&mut reader)
+    let mut counts_buffer = String::new();
+    reader
+        .read_line(&mut counts_buffer)
+        .map_err(|e| Error::from(FormatError::IoError(e)))
+        .and_then(|length| {
+            if length < COUNTS_LINE_WIDTH {
+                Err(Error::from(FormatError::InvalidMolFormat(
+                    "Counts line too short".to_string(),
+                )))
+            } else {
+                Ok(())
+            }
+        })?;
+
+    let counts_data = Reader::from_string(counts_buffer)
         .width(COUNTS_LINE_WIDTH)
         .linebreak(line_break.clone())
         .byte_reader()
         .filter_map(StdResult::ok)
         .next()
-        .ok_or(Error::from(FormatError::InvalidMolFormat(
-            "Counts line not found".to_string(),
-        )))?;
+        .unwrap();
+
+    println!(
+        "DEBUG: COUNTS DATA: {:?}",
+        String::from_utf8_lossy(&counts_data)
+    );
+    println!(
+        "DEBUG: BUFFER: {:?}",
+        String::from_utf8_lossy(reader.fill_buf().unwrap())
+    );
+
     let counts_data = fixed_width::from_bytes::<CountsLine>(&counts_data).map_err(|e| {
         FormatError::InvalidMolFormat(format!("Failed to parse counts line: {}", e))
     })?;
@@ -470,17 +824,48 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
             FormatError::InvalidMolFormat("Only V2000 format supported".to_string()).into(),
         );
     }
+
+    println!("DEBUG: AFTER COUNTS LINE");
+    println!(
+        "DEBUG: BUFFER: {:?}",
+        String::from_utf8_lossy(reader.fill_buf().unwrap())
+    );
+
     let num_atoms: usize = counts_data.atoms as usize;
     let num_bonds: usize = counts_data.bonds as usize;
 
+    println!("DEBUG: NUM ATOMS: {:?}", num_atoms);
+    println!("DEBUG: NUM BONDS: {:?}", num_bonds);
+    println!("DEBUG: BEFORE ATOM BLOCK");
+    println!(
+        "DEBUG: BUFFER: {:?}",
+        String::from_utf8_lossy(reader.fill_buf().unwrap())
+    );
+
     // Atom block
-    const ATOM_LINE_WIDTH: usize = 66;
-    let mut atom_reader = Reader::from_reader(&mut reader)
+    const ATOM_LINE_WIDTH: usize = 69;
+    let mut atom_buffer = vec![0; num_atoms * (ATOM_LINE_WIDTH + line_break.byte_width())];
+    reader.read_exact(&mut atom_buffer).map_err(|e| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Failed to read atom block: {}",
+            e
+        )))
+    })?;
+
+    println!(
+        "DEBUG: ATOM BUFFER: {:?}, CAPACITY: {:?}",
+        String::from_utf8_lossy(&atom_buffer),
+        atom_buffer.capacity()
+    );
+
+    let mut atom_reader = Reader::from_bytes(atom_buffer)
         .width(ATOM_LINE_WIDTH)
-        .linebreak(line_break);
-    let (mut atoms, positions) = atom_reader.byte_reader().take(num_atoms).try_fold(
+        .linebreak(line_break.clone());
+
+    let (mut atoms, positions) = atom_reader.byte_reader().try_fold(
         (Vec::new(), Vec::new()),
         |(mut atoms, mut positions), res| -> Result<_> {
+            println!("DEBUG: Atom block - Read bytes: {:?}", res);
             let bytes = res.map_err(|e| {
                 Error::from(FormatError::InvalidMolFormat(format!(
                     "Failed to parse atom line: {}",
@@ -497,6 +882,7 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
             if let AtomSymbol::Element(element) = atom_symbol {
                 let mut atom = Atom::new(element);
                 atom.formal_charge = parse_charge_code(atom_data.charge)?;
+                atom.radical = parse_radical_code(atom_data.charge)?;
                 atom.mass_difference = if atom_data.mass_diff == 0 {
                     None
                 } else {
@@ -524,13 +910,41 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
         },
     )?;
 
+    println!("DEBUG: AFTER ATOM BLOCK");
+    println!("DEBUG: ATOMS: {:?}", atoms);
+    println!("DEBUG: POSITIONS: {:?}", positions);
+    println!("DEBUG: BEFORE BOND BLOCK");
+    println!(
+        "DEBUG: BUFFER: {:?}",
+        String::from_utf8_lossy(reader.fill_buf().unwrap())
+    );
+
     // Bond block
     const BOND_LINE_WIDTH: usize = 21;
-    let mut bond_reader = Reader::from_reader(&mut reader).width(BOND_LINE_WIDTH);
-    let bonds = bond_reader.byte_reader().take(num_bonds).try_fold(
+
+    let mut bond_buffer = vec![0; num_bonds * (BOND_LINE_WIDTH + line_break.byte_width())];
+    reader.read_exact(&mut bond_buffer).map_err(|e| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Failed to read bond block: {}",
+            e
+        )))
+    })?;
+
+    println!(
+        "DEBUG: BOND BUFFER: {:?}, CAPACITY: {:?}",
+        String::from_utf8_lossy(&bond_buffer),
+        bond_buffer.capacity()
+    );
+
+    let mut bond_reader = Reader::from_bytes(bond_buffer)
+        .width(BOND_LINE_WIDTH)
+        .linebreak(line_break.clone());
+
+    let bonds = bond_reader.byte_reader().try_fold(
         Vec::with_capacity(num_bonds),
-        |mut bonds, bytes_result| -> Result<_> {
-            let bytes = bytes_result.map_err(|e| {
+        |mut bonds, res| -> Result<_> {
+            println!("DEBUG: Bond block - Read bytes: {:?}", res);
+            let bytes = res.map_err(|e| {
                 Error::from(FormatError::InvalidMolFormat(format!(
                     "Failed to parse bond line: {}",
                     e
@@ -565,45 +979,91 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
         },
     )?;
 
-    // Define M property parsers before using them
-    let m_parsers: HashMap<&'static str, MParserFn> = [
-        ("CHG", parse_m_chg as MParserFn),
-        ("ISO", parse_m_iso as MParserFn),
-        ("RAD", parse_m_rad as MParserFn),
-        // TODO: Add other parsers here
+    println!("DEBUG: AFTER BOND BLOCK");
+    println!("DEBUG: BONDS: {:?}", bonds);
+    println!("DEBUG: AFTER BOND BLOCK");
+
+    // Atom M property parsers
+    let m_atom_parsers: HashMap<&'static str, MAtomParserFn> = [
+        ("CHG", parse_m_chg as MAtomParserFn),
+        ("ISO", parse_m_iso as MAtomParserFn),
+        ("RAD", parse_m_rad as MAtomParserFn),
+        // TODO: Add other atom property parsers here
     ]
     .iter()
     .cloned()
     .collect();
 
-    // Properties block - Parse M lines using try_for_each
+    // SGroup M property parsers
+    let m_sgroup_parsers: HashMap<&'static str, MSGroupParserFn> = [
+        ("STY", parse_m_sty as MSGroupParserFn),
+        ("SAL", parse_m_sal as MSGroupParserFn),
+        ("SBL", parse_m_sbl as MSGroupParserFn),
+        ("SLB", parse_m_slb as MSGroupParserFn),
+        ("SMT", parse_m_smt as MSGroupParserFn),
+        // TODO: Add other SGroup property parsers here
+    ]
+    .iter()
+    .cloned()
+    .collect();
+
+    // SGroup definitions
+    let mut sgroups: Vec<SGroup> = Vec::new();
+
+    println!("DEBUG: BEFORE PROPERTIES BLOCK");
+    println!(
+        "DEBUG: BUFFER: {:?}",
+        String::from_utf8_lossy(reader.fill_buf().unwrap())
+    );
+
+    // Properties block
     let terminated = reader
         .lines()
         .map(|line| line.map_err(|e| Error::from(FormatError::IoError(e))))
         .try_fold(false, |mut terminated, line| -> Result<bool> {
             let line = line?;
+            // --- ADD Properties Block DEBUG ---
+            println!("DEBUG Properties Block - Read line: {:?}", line);
+            // --- END Properties Block DEBUG ---
+
             if line.starts_with("M  END") {
+                // --- ADD Properties Block DEBUG ---
+                println!("DEBUG Properties Block - Found M END");
+                // --- END Properties Block DEBUG ---
                 terminated = true;
+            } else if terminated {
+                return Err(Error::from(FormatError::InvalidMolFormat(
+                    "Data found after M END".to_string(),
+                )));
             } else if line.starts_with("M  ") {
-                if terminated {
-                    return Err(Error::from(FormatError::InvalidMolFormat(
-                        "M line found after M END".to_string(),
-                    )));
-                }
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 {
-                    if let Some(parser_fn) = m_parsers.get(parts[1]) {
-                        parser_fn(&mut atoms, &parts)?;
+                    if let Some(parser_fn) = m_atom_parsers.get(parts[1]) {
+                        parser_fn(&mut atoms, &parts)?; // Note: atoms Vec is moved by atom block loop
+                    } else if let Some(parser_fn) = m_sgroup_parsers.get(parts[1]) {
+                        // Pass the original bonds Vec used for SGroup lookup
+                        parser_fn(&mut sgroups, &parts, &bonds)?;
                     } else {
-                        // Optional: Log unknown M property type
+                        // TODO: Log unknown M property type
                         // eprintln!("Warning: Unknown M property type '{}'", parts[1]);
                     }
+                } else {
+                    return Err(Error::from(FormatError::InvalidMolFormat(
+                        "Malformed M line".to_string(),
+                    )));
                 }
-                // Silently ignore malformed M lines (parts.len() < 2)
+            } else if !line.trim().is_empty() {
+                // Ignore potentially empty lines
+                return Err(Error::from(FormatError::InvalidMolFormat(format!(
+                    "Expected 'M  ' prefix or 'M  END' in properties block, found: {:?}",
+                    line
+                ))));
             }
-            // Silently ignore non-"M  " lines within the properties block
             Ok(terminated)
         })?;
+
+    println!("DEBUG: AFTER PROPERTIES BLOCK");
+    println!("DEBUG: TERMINATED: {:?}", terminated);
 
     if !terminated {
         return Err(Error::from(FormatError::InvalidMolFormat(
@@ -611,17 +1071,20 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
         )));
     }
 
-    // Add atoms (potentially modified by properties) to the molecule
+    // Add atoms to molecule
     for (idx, atom) in atoms.into_iter().enumerate() {
         molecule.add_atom(idx + 1, atom);
     }
 
-    // Add bonds to the molecule
+    // Add bonds to molecule
     for (idx1, idx2, bond) in bonds {
         molecule.add_bond(idx1, idx2, bond)?;
     }
 
-    // Add conformer
+    // Add SGroups to molecule
+    molecule.sgroups = sgroups;
+
+    // Add conformer to molecule
     if num_atoms > 0 {
         let has_3d = is_3d(&positions);
         let mut conformer = Conformer::new(num_atoms, has_3d);
@@ -637,4 +1100,65 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
     }
 
     Ok(molecule)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+    use umol_data::Element;
+
+    #[test]
+    fn test_read_minimal_mol() {
+        let mol_str = r#"Methane Minimal Test
+  umol test suite
+
+  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+M  END
+"#; // Added 5 spaces after V2000
+
+        let cursor = Cursor::new(mol_str);
+        let result = read_mol_v2000(cursor);
+
+        assert!(result.is_ok(), "Parsing failed: {:?}", result.err());
+        let molecule = result.unwrap();
+
+        assert_eq!(molecule.atom_count(), 1, "Incorrect number of atoms");
+        assert_eq!(molecule.bond_count(), 0, "Incorrect number of bonds");
+        assert!(molecule.sgroups.is_empty(), "SGroups should be empty");
+
+        // Check atom properties (external index 1 should map to graph index 0)
+        let graph_idx = *molecule.external_indices.get(&1).unwrap();
+        let atom = molecule.atom(graph_idx).unwrap();
+        assert_eq!(atom.element, Element::C, "Atom element should be Carbon");
+        assert_eq!(atom.formal_charge, 0, "Atom charge should be 0");
+        assert_eq!(atom.radical, None, "Atom radical should be None");
+        assert_eq!(
+            atom.mass_difference, None,
+            "Atom mass difference should be None"
+        );
+        assert_eq!(atom.stereo_parity, None, "Atom stereo should be None");
+        assert_eq!(atom.valence, None, "Atom valence should be None"); // Default valence code 0 -> None
+        assert_eq!(
+            atom.explicit_hydrogens,
+            Some(0),
+            "Atom H count should be Some(0)"
+        ); // Code 1 -> Some(0)
+        assert_eq!(atom.atom_map_num, None, "Atom map number should be None");
+
+        // Check conformer
+        assert_eq!(molecule.conformers.len(), 1, "Should have one conformer");
+        let conformer = &molecule.conformers[0]; // Access via indexing
+        assert!(!conformer.is_3d, "Conformer should be marked as 2D");
+        assert_eq!(
+            conformer.positions.len(),
+            1,
+            "Conformer should have one position"
+        );
+        let pos = conformer.get_position(graph_idx).unwrap();
+        assert_eq!(pos.x, 0.0, "Position x should be 0.0");
+        assert_eq!(pos.y, 0.0, "Position y should be 0.0");
+        assert_eq!(pos.z, 0.0, "Position z should be 0.0");
+    }
 }
