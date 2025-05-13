@@ -1,6 +1,5 @@
 //! Conformer type for the molecular graph model.
 
-use crate::AtomIndex;
 use std::collections::HashMap;
 
 /// Type alias for 3D coordinates using nalgebra.
@@ -38,21 +37,21 @@ impl Conformer {
     ///
     /// Panics if the index derived from `idx` is out of bounds
     /// for the `positions` vector. Assumes the conformer was correctly sized by the Molecule.
-    pub fn set_position(&mut self, idx: AtomIndex, pos: Point3D) {
-        if let Some(p) = self.positions.get_mut(idx.index()) {
+    pub fn set_position(&mut self, idx: usize, pos: Point3D) {
+        if let Some(p) = self.positions.get_mut(idx) {
             *p = pos;
         } else {
             // This shouldn't happen if Molecule manages conformer size correctly.
             panic!(
                 "Attempted to set position for out-of-bounds atom index {} (conformer size {})",
-                idx.index(),
+                idx,
                 self.positions.len()
             );
         }
     }
 
     /// Gets the 3D position for a specific atom graph index within this conformer.
-    pub fn get_position(&self, idx: AtomIndex) -> Option<&Point3D> {
-        self.positions.get(idx.index())
+    pub fn get_position(&self, idx: usize) -> Option<&Point3D> {
+        self.positions.get(idx)
     }
 }

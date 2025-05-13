@@ -17,22 +17,21 @@ pub enum AtomStereoParity {
 /// Atom
 #[derive(Debug, Clone)]
 pub struct Atom {
-    /// The chemical element.
+    /// Element
     pub element: Element,
-    /// Formal charge on the atom.
-    pub formal_charge: i8,
-    /// Isotope mass difference relative to the standard atomic weight for the element.
-    /// `None` or `Some(0)` represents the default isotope.
-    pub mass_difference: Option<i8>,
-    /// Tetrahedral chirality, if specified.
+    /// Charge
+    pub charge: i8,
+    /// Isotope mass number
+    pub isotope_mass: Option<u32>,
+    /// Tetrahedral chirality
     pub stereo_parity: Option<AtomStereoParity>,
-    /// Number of explicit hydrogens attached, if specified (e.g., from HCOUNT).
-    pub explicit_hydrogens: Option<u8>,
-    /// Valence specified directly in the input (e.g., MOL VAL field).
+    /// Hydrogen count
+    pub hydrogen_count: Option<u8>,
+    /// Valence
     pub valence: Option<u8>,
-    /// Atom mapping number, often used in reactions.
+    /// Atom mapping number
     pub atom_map_num: Option<u32>,
-    /// Radical status: 1=singlet, 2=doublet, 3=triplet. `None` or `Some(0)` means non-radical.
+    /// Radical flag
     pub radical: Option<u8>,
     /// Generic string-based properties.
     pub properties: HashMap<String, String>,
@@ -43,10 +42,10 @@ impl Atom {
     pub fn new(element: Element) -> Self {
         Self {
             element,
-            formal_charge: 0,
-            mass_difference: None,
+            charge: 0,
+            isotope_mass: None,
             stereo_parity: None,
-            explicit_hydrogens: None,
+            hydrogen_count: None,
             valence: None,
             atom_map_num: None,
             radical: None,

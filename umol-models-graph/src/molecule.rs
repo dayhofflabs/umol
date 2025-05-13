@@ -9,7 +9,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::Undirected;
 use std::collections::HashMap;
 use umol::error::DataError;
-use umol::{Error, Result};
+use umol::Result;
 
 /// Type alias for the node index type used in the molecular graph.
 pub type AtomIndex = NodeIndex<usize>;
@@ -81,60 +81,48 @@ impl Molecule {
 
     /// Add atom to the molecule and update index mappings
     ///
-    /// - `idx`: The external index (e.g., 1-based from MOL file).
-    /// - `atom`: The Atom object to add.
+    /// - `atom`: Atom to add (Molecule takes ownership)
     ///
-    /// Returns the internal graph index (`AtomIndex`) of the added atom.
-    pub fn add_atom(&mut self, idx: usize, atom: Atom) -> AtomIndex {
-        let graph_index = self.graph.add_node(atom);
-        self.external_indices.insert(idx, graph_index);
-        self.internal_indices.insert(graph_index, idx);
-        graph_index
+    /// Returns index of added atom.
+    pub fn add_atom(&mut self, atom: Atom) -> usize {
+        self.graph.add_node(atom).index()
     }
 
     /// Add bond between two atoms specified by external/MOL indices
     ///
-    /// - `idx1`, `idx2`: External indices of the atoms to connect.
-    /// - `bond`: The Bond object to add.
+    /// - `idx1`, `idx2`: Atom indices
+    /// - `bond`: Bond to add (Molecule takes ownership)
     ///
-    /// Returns the internal graph index (`BondIndex`) of the added bond, or an error
-    /// if either atom index is not found.
-    pub fn add_bond(&mut self, idx1: usize, idx2: usize, bond: Bond) -> Result<BondIndex> {
-        let graph_idx1 = *self
-            .external_indices
-            .get(&idx1)
-            .ok_or_else::<Error, _>(|| DataError::MissingAtomIndex(idx1).into())?;
-        let graph_idx2 = *self
-            .external_indices
-            .get(&idx2)
-            .ok_or_else::<Error, _>(|| DataError::MissingAtomIndex(idx2).into())?;
-
-        Ok(self.graph.add_edge(graph_idx1, graph_idx2, bond))
+    /// Returns index of added bond.
+    pub fn add_bond(&mut self, idx1: usize, idx2: usize, bond: Bond) -> usize {
+        self.graph
+            .add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond)
+            .index()
     }
 
     /// Get immutable reference to atom by internal graph index
-    pub fn atom(&self, idx: AtomIndex) -> Option<&Atom> {
-        self.graph.node_weight(idx)
+    pub fn atom(&self, idx: usize) -> Option<&Atom> {
+        self.graph.node_weight(AtomIndex::new(idx))
     }
 
     /// Get mutable reference to atom by internal graph index
-    pub fn atom_mut(&mut self, idx: AtomIndex) -> Option<&mut Atom> {
-        self.graph.node_weight_mut(idx)
+    pub fn atom_mut(&mut self, idx: usize) -> Option<&mut Atom> {
+        self.graph.node_weight_mut(AtomIndex::new(idx))
     }
 
     /// Get immutable reference to bond by internal graph index
-    pub fn bond(&self, idx: BondIndex) -> Option<&Bond> {
-        self.graph.edge_weight(idx)
+    pub fn bond(&self, idx: usize) -> Option<&Bond> {
+        self.graph.edge_weight(BondIndex::new(idx))
     }
 
     /// Get mutable reference to bond by internal graph index
-    pub fn bond_mut(&mut self, idx: BondIndex) -> Option<&mut Bond> {
-        self.graph.edge_weight_mut(idx)
+    pub fn bond_mut(&mut self, idx: usize) -> Option<&mut Bond> {
+        self.graph.edge_weight_mut(BondIndex::new(idx))
     }
 
     /// Get iterator over graph indices of neighbor atoms for a given atom index
-    pub fn neighbors(&self, idx: AtomIndex) -> impl Iterator<Item = AtomIndex> + '_ {
-        self.graph.neighbors(idx)
+    pub fn neighbors(&self, idx: usize) -> impl Iterator<Item = usize> + '_ {
+        self.graph.neighbors(AtomIndex::new(idx)).map(|i| i.index())
     }
 
     /// Get immutable slice of all conformers
