@@ -1,5 +1,60 @@
 //! Property parsing functions for MOL files.
 
+//! Implementation status for the Property Block MOL v2000 file
+//!   https://en.wikipedia.org/wiki/Chemical_table_file
+//!
+//! | Property   | Symbol | Implementation | Class   | RDKit* | ChemAxon** | CDK*** | Notes                 |
+//! |------------|--------|----------------|---------|--------|------------|--------|-----------------------|
+//! | Atom Alias | A      | x              | ISIS    | x      | x          | x      |                       |
+//! | Atom Value | V      | x              | ISIS    | x      | x          | x      |                       |
+//! ! Group Abbr | G      | -              | ISIS    | -      | -          | -      | Outdated, use `M SUP` |
+//! | Charge     | CHG    | x              | Generic | x      | x          | x      |                       |
+//! | Radical    | RAD    | x              | Generic | x      | x          | x      |                       |
+//! | Isotope    | ISO    | x              | Generic | x      | x          | x      |                       |
+//! | Ring Bonds | RBC    | -              | Query   | x      | x          | x      |                       |
+//! | Subs Count | SUB    | -              | Query   | x      | x          | x      |                       |
+//! | Unsat Atom | UNS    | -              | Query   | x      | x          | x      |                       |
+//! | Link Atom  | LIN    | -              | Query   | x      | x          | x      |                       |
+//! | Atom List  | ALS    | -              | Query   | x      | x          | x      |                       |
+//! | Att Point  | APO    | -              | RGroup  | x      | x          | x      |                       |
+//! | Att Order  | AAL    | -              | RGroup  | -      | -          | x      |                       |
+//! | Lab Loc    | RGP    | -              | RGroup  | x      | x          | x      |                       |
+//! | Logic      | LOG    | -              | RGroup  | -      | x          | x      |                       |
+//! | Sgrp Type  | STY    | x              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Subt  | SST    | -              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Label | SLB    | x              | SGroup  | x      | -          | x      |                       |
+//! | Sgrp Conn  | SCN    | -              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Expan | SDS    | -              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Atoms | SAL    | x              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Bonds | SBL    | x              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Parnt | SPA    | -              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Subs  | SMT    | -              | SGroup  | x      | x          | x      |                       |
+//! | Sgrp Corr  | CRS    | -              | SGroup  | x      | -          | x      |                       |
+//! | Sgrp Disp  | SDI    | -              | SGroup  | x      | x          | x      |                       |
+//! | Sup Bd Vec | SBV    | -              | SGroup  | x      | -          | x      |                       |
+//! | Data Flds  | SDT    | -              | SGroup  | x      | x          | x      |                       |
+//! | Data Disp  | SDD    | -              | SGroup  | x      | x          | x      |                       |
+//! | Data Sgrp  | SCD    | -              | SGroup  | x      | x          | x      | Continued data line   |
+//! | Data Sgrp  | SED    | -              | SGroup  | x      | x          | x      | End of data line      |
+//! | Sgrp Hier  | SPL    | -              | SGroup  | x      | x          | x      | Parent list           |
+//! | Sgrp Comp# | SNC    | -              | SGroup  | x      | x          | x      |                       |
+//! | 3D Feat    | $3D    | -              | 3D      | -      | -          | x      |                       |
+//! | Phantom    | PXA    | -              | ISIS    | x      | -          | -      |                       |
+//! | Sup Att Pt | SAP    | -              | ISIS    | x      | x          | -      |                       |
+//! | Sup Class  | SCL    | -              | ISIS    | x      | -          | -      |                       |
+//! | Regno      | REG    | -              | ISIS    | -      | -          | -      |                       |
+//! | Sgrp Brkt  | SBT    | -              | ISIS    | x      | x          | x      |                       |
+//! | 0-Order Bd | ZBO    | -              | Bd Ext  | x      | -          | -      | DOI:10.1021/ci200488k |
+//! | Virt Hs    | ZCH    | -              | Bd Ext  | x      | -          | -      | DOI:10.1021/ci200488k |                     |
+//! | Marvin SM  | MRV    | -              | Marvin  | x      | x          | -      |                       |
+//! | Atom Label | ZZC    | -              | ADC     | -      | -          | x      |                       |
+//! | Skip       | SKIP   | -              | Generic | ?      | -          | x      |                       |
+//! | End        | END    | x              | Generic | x      | x          | x      |                       |
+//! 
+//! * RDKit: https://www.rdkit.org/docs/GettingStartedInPython.html#writing-molecules
+//! ** ChemAxon: https://docs.chemaxon.com/display/docs/formats_mdl-molfiles-rgfiles-sdfiles-rxnfiles-rdfiles-formats.md
+//! *** CDK: https://cdk.github.io/cdk/latest/docs/api/org/openscience/cdk/io/MDLV2000Reader.html
+
 use super::atom::parse_index;
 use crate::{Atom, Bond, SGroup, SGroupType};
 use fixed_width::{from_bytes_with_fields, FieldSet, Reader};
@@ -200,7 +255,7 @@ pub(crate) fn parse_m_sal(
     _atoms: &[Atom],
     _bonds: &[(usize, usize, Bond)],
 ) -> Result<()> {
-    let (group, count): (usize, usize) = from_bytes_with_fields(
+    let (group_str, count): (String, usize) = from_bytes_with_fields(
         &input[7..13],
         FieldSet::Seq(vec![
             FieldSet::new_field(0..3).name("index"),
@@ -213,7 +268,8 @@ pub(crate) fn parse_m_sal(
         ))
     })?;
 
-    if group >= sgroups.len() {
+    let group = parse_index(group_str.as_bytes())?;
+    if group > sgroups.len() {
         return Err(FormatError::InvalidMolFormat(format!(
             "SGroup ID {} out of range in M SAL line",
             group
@@ -264,7 +320,7 @@ pub(crate) fn parse_m_sbl(
     _atoms: &[Atom],
     _bonds: &[(usize, usize, Bond)],
 ) -> Result<()> {
-    let (group, count): (usize, usize) = from_bytes_with_fields(
+    let (group_str, count): (String, usize) = from_bytes_with_fields(
         &input[7..13],
         FieldSet::Seq(vec![
             FieldSet::new_field(0..3).name("index"),
@@ -277,6 +333,15 @@ pub(crate) fn parse_m_sbl(
         ))
     })?;
 
+    let group = parse_index(group_str.as_bytes())?;
+
+    if group > sgroups.len() {
+        return Err(FormatError::InvalidMolFormat(format!(
+            "SGroup ID {} out of range in M SBL line",
+            group
+        ))
+        .into());
+    }
     let indices_bytes = Reader::from_bytes(&input[13..])
         .width(4)
         .byte_reader()
@@ -325,18 +390,17 @@ pub(crate) fn parse_m_slb(
         let sgroup = &mut sgroups[index];
         sgroup.label = Some(label);
     }
-
     Ok(())
 }
 
 /// Atom alias parser
-/// 
+/// Format: `A  aaa\nx...` (constructed using `combine_next_n` from 2 lines)
 pub(crate) fn parse_a_prop(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
-    let (index, alias) = from_bytes_with_fields::<(usize, String)>(
+    let (index_str, alias) = from_bytes_with_fields::<(String, String)>(
         &input[3..],
         FieldSet::Seq(vec![
             FieldSet::new_field(0..3).name("index"),
-            FieldSet::new_field(4..80).name("alias"),
+            FieldSet::new_field(4..input.len() - 3).name("alias"),
         ]),
     )
     .map_err(|_| {
@@ -345,42 +409,49 @@ pub(crate) fn parse_a_prop(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
         ))
     })?;
 
+    let index = parse_index(index_str.as_bytes())?;
+    if index >= atoms.len() {
+        return Err(FormatError::InvalidMolFormat(format!(
+            "Atom index {} out of range in A line",
+            index
+        ))
+        .into());
+    }
+
     let atom = &mut atoms[index];
     atom.properties.insert("molFileAlias".to_string(), alias);
     Ok(())
 }
 
-// /// Atom value parser
-// pub(crate) fn parse_v_prop(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
-//     let (index, value) = from_bytes_with_fields::<(usize, String)>(
-//         &input[3..],
-//         FieldSet::Seq(vec![
-//             FieldSet::new_field(0..3).name("index"),
-//             FieldSet::new_field(4..80).name("value"),
-//         ]),
-//     )
-//     .map_err(|_| {
-//         Error::from(FormatError::InvalidMolFormat(
-//             "Invalid index and value in V line".to_string(),
-//         ))
-//     })?;
+/// Atom value parser
+pub(crate) fn parse_v_prop(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
+    let (index_str, value) = from_bytes_with_fields::<(String, String)>(
+        &input[3..],
+        FieldSet::Seq(vec![
+            FieldSet::new_field(0..3).name("index"),
+            FieldSet::new_field(4..input.len() - 3).name("value"),
+        ]),
+    )
+    .map_err(|_| {
+        Error::from(FormatError::InvalidMolFormat(
+            "Invalid index and value in V line".to_string(),
+        ))
+    })?;
 
-//     let atom = &mut atoms[index];
-//     atom.properties.insert("molFileValue".to_string(), value);
-//     Ok(())
-// }
+    let index = parse_index(index_str.as_bytes())?;
+    if index >= atoms.len() {
+        return Err(FormatError::InvalidMolFormat(format!(
+            "Atom index {} out of range in V line",
+            index
+        ))
+        .into());
+    }
 
-// /// Group abbreviation parser
-// pub(crate) fn parse_g_prop(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
-//     let (index, abbr) = from_bytes_with_fields::<(usize, String)>(
-//         &input[3..],
-//         FieldSet::Seq(vec![
-//             FieldSet::new_field(0..3).name("index"),
-//             FieldSet::new_field(4..80).name("abbreviation"),
-//         ]),
-//     )
-//     Ok(())
-// }
+    let atom = &mut atoms[index];
+    atom.properties.insert("molFileValue".to_string(), value);
+
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -428,18 +499,78 @@ mod tests {
 
     #[test]
     fn test_parse_sty() {
-        let line = b"M  STY  2   1 SUP   2 DAT";
+        let line = b"M  STY  3   1 SUP   2 SUP   3 SUP";
         let mut sgroups = vec![];
         parse_m_sty(&mut sgroups, line, &[], &[]).unwrap();
         assert_eq!(sgroups[0].group_type, SGroupType::Superatom);
-        assert_eq!(sgroups[1].group_type, SGroupType::Data);
+        assert_eq!(sgroups[1].group_type, SGroupType::Superatom);
+        assert_eq!(sgroups[2].group_type, SGroupType::Superatom);
     }
 
-    // #[test]
-    // fn test_parse_sal() {
-    //     let line = b"M   SAL  2   1   1   2";
-    //     let mut sgroups = vec![];
-    //     parse_m_sal(&mut sgroups, line, &[], &[]).unwrap();
-    //     assert_eq!(sgroups[0].atom_indices, vec![0, 1]);
-    // }
+    #[test]
+    fn test_parse_sal() {
+        let line = b"M  SAL   1  1   1";
+        let mut sgroups = vec![SGroup {
+            id: 0,
+            group_type: SGroupType::Superatom,
+            label: None,
+            subscript: None,
+            atom_indices: Vec::new(),
+            bond_indices: Vec::new(),
+        }];
+        parse_m_sal(&mut sgroups, line, &[], &[]).unwrap();
+        assert_eq!(sgroups[0].atom_indices, vec![0]);
+    }
+
+    #[test]
+    fn test_parse_sbl() {
+        let line = b"M  SBL   1  1   2";
+        let mut sgroups = vec![SGroup {
+            id: 0,
+            group_type: SGroupType::Superatom,
+            label: None,
+            subscript: None,
+            atom_indices: Vec::new(),
+            bond_indices: Vec::new(),
+        }];
+        parse_m_sbl(&mut sgroups, line, &[], &[]).unwrap();
+        assert_eq!(sgroups[0].bond_indices, vec![1]);
+    }
+
+    #[test]
+    fn test_parse_slb() {
+        let line = b"M  SLB  1   1   1";
+        let mut sgroups = vec![SGroup {
+            id: 0,
+            group_type: SGroupType::Superatom,
+            label: None,
+            subscript: None,
+            atom_indices: Vec::new(),
+            bond_indices: Vec::new(),
+        }];
+        parse_m_slb(&mut sgroups, line, &[], &[]).unwrap();
+        assert!(matches!(&sgroups[0].label, Some(label) if label == "1"));
+    }
+
+    #[test]
+    fn test_parse_a_prop() {
+        let line = b"A    1 CF3";
+        let mut atoms = vec![
+            Atom::new(Element::C),
+            Atom::new(Element::F),
+            Atom::new(Element::F),
+            Atom::new(Element::F),
+        ];
+        parse_a_prop(&mut atoms, line).unwrap();
+        assert_eq!(atoms[0].properties["molFileAlias"], "CF3");
+    }
+
+    #[test]
+    fn test_parse_v_prop() {
+        let line = b"V    1 *";
+        let mut atoms = vec![Atom::new(Element::C)];
+        parse_v_prop(&mut atoms, line).unwrap();
+        assert_eq!(atoms[0].properties["molFileValue"], "*");
+    }
+
 }

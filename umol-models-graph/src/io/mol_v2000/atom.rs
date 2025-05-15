@@ -41,17 +41,9 @@ pub(crate) fn parse_index(s: &[u8]) -> Result<usize> {
 
 /// Parse atom symbol (element, atom list, unspecified, lone pair, R group).
 pub(crate) fn parse_atom_symbol(s: &[u8]) -> Result<AtomSymbol> {
-    if s.len() != 3 {
-        return Err(FormatError::InvalidMolFormat(format!(
-            "Invalid atom symbol: '{}', must be 3 characters long",
-            String::from_utf8_lossy(s)
-        ))
-        .into());
-    }
-
     let symbol = from_bytes_with_fields::<String>(
         s,
-        FieldSet::Seq(vec![FieldSet::new_field(0..3).name("symbol")]),
+        FieldSet::Seq(vec![FieldSet::new_field(0..s.len()).name("symbol")]),
     );
 
     match symbol {
@@ -176,52 +168,43 @@ mod tests {
     #[test]
     fn test_parse_atom_symbol() {
         assert_eq!(
-            parse_atom_symbol(b"  H").unwrap(),
+            parse_atom_symbol(b"H").unwrap(),
             AtomSymbol::Element(Element::H)
         );
         assert_eq!(
-            parse_atom_symbol(b" H ").unwrap(),
+            parse_atom_symbol(b"h").unwrap(),
             AtomSymbol::Element(Element::H)
         );
         assert_eq!(
-            parse_atom_symbol(b"H  ").unwrap(),
-            AtomSymbol::Element(Element::H)
-        );
-        assert_eq!(
-            parse_atom_symbol(b"  h").unwrap(),
-            AtomSymbol::Element(Element::H)
-        );
-        assert_eq!(
-            parse_atom_symbol(b" Cu").unwrap(),
+            parse_atom_symbol(b"Cu").unwrap(),
             AtomSymbol::Element(Element::Cu)
         );
         assert_eq!(
-            parse_atom_symbol(b" CU").unwrap(),
+            parse_atom_symbol(b"CU").unwrap(),
             AtomSymbol::Element(Element::Cu)
         );
         assert_eq!(
-            parse_atom_symbol(b" cu").unwrap(),
+            parse_atom_symbol(b"cu").unwrap(),
             AtomSymbol::Element(Element::Cu)
         );
-        assert_eq!(parse_atom_symbol(b"L  ").unwrap(), AtomSymbol::AtomList);
+        assert_eq!(parse_atom_symbol(b"L").unwrap(), AtomSymbol::AtomList);
         assert_eq!(
-            parse_atom_symbol(b"A  ").unwrap(),
+            parse_atom_symbol(b"A").unwrap(),
             AtomSymbol::Unspecified('A')
         );
         assert_eq!(
-            parse_atom_symbol(b"Q  ").unwrap(),
+            parse_atom_symbol(b"Q").unwrap(),
             AtomSymbol::Unspecified('Q')
         );
         assert_eq!(
-            parse_atom_symbol(b"*  ").unwrap(),
+            parse_atom_symbol(b"*").unwrap(),
             AtomSymbol::Unspecified('*')
         );
-        assert_eq!(parse_atom_symbol(b"LP ").unwrap(), AtomSymbol::LonePair);
-        assert_eq!(parse_atom_symbol(b"R1 ").unwrap(), AtomSymbol::RGroup(0));
+        assert_eq!(parse_atom_symbol(b"LP").unwrap(), AtomSymbol::LonePair);
+        assert_eq!(parse_atom_symbol(b"R1").unwrap(), AtomSymbol::RGroup(0));
         assert_eq!(parse_atom_symbol(b"R10").unwrap(), AtomSymbol::RGroup(9));
-        assert!(parse_atom_symbol(b"H").is_err());
-        assert!(parse_atom_symbol(b"  X").is_err());
-        assert!(parse_atom_symbol(b"R0 ").is_err());
+        assert!(parse_atom_symbol(b"X").is_err());
+        assert!(parse_atom_symbol(b"R0").is_err());
     }
 
     #[test]

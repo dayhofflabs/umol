@@ -7,8 +7,8 @@ use super::atom::{
 use super::bond::{parse_bond_dir_code, parse_bond_stereo_code, parse_bond_type_code};
 use super::conformer::is_3d;
 use super::property::{
-    parse_a_prop, parse_m_chg, parse_m_iso, parse_m_rad, parse_m_sal, parse_m_sbl, parse_m_slb,
-    parse_m_smt, parse_m_sty, MAtomParserFn, MSGroupParserFn,
+    parse_m_chg, parse_m_iso, parse_m_rad, parse_m_sal, parse_m_sbl, parse_m_slb, parse_m_sty,
+    MAtomParserFn, MSGroupParserFn,
 };
 use crate::io::utils::{detect_line_break, CombineNextN};
 use crate::{Atom, Bond, BondType, Conformer, Molecule, Point3D, SGroup};
@@ -164,20 +164,19 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
     // Counts line
     const COUNTS_LINE_WIDTH: usize = 39;
     let mut counts_buffer = String::new();
-    let length = reader
-        .read_line(&mut counts_buffer)
-        .map_err(|e| {
-            Err(FormatError::InvalidMolFormat(format!(
-                "Failed to read counts line: {}",
-                e
-            )).into())
-        })?;
+    let length = reader.read_line(&mut counts_buffer).map_err(|e| {
+        Error::from(FormatError::InvalidMolFormat(format!(
+            "Failed to read counts line: {}",
+            e
+        )))
+    })?;
 
     if length < COUNTS_LINE_WIDTH {
         return Err(FormatError::InvalidMolFormat(format!(
-                    "Counts line too short: found {}, expected {}",
+            "Counts line too short: found {}, expected {}",
             length, COUNTS_LINE_WIDTH
-        )));
+        ))
+        .into());
     }
 
     let counts_data = Reader::from_string(counts_buffer)
@@ -258,7 +257,8 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
                     e
                 )))
             })?;
-            let atom_symbol = parse_atom_symbol(&atom_data.symbol)?;
+            println!("DEBUG: ATOM DATA: {:?}", atom_data);
+            let atom_symbol = parse_atom_symbol(&atom_data.symbol.as_bytes())?;
             if let AtomSymbol::Element(element) = atom_symbol {
                 let mut atom = Atom::new(element);
                 atom.charge = parse_charge_code(atom_data.charge)?;
@@ -341,10 +341,14 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
             })?;
 
             let idx1 = bond_data.atom1.checked_sub(1).ok_or_else(|| {
-                Error::from(FormatError::InvalidMolFormat("Atom index 1 out of bounds".to_string()))
+                Error::from(FormatError::InvalidMolFormat(
+                    "Atom index 1 out of bounds".to_string(),
+                ))
             })?;
             let idx2 = bond_data.atom2.checked_sub(1).ok_or_else(|| {
-                Error::from(FormatError::InvalidMolFormat("Atom index 2 out of bounds".to_string()))
+                Error::from(FormatError::InvalidMolFormat(
+                    "Atom index 2 out of bounds".to_string(),
+                ))
             })?;
 
             let bond_type = parse_bond_type_code(bond_data.bond_type)?;
@@ -371,27 +375,24 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
     println!("DEBUG: AFTER BOND BLOCK");
 
     // Atom M property parsers
-    let m_atom_parsers: HashMap<&'static [u8], MAtomParserFn> = [
-        (b"CHG", parse_m_chg as MAtomParserFn),
-        (b"ISO", parse_m_iso as MAtomParserFn),
-        (b"RAD", parse_m_rad as MAtomParserFn),
+    let m_atom_parsers: HashMap<&[u8], MAtomParserFn> = [
+        (b"CHG" as &[u8], parse_m_chg as MAtomParserFn),
+        (b"ISO" as &[u8], parse_m_iso as MAtomParserFn),
+        (b"RAD" as &[u8], parse_m_rad as MAtomParserFn),
         // TODO: Add other atom property parsers here
     ]
-    .iter()
-    .cloned()
+    .into_iter()
     .collect();
 
     // SGroup M property parsers
-    let m_sgroup_parsers: HashMap<&'static [u8], MSGroupParserFn> = [
-        (b"STY", parse_m_sty as MSGroupParserFn),
-        (b"SAL", parse_m_sal as MSGroupParserFn),
-        (b"SBL", parse_m_sbl as MSGroupParserFn),
-        (b"SLB", parse_m_slb as MSGroupParserFn),
-        (b"SMT", parse_m_smt as MSGroupParserFn),
+    let m_sgroup_parsers: HashMap<&[u8], MSGroupParserFn> = [
+        (b"STY" as &[u8], parse_m_sty as MSGroupParserFn),
+        (b"SAL" as &[u8], parse_m_sal as MSGroupParserFn),
+        (b"SBL" as &[u8], parse_m_sbl as MSGroupParserFn),
+        (b"SLB" as &[u8], parse_m_slb as MSGroupParserFn),
         // TODO: Add other SGroup property parsers here
     ]
-    .iter()
-    .cloned()
+    .into_iter()
     .collect();
 
     // SGroup definitions
@@ -404,25 +405,24 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
     );
 
     // Properties block
-    let mut properties_reader = Reader::from_reader(reader).linebreak(line_break.clone());
-
-    let terminated = properties_reader
-        .byte_reader()
+    let terminated = reader.split(b'\n')
         .combine_next_n(
             |line| {
+                println!("DEBUG: COMBINE NEXT N: {:?}", line);
                 if let Ok(line) = line {
                     if line.starts_with(b"A  ") || line.starts_with(b"G  ") {
-                        Some(1u16)
-                    } else {
-                        None
+                        return Some(1u16);
                     }
-                } else {
-                    None
                 }
+                None
             },
             " ",
         )
         .try_fold(false, |mut terminated, res| -> Result<bool> {
+            println!(
+                "DEBUG: PROPERTIES LINE: {:?}, TERMINATED: {}",
+                res, terminated
+            );
             let line = res.map_err(|e| {
                 Error::from(FormatError::InvalidMolFormat(format!(
                     "Failed to read properties line: {}",
@@ -451,18 +451,13 @@ pub fn read_mol_v2000(mut reader: impl BufRead) -> Result<Molecule> {
                         "Malformed M line".to_string(),
                     )));
                 }
-            // } else if line.starts_with(b"V  ") {
-            //     // TODO: Handle V property
-            // } else if line.starts_with(b"A  ") {
-            //     parse_a_prop(&mut atoms, &line[3..])?;
-            // } else if line.starts_with(b"G  ") {
-            //     // TODO: Handle G property
-            // } else if !line.iter().all(|&b| b.is_ascii_whitespace()) {
-            //     return Err(Error::from(FormatError::InvalidMolFormat(format!(
-            //         "Invalid line in properties block: {:?}",
-            //         line
-            //     ))));
-            // }
+            // TODO: Handle other M lines and $3D properties
+            } else if !line.iter().all(|&b| b.is_ascii_whitespace()) {
+                return Err(Error::from(FormatError::InvalidMolFormat(format!(
+                    "Invalid line in properties block: {:?}",
+                    line
+                ))));
+            }
             Ok(terminated)
         })?;
 
