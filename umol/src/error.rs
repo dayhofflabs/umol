@@ -150,6 +150,9 @@ pub enum DataError {
     #[error("Invalid element: {0}")]
     InvalidElement(String),
 
+    #[error("Invalid isotope: {0}")]
+    InvalidIsotope(String),
+
     #[error("Invalid occupation: {0}")]
     InvalidOccupation(String),
 

@@ -222,12 +222,8 @@ static PERIOD_GROUP_TO_ELEMENT: Lazy<HashMap<(u8, u8), Element>> = Lazy::new(|| 
         .collect()
 });
 
-static ELEMENT_SYMBOLS: Lazy<HashSet<String>> = Lazy::new(|| {
-    ELEMENTS
-        .iter()
-        .map(|e| e.symbol().to_lowercase())
-        .collect()
-});
+static ELEMENT_SYMBOLS: Lazy<HashSet<String>> =
+    Lazy::new(|| ELEMENTS.iter().map(|e| e.symbol().to_lowercase()).collect());
 
 impl Element {
     // Get element from symbol
@@ -362,7 +358,7 @@ impl Element {
         }
     }
 
-    // Check if element is a valid element symbol
+    // Check if element is a valid element symbol (case-insensitive)
     pub fn is_element(symbol: &str) -> bool {
         ELEMENT_SYMBOLS.contains(symbol.to_lowercase().as_str())
     }
@@ -399,11 +395,154 @@ impl Display for Element {
     }
 }
 
+impl From<Isotope> for Element {
+    fn from(isotope: Isotope) -> Self {
+        isotope.element
+    }
+}
+
 /// Shorthand macro for element access
 #[macro_export]
 macro_rules! e {
     ($elem:ident) => {
         Element::$elem
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd)]
+pub struct Isotope {
+    element: Element,
+    mass_number: u8,
+}
+
+/// Isotope data:
+///
+/// 0. isotope mass (in amu)
+static ISOTOPE_DATA: Lazy<HashMap<Isotope, (f64,)>> = Lazy::new(|| {
+    vec![
+        (
+            Isotope {
+                element: Element::H,
+                mass_number: 2,
+            },
+            (2.0141,),
+        ),
+        (
+            Isotope {
+                element: Element::H,
+                mass_number: 3,
+            },
+            (3.0160,),
+        ),
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Named isotopes (only for H)
+static NAMED_ISOTOPES: Lazy<HashMap<Isotope, &'static str>> = Lazy::new(|| {
+    vec![
+        (
+            Isotope {
+                element: Element::H,
+                mass_number: 2,
+            },
+            "D",
+        ),
+        (
+            Isotope {
+                element: Element::H,
+                mass_number: 3,
+            },
+            "T",
+        ),
+    ]
+    .into_iter()
+    .collect()
+});
+
+static NAMED_SYMBOL_TO_ISOTOPE: Lazy<HashMap<&'static str, Isotope>> = Lazy::new(|| {
+    NAMED_ISOTOPES
+        .iter()
+        .map(|(isotope, symbol)| (*symbol, *isotope))
+        .collect()
+});
+
+impl Isotope {
+    pub fn from_symbol(symbol: &str) -> Option<Self> {
+        // Named isotopes ("D", "T")
+        NAMED_SYMBOL_TO_ISOTOPE
+            .get(symbol)
+            .copied()
+            // Isotope symbol (AZ notation - "7B", "13C", "222Ra")
+            .or_else(|| {
+                // Find index of the first non-digit character
+                match symbol.chars().position(|c| !c.is_digit(10)) {
+                    Some(0) => None,
+                    Some(idx) => {
+                        let mass_number = symbol[..idx].parse::<u8>().ok()?;
+                        let element = Element::from_symbol(&symbol[idx..])?;
+                        Some(Isotope {
+                            element,
+                            mass_number,
+                        })
+                    }
+                    None => None,
+                }
+            })
+    }
+
+    /// Get the element
+    pub fn element(&self) -> Element {
+        self.element
+    }
+
+    /// Get the mass number
+    pub fn mass_number(&self) -> u8 {
+        self.mass_number
+    }
+
+    /// Get the isotope symbol (AZ notation)
+    pub fn symbol(&self) -> String {
+        if let Some(symbol) = NAMED_ISOTOPES.get(self) {
+            symbol.to_string()
+        } else {
+            format!("{}{}", self.mass_number, self.element)
+        }
+    }
+
+    /// Get the isotope mass
+    pub fn mass(&self) -> f64 {
+        ISOTOPE_DATA.get(self).unwrap().0
+    }
+}
+
+impl Display for Isotope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.symbol())
+    }
+}
+
+impl FromStr for Isotope {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()).into())
+    }
+}
+
+impl TryFrom<&str> for Isotope {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self> {
+        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()).into())
+    }
+}
+
+#[macro_export]
+macro_rules! iso {
+    ($isotope:expr) => {
+        Isotope::from_symbol($isotope).unwrap()
     };
 }
 
@@ -638,5 +777,200 @@ mod tests {
     fn test_element_macro() {
         assert_eq!(e!(H), Element::H);
         assert_eq!(e!(Fe), Element::Fe);
+    }
+
+    #[test]
+    fn test_isotope_from_symbol() {
+        assert_eq!(
+            Isotope::from_symbol("D"),
+            Some(Isotope {
+                element: Element::H,
+                mass_number: 2
+            })
+        );
+        assert_eq!(
+            Isotope::from_symbol("T"),
+            Some(Isotope {
+                element: Element::H,
+                mass_number: 3
+            })
+        );
+        assert_eq!(
+            Isotope::from_symbol("2H"),
+            Some(Isotope {
+                element: Element::H,
+                mass_number: 2
+            })
+        );
+        assert_eq!(
+            Isotope::from_symbol("7B"),
+            Some(Isotope {
+                element: Element::B,
+                mass_number: 7
+            })
+        );
+        assert_eq!(
+            Isotope::from_symbol("13C"),
+            Some(Isotope {
+                element: Element::C,
+                mass_number: 13
+            })
+        );
+        assert_eq!(
+            Isotope::from_symbol("226Ra"),
+            Some(Isotope {
+                element: Element::Ra,
+                mass_number: 226
+            })
+        );
+        assert_eq!(Isotope::from_symbol("Q"), None);
+        assert_eq!(Isotope::from_symbol("13C2"), None);
+        assert_eq!(Isotope::from_symbol("C"), None);
+        assert_eq!(Isotope::from_symbol("12"), None);
+        assert_eq!(Isotope::from_symbol(""), None);
+    }
+
+    #[test]
+    fn test_isotope_element() {
+        assert_eq!(Isotope::from_symbol("D").unwrap().element(), Element::H);
+        assert_eq!(Isotope::from_symbol("T").unwrap().element(), Element::H);
+        assert_eq!(Isotope::from_symbol("7B").unwrap().element(), Element::B);
+        assert_eq!(Isotope::from_symbol("13C").unwrap().element(), Element::C);
+        assert_eq!(
+            Isotope::from_symbol("226Ra").unwrap().element(),
+            Element::Ra
+        );
+    }
+
+    #[test]
+    fn test_isotope_mass_number() {
+        assert_eq!(Isotope::from_symbol("D").unwrap().mass_number(), 2);
+        assert_eq!(Isotope::from_symbol("T").unwrap().mass_number(), 3);
+        assert_eq!(Isotope::from_symbol("7B").unwrap().mass_number(), 7);
+        assert_eq!(Isotope::from_symbol("13C").unwrap().mass_number(), 13);
+        assert_eq!(Isotope::from_symbol("226Ra").unwrap().mass_number(), 226);
+    }
+
+    #[test]
+    fn test_isotope_mass() {
+        assert_eq!(Isotope::from_symbol("D").unwrap().mass(), 2.0141);
+        assert_eq!(Isotope::from_symbol("T").unwrap().mass(), 3.0160);
+    }
+
+    #[test]
+    fn test_isotope_symbol() {
+        assert_eq!(Isotope::from_symbol("D").unwrap().symbol(), "D");
+        assert_eq!(Isotope::from_symbol("T").unwrap().symbol(), "T");
+        assert_eq!(Isotope::from_symbol("7B").unwrap().symbol(), "7B");
+        assert_eq!(Isotope::from_symbol("13C").unwrap().symbol(), "13C");
+        assert_eq!(Isotope::from_symbol("226Ra").unwrap().symbol(), "226Ra");
+    }
+
+    #[test]
+    fn test_isotope_display() {
+        assert_eq!(Isotope::from_symbol("D").unwrap().to_string(), "D");
+        assert_eq!(Isotope::from_symbol("T").unwrap().to_string(), "T");
+        assert_eq!(Isotope::from_symbol("7B").unwrap().to_string(), "7B");
+        assert_eq!(Isotope::from_symbol("13C").unwrap().to_string(), "13C");
+        assert_eq!(Isotope::from_symbol("226Ra").unwrap().to_string(), "226Ra");
+    }
+
+    #[test]
+    fn test_isotope_serialization() {
+        // Test serialization of individual isotopes
+        assert_eq!(
+            serde_json::to_string(&Isotope::from_symbol("D").unwrap()).unwrap(),
+            r#"{"element":"H","mass_number":2}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Isotope::from_symbol("T").unwrap()).unwrap(),
+            r#"{"element":"H","mass_number":3}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Isotope::from_symbol("7B").unwrap()).unwrap(),
+            r#"{"element":"B","mass_number":7}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Isotope::from_symbol("13C").unwrap()).unwrap(),
+            r#"{"element":"C","mass_number":13}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Isotope::from_symbol("226Ra").unwrap()).unwrap(),
+            r#"{"element":"Ra","mass_number":226}"#
+        );
+    }
+
+    #[test]
+    fn test_isotope_deserialization() {
+        assert_eq!(
+            serde_json::from_str::<Isotope>(r#"{"element":"H","mass_number":2}"#).unwrap(),
+            Isotope::from_symbol("D").unwrap()
+        );
+        assert_eq!(
+            serde_json::from_str::<Isotope>(r#"{"element":"H","mass_number":3}"#).unwrap(),
+            Isotope::from_symbol("T").unwrap()
+        );
+        assert_eq!(
+            serde_json::from_str::<Isotope>(r#"{"element":"B","mass_number":7}"#).unwrap(),
+            Isotope::from_symbol("7B").unwrap()
+        );
+        assert_eq!(
+            serde_json::from_str::<Isotope>(r#"{"element":"C","mass_number":13}"#).unwrap(),
+            Isotope::from_symbol("13C").unwrap()
+        );
+        assert_eq!(
+            serde_json::from_str::<Isotope>(r#"{"element":"Ra","mass_number":226}"#).unwrap(),
+            Isotope::from_symbol("226Ra").unwrap()
+        );
+        assert!(serde_json::from_str::<Isotope>(r#"{"element":"Invalid","mass_number":123}"#).is_err());
+    }
+
+    #[test]
+    fn test_isotope_roundtrip() {
+        let isotopes = vec![
+            Isotope::from_symbol("D").unwrap(),
+            Isotope::from_symbol("T").unwrap(),
+            Isotope::from_symbol("7B").unwrap(),
+            Isotope::from_symbol("13C").unwrap(),
+            Isotope::from_symbol("226Ra").unwrap(),
+        ];
+
+        let serialized = serde_json::to_string(&isotopes).unwrap();
+        let deserialized: Vec<Isotope> = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(isotopes, deserialized);
+    }
+
+    #[test]
+    fn test_isotope_to_element() {
+        assert_eq!(
+            Element::from(Isotope::from_symbol("D").unwrap()),
+            Element::H
+        );
+        assert_eq!(
+            Element::from(Isotope::from_symbol("T").unwrap()),
+            Element::H
+        );
+        assert_eq!(
+            Element::from(Isotope::from_symbol("7B").unwrap()),
+            Element::B
+        );
+        assert_eq!(
+            Element::from(Isotope::from_symbol("13C").unwrap()),
+            Element::C
+        );
+        assert_eq!(
+            Element::from(Isotope::from_symbol("226Ra").unwrap()),
+            Element::Ra
+        );
+    }
+
+    #[test]
+    fn test_isotope_macro() {
+        assert_eq!(iso!("D"), Isotope::from_symbol("D").unwrap());
+        assert_eq!(iso!("T"), Isotope::from_symbol("T").unwrap());
+        assert_eq!(iso!("7B"), Isotope::from_symbol("7B").unwrap());
+        assert_eq!(iso!("13C"), Isotope::from_symbol("13C").unwrap());
+        assert_eq!(iso!("226Ra"), Isotope::from_symbol("226Ra").unwrap());
     }
 }
