@@ -1,6 +1,5 @@
-//! Element data
+//! Element definitions and data
 
-use convert_case::{Case, Casing};
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -201,13 +200,6 @@ pub const ELEMENTS: [Element; 118] = [
 /// Last element
 pub const LAST_ELEMENT: Element = Element::Og;
 
-static SYMBOL_TO_ELEMENT: Lazy<HashMap<&'static str, Element>> = Lazy::new(|| {
-    ELEMENT_DATA
-        .iter()
-        .map(|(element, data)| (data.3, *element))
-        .collect()
-});
-
 static ATOMIC_NUMBER_TO_ELEMENT: Lazy<HashMap<u8, Element>> = Lazy::new(|| {
     ELEMENT_DATA
         .iter()
@@ -222,19 +214,169 @@ static PERIOD_GROUP_TO_ELEMENT: Lazy<HashMap<(u8, u8), Element>> = Lazy::new(|| 
         .collect()
 });
 
-static ELEMENT_SYMBOLS: Lazy<HashSet<String>> =
-    Lazy::new(|| ELEMENTS.iter().map(|e| e.symbol().to_lowercase()).collect());
+static ELEMENT_SYMBOLS: Lazy<HashSet<Vec<u8>>> = Lazy::new(|| {
+    ELEMENTS
+        .iter()
+        .map(|e| e.symbol().as_bytes().to_owned())
+        .collect()
+});
+
+// Helper function to normalize element symbol bytes to title case on stack
+// Returns the normalized buffer and the length of the symbol (1 or 2).
+fn normalize_symbol_bytes(bytes: &[u8]) -> Option<([u8; 2], usize)> {
+    match bytes.len() {
+        1 => {
+            if !bytes[0].is_ascii_alphabetic() {
+                return None;
+            }
+            let upper_b = bytes[0].to_ascii_uppercase();
+            Some(([upper_b, 0], 1)) // Second byte is padding, length is 1
+        }
+        2 => {
+            if !bytes[0].is_ascii_alphabetic() || !bytes[1].is_ascii_alphabetic() {
+                return None;
+            }
+            let b1_upper = bytes[0].to_ascii_uppercase();
+            let b2_lower = bytes[1].to_ascii_lowercase();
+            Some(([b1_upper, b2_lower], 2))
+        }
+        _ => None,
+    }
+}
 
 impl Element {
-    // Get element from symbol
-    pub fn from_symbol(symbol: &str) -> Option<Self> {
-        if symbol.is_empty() {
-            return None;
+    // Get element from symbol bytestring (allocation-free)
+    pub fn from_symbol_bytes(symbol: &[u8]) -> Option<Self> {
+        if let Some((key_buf, len)) = normalize_symbol_bytes(symbol) {
+            match &key_buf[..len] {
+                b"H" => Some(Element::H),
+                b"He" => Some(Element::He),
+                b"Li" => Some(Element::Li),
+                b"Be" => Some(Element::Be),
+                b"B" => Some(Element::B),
+                b"C" => Some(Element::C),
+                b"N" => Some(Element::N),
+                b"O" => Some(Element::O),
+                b"F" => Some(Element::F),
+                b"Ne" => Some(Element::Ne),
+                b"Na" => Some(Element::Na),
+                b"Mg" => Some(Element::Mg),
+                b"Al" => Some(Element::Al),
+                b"Si" => Some(Element::Si),
+                b"P" => Some(Element::P),
+                b"S" => Some(Element::S),
+                b"Cl" => Some(Element::Cl),
+                b"Ar" => Some(Element::Ar),
+                b"K" => Some(Element::K),
+                b"Ca" => Some(Element::Ca),
+                b"Sc" => Some(Element::Sc),
+                b"Ti" => Some(Element::Ti),
+                b"V" => Some(Element::V),
+                b"Cr" => Some(Element::Cr),
+                b"Mn" => Some(Element::Mn),
+                b"Fe" => Some(Element::Fe),
+                b"Co" => Some(Element::Co),
+                b"Ni" => Some(Element::Ni),
+                b"Cu" => Some(Element::Cu),
+                b"Zn" => Some(Element::Zn),
+                b"Ga" => Some(Element::Ga),
+                b"Ge" => Some(Element::Ge),
+                b"As" => Some(Element::As),
+                b"Se" => Some(Element::Se),
+                b"Br" => Some(Element::Br),
+                b"Kr" => Some(Element::Kr),
+                b"Rb" => Some(Element::Rb),
+                b"Sr" => Some(Element::Sr),
+                b"Y" => Some(Element::Y),
+                b"Zr" => Some(Element::Zr),
+                b"Nb" => Some(Element::Nb),
+                b"Mo" => Some(Element::Mo),
+                b"Tc" => Some(Element::Tc),
+                b"Ru" => Some(Element::Ru),
+                b"Rh" => Some(Element::Rh),
+                b"Pd" => Some(Element::Pd),
+                b"Ag" => Some(Element::Ag),
+                b"Cd" => Some(Element::Cd),
+                b"In" => Some(Element::In),
+                b"Sn" => Some(Element::Sn),
+                b"Sb" => Some(Element::Sb),
+                b"Te" => Some(Element::Te),
+                b"I" => Some(Element::I),
+                b"Xe" => Some(Element::Xe),
+                b"Cs" => Some(Element::Cs),
+                b"Ba" => Some(Element::Ba),
+                b"La" => Some(Element::La),
+                b"Ce" => Some(Element::Ce),
+                b"Pr" => Some(Element::Pr),
+                b"Nd" => Some(Element::Nd),
+                b"Pm" => Some(Element::Pm),
+                b"Sm" => Some(Element::Sm),
+                b"Eu" => Some(Element::Eu),
+                b"Gd" => Some(Element::Gd),
+                b"Tb" => Some(Element::Tb),
+                b"Dy" => Some(Element::Dy),
+                b"Ho" => Some(Element::Ho),
+                b"Er" => Some(Element::Er),
+                b"Tm" => Some(Element::Tm),
+                b"Yb" => Some(Element::Yb),
+                b"Lu" => Some(Element::Lu),
+                b"Hf" => Some(Element::Hf),
+                b"Ta" => Some(Element::Ta),
+                b"W" => Some(Element::W),
+                b"Re" => Some(Element::Re),
+                b"Os" => Some(Element::Os),
+                b"Ir" => Some(Element::Ir),
+                b"Pt" => Some(Element::Pt),
+                b"Au" => Some(Element::Au),
+                b"Hg" => Some(Element::Hg),
+                b"Tl" => Some(Element::Tl),
+                b"Pb" => Some(Element::Pb),
+                b"Bi" => Some(Element::Bi),
+                b"Po" => Some(Element::Po),
+                b"At" => Some(Element::At),
+                b"Rn" => Some(Element::Rn),
+                b"Fr" => Some(Element::Fr),
+                b"Ra" => Some(Element::Ra),
+                b"Ac" => Some(Element::Ac),
+                b"Th" => Some(Element::Th),
+                b"Pa" => Some(Element::Pa),
+                b"U" => Some(Element::U),
+                b"Np" => Some(Element::Np),
+                b"Pu" => Some(Element::Pu),
+                b"Am" => Some(Element::Am),
+                b"Cm" => Some(Element::Cm),
+                b"Bk" => Some(Element::Bk),
+                b"Cf" => Some(Element::Cf),
+                b"Es" => Some(Element::Es),
+                b"Fm" => Some(Element::Fm),
+                b"Md" => Some(Element::Md),
+                b"No" => Some(Element::No),
+                b"Lr" => Some(Element::Lr),
+                b"Rf" => Some(Element::Rf),
+                b"Db" => Some(Element::Db),
+                b"Sg" => Some(Element::Sg),
+                b"Bh" => Some(Element::Bh),
+                b"Hs" => Some(Element::Hs),
+                b"Mt" => Some(Element::Mt),
+                b"Ds" => Some(Element::Ds),
+                b"Rg" => Some(Element::Rg),
+                b"Cn" => Some(Element::Cn),
+                b"Nh" => Some(Element::Nh),
+                b"Fl" => Some(Element::Fl),
+                b"Mc" => Some(Element::Mc),
+                b"Lv" => Some(Element::Lv),
+                b"Ts" => Some(Element::Ts),
+                b"Og" => Some(Element::Og),
+                _ => None,
+            }
+        } else {
+            None
         }
+    }
 
-        // Handle case-insensitive lookup by normalizing capitalization
-        let normalized_symbol = symbol.to_owned().to_case(Case::Title);
-        SYMBOL_TO_ELEMENT.get(normalized_symbol.as_str()).copied()
+    // Get element from symbol string (allocation-free)
+    pub fn from_symbol(symbol: &str) -> Option<Self> {
+        Self::from_symbol_bytes(symbol.as_bytes())
     }
 
     // Get element from atomic number
@@ -253,13 +395,13 @@ impl Element {
         ELEMENT_DATA.get(self).unwrap().0
     }
 
-    // Get reference atomic mass for element
-    pub fn reference_atomic_mass(&self) -> u32 {
+    // Get mass number of the reference isotope for element
+    pub fn reference_mass_number(&self) -> u32 {
         ELEMENT_DATA.get(self).unwrap().1
     }
 
     // Get atomic mass (standard atomic weight) for element
-    pub fn atomic_mass(&self) -> f64 {
+    pub fn mass(&self) -> f64 {
         ELEMENT_DATA.get(self).unwrap().2
     }
 
@@ -358,9 +500,19 @@ impl Element {
         }
     }
 
-    // Check if element is a valid element symbol (case-insensitive)
+    // Check if bytestring contains valid element symbol (case-insensitive)
+    pub fn is_element_bytes(symbol: &[u8]) -> bool {
+        if let Some((key_buf, len)) = normalize_symbol_bytes(symbol) {
+            let key = &key_buf[..len];
+            ELEMENT_SYMBOLS.contains(key)
+        } else {
+            false
+        }
+    }
+
+    // Check if string contains valid element symbol (case-insesitive)
     pub fn is_element(symbol: &str) -> bool {
-        ELEMENT_SYMBOLS.contains(symbol.to_lowercase().as_str())
+        Self::is_element_bytes(symbol.as_bytes())
     }
 }
 
@@ -395,154 +547,11 @@ impl Display for Element {
     }
 }
 
-impl From<Isotope> for Element {
-    fn from(isotope: Isotope) -> Self {
-        isotope.element
-    }
-}
-
 /// Shorthand macro for element access
 #[macro_export]
 macro_rules! e {
     ($elem:ident) => {
         Element::$elem
-    };
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd)]
-pub struct Isotope {
-    element: Element,
-    mass_number: u8,
-}
-
-/// Isotope data:
-///
-/// 0. isotope mass (in amu)
-static ISOTOPE_DATA: Lazy<HashMap<Isotope, (f64,)>> = Lazy::new(|| {
-    vec![
-        (
-            Isotope {
-                element: Element::H,
-                mass_number: 2,
-            },
-            (2.0141,),
-        ),
-        (
-            Isotope {
-                element: Element::H,
-                mass_number: 3,
-            },
-            (3.0160,),
-        ),
-    ]
-    .into_iter()
-    .collect()
-});
-
-/// Named isotopes (only for H)
-static NAMED_ISOTOPES: Lazy<HashMap<Isotope, &'static str>> = Lazy::new(|| {
-    vec![
-        (
-            Isotope {
-                element: Element::H,
-                mass_number: 2,
-            },
-            "D",
-        ),
-        (
-            Isotope {
-                element: Element::H,
-                mass_number: 3,
-            },
-            "T",
-        ),
-    ]
-    .into_iter()
-    .collect()
-});
-
-static NAMED_SYMBOL_TO_ISOTOPE: Lazy<HashMap<&'static str, Isotope>> = Lazy::new(|| {
-    NAMED_ISOTOPES
-        .iter()
-        .map(|(isotope, symbol)| (*symbol, *isotope))
-        .collect()
-});
-
-impl Isotope {
-    pub fn from_symbol(symbol: &str) -> Option<Self> {
-        // Named isotopes ("D", "T")
-        NAMED_SYMBOL_TO_ISOTOPE
-            .get(symbol)
-            .copied()
-            // Isotope symbol (AZ notation - "7B", "13C", "222Ra")
-            .or_else(|| {
-                // Find index of the first non-digit character
-                match symbol.chars().position(|c| !c.is_digit(10)) {
-                    Some(0) => None,
-                    Some(idx) => {
-                        let mass_number = symbol[..idx].parse::<u8>().ok()?;
-                        let element = Element::from_symbol(&symbol[idx..])?;
-                        Some(Isotope {
-                            element,
-                            mass_number,
-                        })
-                    }
-                    None => None,
-                }
-            })
-    }
-
-    /// Get the element
-    pub fn element(&self) -> Element {
-        self.element
-    }
-
-    /// Get the mass number
-    pub fn mass_number(&self) -> u8 {
-        self.mass_number
-    }
-
-    /// Get the isotope symbol (AZ notation)
-    pub fn symbol(&self) -> String {
-        if let Some(symbol) = NAMED_ISOTOPES.get(self) {
-            symbol.to_string()
-        } else {
-            format!("{}{}", self.mass_number, self.element)
-        }
-    }
-
-    /// Get the isotope mass
-    pub fn mass(&self) -> f64 {
-        ISOTOPE_DATA.get(self).unwrap().0
-    }
-}
-
-impl Display for Isotope {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.symbol())
-    }
-}
-
-impl FromStr for Isotope {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()).into())
-    }
-}
-
-impl TryFrom<&str> for Isotope {
-    type Error = Error;
-
-    fn try_from(s: &str) -> Result<Self> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()).into())
-    }
-}
-
-#[macro_export]
-macro_rules! iso {
-    ($isotope:expr) => {
-        Isotope::from_symbol($isotope).unwrap()
     };
 }
 
@@ -554,9 +563,25 @@ mod tests {
     use serde_json;
 
     #[test]
+    fn test_element_from_symbol_bytes() {
+        assert_eq!(Element::from_symbol_bytes(b"H"), Some(Element::H));
+        assert_eq!(Element::from_symbol_bytes(b"h"), Some(Element::H));
+        assert_eq!(Element::from_symbol_bytes(b"He"), Some(Element::He));
+        assert_eq!(Element::from_symbol_bytes(b"he"), Some(Element::He));
+        assert_eq!(Element::from_symbol_bytes(b"HE"), Some(Element::He));
+        assert_eq!(Element::from_symbol_bytes(b"hE"), Some(Element::He));
+        assert_eq!(Element::from_symbol_bytes(b"C"), Some(Element::C));
+        assert_eq!(Element::from_symbol_bytes(b"invalid"), None);
+    }
+
+    #[test]
     fn test_element_from_symbol() {
         assert_eq!(Element::from_symbol("H"), Some(Element::H));
+        assert_eq!(Element::from_symbol("h"), Some(Element::H));
         assert_eq!(Element::from_symbol("He"), Some(Element::He));
+        assert_eq!(Element::from_symbol("he"), Some(Element::He));
+        assert_eq!(Element::from_symbol("HE"), Some(Element::He));
+        assert_eq!(Element::from_symbol("hE"), Some(Element::He));
         assert_eq!(Element::from_symbol("C"), Some(Element::C));
         assert_eq!(Element::from_symbol("invalid"), None);
     }
@@ -592,13 +617,8 @@ mod tests {
     ) {
         assert_eq!(element.symbol(), symbol);
         assert_eq!(element.atomic_number(), atomic_number);
-        assert_eq!(element.reference_atomic_mass(), reference_atomic_mass);
-        assert!(approx_eq!(
-            f64,
-            element.atomic_mass(),
-            atomic_mass,
-            ulps = 4
-        ));
+        assert_eq!(element.reference_mass_number(), reference_atomic_mass);
+        assert!(approx_eq!(f64, element.mass(), atomic_mass, ulps = 4));
         assert_eq!(element.period(), period);
         assert_eq!(element.group(), group);
         assert_eq!(element.valence_electrons(), valence_electrons);
@@ -646,13 +666,6 @@ mod tests {
             assert!(data.8 .0 <= data.8 .1); // charge bounds
             assert!(data.9 <= 10); // max unpaired electrons
             assert!(data.10 <= 4); // max implicit hydrogens
-        }
-    }
-
-    #[test]
-    fn test_symbol_to_element_to_symbol() {
-        for (symbol, element) in SYMBOL_TO_ELEMENT.iter() {
-            assert_eq!(element.symbol(), *symbol);
         }
     }
 
@@ -706,6 +719,20 @@ mod tests {
         assert_eq!(Element::Li.next_group(), Some(Element::Be));
         assert_eq!(Element::Ne.previous_group(), Some(Element::F));
         assert_eq!(Element::Ne.next_group(), None);
+    }
+
+    #[test]
+    fn test_element_is_element_bytes() {
+        assert!(Element::is_element_bytes(b"H"));
+        assert!(Element::is_element_bytes(b"He"));
+        assert!(Element::is_element_bytes(b"C"));
+        assert!(Element::is_element_bytes(b"c"));
+        assert!(Element::is_element_bytes(b"Cu"));
+        assert!(Element::is_element_bytes(b"cu"));
+        assert!(Element::is_element_bytes(b"CU"));
+        assert!(Element::is_element_bytes(b"Ru"));
+        assert!(!Element::is_element_bytes(b"R1"));
+        assert!(!Element::is_element_bytes(b"X"));
     }
 
     #[test]
@@ -777,200 +804,5 @@ mod tests {
     fn test_element_macro() {
         assert_eq!(e!(H), Element::H);
         assert_eq!(e!(Fe), Element::Fe);
-    }
-
-    #[test]
-    fn test_isotope_from_symbol() {
-        assert_eq!(
-            Isotope::from_symbol("D"),
-            Some(Isotope {
-                element: Element::H,
-                mass_number: 2
-            })
-        );
-        assert_eq!(
-            Isotope::from_symbol("T"),
-            Some(Isotope {
-                element: Element::H,
-                mass_number: 3
-            })
-        );
-        assert_eq!(
-            Isotope::from_symbol("2H"),
-            Some(Isotope {
-                element: Element::H,
-                mass_number: 2
-            })
-        );
-        assert_eq!(
-            Isotope::from_symbol("7B"),
-            Some(Isotope {
-                element: Element::B,
-                mass_number: 7
-            })
-        );
-        assert_eq!(
-            Isotope::from_symbol("13C"),
-            Some(Isotope {
-                element: Element::C,
-                mass_number: 13
-            })
-        );
-        assert_eq!(
-            Isotope::from_symbol("226Ra"),
-            Some(Isotope {
-                element: Element::Ra,
-                mass_number: 226
-            })
-        );
-        assert_eq!(Isotope::from_symbol("Q"), None);
-        assert_eq!(Isotope::from_symbol("13C2"), None);
-        assert_eq!(Isotope::from_symbol("C"), None);
-        assert_eq!(Isotope::from_symbol("12"), None);
-        assert_eq!(Isotope::from_symbol(""), None);
-    }
-
-    #[test]
-    fn test_isotope_element() {
-        assert_eq!(Isotope::from_symbol("D").unwrap().element(), Element::H);
-        assert_eq!(Isotope::from_symbol("T").unwrap().element(), Element::H);
-        assert_eq!(Isotope::from_symbol("7B").unwrap().element(), Element::B);
-        assert_eq!(Isotope::from_symbol("13C").unwrap().element(), Element::C);
-        assert_eq!(
-            Isotope::from_symbol("226Ra").unwrap().element(),
-            Element::Ra
-        );
-    }
-
-    #[test]
-    fn test_isotope_mass_number() {
-        assert_eq!(Isotope::from_symbol("D").unwrap().mass_number(), 2);
-        assert_eq!(Isotope::from_symbol("T").unwrap().mass_number(), 3);
-        assert_eq!(Isotope::from_symbol("7B").unwrap().mass_number(), 7);
-        assert_eq!(Isotope::from_symbol("13C").unwrap().mass_number(), 13);
-        assert_eq!(Isotope::from_symbol("226Ra").unwrap().mass_number(), 226);
-    }
-
-    #[test]
-    fn test_isotope_mass() {
-        assert_eq!(Isotope::from_symbol("D").unwrap().mass(), 2.0141);
-        assert_eq!(Isotope::from_symbol("T").unwrap().mass(), 3.0160);
-    }
-
-    #[test]
-    fn test_isotope_symbol() {
-        assert_eq!(Isotope::from_symbol("D").unwrap().symbol(), "D");
-        assert_eq!(Isotope::from_symbol("T").unwrap().symbol(), "T");
-        assert_eq!(Isotope::from_symbol("7B").unwrap().symbol(), "7B");
-        assert_eq!(Isotope::from_symbol("13C").unwrap().symbol(), "13C");
-        assert_eq!(Isotope::from_symbol("226Ra").unwrap().symbol(), "226Ra");
-    }
-
-    #[test]
-    fn test_isotope_display() {
-        assert_eq!(Isotope::from_symbol("D").unwrap().to_string(), "D");
-        assert_eq!(Isotope::from_symbol("T").unwrap().to_string(), "T");
-        assert_eq!(Isotope::from_symbol("7B").unwrap().to_string(), "7B");
-        assert_eq!(Isotope::from_symbol("13C").unwrap().to_string(), "13C");
-        assert_eq!(Isotope::from_symbol("226Ra").unwrap().to_string(), "226Ra");
-    }
-
-    #[test]
-    fn test_isotope_serialization() {
-        // Test serialization of individual isotopes
-        assert_eq!(
-            serde_json::to_string(&Isotope::from_symbol("D").unwrap()).unwrap(),
-            r#"{"element":"H","mass_number":2}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&Isotope::from_symbol("T").unwrap()).unwrap(),
-            r#"{"element":"H","mass_number":3}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&Isotope::from_symbol("7B").unwrap()).unwrap(),
-            r#"{"element":"B","mass_number":7}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&Isotope::from_symbol("13C").unwrap()).unwrap(),
-            r#"{"element":"C","mass_number":13}"#
-        );
-        assert_eq!(
-            serde_json::to_string(&Isotope::from_symbol("226Ra").unwrap()).unwrap(),
-            r#"{"element":"Ra","mass_number":226}"#
-        );
-    }
-
-    #[test]
-    fn test_isotope_deserialization() {
-        assert_eq!(
-            serde_json::from_str::<Isotope>(r#"{"element":"H","mass_number":2}"#).unwrap(),
-            Isotope::from_symbol("D").unwrap()
-        );
-        assert_eq!(
-            serde_json::from_str::<Isotope>(r#"{"element":"H","mass_number":3}"#).unwrap(),
-            Isotope::from_symbol("T").unwrap()
-        );
-        assert_eq!(
-            serde_json::from_str::<Isotope>(r#"{"element":"B","mass_number":7}"#).unwrap(),
-            Isotope::from_symbol("7B").unwrap()
-        );
-        assert_eq!(
-            serde_json::from_str::<Isotope>(r#"{"element":"C","mass_number":13}"#).unwrap(),
-            Isotope::from_symbol("13C").unwrap()
-        );
-        assert_eq!(
-            serde_json::from_str::<Isotope>(r#"{"element":"Ra","mass_number":226}"#).unwrap(),
-            Isotope::from_symbol("226Ra").unwrap()
-        );
-        assert!(serde_json::from_str::<Isotope>(r#"{"element":"Invalid","mass_number":123}"#).is_err());
-    }
-
-    #[test]
-    fn test_isotope_roundtrip() {
-        let isotopes = vec![
-            Isotope::from_symbol("D").unwrap(),
-            Isotope::from_symbol("T").unwrap(),
-            Isotope::from_symbol("7B").unwrap(),
-            Isotope::from_symbol("13C").unwrap(),
-            Isotope::from_symbol("226Ra").unwrap(),
-        ];
-
-        let serialized = serde_json::to_string(&isotopes).unwrap();
-        let deserialized: Vec<Isotope> = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(isotopes, deserialized);
-    }
-
-    #[test]
-    fn test_isotope_to_element() {
-        assert_eq!(
-            Element::from(Isotope::from_symbol("D").unwrap()),
-            Element::H
-        );
-        assert_eq!(
-            Element::from(Isotope::from_symbol("T").unwrap()),
-            Element::H
-        );
-        assert_eq!(
-            Element::from(Isotope::from_symbol("7B").unwrap()),
-            Element::B
-        );
-        assert_eq!(
-            Element::from(Isotope::from_symbol("13C").unwrap()),
-            Element::C
-        );
-        assert_eq!(
-            Element::from(Isotope::from_symbol("226Ra").unwrap()),
-            Element::Ra
-        );
-    }
-
-    #[test]
-    fn test_isotope_macro() {
-        assert_eq!(iso!("D"), Isotope::from_symbol("D").unwrap());
-        assert_eq!(iso!("T"), Isotope::from_symbol("T").unwrap());
-        assert_eq!(iso!("7B"), Isotope::from_symbol("7B").unwrap());
-        assert_eq!(iso!("13C"), Isotope::from_symbol("13C").unwrap());
-        assert_eq!(iso!("226Ra"), Isotope::from_symbol("226Ra").unwrap());
     }
 }

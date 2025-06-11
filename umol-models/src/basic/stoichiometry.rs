@@ -250,7 +250,7 @@ impl Property<Stoichiometry> for Mass {
         Ok(model
             .counts
             .iter()
-            .map(|(&element, &count)| element.atomic_mass() * (count as f64))
+            .map(|(&element, &count)| element.mass() * (count as f64))
             .sum())
     }
 }
@@ -417,7 +417,7 @@ mod tests {
 
         // Test mass property
         let mass = s.mass().unwrap();
-        let expected_mass = 2.0 * e!(C).atomic_mass() + 6.0 * e!(H).atomic_mass();
+        let expected_mass = 2.0 * e!(C).mass() + 6.0 * e!(H).mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }
 
@@ -442,7 +442,7 @@ mod tests {
         assert_eq!(s.atom_count(e!(O)).unwrap(), 0);
 
         let mass = s.mass().unwrap();
-        let expected_mass = 2.0 * e!(C).atomic_mass() + 6.0 * e!(H).atomic_mass();
+        let expected_mass = 2.0 * e!(C).mass() + 6.0 * e!(H).mass();
         assert!((mass - expected_mass).abs() < 1e-10);
     }
 }

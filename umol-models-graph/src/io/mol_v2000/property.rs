@@ -137,12 +137,12 @@ pub(crate) fn parse_m_pairs<'de, T: DeserializeOwned>(input: &'de [u8]) -> Resul
 
 /// Charge property parser
 /// Format: `M  CHGnn8 aaa vvv ...`
-/// TODO: Rewrite to return editing commands
 pub(crate) fn parse_m_chg(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
     let pairs = parse_m_pairs::<i8>(input)?;
 
     for (idx, charge) in pairs {
         let atom = &mut atoms[idx];
+        println!("DEBUG CHG PROP: INDEX: {}, VALUE: {}", idx, charge);
         if charge >= -15 && charge <= 15 {
             atom.charge = charge as i8;
         } else {
@@ -157,12 +157,12 @@ pub(crate) fn parse_m_chg(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
 
 /// Isotope property parser
 /// Format: `M  ISOnn8 aaa vvv ...`
-/// TODO: Rewrite to return editing commands
 pub(crate) fn parse_m_iso(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
     let pairs = parse_m_pairs::<i32>(input)?;
 
     for (idx, mass_diff) in pairs {
         let atom = &mut atoms[idx];
+        println!("DEBUG ISO PROP: INDEX: {}, VALUE: {}", idx, mass_diff);
         if mass_diff == 0 {
             atom.isotope_mass = None;
         } else if mass_diff >= -18 && mass_diff <= 12 {
@@ -183,12 +183,12 @@ pub(crate) fn parse_m_iso(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
 
 /// Radical property parser
 /// Format: `M  RADnn8 aaa vvv ...`
-/// TODO: Rewrite to return editing commands
 pub(crate) fn parse_m_rad(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
     let pairs = parse_m_pairs::<i64>(input)?;
 
     for (idx, rad) in pairs {
         let atom = &mut atoms[idx];
+        println!("DEBUG RAD PROP: INDEX: {}, VALUE: {}", idx, rad);
         match rad {
             1 => atom.radical = Some(1), // Singlet
             2 => atom.radical = Some(2), // Doublet
@@ -224,7 +224,7 @@ pub(crate) fn parse_m_sty(
                 "SRU" => SGroupType::SRU,
                 "SUP" => SGroupType::Superatom,
                 "DAT" => SGroupType::Data,
-                _ => SGroupType::Unknown(group_type),
+                _ => SGroupType::Unknown(group_type.clone()),
             },
             label: None,
             subscript: None,
@@ -232,6 +232,7 @@ pub(crate) fn parse_m_sty(
             bond_indices: Vec::new(),
         };
 
+        println!("DEBUG STY PROP: INDEX: {}, VALUE: {}", index, group_type);
         if index < sgroups.len() {
             sgroups[index] = sgroup;
         } else if index == sgroups.len() {
@@ -306,6 +307,7 @@ pub(crate) fn parse_m_sal(
         indices.push(index);
     }
 
+    println!("DEBUG SAL PROP: GROUP: {}, INDICES: {:?}", group, indices);
     let sgroup = &mut sgroups[group];
     sgroup.atom_indices.extend(indices);
 
@@ -371,6 +373,8 @@ pub(crate) fn parse_m_sbl(
         indices.push(index);
     }
 
+    println!("DEBUG SBL PROP: GROUP: {}, INDICES: {:?}", group, indices);
+
     let sgroup = &mut sgroups[group];
     sgroup.bond_indices.extend(indices);
 
@@ -388,6 +392,7 @@ pub(crate) fn parse_m_slb(
     let pairs = parse_m_pairs::<String>(input)?;
     for (index, label) in pairs {
         let sgroup = &mut sgroups[index];
+        println!("DEBUG SLB PROP: INDEX: {}, VALUE: {}", index, label);
         sgroup.label = Some(label);
     }
     Ok(())
@@ -418,6 +423,8 @@ pub(crate) fn parse_a_prop(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
         .into());
     }
 
+    println!("DEBUG A PROP: INDEX: {}, VALUE: {}", index, alias);
+
     let atom = &mut atoms[index];
     atom.properties.insert("molFileAlias".to_string(), alias);
     Ok(())
@@ -446,6 +453,8 @@ pub(crate) fn parse_v_prop(atoms: &mut Vec<Atom>, input: &[u8]) -> Result<()> {
         ))
         .into());
     }
+
+    println!("DEBUG V PROP: INDEX: {}, VALUE: {}", index, value);
 
     let atom = &mut atoms[index];
     atom.properties.insert("molFileValue".to_string(), value);
