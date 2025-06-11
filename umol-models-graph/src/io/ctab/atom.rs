@@ -9,9 +9,7 @@ use nom::sequence::{delimited, preceded};
 use nom::Parser;
 use umol_data::{Element, NamedIsotope};
 
-use super::utils::{
-    fixed_width_float, fixed_width_int, fixed_width_int_in_range_minus1,
-};
+use super::utils::{fixed_width_float, fixed_width_int, fixed_width_int_in_range_minus1};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum AtomSymbol {
@@ -27,7 +25,7 @@ pub(crate) struct AtomLine {
     x: f64,
     y: f64,
     z: f64,
-    symbol: AtomSymbol,       // 'aaa' field: atom symbol (see AtomSymbol enum)
+    symbol: AtomSymbol, // 'aaa' field: atom symbol (see AtomSymbol enum)
     mass_diff: i8, // 'dd' field: mass difference (-3, -2, -1, 0, 1, 2, 3, 4), 0 if value outside of this range
     charge_code: u8, // 'ccc' field: 0 = uncharged, 1 = +3, 2 = +2, 3 = +1, 4 = doublet radical, 5 = -1, 6 = -2, 7 = -3
     stereo_parity: u8, // 'sss' field: 0 = not stereo, 1 = odd, 2 = even, 3 = either or unmarked
@@ -71,7 +69,14 @@ fn atom_symbol<'a>(
                     delimited(space0, tag("*"), space0),
                 ),
                 map(
-                    delimited(space0, (tag("R"), fixed_width_int_in_range_minus1::<usize, _>(2, 1..=31)), space0),
+                    delimited(
+                        space0,
+                        (
+                            tag("R"),
+                            fixed_width_int_in_range_minus1::<usize, _>(2, 1..=31),
+                        ),
+                        space0,
+                    ),
                     |(_, idx)| (AtomSymbol::RGroup(idx), None),
                 ),
                 map(
@@ -202,6 +207,8 @@ pub(crate) fn atom_line<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nom::error::ErrorKind;
+    use nom::Err;
     use rstest::rstest;
 
     #[rstest]
@@ -228,20 +235,33 @@ mod tests {
         #[case] expected_mass_diff: Option<i8>,
     ) {
         let (remaining, (symbol, mass_diff)) = atom_symbol().parse(input).unwrap();
-        assert_eq!(remaining, b"");
+        assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(symbol, expected_symbol);
         assert_eq!(mass_diff, expected_mass_diff);
     }
 
     #[rstest]
-    #[case(b"R  ", "R group index missing")]
-    #[case(b"R0", "R group index must be between 1 and 31")]
-    #[case(b"R32", "R group index must be between 1 and 31")]
-    #[case(b"Xx ", "Unknown atom symbol")]
-    #[case(b"LQ", "Unknown atom symbol")]
-    fn test_atom_symbol_invalid(#[case] input: &[u8], #[case] message: &str) {
+    #[case(b"   ", "empty field", ErrorKind::Alpha)]
+    #[case(b"H", "too short", ErrorKind::Eof)]
+    #[case(b"R  ", "R group index missing", ErrorKind::MapRes)]
+    #[case(b"R0 ", "R group index must be between 1 and 31", ErrorKind::MapRes)]
+    #[case(b"R32", "R group index must be between 1 and 31", ErrorKind::MapRes)]
+    #[case(b"Xx ", "Unknown atom symbol", ErrorKind::MapRes)]
+    #[case(b"LQ ", "Unknown atom symbol", ErrorKind::Eof)]
+    fn test_atom_symbol_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
         let res = atom_symbol().parse(input);
-        assert!(res.is_err(), "{}", message);
+        assert!(res.is_err(), "{}", desc);
+        assert!(
+            matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            res.clone().unwrap_err().map(|e| e.code),
+        );
     }
 
     #[rstest]
@@ -294,7 +314,7 @@ mod tests {
                  hydrogen_code: 0, stereo_care: 0, valence_code: 0, atom_mapping: 0, inversion: 0, exact_change: 0 })]
     fn test_atom_line(#[case] input: &[u8], #[case] expected_atom_line: AtomLine) {
         let (remaining, atom_line) = atom_line().parse(input).unwrap();
-        assert_eq!(remaining, b"");
+        assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(atom_line, expected_atom_line);
     }
 }

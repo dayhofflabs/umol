@@ -28,7 +28,7 @@ use super::utils::fixed_width_int;
 /// -------------------------------------------------------------------
 ///
 pub(crate) fn counts_line<'a>(
-) -> impl Parser<&'a [u8], Output = ParsedCounts, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = CountsLine, Error = error::Error<&'a [u8]>> {
     let atoms = fixed_width_int::<i32>(3);
     let bonds = fixed_width_int::<i32>(3);
     let atom_lists = fixed_width_int::<i32>(3);
@@ -49,7 +49,7 @@ pub(crate) fn counts_line<'a>(
             version,
         ),
         |(atoms, bonds, atom_lists, _, chiral_flag, stext_entries, _, properties_lines, _)| {
-            ParsedCounts {
+            CountsLine {
                 atoms,
                 bonds,
                 atom_lists,
@@ -62,7 +62,7 @@ pub(crate) fn counts_line<'a>(
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ParsedCounts {
+pub(crate) struct CountsLine {
     atoms: i32,      // 'aaa' - number of atoms (max 255)
     bonds: i32,      // 'bbb' - number of bonds (max 255)
     atom_lists: i32, // 'lll' - number of atom lists (max 30)
@@ -80,33 +80,42 @@ pub(crate) struct ParsedCounts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nom::error::ErrorKind;
+    use nom::Err;
     use rstest::rstest;
 
     #[rstest]
     // From CTab spec (Figure 3)
     #[case(b"  6  5  0  0  1                 3 V2000",
-      ParsedCounts {atoms: 6, bonds: 5, atom_lists: 0, chiral_flag: 1, stext_entries: 0, properties_lines: 3})]
+      CountsLine {atoms: 6, bonds: 5, atom_lists: 0, chiral_flag: 1, stext_entries: 0, properties_lines: 3})]
     #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000",
-      ParsedCounts {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
+      CountsLine {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
     #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ",
-      ParsedCounts {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 0})]
+      CountsLine {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 0})]
     #[case(b"  4  2  0  0  0  0  0  0  0  0999 V2000",
-      ParsedCounts {atoms: 4, bonds: 2, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
+      CountsLine {atoms: 4, bonds: 2, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
     #[case(b"  1  0  0  0  0  0            999 V2000",
-      ParsedCounts {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
-    fn test_counts_line(#[case] input: &[u8], #[case] expected: ParsedCounts) {
+      CountsLine {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
+    fn test_counts_line(#[case] input: &[u8], #[case] expected: CountsLine) {
         let (remaining, counts) = counts_line().parse(input).unwrap();
-        assert_eq!(remaining, b"");
+        assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(counts, expected);
     }
 
     #[rstest]
-    #[case(b"  4  2  0     0  0            999 V1000", "invalid version")]
-    #[case(b"  4  2  0     0  0            ", "too short")]
-    #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom")]
-    #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond")]
-    fn test_counts_line_invalid(#[case] input: &[u8], #[case] message: &str) {
+    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", ErrorKind::Tag)]
+    #[case(b"  4  2  0     0  0            ", "too short", ErrorKind::TakeWhileMN)]
+    #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", ErrorKind::TakeWhileMN)]
+    #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", ErrorKind::TakeWhileMN)]
+    fn test_counts_line_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
         let res = counts_line().parse(input);
-        assert!(res.is_err(), "{}", message);
+        assert!(res.is_err(), "{}", desc);
+        assert!(
+            matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            res.clone().unwrap_err().map(|e| e.code),
+        );
     }
 }

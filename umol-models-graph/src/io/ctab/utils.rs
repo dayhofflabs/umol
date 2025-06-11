@@ -186,7 +186,10 @@ mod tests {
     fn test_fixed_width_int(#[case] input: &[u8], #[case] expected: i32) {
         let mut parser = all_consuming(fixed_width_int::<i32>(3));
         let result = parser.parse(input);
-        assert_eq!(result, Ok((&b""[..], expected)));
+        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
     }
 
     #[rstest]
@@ -202,11 +205,12 @@ mod tests {
         let mut parser = all_consuming(fixed_width_int::<i32>(3));
         let result = parser.parse(input);
         assert!(result.is_err(), "Test for should have failed for {}", desc);
-        println!("{:?}", result);
         assert!(
-            matches!(result, Err(Err::Error(e)) if e.code == expected_kind),
-            "Mismatched error kind for {}",
-            desc
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
         );
     }
 
@@ -218,7 +222,10 @@ mod tests {
     fn test_fixed_width_int_in_range(#[case] input: &[u8], #[case] expected: i8) {
         let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, -10i8..=110i8));
         let result = parser.parse(input);
-        assert_eq!(result, Ok((&b""[..], expected)));
+        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
     }
 
     #[rstest]
@@ -235,9 +242,11 @@ mod tests {
         let result = parser.parse(input);
         assert!(result.is_err(), "Test for should have failed for {}", desc);
         assert!(
-            matches!(result, Err(Err::Error(e)) if e.code == expected_kind),
-            "Mismatched error kind for {}",
-            desc
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
         );
     }
 
@@ -249,7 +258,10 @@ mod tests {
     fn test_fixed_width_int_in_range_inclusive(#[case] input: &[u8], #[case] expected: u8) {
         let mut parser = all_consuming(fixed_width_int_in_range::<u8, _>(3, 0u8..=100u8));
         let result = parser.parse(input);
-        assert_eq!(result, Ok((&b""[..], expected)));
+        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
     }
 
     #[rstest]
@@ -258,7 +270,10 @@ mod tests {
     fn test_fixed_width_int_minus1(#[case] input: &[u8], #[case] expected: usize) {
         let mut parser = all_consuming(fixed_width_int_minus1::<usize>(3));
         let result = parser.parse(input);
-        assert_eq!(result, Ok((&b""[..], expected)));
+        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
     }
 
     #[rstest]
@@ -267,16 +282,30 @@ mod tests {
     fn test_fixed_width_int_in_range_minus1(#[case] input: &[u8], #[case] expected: usize) {
         let mut parser = all_consuming(fixed_width_int_in_range_minus1::<usize, _>(3, 1..=100));
         let result = parser.parse(input);
-        assert_eq!(result, Ok((&b""[..], expected)));
+        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
     }
 
     #[rstest]
-    #[case(b"101", "out of range")]
-    #[case(b"  0", "out of range")]
-    fn test_fixed_width_int_in_range_minus1_invalid(#[case] input: &[u8], #[case] desc: &str) {
+    #[case(b"101", "out of range", ErrorKind::Verify)]
+    #[case(b"  0", "out of range", ErrorKind::Verify)]
+    fn test_fixed_width_int_in_range_minus1_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
         let mut parser = all_consuming(fixed_width_int_in_range_minus1::<usize, _>(3, 1..=100));
         let result = parser.parse(input);
         assert!(result.is_err(), "Test for '{}' should have failed", desc);
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
+        );
     }
 
     #[rstest]
@@ -297,12 +326,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"1.23a     ")]
-    #[case(b"1.2.3     ")]
-    #[case(b"          a")]
-    fn test_fixed_width_float_invalid(#[case] input: &[u8]) {
+    #[case(b"1.23a     ", "trailing characters", ErrorKind::Eof)]
+    #[case(b"1.2.3     ", "invalid decimal point", ErrorKind::Eof)]
+    #[case(b"          a", "trailing characters", ErrorKind::Eof)]
+    fn test_fixed_width_float_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
         let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
         let result = parser.parse(input);
-        assert!(result.is_err());
+        assert!(result.is_err(), "Test for '{}' should have failed", desc);
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
+        );
     }
 }
