@@ -80,8 +80,7 @@ pub(crate) struct CountsLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nom::error::ErrorKind;
-    use nom::Err;
+    use nom::{error::ErrorKind, Err};
     use rstest::rstest;
 
     #[rstest]
@@ -103,13 +102,29 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", ErrorKind::Tag)]
+    #[case(
+        b"  4  2  0     0  0            999 V1000",
+        "invalid version",
+        ErrorKind::Tag
+    )]
     #[case(b"  4  2  0     0  0            ", "too short", ErrorKind::TakeWhileMN)]
-    #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", ErrorKind::TakeWhileMN)]
-    #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", ErrorKind::TakeWhileMN)]
-    fn test_counts_line_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    #[case(
+        b" 1A  2  0     0  0            999 V2000",
+        "non-numeric atom",
+        ErrorKind::TakeWhileMN
+    )]
+    #[case(
+        b"  4 AA  0     0  0            999 V2000",
+        "non-numeric bond",
+        ErrorKind::TakeWhileMN
+    )]
+    fn test_counts_line_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
         let res = counts_line().parse(input);
-        assert!(res.is_err(), "{}", desc);
+        assert!(res.is_err(), "{} should have failed", desc);
         assert!(
             matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",

@@ -38,10 +38,9 @@ pub(crate) struct AtomLine {
     exact_change: u8, // 'eee' field: 0 = property not applied, 1 = charge in query must match
 }
 
-/// Parse atom symbol and named isotope
-///
-///
-///
+/// Parse atom symbol
+/// Values: entry in periodic table or L for atom list, A, Q, * for unspecified atom, and LP for lone pair,
+/// or R# for Rgroup label. Named isotopes (D, T) are supported as extension
 fn atom_symbol<'a>(
 ) -> impl Parser<&'a [u8], Output = (AtomSymbol, Option<i8>), Error = error::Error<&'a [u8]>> {
     |input| {
@@ -207,8 +206,7 @@ pub(crate) fn atom_line<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nom::error::ErrorKind;
-    use nom::Err;
+    use nom::{error::ErrorKind, Err};
     use rstest::rstest;
 
     #[rstest]
@@ -253,14 +251,14 @@ mod tests {
         #[case] desc: &str,
         #[case] expected_kind: ErrorKind,
     ) {
-        let res = atom_symbol().parse(input);
-        assert!(res.is_err(), "{}", desc);
+        let result = atom_symbol().parse(input);
+        assert!(result.is_err(), "{} should have failed", desc);
         assert!(
-            matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",
             desc,
             expected_kind,
-            res.clone().unwrap_err().map(|e| e.code),
+            result.clone().unwrap_err().map(|e| e.code),
         );
     }
 

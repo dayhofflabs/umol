@@ -10,11 +10,11 @@ use nom::{
     branch::alt,
     bytes::{complete::tag, take, take_while_m_n},
     character::complete::{
-        digit0, digit1, i32 as nom_i32, i8 as nom_i8, space0, u8 as nom_u8, usize as nom_usize,
+        digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
+        u8 as nom_u8, usize as nom_usize,
     },
     combinator::{all_consuming, complete, map, map_parser, opt, recognize, value, verify},
     error,
-    number::complete::{double, float},
     sequence::delimited,
     Parser,
 };
@@ -46,6 +46,12 @@ impl IntParser for i8 {
     }
 }
 
+impl IntParser for i16 {
+    fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>> {
+        nom_i16
+    }
+}
+
 impl IntParser for i32 {
     fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>> {
         nom_i32
@@ -58,25 +64,15 @@ impl IntParser for u8 {
     }
 }
 
+impl IntParser for u32 {
+    fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>> {
+        nom_u32
+    }
+}
+
 impl IntParser for usize {
     fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>> {
         nom_usize
-    }
-}
-
-pub(crate) trait FloatParser: Sized + Copy + Debug + Default + Float {
-    fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>>;
-}
-
-impl FloatParser for f32 {
-    fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>> {
-        float
-    }
-}
-
-impl FloatParser for f64 {
-    fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>> {
-        double
     }
 }
 
@@ -121,7 +117,10 @@ pub(crate) fn fixed_width_int_minus1<'a, T>(
 where
     T: IntParser,
 {
-    map(fixed_width_int(width), |x: T| x - T::one())
+    map(
+        verify(fixed_width_int(width), |val: &T| *val >= T::one()),
+        |x: T| x - T::one(),
+    )
 }
 
 /// Parse a fixed-width field as an integer type with a range check, subtracting one.
@@ -142,7 +141,7 @@ pub(crate) fn fixed_width_float<'a, T>(
     precision: usize,
 ) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
 where
-    T: FloatParser + FastFloat,
+    T: Float + FastFloat,
 {
     map_parser(
         take(width),
@@ -186,7 +185,11 @@ mod tests {
     fn test_fixed_width_int(#[case] input: &[u8], #[case] expected: i32) {
         let mut parser = all_consuming(fixed_width_int::<i32>(3));
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        assert!(
+            result.is_ok(),
+            "Test for '{}' should have succeeded",
+            String::from_utf8_lossy(input)
+        );
         let (remaining, result) = result.unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
@@ -204,7 +207,7 @@ mod tests {
     ) {
         let mut parser = all_consuming(fixed_width_int::<i32>(3));
         let result = parser.parse(input);
-        assert!(result.is_err(), "Test for should have failed for {}", desc);
+        assert!(result.is_err(), "{} should have failed", desc);
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",
@@ -222,7 +225,11 @@ mod tests {
     fn test_fixed_width_int_in_range(#[case] input: &[u8], #[case] expected: i8) {
         let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, -10i8..=110i8));
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        assert!(
+            result.is_ok(),
+            "{} should have succeeded",
+            String::from_utf8_lossy(input)
+        );
         let (remaining, result) = result.unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
@@ -240,7 +247,7 @@ mod tests {
     ) {
         let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, -10i8..=10i8));
         let result = parser.parse(input);
-        assert!(result.is_err(), "Test for should have failed for {}", desc);
+        assert!(result.is_err(), "{} should have failed", desc);
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",
@@ -258,7 +265,11 @@ mod tests {
     fn test_fixed_width_int_in_range_inclusive(#[case] input: &[u8], #[case] expected: u8) {
         let mut parser = all_consuming(fixed_width_int_in_range::<u8, _>(3, 0u8..=100u8));
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        assert!(
+            result.is_ok(),
+            "Test for '{}' should have succeeded",
+            String::from_utf8_lossy(input)
+        );
         let (remaining, result) = result.unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
@@ -270,7 +281,11 @@ mod tests {
     fn test_fixed_width_int_minus1(#[case] input: &[u8], #[case] expected: usize) {
         let mut parser = all_consuming(fixed_width_int_minus1::<usize>(3));
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        assert!(
+            result.is_ok(),
+            "Test for '{}' should have succeeded",
+            String::from_utf8_lossy(input)
+        );
         let (remaining, result) = result.unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
@@ -282,7 +297,11 @@ mod tests {
     fn test_fixed_width_int_in_range_minus1(#[case] input: &[u8], #[case] expected: usize) {
         let mut parser = all_consuming(fixed_width_int_in_range_minus1::<usize, _>(3, 1..=100));
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Test for '{}' should have succeeded", String::from_utf8_lossy(input));
+        assert!(
+            result.is_ok(),
+            "Test for '{}' should have succeeded",
+            String::from_utf8_lossy(input)
+        );
         let (remaining, result) = result.unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
@@ -298,7 +317,7 @@ mod tests {
     ) {
         let mut parser = all_consuming(fixed_width_int_in_range_minus1::<usize, _>(3, 1..=100));
         let result = parser.parse(input);
-        assert!(result.is_err(), "Test for '{}' should have failed", desc);
+        assert!(result.is_err(), "{} should have failed", desc);
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",
@@ -336,7 +355,7 @@ mod tests {
     ) {
         let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
         let result = parser.parse(input);
-        assert!(result.is_err(), "Test for '{}' should have failed", desc);
+        assert!(result.is_err(), "{} should have failed", desc);
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",

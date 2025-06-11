@@ -3,5 +3,5 @@
 mod atom;
 mod bond;
 mod counts;
-mod utils;
 mod properties;
+mod utils;

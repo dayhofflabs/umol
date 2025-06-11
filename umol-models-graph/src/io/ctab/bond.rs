@@ -84,6 +84,7 @@ fn bond_line<'a>() -> impl Parser<&'a [u8], Output = BondLine, Error = error::Er
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nom::{error::ErrorKind, Err};
     use rstest::rstest;
 
     #[rstest]
@@ -102,5 +103,20 @@ mod tests {
         let (remaining, bond_line) = bond_line().parse(input).unwrap();
         assert_eq!(bond_line, expected);
         assert!(remaining.is_empty());
+    }
+
+    #[rstest]
+    #[case(b"  1  2  1  ", "too few fields", ErrorKind::TakeWhileMN)]
+    #[case(b"  1  2  1  0  0  0  0  0", "too many fields", ErrorKind::Eof)]
+    fn test_bond_line_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+        let res = bond_line().parse(input);
+        assert!(res.is_err(), "{} should have failed", desc);
+        assert!(
+            matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            res.clone().unwrap_err().map(|e| e.code),
+        );
     }
 }
