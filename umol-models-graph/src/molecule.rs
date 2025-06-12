@@ -11,40 +11,26 @@ use std::collections::HashMap;
 use umol::error::DataError;
 use umol::Result;
 
-/// Type alias for the node index type used in the molecular graph.
+/// Type aliases for the node and edge indices
 pub type AtomIndex = NodeIndex<usize>;
-
-/// Type alias for the edge index type used in the molecular graph.
 pub type BondIndex = EdgeIndex<usize>;
 
-/// Molecule type represented by a graph of atoms and bonds.
+/// Graph-based molecule representation with MOL file semantics
 #[derive(Debug, Clone)]
 pub struct Molecule {
-    /// The underlying graph storing atoms (nodes) and bonds (edges).
     pub graph: StableGraph<Atom, Bond, Undirected, usize>,
-    /// A collection of conformers (3D coordinate sets) for the molecule.
     pub conformers: Vec<Conformer>,
-    /// Molecule-level properties stored as key-value pairs.
     pub properties: HashMap<String, String>,
-    /// Map from external/MOL 1-based indices to internal graph atom indices.
-    /// Populated during parsing.
-    pub external_indices: HashMap<usize, AtomIndex>,
-    /// Map from internal graph atom indices back to external/MOL 1-based indices.
-    /// Populated during parsing, used for writing.
-    pub internal_indices: HashMap<AtomIndex, usize>,
-    /// Collection of SGroups defined in the file.
     pub sgroups: Vec<SGroup>,
 }
 
 impl Molecule {
-    /// Creates a new, empty Molecule.
+    /// Create empty molecule
     pub fn new() -> Self {
         Self {
             graph: StableGraph::<Atom, Bond, Undirected, usize>::default(),
             conformers: Vec::new(),
             properties: HashMap::new(),
-            external_indices: HashMap::new(),
-            internal_indices: HashMap::new(),
             sgroups: Vec::new(),
         }
     }
@@ -60,16 +46,16 @@ impl Molecule {
     }
 
     /// Get molecule-level property by key
-    pub fn get_prop(&self, key: &str) -> Option<&String> {
+    pub fn property(&self, key: &str) -> Option<&String> {
         self.properties.get(key)
     }
 
-    /// Set molecule-level property
-    pub fn set_prop(&mut self, key: String, value: String) {
+    /// Set molecule-level property by key
+    pub fn set_property(&mut self, key: String, value: String) {
         self.properties.insert(key, value);
     }
 
-    /// Get molecule-level properties as a map
+    /// Get molecule-level properties as hashmap
     pub fn properties(&self) -> &HashMap<String, String> {
         &self.properties
     }
@@ -83,7 +69,7 @@ impl Molecule {
     ///
     /// - `atom`: Atom to add (Molecule takes ownership)
     ///
-    /// Returns index of added atom.
+    /// Return index of added atom.
     pub fn add_atom(&mut self, atom: Atom) -> usize {
         self.graph.add_node(atom).index()
     }
@@ -93,34 +79,50 @@ impl Molecule {
     /// - `idx1`, `idx2`: Atom indices
     /// - `bond`: Bond to add (Molecule takes ownership)
     ///
-    /// Returns index of added bond.
+    /// Return index of added bond.
     pub fn add_bond(&mut self, idx1: usize, idx2: usize, bond: Bond) -> usize {
         self.graph
             .add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond)
             .index()
     }
 
-    /// Get immutable reference to atom by internal graph index
+    /// Get immutable reference to atom by index
+    ///
+    /// - `idx`: Atom index
+    ///
+    /// Return immutable reference to atom.
     pub fn atom(&self, idx: usize) -> Option<&Atom> {
         self.graph.node_weight(AtomIndex::new(idx))
     }
 
-    /// Get mutable reference to atom by internal graph index
+    /// Get mutable reference to atom by index
+    ///
+    /// - `idx`: Atom index
+    ///
+    /// Return mutable reference to atom.
     pub fn atom_mut(&mut self, idx: usize) -> Option<&mut Atom> {
         self.graph.node_weight_mut(AtomIndex::new(idx))
     }
 
-    /// Get immutable reference to bond by internal graph index
+    /// Get immutable reference to bond by index
+    ///
+    /// - `idx`: Bond index
+    ///
+    /// Return immutable reference to bond.
     pub fn bond(&self, idx: usize) -> Option<&Bond> {
         self.graph.edge_weight(BondIndex::new(idx))
     }
 
-    /// Get mutable reference to bond by internal graph index
+    /// Get mutable reference to bond by index
+    ///
+    /// - `idx`: Bond index
+    ///
+    /// Return mutable reference to bond.
     pub fn bond_mut(&mut self, idx: usize) -> Option<&mut Bond> {
         self.graph.edge_weight_mut(BondIndex::new(idx))
     }
 
-    /// Get iterator over graph indices of neighbor atoms for a given atom index
+    /// Get iterator over neighbor atom indices for atom index
     pub fn neighbors(&self, idx: usize) -> impl Iterator<Item = usize> + '_ {
         self.graph.neighbors(AtomIndex::new(idx)).map(|i| i.index())
     }
@@ -137,9 +139,9 @@ impl Molecule {
 
     /// Add conformer to the molecule
     ///
-    /// Check if the conformer has the correct number of atomic positions.
+    /// - `conformer`: Conformer to add
     ///
-    /// Returns an error if the number of positions in the conformer does not match
+    /// Return error if the number of positions in the conformer does not match
     /// the number of atoms in the molecule.
     pub fn add_conformer(&mut self, conformer: Conformer) -> Result<()> {
         let num_atoms = self.atom_count();
