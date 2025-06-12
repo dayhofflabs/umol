@@ -1,7 +1,7 @@
 //! CTab format parser (used in MOL and SDF formats).
 
-mod atom;
-mod bond;
-mod counts;
-mod properties;
-mod utils;
+pub mod atom;
+pub mod bond;
+pub mod counts;
+pub mod properties;
+pub mod utils;

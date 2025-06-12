@@ -141,6 +141,7 @@ pub(crate) fn atom_line<'a>(
     let atom_mapping = fixed_width_int::<u8>(3);
     let inversion = fixed_width_int::<u8>(3);
     let exact_change = fixed_width_int::<u8>(3);
+
     all_consuming(map(
         (
             x,
@@ -148,19 +149,15 @@ pub(crate) fn atom_line<'a>(
             z,
             take(1usize),
             symbol,
-            mass_diff,
-            charge_code,
-            stereo_parity,
-            hydrogen_code,
-            stereo_care,
-            valence_code,
-            opt(preceded(
-                take(9usize),
-                complete((
-                    atom_mapping,
-                    opt(complete((inversion, opt(complete(exact_change))))),
-                )),
-            )),
+            opt(complete(mass_diff)),
+            opt(complete(charge_code)),
+            opt(complete(stereo_parity)),
+            opt(complete(hydrogen_code)),
+            opt(complete(stereo_care)),
+            opt(complete(valence_code)),
+            opt(complete(preceded(take(9usize), atom_mapping))),
+            opt(complete(inversion)),
+            opt(complete(exact_change)),
             space0,
         ),
         |(
@@ -175,29 +172,25 @@ pub(crate) fn atom_line<'a>(
             hydrogen_code,
             stereo_care,
             valence_code,
-            rest,
+            atom_mapping,
+            inversion,
+            exact_change,
             _,
         )| {
-            let (atom_mapping, inversion, exact_change) = match rest {
-                Some((m, Some((n, Some(e))))) => (m, n, e),
-                Some((m, Some((n, None)))) => (m, n, 0),
-                Some((m, None)) => (m, 0, 0),
-                None => (0, 0, 0),
-            };
             AtomLine {
                 x,
                 y,
                 z,
                 symbol,
-                mass_diff: mass_diff_named.unwrap_or(mass_diff),
-                charge_code,
-                stereo_parity,
-                hydrogen_code,
-                stereo_care,
-                valence_code,
-                atom_mapping,
-                inversion,
-                exact_change,
+                mass_diff: mass_diff_named.unwrap_or(mass_diff.unwrap_or(0)),
+                charge_code: charge_code.unwrap_or(0),
+                stereo_parity: stereo_parity.unwrap_or(0),
+                hydrogen_code: hydrogen_code.unwrap_or(0),
+                stereo_care: stereo_care.unwrap_or(0),
+                valence_code: valence_code.unwrap_or(0),
+                atom_mapping: atom_mapping.unwrap_or(0),
+                inversion: inversion.unwrap_or(0),
+                exact_change: exact_change.unwrap_or(0),
             }
         },
     ))
@@ -281,6 +274,15 @@ mod tests {
                  hydrogen_code: 0, stereo_care: 0, valence_code: 0, atom_mapping: 0, inversion: 0, exact_change: 0 })]
     #[case(b"    1.9464    0.4244    0.0000 O   0  5  0  0  0  0",
       AtomLine { x: 1.9464, y: 0.4244, z: 0.0, symbol: AtomSymbol::Element(Element::O), mass_diff: 0, charge_code: 5, stereo_parity: 0,
+                 hydrogen_code: 0, stereo_care: 0, valence_code: 0, atom_mapping: 0, inversion: 0, exact_change: 0 })]
+    #[case(b"    0.6622   -0.3000    0.0000   C 0  0  0  0  0  0  0  0  0  0  0  0",
+      AtomLine { x: 0.6622, y: -0.3, z: 0.0, symbol: AtomSymbol::Element(Element::C), mass_diff: 0, charge_code: 0, stereo_parity: 0,
+                 hydrogen_code: 0, stereo_care: 0, valence_code: 0, atom_mapping: 0, inversion: 0, exact_change: 0 })]
+    #[case(b"    0.6622   -0.3000    0.0000   C 0  0  0  0  0",
+      AtomLine { x: 0.6622, y: -0.3, z: 0.0, symbol: AtomSymbol::Element(Element::C), mass_diff: 0, charge_code: 0, stereo_parity: 0,
+                 hydrogen_code: 0, stereo_care: 0, valence_code: 0, atom_mapping: 0, inversion: 0, exact_change: 0 })]
+    #[case(b"    0.6622   -0.3000    0.0000   C",
+      AtomLine { x: 0.6622, y: -0.3, z: 0.0, symbol: AtomSymbol::Element(Element::C), mass_diff: 0, charge_code: 0, stereo_parity: 0,
                  hydrogen_code: 0, stereo_care: 0, valence_code: 0, atom_mapping: 0, inversion: 0, exact_change: 0 })]
     // From RDKit test files
     #[case(b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",

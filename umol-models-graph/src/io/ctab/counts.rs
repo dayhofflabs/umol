@@ -61,7 +61,7 @@ pub(crate) fn counts_line<'a>(
     ))
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct CountsLine {
     atoms: i32,      // 'aaa' - number of atoms (max 255)
     bonds: i32,      // 'bbb' - number of bonds (max 255)
@@ -75,6 +75,27 @@ pub(crate) struct CountsLine {
     // iii is obsolete, skipping
     properties_lines: i32, // 'mmm' - number of additional properties lines
                            // 'vvvvvv' - version stamp (V2000), fixed string, skipping
+}
+
+impl CountsLine {
+    pub fn atoms(&self) -> i32 {
+        self.atoms
+    }
+    pub fn bonds(&self) -> i32 {
+        self.bonds
+    }
+    pub fn atom_lists(&self) -> i32 {
+        self.atom_lists
+    }
+    pub fn chiral_flag(&self) -> i32 {
+        self.chiral_flag
+    }
+    pub fn stext_entries(&self) -> i32 {
+        self.stext_entries
+    }
+    pub fn properties_lines(&self) -> i32 {
+        self.properties_lines
+    }
 }
 
 #[cfg(test)]

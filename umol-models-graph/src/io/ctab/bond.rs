@@ -33,49 +33,40 @@ pub(crate) struct BondLine {
 /// | ccc   | bond reacting center | 0..=3      | *[Reaction,Query]* |
 /// ------------------------------------------------------------------
 ///
-fn bond_line<'a>() -> impl Parser<&'a [u8], Output = BondLine, Error = error::Error<&'a [u8]>> {
+pub(crate) fn bond_line<'a>() -> impl Parser<&'a [u8], Output = BondLine, Error = error::Error<&'a [u8]>> {
     let first_atom = fixed_width_int_minus1::<usize>(3);
     let second_atom = fixed_width_int_minus1::<usize>(3);
     let bond_type = fixed_width_int::<u8>(3);
     let bond_stereo = fixed_width_int::<u8>(3);
+    let bond_topology = fixed_width_int::<u8>(3);
+    let bond_reacting_center = fixed_width_int::<u8>(3);
+
     all_consuming(map(
         (
             first_atom,
             second_atom,
             bond_type,
-            bond_stereo,
-            opt(preceded(
-                take(3usize),
-                (
-                    complete(fixed_width_int::<u8>(3)),
-                    opt(complete(fixed_width_int::<u8>(3))),
-                ),
-            )),
+            opt(complete(bond_stereo)),
+            opt(complete(preceded(take(3usize), bond_topology))),
+            opt(complete(bond_reacting_center)),
             space0,
         ),
         |(
-            first_atom,  // '111' field: first atom
-            second_atom, // '222' field: second atom
-            bond_type,   // 'ttt' field: bond type
-            bond_stereo, // 'sss' field: bond stereo
-            rest,        // Optional fields:
-            // 'rrr' field: bond topology
-            // 'ccc' field: bond reacting center
+            first_atom,
+            second_atom,
+            bond_type,
+            bond_stereo,
+            bond_topology,
+            reacting_center,
             _,
         )| {
-            let (bond_topology, bond_reacting_center) = match rest {
-                Some((top, Some(rct))) => (top, rct),
-                Some((top, None)) => (top, 0),
-                None => (0, 0),
-            };
-
             BondLine {
                 first_atom,
                 second_atom,
                 bond_type,
-                bond_stereo,
-                bond_topology,
-                bond_reacting_center,
+                bond_stereo: bond_stereo.unwrap_or(0),
+                bond_topology: bond_topology.unwrap_or(0),
+                bond_reacting_center: reacting_center.unwrap_or(0),
             }
         },
     ))
@@ -94,6 +85,8 @@ mod tests {
     #[case(b"  1  4  1  0  0  0", BondLine { first_atom: 0, second_atom: 3, bond_type: 1, bond_stereo: 0, bond_topology: 0, bond_reacting_center: 0 })]
     #[case(b"  2  5  2  0  0  0", BondLine { first_atom: 1, second_atom: 4, bond_type: 2, bond_stereo: 0, bond_topology: 0, bond_reacting_center: 0 })]
     #[case(b"  2  6  1  0  0  0", BondLine { first_atom: 1, second_atom: 5, bond_type: 1, bond_stereo: 0, bond_topology: 0, bond_reacting_center: 0 })]
+    #[case(b"  1  2  1", BondLine { first_atom: 0, second_atom: 1, bond_type: 1, bond_stereo: 0, bond_topology: 0, bond_reacting_center: 0 })]
+    #[case(b"  1  2  1  4", BondLine { first_atom: 0, second_atom: 1, bond_type: 1, bond_stereo: 4, bond_topology: 0, bond_reacting_center: 0 })]
     // From RDKit test files
     #[case(b"  2  3  2  0  0  0  0", BondLine { first_atom: 1, second_atom: 2, bond_type: 2, bond_stereo: 0, bond_topology: 0, bond_reacting_center: 0 })]
     #[case(b"  3  5  1  0  0  2  0", BondLine { first_atom: 2, second_atom: 4, bond_type: 1, bond_stereo: 0, bond_topology: 2, bond_reacting_center: 0 })]
@@ -106,7 +99,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"  1  2  1  ", "too few fields", ErrorKind::TakeWhileMN)]
+    #[case(b"  1  2", "too few fields", ErrorKind::TakeWhileMN)]
     #[case(b"  1  2  1  0  0  0  0  0", "too many fields", ErrorKind::Eof)]
     fn test_bond_line_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
         let res = bond_line().parse(input);
