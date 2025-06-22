@@ -55,22 +55,13 @@ bitflags! {
     /// `NOT_CENTER` and `NO_CHANGE` are exclusive.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct BondReactingCenter: i16 {
-        /// No specific reacting center status.
         const UNMARKED         = 0b00000000; // MOL code 0
-        /// Identifies the bond as a reaction center.
         const CENTER           = 0b00000001; // MOL code 1
-        /// Explicitly marks the bond as not a reaction center.
-        /// This is exclusive of other flags.
-        const NOT_CENTER       = 0b00000010; // MOL code -1
-        /// Indicates the bond does not change during the reaction.
-        /// This is exclusive of other flags.
-        const NO_CHANGE        = 0b00000100; // MOL code 2
-        /// Indicates the bond is made or broken.
+        const NOT_CENTER       = 0b00000010; // MOL code -1 (exclusive, cannot be combined)
+        const NO_CHANGE        = 0b00000100; // MOL code 2 (exclusive, cannot be combined)
         const MADE_BROKEN      = 0b00001000; // MOL code 4
-        /// Indicates the bond order changes.
         const ORDER_CHANGED    = 0b00010000; // MOL code 8
 
-        // Explicit names for allowed combinations
         const MADE_BROKEN_AND_ORDER_CHANGED = Self::MADE_BROKEN.bits() | Self::ORDER_CHANGED.bits();
         const CENTER_AND_MADE_BROKEN = Self::CENTER.bits() | Self::MADE_BROKEN.bits();
         const CENTER_AND_ORDER_CHANGED = Self::CENTER.bits() | Self::ORDER_CHANGED.bits();
@@ -81,17 +72,11 @@ bitflags! {
 /// Bond
 #[derive(Debug, Clone)]
 pub struct Bond {
-    /// The type/order of the bond.
     pub bond_type: BondType,
-    /// Double bond stereochemistry (`Cis`/`Trans`), if specified.
     pub stereo: Option<BondStereo>,
-    /// Single bond directionality (wedge/dash for depiction), if specified.
     pub dir: Option<BondDir>,
-    /// Bond topology (chain, ring, either), if specified.
     pub topology: Option<BondTopology>,
-    /// Bond reacting center (not reacting, reacting), if specified.
     pub reacting_center: Option<BondReactingCenter>,
-    /// Generic string-based properties.
     pub properties: HashMap<String, String>,
 }
 

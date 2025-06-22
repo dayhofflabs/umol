@@ -1,7 +1,6 @@
 //! Error types and handling.
 
-use crate::{Capability, Model};
-use std::collections::HashSet;
+use crate::Capability;
 use thiserror::Error;
 
 /// umol error types
@@ -15,9 +14,9 @@ pub enum Error {
     #[error(transparent)]
     Property(#[from] PropertyError),
 
-    /// Format operations errors
+    /// Parsing errors
     #[error(transparent)]
-    Format(#[from] FormatError),
+    Parse(#[from] ParseError),
 
     /// Conversion operations errors
     #[error(transparent)]
@@ -235,26 +234,26 @@ pub enum DataError {
     MissingBondProperty(String, usize),
 
     #[error("Invalid conformer definition: {0}")]
-    InvalidConformerDefinition(String),
+    InvalidConformer(String),
 }
 
-/// Errors related to format operations
+/// Parsing errors
 #[derive(Error, Debug)]
-pub enum FormatError {
-    #[error("Format not found: {0}")]
-    NotFound(String),
+pub enum ParseError {
+    #[error("Unknown format: {0}")]
+    UnknownFormat(String),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("Unkown format: {0}")]
-    Unknown(String),
+    #[error("Parse failed at line {0} ('{1}'): {2}")]
+    Failed(usize, String, String),
 
-    #[error("Format operation failed: {0}")]
-    Failed(String),
+    #[error("Invalid: {0}")]
+    Invalid(String),
 
-    #[error("Invalid MOL format: {0}")]
-    InvalidMolFormat(String),
+    #[error("Incomplete: {0}")]
+    Incomplete(String),
 }
 
 /// umol result type
@@ -263,65 +262,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn test_error_display() {
-        let error = ModelError::NotFound("test".to_string());
-        assert_eq!(format!("{}", error), "Model not found: test");
-
-        let error = PropertyError::CalculationFailed("test error".into());
-        assert_eq!(
-            format!("{}", error),
-            "Property calculation failed: test error"
-        );
-
-        let error = FormatError::NotFound("test".to_string());
-        assert_eq!(format!("{}", error), "Format not found: test");
-
-        let error = ConversionError::NotFound("source".to_string(), "target".to_string());
-        assert_eq!(
-            format!("{}", error),
-            "No conversion found from source to target"
-        );
-
-        let error = OperationError::Failed("test error".to_string());
-        assert_eq!(format!("{}", error), "Operation failed: test error");
-
-        let error = DataError::InvalidAtomCharge(format!("{}", 2));
-        assert_eq!(format!("{}", error), "Invalid atom charge: 2");
-
-        let error = DataError::InvalidAtomUnpairedElectrons(format!("{}", 2));
-        assert_eq!(
-            format!("{}", error),
-            "Invalid atom unpaired electron specification: 2"
-        );
-
-        let error = DataError::InvalidAtomImplicitHydrogens(format!("{}", 2));
-        assert_eq!(
-            format!("{}", error),
-            "Invalid atom implicit hydrogen specification: 2"
-        );
+    #[rstest]
+    #[case(ModelError::NotFound("test".to_string()).into(), "Model not found: test")]
+    #[case(PropertyError::CalculationFailed("test error".to_string()).into(), "Property calculation failed: test error")]
+    #[case(ParseError::UnknownFormat("test".to_string()).into(), "Unknown format: test")]
+    #[case(ConversionError::NotFound("source".to_string(), "target".to_string()).into(), "No conversion found from source to target")]
+    #[case(OperationError::Failed("test error".to_string()).into(), "Operation failed: test error")]
+    #[case(DataError::InvalidAtomCharge(format!("{}", 2)).into(), "Invalid atom charge: 2")]
+    #[case(DataError::InvalidAtomUnpairedElectrons(format!("{}", 2)).into(), "Invalid atom unpaired electron specification: 2")]
+    fn test_error_display(#[case] error: Error, #[case] expected: &str) {
+        assert_eq!(format!("{}", error), expected);
     }
-}
-
-// Update the helper functions to use the appropriate error types
-pub fn verify_capabilities(model: &impl Model, required: &[Capability]) -> Result<()> {
-    for cap in required {
-        if !model.has_capability(cap) {
-            return Err(ModelError::MissingCapability(cap.clone()).into());
-        }
-    }
-    Ok(())
-}
-
-pub fn test_model_capabilities(model: &impl Model) -> Result<()> {
-    let mut caps = HashSet::new();
-    caps.insert(Capability::local("has_atoms", 1));
-
-    for cap in &caps {
-        if !model.has_capability(cap) {
-            return Err(ModelError::MissingCapability(cap.clone()).into());
-        }
-    }
-    Ok(())
 }

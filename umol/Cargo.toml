@@ -12,3 +12,6 @@ slog = "2.7.0"
 slog-term = "2.9.1"
 slog-async = "2.8.0"
 umol-macros = { path = "../umol-macros" }
+
+[dev-dependencies]
+rstest = "0.25.0"

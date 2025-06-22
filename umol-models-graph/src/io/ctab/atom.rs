@@ -9,19 +9,19 @@ use nom::sequence::{delimited, preceded};
 use nom::Parser;
 use umol_data::{Element, NamedIsotope};
 
-use super::utils::{fixed_width_float, fixed_width_int, fixed_width_int_in_range_minus1};
+use crate::atom::{Atom, AtomLike, AtomList, AtomSymbol};
+use crate::conformer::Point3D;
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum AtomSymbol {
-    Element(Element),
-    AtomList,
-    Unspecified(char),
-    LonePair,
-    RGroup(usize),
-}
+use super::convert::{
+    convert_atom_charge_code, convert_atom_hydrogen_count_code, convert_atom_mass_diff_code,
+    convert_atom_stereo_parity_code, convert_atom_valence_code,
+};
+use super::utils::{
+    fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_minus1,
+};
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct AtomLine {
+#[derive(Debug, Clone)]
+pub(crate) struct AtomInput {
     x: f64,
     y: f64,
     z: f64,
@@ -41,30 +41,26 @@ pub(crate) struct AtomLine {
 /// Parse atom symbol
 /// Values: entry in periodic table or L for atom list, A, Q, * for unspecified atom, and LP for lone pair,
 /// or R# for Rgroup label. Named isotopes (D, T) are supported as extension
-fn atom_symbol<'a>(
-) -> impl Parser<&'a [u8], Output = (AtomSymbol, Option<i8>), Error = error::Error<&'a [u8]>> {
+fn atom_symbol<'a>() -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
     |input| {
         map_parser(
             take(3usize),
             all_consuming(alt((
+                value(AtomSymbol::LonePair, delimited(space0, tag("LP"), space0)),
                 value(
-                    (AtomSymbol::LonePair, None),
-                    delimited(space0, tag("LP"), space0),
-                ),
-                value(
-                    (AtomSymbol::AtomList, None),
+                    AtomSymbol::AtomList(AtomList { elements: vec![] }),
                     delimited(space0, tag("L"), space0),
                 ),
                 value(
-                    (AtomSymbol::Unspecified('A'), None),
+                    AtomSymbol::Unspecified('A'),
                     delimited(space0, tag("A"), space0),
                 ),
                 value(
-                    (AtomSymbol::Unspecified('Q'), None),
+                    AtomSymbol::Unspecified('Q'),
                     delimited(space0, tag("Q"), space0),
                 ),
                 value(
-                    (AtomSymbol::Unspecified('*'), None),
+                    AtomSymbol::Unspecified('*'),
                     delimited(space0, tag("*"), space0),
                 ),
                 map(
@@ -76,27 +72,21 @@ fn atom_symbol<'a>(
                         ),
                         space0,
                     ),
-                    |(_, idx)| (AtomSymbol::RGroup(idx), None),
+                    |(_, idx)| AtomSymbol::RGroup(idx),
                 ),
                 map(
                     map_res(delimited(space0, alpha1, space0), |s| {
                         Element::from_symbol_bytes(s)
                             .ok_or_else(|| error::Error::new(s, error::ErrorKind::MapRes))
                     }),
-                    |element| (AtomSymbol::Element(element), None),
+                    |element| AtomSymbol::Element(element),
                 ),
                 map(
                     map_res(delimited(space0, alpha1, space0), |s| {
                         NamedIsotope::from_symbol_bytes(s)
-                            .map(|iso| (iso.element(), iso.mass_number()))
                             .ok_or_else(|| error::Error::new(s, error::ErrorKind::MapRes))
                     }),
-                    |(element, mass_number)| {
-                        (
-                            AtomSymbol::Element(element),
-                            Some(mass_number as i8 - element.reference_mass_number() as i8),
-                        )
-                    },
+                    |isotope| AtomSymbol::NamedIsotope(isotope),
                 ),
             ))),
         )
@@ -126,21 +116,36 @@ fn atom_symbol<'a>(
 /// | eee   | exact change       | 0, 1         | *[Reaction]*                              |
 /// -----------------------------------------------------------------------------------------
 ///
-pub(crate) fn atom_line<'a>(
-) -> impl Parser<&'a [u8], Output = AtomLine, Error = error::Error<&'a [u8]>> {
+pub(crate) fn atom_input<'a>(
+) -> impl Parser<&'a [u8], Output = (Atom, Point3D), Error = error::Error<&'a [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
     let symbol = atom_symbol();
-    let mass_diff = fixed_width_int::<i8>(2);
-    let charge_code = fixed_width_int::<u8>(3);
-    let stereo_parity = fixed_width_int::<u8>(3);
-    let hydrogen_code = fixed_width_int::<u8>(3);
-    let stereo_care = fixed_width_int::<u8>(3);
-    let valence_code = fixed_width_int::<u8>(3);
+    let mass_diff = map_res(
+        fixed_width_int_in_range::<i8, _>(2, -3..=4),
+        convert_atom_mass_diff_code,
+    );
+    let charge = map_res(
+        fixed_width_int_in_range::<u8, _>(3, 0..=7),
+        convert_atom_charge_code,
+    );
+    let stereo_parity = map_res(
+        fixed_width_int_in_range::<u8, _>(3, 0..=3),
+        convert_atom_stereo_parity_code,
+    );
+    let hydrogen_count = map_res(
+        fixed_width_int_in_range::<u8, _>(3, 0..=5),
+        convert_atom_hydrogen_count_code,
+    );
+    let stereo_care = fixed_width_int_in_range_minus1::<u8, _>(3, 0..=1);
+    let valence = map_res(
+        fixed_width_int_in_range::<u8, _>(3, 0..=15),
+        convert_atom_valence_code,
+    );
     let atom_mapping = fixed_width_int::<u8>(3);
-    let inversion = fixed_width_int::<u8>(3);
-    let exact_change = fixed_width_int::<u8>(3);
+    let inversion = fixed_width_int_in_range::<u8, _>(3, 0..=2);
+    let exact_change = fixed_width_int_in_range::<u8, _>(3, 0..=1);
 
     all_consuming(map(
         (
@@ -150,11 +155,11 @@ pub(crate) fn atom_line<'a>(
             take(1usize),
             symbol,
             opt(complete(mass_diff)),
-            opt(complete(charge_code)),
+            opt(complete(charge)),
             opt(complete(stereo_parity)),
-            opt(complete(hydrogen_code)),
+            opt(complete(hydrogen_count)),
             opt(complete(stereo_care)),
-            opt(complete(valence_code)),
+            opt(complete(valence)),
             opt(complete(preceded(take(9usize), atom_mapping))),
             opt(complete(inversion)),
             opt(complete(exact_change)),
@@ -165,70 +170,70 @@ pub(crate) fn atom_line<'a>(
             y,
             z,
             _,
-            (symbol, mass_diff_named),
+            symbol,
             mass_diff,
-            charge_code,
+            charge,
             stereo_parity,
-            hydrogen_code,
+            hydrogen_count,
             stereo_care,
-            valence_code,
+            valence,
             atom_mapping,
             inversion,
             exact_change,
             _,
         )| {
-            AtomLine {
-                x,
-                y,
-                z,
-                symbol,
-                mass_diff: mass_diff_named.unwrap_or(mass_diff.unwrap_or(0)),
-                charge_code: charge_code.unwrap_or(0),
-                stereo_parity: stereo_parity.unwrap_or(0),
-                hydrogen_code: hydrogen_code.unwrap_or(0),
-                stereo_care: stereo_care.unwrap_or(0),
-                valence_code: valence_code.unwrap_or(0),
-                atom_mapping: atom_mapping.unwrap_or(0),
-                inversion: inversion.unwrap_or(0),
-                exact_change: exact_change.unwrap_or(0),
-            }
+            let atom = Atom {
+                // element: match symbol {
+                //     AtomSymbol::Element(e) => e,
+                //     AtomSymbol::NamedIsotope(i) => i.element,
+                //     AtomSymbol::AtomList(l) => l.elements[0],
+                //     AtomSymbol::LonePair => Element::H,
+                //     AtomSymbol::RGroup(i) => Element::H,
+                // },
+                // isotope_mass: mass_diff,
+                // charge: charge.unwrap_or(0),
+                // stereo_parity: stereo_parity.unwrap_or(AtomStereoParity::None),
+                // hydrogen_count: hydrogen_count.unwrap_or(0),
+                // valence: valence.unwrap_or(0),
+                // atom_map_num: atom_mapping.unwrap_or(0),
+                // radical: inversion.unwrap_or(0),
+                // properties: std::collections::HashMap::new(),
+            };
+            (atom, Point3D::new(x, y, z))
         },
     ))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::AtomStereoParity;
+
     use super::*;
     use nom::{error::ErrorKind, Err};
     use rstest::rstest;
 
     #[rstest]
-    #[case(b"A  ", AtomSymbol::Unspecified('A'), None)]
-    #[case(b"Q  ", AtomSymbol::Unspecified('Q'), None)]
-    #[case(b"*  ", AtomSymbol::Unspecified('*'), None)]
-    #[case(b"L  ", AtomSymbol::AtomList, None)]
-    #[case(b"LP ", AtomSymbol::LonePair, None)]
-    #[case(b"R1 ", AtomSymbol::RGroup(0), None)]
-    #[case(b"R3 ", AtomSymbol::RGroup(2), None)]
-    #[case(b"H  ", AtomSymbol::Element(Element::H), None)]
-    #[case(b"C  ", AtomSymbol::Element(Element::C), None)]
-    #[case(b" C ", AtomSymbol::Element(Element::C), None)]
-    #[case(b"  C", AtomSymbol::Element(Element::C), None)]
-    #[case(b"Cu ", AtomSymbol::Element(Element::Cu), None)]
-    #[case(b"cu ", AtomSymbol::Element(Element::Cu), None)]
-    #[case(b"CU ", AtomSymbol::Element(Element::Cu), None)]
-    #[case(b"D  ", AtomSymbol::Element(Element::H), Some(1))]
-    #[case(b"d  ", AtomSymbol::Element(Element::H), Some(1))]
-    #[case(b"T  ", AtomSymbol::Element(Element::H), Some(2))]
-    fn test_atom_symbol(
-        #[case] input: &[u8],
-        #[case] expected_symbol: AtomSymbol,
-        #[case] expected_mass_diff: Option<i8>,
-    ) {
-        let (remaining, (symbol, mass_diff)) = atom_symbol().parse(input).unwrap();
+    #[case(b"A  ", AtomSymbol::Unspecified('A'))]
+    #[case(b"Q  ", AtomSymbol::Unspecified('Q'))]
+    #[case(b"*  ", AtomSymbol::Unspecified('*'))]
+    #[case(b"L  ", AtomSymbol::AtomList(AtomList { elements: vec![] }))]
+    #[case(b"LP ", AtomSymbol::LonePair)]
+    #[case(b"R1 ", AtomSymbol::RGroup(0))]
+    #[case(b"R3 ", AtomSymbol::RGroup(2))]
+    #[case(b"H  ", AtomSymbol::Element(Element::H))]
+    #[case(b"C  ", AtomSymbol::Element(Element::C))]
+    #[case(b" C ", AtomSymbol::Element(Element::C))]
+    #[case(b"  C", AtomSymbol::Element(Element::C))]
+    #[case(b"Cu ", AtomSymbol::Element(Element::Cu))]
+    #[case(b"cu ", AtomSymbol::Element(Element::Cu))]
+    #[case(b"CU ", AtomSymbol::Element(Element::Cu))]
+    #[case(b"D  ", AtomSymbol::NamedIsotope(NamedIsotope::D))]
+    #[case(b"d  ", AtomSymbol::NamedIsotope(NamedIsotope::D))]
+    #[case(b"T  ", AtomSymbol::NamedIsotope(NamedIsotope::T))]
+    fn test_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
+        let (remaining, symbol) = atom_symbol().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
-        assert_eq!(symbol, expected_symbol);
-        assert_eq!(mass_diff, expected_mass_diff);
+        assert_eq!(symbol, expected);
     }
 
     #[rstest]
@@ -316,5 +321,63 @@ mod tests {
         let (remaining, atom_line) = atom_line().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(atom_line, expected_atom_line);
+    }
+
+    #[rstest]
+    #[case(b"   -0.6622    0.5342    0.0000 C   0  0  2  0  0  0",
+           Some(Atom { element: Element::C, charge: 0, isotope_mass: None, stereo_parity: Some(AtomStereoParity::Even), hydrogen_count: Some(0), valence: Some(0), atom_map_num: Some(0), radical: None, properties: std::collections::HashMap::new() }),
+           None,
+           Point3D::new(-0.6622, 0.5342, 0.0))]
+    #[case(b"    0.6622   -0.3000    0.0000 C   0  0  0  0  0  0",
+           Some(Atom { element: Element::C, charge: 0, isotope_mass: None, stereo_parity: None, hydrogen_count: Some(0), valence: Some(0), atom_map_num: Some(0), radical: None, properties: std::collections::HashMap::new() }),
+           None,
+           Point3D::new(0.6622, -0.3, 0.0))]
+    #[case(b"   -0.7207    2.0817    0.0000 C   1  0  0  0  0  0",
+           Some(Atom { element: Element::C, charge: 0, isotope_mass: Some(13), stereo_parity: None, hydrogen_count: Some(0), valence: Some(0), atom_map_num: Some(0), radical: None, properties: std::collections::HashMap::new() }),
+           None,
+           Point3D::new(-0.7207, 2.0817, 0.0))]
+    #[case(b"   -1.8622   -0.3695    0.0000 N   0  3  0  0  0  0",
+           Some(Atom { element: Element::N, charge: 1, isotope_mass: None, stereo_parity: None, hydrogen_count: Some(0), valence: Some(0), atom_map_num: Some(0), radical: None, properties: std::collections::HashMap::new() }),
+           None,
+           Point3D::new(-1.8622, -0.3695, 0.0))]
+    #[case(
+        b"    0.0000    0.0000    0.0000 L   0  0  0  0  0  0",
+        None,
+        Some(AtomSymbol::AtomList(AtomList { elements: vec![] })),
+        Point3D::new(0.0, 0.0, 0.0)
+    )]
+    #[case(
+        b"    0.0000    0.0000    0.0000 A   0  0  0  0  0  0",
+        None,
+        Some(AtomSymbol::Unspecified('A')),
+        Point3D::new(0.0, 0.0, 0.0)
+    )]
+    #[case(
+        b"    0.0000    0.0000    0.0000 LP  0  0  0  0  0  0",
+        None,
+        Some(AtomSymbol::LonePair),
+        Point3D::new(0.0, 0.0, 0.0)
+    )]
+    #[case(
+        b"    0.0000    0.0000    0.0000 R1  0  0  0  0  0  0",
+        None,
+        Some(AtomSymbol::RGroup(0)),
+        Point3D::new(0.0, 0.0, 0.0)
+    )]
+    #[case(b"    0.7143   -0.2061    0.0000 D   0  0  0  0  0  0",
+           Some(Atom { element: Element::H, charge: 0, isotope_mass: Some(2), stereo_parity: None, hydrogen_count: Some(0), valence: Some(0), atom_map_num: Some(0), radical: None, properties: std::collections::HashMap::new() }),
+           None,
+           Point3D::new(0.7143, -0.2061, 0.0))]
+    fn test_atom_line_parsed(
+        #[case] input: &[u8],
+        #[case] expected_atom: Option<Atom>,
+        #[case] expected_atom_like: Option<AtomSymbol>,
+        #[case] expected_position: Point3D,
+    ) {
+        let (remaining, (atom, atom_like, position)) = atom_line().parse(input).unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(atom, expected_atom);
+        assert_eq!(atom_like, expected_atom_like);
+        assert_eq!(position, expected_position);
     }
 }

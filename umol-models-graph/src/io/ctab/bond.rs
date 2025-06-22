@@ -1,5 +1,7 @@
 //! Bond block parser for CTab files.
 
+use crate::bond::Bond;
+
 use super::utils::{fixed_width_int, fixed_width_int_minus1};
 use nom::bytes::complete::take;
 use nom::character::complete::space0;
@@ -33,7 +35,8 @@ pub(crate) struct BondLine {
 /// | ccc   | bond reacting center | 0..=3      | *[Reaction,Query]* |
 /// ------------------------------------------------------------------
 ///
-pub(crate) fn bond_line<'a>() -> impl Parser<&'a [u8], Output = BondLine, Error = error::Error<&'a [u8]>> {
+pub(crate) fn bond_line<'a>() -> impl Parser<&'a [u8], Output = Bond, Error = error::Error<&'a [u8]>>
+{
     let first_atom = fixed_width_int_minus1::<usize>(3);
     let second_atom = fixed_width_int_minus1::<usize>(3);
     let bond_type = fixed_width_int::<u8>(3);
@@ -51,15 +54,7 @@ pub(crate) fn bond_line<'a>() -> impl Parser<&'a [u8], Output = BondLine, Error 
             opt(complete(bond_reacting_center)),
             space0,
         ),
-        |(
-            first_atom,
-            second_atom,
-            bond_type,
-            bond_stereo,
-            bond_topology,
-            reacting_center,
-            _,
-        )| {
+        |(first_atom, second_atom, bond_type, bond_stereo, bond_topology, reacting_center, _)| {
             BondLine {
                 first_atom,
                 second_atom,
@@ -101,7 +96,11 @@ mod tests {
     #[rstest]
     #[case(b"  1  2", "too few fields", ErrorKind::TakeWhileMN)]
     #[case(b"  1  2  1  0  0  0  0  0", "too many fields", ErrorKind::Eof)]
-    fn test_bond_line_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    fn test_bond_line_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
         let res = bond_line().parse(input);
         assert!(res.is_err(), "{} should have failed", desc);
         assert!(

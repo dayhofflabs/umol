@@ -148,7 +148,7 @@ impl Molecule {
         let num_positions = conformer.positions.len();
 
         if num_atoms != num_positions {
-            return Err(DataError::InvalidConformerDefinition(format!(
+            return Err(DataError::InvalidConformer(format!(
                 "Expected {} positions, found {}",
                 num_atoms, num_positions
             ))
