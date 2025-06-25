@@ -1,21 +1,44 @@
 //! Convert numerical codes used in MOL files to enums
 
-use crate::atom::AtomStereoParity;
+use crate::atom::{AtomStereoParity, AtomSymbol};
 use crate::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use umol::error::{ParseError, Result};
+use umol_data::Element;
 
 /// Convert atom mass difference code (atom block)
-/// 'dd' field: mass difference (-3..=4), 0 if value outside of this range
-pub(crate) fn convert_atom_mass_diff_code(code: i8) -> Result<Option<i8>> {
+/// 'dd' field: mass difference (-3..=4), None if 0 or value outside of this range
+pub(crate) fn convert_atom_mass_diff_code(code: i8) -> Option<i8> {
     match code {
-        0 => Ok(None),
-        -3..=-1 | 1..=4 => Ok(Some(code)),
-        _ => Err(ParseError::Invalid(format!("Invalid mass difference code '{}'", code)).into()),
+        -3..=-1 | 1..=4 => Some(code),
+        _ => None,
     }
 }
 
+/// Convert standard atom symbol and mass difference to element and isotope mass
+/// 'ss' field: atom symbol, 'dd' field: mass difference
+/// Processes elements and named isotopes.
+/// Returns error for non-standard atom symbols (L, A, Q, *, LP, R#)
+pub(crate) fn convert_atom_symbol_mass_diff(
+    symbol: AtomSymbol,
+    mass_diff: Option<i8>,
+) -> (Element, Option<u32>) {
+    let (element, isotope_mass) = match symbol {
+        AtomSymbol::Element(e) => {
+            let isotope_mass = match mass_diff {
+                None | Some(0) => None,
+                Some(diff) => Some((e.reference_mass_number() as i8 + diff) as u32),
+            };
+            (e, isotope_mass)
+        }
+        AtomSymbol::NamedIsotope(i) => (i.element(), Some(i.mass_number())),
+        _ => unreachable!("atom_symbol_standard() should only return Element or NamedIsotope"),
+    };
+    (element, isotope_mass)
+}
+
 /// Convert atom valence code (default, explicit, explicit zero).
-// 'vvv' field: 0 = default, 1..=14 = explicit, 15 = explicit 0
+/// 'vvv' field: 0 = default, 1..=14 = explicit, 15 = explicit 0
+/// Returns error for invalid valence codes.
 pub(crate) fn convert_atom_valence_code(code: u8) -> Result<Option<u8>> {
     match code {
         0 => Ok(None),                   // default/unspecified valence
@@ -25,28 +48,14 @@ pub(crate) fn convert_atom_valence_code(code: u8) -> Result<Option<u8>> {
     }
 }
 
-/// Convert atom charge code
+/// Convert atom charge code (includes doublet radical).
 /// 'ccc' field: 0 = uncharged, 1 = +3, 2 = +2, 3 = +1, 4 = doublet radical, 5 = -1, 6 = -2, 7 = -3
-pub(crate) fn convert_atom_charge_code(code: u8) -> Result<i8> {
+/// 0 if outside of range.
+pub(crate) fn convert_atom_charge_code(code: u8) -> (i8, Option<u8>) {
     match code {
-        0 => Ok(0),
-        1..=3 | 5..=7 => Ok(4 - code as i8),
-        4 => Ok(0), // Code 4 is doublet radical, not charge
-        _ => Err(ParseError::Invalid(format!("Invalid charge code '{}'", code)).into()),
-    }
-}
-
-/// Convert atom radical code
-/// 'ccc' field: 4 = doublet radical
-pub(crate) fn convert_atom_radical_code(code: u8) -> Result<Option<u8>> {
-    match code {
-        4 => Ok(Some(2)), // Code 4 is doublet radical
-        0..=3 | 5..=7 => Ok(None),
-        _ => Err(ParseError::Invalid(format!(
-            "Invalid code '{}' passed to parse_radical_code",
-            code
-        ))
-        .into()),
+        1..=3 | 5..=7 => (4 - code as i8, None),
+        4 => (0, Some(2)),
+        _ => (0, None),
     }
 }
 
@@ -89,29 +98,33 @@ pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
     }
 }
 
-/// Convert bond stereo code
-/// 'sss' field - bond stereo (0=Not stereo, 1=Up, 3=Either, 4=Unknown, 6=Down)
-/// Used for double bond Cis/Trans by convention
-pub(crate) fn convert_bond_stereo_code(code: u8) -> Result<Option<BondStereo>> {
+/// Convert bond type code (standard molecules only)
+/// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic)
+pub(crate) fn convert_bond_type_code_standard(code: u8) -> Result<BondType> {
     match code {
-        0 => Ok(None),                     // Not stereo
-        1 => Ok(Some(BondStereo::Cis)),    // Up (used for Cis/Trans by convention)
-        3 | 4 => Ok(Some(BondStereo::Either)), // Either or Unknown
-        6 => Ok(Some(BondStereo::Trans)),  // Down (used for Cis/Trans by convention)
-        _ => Err(ParseError::Invalid(format!("Invalid bond stereo code '{}'", code)).into()),
+        1 => Ok(BondType::Single),
+        2 => Ok(BondType::Double),
+        3 => Ok(BondType::Triple),
+        4 => Ok(BondType::Aromatic),
+        _ => Err(ParseError::Invalid(format!("Invalid standard bond type code '{}'", code)).into()),
     }
 }
 
-/// Convert bond direction code
-/// 'sss' field - bond direction (0=Not stereo, 1=Up, 6=Down)
-/// Used for single bond Wedge/Dash
-pub(crate) fn convert_bond_dir_code(code: u8) -> Result<Option<BondDir>> {
+/// Convert bond stereo/direction code
+/// 'sss' field - can mean stereo for double bonds or direction for single bonds
+/// Stereo: (0=Not stereo, 1=Up, 3=Either, 4=Unknown, 6=Down)
+/// Direction: (1=Up, 6=Down)
+pub(crate) fn convert_bond_stereo_dir_code(
+    code: u8,
+) -> Result<(Option<BondStereo>, Option<BondDir>)> {
     match code {
-        0 => Ok(None),                 // Not stereo
-        1 => Ok(Some(BondDir::Wedge)), // Up
-        6 => Ok(Some(BondDir::Dash)),  // Down
-        // Note: Codes 3 (Either) and 4 (Unknown) exist but aren't typically used for wedge/dash dir
-        _ => Err(ParseError::Invalid(format!("Invalid bond direction code '{}'", code)).into()),
+        0 => Ok((None, None)),
+        1 => Ok((Some(BondStereo::Cis), Some(BondDir::Wedge))),
+        3 | 4 => Ok((Some(BondStereo::Either), Some(BondDir::Either))),
+        6 => Ok((Some(BondStereo::Trans), Some(BondDir::Dash))),
+        _ => Err(
+            ParseError::Invalid(format!("Invalid bond stereo/direction code '{}'", code)).into(),
+        ),
     }
 }
 
@@ -187,23 +200,28 @@ pub(crate) fn convert_bond_reacting_center_code(code: i8) -> Result<Option<BondR
 mod tests {
     use super::*;
     use rstest::rstest;
+    use umol_data::NamedIsotope;
 
     #[rstest]
     #[case(0, None)]
     #[case(-3, Some(-3))]
     #[case(4, Some(4))]
+    #[case(5, None)]
     fn test_atom_convert_mass_diff_code(#[case] code: i8, #[case] expected: Option<i8>) {
-        assert_eq!(convert_atom_mass_diff_code(code).unwrap(), expected);
+        assert_eq!(convert_atom_mass_diff_code(code), expected);
     }
 
     #[rstest]
-    #[case(5, "too high")]
-    fn test_atom_convert_mass_diff_code_invalid(#[case] code: i8, #[case] expected: &str) {
-        assert!(
-            convert_atom_mass_diff_code(code).is_err(),
-            "{} should have failed",
-            expected
-        );
+    #[case(AtomSymbol::Element(Element::C), None, (Element::C, None))]
+    #[case(AtomSymbol::Element(Element::C), Some(1), (Element::C, Some(13)))]
+    #[case(AtomSymbol::NamedIsotope(NamedIsotope::D), None, (Element::H, Some(2)))]
+    #[case(AtomSymbol::NamedIsotope(NamedIsotope::D), Some(3), (Element::H, Some(2)))]
+    fn test_atom_convert_symbol_mass_diff(
+        #[case] symbol: AtomSymbol,
+        #[case] mass_diff: Option<i8>,
+        #[case] expected: (Element, Option<u32>),
+    ) {
+        assert_eq!(convert_atom_symbol_mass_diff(symbol, mass_diff), expected);
     }
 
     #[rstest]
@@ -217,47 +235,28 @@ mod tests {
 
     #[rstest]
     #[case(16, "too high")]
-    fn test_atom_convert_valence_code_invalid(#[case] code: u8, #[case] expected: &str) {
+    fn test_atom_convert_valence_code_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
             convert_atom_valence_code(code).is_err(),
             "{} should have failed",
-            expected
+            desc
         );
     }
 
     #[rstest]
-    #[case(0, 0)]
-    #[case(1, 3)]
-    #[case(4, 0)]
-    #[case(5, -1)]
-    fn test_atom_convert_charge_code(#[case] code: u8, #[case] expected: i8) {
-        assert_eq!(convert_atom_charge_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case(8, "too high")]
-    fn test_atom_convert_charge_code_invalid(#[case] code: u8, #[case] expected: &str) {
-        assert!(
-            convert_atom_charge_code(code).is_err(),
-            "{} should have failed",
-            expected
-        );
-    }
-
-    #[rstest]
-    #[case(4, Some(2))]
-    #[case(1, None)]
-    fn test_atom_convert_radical_code(#[case] code: u8, #[case] expected: Option<u8>) {
-        assert_eq!(convert_atom_radical_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case(8, "too high")]
-    fn test_atom_convert_radical_code_invalid(#[case] code: u8, #[case] expected: &str) {
-        assert!(
-            convert_atom_radical_code(code).is_err(),
-            "{} should have failed",
-            expected
+    #[case(0, 0, None)]
+    #[case(1, 3, None)]
+    #[case(4, 0, Some(2))]
+    #[case(5, -1, None)]
+    #[case(8, 0, None)]
+    fn test_atom_convert_charge_radical_code(
+        #[case] code: u8,
+        #[case] expected_charge: i8,
+        #[case] expected_radical: Option<u8>,
+    ) {
+        assert_eq!(
+            convert_atom_charge_code(code),
+            (expected_charge, expected_radical)
         );
     }
 
@@ -275,11 +274,11 @@ mod tests {
 
     #[rstest]
     #[case(4, "too high")]
-    fn test_atom_convert_stereo_parity_code_invalid(#[case] code: u8, #[case] expected: &str) {
+    fn test_atom_convert_stereo_parity_code_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
             convert_atom_stereo_parity_code(code).is_err(),
             "{} should have failed",
-            expected
+            desc
         );
     }
 
@@ -296,11 +295,11 @@ mod tests {
 
     #[rstest]
     #[case(6, "too high")]
-    fn test_atom_convert_hydrogen_count_code_invalid(#[case] code: u8, #[case] expected: &str) {
+    fn test_atom_convert_hydrogen_count_code_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
             convert_atom_hydrogen_count_code(code).is_err(),
             "{} should have failed",
-            expected
+            desc
         );
     }
 
@@ -311,103 +310,97 @@ mod tests {
         assert_eq!(convert_bond_type_code(3).unwrap(), BondType::Triple);
         assert_eq!(convert_bond_type_code(4).unwrap(), BondType::Aromatic);
         assert_eq!(convert_bond_type_code(5).unwrap(), BondType::SingleOrDouble);
-        assert_eq!(convert_bond_type_code(6).unwrap(), BondType::SingleOrAromatic);
-        assert_eq!(convert_bond_type_code(7).unwrap(), BondType::DoubleOrAromatic);
+        assert_eq!(
+            convert_bond_type_code(6).unwrap(),
+            BondType::SingleOrAromatic
+        );
+        assert_eq!(
+            convert_bond_type_code(7).unwrap(),
+            BondType::DoubleOrAromatic
+        );
         assert_eq!(convert_bond_type_code(8).unwrap(), BondType::Any);
         assert!(convert_bond_type_code(9).is_err());
     }
 
-    #[test]
-    fn test_bond_convert_stereo_code() {
-        assert_eq!(convert_bond_stereo_code(0).unwrap(), None);
-        assert_eq!(convert_bond_stereo_code(1).unwrap(), Some(BondStereo::Cis));
-        assert_eq!(convert_bond_stereo_code(3).unwrap(), Some(BondStereo::Either));
-        assert_eq!(convert_bond_stereo_code(6).unwrap(), Some(BondStereo::Trans));
-        assert!(convert_bond_stereo_code(2).is_err());
+    #[rstest]
+    #[case(1, BondType::Single)]
+    #[case(2, BondType::Double)]
+    #[case(3, BondType::Triple)]
+    #[case(4, BondType::Aromatic)]
+    fn test_bond_convert_type_code_standard(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(convert_bond_type_code_standard(code).unwrap(), expected);
     }
 
-    #[test]
-    fn test_bond_convert_dir_code() {
-        assert_eq!(convert_bond_dir_code(0).unwrap(), None);
-        assert_eq!(convert_bond_dir_code(1).unwrap(), Some(BondDir::Wedge));
-        assert_eq!(convert_bond_dir_code(6).unwrap(), Some(BondDir::Dash));
-        assert!(convert_bond_dir_code(3).is_err());
+    #[rstest]
+    #[case(0)]
+    #[case(5)]
+    #[case(8)]
+    fn test_bond_convert_type_code_standard_invalid(#[case] code: u8) {
+        assert!(convert_bond_type_code_standard(code).is_err());
     }
 
-    #[test]
-    fn test_bond_convert_topology_code() {
-        assert_eq!(
-            convert_bond_topology_code(0).unwrap(),
-            Some(BondTopology::Either)
-        );
-        assert_eq!(
-            convert_bond_topology_code(1).unwrap(),
-            Some(BondTopology::Ring)
-        );
-        assert_eq!(
-            convert_bond_topology_code(2).unwrap(),
-            Some(BondTopology::Chain)
-        );
-        assert!(convert_bond_topology_code(3).is_err());
+    #[rstest]
+    #[case(0, (None, None))]
+    #[case(1, (Some(BondStereo::Cis), Some(BondDir::Wedge)))]
+    #[case(3, (Some(BondStereo::Either), Some(BondDir::Either)))]
+    #[case(4, (Some(BondStereo::Either), Some(BondDir::Either)))]
+    #[case(6, (Some(BondStereo::Trans), Some(BondDir::Dash)))]
+    fn test_bond_convert_stereo_dir_code(
+        #[case] code: u8,
+        #[case] expected: (Option<BondStereo>, Option<BondDir>),
+    ) {
+        assert_eq!(convert_bond_stereo_dir_code(code).unwrap(), expected);
     }
 
-    #[test]
-    fn test_bond_convert_reacting_center_code() {
-        // Test individual flags
-        assert_eq!(
-            convert_bond_reacting_center_code(0).unwrap(),
-            Some(BondReactingCenter::UNMARKED)
-        );
-        assert_eq!(
-            convert_bond_reacting_center_code(-1).unwrap(),
-            Some(BondReactingCenter::NOT_CENTER)
-        );
-        assert_eq!(
-            convert_bond_reacting_center_code(1).unwrap(),
-            Some(BondReactingCenter::CENTER)
-        );
-        assert_eq!(
-            convert_bond_reacting_center_code(2).unwrap(),
-            Some(BondReactingCenter::NO_CHANGE)
-        );
-        assert_eq!(
-            convert_bond_reacting_center_code(4).unwrap(),
-            Some(BondReactingCenter::MADE_BROKEN)
-        );
-        assert_eq!(
-            convert_bond_reacting_center_code(8).unwrap(),
-            Some(BondReactingCenter::ORDER_CHANGED)
-        );
+    #[rstest]
+    #[case(2)]
+    #[case(5)]
+    #[case(7)]
+    fn test_bond_convert_stereo_dir_code_invalid(#[case] code: u8) {
+        assert!(convert_bond_stereo_dir_code(code).is_err());
+    }
 
-        // Test combinations from the spec
-        // 5 = (4 + 1) -> MADE_BROKEN | CENTER
-        assert_eq!(
-            convert_bond_reacting_center_code(5).unwrap(),
-            Some(BondReactingCenter::CENTER | BondReactingCenter::MADE_BROKEN)
-        );
-        // 9 = (8 + 1) -> ORDER_CHANGED | CENTER
-        assert_eq!(
-            convert_bond_reacting_center_code(9).unwrap(),
-            Some(BondReactingCenter::CENTER | BondReactingCenter::ORDER_CHANGED)
-        );
-        // 12 = (4 + 8) -> MADE_BROKEN | ORDER_CHANGED
-        assert_eq!(
-            convert_bond_reacting_center_code(12).unwrap(),
-            Some(BondReactingCenter::MADE_BROKEN | BondReactingCenter::ORDER_CHANGED)
-        );
-        // 13 = (4 + 8 + 1) -> MADE_BROKEN | ORDER_CHANGED | CENTER
-        assert_eq!(
-            convert_bond_reacting_center_code(13).unwrap(),
-            Some(
-                BondReactingCenter::CENTER
-                    | BondReactingCenter::MADE_BROKEN
-                    | BondReactingCenter::ORDER_CHANGED
-            )
-        );
+    #[rstest]
+    #[case(0, BondTopology::Either)]
+    #[case(1, BondTopology::Ring)]
+    #[case(2, BondTopology::Chain)]
+    fn test_bond_convert_topology_code(#[case] code: u8, #[case] topology: BondTopology) {
+        assert_eq!(convert_bond_topology_code(code).unwrap(), Some(topology));
+    }
 
-        // Test invalid codes
-        assert!(convert_bond_reacting_center_code(3).is_err());
-        assert!(convert_bond_reacting_center_code(16).is_err());
-        assert!(convert_bond_reacting_center_code(-2).is_err());
+    #[rstest]
+    #[case(3)]
+    fn test_bond_convert_topology_code_invalid(#[case] code: u8) {
+        assert!(convert_bond_topology_code(code).is_err());
+    }
+
+    #[rstest]
+    #[case(0, Some(BondReactingCenter::UNMARKED))]
+    #[case(-1, Some(BondReactingCenter::NOT_CENTER))]
+    #[case(1, Some(BondReactingCenter::CENTER))]
+    #[case(2, Some(BondReactingCenter::NO_CHANGE))]
+    #[case(4, Some(BondReactingCenter::MADE_BROKEN))]
+    #[case(8, Some(BondReactingCenter::ORDER_CHANGED))]
+    #[case(5, Some(BondReactingCenter::CENTER | BondReactingCenter::MADE_BROKEN))]
+    #[case(9, Some(BondReactingCenter::CENTER | BondReactingCenter::ORDER_CHANGED))]
+    #[case(12, Some(BondReactingCenter::MADE_BROKEN | BondReactingCenter::ORDER_CHANGED))]
+    #[case(13, Some(
+        BondReactingCenter::CENTER
+            | BondReactingCenter::MADE_BROKEN
+            | BondReactingCenter::ORDER_CHANGED
+    ))]
+    fn test_bond_convert_reacting_center_code(
+        #[case] code: i8,
+        #[case] expected: Option<BondReactingCenter>,
+    ) {
+        assert_eq!(convert_bond_reacting_center_code(code).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(3)]
+    #[case(16)]
+    #[case(-2)]
+    fn test_bond_convert_reacting_center_code_invalid(#[case] code: i8) {
+        assert!(convert_bond_reacting_center_code(code).is_err());
     }
 }

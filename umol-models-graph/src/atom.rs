@@ -15,13 +15,13 @@ pub enum AtomStereoParity {
 }
 
 /// Atom list (for query molecules in MOL files)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AtomList {
     pub(crate) elements: Vec<Element>,
 }
 
 /// Generalized atom kind (for atom-like objects in MOL files)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum AtomSymbol {
     Element(Element),
     NamedIsotope(NamedIsotope),
@@ -63,7 +63,7 @@ impl Atom {
 }
 
 /// Generalized atom symbol (for atom-like objects in MOL files)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AtomLike {
     pub symbol: AtomSymbol,
     pub charge: i8,

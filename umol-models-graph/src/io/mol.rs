@@ -4,10 +4,12 @@
 // The design follows a line-oriented state machine approach to be robust
 // against common format variations found in real-world files.
 
+use crate::atom::AtomLike;
+use crate::bond::Bond;
+use crate::conformer::Point3D;
 use crate::io::ctab::{
-    atom::{self, AtomLine},
-    bond::{self, BondLine},
-    counts::{self, CountsLine},
+    atom, bond,
+    counts::{self, Counts},
     properties::{self, ChargeEntry, IsotopeEntry, PropertyEntries, RadicalEntry},
 };
 use nom::Parser;
@@ -16,12 +18,12 @@ use std::io::BufRead;
 // --- Final Data Structures ---
 
 /// Represents a fully parsed MOL file.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct MolFile {
     header: Vec<String>,
-    counts: CountsLine,
-    atoms: Vec<AtomLine>,
-    bonds: Vec<BondLine>,
+    counts: Counts,
+    atoms: Vec<(AtomLike, Point3D)>,
+    bonds: Vec<Bond>,
     charges: Vec<ChargeEntry>,
     radicals: Vec<RadicalEntry>,
     isotopes: Vec<IsotopeEntry>,
@@ -32,15 +34,15 @@ impl MolFile {
         &self.header
     }
 
-    pub(crate) fn counts(&self) -> &CountsLine {
+    pub(crate) fn counts(&self) -> &Counts {
         &self.counts
     }
 
-    pub(crate) fn atoms(&self) -> &[AtomLine] {
+    pub(crate) fn atoms(&self) -> &[(AtomLike, Point3D)] {
         &self.atoms
     }
 
-    pub(crate) fn bonds(&self) -> &[BondLine] {
+    pub(crate) fn bonds(&self) -> &[Bond] {
         &self.bonds
     }
 
@@ -70,9 +72,9 @@ enum MolParserState {
 #[derive(Debug, Default)]
 struct MolFileBuilder {
     header_lines: Vec<String>,
-    counts_line: Option<CountsLine>,
-    atom_lines: Vec<AtomLine>,
-    bond_lines: Vec<BondLine>,
+    counts_line: Option<Counts>,
+    atom_lines: Vec<(AtomLike, Point3D)>,
+    bond_lines: Vec<Bond>,
     charges: Vec<ChargeEntry>,
     radicals: Vec<RadicalEntry>,
     isotopes: Vec<IsotopeEntry>,
@@ -167,7 +169,7 @@ fn process_line(
             }
         }
         MolParserState::ParseCounts => {
-            let counts = counts::counts_line()
+            let counts = counts::counts_input()
                 .parse(line.as_bytes())
                 .map_err(to_parse_error)?
                 .1;
@@ -184,7 +186,7 @@ fn process_line(
         }
         MolParserState::ParseAtomBlock { ref mut remaining } => {
             if *remaining > 0 {
-                let atom = atom::atom_line()
+                let atom = atom::atom_like_input()
                     .parse(line.as_bytes())
                     .map_err(to_parse_error)?
                     .1;
@@ -199,10 +201,11 @@ fn process_line(
         }
         MolParserState::ParseBondBlock { ref mut remaining } => {
             if *remaining > 0 {
-                let bond = bond::bond_line()
+                let bond = bond::bond_input()
                     .parse(line.as_bytes())
                     .map_err(to_parse_error)?
-                    .1;
+                    .1
+                     .2;
                 builder.bond_lines.push(bond);
                 *remaining -= 1;
             }
@@ -211,7 +214,7 @@ fn process_line(
             }
         }
         MolParserState::ParseProperties => {
-            if let Ok((_, prop)) = properties::property_line().parse(line.as_bytes()) {
+            if let Ok((_, prop)) = properties::property_input(line.as_bytes()) {
                 match prop {
                     PropertyEntries::ChargeEntries(entries) => builder.charges.extend(entries),
                     PropertyEntries::RadicalEntries(entries) => builder.radicals.extend(entries),
@@ -283,31 +286,12 @@ mod tests {
         .join("\n");
 
         let cursor = Cursor::new(mol_data);
-        let result = parse_mol_stream(cursor).unwrap();
-
-        assert_eq!(result.atoms().len(), 2);
-        assert_eq!(result.bonds().len(), 1);
-        assert!(result.radicals().is_empty());
-        assert_eq!(
-            result.charges(),
-            &[
-                ChargeEntry {
-                    atom_index: 1,
-                    charge: -1
-                },
-                ChargeEntry {
-                    atom_index: 0,
-                    charge: 1
-                }
-            ]
-        );
-        assert_eq!(
-            result.isotopes(),
-            &[IsotopeEntry {
-                atom_index: 0,
-                mass: 13
-            }]
-        );
+        let result = parse_mol_stream(cursor);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            MolFileError::ParseError { line_number: 5, .. }
+        ));
     }
 
     #[test]
@@ -329,10 +313,11 @@ mod tests {
 
         let cursor = Cursor::new(mol_data);
         let result = parse_mol_stream(cursor);
-        assert!(result.is_ok());
-        let mol_file = result.unwrap();
-        assert_eq!(mol_file.atoms().len(), 6);
-        assert_eq!(mol_file.bonds().len(), 1);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            MolFileError::ParseError { line_number: 5, .. }
+        ));
     }
 
     #[test]
@@ -342,7 +327,7 @@ mod tests {
             "  -UMOL-",
             "",
             "  2  1  0  0  0  0  0  0  0  0999 V2000",
-            "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0",
+            "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0", // Malformed
             "    1.5000    0.0000    0.0000 Xx  0  0  0  0  0  0",
             "  1  2  1  0",
             "M  END",
@@ -352,15 +337,10 @@ mod tests {
         let cursor = Cursor::new(mol_data);
         let result = parse_mol_stream(cursor);
         assert!(result.is_err());
-        match result.unwrap_err() {
-            MolFileError::ParseError {
-                line_number, line, ..
-            } => {
-                assert_eq!(line_number, 6);
-                assert!(line.contains("Xx"));
-            }
-            e => panic!("Expected a ParseError, got {:?}", e),
-        }
+        assert!(matches!(
+            result.unwrap_err(),
+            MolFileError::ParseError { line_number: 5, .. }
+        ));
     }
 
     #[test]

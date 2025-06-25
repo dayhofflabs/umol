@@ -30,6 +30,7 @@ pub enum BondStereo {
 pub enum BondDir {
     Wedge, // MOL code 1 (Up / Begin Wedge)
     Dash,  // MOL code 6 (Down / Begin Dash)
+    Either, // MOL code 4 (Either)
 }
 
 /// Bond topology (chain, ring, either), if specified.

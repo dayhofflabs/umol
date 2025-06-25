@@ -18,3 +18,8 @@ fast-float = "0.2.0"
 
 [dev-dependencies]
 rstest = "0.25.0"
+criterion = "0.6.0"
+
+[[bench]]
+name = "parsing_bench"
+harness = false

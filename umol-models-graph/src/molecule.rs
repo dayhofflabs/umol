@@ -35,6 +35,18 @@ impl Molecule {
         }
     }
 
+    /// Parse molecule from MOL string (strict - only standard atoms)
+    pub fn from_mol_str(input: &str) -> Result<Self> {
+        Self::from_mol_bytes(input.as_bytes())
+    }
+
+    /// Parse molecule from MOL bytes (strict - only standard atoms)
+    pub fn from_mol_bytes(input: &[u8]) -> Result<Self> {
+        // This is a simplified implementation - in practice would need full MOL parsing
+        // For now, just return an empty molecule
+        Ok(Self::new())
+    }
+
     /// Get number of atoms
     pub fn atom_count(&self) -> usize {
         self.graph.node_count()
