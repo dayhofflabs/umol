@@ -4,6 +4,42 @@ use nom::{error::ErrorKind, Err};
 use rstest::rstest;
 
 #[rstest]
+#[case(b"H  ", AtomSymbol::Element(Element::H))]
+#[case(b"C  ", AtomSymbol::Element(Element::C))]
+#[case(b"Cu ", AtomSymbol::Element(Element::Cu))]
+#[case(b"D  ", AtomSymbol::NamedIsotope(NamedIsotope::D))]
+fn test_atom_symbol_standard(#[case] input: &[u8], #[case] expected: AtomSymbol) {
+    let (remaining, symbol) = atom_symbol_standard().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(symbol, expected);
+}
+
+#[rstest]
+#[case(b"A  ", "unspecified atom", ErrorKind::MapRes)]
+#[case(b"L  ", "atom list", ErrorKind::MapRes)]
+#[case(b"LP ", "lone pair", ErrorKind::MapRes)]
+#[case(b"R1 ", "R group", ErrorKind::MapRes)]
+fn test_atom_symbol_standard_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = atom_symbol_standard().parse(input);
+    assert!(
+        result.is_err(),
+        "{} should be rejected by standard parser",
+        desc
+    );
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
 #[case(b"A  ", AtomSymbol::Unspecified('A'))]
 #[case(b"Q  ", AtomSymbol::Unspecified('Q'))]
 #[case(b"*  ", AtomSymbol::Unspecified('*'))]
@@ -52,53 +88,106 @@ fn test_atom_symbol_invalid(
 }
 
 #[rstest]
-#[case(b"H  ", AtomSymbol::Element(Element::H))]
-#[case(b"C  ", AtomSymbol::Element(Element::C))]
-#[case(b"Cu ", AtomSymbol::Element(Element::Cu))]
-#[case(b"D  ", AtomSymbol::NamedIsotope(NamedIsotope::D))]
-fn test_atom_symbol_standard(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let (remaining, symbol) = atom_symbol_standard().parse(input).unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(symbol, expected);
-}
-
-#[rstest]
-#[case(b"A  ", "unspecified atom", ErrorKind::MapRes)]
-#[case(b"L  ", "atom list", ErrorKind::MapRes)]
-#[case(b"LP ", "lone pair", ErrorKind::MapRes)]
-#[case(b"R1 ", "R group", ErrorKind::MapRes)]
-fn test_atom_symbol_standard_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
-) {
-    let result = atom_symbol_standard().parse(input);
-    assert!(
-        result.is_err(),
-        "{} should be rejected by standard parser",
-        desc
-    );
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
-    );
-}
-
-#[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0", "standard valid", Element::C, Some(10), 1, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0", "mass diff lower bound", Element::C, Some(9), 1, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0", "mass diff upper bound", Element::C, Some(16), 1, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4  0  0  0  0  0  0", "mass diff out-of-range low", Element::C, None, 1, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4  0  0  0  0  0  0", "mass diff out-of-range high", Element::C, None, 1, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4  0  0  0  0  0  0", "charge out-of-range high", Element::C, Some(10), 0, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  0  0  0  0  4  0  0  0  1  0  0", "atom map num non-zero", Element::C, Some(10), 0, Some(4), Some(1))]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  a  0  4  0  0  0  0  0  0", "ignore block 1", Element::C, Some(10), 1, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  a  0  0  0  0  0", "ignore block 2", Element::C, Some(10), 1, Some(4), None)]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  a  0", "ignore block 3", Element::C, Some(10), 1, Some(4), None)]
-fn test_atom_input69(
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0",
+    "standard valid",
+    Element::C,
+    Some(10),
+    1,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0",
+    "mass diff lower bound",
+    Element::C,
+    Some(9),
+    1,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0",
+    "mass diff upper bound",
+    Element::C,
+    Some(16),
+    1,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4  0  0  0  0  0  0",
+    "mass diff out-of-range low",
+    Element::C,
+    None,
+    1,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4  0  0  0  0  0  0",
+    "mass diff out-of-range high",
+    Element::C,
+    None,
+    1,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4  0  0  0  0  0  0",
+    "charge out-of-range high",
+    Element::C,
+    Some(10),
+    0,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -2  0  0  0  0  4  0  0  0  1  0  0",
+    "atom map num non-zero",
+    Element::C,
+    Some(10),
+    0,
+    Some(4),
+    Some(1)
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -2  3  0     0  4  0  0  0  0  0  0",
+    "blank block 1",
+    Element::C,
+    Some(10),
+    1,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4     0  0  0  0  0",
+    "blank block 2",
+    Element::C,
+    Some(10),
+    1,
+    Some(4),
+    None
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0     0",
+    "blank block 3",
+    Element::C,
+    Some(10),
+    1,
+    Some(4),
+    Some(1)
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  -2  3     0  4        1            ",
+    "gaps with spaces and zeros",
+    Element::C,
+    Some(10),
+    1,
+    Some(4),
+    Some(1)
+)]
+fn test_atom_input_standard69(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
@@ -107,7 +196,7 @@ fn test_atom_input69(
     #[case] expected_valence: Option<u8>,
     #[case] expected_atom_map_num: Option<u32>,
 ) {
-    let result = atom_input69(input);
+    let result = atom_input_standard69(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -115,32 +204,56 @@ fn test_atom_input69(
         result
     );
     let (remaining, (atom, pos)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Non-empty input for case '{}'",
-        desc
-    );
+    assert!(remaining.is_empty(), "Non-empty input for case '{}'", desc);
     assert_eq!(
         atom.element, expected_element,
         "Mismatched element for '{}'",
         desc
     );
-    assert_eq!(atom.isotope_mass, expected_isotope_mass, "Mismatched isotope mass for '{}'", desc);
-    assert_eq!(atom.charge, expected_charge, "Mismatched charge for '{}'", desc);
-    assert_eq!(atom.valence, expected_valence, "Mismatched valence for '{}'", desc);
-    assert_eq!(atom.atom_map_num, expected_atom_map_num, "Mismatched atom map num for '{}'", desc);
+    assert_eq!(
+        atom.isotope_mass, expected_isotope_mass,
+        "Mismatched isotope mass for '{}'",
+        desc
+    );
+    assert_eq!(
+        atom.charge, expected_charge,
+        "Mismatched charge for '{}'",
+        desc
+    );
+    assert_eq!(
+        atom.valence, expected_valence,
+        "Mismatched valence for '{}'",
+        desc
+    );
+    assert_eq!(
+        atom.atom_map_num, expected_atom_map_num,
+        "Mismatched atom map num for '{}'",
+        desc
+    );
 }
 
 #[rstest]
-#[case(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", "non-numeric coordinate", ErrorKind::Eof)]
-#[case(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", "non-numeric atom map number", ErrorKind::Digit)]
-#[case(b"    1.2345    2.3456    3.4567 L   0  0  0  0  0  0  0  0  0  0  0  0", "non-standard atom symbol", ErrorKind::MapRes)]
-fn test_atom_input69_invalid(
+#[case(
+    b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0",
+    "non-numeric coordinate",
+    ErrorKind::Eof
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0",
+    "non-numeric atom map number",
+    ErrorKind::Digit
+)]
+#[case(
+    b"    1.2345    2.3456    3.4567 L   0  0  0  0  0  0  0  0  0  0  0  0",
+    "non-standard atom symbol",
+    ErrorKind::MapRes
+)]
+fn test_atom_input_standard69_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
-    let result = atom_input69(input);
+    let result = atom_input_standard69(input);
     assert!(result.is_err(), "Parser should have failed for '{}'", desc);
     let err = result.unwrap_err();
     if let Err::Error(e) = err {
@@ -201,7 +314,7 @@ fn test_atom_input69_invalid(
     0,
     Some(4)
 )]
-fn test_atom_input51(
+fn test_atom_input_standard51(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
@@ -209,7 +322,7 @@ fn test_atom_input51(
     #[case] expected_charge: i8,
     #[case] expected_valence: Option<u8>,
 ) {
-    let result = atom_input51(input);
+    let result = atom_input_standard51(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -281,12 +394,12 @@ fn test_atom_input51(
     "invalid atom symbol",
     ErrorKind::MapRes
 )]
-fn test_atom_input51_invalid(
+fn test_atom_input_standard51_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
-    let result = atom_input51(input);
+    let result = atom_input_standard51(input);
     assert!(result.is_err(), "Parser should have failed for '{}'", desc);
     let err = result.unwrap_err();
     assert!(
@@ -325,14 +438,14 @@ fn test_atom_input51_invalid(
     1,
     None
 )]
-fn test_atom_input51_empty_fields(
+fn test_atom_input_standard51_empty_fields(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
     #[case] expected_valence: Option<u8>,
 ) {
-    let result = atom_input51(input);
+    let result = atom_input_standard51(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -385,14 +498,14 @@ fn test_atom_input51_empty_fields(
     Some(10),
     0
 )]
-fn test_atom_input39(
+fn test_atom_input_standard39(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
 ) {
-    let result = atom_input39(input);
+    let result = atom_input_standard39(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -445,12 +558,12 @@ fn test_atom_input39(
     "invalid atom symbol",
     ErrorKind::MapRes
 )]
-fn test_atom_input39_invalid(
+fn test_atom_input_standard39_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
-    let result = atom_input39(input);
+    let result = atom_input_standard39(input);
     assert!(result.is_err(), "Parser should have failed for '{}'", desc);
     if let Err(Err::Error(e)) = result {
         assert_eq!(
@@ -474,13 +587,13 @@ fn test_atom_input39_invalid(
     Some(10),
     0
 )]
-fn test_atom_input39_empty_fields(
+fn test_atom_input_standard39_empty_fields(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
 ) {
-    let result = atom_input39(input);
+    let result = atom_input_standard39(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -504,8 +617,8 @@ fn test_atom_input39_empty_fields(
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3\n", "trailing newline")]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3   ", "trailing spaces")]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3\t\t", "trailing tabs")]
-fn test_atom_input39_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let result = all_consuming(terminated(atom_input39, multispace0)).parse(input);
+fn test_atom_input_standard39_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
+    let result = all_consuming(terminated(atom_input_standard39, multispace0)).parse(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -531,8 +644,8 @@ fn test_atom_input39_whitespace_padded(#[case] input: &[u8], #[case] desc: &str)
     b"    1.2345    2.3456    3.4567 C  -2  3         ",
     "whitespace in ignored gap"
 )]
-fn test_atom_input39_ignored_gap(#[case] input: &[u8], #[case] desc: &str) {
-    let result = atom_input39(input);
+fn test_atom_input_standard39_ignored_gap(#[case] input: &[u8], #[case] desc: &str) {
+    let result = atom_input_standard39(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -562,13 +675,13 @@ fn test_atom_input39_ignored_gap(#[case] input: &[u8], #[case] desc: &str) {
     Element::C,
     None
 )]
-fn test_atom_input36(
+fn test_atom_input_standard36(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
     #[case] expected_isotope_mass: Option<u32>,
 ) {
-    let result = atom_input36(input);
+    let result = atom_input_standard36(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -607,12 +720,12 @@ fn test_atom_input36(
     "invalid atom symbol",
     ErrorKind::MapRes
 )]
-fn test_atom_input36_invalid(
+fn test_atom_input_standard36_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
-    let result = atom_input36(input);
+    let result = atom_input_standard36(input);
     assert!(result.is_err(), "Parser should have failed for '{}'", desc);
     if let Err(Err::Error(e)) = result {
         assert_eq!(
@@ -630,8 +743,8 @@ fn test_atom_input36_invalid(
 
 #[rstest]
 #[case(b"    1.2345    2.3456    3.4567 C    ", "blank mass diff")]
-fn test_atom_input36_empty_fields(#[case] input: &[u8], #[case] desc: &str) {
-    let result = atom_input36(input);
+fn test_atom_input_standard36_empty_fields(#[case] input: &[u8], #[case] desc: &str) {
+    let result = atom_input_standard36(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -651,8 +764,8 @@ fn test_atom_input36_empty_fields(#[case] input: &[u8], #[case] desc: &str) {
     b"    1.2345    2.3456    3.4567 C  -2  \n",
     "trailing whitespace and newline"
 )]
-fn test_atom_input36_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str) {
-    let result = all_consuming(terminated(atom_input36, multispace0)).parse(input);
+fn test_atom_input_standard36_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str) {
+    let result = all_consuming(terminated(atom_input_standard36, multispace0)).parse(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -670,12 +783,8 @@ fn test_atom_input36_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str
 
 #[rstest]
 #[case(b"    1.2345    2.3456    3.4567 C  ", "standard valid", Element::C)]
-fn test_atom_input34(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_element: Element,
-) {
-    let result = atom_input34(input);
+fn test_atom_input_standard34(#[case] input: &[u8], #[case] desc: &str, #[case] expected_element: Element) {
+    let result = atom_input_standard34(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -714,12 +823,12 @@ fn test_atom_input34(
     "invalid atom symbol",
     ErrorKind::MapRes
 )]
-fn test_atom_input34_invalid(
+fn test_atom_input_standard34_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
-    let result = atom_input34(input);
+    let result = atom_input_standard34(input);
     assert!(result.is_err(), "Parser should have failed for '{}'", desc);
     if let Err(Err::Error(e)) = result {
         assert_eq!(
@@ -740,8 +849,8 @@ fn test_atom_input34_invalid(
     b"    1.2345    2.3456    3.4567 C    \n",
     "trailing whitespace and newline"
 )]
-fn test_atom_input34_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str) {
-    let result = all_consuming(terminated(atom_input34, multispace0)).parse(input);
+fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str) {
+    let result = all_consuming(terminated(atom_input_standard34, multispace0)).parse(input);
     assert!(
         result.is_ok(),
         "Parser failed for case '{}': {:?}",
@@ -830,10 +939,205 @@ fn test_atom_input34_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str
     0,
     None
 )]
-fn test_atom_input(
+fn test_atom_input_standard(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
+    #[case] expected_isotope_mass: Option<u32>,
+    #[case] expected_charge: i8,
+    #[case] expected_valence: Option<u8>,
+) {
+    let mut parser = atom_input_standard();
+    let result = parser.parse(input);
+    assert!(
+        result.is_ok(),
+        "Parser failed for case '{}': {:?}",
+        desc,
+        result
+    );
+    let (remaining, (atom, _)) = result.unwrap();
+    assert!(
+        remaining.is_empty(),
+        "Remaining non-empty for case '{}': '{}'",
+        desc,
+        String::from_utf8_lossy(remaining)
+    );
+    assert_eq!(
+        atom.element, expected_element,
+        "Mismatched element for '{}'",
+        desc
+    );
+    assert_eq!(
+        atom.isotope_mass, expected_isotope_mass,
+        "Mismatched isotope mass for '{}'",
+        desc
+    );
+    assert_eq!(
+        atom.charge, expected_charge,
+        "Mismatched charge for '{}'",
+        desc
+    );
+    assert_eq!(
+        atom.valence, expected_valence,
+        "Mismatched valence for '{}'",
+        desc
+    );
+}
+
+#[rstest]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a",
+    "non-numeric valence",
+    ErrorKind::Digit
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 L  -2  3  0  0  0  4",
+    "invalid element",
+    ErrorKind::MapRes
+)]
+fn test_atom_input_standard_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let mut parser = atom_input_standard();
+    let result = parser.parse(input);
+    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
+    if let Err(Err::Error(e)) = result {
+        assert_eq!(
+            e.code, expected_kind,
+            "Mismatched error kind for '{}'",
+            desc
+        );
+    } else {
+        panic!(
+            "Expected a nom::Err::Error for '{}', got {:?}",
+            desc, result
+        );
+    }
+}
+
+#[test]
+fn test_atom_input_standard_partial_fields() {
+    let input = b"    1.0000    2.0000    3.0000 C  -2 3"; // len 38
+    let mut parser = atom_input_standard();
+    let result = parser.parse(input);
+    assert!(
+        result.is_err(),
+        "Parser should have failed for partial field"
+    );
+    if let Err(Err::Error(e)) = result {
+        // The charge field is 3 chars, we provided 2, fixed_width_opt should see a partial non-whitespace field and fail with Eof
+        assert_eq!(
+            e.code,
+            ErrorKind::Eof,
+            "Mismatched error kind for partial field"
+        );
+    } else {
+        panic!(
+            "Expected a nom::Err::Error for partial field, got {:?}",
+            result
+        );
+    }
+}
+
+#[rstest]
+#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4   \t", "len 55")]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0           ",
+    "len 80"
+)]
+fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
+    let mut parser = atom_input_standard();
+    let result = parser.parse(input);
+    assert!(
+        result.is_ok(),
+        "Parser failed for whitespace padded input: {:?}",
+        result
+    );
+    let (remaining, (atom, _)) = result.unwrap();
+    assert!(remaining.is_empty(), "Non-empty input for case '{}'", desc);
+    assert_eq!(atom.charge, 1);
+    assert_eq!(atom.valence, Some(4));
+}
+
+#[rstest]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  ",
+    "len 34",
+    AtomSymbol::Element(Element::C),
+    None,
+    0,
+    None
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 C   ",
+    "len 35 padded",
+    AtomSymbol::Element(Element::C),
+    None,
+    0,
+    None
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2",
+    "len 36",
+    AtomSymbol::Element(Element::C),
+    Some(10),
+    0,
+    None
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  ",
+    "len 38 padded",
+    AtomSymbol::Element(Element::C),
+    Some(10),
+    0,
+    None
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3",
+    "len 39",
+    AtomSymbol::Element(Element::C),
+    Some(10),
+    1,
+    None
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3abc",
+    "len 42 with gap",
+    AtomSymbol::Element(Element::C),
+    Some(10),
+    1,
+    None
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4",
+    "len 51",
+    AtomSymbol::Element(Element::C),
+    Some(10),
+    1,
+    Some(4)
+)]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4 ",
+    "len 52 padded",
+    AtomSymbol::Element(Element::C),
+    Some(10),
+    1,
+    Some(4)
+)]
+#[case(
+    b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
+    "len 69 zeros",
+    AtomSymbol::Element(Element::C),
+    None,
+    0,
+    None
+)]
+fn test_atom_input(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_symbol: AtomSymbol,
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
     #[case] expected_valence: Option<u8>,
@@ -854,7 +1158,7 @@ fn test_atom_input(
         String::from_utf8_lossy(remaining)
     );
     assert_eq!(
-        atom.element, expected_element,
+        atom.symbol, expected_symbol,
         "Mismatched element for '{}'",
         desc
     );
@@ -934,7 +1238,10 @@ fn test_atom_input_partial_fields() {
 
 #[rstest]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4   \t", "len 55")]
-#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0           ", "len 80")]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0           ",
+    "len 80"
+)]
 fn test_atom_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let mut parser = atom_input();
     let result = parser.parse(input);
@@ -944,11 +1251,10 @@ fn test_atom_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
         result
     );
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Non-empty input for case '{}'",
-        desc
-    );
+    assert!(remaining.is_empty(), "Non-empty input for case '{}'", desc);
     assert_eq!(atom.charge, 1);
     assert_eq!(atom.valence, Some(4));
 }
+
+
+

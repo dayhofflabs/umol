@@ -101,7 +101,7 @@ fn isotope_entries<'a>(
 }
 
 /// Parse property line
-pub fn property_input<'a>(
+pub fn property_input_standard<'a>(
     input: &'a [u8],
 ) -> nom::IResult<&'a [u8], PropertyEntries, error::Error<&'a [u8]>> {
     let (rest, tag) = take(6u8)(input)?;

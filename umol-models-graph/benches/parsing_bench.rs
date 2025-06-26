@@ -3,10 +3,10 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use nom::Parser;
 use umol_models_graph::io::ctab::{
-    atom::atom_input,
-    bond::bond_input,
+    atom::atom_input_standard,
+    bond::bond_input_standard,
     counts::counts_input,
-    properties::property_input,
+    properties::property_input_standard,
 };
 
 fn parsing_benchmarks(c: &mut Criterion) {
@@ -83,7 +83,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| atom_input().parse(std::hint::black_box(input)))
+                b.iter(|| atom_input_standard().parse(std::hint::black_box(input)))
         });
         }
 
@@ -103,7 +103,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| bond_input().parse(std::hint::black_box(input)))
+                b.iter(|| bond_input_standard().parse(std::hint::black_box(input)))
             });
         }
         group.finish();
@@ -134,7 +134,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| property_input(std::hint::black_box(input)))
+                b.iter(|| property_input_standard(std::hint::black_box(input)))
             });
         }
         group.finish();

@@ -12,7 +12,7 @@ use crate::bond::{Bond, BondDir, BondStereo, BondType};
 use super::convert::{convert_bond_stereo_dir_code, convert_bond_type_code_standard};
 use super::utils::{fixed_width_int, fixed_width_int_minus1};
 
-fn bond_input9(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
+fn bond_input_standard9(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
     map(
         (
             fixed_width_int_minus1::<usize>(3),
@@ -26,7 +26,7 @@ fn bond_input9(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
     .parse(input)
 }
 
-fn bond_input12(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
+fn bond_input_standard12(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
     map(
         (
             fixed_width_int_minus1::<usize>(3),
@@ -51,7 +51,7 @@ fn bond_input12(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
     .parse(input)
 }
 
-fn bond_input21(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
+fn bond_input_standard21(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
     terminated(
         map(
             (
@@ -95,14 +95,14 @@ fn bond_input21(input: &[u8]) -> IResult<&[u8], (usize, usize, Bond)> {
 /// | rrr   | bond topology        | 0..=2      | Query          |
 /// | ccc   | bond reacting center | 0..=3      | Reaction,Query |
 /// --------------------------------------------------------------
-pub fn bond_input<'a>(
+pub fn bond_input_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let len = input.len();
         let parser = match len {
-            21.. => bond_input21,
-            10..=20 => bond_input12,
-            9 => bond_input9,
+            21.. => bond_input_standard21,
+            10..=20 => bond_input_standard12,
+            9 => bond_input_standard9,
             _ => {
                 return Err(nom::Err::Error(error::Error::new(
                     input,

@@ -186,7 +186,7 @@ fn process_line(
         }
         MolParserState::ParseAtomBlock { ref mut remaining } => {
             if *remaining > 0 {
-                let atom = atom::atom_like_input()
+                let atom = atom::atom_input()
                     .parse(line.as_bytes())
                     .map_err(to_parse_error)?
                     .1;
@@ -201,7 +201,7 @@ fn process_line(
         }
         MolParserState::ParseBondBlock { ref mut remaining } => {
             if *remaining > 0 {
-                let bond = bond::bond_input()
+                let bond = bond::bond_input_standard()
                     .parse(line.as_bytes())
                     .map_err(to_parse_error)?
                     .1
@@ -214,7 +214,7 @@ fn process_line(
             }
         }
         MolParserState::ParseProperties => {
-            if let Ok((_, prop)) = properties::property_input(line.as_bytes()) {
+            if let Ok((_, prop)) = properties::property_input_standard(line.as_bytes()) {
                 match prop {
                     PropertyEntries::ChargeEntries(entries) => builder.charges.extend(entries),
                     PropertyEntries::RadicalEntries(entries) => builder.radicals.extend(entries),

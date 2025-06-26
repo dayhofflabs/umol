@@ -15,6 +15,7 @@ use nom::{
     },
     combinator::{complete, map, opt, recognize, verify},
     error,
+    multi::fold_many_m_n,
     sequence::delimited,
     Parser,
 };
@@ -226,13 +227,47 @@ where
     ))
 }
 
+/// Verify that a slice contains only blanks or zeros
+pub(crate) fn is_blanks_or_zeros(input: &[u8]) -> bool {
+    // Trim leading spaces.
+    let mut start = 0;
+    while start < input.len() && input[start] == b' ' {
+        start += 1;
+    }
+
+    // If the slice is all spaces, it's valid.
+    if start == input.len() {
+        return true;
+    }
+
+    // Trim trailing spaces.
+    let mut end = input.len();
+    while end > start && input[end - 1] == b' ' {
+        end -= 1;
+    }
+
+    // Check if the remaining (non-empty) slice is all zeros.
+    let num_slice = &input[start..end];
+    num_slice.iter().all(|&b| b == b'0')
+}
+
+/// Apply the parser `p` exactly `n` times, discarding the results.
+pub(crate) fn repeat<I, O, P, E>(n: usize, p: P) -> impl Parser<I, Output = (), Error = E>
+where
+    I: nom::Input,
+    P: Parser<I, Output = O, Error = E>,
+    E: error::ParseError<I>,
+{
+    fold_many_m_n(n, n, p, || (), |_, _| ())
+}
+
 /// SmallVec-based parser combinator for length_count expressions.
 pub(crate) fn small_length_count<I, A, C, E, F>(
     mut count: C,
     mut f: F,
 ) -> impl Parser<I, Output = SmallVec<A>, Error = E>
 where
-    I: Clone,
+    I: nom::Input,
     A: Array,
     C: Parser<I, Output = usize, Error = E>,
     F: Parser<I, Output = <A as Array>::Item, Error = E>,
@@ -557,6 +592,54 @@ mod tests {
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",
             desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
+        );
+    }
+
+    #[rstest]
+    #[case(b"", true)]
+    #[case(b"   ", true)]
+    #[case(b"  0", true)]
+    #[case(b" 0 ", true)]
+    #[case(b"0  ", true)]
+    #[case(b" 00", true)]
+    #[case(b"00 ", true)]
+    #[case(b"000", true)]
+    #[case(b"0", true)]
+    #[case(b"00", true)]
+    #[case(b"0 0", false)]
+    #[case(b"  1", false)]
+    fn test_is_blanks_or_zeros(#[case] input: &[u8], #[case] expected: bool) {
+        assert_eq!(is_blanks_or_zeros(input), expected);
+    }
+
+    #[rstest]
+    #[case(b"abcabcabc")]
+    fn test_repeat(#[case] input: &[u8]) {
+        let mut parser = all_consuming(repeat::<_, _, _, error::Error<_>>(3, tag(&b"abc"[..])));
+        let result = parser.parse(input);
+        assert!(
+            result.is_ok(),
+            "{:?}: should have succeeded",
+            String::from_utf8_lossy(input)
+        );
+        let (remaining, _) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+    }
+
+    #[rstest]
+    #[case(b"abcabc", ErrorKind::Tag)]
+    #[case(b"abc", ErrorKind::Tag)]
+    #[case(b"", ErrorKind::Tag)]
+    fn test_repeat_invalid(#[case] input: &[u8], #[case] expected_kind: ErrorKind) {
+        let mut parser = all_consuming(repeat::<_, _, _, error::Error<_>>(3, tag(&b"abc"[..])));
+        let result = parser.parse(input);
+        assert!(result.is_err(), "{:?}: should have failed", input);
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {:?}, expected {:?}, got {:?}",
+            input,
             expected_kind,
             result.clone().unwrap_err().map(|e| e.code),
         );

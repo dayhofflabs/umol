@@ -112,7 +112,7 @@ fn test_isotope_entries_invalid(
 #[case(b"M  RAD  1   1   2", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
 #[case(b"M  ISO  1   1  13", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
 fn test_property_input(#[case] input: &[u8], #[case] expected: PropertyEntries) {
-    let (remaining, result) = property_input(input).unwrap();
+    let (remaining, result) = property_input_standard(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
 }
