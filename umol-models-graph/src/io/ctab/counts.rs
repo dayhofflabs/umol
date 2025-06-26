@@ -43,12 +43,12 @@ pub fn counts_input<'a>() -> impl Parser<&'a [u8], Output = Counts, Error = erro
             delimited(take(12usize), properties_lines, version),
         ),
         |(atoms, bonds, atom_lists, chiral_flag, stext_entries, properties_lines)| Counts {
-            atoms,
-            bonds,
-            atom_lists,
-            chiral_flag,
-            stext_entries,
-            properties_lines,
+                atoms,
+                bonds,
+                atom_lists,
+                chiral_flag,
+                stext_entries,
+                properties_lines,
         },
     ), multispace0))
 }

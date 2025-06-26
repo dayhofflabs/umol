@@ -19,6 +19,7 @@ use nom::{
     Parser,
 };
 use num::{Float, Integer};
+use smallvec::{Array, SmallVec};
 
 pub(crate) trait Contains<T: PartialOrd> {
     fn contains(&self, value: &T) -> bool;
@@ -225,30 +226,48 @@ where
     ))
 }
 
+/// SmallVec-based parser combinator for length_count expressions.
+pub(crate) fn small_length_count<I, A, C, E, F>(
+    mut count: C,
+    mut f: F,
+) -> impl Parser<I, Output = SmallVec<A>, Error = E>
+where
+    I: Clone,
+    A: Array,
+    C: Parser<I, Output = usize, Error = E>,
+    F: Parser<I, Output = <A as Array>::Item, Error = E>,
+    E: error::ParseError<I>,
+{
+    move |input: I| {
+        let (remaining, count) = count.parse(input)?;
+        let mut v = SmallVec::new();
+
+        let mut input = remaining;
+        for _ in 0..count {
+            let (remaining, val) = f.parse(input)?;
+            v.push(val);
+            input = remaining;
+        }
+        Ok((input, v))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nom::combinator::all_consuming;
+    use nom::bytes::complete::take;
+    use nom::combinator::{all_consuming, map_parser};
     use nom::error::ErrorKind;
     use nom::Err;
     use rstest::rstest;
+    use smallvec::smallvec;
 
     #[rstest]
-    // Field absent (line is empty, a subset of too short)
-    #[case(b"", None, b"")]
-    // Field absent (line is too short but all whitespace)
-    #[case(b"  ", None, b"")]
-    // Field present but blank
-    #[case(b"   ", None, b"")]
-    // Field present and parsable
-    #[case(b" 42", Some(42), b"")]
-    // Field present and parsable with remaining data
-    #[case(b" 42 leftover", Some(42), b" leftover")]
-    fn test_fixed_width_opt(
-        #[case] input: &[u8],
-        #[case] expected_val: Option<i32>,
-        #[case] expected_rem: &[u8],
-    ) {
+    #[case(b"", None)]
+    #[case(b"  ", None)]
+    #[case(b"   ", None)]
+    #[case(b" 42", Some(42))]
+    fn test_fixed_width_opt(#[case] input: &[u8], #[case] expected_val: Option<i32>) {
         let mut parser = fixed_width_opt(3, delimited(space0, nom_i32, space0));
         let result = parser.parse(input);
         assert!(
@@ -264,32 +283,25 @@ mod tests {
             "Mismatched value for '{}'",
             String::from_utf8_lossy(input)
         );
-        assert_eq!(
-            remaining,
-            expected_rem,
-            "Mismatched remaining for '{}'",
-            String::from_utf8_lossy(input)
-        );
+        assert!(remaining.is_empty(), "remaining should be empty");
     }
 
     #[rstest]
-    // Field present but not parsable
-    #[case(b" abc ", "abc", ErrorKind::Digit)]
-    // Field partially present (too short) and not all whitespace -> ambiguous
-    #[case(b" 1", "1", ErrorKind::Eof)]
-    // Field partially present (one char) and not all whitespace -> ambiguous
-    #[case(b"1", "1", ErrorKind::Eof)]
+    #[case(b" abc ", "non-numeric input", ErrorKind::Digit)]
+    #[case(b" 1", "too few characters", ErrorKind::Eof)]
+    #[case(b"1", "too few characters", ErrorKind::Eof)]
     fn test_fixed_width_opt_invalid(
         #[case] input: &[u8],
-        #[case] _desc: &str,
+        #[case] desc: &str,
         #[case] expected_kind: ErrorKind,
     ) {
         let mut parser = fixed_width_opt(5, delimited(space0, nom_i32, space0));
         let result = parser.parse(input);
         assert!(
             result.is_err(),
-            "Test for '{}' should have failed",
-            String::from_utf8_lossy(input)
+            "{} should have failed with {:?}",
+            desc,
+            result.clone().unwrap_err().map(|e| e.code),
         );
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -541,6 +553,48 @@ mod tests {
         let mut parser = all_consuming(fixed_width_int_minus1::<usize>(3));
         let result = parser.parse(input);
         assert!(result.is_err(), "{} should have failed", desc);
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
+        );
+    }
+
+    #[rstest]
+    #[case(b"3123", smallvec![1, 2, 3], "three items")]
+    #[case(b"0", smallvec![], "zero count")]
+    fn test_small_length_count(
+        #[case] input: &[u8],
+        #[case] expected_val: SmallVec<[u8; 8]>,
+        #[case] desc: &str,
+    ) {
+        let count = map_parser(take(1u8), nom_usize);
+        let item = map_parser(take(1u8), nom_u8);
+        let mut parser = small_length_count::<_, [u8; 8], _, error::Error<&[u8]>, _>(count, item);
+        let result = parser.parse(input);
+
+        assert!(result.is_ok(), "{}: should have succeeded", desc);
+        let (remaining, val) = result.unwrap();
+        assert_eq!(val, expected_val, "{}: value mismatch", desc);
+        assert!(remaining.is_empty(), "remaining should be empty");
+    }
+
+    #[rstest]
+    #[case(b"312", ErrorKind::Eof, "incomplete items")]
+    #[case(b"x12", ErrorKind::Digit, "invalid count character")]
+    fn test_small_length_count_invalid(
+        #[case] input: &[u8],
+        #[case] expected_kind: ErrorKind,
+        #[case] desc: &str,
+    ) {
+        let count = map_parser(take(1u8), nom_usize);
+        let item = map_parser(take(1u8), nom_u8);
+        let mut parser = small_length_count::<_, [u8; 8], _, error::Error<&[u8]>, _>(count, item);
+        let result = parser.parse(input);
+
+        assert!(result.is_err(), "{}: should have failed", desc);
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",

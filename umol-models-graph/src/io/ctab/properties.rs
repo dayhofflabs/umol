@@ -2,7 +2,7 @@
 
 use nom::{
     bytes::complete::{tag, take},
-    combinator::map,
+    combinator::{map, map_parser},
     error,
     multi::length_count,
     sequence::preceded,
@@ -47,8 +47,14 @@ fn charge_entries<'a>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -15..=15)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -15..=15)),
+                ),
             ),
             |(atom_index, charge)| ChargeEntry { atom_index, charge },
         ),
@@ -118,4 +124,3 @@ pub fn property_input<'a>(
 
 #[cfg(test)]
 mod tests;
-

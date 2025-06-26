@@ -15,7 +15,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         let test_cases = [
             ("valid", &b"  6  5  0  0  1  0  0  0  0  0999 V2000"[..]),
             (
-                "invalid_version",
+                "invalid",
                 &b"  4  2  0     0  0            999 V1000"[..],
             ),
         ];
@@ -84,7 +84,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| atom_input().parse(std::hint::black_box(input)))
-            });
+        });
         }
 
         group.finish();
