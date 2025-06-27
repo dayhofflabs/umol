@@ -72,6 +72,28 @@ bitflags! {
 
 /// Bond
 #[derive(Debug, Clone)]
+pub struct BondStandard {
+    pub bond_type: BondType,
+    pub stereo: Option<BondStereo>,
+    pub dir: Option<BondDir>,
+    pub properties: HashMap<String, String>,
+}
+
+impl BondStandard {
+    /// Create new BondStandard with default properties for given BondType
+    pub fn new(bond_type: BondType) -> Self {
+        Self {
+            bond_type,
+            stereo: None,
+            dir: None,
+            properties: HashMap::new(),
+        }
+    }
+}
+
+
+/// Bond
+#[derive(Debug, Clone)]
 pub struct Bond {
     pub bond_type: BondType,
     pub stereo: Option<BondStereo>,

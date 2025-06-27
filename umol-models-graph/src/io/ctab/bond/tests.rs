@@ -1,5 +1,5 @@
 use super::*;
-use crate::bond::{BondStereo, BondType};
+use crate::bond::{BondDir, BondStereo, BondType};
 use nom::{error::ErrorKind, Err, Parser};
 use rstest::rstest;
 

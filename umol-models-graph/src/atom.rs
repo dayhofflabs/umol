@@ -16,13 +16,13 @@ pub enum AtomStereoParity {
 
 /// Atom list (for query molecules in MOL files)
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct AtomList {
-    pub(crate) elements: Vec<Element>,
+pub struct AtomList {
+    pub elements: Vec<Element>,
 }
 
 /// Generalized atom kind (for atom-like objects in MOL files)
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum AtomSymbol {
+pub enum AtomSymbol {
     Element(Element),
     NamedIsotope(NamedIsotope),
     AtomList(AtomList),
@@ -33,7 +33,7 @@ pub(crate) enum AtomSymbol {
 
 /// Atom
 #[derive(Debug, Clone)]
-pub struct Atom {
+pub struct AtomStandard {
     pub element: Element,
     pub charge: i8,
     pub isotope_mass: Option<u32>,
@@ -45,7 +45,7 @@ pub struct Atom {
     pub properties: HashMap<String, String>,
 }
 
-impl Atom {
+impl AtomStandard {
     /// Create new Atom with default properties for given element
     pub fn new(element: Element) -> Self {
         Self {
@@ -64,7 +64,7 @@ impl Atom {
 
 /// Generalized atom symbol (for atom-like objects in MOL files)
 #[derive(Debug, Clone, PartialEq)]
-pub struct AtomLike {
+pub struct Atom {
     pub symbol: AtomSymbol,
     pub charge: i8,
     pub isotope_mass: Option<u32>,
@@ -74,7 +74,7 @@ pub struct AtomLike {
     pub atom_map_num: Option<u32>,
 }
 
-impl AtomLike {
+impl Atom {
     pub fn new(symbol: AtomSymbol) -> Self {
         Self {
             symbol,
@@ -88,8 +88,8 @@ impl AtomLike {
     }
 }
 
-impl From<Atom> for AtomLike {
-    fn from(atom: Atom) -> Self {
+impl From<AtomStandard> for Atom {
+    fn from(atom: AtomStandard) -> Self {
         Self {
             symbol: AtomSymbol::Element(atom.element),
             charge: atom.charge,

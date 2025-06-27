@@ -3,7 +3,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use nom::Parser;
 use umol_models_graph::io::ctab::{
-    atom::atom_input_standard,
+    atom::{atom_input, atom_input_standard},
     bond::bond_input_standard,
     counts::counts_input,
     properties::property_input_standard,
@@ -28,6 +28,69 @@ fn parsing_benchmarks(c: &mut Criterion) {
     }
 
     {
+        let mut group = c.benchmark_group("mol_parsing/atom_standard");
+
+        let test_cases = [
+            (
+                "len69_standard",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  0  0  0  0"[..],
+            ),
+            (
+                "len69_standard_invalid",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  0  0  0  X"[..],
+            ),
+            (
+                "len51_standard",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0"[..],
+            ),
+            (
+                "len51_standard_invalid",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  X"[..],
+            ),
+            (
+                "len42_standard",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0"[..],
+            ),
+            (
+                "len42_standard_invalid",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  X"[..],
+            ),
+            (
+                "len39_standard",
+                &b"   -0.1234    0.4560    0.7890 C   0  0"[..],
+            ),
+            (
+                "len39_standard_invalid",
+                &b"   -0.1234    0.4560    0.7890 C   0  X"[..],
+            ),
+            (
+                "len36_standard",
+                &b"   -0.1234    0.4560    0.7890 C   0"[..],
+            ),
+            (
+                "len36_standard_invalid",
+                &b"   -0.1234    0.4560    0.7890 C   X"[..],
+            ),
+            (
+                "len34_standard",
+                &b"   -0.1234    0.4560    0.7890 C  "[..],
+            ),
+            (
+                "len34_standard_invalid",
+                &b"   -0.1234    0.4560    0.7890 X  "[..],
+            ),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| atom_input_standard().parse(std::hint::black_box(input)))
+        });
+        }
+
+        group.finish();
+    }
+
+    {
         let mut group = c.benchmark_group("mol_parsing/atom");
 
         let test_cases = [
@@ -37,7 +100,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
             ),
             (
                 "len69_invalid",
-                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  X  0  0  0"[..],
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  0  0  0  X"[..],
             ),
             (
                 "len51",
@@ -83,7 +146,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| atom_input_standard().parse(std::hint::black_box(input)))
+                b.iter(|| atom_input().parse(std::hint::black_box(input)))
         });
         }
 
@@ -91,14 +154,14 @@ fn parsing_benchmarks(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/bond");
+        let mut group = c.benchmark_group("mol_parsing/bond_standard");
         let test_cases = [
-            ("len21", &b"  1  2  1  1  0  0  0"[..]),
-            ("len21_invalid", &b"  1  2  1  A  0  0  0"[..]),
-            ("len12", &b"  1  3  1  1"[..]),
-            ("len12_invalid", &b"  1  2  1  A"[..]),
-            ("len9", &b"  1  2  1"[..]),
-            ("len9_invalid", &b"  1  2  A"[..]),
+            ("len21_standard", &b"  1  2  1  1  0  0  0"[..]),
+            ("len21_standard_invalid", &b"  1  2  1  A  0  0  0"[..]),
+            ("len12_standard", &b"  1  3  1  1"[..]),
+            ("len12_standard_invalid", &b"  1  2  1  A"[..]),
+            ("len9_standard", &b"  1  2  1"[..]),
+            ("len9_standard_invalid", &b"  1  2  A"[..]),
         ];
 
         for (id, data) in test_cases.iter() {

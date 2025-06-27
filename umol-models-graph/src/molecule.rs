@@ -1,6 +1,6 @@
 //! Molecular graph model.
 
-use crate::atom::Atom;
+use crate::atom::AtomStandard;
 use crate::bond::Bond;
 use crate::conformer::Conformer;
 use crate::sgroup::SGroup;
@@ -18,7 +18,7 @@ pub type BondIndex = EdgeIndex<usize>;
 /// Graph-based molecule representation with MOL file semantics
 #[derive(Debug, Clone)]
 pub struct Molecule {
-    pub graph: StableGraph<Atom, Bond, Undirected, usize>,
+    pub graph: StableGraph<AtomStandard, Bond, Undirected, usize>,
     pub conformers: Vec<Conformer>,
     pub properties: HashMap<String, String>,
     pub sgroups: Vec<SGroup>,
@@ -28,7 +28,7 @@ impl Molecule {
     /// Create empty molecule
     pub fn new() -> Self {
         Self {
-            graph: StableGraph::<Atom, Bond, Undirected, usize>::default(),
+            graph: StableGraph::<AtomStandard, Bond, Undirected, usize>::default(),
             conformers: Vec::new(),
             properties: HashMap::new(),
             sgroups: Vec::new(),
@@ -82,7 +82,7 @@ impl Molecule {
     /// - `atom`: Atom to add (Molecule takes ownership)
     ///
     /// Return index of added atom.
-    pub fn add_atom(&mut self, atom: Atom) -> usize {
+    pub fn add_atom(&mut self, atom: AtomStandard) -> usize {
         self.graph.add_node(atom).index()
     }
 
@@ -103,7 +103,7 @@ impl Molecule {
     /// - `idx`: Atom index
     ///
     /// Return immutable reference to atom.
-    pub fn atom(&self, idx: usize) -> Option<&Atom> {
+    pub fn atom(&self, idx: usize) -> Option<&AtomStandard> {
         self.graph.node_weight(AtomIndex::new(idx))
     }
 
@@ -112,7 +112,7 @@ impl Molecule {
     /// - `idx`: Atom index
     ///
     /// Return mutable reference to atom.
-    pub fn atom_mut(&mut self, idx: usize) -> Option<&mut Atom> {
+    pub fn atom_mut(&mut self, idx: usize) -> Option<&mut AtomStandard> {
         self.graph.node_weight_mut(AtomIndex::new(idx))
     }
 

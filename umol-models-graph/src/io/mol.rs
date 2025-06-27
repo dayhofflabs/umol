@@ -4,8 +4,8 @@
 // The design follows a line-oriented state machine approach to be robust
 // against common format variations found in real-world files.
 
-use crate::atom::AtomLike;
-use crate::bond::Bond;
+use crate::atom::AtomStandard;
+use crate::bond::BondStandard;
 use crate::conformer::Point3D;
 use crate::io::ctab::{
     atom, bond,
@@ -22,8 +22,8 @@ use std::io::BufRead;
 pub struct MolFile {
     header: Vec<String>,
     counts: Counts,
-    atoms: Vec<(AtomLike, Point3D)>,
-    bonds: Vec<Bond>,
+    atoms: Vec<(AtomStandard, Point3D)>,
+    bonds: Vec<BondStandard>,
     charges: Vec<ChargeEntry>,
     radicals: Vec<RadicalEntry>,
     isotopes: Vec<IsotopeEntry>,
@@ -38,11 +38,11 @@ impl MolFile {
         &self.counts
     }
 
-    pub(crate) fn atoms(&self) -> &[(AtomLike, Point3D)] {
+    pub(crate) fn atoms(&self) -> &[(AtomStandard, Point3D)] {
         &self.atoms
     }
 
-    pub(crate) fn bonds(&self) -> &[Bond] {
+    pub(crate) fn bonds(&self) -> &[BondStandard] {
         &self.bonds
     }
 
@@ -73,8 +73,8 @@ enum MolParserState {
 struct MolFileBuilder {
     header_lines: Vec<String>,
     counts_line: Option<Counts>,
-    atom_lines: Vec<(AtomLike, Point3D)>,
-    bond_lines: Vec<Bond>,
+    atom_lines: Vec<(AtomStandard, Point3D)>,
+    bond_lines: Vec<BondStandard>,
     charges: Vec<ChargeEntry>,
     radicals: Vec<RadicalEntry>,
     isotopes: Vec<IsotopeEntry>,
@@ -186,7 +186,7 @@ fn process_line(
         }
         MolParserState::ParseAtomBlock { ref mut remaining } => {
             if *remaining > 0 {
-                let atom = atom::atom_input()
+                let atom = atom::atom_input_standard()
                     .parse(line.as_bytes())
                     .map_err(to_parse_error)?
                     .1;
