@@ -1,5 +1,5 @@
 use super::*;
-use crate::atom::AtomStandard;
+use crate::atom::{Atom, AtomSymbol};
 use crate::bond::{Bond, BondType};
 use crate::sgroup::{SGroup, SGroupType};
 use rstest::rstest;
@@ -12,7 +12,7 @@ fn create_test_molecule(atom_count: usize, bond_count: usize) -> Molecule {
 
     // Add atoms
     for _i in 0..atom_count {
-        let atom = AtomStandard::new(e!(C));
+        let atom = Atom::new(AtomSymbol::Element(e!(C)));
         molecule.add_atom(atom);
     }
 

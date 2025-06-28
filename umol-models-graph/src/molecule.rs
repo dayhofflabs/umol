@@ -1,6 +1,6 @@
 //! Molecular graph model.
 
-use crate::atom::AtomStandard;
+use crate::atom::{Atom, AtomStandard};
 use crate::bond::Bond;
 use crate::conformer::Conformer;
 use crate::sgroup::SGroup;
@@ -15,9 +15,18 @@ use umol::Result;
 pub type AtomIndex = NodeIndex<usize>;
 pub type BondIndex = EdgeIndex<usize>;
 
-/// Graph-based molecule representation with MOL file semantics
+/// Graph-based molecule representation with full MOL file semantics (including queries)
 #[derive(Debug, Clone)]
 pub struct Molecule {
+    pub graph: StableGraph<Atom, Bond, Undirected, usize>,
+    pub conformers: Vec<Conformer>,
+    pub properties: HashMap<String, String>,
+    pub sgroups: Vec<SGroup>,
+}
+
+/// Graph-based molecule representation for standard (non-query) molecules only
+#[derive(Debug, Clone)]
+pub struct MoleculeStandard {
     pub graph: StableGraph<AtomStandard, Bond, Undirected, usize>,
     pub conformers: Vec<Conformer>,
     pub properties: HashMap<String, String>,
@@ -28,7 +37,7 @@ impl Molecule {
     /// Create empty molecule
     pub fn new() -> Self {
         Self {
-            graph: StableGraph::<AtomStandard, Bond, Undirected, usize>::default(),
+            graph: StableGraph::<Atom, Bond, Undirected, usize>::default(),
             conformers: Vec::new(),
             properties: HashMap::new(),
             sgroups: Vec::new(),
@@ -82,7 +91,7 @@ impl Molecule {
     /// - `atom`: Atom to add (Molecule takes ownership)
     ///
     /// Return index of added atom.
-    pub fn add_atom(&mut self, atom: AtomStandard) -> usize {
+    pub fn add_atom(&mut self, atom: Atom) -> usize {
         self.graph.add_node(atom).index()
     }
 
@@ -103,7 +112,7 @@ impl Molecule {
     /// - `idx`: Atom index
     ///
     /// Return immutable reference to atom.
-    pub fn atom(&self, idx: usize) -> Option<&AtomStandard> {
+    pub fn atom(&self, idx: usize) -> Option<&Atom> {
         self.graph.node_weight(AtomIndex::new(idx))
     }
 
@@ -112,7 +121,7 @@ impl Molecule {
     /// - `idx`: Atom index
     ///
     /// Return mutable reference to atom.
-    pub fn atom_mut(&mut self, idx: usize) -> Option<&mut AtomStandard> {
+    pub fn atom_mut(&mut self, idx: usize) -> Option<&mut Atom> {
         self.graph.node_weight_mut(AtomIndex::new(idx))
     }
 
@@ -169,5 +178,45 @@ impl Molecule {
 
         self.conformers.push(conformer);
         Ok(())
+    }
+}
+
+impl MoleculeStandard {
+    /// Create empty standard molecule
+    pub fn new() -> Self {
+        Self {
+            graph: StableGraph::<AtomStandard, Bond, Undirected, usize>::default(),
+            conformers: Vec::new(),
+            properties: HashMap::new(),
+            sgroups: Vec::new(),
+        }
+    }
+
+    /// Get number of atoms
+    pub fn atom_count(&self) -> usize {
+        self.graph.node_count()
+    }
+
+    /// Get number of bonds
+    pub fn bond_count(&self) -> usize {
+        self.graph.edge_count()
+    }
+
+    /// Add atom to the molecule and update index mappings
+    ///
+    /// - `atom`: Atom to add (MoleculeStandard takes ownership)
+    ///
+    /// Return index of added atom.
+    pub fn add_atom(&mut self, atom: AtomStandard) -> usize {
+        self.graph.add_node(atom).index()
+    }
+
+    /// Get mutable reference to atom by index
+    ///
+    /// - `idx`: Atom index
+    ///
+    /// Return mutable reference to atom.
+    pub fn atom_mut(&mut self, idx: usize) -> Option<&mut AtomStandard> {
+        self.graph.node_weight_mut(AtomIndex::new(idx))
     }
 }

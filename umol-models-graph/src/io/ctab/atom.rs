@@ -541,6 +541,14 @@ fn atom_input_inner(input: &[u8]) -> IResult<&[u8], (Atom, Point3D), error::Erro
         inversion_retention: inversion_flag.flatten(),
         exact_change: exact_change_flag.flatten(),
         properties: std::collections::HashMap::new(),
+        
+        // Query-specific properties - default to None during parsing
+        attachment_point: None,
+        attachment_order: None,
+        ring_bond_count: None,
+        substitution_count: None,
+        unsaturated: None,
+        link_atom: None,
     };
 
     let point = Point3D::new(x, y, z);

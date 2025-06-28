@@ -6,7 +6,7 @@ use umol_models_graph::io::ctab::{
     atom::{atom_input, atom_input_standard},
     bond::bond_input_standard,
     counts::counts_input,
-    properties::property_input_standard,
+    properties::{property_input, property_input_standard},
 };
 
 fn parsing_benchmarks(c: &mut Criterion) {
@@ -173,7 +173,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/properties");
+        let mut group = c.benchmark_group("mol_parsing/properties_standard");
         let test_cases = [
             ("chg1", &b"M  CHG  1   1  -1"[..]),
             (
@@ -198,6 +198,33 @@ fn parsing_benchmarks(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| property_input_standard(std::hint::black_box(input)))
+            });
+        }
+        group.finish();
+    }
+
+    {
+        let mut group = c.benchmark_group("mol_parsing/properties");
+        let test_cases = [
+            ("chg1", &b"M  CHG  1   1  -1"[..]),
+            (
+                "chg6",
+                &b"M  CHG  6   1  -1   2   1   3  -1   4   1   5  -1   6   1"[..],
+            ),
+            ("rad1", &b"M  RAD  1   1   2"[..]),
+            ("iso1", &b"M  ISO  1   1  13"[..]),
+            ("als1", &b"M  ALS  1  3FC   N   O   "[..]),
+            ("apo1", &b"M  APO  1   1   1"[..]),
+            ("aal1", &b"M  AAL  1 1   2   1"[..]),
+            ("rbc1", &b"M  RBC  1   1   2"[..]),
+            ("sub1", &b"M  SUB  1   1   3"[..]),
+            ("uns1", &b"M  UNS  1   1   1"[..]),
+            ("lin1", &b"M  LIN  1   1   2   5   7"[..]),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| property_input(std::hint::black_box(input)))
             });
         }
         group.finish();

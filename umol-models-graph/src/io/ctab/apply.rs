@@ -1,9 +1,11 @@
 //! Apply property entries to molecule
 
 use super::properties::{
-    AtomAliasEntry, AtomValueEntry, ChargeEntry, IsotopeEntry, RadicalEntry, SGroupAtomListEntry,
-    SGroupBondListEntry, SGroupLabelEntry, SGroupTypeEntry,
+    AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
+    ChargeEntry, IsotopeEntry, LinkAtomEntry, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry,
+    SGroupBondListEntry, SGroupLabelEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
+use crate::atom::{AtomList, AtomSymbol, LinkAtomSpec};
 use crate::molecule::Molecule;
 use crate::sgroup::{SGroup, SGroupType};
 use umol::error::{DataError, ValidationError};
@@ -252,6 +254,213 @@ impl Apply for AtomValueEntry {
             }
             atom.properties
                 .insert("molFileValue".to_string(), self.value);
+        }
+        Ok(())
+    }
+}
+
+impl Apply for AtomListEntry {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        if self.atom_index >= molecule.atom_count() {
+            return Err(DataError::MissingAtomIndex(self.atom_index).into());
+        }
+
+        if let Some(atom) = molecule.atom_mut(self.atom_index) {
+            // Create AtomList from elements
+            let atom_list = AtomList {
+                elements: self.elements,
+            };
+
+            // Check for conflicts - if atom already has a symbol set
+            match &atom.symbol {
+                AtomSymbol::Element(_) => {
+                    // Replace element with atom list
+                    atom.symbol = AtomSymbol::AtomList(atom_list);
+                }
+                AtomSymbol::AtomList(existing) => {
+                    // Check for conflict
+                    if existing.elements != atom_list.elements {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "Atom list conflict for atom {}: existing vs new atom list",
+                            self.atom_index
+                        ))
+                        .into());
+                    }
+                }
+                _ => {
+                    // Replace other symbols with atom list
+                    atom.symbol = AtomSymbol::AtomList(atom_list);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<AttachmentPointEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            if entry.atom_index >= molecule.atom_count() {
+                return Err(DataError::MissingAtomIndex(entry.atom_index).into());
+            }
+
+            if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                // Check for conflicts
+                if let Some(existing) = atom.attachment_point {
+                    if existing != entry.attachment_type {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "Attachment point conflict for atom {}: existing {} vs new {}",
+                            entry.atom_index, existing, entry.attachment_type
+                        ))
+                        .into());
+                    }
+                }
+                atom.attachment_point = Some(entry.attachment_type);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Apply for AtomAttachmentOrderEntry {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        if self.atom_index >= molecule.atom_count() {
+            return Err(DataError::MissingAtomIndex(self.atom_index).into());
+        }
+
+        if let Some(atom) = molecule.atom_mut(self.atom_index) {
+            // Check for conflicts
+            if let Some(ref existing) = atom.attachment_order {
+                if existing != &self.attachments {
+                    return Err(ValidationError::InvalidComponent(format!(
+                        "Attachment order conflict for atom {}: existing vs new order",
+                        self.atom_index
+                    ))
+                    .into());
+                }
+            }
+            atom.attachment_order = Some(self.attachments);
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<RingBondCountEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            if entry.atom_index >= molecule.atom_count() {
+                return Err(DataError::MissingAtomIndex(entry.atom_index).into());
+            }
+
+            if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                // Check for conflicts
+                if let Some(existing) = atom.ring_bond_count {
+                    if existing != entry.ring_bond_count {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "Ring bond count conflict for atom {}: existing {} vs new {}",
+                            entry.atom_index, existing, entry.ring_bond_count
+                        ))
+                        .into());
+                    }
+                }
+                atom.ring_bond_count = Some(entry.ring_bond_count);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<SubstitutionCountEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            if entry.atom_index >= molecule.atom_count() {
+                return Err(DataError::MissingAtomIndex(entry.atom_index).into());
+            }
+
+            if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                // Check for conflicts
+                if let Some(existing) = atom.substitution_count {
+                    if existing != entry.substitution_count {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "Substitution count conflict for atom {}: existing {} vs new {}",
+                            entry.atom_index, existing, entry.substitution_count
+                        ))
+                        .into());
+                    }
+                }
+                atom.substitution_count = Some(entry.substitution_count);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<UnsaturatedAtomEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            if entry.atom_index >= molecule.atom_count() {
+                return Err(DataError::MissingAtomIndex(entry.atom_index).into());
+            }
+
+            if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                // Convert integer to boolean
+                let unsaturated_value = match entry.unsaturated {
+                    0 => None,    // Off
+                    1 => Some(true), // On
+                    _ => {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "Invalid unsaturated value for atom {}: {}",
+                            entry.atom_index, entry.unsaturated
+                        ))
+                        .into())
+                    }
+                };
+
+                // Check for conflicts
+                if let Some(existing) = atom.unsaturated {
+                    if let Some(new) = unsaturated_value {
+                        if existing != new {
+                            return Err(ValidationError::InvalidComponent(format!(
+                                "Unsaturated conflict for atom {}: existing {} vs new {}",
+                                entry.atom_index, existing, new
+                            ))
+                            .into());
+                        }
+                    }
+                }
+                atom.unsaturated = unsaturated_value;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<LinkAtomEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            if entry.atom_index >= molecule.atom_count() {
+                return Err(DataError::MissingAtomIndex(entry.atom_index).into());
+            }
+
+            if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                let link_spec = LinkAtomSpec {
+                    repeat_count: entry.repeat_count,
+                    bond1: entry.bond1,
+                    bond2: entry.bond2,
+                };
+
+                // Check for conflicts
+                if let Some(ref existing) = atom.link_atom {
+                    if *existing != link_spec {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "Link atom conflict for atom {}: existing vs new link specification",
+                            entry.atom_index
+                        ))
+                        .into());
+                    }
+                }
+                atom.link_atom = Some(link_spec);
+            }
         }
         Ok(())
     }
