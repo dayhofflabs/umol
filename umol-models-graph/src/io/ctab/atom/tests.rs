@@ -17,7 +17,7 @@ fn test_atom_symbol_standard(
     let result = atom_symbol_standard().parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, symbol) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(symbol, expected, "{} should have succeeded", desc);
 }
 
@@ -35,10 +35,10 @@ fn test_atom_symbol_standard_invalid(
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
+        "{} should have failed with error kind {:?}, got {:?}",
         desc,
         expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
@@ -64,8 +64,12 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: 
     let result = atom_symbol().parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, symbol) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(symbol, expected);
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
+    assert_eq!(
+        symbol, expected,
+        "{} has returned symbol {:?}, expected {:?}",
+        desc, symbol, expected
+    );
 }
 
 #[rstest]
@@ -85,10 +89,10 @@ fn test_atom_symbol_invalid(
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
+        "{} should have failed with error kind {:?}, got {:?}",
         desc,
         expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
@@ -202,38 +206,33 @@ fn test_atom_input_standard69(
     #[case] expected_atom_map_num: Option<u32>,
 ) {
     let result = atom_input_standard69(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
-    let (remaining, (atom, pos)) = result.unwrap();
-    assert!(remaining.is_empty(), "Non-empty input for case '{}'", desc);
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
+    let (remaining, (atom, _)) = result.unwrap();
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
     assert_eq!(
         atom.valence, expected_valence,
-        "Mismatched valence for '{}'",
-        desc
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, expected_valence,
     );
     assert_eq!(
         atom.atom_map_num, expected_atom_map_num,
-        "Mismatched atom map num for '{}'",
-        desc
+        "{} has returned atom map num {:?}, expected {:?}",
+        desc, atom.atom_map_num, expected_atom_map_num,
     );
 }
 
@@ -260,14 +259,13 @@ fn test_atom_input_standard69_invalid(
 ) {
     let result = atom_input_standard69(input);
     assert!(result.is_err(), "{} should have failed", desc);
-    let err = result.unwrap_err();
-    if let Err::Error(e) = err {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    }
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]
@@ -328,53 +326,49 @@ fn test_atom_input_standard51(
     #[case] expected_valence: Option<u8>,
 ) {
     let result = atom_input_standard51(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, pos)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert!(
         approx_eq!(f64, pos.x, 1.2345),
-        "Mismatched x for '{}'",
-        desc
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        pos.x,
+        1.2345,
     );
     assert!(
         approx_eq!(f64, pos.y, 2.3456),
-        "Mismatched y for '{}'",
-        desc
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        pos.y,
+        2.3456,
     );
     assert!(
         approx_eq!(f64, pos.z, 3.4567),
-        "Mismatched z for '{}'",
-        desc
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        pos.z,
+        3.4567,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
     assert_eq!(
         atom.valence, expected_valence,
-        "Mismatched valence for '{}'",
-        desc
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, expected_valence,
     );
 }
 
@@ -406,19 +400,13 @@ fn test_atom_input_standard51_invalid(
 ) {
     let result = atom_input_standard51(input);
     assert!(result.is_err(), "{} should have failed", desc);
-    let err = result.unwrap_err();
     assert!(
-        matches!(err, Err::Error(_)),
-        "Error should be a nom::Err::Error for '{}'",
-        desc
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
     );
-    if let Err::Error(e) = err {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    }
 }
 
 #[rstest]
@@ -451,33 +439,23 @@ fn test_atom_input_standard51_empty_fields(
     #[case] expected_valence: Option<u8>,
 ) {
     let result = atom_input_standard51(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
     assert_eq!(
         atom.valence, expected_valence,
-        "Mismatched valence for '{}'",
-        desc
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, expected_valence,
     );
 }
 
@@ -507,38 +485,28 @@ fn test_atom_input_standard42(
     #[case] expected_stereo_parity: Option<AtomStereoParity>,
 ) {
     let result = atom_input_standard42(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
     assert_eq!(
         atom.stereo_parity, expected_stereo_parity,
-        "Mismatched stereo parity for '{}'",
-        desc
+        "{} has returned stereo parity {:?}, expected {:?}",
+        desc, atom.stereo_parity, expected_stereo_parity,
     );
 }
 
@@ -575,13 +543,13 @@ fn test_atom_input_standard42_invalid(
 ) {
     let result = atom_input_standard42(input);
     assert!(result.is_err(), "{} should have failed", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    }
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]
@@ -610,37 +578,28 @@ fn test_atom_input_standard42_empty_fields(
     #[case] expected_stereo_parity: Option<AtomStereoParity>,
 ) {
     let result = atom_input_standard42(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}'",
-        desc
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
     assert_eq!(
         atom.stereo_parity, expected_stereo_parity,
-        "Mismatched stereo parity for '{}'",
-        desc
+        "{} has returned stereo parity {:?}, expected {:?}",
+        desc, atom.stereo_parity, expected_stereo_parity,
     );
 }
 
@@ -655,19 +614,9 @@ fn test_atom_input_standard42_empty_fields(
 )]
 fn test_atom_input_standard42_ignored_gap(#[case] input: &[u8], #[case] desc: &str) {
     let result = atom_input_standard42(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining input should be empty for case '{}', but was: '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(atom.charge, 1);
 }
 
@@ -701,39 +650,35 @@ fn test_atom_input_standard39(
     #[case] expected_charge: i8,
 ) {
     let result = atom_input_standard39(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, pos)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
-    assert_eq!(atom.valence, None, "Valence is not None for '{}'", desc);
+    assert_eq!(
+        atom.valence, None,
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, None as Option<u8>
+    );
     assert!(
         approx_eq!(f64, pos.x, 1.2345),
-        "Mismatched x for '{}'",
-        desc
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        pos.x,
+        1.2345,
     );
 }
 
@@ -760,19 +705,14 @@ fn test_atom_input_standard39_invalid(
     #[case] expected_kind: ErrorKind,
 ) {
     let result = atom_input_standard39(input);
-    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!(
-            "Expected a nom::Err::Error for '{}', got {:?}",
-            desc, result
-        );
-    }
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]
@@ -790,22 +730,17 @@ fn test_atom_input_standard39_empty_fields(
     #[case] expected_charge: i8,
 ) {
     let result = atom_input_standard39(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (_, (atom, _)) = result.unwrap();
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
 }
 
@@ -815,19 +750,9 @@ fn test_atom_input_standard39_empty_fields(
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3\t\t", "trailing tabs")]
 fn test_atom_input_standard39_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let result = all_consuming(terminated(atom_input_standard39, multispace0)).parse(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(atom.charge, 1);
 }
 
@@ -851,31 +776,29 @@ fn test_atom_input_standard36(
     #[case] expected_isotope_mass: Option<u32>,
 ) {
     let result = atom_input_standard36(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
-    assert_eq!(atom.charge, 0, "Charge should be 0 for '{}'", desc);
-    assert_eq!(atom.valence, None, "Valence should be None for '{}'", desc);
+    assert_eq!(
+        atom.charge, 0,
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, 0
+    );
+    assert_eq!(
+        atom.valence, None,
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, None as Option<u8>
+    );
 }
 
 #[rstest]
@@ -896,35 +819,29 @@ fn test_atom_input_standard36_invalid(
 ) {
     let result = atom_input_standard36(input);
     assert!(result.is_err(), "{} should have failed", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!(
-            "Expected a nom::Err::Error for '{}', got {:?}",
-            desc, result
-        );
-    }
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C    ", "blank mass diff")]
-fn test_atom_input_standard36_empty_fields(#[case] input: &[u8], #[case] desc: &str) {
+#[case(b"    1.2345    2.3456    3.4567 C    ", "blank mass diff", None)]
+fn test_atom_input_standard36_empty_fields(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_isotope_mass: Option<u32>,
+) {
     let result = atom_input_standard36(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (_, (atom, _)) = result.unwrap();
     assert_eq!(
-        atom.isotope_mass, None,
-        "Mismatched isotope mass for '{}'",
-        desc
+        atom.isotope_mass, expected_isotope_mass,
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
 }
 
@@ -935,54 +852,49 @@ fn test_atom_input_standard36_empty_fields(#[case] input: &[u8], #[case] desc: &
 )]
 fn test_atom_input_standard36_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str) {
     let result = all_consuming(terminated(atom_input_standard36, multispace0)).parse(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        _desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", _desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining input should be empty for case '{}'",
-        _desc
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", _desc);
     assert_eq!(atom.isotope_mass, Some(10));
 }
 
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C  ", "standard valid", Element::C)]
+#[case(
+    b"    1.2345    2.3456    3.4567 C  ",
+    "standard valid",
+    Element::C,
+    None
+)]
 fn test_atom_input_standard34(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
+    #[case] expected_isotope_mass: Option<u32>,
 ) {
     let result = atom_input_standard34(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert_eq!(
-        atom.isotope_mass, None,
-        "Isotope mass should be None for '{}'",
-        desc
+        atom.isotope_mass, expected_isotope_mass,
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
-    assert_eq!(atom.charge, 0, "Charge should be 0 for '{}'", desc);
-    assert_eq!(atom.valence, None, "Valence should be None for '{}'", desc);
+    assert_eq!(
+        atom.charge, 0,
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, 0
+    );
+    assert_eq!(
+        atom.valence, None,
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, None as Option<u8>
+    );
 }
 
 #[rstest]
@@ -1003,18 +915,13 @@ fn test_atom_input_standard34_invalid(
 ) {
     let result = atom_input_standard34(input);
     assert!(result.is_err(), "{} should have failed", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!(
-            "Expected a nom::Err::Error for '{}', got {:?}",
-            desc, result
-        );
-    }
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]
@@ -1024,14 +931,9 @@ fn test_atom_input_standard34_invalid(
 )]
 fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let result = all_consuming(terminated(atom_input_standard34, multispace0)).parse(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded: {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "Remaining non-empty for {}", desc);
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(atom.element, Element::C);
 }
 
@@ -1118,38 +1020,28 @@ fn test_atom_input_standard(
 ) {
     let mut parser = atom_input_standard();
     let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
     assert_eq!(
         atom.valence, expected_valence,
-        "Mismatched valence for '{}'",
-        desc
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, expected_valence,
     );
 }
 
@@ -1223,43 +1115,29 @@ fn test_atom_input_standard_invalid(
 ) {
     let mut parser = atom_input_standard();
     let result = parser.parse(input);
-    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!(
-            "Expected a nom::Err::Error for '{}', got {:?}",
-            desc, result
-        );
-    }
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
-#[test]
-fn test_atom_input_standard_partial_fields() {
-    let input = b"    1.0000    2.0000    3.0000 C  -2 3"; // len 38
+#[rstest]
+#[case(b"    1.0000    2.0000    3.0000 C  -2 3", "len 38")]
+fn test_atom_input_standard_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
     let mut parser = atom_input_standard();
     let result = parser.parse(input);
+    assert!(result.is_err(), "{} should have failed", desc,);
     assert!(
-        result.is_err(),
-        "Parser should have failed for partial field"
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == ErrorKind::Eof),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        ErrorKind::Eof,
+        result.clone().unwrap_err().map(|e| e.code)
     );
-    if let Err(Err::Error(e)) = result {
-        // The charge field is 3 chars, we provided 2, fixed_width_opt should see a partial non-whitespace field and fail with Eof
-        assert_eq!(
-            e.code,
-            ErrorKind::Eof,
-            "Mismatched error kind for partial field"
-        );
-    } else {
-        panic!(
-            "Expected a nom::Err::Error for partial field, got {:?}",
-            result
-        );
-    }
 }
 
 #[rstest]
@@ -1271,15 +1149,22 @@ fn test_atom_input_standard_partial_fields() {
 fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let mut parser = atom_input_standard();
     let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for whitespace padded input: {:?}",
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "Non-empty input for case '{}'", desc);
-    assert_eq!(atom.charge, 1);
-    assert_eq!(atom.valence, Some(4));
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert_eq!(
+        atom.charge, 1,
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, 1
+    );
+    assert_eq!(
+        atom.valence,
+        Some(4),
+        "{} has returned valence {:?}, expected {:?}",
+        desc,
+        atom.valence,
+        Some(4)
+    );
 }
 
 #[rstest]
@@ -1373,38 +1258,28 @@ fn test_atom_input(
 ) {
     let mut parser = atom_input();
     let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}': '{}'",
-        desc,
-        String::from_utf8_lossy(remaining)
-    );
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.symbol, expected_symbol,
-        "Mismatched element for '{}'",
-        desc
+        "{} has returned symbol {:?}, expected {:?}",
+        desc, atom.symbol, expected_symbol,
     );
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
-        "Mismatched isotope mass for '{}'",
-        desc
+        "{} has returned isotope mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope_mass,
     );
     assert_eq!(
         atom.charge, expected_charge,
-        "Mismatched charge for '{}'",
-        desc
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, expected_charge,
     );
     assert_eq!(
         atom.valence, expected_valence,
-        "Mismatched valence for '{}'",
-        desc
+        "{} has returned valence {:?}, expected {:?}",
+        desc, atom.valence, expected_valence,
     );
 }
 
@@ -1427,43 +1302,29 @@ fn test_atom_input_invalid(
 ) {
     let mut parser = atom_input();
     let result = parser.parse(input);
-    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!(
-            "Expected a nom::Err::Error for '{}', got {:?}",
-            desc, result
-        );
-    }
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
-#[test]
-fn test_atom_input_partial_fields() {
-    let input = b"    1.0000    2.0000    3.0000 C  -2 3"; // len 38
+#[rstest]
+#[case(b"    1.0000    2.0000    3.0000 C  -2 3", "len 38")]
+fn test_atom_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
     let mut parser = atom_input();
     let result = parser.parse(input);
+    assert!(result.is_err(), "{} should have failed", desc,);
     assert!(
-        result.is_err(),
-        "Parser should have failed for partial field"
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == ErrorKind::Eof),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        ErrorKind::Eof,
+        result.clone().unwrap_err().map(|e| e.code)
     );
-    if let Err(Err::Error(e)) = result {
-        // The charge field is 3 chars, we provided 2, fixed_width_opt should see a partial non-whitespace field and fail with Eof
-        assert_eq!(
-            e.code,
-            ErrorKind::Eof,
-            "Mismatched error kind for partial field"
-        );
-    } else {
-        panic!(
-            "Expected a nom::Err::Error for partial field, got {:?}",
-            result
-        );
-    }
 }
 
 #[rstest]
@@ -1475,13 +1336,20 @@ fn test_atom_input_partial_fields() {
 fn test_atom_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let mut parser = atom_input();
     let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for whitespace padded input: {:?}",
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "Non-empty input for case '{}'", desc);
-    assert_eq!(atom.charge, 1);
-    assert_eq!(atom.valence, Some(4));
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert_eq!(
+        atom.charge, 1,
+        "{} has returned charge {:?}, expected {:?}",
+        desc, atom.charge, 1
+    );
+    assert_eq!(
+        atom.valence,
+        Some(4),
+        "{} has returned valence {:?}, expected {:?}",
+        desc,
+        atom.valence,
+        Some(4)
+    );
 }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::bond::{BondDir, BondStereo, BondType};
+use crate::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use nom::{error::ErrorKind, Err, Parser};
 use rstest::rstest;
 
@@ -96,27 +96,34 @@ fn test_bond_input_standard21(
     #[case] dir: Option<BondDir>,
 ) {
     let result = bond_input_standard21(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}'",
-        desc
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert_eq!(
+        a1, atom1,
+        "{} has returned atom1 {:?}, expected {:?}",
+        desc, a1, atom1
     );
-    assert_eq!(a1, atom1, "Mismatched atom1 for '{}'", desc);
-    assert_eq!(a2, atom2, "Mismatched atom2 for '{}'", desc);
+    assert_eq!(
+        a2, atom2,
+        "{} has returned atom2 {:?}, expected {:?}",
+        desc, a2, atom2
+    );
     assert_eq!(
         bond.bond_type, bond_type,
-        "Mismatched bond type for '{}'",
-        desc
+        "{} has returned bond type {:?}, expected {:?}",
+        desc, bond.bond_type, bond_type,
     );
-    assert_eq!(bond.stereo, stereo, "Mismatched stereo for '{}'", desc);
-    assert_eq!(bond.dir, dir, "Mismatched dir for '{}'", desc);
+    assert_eq!(
+        bond.stereo, stereo,
+        "{} has returned stereo {:?}, expected {:?}",
+        desc, bond.stereo, stereo
+    );
+    assert_eq!(
+        bond.dir, dir,
+        "{} has returned dir {:?}, expected {:?}",
+        desc, bond.dir, dir
+    );
 }
 
 #[rstest]
@@ -129,16 +136,13 @@ fn test_bond_input_standard21_invalid(
     #[case] expected_kind: ErrorKind,
 ) {
     let result = bond_input_standard21(input);
-    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!("Expected nom::Err::Error for '{}', got {:?}", desc, result);
-    }
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]
@@ -189,27 +193,34 @@ fn test_bond_input_standard12(
     #[case] dir: Option<BondDir>,
 ) {
     let result = bond_input_standard12(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}'",
-        desc
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert_eq!(
+        a1, atom1,
+        "{} has returned atom1 {:?}, expected {:?}",
+        desc, a1, atom1
     );
-    assert_eq!(a1, atom1, "Mismatched atom1 for '{}'", desc);
-    assert_eq!(a2, atom2, "Mismatched atom2 for '{}'", desc);
+    assert_eq!(
+        a2, atom2,
+        "{} has returned atom2 {:?}, expected {:?}",
+        desc, a2, atom2
+    );
     assert_eq!(
         bond.bond_type, bond_type,
-        "Mismatched bond type for '{}'",
-        desc
+        "{} has returned bond type {:?}, expected {:?}",
+        desc, bond.bond_type, bond_type,
     );
-    assert_eq!(bond.stereo, stereo, "Mismatched stereo for '{}'", desc);
-    assert_eq!(bond.dir, dir, "Mismatched dir for '{}'", desc);
+    assert_eq!(
+        bond.stereo, stereo,
+        "{} has returned stereo {:?}, expected {:?}",
+        desc, bond.stereo, stereo
+    );
+    assert_eq!(
+        bond.dir, dir,
+        "{} has returned dir {:?}, expected {:?}",
+        desc, bond.dir, dir
+    );
 }
 
 #[rstest]
@@ -221,16 +232,13 @@ fn test_bond_input_standard12_invalid(
     #[case] expected_kind: ErrorKind,
 ) {
     let result = bond_input_standard12(input);
-    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!("Expected nom::Err::Error for '{}', got {:?}", desc, result);
-    }
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]
@@ -246,26 +254,29 @@ fn test_bond_input_standard9(
     #[case] bond_type: BondType,
 ) {
     let result = bond_input_standard9(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}'",
-        desc
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert_eq!(
+        a1, atom1,
+        "{} has returned atom1 {:?}, expected {:?}",
+        desc, a1, atom1
     );
-    assert_eq!(a1, atom1, "Mismatched atom1 for '{}'", desc);
-    assert_eq!(a2, atom2, "Mismatched atom2 for '{}'", desc);
+    assert_eq!(
+        a2, atom2,
+        "{} has returned atom2 {:?}, expected {:?}",
+        desc, a2, atom2
+    );
     assert_eq!(
         bond.bond_type, bond_type,
-        "Mismatched bond type for '{}'",
-        desc
+        "{} has returned bond type {:?}, expected {:?}",
+        desc, bond.bond_type, bond_type,
     );
-    assert_eq!(bond.stereo, None, "Stereo should be None for '{}'", desc);
+    assert_eq!(
+        bond.stereo, None,
+        "{} has returned stereo {:?}, expected {:?}",
+        desc, bond.stereo, None as Option<BondStereo>
+    );
 }
 
 #[rstest]
@@ -277,16 +288,13 @@ fn test_bond_input_standard9_invalid(
     #[case] expected_kind: ErrorKind,
 ) {
     let result = bond_input_standard9(input);
-    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!("Expected nom::Err::Error for '{}', got {:?}", desc, result);
-    }
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 #[rstest]
 #[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None)]
@@ -329,27 +337,34 @@ fn test_bond_input_standard(
 ) {
     let mut parser = bond_input_standard();
     let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "Remaining non-empty for case '{}'",
-        desc
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert_eq!(
+        a1, atom1,
+        "{} has returned atom1 {:?}, expected {:?}",
+        desc, a1, atom1
     );
-    assert_eq!(a1, atom1, "Mismatched atom1 for '{}'", desc);
-    assert_eq!(a2, atom2, "Mismatched atom2 for '{}'", desc);
+    assert_eq!(
+        a2, atom2,
+        "{} has returned atom2 {:?}, expected {:?}",
+        desc, a2, atom2
+    );
     assert_eq!(
         bond.bond_type, bond_type,
-        "Mismatched bond type for '{}'",
-        desc
+        "{} has returned bond type {:?}, expected {:?}",
+        desc, bond.bond_type, bond_type,
     );
-    assert_eq!(bond.stereo, stereo, "Mismatched stereo for '{}'", desc);
-    assert_eq!(bond.dir, dir, "Mismatched dir for '{}'", desc);
+    assert_eq!(
+        bond.stereo, stereo,
+        "{} has returned stereo {:?}, expected {:?}",
+        desc, bond.stereo, stereo
+    );
+    assert_eq!(
+        bond.dir, dir,
+        "{} has returned dir {:?}, expected {:?}",
+        desc, bond.dir, dir
+    );
 }
 
 #[rstest]
@@ -362,58 +377,174 @@ fn test_bond_input_standard_invalid(
 ) {
     let mut parser = bond_input_standard();
     let result = parser.parse(input);
-    assert!(result.is_err(), "Parser should have failed for '{}'", desc);
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code, expected_kind,
-            "Mismatched error kind for '{}'",
-            desc
-        );
-    } else {
-        panic!("Expected nom::Err::Error for '{}', got {:?}", desc, result);
-    }
-}
-
-#[test]
-fn test_bond_input_standard_partial_fields() {
-    let input = b"  1  2  1 1"; // len 11
-    let mut parser = bond_input_standard();
-    let result = parser.parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
     assert!(
-        result.is_err(),
-        "Parser should have failed for partial field"
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
     );
-    if let Err(Err::Error(e)) = result {
-        assert_eq!(
-            e.code,
-            ErrorKind::Eof,
-            "Mismatched error kind for partial field"
-        );
-    } else {
-        panic!(
-            "Expected nom::Err::Error for partial field, got {:?}",
-            result
-        );
-    }
 }
 
 #[rstest]
-#[case(b"  1  2  1\n", "Padded 9")]
-#[case(b"  1  3  1  1  ", "Padded 12")]
+#[case(b"  1  2  1 1", "len 11")]
+fn test_bond_input_standard_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
+    let mut parser = bond_input_standard();
+    let result = parser.parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+}
+
+#[rstest]
+#[case(b"  1  2  1\n", "len 9 padded")]
+#[case(b"  1  3  1  1  ", "len 12 padded")]
 fn test_bond_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let mut parser = bond_input_standard();
     let trimmed_input = input.trim_ascii_end();
     let result = parser.parse(trimmed_input);
-    assert!(
-        result.is_ok(),
-        "Parser failed for case '{}': {:?}",
-        desc,
-        result
-    );
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (_a1, _a2, _bond)) = result.unwrap();
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+}
+
+#[rstest]
+#[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None, None, None)]
+#[case(
+    b"  1  2  2  3",
+    "len 12 double either",
+    0,
+    1,
+    BondType::Double,
+    Some(BondStereo::Either),
+    None,
+    None,
+    None
+)]
+#[case(
+    b"  1  2  1  6  ",
+    "len 13 single dash padded",
+    0,
+    1,
+    BondType::Single,
+    None,
+    Some(BondDir::Dash),
+    None,
+    None
+)]
+#[case(
+    b"  1  2  8  0     1",
+    "len 18 any bond, ring",
+    0,
+    1,
+    BondType::Any,
+    None,
+    None,
+    Some(BondTopology::Ring),
+    None
+)]
+#[case(
+    b"  1  2  1  0     2  1",
+    "len 21 full, chain, center",
+    0,
+    1,
+    BondType::Single,
+    None,
+    None,
+    Some(BondTopology::Chain),
+    Some(BondReactingCenter::CENTER)
+)]
+#[case(
+    b"  1  2  1  0     2 -1",
+    "len 21 full, not center",
+    0,
+    1,
+    BondType::Single,
+    None,
+    None,
+    Some(BondTopology::Chain),
+    Some(BondReactingCenter::NOT_CENTER)
+)]
+#[case(
+    b"  1  2  1            ",
+    "len 21 only mandatory fields",
+    0,
+    1,
+    BondType::Single,
+    None,
+    None,
+    Some(BondTopology::Either),
+    Some(BondReactingCenter::UNMARKED)
+)]
+fn test_bond_input(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] atom1: usize,
+    #[case] atom2: usize,
+    #[case] bond_type: BondType,
+    #[case] stereo: Option<BondStereo>,
+    #[case] dir: Option<BondDir>,
+    #[case] topology: Option<BondTopology>,
+    #[case] reacting_center: Option<BondReactingCenter>,
+) {
+    let mut parser = bond_input();
+    let result = parser.parse(input);
+    assert!(result.is_ok(), "{} should have succeeded", desc,);
+    let (remaining, (a1, a2, bond)) = result.unwrap();
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert_eq!(
+        a1, atom1,
+        "{} has returned atom1 {:?}, expected {:?}",
+        desc, a1, atom1
+    );
+    assert_eq!(
+        a2, atom2,
+        "{} has returned atom2 {:?}, expected {:?}",
+        desc, a2, atom2
+    );
+    assert_eq!(
+        bond.bond_type, bond_type,
+        "{} has returned bond type {:?}, expected {:?}",
+        desc, bond.bond_type, bond_type,
+    );
+    assert_eq!(
+        bond.stereo, stereo,
+        "{} has returned stereo {:?}, expected {:?}",
+        desc, bond.stereo, stereo
+    );
+    assert_eq!(
+        bond.dir, dir,
+        "{} has returned dir {:?}, expected {:?}",
+        desc, bond.dir, dir
+    );
+    assert_eq!(
+        bond.topology, topology,
+        "{} has returned topology {:?}, expected {:?}",
+        desc, bond.topology, topology
+        
+    );
+    assert_eq!(
+        bond.reacting_center, reacting_center,
+        "{} has returned reacting_center {:?}, expected {:?}",
+        desc, bond.reacting_center, reacting_center,
+    );
+}
+
+#[rstest]
+#[case(b"  1  2", "Line too short", ErrorKind::MapRes)]
+#[case(b"  1  2  9", "Out of range type", ErrorKind::MapRes)]
+#[case(b"  1  2  1  0      4", "Invalid topology", ErrorKind::Eof)]
+fn test_bond_input_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let mut parser = bond_input();
+    let result = parser.parse(input);
     assert!(
-        remaining.is_empty(),
-        "Remaining should be empty for case '{}'",
-        desc
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{} should have failed with error kind {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
