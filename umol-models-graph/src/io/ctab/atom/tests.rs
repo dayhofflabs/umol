@@ -1,5 +1,5 @@
 use super::*;
-use crate::atom::AtomStereoParity;
+use crate::atom::{AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity};
 use float_cmp::approx_eq;
 use nom::{error::ErrorKind, Err};
 use rstest::rstest;
@@ -941,239 +941,15 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
 #[case(
     b"    1.0000    2.0000    3.0000 C  ",
     "len 34",
-    Element::C,
-    None,
-    0,
-    None
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C   ",
-    "len 35 padded",
-    Element::C,
-    None,
-    0,
-    None
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2",
-    "len 36",
-    Element::C,
-    Some(10),
-    0,
-    None
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  ",
-    "len 38 padded",
-    Element::C,
-    Some(10),
-    0,
-    None
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3",
-    "len 39",
-    Element::C,
-    Some(10),
-    1,
-    None
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0",
-    "len 42 with numeric data in ignored block",
-    Element::C,
-    Some(10),
-    1,
-    None
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4",
-    "len 51",
-    Element::C,
-    Some(10),
-    1,
-    Some(4)
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4 ",
-    "len 52 padded",
-    Element::C,
-    Some(10),
-    1,
-    Some(4)
-)]
-#[case(
-    b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
-    "len 69 zeros",
-    Element::C,
-    None,
-    0,
-    None
-)]
-fn test_atom_input_standard(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_element: Element,
-    #[case] expected_isotope_mass: Option<u32>,
-    #[case] expected_charge: i8,
-    #[case] expected_valence: Option<u8>,
-) {
-    let mut parser = atom_input_standard();
-    let result = parser.parse(input);
-    assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
-    assert_eq!(
-        atom.element, expected_element,
-        "{} has returned element {:?}, expected {:?}",
-        desc, atom.element, expected_element,
-    );
-    assert_eq!(
-        atom.isotope_mass, expected_isotope_mass,
-        "{} has returned isotope mass {:?}, expected {:?}",
-        desc, atom.isotope_mass, expected_isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, expected_charge,
-        "{} has returned charge {:?}, expected {:?}",
-        desc, atom.charge, expected_charge,
-    );
-    assert_eq!(
-        atom.valence, expected_valence,
-        "{} has returned valence {:?}, expected {:?}",
-        desc, atom.valence, expected_valence,
-    );
-}
-
-#[rstest]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  a",
-    "non-numeric data in ignored block",
-    ErrorKind::Verify
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a",
-    "non-numeric valence",
-    ErrorKind::Digit
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 L  -2  3  0  0  0  4",
-    "invalid element",
-    ErrorKind::MapRes
-)]
-#[case(b"", "empty", ErrorKind::Eof)]
-#[case(b"    1.0000    2.0000    3.0000 ", "too short", ErrorKind::Eof)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  a",
-    "len 35 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2 a",
-    "len 38 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2 a",
-    "len 38 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3 a",
-    "len 41 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0 a",
-    "len 44 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0 a",
-    "len 47 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0 a",
-    "len 50 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  0 a",
-    "len 53 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  0  0  0  0  0  0  0  a",
-    "len 72 trailing non-numeric data",
-    ErrorKind::Eof
-)]
-fn test_atom_input_standard_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
-) {
-    let mut parser = atom_input_standard();
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{} should have failed with error kind {:?}, got {:?}",
-        desc,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rstest]
-#[case(b"    1.0000    2.0000    3.0000 C  -2 3", "len 38")]
-fn test_atom_input_standard_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = atom_input_standard();
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc,);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == ErrorKind::Eof),
-        "{} should have failed with error kind {:?}, got {:?}",
-        desc,
-        ErrorKind::Eof,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rstest]
-#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4   \t", "len 55")]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0           ",
-    "len 80"
-)]
-fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = atom_input_standard();
-    let result = parser.parse(input);
-    assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
-    assert_eq!(
-        atom.charge, 1,
-        "{} has returned charge {:?}, expected {:?}",
-        desc, atom.charge, 1
-    );
-    assert_eq!(
-        atom.valence,
-        Some(4),
-        "{} has returned valence {:?}, expected {:?}",
-        desc,
-        atom.valence,
-        Some(4)
-    );
-}
-
-#[rstest]
-#[case(
-    b"    1.0000    2.0000    3.0000 C  ",
-    "len 34",
     AtomSymbol::Element(Element::C),
     None,
     0,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
     None
 )]
 #[case(
@@ -1182,6 +958,12 @@ fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
     AtomSymbol::Element(Element::C),
     None,
     0,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
     None
 )]
 #[case(
@@ -1190,6 +972,12 @@ fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
     AtomSymbol::Element(Element::C),
     Some(10),
     0,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
     None
 )]
 #[case(
@@ -1198,6 +986,12 @@ fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
     AtomSymbol::Element(Element::C),
     Some(10),
     0,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
     None
 )]
 #[case(
@@ -1206,23 +1000,41 @@ fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
     AtomSymbol::Element(Element::C),
     Some(10),
     1,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
     None
 )]
 #[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0",
-    "len 42 with numeric data in ignored block",
+    b"    1.0000    2.0000    3.0000 C  -2  3  1",
+    "len 42 with stereo parity",
     AtomSymbol::Element(Element::C),
     Some(10),
     1,
+    None,
+    Some(AtomStereoParity::Odd),
+    None,
+    None,
+    None,
+    None,
     None
 )]
 #[case(
-    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4",
-    "len 51",
+    b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4",
+    "len 51 with query fields",
     AtomSymbol::Element(Element::C),
     Some(10),
     1,
-    Some(4)
+    Some(4),
+    Some(AtomStereoParity::Odd),
+    Some(1),
+    Some(AtomStereoCare::Care),
+    None,
+    None,
+    None
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4 ",
@@ -1230,15 +1042,27 @@ fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
     AtomSymbol::Element(Element::C),
     Some(10),
     1,
-    Some(4)
+    Some(4),
+    None,
+    None,
+    None,
+    None,
+    None,
+    None
 )]
 #[case(
-    b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0",
-    "len 69 zeros",
+    b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0           1  2  1",
+    "len 69 with reaction fields",
     AtomSymbol::Element(Element::C),
     None,
     0,
-    None
+    None,
+    None,
+    None,
+    None,
+    Some(1),
+    Some(AtomInversionRetention::Retained),
+    Some(AtomExactChange::Match)
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 L   0  0  0  0  0  4",
@@ -1246,7 +1070,13 @@ fn test_atom_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
     AtomSymbol::AtomList(AtomList { elements: vec![]}),
     None,
     0,
-    Some(4)
+    Some(4),
+    None,
+    None,
+    None,
+    None,
+    None,
+    None
 )]
 fn test_atom_input(
     #[case] input: &[u8],
@@ -1255,6 +1085,12 @@ fn test_atom_input(
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
     #[case] expected_valence: Option<u8>,
+    #[case] expected_stereo_parity: Option<AtomStereoParity>,
+    #[case] expected_hydrogen_count: Option<u8>,
+    #[case] expected_stereo_care: Option<AtomStereoCare>,
+    #[case] expected_atom_map_num: Option<u32>,
+    #[case] expected_inversion_retention: Option<AtomInversionRetention>,
+    #[case] expected_exact_change: Option<AtomExactChange>,
 ) {
     let mut parser = atom_input();
     let result = parser.parse(input);
@@ -1281,12 +1117,47 @@ fn test_atom_input(
         "{} has returned valence {:?}, expected {:?}",
         desc, atom.valence, expected_valence,
     );
+    assert_eq!(
+        atom.stereo_parity, expected_stereo_parity,
+        "{} has returned stereo_parity {:?}, expected {:?}",
+        desc, atom.stereo_parity, expected_stereo_parity,
+    );
+    assert_eq!(
+        atom.hydrogen_count, expected_hydrogen_count,
+        "{} has returned hydrogen_count {:?}, expected {:?}",
+        desc, atom.hydrogen_count, expected_hydrogen_count,
+    );
+    assert_eq!(
+        atom.stereo_care, expected_stereo_care,
+        "{} has returned stereo_care {:?}, expected {:?}",
+        desc, atom.stereo_care, expected_stereo_care,
+    );
+    assert_eq!(
+        atom.atom_map_num, expected_atom_map_num,
+        "{} has returned atom_map_num {:?}, expected {:?}",
+        desc, atom.atom_map_num, expected_atom_map_num,
+    );
+    assert_eq!(
+        atom.inversion_retention, expected_inversion_retention,
+        "{} has returned inversion_retention {:?}, expected {:?}",
+        desc, atom.inversion_retention, expected_inversion_retention,
+    );
+    assert_eq!(
+        atom.exact_change, expected_exact_change,
+        "{} has returned exact_change {:?}, expected {:?}",
+        desc, atom.exact_change, expected_exact_change,
+    );
 }
 
 #[rstest]
 #[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3  4",
+    "invalid stereo parity",
+    ErrorKind::MapRes
+)]
+#[case(
     b"    1.0000    2.0000    3.0000 C  -2  3  0  a",
-    "non-numeric data in ignored block",
+    "non-numeric hydrogen count",
     ErrorKind::Digit
 )]
 #[case(
@@ -1294,7 +1165,6 @@ fn test_atom_input(
     "non-numeric valence",
     ErrorKind::Digit
 )]
-
 fn test_atom_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
