@@ -6,19 +6,17 @@ use std::{
 };
 
 use fast_float::FastFloat;
-use nom::{
-    branch::alt,
-    bytes::{complete::tag, take},
-    character::complete::{
-        digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
-        u8 as nom_u8, usize as nom_usize,
-    },
-    combinator::{complete, map, opt, recognize, verify},
-    error,
-    multi::fold_many_m_n,
-    sequence::delimited,
-    Parser,
+use nom::branch::alt;
+use nom::bytes::{complete::tag, take};
+use nom::character::complete::{
+    digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
+    u8 as nom_u8, usize as nom_usize,
 };
+use nom::combinator::{complete, map, opt, recognize, verify};
+use nom::error;
+use nom::multi::fold_many_m_n;
+use nom::sequence::delimited;
+use nom::Parser;
 use num::{Float, Integer};
 use smallvec::{Array, SmallVec};
 

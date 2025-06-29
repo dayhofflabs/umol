@@ -745,11 +745,10 @@ fn test_atom_input_standard39_empty_fields(
 }
 
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3\n", "trailing newline")]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3   ", "trailing spaces")]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3\t\t", "trailing tabs")]
 fn test_atom_input_standard39_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let result = all_consuming(terminated(atom_input_standard39, multispace0)).parse(input);
+    let result = all_consuming(terminated(atom_input_standard39, space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
@@ -847,11 +846,11 @@ fn test_atom_input_standard36_empty_fields(
 
 #[rstest]
 #[case(
-    b"    1.2345    2.3456    3.4567 C  -2  \n",
-    "trailing whitespace and newline"
+    b"    1.2345    2.3456    3.4567 C  -2   \t\t",
+    "trailing whitespace and tabs"
 )]
 fn test_atom_input_standard36_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str) {
-    let result = all_consuming(terminated(atom_input_standard36, multispace0)).parse(input);
+    let result = all_consuming(terminated(atom_input_standard36, space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", _desc,);
     let (remaining, (atom, _)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", _desc);
@@ -926,11 +925,11 @@ fn test_atom_input_standard34_invalid(
 
 #[rstest]
 #[case(
-    b"    1.2345    2.3456    3.4567 C    \n",
-    "trailing whitespace and newline"
+    b"    1.2345    2.3456    3.4567 C    \t\t",
+    "trailing whitespace and tabs"
 )]
 fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let result = all_consuming(terminated(atom_input_standard34, multispace0)).parse(input);
+    let result = all_consuming(terminated(atom_input_standard34, space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
     let (remaining, (atom, _)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
@@ -1165,12 +1164,17 @@ fn test_atom_input(
     "non-numeric valence",
     ErrorKind::Digit
 )]
+#[case(
+    b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0         a ",
+    "trailing non-whitespace",
+    ErrorKind::Eof
+)]
 fn test_atom_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
-    let mut parser = atom_input();
+    let mut parser = all_consuming(atom_input());
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(

@@ -232,3 +232,13 @@ A robust feedback mechanism is critical for user trust and data integrity.
     1.  The feature or symbol that triggered the warning.
     2.  Its location in the source file (line number).
     3.  How the parser handled it (e.g., "Ignored", "Interpreted as...").
+
+
+## Status Update. 2025-06-28
+
+### Outstanding Questions
+
+
+7. Finally, what advanced features of the MOL format are still outstanding? We should once again look at OpenBabel, RDKit, and CDK and implement at least everything they implement. I don't think there are any other source-available codes out there but there are manuals for ChemAxon and OpenEye that we should also check. Are there manuals for the Biovia MOL software (descendents of the original MDL/Accelrys codes)? Any newer JS-based, Python-, Julia, or Java tools?  The ChemAxon extensions are probably not important unless they are very common.
+
+??

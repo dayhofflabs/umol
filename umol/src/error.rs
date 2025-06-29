@@ -235,6 +235,12 @@ pub enum DataError {
 
     #[error("Invalid conformer definition: {0}")]
     InvalidConformer(String),
+
+    #[error("Invalid feature: {0}")]
+    InvalidFeature(String),
+
+    #[error("Invalid MOL file format: {0}")]
+    InvalidMolFormat(String),
 }
 
 /// Parsing errors

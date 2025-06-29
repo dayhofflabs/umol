@@ -1,8 +1,9 @@
 //! Molecular graph model.
 
-use crate::atom::{Atom, AtomStandard};
-use crate::bond::Bond;
-use crate::conformer::Conformer;
+use crate::atom::{Atom, AtomStandard, AtomSymbol};
+use crate::bond::{Bond, BondType};
+use crate::conformer::{Conformer, Point3D};
+use crate::io::ctab::mol::mol_block;
 use crate::sgroup::SGroup;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::stable_graph::StableGraph;
@@ -15,13 +16,51 @@ use umol::Result;
 pub type AtomIndex = NodeIndex<usize>;
 pub type BondIndex = EdgeIndex<usize>;
 
+/// MOL file header information (3 lines)
+#[derive(Debug, Clone, PartialEq)]
+pub struct Header {
+    /// Molecule title/name (line 1)
+    pub title: String,
+    /// Program info (line 2)
+    pub program_info: String,
+    /// Comment (line 3)
+    pub comment: String,
+}
+
+impl Header {
+    /// Create a new header
+    pub fn new(title: String, program_info: String, comment: String) -> Self {
+        Self {
+            title,
+            program_info,
+            comment,
+        }
+    }
+
+    /// Create an empty header
+    pub fn empty() -> Self {
+        Self {
+            title: String::new(),
+            program_info: String::new(),
+            comment: String::new(),
+        }
+    }
+}
+
+impl Default for Header {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// Graph-based molecule representation with full MOL file semantics (including queries)
 #[derive(Debug, Clone)]
 pub struct Molecule {
     pub graph: StableGraph<Atom, Bond, Undirected, usize>,
     pub conformers: Vec<Conformer>,
-    pub properties: HashMap<String, String>,
     pub sgroups: Vec<SGroup>,
+    pub properties: HashMap<String, String>,
+    pub header: Header,
 }
 
 /// Graph-based molecule representation for standard (non-query) molecules only
@@ -29,8 +68,106 @@ pub struct Molecule {
 pub struct MoleculeStandard {
     pub graph: StableGraph<AtomStandard, Bond, Undirected, usize>,
     pub conformers: Vec<Conformer>,
-    pub properties: HashMap<String, String>,
     pub sgroups: Vec<SGroup>,
+    pub properties: HashMap<String, String>,
+    pub header: Header,
+}
+
+/// Result of parsing a MOL file with information about query features
+#[derive(Debug, Clone)]
+pub struct ParsedMol {
+    molecule: Molecule,
+    is_query_molecule: bool,
+}
+
+impl ParsedMol {
+    /// Create a new ParsedMol
+    pub fn new(molecule: Molecule, is_query_molecule: bool) -> Self {
+        Self {
+            molecule,
+            is_query_molecule,
+        }
+    }
+
+    /// Check if the parsed molecule contains query features
+    pub fn has_query_features(&self) -> bool {
+        self.is_query_molecule
+    }
+
+    /// Extract the molecule (works regardless of query features)
+    pub fn into_molecule(self) -> Molecule {
+        self.molecule
+    }
+
+    /// Get a reference to the molecule
+    pub fn molecule(&self) -> &Molecule {
+        &self.molecule
+    }
+
+    /// Try to convert to a standard molecule (fails if query features present)
+    pub fn try_into_standard(self) -> Result<MoleculeStandard> {
+        if self.is_query_molecule {
+            Err(DataError::InvalidFeature(
+                "Query features present in molecule marked as standard".to_string(),
+            )
+            .into())
+        } else {
+            // TODO: Implement conversion from Molecule to MoleculeStandard
+            // For now, this is a placeholder
+            Err(DataError::InvalidMolFormat("Conversion not yet implemented".to_string()).into())
+        }
+    }
+
+    /// Try to convert to a standard molecule, returning a reference to the error
+    pub fn as_standard(&self) -> std::result::Result<&MoleculeStandard, umol::Error> {
+        if self.is_query_molecule {
+            Err(DataError::InvalidFeature(
+                "Query features present in molecule marked as standard".to_string(),
+            )
+            .into())
+        } else {
+            // TODO: This would need a different approach since we can't return a reference
+            // to a converted value that doesn't exist yet
+            Err(
+                DataError::InvalidMolFormat("Reference conversion not yet implemented".to_string())
+                    .into(),
+            )
+        }
+    }
+}
+
+/// Parse a MOL string into a ParsedMol
+///
+/// This is the main parsing function that handles both standard and query molecules.
+/// Users can then extract the appropriate type based on their needs.
+pub fn parse_mol_str(input: &str) -> Result<ParsedMol> {
+    parse_mol(input.as_bytes())
+}
+
+/// Parse MOL bytes into a ParsedMol
+///
+/// This is the primary parsing function. It parses once and allows flexible
+/// extraction of either Molecule or MoleculeStandard depending on content.
+pub fn parse_mol(input: &[u8]) -> Result<ParsedMol> {
+    match mol_block(input) {
+        Ok((remaining, parsed_mol)) => {
+            // Check if there's unexpected remaining data
+            if !remaining.is_empty() && !remaining.iter().all(|&b| b.is_ascii_whitespace()) {
+                return Err(DataError::InvalidMolFormat(format!(
+                    "Unexpected data after MOL block: {} bytes remaining",
+                    remaining.len()
+                ))
+                .into());
+            }
+            Ok(parsed_mol)
+        }
+        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+            Err(DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())
+        }
+        Err(nom::Err::Incomplete(_)) => {
+            Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
+        }
+    }
 }
 
 impl Molecule {
@@ -39,17 +176,22 @@ impl Molecule {
         Self {
             graph: StableGraph::<Atom, Bond, Undirected, usize>::default(),
             conformers: Vec::new(),
-            properties: HashMap::new(),
             sgroups: Vec::new(),
+            properties: HashMap::new(),
+            header: Header::empty(),
         }
     }
 
     /// Parse molecule from MOL string (strict - only standard atoms)
+    ///
+    /// DEPRECATED: Use parse_mol_str() instead for better error handling
     pub fn from_mol_str(input: &str) -> Result<Self> {
         Self::from_mol_bytes(input.as_bytes())
     }
 
     /// Parse molecule from MOL bytes (strict - only standard atoms)
+    ///
+    /// DEPRECATED: Use parse_mol() instead for better error handling
     pub fn from_mol_bytes(input: &[u8]) -> Result<Self> {
         // This is a simplified implementation - in practice would need full MOL parsing
         // For now, just return an empty molecule
@@ -187,8 +329,9 @@ impl MoleculeStandard {
         Self {
             graph: StableGraph::<AtomStandard, Bond, Undirected, usize>::default(),
             conformers: Vec::new(),
-            properties: HashMap::new(),
             sgroups: Vec::new(),
+            properties: HashMap::new(),
+            header: Header::empty(),
         }
     }
 
@@ -218,5 +361,277 @@ impl MoleculeStandard {
     /// Return mutable reference to atom.
     pub fn atom_mut(&mut self, idx: usize) -> Option<&mut AtomStandard> {
         self.graph.node_weight_mut(AtomIndex::new(idx))
+    }
+}
+
+impl Molecule {
+    /// Serialize to MOL format string
+    pub fn to_mol_string(&self) -> String {
+        let mut output = String::new();
+        self.write_mol_to_string(&mut output);
+        output
+    }
+
+    /// Write MOL format to writer
+    pub fn write_mol<W: std::io::Write>(&self, mut writer: W) -> Result<()> {
+        let mol_string = self.to_mol_string();
+        writer.write_all(mol_string.as_bytes()).map_err(|e| {
+            let serialization_error: umol::error::SerializationError =
+                umol::error::SerializationError::IoError(e);
+            let umol_error: umol::Error = serialization_error.into();
+            umol_error
+        })?;
+        Ok(())
+    }
+
+    /// Internal method to write MOL format to string
+    fn write_mol_to_string(&self, output: &mut String) {
+        // Write header (3 lines)
+        output.push_str(&self.header.title);
+        output.push('\n');
+        output.push_str(&self.header.program_info);
+        output.push('\n');
+        output.push_str(&self.header.comment);
+        output.push('\n');
+
+        // Write counts line
+        let atom_count = self.graph.node_count();
+        let bond_count = self.graph.edge_count();
+        output.push_str(&format!(
+            "{:3}{:3}  0  0  0  0  0  0  0  0999 V2000\n",
+            atom_count, bond_count
+        ));
+
+        // Get first conformer for coordinates (or use zero coordinates)
+        let empty_coords: Vec<Point3D> = Vec::new();
+        let coordinates = self
+            .conformers
+            .first()
+            .map(|c| &c.positions)
+            .unwrap_or_else(|| &empty_coords);
+
+        // Write atom block
+        for (i, node_idx) in self.graph.node_indices().enumerate() {
+            if let Some(atom) = self.graph.node_weight(node_idx) {
+                let coord = coordinates
+                    .get(i)
+                    .copied()
+                    .unwrap_or(Point3D::new(0.0, 0.0, 0.0));
+
+                // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
+                let symbol_str = match &atom.symbol {
+                    AtomSymbol::Element(element) => element.symbol().to_string(),
+                    AtomSymbol::NamedIsotope(isotope) => isotope.element().symbol().to_string(),
+                    _ => "C".to_string(), // Fallback for query atoms
+                };
+
+                output.push_str(&format!(
+                    "{:10.4}{:10.4}{:10.4} {:3}  0  0  0  0  0  0  0  0  0  0  0  0\n",
+                    coord.x, coord.y, coord.z, symbol_str
+                ));
+            }
+        }
+
+        // Write bond block
+        for edge_idx in self.graph.edge_indices() {
+            if let Some((idx1, idx2)) = self.graph.edge_endpoints(edge_idx) {
+                if let Some(bond) = self.graph.edge_weight(edge_idx) {
+                    let idx1_1based = idx1.index() + 1;
+                    let idx2_1based = idx2.index() + 1;
+                    let bond_type_code = match bond.bond_type {
+                        BondType::Single => 1,
+                        BondType::Double => 2,
+                        BondType::Triple => 3,
+                        BondType::Aromatic => 4,
+                        _ => 1, // Fallback
+                    };
+
+                    output.push_str(&format!(
+                        "{:3}{:3}{:3}  0  0  0  0\n",
+                        idx1_1based, idx2_1based, bond_type_code
+                    ));
+                }
+            }
+        }
+
+        // Write properties block (simplified for now)
+        // TODO: Implement property serialization
+
+        // Write M  END
+        output.push_str("M  END\n");
+    }
+}
+
+impl MoleculeStandard {
+    /// Serialize to MOL format string
+    pub fn to_mol_string(&self) -> String {
+        let mut output = String::new();
+        self.write_mol_to_string(&mut output);
+        output
+    }
+
+    /// Write MOL format to writer
+    pub fn write_mol<W: std::io::Write>(&self, mut writer: W) -> Result<()> {
+        let mol_string = self.to_mol_string();
+        writer.write_all(mol_string.as_bytes()).map_err(|e| {
+            let serialization_error: umol::error::SerializationError =
+                umol::error::SerializationError::IoError(e);
+            let umol_error: umol::Error = serialization_error.into();
+            umol_error
+        })?;
+        Ok(())
+    }
+
+    /// Internal method to write MOL format to string
+    fn write_mol_to_string(&self, output: &mut String) {
+        // Write header (3 lines)
+        output.push_str(&self.header.title);
+        output.push('\n');
+        output.push_str(&self.header.program_info);
+        output.push('\n');
+        output.push_str(&self.header.comment);
+        output.push('\n');
+
+        // Write counts line
+        let atom_count = self.graph.node_count();
+        let bond_count = self.graph.edge_count();
+        output.push_str(&format!(
+            "{:3}{:3}  0  0  0  0  0  0  0  0999 V2000\n",
+            atom_count, bond_count
+        ));
+
+        // Get first conformer for coordinates (or use zero coordinates)
+        let empty_coords: Vec<Point3D> = Vec::new();
+        let coordinates = self
+            .conformers
+            .first()
+            .map(|c| &c.positions)
+            .unwrap_or(&empty_coords);
+
+        // Write atom block
+        for (i, node_idx) in self.graph.node_indices().enumerate() {
+            if let Some(atom) = self.graph.node_weight(node_idx) {
+                let coord = coordinates
+                    .get(i)
+                    .copied()
+                    .unwrap_or(Point3D::new(0.0, 0.0, 0.0));
+
+                // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
+                let symbol_str = atom.element.symbol().to_string();
+
+                output.push_str(&format!(
+                    "{:10.4}{:10.4}{:10.4} {:3}  0  0  0  0  0  0  0  0  0  0  0  0\n",
+                    coord.x, coord.y, coord.z, symbol_str
+                ));
+            }
+        }
+
+        // Write bond block
+        for edge_idx in self.graph.edge_indices() {
+            if let Some((idx1, idx2)) = self.graph.edge_endpoints(edge_idx) {
+                if let Some(bond) = self.graph.edge_weight(edge_idx) {
+                    let idx1_1based = idx1.index() + 1;
+                    let idx2_1based = idx2.index() + 1;
+                    let bond_type_code = match bond.bond_type {
+                        BondType::Single => 1,
+                        BondType::Double => 2,
+                        BondType::Triple => 3,
+                        BondType::Aromatic => 4,
+                        _ => 1, // Fallback
+                    };
+
+                    output.push_str(&format!(
+                        "{:3}{:3}{:3}  0  0  0  0\n",
+                        idx1_1based, idx2_1based, bond_type_code
+                    ));
+                }
+            }
+        }
+
+        // Write properties block (simplified for now)
+        // TODO: Implement property serialization
+
+        // Write M  END
+        output.push_str("M  END\n");
+    }
+}
+
+// Standard library integration
+impl std::fmt::Display for Molecule {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.to_mol_string())
+    }
+}
+
+impl std::fmt::Display for MoleculeStandard {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.to_mol_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+
+         #[rstest]
+     #[case(b"Methane\nRDKit          3D\nGenerated by RDKit\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0\nM  END\n",
+       "valid")]
+     fn test_parse_mol(#[case] mol_str: &[u8], #[case] desc: &str) {
+         let result = parse_mol(mol_str);
+         assert!(result.is_ok(), "{} should have succeeded: {:?}", desc, result.err());
+
+        let parsed_mol = result.unwrap();
+        assert!(
+            !parsed_mol.has_query_features(),
+            "{} should not have query features",
+            desc
+        );
+
+        let molecule = parsed_mol.into_molecule();
+        assert_eq!(molecule.atom_count(), 1, "{} should have 1 atom", desc);
+        assert_eq!(molecule.bond_count(), 0, "{} should have 0 bonds", desc);
+        assert_eq!(
+            molecule.header.title, "Methane",
+            "{} header title should match",
+            desc
+        );
+        assert_eq!(
+            molecule.header.program_info, "RDKit          3D",
+            "{} header program info should match",
+            desc
+        );
+        assert_eq!(
+            molecule.header.comment, "Generated by RDKit",
+            "{} header comment should match",
+            desc
+        );
+    }
+
+    #[test]
+    fn test_write_mol() {
+        // Create a simple molecule
+        let mut molecule = Molecule::new();
+        molecule.header = Header::new(
+            "Test Molecule".to_string(),
+            "umol-test      ".to_string(),
+            "Test comment".to_string(),
+        );
+
+        // Add a carbon atom
+        let atom = Atom::new(AtomSymbol::Element(umol_data::Element::C));
+        molecule.add_atom(atom);
+
+        // Test serialization
+        let mol_string = molecule.to_mol_string();
+
+        // Basic checks
+        assert!(mol_string.contains("Test Molecule"));
+        assert!(mol_string.contains("umol-test"));
+        assert!(mol_string.contains("Test comment"));
+        assert!(mol_string.contains("  1  0  0  0  0  0  0  0  0  0999 V2000"));
+        assert!(mol_string.contains("M  END"));
+
+        println!("Generated MOL:\n{}", mol_string);
     }
 }

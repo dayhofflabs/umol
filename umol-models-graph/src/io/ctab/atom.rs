@@ -2,7 +2,7 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::{alpha1, multispace0, space0};
+use nom::character::complete::{alpha1, space0};
 use nom::combinator::{all_consuming, complete, cond, map, map_parser, map_res, value, verify};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, IResult, Parser};
@@ -442,7 +442,7 @@ pub fn atom_input_standard<'a>(
                 )))
             }
         };
-        all_consuming(terminated(parser, multispace0)).parse(input)
+        all_consuming(terminated(parser, space0)).parse(input)
     }
 }
 
@@ -541,7 +541,7 @@ fn atom_input_inner(input: &[u8]) -> IResult<&[u8], (Atom, Point3D), error::Erro
         inversion_retention: inversion_flag.flatten(),
         exact_change: exact_change_flag.flatten(),
         properties: std::collections::HashMap::new(),
-        
+
         // Query-specific properties - default to None during parsing
         attachment_point: None,
         attachment_order: None,
@@ -557,7 +557,7 @@ fn atom_input_inner(input: &[u8]) -> IResult<&[u8], (Atom, Point3D), error::Erro
 
 pub fn atom_input<'a>(
 ) -> impl Parser<&'a [u8], Output = (Atom, Point3D), Error = error::Error<&'a [u8]>> {
-    all_consuming(terminated(atom_input_inner, multispace0))
+    terminated(atom_input_inner, space0)
 }
 
 #[cfg(test)]

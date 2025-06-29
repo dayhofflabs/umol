@@ -2,7 +2,7 @@
 
 use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
-    ChargeEntry, IsotopeEntry, LinkAtomEntry, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry,
+    ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry,
     SGroupBondListEntry, SGroupLabelEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::atom::{AtomList, AtomSymbol, LinkAtomSpec};
@@ -14,6 +14,30 @@ use umol::Result;
 /// Trait for applying property entries to molecule
 pub trait Apply {
     fn apply(self, molecule: &mut Molecule) -> Result<()>;
+}
+
+/// Implementation for PropertyEntries enum - dispatches to specific implementations
+impl Apply for PropertyEntries {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        match self {
+            PropertyEntries::ChargeEntries(entries) => entries.apply(molecule),
+            PropertyEntries::RadicalEntries(entries) => entries.apply(molecule),
+            PropertyEntries::IsotopeEntries(entries) => entries.apply(molecule),
+            PropertyEntries::SGroupTypeEntries(entries) => entries.apply(molecule),
+            PropertyEntries::SGroupLabelEntries(entries) => entries.apply(molecule),
+            PropertyEntries::SGroupAtomListEntry(entry) => entry.apply(molecule),
+            PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule),
+            PropertyEntries::AtomAliasEntry(entry) => entry.apply(molecule),
+            PropertyEntries::AtomValueEntry(entry) => entry.apply(molecule),
+            PropertyEntries::AtomListEntry(entry) => entry.apply(molecule),
+            PropertyEntries::AttachmentPointEntries(entries) => entries.apply(molecule),
+            PropertyEntries::AtomAttachmentOrderEntry(entry) => entry.apply(molecule),
+            PropertyEntries::RingBondCountEntries(entries) => entries.apply(molecule),
+            PropertyEntries::SubstitutionCountEntries(entries) => entries.apply(molecule),
+            PropertyEntries::UnsaturatedAtomEntries(entries) => entries.apply(molecule),
+            PropertyEntries::LinkAtomEntries(entries) => entries.apply(molecule),
+        }
+    }
 }
 
 impl Apply for Vec<ChargeEntry> {

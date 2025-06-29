@@ -1,7 +1,7 @@
 //! Bond block parser for CTab files.
 
 use nom::bytes::complete::take;
-use nom::character::complete::multispace0;
+use nom::character::complete::space0;
 use nom::combinator::{all_consuming, cond, map, map_res};
 use nom::error;
 use nom::sequence::terminated;
@@ -119,7 +119,7 @@ pub fn bond_input_standard<'a>(
                 )))
             }
         };
-        all_consuming(terminated(parser, multispace0)).parse(input)
+        all_consuming(terminated(parser, space0)).parse(input)
     }
 }
 
@@ -177,7 +177,7 @@ fn bond_input_inner<'a>(
 
 pub fn bond_input<'a>(
 ) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
-    all_consuming(terminated(bond_input_inner, multispace0))
+    terminated(bond_input_inner, space0)
 }
 
 #[cfg(test)]

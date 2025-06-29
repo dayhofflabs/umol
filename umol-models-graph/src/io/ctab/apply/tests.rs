@@ -49,8 +49,6 @@ fn create_molecule_with_properties() -> Molecule {
     molecule
 }
 
-// === CHARGE ENTRY TESTS ===
-
 #[rstest]
 #[case(vec![ChargeEntry { atom_index: 0, charge: -1 }], 0, -1)]
 #[case(vec![ChargeEntry { atom_index: 1, charge: 2 }], 1, 2)]
@@ -141,8 +139,6 @@ fn test_charge_entry_conflict() {
     }
 }
 
-// === RADICAL ENTRY TESTS ===
-
 #[rstest]
 #[case(0, None)]
 #[case(1, Some(1))]
@@ -179,8 +175,6 @@ fn test_radical_entry_invalid() {
     }
 }
 
-// === ISOTOPE ENTRY TESTS ===
-
 #[test]
 fn test_apply_isotope_entry() {
     let mut molecule = create_test_molecule(2, 0);
@@ -214,8 +208,6 @@ fn test_isotope_entry_conflict() {
     }
 }
 
-// === SGROUP TYPE ENTRY TESTS ===
-
 #[test]
 fn test_apply_sgroup_type_entry() {
     let mut molecule = create_test_molecule(2, 0);
@@ -247,8 +239,6 @@ fn test_apply_sgroup_type_entry_multiple() {
     assert_eq!(molecule.sgroups[2].group_type, SGroupType::Data);
 }
 
-// === SGROUP LABEL ENTRY TESTS ===
-
 #[test]
 fn test_apply_sgroup_label_entry() {
     let mut molecule = create_test_molecule(2, 0);
@@ -262,8 +252,6 @@ fn test_apply_sgroup_label_entry() {
     assert_eq!(molecule.sgroups.len(), 1);
     assert_eq!(molecule.sgroups[0].label, Some("Ph".to_string()));
 }
-
-// === SGROUP ATOM LIST ENTRY TESTS ===
 
 #[test]
 fn test_apply_sgroup_atom_list_entry() {
@@ -296,8 +284,6 @@ fn test_sgroup_atom_list_entry_invalid_atom_index() {
     }
 }
 
-// === SGROUP BOND LIST ENTRY TESTS ===
-
 #[test]
 fn test_apply_sgroup_bond_list_entry() {
     let mut molecule = create_test_molecule(3, 2);
@@ -328,8 +314,6 @@ fn test_sgroup_bond_list_entry_invalid_bond_index() {
         _ => panic!("Expected MissingBondIndex error"),
     }
 }
-
-// === ATOM ALIAS ENTRY TESTS ===
 
 #[test]
 fn test_apply_atom_alias_entry() {
@@ -369,8 +353,6 @@ fn test_atom_alias_entry_conflict() {
         _ => panic!("Expected InvalidComponent error"),
     }
 }
-
-// === ATOM VALUE ENTRY TESTS ===
 
 #[test]
 fn test_apply_atom_value_entry() {

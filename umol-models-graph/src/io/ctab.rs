@@ -5,6 +5,7 @@ pub mod atom;
 pub mod bond;
 pub mod convert;
 pub mod counts;
-// pub mod molecule;
+pub mod header;
+pub mod mol;
 pub mod properties;
 mod utils;

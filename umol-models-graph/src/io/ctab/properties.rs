@@ -1,14 +1,12 @@
 //! Properties block parser for CTab files.
 
-use nom::{
-    bytes::complete::{tag, take},
-    character::complete::space0,
-    combinator::{map, map_parser, rest},
-    error,
-    multi::length_count,
-    sequence::preceded,
-    Parser,
-};
+use nom::bytes::complete::{tag, take};
+use nom::character::complete::space0;
+use nom::combinator::{map, map_parser, rest};
+use nom::error;
+use nom::multi::length_count;
+use nom::sequence::preceded;
+use nom::Parser;
 
 use super::utils::{fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1};
 use umol_data::Element;

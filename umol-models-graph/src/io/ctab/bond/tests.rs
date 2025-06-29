@@ -532,13 +532,14 @@ fn test_bond_input(
 #[rstest]
 #[case(b"  1  2", "Line too short", ErrorKind::MapRes)]
 #[case(b"  1  2  9", "Out of range type", ErrorKind::MapRes)]
-#[case(b"  1  2  1  0      4", "Invalid topology", ErrorKind::Eof)]
+#[case(b"  2  5  2  0  0  4  0", "Invalid topology", ErrorKind::MapRes)]
+#[case(b"  1  2  1  0         a", "trailing non-whitespace", ErrorKind::Eof)]
 fn test_bond_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
-    let mut parser = bond_input();
+    let mut parser = all_consuming(bond_input());
     let result = parser.parse(input);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),

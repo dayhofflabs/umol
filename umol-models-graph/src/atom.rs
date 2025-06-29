@@ -89,9 +89,9 @@ impl AtomStandard {
 /// Link atom specification for LIN property
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkAtomSpec {
-    pub repeat_count: u8,  // vvv >= 2
-    pub bond1: usize,      // bbb (can be 0)
-    pub bond2: usize,      // ccc (can be 0)
+    pub repeat_count: u8, // vvv >= 2
+    pub bond1: usize,     // bbb (can be 0)
+    pub bond2: usize,     // ccc (can be 0)
 }
 
 /// Generalized atom symbol (for atom-like objects in MOL files)
@@ -108,15 +108,13 @@ pub struct Atom {
     pub atom_map_num: Option<u32>,
     pub inversion_retention: Option<AtomInversionRetention>,
     pub exact_change: Option<AtomExactChange>,
+    pub attachment_point: Option<u8>,
+    pub attachment_order: Option<Vec<(usize, u8)>>,
+    pub ring_bond_count: Option<i8>,
+    pub substitution_count: Option<i8>,
+    pub unsaturated: Option<bool>,
+    pub link_atom: Option<LinkAtomSpec>,
     pub properties: HashMap<String, String>,
-    
-    // Query-specific properties
-    pub attachment_point: Option<u8>,                    // APO: 0=none, 1=first, 2=second, 3=both
-    pub attachment_order: Option<Vec<(usize, u8)>>,      // AAL: neighbor-order pairs
-    pub ring_bond_count: Option<i8>,                     // RBC: -2=r*, -1=r0, 0=off, 2+=count
-    pub substitution_count: Option<i8>,                  // SUB: -2=s*, -1=s0, 0=off, 1+=count
-    pub unsaturated: Option<bool>,                       // UNS: Some(true)=on, None=off
-    pub link_atom: Option<LinkAtomSpec>,                 // LIN: complex spec
 }
 
 impl Atom {
@@ -133,20 +131,16 @@ impl Atom {
             atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
-            properties: HashMap::new(),
-            
-            // Query-specific properties - all default to None
             attachment_point: None,
             attachment_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
             link_atom: None,
+            properties: HashMap::new(),
         }
     }
 }
-
-
 
 impl From<AtomStandard> for Atom {
     fn from(atom: AtomStandard) -> Self {
@@ -162,15 +156,13 @@ impl From<AtomStandard> for Atom {
             atom_map_num: atom.atom_map_num,
             inversion_retention: None,
             exact_change: None,
-            properties: atom.properties,
-            
-            // Query-specific properties - not applicable to AtomStandard
             attachment_point: None,
             attachment_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
             link_atom: None,
+            properties: atom.properties,
         }
     }
 }
