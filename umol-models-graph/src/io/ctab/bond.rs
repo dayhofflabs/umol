@@ -2,7 +2,7 @@
 
 use nom::bytes::complete::take;
 use nom::character::complete::space0;
-use nom::combinator::{all_consuming, cond, map, map_res};
+use nom::combinator::{cond, map, map_res};
 use nom::error;
 use nom::sequence::terminated;
 use nom::{IResult, Parser};
@@ -14,6 +14,8 @@ use super::convert::{
     convert_bond_type_code, convert_bond_type_code_standard,
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1};
+
+
 
 fn bond_input_standard21(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStandard)> {
     terminated(
@@ -119,7 +121,7 @@ pub fn bond_input_standard<'a>(
                 )))
             }
         };
-        all_consuming(terminated(parser, space0)).parse(input)
+        terminated(parser, space0).parse(input)
     }
 }
 

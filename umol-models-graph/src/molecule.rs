@@ -3,7 +3,7 @@
 use crate::atom::{Atom, AtomStandard, AtomSymbol};
 use crate::bond::{Bond, BondType};
 use crate::conformer::{Conformer, Point3D};
-use crate::io::ctab::mol::mol_block;
+use crate::io::ctab::mol::{mol_block, mol_block_standard};
 use crate::sgroup::SGroup;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::stable_graph::StableGraph;
@@ -144,6 +144,14 @@ pub fn parse_mol_str(input: &str) -> Result<ParsedMol> {
     parse_mol(input.as_bytes())
 }
 
+/// Parse a MOL string into a MoleculeStandard (optimized, standard molecules only)
+///
+/// This is the high-performance parsing function for standard molecules.
+/// It will fail if the MOL file contains query features.
+pub fn parse_mol_standard_str(input: &str) -> Result<MoleculeStandard> {
+    parse_mol_standard(input.as_bytes())
+}
+
 /// Parse MOL bytes into a ParsedMol
 ///
 /// This is the primary parsing function. It parses once and allows flexible
@@ -170,6 +178,32 @@ pub fn parse_mol(input: &[u8]) -> Result<ParsedMol> {
     }
 }
 
+/// Parse MOL bytes into a MoleculeStandard (optimized, standard molecules only)
+///
+/// This is the high-performance parsing function for standard molecules.
+/// It will fail if the MOL file contains query features.
+pub fn parse_mol_standard(input: &[u8]) -> Result<MoleculeStandard> {
+    match mol_block_standard(input) {
+        Ok((remaining, molecule)) => {
+            // Check if there's unexpected remaining data
+            if !remaining.is_empty() && !remaining.iter().all(|&b| b.is_ascii_whitespace()) {
+                return Err(DataError::InvalidMolFormat(format!(
+                    "Unexpected data after MOL block: {} bytes remaining",
+                    remaining.len()
+                ))
+                .into());
+            }
+            Ok(molecule)
+        }
+        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+            Err(DataError::InvalidMolFormat(format!("Standard MOL parsing failed: {:?}", e)).into())
+        }
+        Err(nom::Err::Incomplete(_)) => {
+            Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
+        }
+    }
+}
+
 impl Molecule {
     /// Create empty molecule
     pub fn new() -> Self {
@@ -180,22 +214,6 @@ impl Molecule {
             properties: HashMap::new(),
             header: Header::empty(),
         }
-    }
-
-    /// Parse molecule from MOL string (strict - only standard atoms)
-    ///
-    /// DEPRECATED: Use parse_mol_str() instead for better error handling
-    pub fn from_mol_str(input: &str) -> Result<Self> {
-        Self::from_mol_bytes(input.as_bytes())
-    }
-
-    /// Parse molecule from MOL bytes (strict - only standard atoms)
-    ///
-    /// DEPRECATED: Use parse_mol() instead for better error handling
-    pub fn from_mol_bytes(input: &[u8]) -> Result<Self> {
-        // This is a simplified implementation - in practice would need full MOL parsing
-        // For now, just return an empty molecule
-        Ok(Self::new())
     }
 
     /// Get number of atoms
@@ -422,11 +440,18 @@ impl Molecule {
                 let symbol_str = match &atom.symbol {
                     AtomSymbol::Element(element) => element.symbol().to_string(),
                     AtomSymbol::NamedIsotope(isotope) => isotope.element().symbol().to_string(),
-                    _ => "C".to_string(), // Fallback for query atoms
+                    AtomSymbol::AtomList(atom_list) => {
+                        atom_list.elements.first().unwrap_or(&umol_data::Element::C).symbol().to_string()
+                    },
+                    AtomSymbol::Unspecified(c) => c.to_string(),
+                    AtomSymbol::LonePair => "LP".to_string(),
+                    AtomSymbol::RGroup(n) => format!("R{}", n),
                 };
 
+                // Use precise F10.4 format: 10 characters wide, 4 decimal places, right-aligned
+                // Symbol is exactly 3 characters, left-aligned after a single space
                 output.push_str(&format!(
-                    "{:10.4}{:10.4}{:10.4} {:3}  0  0  0  0  0  0  0  0  0  0  0  0\n",
+                    "{:10.4}{:10.4}{:10.4} {:<3} 0  0  0  0  0  0  0  0  0  0  0  0\n",
                     coord.x, coord.y, coord.z, symbol_str
                 ));
             }
@@ -519,8 +544,10 @@ impl MoleculeStandard {
                 // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
                 let symbol_str = atom.element.symbol().to_string();
 
+                // Use precise F10.4 format: 10 characters wide, 4 decimal places, right-aligned
+                // Symbol is exactly 3 characters, left-aligned after a single space
                 output.push_str(&format!(
-                    "{:10.4}{:10.4}{:10.4} {:3}  0  0  0  0  0  0  0  0  0  0  0  0\n",
+                    "{:10.4}{:10.4}{:10.4} {:<3} 0  0  0  0  0  0  0  0  0  0  0  0\n",
                     coord.x, coord.y, coord.z, symbol_str
                 ));
             }
@@ -633,5 +660,105 @@ mod tests {
         assert!(mol_string.contains("M  END"));
 
         println!("Generated MOL:\n{}", mol_string);
+    }
+
+    #[rstest]
+    #[case(b"Ethane\nRDKit          3D\nGenerated by RDKit\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n",
+      "standard ethane")]
+    fn test_parse_mol_standard(#[case] mol_str: &[u8], #[case] desc: &str) {
+        let result = parse_mol_standard(mol_str);
+        assert!(result.is_ok(), "{} should have succeeded: {:?}", desc, result.err());
+
+        let molecule = result.unwrap();
+        assert_eq!(molecule.atom_count(), 2, "{} should have 2 atoms", desc);
+        assert_eq!(molecule.bond_count(), 1, "{} should have 1 bond", desc);
+        assert_eq!(
+            molecule.header.title, "Ethane",
+            "{} header title should match",
+            desc
+        );
+        assert_eq!(
+            molecule.header.program_info, "RDKit          3D",
+            "{} header program info should match",
+            desc
+        );
+        assert_eq!(
+            molecule.header.comment, "Generated by RDKit",
+            "{} header comment should match",
+            desc
+        );
+    }
+
+    #[test]
+    fn test_parse_mol_standard_query() {
+        // MOL with query atom 'A' (any atom)
+        let query_mol = b"Query\nRDKit          3D\nWith query atom\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 A   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n";
+        
+        let result = parse_mol_standard(query_mol);
+        assert!(result.is_err(), "Standard parser should fail on query atoms");
+        
+        let error = result.unwrap_err();
+        let error_string = format!("{}", error);
+        assert!(error_string.contains("MOL parsing failed") || error_string.contains("Standard MOL parsing failed"), 
+                "Error should mention parsing failure: {}", error_string);
+    }
+
+    #[test]
+    fn test_write_mol_standard() {
+        // Create a simple standard molecule
+        let mut molecule = MoleculeStandard::new();
+        molecule.header = Header::new(
+            "Test Standard".to_string(),
+            "umol-standard  ".to_string(),
+            "Standard comment".to_string(),
+        );
+
+        // Add two carbon atoms
+        let atom1 = AtomStandard::new(umol_data::Element::C);
+        let atom2 = AtomStandard::new(umol_data::Element::N);
+        molecule.add_atom(atom1);
+        molecule.add_atom(atom2);
+
+        // Add a bond directly to the graph (since MoleculeStandard doesn't have add_bond)
+        let bond = Bond::new(BondType::Single);
+        molecule.graph.add_edge(AtomIndex::new(0), AtomIndex::new(1), bond);
+
+        // Test serialization
+        let mol_string = molecule.to_mol_string();
+
+        // Basic checks
+        assert!(mol_string.contains("Test Standard"));
+        assert!(mol_string.contains("umol-standard"));
+        assert!(mol_string.contains("Standard comment"));
+        assert!(mol_string.contains("  2  1  0  0  0  0  0  0  0  0999 V2000"));
+        assert!(mol_string.contains("C  "));
+        assert!(mol_string.contains("N  "));
+        assert!(mol_string.contains("  1  2  1  0  0  0  0"));
+        assert!(mol_string.contains("M  END"));
+
+        println!("Generated Standard MOL:\n{}", mol_string);
+    }
+
+    #[test]
+    fn test_round_trip_standard() {
+        // Test that we can parse a standard MOL and write it back
+        let original_mol = b"Methanol\nRDKit          3D\nSimple molecule\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.4300    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n";
+        
+        // Parse with standard parser
+        let parsed = parse_mol_standard(original_mol).unwrap();
+        
+        // Write back to string
+        let regenerated = parsed.to_mol_string();
+        println!("Original bytes: {:?}", original_mol);
+        println!("Regenerated string: {:?}", regenerated);
+        println!("Regenerated bytes: {:?}", regenerated.as_bytes());
+        
+        // Parse the regenerated string to verify it's valid
+        let reparsed = parse_mol_standard(regenerated.as_bytes()).unwrap();
+        
+        // Verify structure is preserved
+        assert_eq!(reparsed.atom_count(), 2);
+        assert_eq!(reparsed.bond_count(), 1);
+        assert_eq!(reparsed.header.title, "Methanol");
     }
 }

@@ -260,6 +260,7 @@ where
 }
 
 /// SmallVec-based parser combinator for length_count expressions.
+#[allow(dead_code)]
 pub(crate) fn small_length_count<I, A, C, E, F>(
     mut count: C,
     mut f: F,

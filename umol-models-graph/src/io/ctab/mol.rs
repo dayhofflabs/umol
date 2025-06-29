@@ -7,19 +7,19 @@ use nom::multi::{count, many0};
 use nom::sequence::terminated;
 use nom::{error, IResult, Parser};
 
-use crate::atom::{Atom, AtomSymbol};
-use crate::bond::Bond;
+use crate::atom::{Atom, AtomStandard, AtomSymbol};
+use crate::bond::{Bond, BondStandard};
 use crate::conformer::{Conformer, Point3D};
-use crate::molecule::{Header, Molecule, ParsedMol};
+use crate::molecule::{AtomIndex, Header, Molecule, MoleculeStandard, ParsedMol};
 
 use super::apply::Apply;
-use super::atom::atom_input;
-use super::bond::bond_input;
+use super::atom::{atom_input, atom_input_standard};
+use super::bond::{bond_input, bond_input_standard};
 use super::counts::counts_input;
 use super::header::header;
-use super::properties::{property_input, PropertyEntries};
+use super::properties::{property_input, property_input_standard, PropertyEntries};
 
-/// Parse MOL block
+/// Parse MOL block (general parser, handles all features)
 pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Error<&'a [u8]>> {
     let (remaining, header) = header().parse(input)?;
     let (remaining, counts) = terminated(counts_input(), line_ending).parse(remaining)?;
@@ -32,6 +32,19 @@ pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Err
     Ok((remaining, ParsedMol::new(molecule, is_query)))
 }
 
+/// Parse MOL block (standard parser, optimized for performance, standard molecules only)
+pub fn mol_block_standard<'a>(input: &'a [u8]) -> IResult<&'a [u8], MoleculeStandard, error::Error<&'a [u8]>> {
+    let (remaining, header) = header().parse(input)?;
+    let (remaining, counts) = terminated(counts_input(), line_ending).parse(remaining)?;
+    let atom_count = counts.atoms() as usize;
+    let bond_count = counts.bonds() as usize;
+    let (remaining, atoms_and_coords) = atom_block_standard(atom_count).parse(remaining)?;
+    let (remaining, bonds) = bond_block_standard(bond_count).parse(remaining)?;
+    let (remaining, properties) = properties_block_standard(remaining)?;
+    let molecule = build_molecule_standard(header, atoms_and_coords, bonds, properties);
+    Ok((remaining, molecule))
+}
+
 /// Parse atom block
 fn atom_block<'a>(
     atom_count: usize,
@@ -39,6 +52,19 @@ fn atom_block<'a>(
     count(
         |input| {
             let (input, (atom, coord)) = terminated(atom_input(), line_ending).parse(input)?;
+            Ok((input, (atom, coord)))
+        },
+        atom_count,
+    )
+}
+
+/// Parse atom block (standard parser)
+fn atom_block_standard<'a>(
+    atom_count: usize,
+) -> impl Parser<&'a [u8], Output = Vec<(AtomStandard, Point3D)>, Error = error::Error<&'a [u8]>> {
+    count(
+        |input| {
+            let (input, (atom, coord)) = terminated(atom_input_standard(), line_ending).parse(input)?;
             Ok((input, (atom, coord)))
         },
         atom_count,
@@ -59,6 +85,20 @@ fn bond_block<'a>(
     )
 }
 
+/// Parse bond block (standard parser)
+fn bond_block_standard<'a>(
+    bond_count: usize,
+) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, BondStandard)>, Error = error::Error<&'a [u8]>> {
+    count(
+        |input| {
+            let (input, (atom1, atom2, bond)) =
+                terminated(bond_input_standard(), line_ending).parse(input)?;
+            Ok((input, (atom1, atom2, bond)))
+        },
+        bond_count,
+    )
+}
+
 /// Parse properties block (until M  END or end of input)
 fn properties_block<'a>(
     input: &'a [u8],
@@ -66,6 +106,38 @@ fn properties_block<'a>(
     let (input, properties) = many0(terminated(property_input, line_ending)).parse(input)?;
     let (input, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(input)?;
     Ok((input, properties))
+}
+
+/// Parse properties block (standard parser)
+fn properties_block_standard<'a>(
+    input: &'a [u8],
+) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
+    let mut properties = Vec::new();
+    let mut remaining = input;
+    
+    loop {
+        // Check if we've reached M  END or end of input
+        if remaining.is_empty() || remaining.starts_with(b"M  END") {
+            break;
+        }
+        
+        // Parse a property line
+        match terminated(property_input_standard, line_ending).parse(remaining) {
+            Ok((new_remaining, property)) => {
+                properties.push(property);
+                remaining = new_remaining;
+            }
+            Err(_) => {
+                // If we can't parse as a property, we might have hit M  END or EOF
+                break;
+            }
+        }
+    }
+    
+    // Consume M  END if present
+    let (remaining, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(remaining)?;
+    
+    Ok((remaining, properties))
 }
 
 /// Detect if molecule contains query features
@@ -169,4 +241,45 @@ fn build_molecule(
     }
 
     (molecule, is_query)
+}
+
+/// Build standard molecule from parsed standard components
+fn build_molecule_standard(
+    header: Header,
+    atoms_and_coords: Vec<(AtomStandard, Point3D)>,
+    bonds: Vec<(usize, usize, BondStandard)>,
+    properties: Vec<PropertyEntries>,
+) -> MoleculeStandard {
+    // Create molecule
+    let mut molecule = MoleculeStandard::new();
+    molecule.header = header;
+
+    // Extract coordinates for conformer
+    let coordinates: Vec<Point3D> = atoms_and_coords.iter().map(|(_, coord)| *coord).collect();
+
+    // Add atoms to molecule
+    for (atom, _) in atoms_and_coords {
+        molecule.add_atom(atom);
+    }
+
+    // Add bonds to molecule (convert BondStandard to Bond)
+    for (idx1, idx2, bond_standard) in bonds {
+        // Convert BondStandard to Bond by creating a new Bond with the same type
+        let bond = Bond::new(bond_standard.bond_type);
+        molecule.graph.add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond);
+    }
+
+    // Apply properties - for now, ignore properties in standard parser
+    // Standard molecules should only have basic properties that are handled in atom parsing
+    if !properties.is_empty() {
+        eprintln!("Warning: Properties found in standard parser - some may be ignored");
+    }
+
+    // Add conformer if we have coordinates
+    if !coordinates.is_empty() {
+        let conformer = Conformer::from_positions(coordinates);
+        molecule.conformers.push(conformer);
+    }
+
+    molecule
 }

@@ -1,5 +1,6 @@
 use super::*;
 use crate::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
+use nom::combinator::all_consuming;
 use nom::{error::ErrorKind, Err, Parser};
 use rstest::rstest;
 
@@ -520,7 +521,6 @@ fn test_bond_input(
         bond.topology, topology,
         "{} has returned topology {:?}, expected {:?}",
         desc, bond.topology, topology
-        
     );
     assert_eq!(
         bond.reacting_center, reacting_center,

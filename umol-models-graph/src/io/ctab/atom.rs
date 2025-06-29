@@ -442,7 +442,7 @@ pub fn atom_input_standard<'a>(
                 )))
             }
         };
-        all_consuming(terminated(parser, space0)).parse(input)
+        terminated(parser, space0).parse(input)
     }
 }
 
