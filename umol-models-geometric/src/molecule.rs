@@ -1,0 +1,1 @@
+//! Geometric molecular model.

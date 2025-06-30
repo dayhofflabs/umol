@@ -20,12 +20,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use thiserror for error handling with descriptive error messages
 - Implement Display trait for user-facing types
 - Use builder pattern for complex object construction
-- Write comprehensive tests including:
-  - Unit tests with rstest for parameterized testing
-  - Property-based tests with proptest
-- Document public APIs with clear comments
+- For tests use rstest for parametrized testing.
+- Use criterion for benchmarking.
 - Use strong typing with enums for domain concepts
-- Validate input values and return Result<T, Error> instead of panicking
+- Validate input values and return Result<T> instead of panicking.
+  Use error and result types from the umol crate.
 
 ## Project Architecture
 - Four-domain semantic model:
@@ -33,9 +32,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   2. Model Domain: Representation models with different capabilities
   3. Instance Domain: Structure-model pairs and operations on them
   4. Property Domain: Properties calculated from instances
-- GraphMolecule is the primary data structure for molecular representation
-- Builder pattern APIs for molecular construction
-- Strong type safety with validation of chemical rules (valence, etc.)
-- Favor composition over inheritance, using traits for shared behaviors
-- Use petgraph for the underlying graph data structure
-- Support for various molecular representations (2D graph, 3D coordinates)
+- Models are grouped in umol-models-* crates. Each of them represents a specific semantic model
+  of molecular structure, e.g., chemical graph, point cloud in 3D space, Born-Oppenheimer model
+  (classical point cloud for nuclei, quantum mechanical model for electrons).
+- I/O formats are represented by dedicated semantic models. All model conversions should be
+  explicit and parametrizable.

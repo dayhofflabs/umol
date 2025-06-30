@@ -1,3 +1,3 @@
-//! Input/output utilities for the molecular graph model.
+//! Input/output formats for molecular graph model.
 
 pub mod ctab;
