@@ -1,5 +1,5 @@
 use super::*;
-use crate::atom::{AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity};
+use crate::io::ctab::atom::{AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity};
 use float_cmp::approx_eq;
 use nom::{error::ErrorKind, Err};
 use rstest::rstest;

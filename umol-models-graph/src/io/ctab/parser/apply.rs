@@ -5,9 +5,9 @@ use super::properties::{
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry,
     SGroupBondListEntry, SGroupLabelEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
-use crate::atom::{AtomList, AtomSymbol, LinkAtomSpec};
-use crate::molecule::Molecule;
-use crate::sgroup::{SGroup, SGroupType};
+use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtomSpec};
+use crate::io::ctab::molecule::Molecule;
+use crate::io::ctab::sgroup::{SGroup, SGroupType};
 use umol::error::{DataError, ValidationError};
 use umol::Result;
 

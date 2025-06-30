@@ -1,7 +1,7 @@
 use super::*;
-use crate::atom::{Atom, AtomSymbol};
-use crate::bond::{Bond, BondType};
-use crate::sgroup::{SGroup, SGroupType};
+use crate::io::ctab::atom::{Atom, AtomSymbol};
+use crate::io::ctab::bond::{Bond, BondType};
+use crate::io::ctab::sgroup::{SGroup, SGroupType};
 use rstest::rstest;
 use umol::error::{DataError, Error, ValidationError};
 use umol_data::{e, Element};

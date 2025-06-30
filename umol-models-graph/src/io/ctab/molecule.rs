@@ -1,10 +1,10 @@
 //! Molecular graph model.
 
-use crate::atom::{Atom, AtomStandard, AtomSymbol};
-use crate::bond::{Bond, BondType};
-use crate::conformer::{Conformer, Point3D};
-use crate::io::ctab::mol::{mol_block, mol_block_standard};
-use crate::sgroup::SGroup;
+use crate::io::ctab::atom::{Atom, AtomStandard, AtomSymbol};
+use crate::io::ctab::bond::{Bond, BondType};
+use crate::io::ctab::conformer::{Conformer, Point3D};
+use crate::io::ctab::sgroup::SGroup;
+use crate::io::mol::parser::{mol_block, mol_block_standard};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::stable_graph::StableGraph;
 use petgraph::Undirected;

@@ -6,7 +6,7 @@ use nom::error;
 use nom::sequence::terminated;
 use nom::Parser;
 
-use crate::molecule::Header;
+use crate::io::ctab::molecule::Header;
 
 /// Parse a single line from the MOL header
 pub(crate) fn header_input<'a>(

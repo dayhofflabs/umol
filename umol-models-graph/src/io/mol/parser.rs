@@ -7,17 +7,17 @@ use nom::multi::{count, many0};
 use nom::sequence::terminated;
 use nom::{error, IResult, Parser};
 
-use crate::atom::{Atom, AtomStandard, AtomSymbol};
-use crate::bond::{Bond, BondStandard};
-use crate::conformer::{Conformer, Point3D};
-use crate::molecule::{AtomIndex, Header, Molecule, MoleculeStandard, ParsedMol};
+use super::super::ctab::atom::{Atom, AtomStandard, AtomSymbol};
+use super::super::ctab::bond::{Bond, BondStandard};
+use super::super::ctab::conformer::{Conformer, Point3D};
+use super::super::ctab::molecule::{AtomIndex, Header, Molecule, MoleculeStandard, ParsedMol};
 
-use super::apply::Apply;
-use super::atom::{atom_input, atom_input_standard};
-use super::bond::{bond_input, bond_input_standard};
-use super::counts::counts_input;
-use super::header::header;
-use super::properties::{property_input, property_input_standard, PropertyEntries};
+use super::super::ctab::parser::apply::Apply;
+use super::super::ctab::parser::atom::{atom_input, atom_input_standard};
+use super::super::ctab::parser::bond::{bond_input, bond_input_standard};
+use super::super::ctab::parser::counts::counts_input;
+use super::super::ctab::parser::header::header;
+use super::super::ctab::parser::properties::{property_input, property_input_standard, PropertyEntries};
 
 /// Parse MOL block (general parser, handles all features)
 pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Error<&'a [u8]>> {

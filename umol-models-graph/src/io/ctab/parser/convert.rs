@@ -1,9 +1,9 @@
 //! Convert numerical codes used in MOL files to enums
 
-use crate::atom::{
+use crate::io::ctab::atom::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity, AtomSymbol,
 };
-use crate::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
+use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use umol::error::{ParseError, Result};
 use umol_data::Element;
 

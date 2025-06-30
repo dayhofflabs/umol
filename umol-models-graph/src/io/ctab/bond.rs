@@ -1,186 +1,118 @@
-//! Bond block parser for CTab files.
+//! Bond type for the molecular graph model.
 
-use nom::bytes::complete::take;
-use nom::character::complete::space0;
-use nom::combinator::{cond, map, map_res};
-use nom::error;
-use nom::sequence::terminated;
-use nom::{IResult, Parser};
+use bitflags::bitflags;
+use std::collections::HashMap;
 
-use crate::bond::{Bond, BondStandard, BondType};
-
-use super::convert::{
-    convert_bond_reacting_center_code, convert_bond_stereo_dir_code, convert_bond_topology_code,
-    convert_bond_type_code, convert_bond_type_code_standard,
-};
-use super::utils::{fixed_width_int, fixed_width_int_minus1};
-
-
-
-fn bond_input_standard21(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStandard)> {
-    terminated(
-        map(
-            (
-                fixed_width_int_minus1::<usize>(3),
-                fixed_width_int_minus1::<usize>(3),
-                map_res(fixed_width_int::<u8>(3), |code| {
-                    convert_bond_type_code_standard(code)
-                }),
-                map_res(fixed_width_int::<u8>(3), |code| {
-                    convert_bond_stereo_dir_code(code)
-                }),
-            ),
-            |(first_atom, second_atom, bond_type, (stereo, dir))| {
-                let mut bond = BondStandard::new(bond_type);
-                match bond.bond_type {
-                    BondType::Single => bond.dir = dir,
-                    BondType::Double => bond.stereo = stereo,
-                    _ => (),
-                }
-                (first_atom, second_atom, bond)
-            },
-        ),
-        take(9usize), // ignore rrrccc fields
-    )
-    .parse(input)
+/// Bond order, mapping common MOL V2000 codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BondType {
+    Single,           // MOL code 1
+    Double,           // MOL code 2
+    Triple,           // MOL code 3
+    Aromatic,         // MOL code 4
+    Other,            // Placeholder for less common types
+    SingleOrDouble,   // MOL code 5
+    SingleOrAromatic, // MOL code 6
+    DoubleOrAromatic, // MOL code 7
+    Any,              // MOL code 8
 }
 
-/// Parse standard bond inputs with 12 characters (s. `bond_input` for more details).
-/// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input_standard12(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStandard)> {
-    map(
-        (
-            fixed_width_int_minus1::<usize>(3),
-            fixed_width_int_minus1::<usize>(3),
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_type_code_standard(code)
-            }),
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_stereo_dir_code(code)
-            }),
-        ),
-        |(first_atom, second_atom, bond_type, (stereo, dir))| {
-            let mut bond = BondStandard::new(bond_type);
-            match bond.bond_type {
-                BondType::Single => bond.dir = dir,
-                BondType::Double => bond.stereo = stereo,
-                _ => (),
-            }
-            (first_atom, second_atom, bond)
-        },
-    )
-    .parse(input)
+/// Double bond stereochemistry specified in MOL V2000 files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BondStereo {
+    Cis,    // MOL code 1
+    Trans,  // MOL code 6
+    Either, // MOL code 3
 }
 
-/// Parse standard bond inputs with 9 characters (s. `bond_input` for more details).
-/// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input_standard9(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStandard)> {
-    map(
-        (
-            fixed_width_int_minus1::<usize>(3),
-            fixed_width_int_minus1::<usize>(3),
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_type_code_standard(code)
-            }),
-        ),
-        |(first_atom, second_atom, bond_type)| {
-            (first_atom, second_atom, BondStandard::new(bond_type))
-        },
-    )
-    .parse(input)
+/// Single bond wedging specified in MOL V2000 files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BondDir {
+    Wedge, // MOL code 1 (Up / Begin Wedge)
+    Dash,  // MOL code 6 (Down / Begin Dash)
+    Either, // MOL code 4 (Either)
 }
 
-/// Parse bond input (optimized for performance)
-/// Fails immediately on non-standard bond properties. For parsing all bond types, see bond_like_input.
-///
-/// "111222tttsssxxxrrrccc" (21 characters wide)
-///
-/// *Values in the bond block*
-/// --------------------------------------------------------------
-/// | Field | Meaning              | Values     | Notes          |
-/// |-------|----------------------|------------|----------------|
-/// | 111   | first atom           | 1..=aaa    | Generic        |
-/// | 222   | second atom          | 1..=aaa    | Generic        |
-/// | ttt   | bond type            | 1..=8      | Generic,Query  |
-/// | sss   | bond stereo          | 0..=6      | Generic        |
-/// | rrr   | bond topology        | 0..=2      | Query          |
-/// | ccc   | bond reacting center | 0..=3      | Reaction,Query |
-/// --------------------------------------------------------------
-pub fn bond_input_standard<'a>(
-) -> impl Parser<&'a [u8], Output = (usize, usize, BondStandard), Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
-        let len = input.len();
-        let parser = match len {
-            21.. => bond_input_standard21,
-            10..=20 => bond_input_standard12,
-            9 => bond_input_standard9,
-            _ => {
-                return Err(nom::Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Eof,
-                )))
-            }
-        };
-        terminated(parser, space0).parse(input)
+/// Bond topology (chain, ring, either), if specified.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BondTopology {
+    Chain,  // MOL code 0
+    Ring,   // MOL code 1
+    Either, // MOL code 2
+}
+
+bitflags! {
+    /// Bond reacting center status
+    ///
+    /// - `0`: Unmarked
+    /// - `1`: A reacting center
+    /// - `-1`: Not a reacting center (exclusive, cannot be combined)
+    /// - `2`: No change in the bond (exclusive, cannot be combined)
+    /// - `4`: Bond is made or broken during the reaction
+    /// - `8`: Bond order changes during the reaction
+    ///
+    /// Some combinations are possible.
+    /// The `CENTER` flag can be combined with `MADE_BROKEN` and/or `ORDER_CHANGED`.
+    /// `NOT_CENTER` and `NO_CHANGE` are exclusive.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct BondReactingCenter: i16 {
+        const UNMARKED         = 0b00000000; // MOL code 0
+        const CENTER           = 0b00000001; // MOL code 1
+        const NOT_CENTER       = 0b00000010; // MOL code -1 (exclusive, cannot be combined)
+        const NO_CHANGE        = 0b00000100; // MOL code 2 (exclusive, cannot be combined)
+        const MADE_BROKEN      = 0b00001000; // MOL code 4
+        const ORDER_CHANGED    = 0b00010000; // MOL code 8
+
+        const MADE_BROKEN_AND_ORDER_CHANGED = Self::MADE_BROKEN.bits() | Self::ORDER_CHANGED.bits();
+        const CENTER_AND_MADE_BROKEN = Self::CENTER.bits() | Self::MADE_BROKEN.bits();
+        const CENTER_AND_ORDER_CHANGED = Self::CENTER.bits() | Self::ORDER_CHANGED.bits();
+        const CENTER_AND_MADE_BROKEN_AND_ORDER_CHANGED = Self::CENTER.bits() | Self::MADE_BROKEN.bits() | Self::ORDER_CHANGED.bits();
     }
 }
 
-fn bond_input_inner<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], (usize, usize, Bond), error::Error<&'a [u8]>> {
-    let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
-    let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
-    let (i, bond_type) =
-        map_res(fixed_width_int::<u8>(3), |code| convert_bond_type_code(code)).parse(i)?;
+/// Bond
+#[derive(Debug, Clone)]
+pub struct BondStandard {
+    pub bond_type: BondType,
+    pub stereo: Option<BondStereo>,
+    pub dir: Option<BondDir>,
+    pub properties: HashMap<String, String>,
+}
 
-    let (i, stereo_dir) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int::<u8>(3), |code| {
-            convert_bond_stereo_dir_code(code)
-        }),
-    )
-    .parse(i)?;
-
-    let (i, _) = cond(i.len() >= 3, take(3usize)).parse(i)?; // xxx field
-
-    let (i, topology) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int::<u8>(3), |code| {
-            convert_bond_topology_code(code)
-        }),
-    )
-    .parse(i)?;
-
-    let (i, reacting_center) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int::<i8>(3), |code| {
-            convert_bond_reacting_center_code(code)
-        }),
-    )
-    .parse(i)?;
-
-    let mut bond = Bond::new(bond_type);
-    if let Some((stereo_val, dir_val)) = stereo_dir {
-        match bond.bond_type {
-            BondType::Single => {
-                bond.dir = dir_val;
-            }
-            BondType::Double => {
-                bond.stereo = stereo_val;
-            }
-            _ => (),
+impl BondStandard {
+    /// Create new BondStandard with default properties for given BondType
+    pub fn new(bond_type: BondType) -> Self {
+        Self {
+            bond_type,
+            stereo: None,
+            dir: None,
+            properties: HashMap::new(),
         }
     }
-    bond.topology = topology.flatten();
-    bond.reacting_center = reacting_center.flatten();
-
-    Ok((i, (first_atom, second_atom, bond)))
 }
 
-pub fn bond_input<'a>(
-) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
-    terminated(bond_input_inner, space0)
+
+/// Bond
+#[derive(Debug, Clone)]
+pub struct Bond {
+    pub bond_type: BondType,
+    pub stereo: Option<BondStereo>,
+    pub dir: Option<BondDir>,
+    pub topology: Option<BondTopology>,
+    pub reacting_center: Option<BondReactingCenter>,
+    pub properties: HashMap<String, String>,
 }
 
-#[cfg(test)]
-mod tests;
+impl Bond {
+    /// Create new Bond with default properties for given BondType
+    pub fn new(bond_type: BondType) -> Self {
+        Self {
+            bond_type,
+            stereo: None,
+            dir: None,
+            topology: None,
+            reacting_center: None,
+            properties: HashMap::new(),
+        }
+    }
+}
