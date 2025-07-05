@@ -236,6 +236,9 @@ pub enum DataError {
     #[error("Invalid conformer definition: {0}")]
     InvalidConformer(String),
 
+    #[error("Invalid fragment: {0}")]
+    InvalidFragment(String),
+
     #[error("Invalid feature: {0}")]
     InvalidFeature(String),
 

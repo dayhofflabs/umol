@@ -170,23 +170,6 @@ where
     )
 }
 
-/// Parse a fixed-width field as an integer type with a range check, subtracting one.
-pub(crate) fn fixed_width_int_in_range_minus1<'a, T, R>(
-    width: usize,
-    range: R,
-) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
-where
-    T: IntParser,
-    R: Contains<T> + Clone + Debug,
-{
-    map(
-        verify(fixed_width_int_in_range(width, range), |val: &T| {
-            *val >= T::one()
-        }),
-        |x: T| x - T::one(),
-    )
-}
-
 /// Parse a fixed-width field as an optional integer type. If range check fails, return None.
 pub(crate) fn fixed_width_int_in_range_opt<'a, T, R>(
     width: usize,
@@ -249,6 +232,92 @@ pub(crate) fn is_blanks_or_zeros(input: &[u8]) -> bool {
     num_slice.iter().all(|&b| b == b'0')
 }
 
+/// Remove leading and trailing whitespace from a 2-character byte slice.
+pub(crate) fn trim_whitespace_2char(s: &[u8]) -> &[u8] {
+    debug_assert_eq!(s.len(), 2, "Input must be 2 characters");
+    if s[0] == b' ' {
+        if s[1] == b' ' {
+            &b""[..]
+        } else {
+            &s[1..2]
+        }
+    } else {
+        if s[1] == b' ' {
+            &s[0..1]
+        } else {
+            s
+        }
+    }
+}
+
+/// Remove leading and trailing whitespace from a 3-character byte slice.
+pub(crate) fn trim_whitespace_3char(s: &[u8]) -> &[u8] {
+    debug_assert_eq!(s.len(), 3, "Input must be 3 characters");
+
+    // Find start (skip leading whitespace)
+    let start = if s[0] == b' ' {
+        if s[1] == b' ' {
+            if s[2] == b' ' {
+                3 // All whitespace
+            } else {
+                2 // First two are whitespace
+            }
+        } else {
+            1 // Only first is whitespace
+        }
+    } else {
+        0 // No leading whitespace
+    };
+
+    if start == 3 {
+        return &s[3..3]; // Empty slice - all whitespace
+    }
+
+    // Find end (skip trailing whitespace)
+    let end = if s[2] == b' ' {
+        if s[1] == b' ' {
+            1 // Last two are whitespace
+        } else {
+            2 // Only last is whitespace
+        }
+    } else {
+        3 // No trailing whitespace
+    };
+
+    // Ensure end is never less than start
+    let end = end.max(start);
+
+    &s[start..end]
+}
+
+/// Remove leading and trailing whitespace
+#[allow(dead_code)]
+pub(crate) fn trim_whitespace(input: &[u8]) -> &[u8] {
+    match input.len() {
+        0 => input,
+        1 => {
+            if input[0] == b' ' {
+                &input[1..1]
+            } else {
+                input
+            }
+        }
+        2 => trim_whitespace_2char(input),
+        3 => trim_whitespace_3char(input),
+        _ => {
+            let mut start = 0;
+            while start < input.len() && input[start] == b' ' {
+                start += 1;
+            }
+            let mut end = input.len();
+            while end > start && input[end - 1] == b' ' {
+                end -= 1;
+            }
+            &input[start..end]
+        }
+    }
+}
+
 /// Apply the parser `p` exactly `n` times, discarding the results.
 pub(crate) fn repeat<I, O, P, E>(n: usize, p: P) -> impl Parser<I, Output = (), Error = E>
 where
@@ -293,6 +362,7 @@ mod tests {
     use nom::combinator::{all_consuming, map_parser};
     use nom::error::ErrorKind;
     use nom::Err;
+    use pretty_assertions::assert_eq;
     use rstest::rstest;
     use smallvec::smallvec;
 
@@ -461,42 +531,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"  2", 1usize)]
-    #[case(b"100", 99usize)]
-    fn test_fixed_width_int_in_range_minus1(#[case] input: &[u8], #[case] expected: usize) {
-        let mut parser = all_consuming(fixed_width_int_in_range_minus1::<usize, _>(3, 1..=100));
-        let result = parser.parse(input);
-        assert!(
-            result.is_ok(),
-            "Test for '{}' should have succeeded",
-            String::from_utf8_lossy(input)
-        );
-        let (remaining, result) = result.unwrap();
-        assert!(remaining.is_empty(), "remaining should be empty");
-        assert_eq!(result, expected);
-    }
-
-    #[rstest]
-    #[case(b"101", "out of range", ErrorKind::Verify)]
-    #[case(b"  0", "out of range", ErrorKind::Verify)]
-    fn test_fixed_width_int_in_range_minus1_invalid(
-        #[case] input: &[u8],
-        #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
-    ) {
-        let mut parser = all_consuming(fixed_width_int_in_range_minus1::<usize, _>(3, 1..=100));
-        let result = parser.parse(input);
-        assert!(result.is_err(), "{} should have failed", desc);
-        assert!(
-            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-            "Mismatched error kind for {}, expected {:?}, got {}",
-            desc,
-            expected_kind,
-            result.clone().unwrap_err().map(|e| e.code),
-        );
-    }
-
-    #[rstest]
     #[case(b"  5", Some(5i32))]
     #[case(b" 10", Some(10i32))]
     #[case(b"  0", Some(0i32))]
@@ -611,6 +645,41 @@ mod tests {
     #[case(b"  1", false)]
     fn test_is_blanks_or_zeros(#[case] input: &[u8], #[case] expected: bool) {
         assert_eq!(is_blanks_or_zeros(input), expected);
+    }
+
+    #[rstest]
+    #[case(b"  ", &b""[..])]
+    #[case(b" 0", &b"0"[..])]
+    #[case(b"0 ", &b"0"[..])]
+    #[case(b"00", &b"00"[..])]
+    fn test_trim_whitespace_2char(#[case] input: &[u8], #[case] expected: &[u8]) {
+        assert_eq!(trim_whitespace_2char(input), expected);
+    }
+
+    #[rstest]
+    #[case(b"   ", &b""[..])]
+    #[case(b"  0", &b"0"[..])]
+    #[case(b" 0 ", &b"0"[..])]
+    #[case(b"0  ", &b"0"[..])]
+    #[case(b" 00", &b"00"[..])]
+    #[case(b"00 ", &b"00"[..])]
+    #[case(b"000", &b"000"[..])]
+    fn test_trim_whitespace_3char(#[case] input: &[u8], #[case] expected: &[u8]) {
+        assert_eq!(trim_whitespace_3char(input), expected);
+    }
+
+    #[rstest]
+    #[case(b"", &b""[..])]
+    #[case(b" ", &b""[..])]
+    #[case(b"0", &b"0"[..])]
+    #[case(b"  ", &b""[..])]
+    #[case(b" 0", &b"0"[..])]
+    #[case(b"   ", &b""[..])]
+    #[case(b"  0", &b"0"[..])]
+    #[case(b"  00", &b"00"[..])]
+    #[case(b"  000", &b"000"[..])]
+    fn test_trim_whitespace(#[case] input: &[u8], #[case] expected: &[u8]) {
+        assert_eq!(trim_whitespace(input), expected);
     }
 
     #[rstest]

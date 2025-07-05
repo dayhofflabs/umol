@@ -153,7 +153,7 @@ fn detect_query_features(
                 // Standard atoms
             }
             AtomSymbol::AtomList(_)
-            | AtomSymbol::Unspecified(_)
+            | AtomSymbol::Query(_)
             | AtomSymbol::LonePair
             | AtomSymbol::RGroup(_) => {
                 return true; // Query atom found

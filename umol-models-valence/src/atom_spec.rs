@@ -75,13 +75,34 @@ impl AtomSpec {
         implicit_hydrogens: u8,
         valence: u8,
     ) -> Self {
-        debug_assert!(multiplicity >= 1 && multiplicity <= unpaired_electrons + 1);
-        debug_assert!((unpaired_electrons + 1 - multiplicity) % 2 == 0);
-        debug_assert!(donated_pairs <= lone_pairs);
-        debug_assert!((element.valence_electrons() as i8 - charge) >= 0);
-        debug_assert!(implicit_hydrogens <= element.max_implicit_hydrogens());
-        debug_assert!(implicit_hydrogens <= valence);
-        debug_assert!(valence <= element.max_valence());
+        debug_assert!(
+            multiplicity >= 1 && multiplicity <= unpaired_electrons + 1,
+            "Multiplicity must be between 1 and unpaired electrons + 1"
+        );
+        debug_assert!(
+            (unpaired_electrons + 1 - multiplicity) % 2 == 0,
+            "Multiplicity must be even"
+        );
+        debug_assert!(
+            donated_pairs <= lone_pairs,
+            "Donated pairs must be less than or equal to lone pairs"
+        );
+        debug_assert!(
+            (element.valence_electrons() as i8 - charge) >= 0,
+            "Charge must be less than or equal to valence electrons"
+        );
+        debug_assert!(
+            implicit_hydrogens <= element.max_implicit_hydrogens(),
+            "Implicit hydrogens must be less than or equal to max implicit hydrogens"
+        );
+        debug_assert!(
+            implicit_hydrogens <= valence,
+            "Implicit hydrogens must be less than or equal to valence"
+        );
+        debug_assert!(
+            valence <= element.max_valence(),
+            "Valence must be less than or equal to max valence"
+        );
         Self {
             element,
             charge,

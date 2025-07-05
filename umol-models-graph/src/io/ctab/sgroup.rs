@@ -1,20 +1,30 @@
-//! SGroup (Superatom group)
+//! SGroup types for CTab format.
 
 use umol::error::Result;
+use umol::error::DataError;
 
 /// SGroup type
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupType {
-    Generic,         // GEN
-    MultipleGroup,   // MUL
-    RepeatingUnit,   // SRU
-    Superatom,       // SUP (Superatom/Abbreviation)
-    Data,            // DAT
-    Unknown(String), // Placeholder for unhandled types
+    Superatom, // SUP
+    MultipleGroup, // MUL
+    RepeatingUnit, // SRU
+    Monomer, // MON
+    Mer, // MER
+    Copolymer, // COP
+    Crosslink, // CRO
+    Modification, // MOD
+    Graft, // GRA
+    Component, // COM
+    Mixture, // MIX
+    Formulation, // FOR
+    Data, // DAT
+    AnyPolymer, // ANY
+    Generic, // GEN
 }
 
 /// SGroup connectivity types
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupConnectivity {
     HeadToHead,      // HH
     HeadToTail,      // HT
@@ -22,7 +32,7 @@ pub enum SGroupConnectivity {
 }
 
 /// SGroup subtype for polymers
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupSubtype {
     Alternating,     // ALT
     Random,          // RAN
@@ -30,7 +40,7 @@ pub enum SGroupSubtype {
 }
 
 /// SGroup bracket style
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupBracketStyle {
     Default,         // 0 = default brackets
     Curved,          // 1 = curved (parenthetic) brackets
@@ -39,8 +49,7 @@ pub enum SGroupBracketStyle {
 /// SGroup (Superatom group)
 #[derive(Debug, Clone)]
 pub struct SGroup {
-    pub id: usize,
-    pub label: Option<String>,                           // Label for SUP, SRU, etc. (SMT)
+    pub label: Option<u32>,                              // Label for SUP, SRU, etc. (SLB)
     pub subscript: Option<String>,                       // Subscript text (e.g., "n", "2") (SMT)
     pub group_type: SGroupType,                          // STY: SGroup type
     pub subtype: Option<SGroupSubtype>,                  // SST: polymer subtype (ALT, RAN, BLO)
@@ -59,9 +68,8 @@ pub struct SGroup {
 
 impl SGroup {
     /// Create new SGroup
-    pub fn new(id: usize, group_type: SGroupType) -> Self {
+    pub fn new(group_type: SGroupType) -> Self {
         Self {
-            id,
             group_type,
             label: None,
             subscript: None,
@@ -86,9 +94,22 @@ impl SGroup {
             "SUP" => Ok(SGroupType::Superatom),
             "MUL" => Ok(SGroupType::MultipleGroup),
             "SRU" => Ok(SGroupType::RepeatingUnit),
+            "MON" => Ok(SGroupType::Monomer),
+            "MER" => Ok(SGroupType::Mer),
+            "COP" => Ok(SGroupType::Copolymer),
+            "CRO" => Ok(SGroupType::Crosslink),
+            "MOD" => Ok(SGroupType::Modification),
+            "GRA" => Ok(SGroupType::Graft),
+            "COM" => Ok(SGroupType::Component),
+            "MIX" => Ok(SGroupType::Mixture),
+            "FOR" => Ok(SGroupType::Formulation),
             "DAT" => Ok(SGroupType::Data),
+            "ANY" => Ok(SGroupType::AnyPolymer),
             "GEN" => Ok(SGroupType::Generic),
-            _ => Ok(SGroupType::Unknown(input.to_string())),
+            _ => Err(DataError::InvalidFragment(format!(
+                "Unknown SGroup type: {}",
+                input
+            )).into()),
         }
     }
 }

@@ -1,4 +1,4 @@
-//! Molecular graph model.
+//! Molecule type for CTab format.
 
 use crate::io::ctab::atom::{Atom, AtomStandard, AtomSymbol};
 use crate::io::ctab::bond::{Bond, BondType};
@@ -8,7 +8,7 @@ use crate::io::mol::parser::{mol_block, mol_block_standard};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::stable_graph::StableGraph;
 use petgraph::Undirected;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use umol::error::DataError;
 use umol::Result;
 
@@ -58,7 +58,7 @@ impl Default for Header {
 pub struct Molecule {
     pub graph: StableGraph<Atom, Bond, Undirected, usize>,
     pub conformers: Vec<Conformer>,
-    pub sgroups: Vec<SGroup>,
+    pub sgroups: BTreeMap<usize, SGroup>,
     pub properties: HashMap<String, String>,
     pub header: Header,
 }
@@ -68,7 +68,7 @@ pub struct Molecule {
 pub struct MoleculeStandard {
     pub graph: StableGraph<AtomStandard, Bond, Undirected, usize>,
     pub conformers: Vec<Conformer>,
-    pub sgroups: Vec<SGroup>,
+    pub sgroups: BTreeMap<usize, SGroup>,
     pub properties: HashMap<String, String>,
     pub header: Header,
 }
@@ -210,7 +210,7 @@ impl Molecule {
         Self {
             graph: StableGraph::<Atom, Bond, Undirected, usize>::default(),
             conformers: Vec::new(),
-            sgroups: Vec::new(),
+            sgroups: BTreeMap::new(),
             properties: HashMap::new(),
             header: Header::empty(),
         }
@@ -347,7 +347,7 @@ impl MoleculeStandard {
         Self {
             graph: StableGraph::<AtomStandard, Bond, Undirected, usize>::default(),
             conformers: Vec::new(),
-            sgroups: Vec::new(),
+            sgroups: BTreeMap::new(),
             properties: HashMap::new(),
             header: Header::empty(),
         }
@@ -438,14 +438,15 @@ impl Molecule {
 
                 // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
                 let symbol_str = match &atom.symbol {
-                    AtomSymbol::Element(element) => element.symbol().to_string(),
-                    AtomSymbol::NamedIsotope(isotope) => isotope.element().symbol().to_string(),
+                    AtomSymbol::Element(element) => element.to_string(),
+                    AtomSymbol::NamedIsotope(isotope) => isotope.element().to_string(),
+                    // TODO: Implement atom list serialization
                     AtomSymbol::AtomList(atom_list) => {
-                        atom_list.elements.first().unwrap_or(&umol_data::Element::C).symbol().to_string()
+                        atom_list.elements.first().unwrap_or(&umol_data::Element::C).to_string()
                     },
-                    AtomSymbol::Unspecified(c) => c.to_string(),
+                    AtomSymbol::Query(query_atom) => query_atom.to_string(),
                     AtomSymbol::LonePair => "LP".to_string(),
-                    AtomSymbol::RGroup(n) => format!("R{}", n),
+                    AtomSymbol::RGroup(rgroup) => format!("R{}", rgroup.to_string()),
                 };
 
                 // Use precise F10.4 format: 10 characters wide, 4 decimal places, right-aligned

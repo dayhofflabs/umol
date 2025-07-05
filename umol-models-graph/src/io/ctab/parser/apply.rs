@@ -1,12 +1,15 @@
 //! Apply property entries to molecule
 
+use super::convert::convert_radical_type_code;
 use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
-    ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry,
-    SGroupBondListEntry, SGroupLabelEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+    ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RadicalEntry, RingBondCountEntry,
+    SGroupAtomListEntry, SGroupBondListEntry, SGroupLabelEntry, SGroupTypeEntry,
+    SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
-use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtomSpec};
+use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
+use crate::io::ctab::parser::convert::convert_attachment_point_code;
 use crate::io::ctab::sgroup::{SGroup, SGroupType};
 use umol::error::{DataError, ValidationError};
 use umol::Result;
@@ -48,15 +51,9 @@ impl Apply for Vec<ChargeEntry> {
             }
 
             if let Some(atom) = molecule.atom_mut(entry.atom_index) {
-                // Check for conflicts - if atom already has a charge set
-                if atom.charge != 0 && atom.charge != entry.charge {
-                    return Err(ValidationError::InvalidComponent(format!(
-                        "Charge conflict for atom {}: existing {} vs new {}",
-                        entry.atom_index, atom.charge, entry.charge
-                    ))
-                    .into());
-                }
+                // Overwrite existing charge and radical values
                 atom.charge = entry.charge;
+                atom.radical = None;
             }
         }
         Ok(())
@@ -72,31 +69,10 @@ impl Apply for Vec<RadicalEntry> {
 
             if let Some(atom) = molecule.atom_mut(entry.atom_index) {
                 // Validate radical type
-                let radical_value = match entry.radical_type {
-                    0 => None,    // No radical
-                    1 => Some(1), // Singlet (:)
-                    2 => Some(2), // Doublet (. or ^)
-                    3 => Some(3), // Triplet (^^)
-                    _ => {
-                        return Err(ValidationError::InvalidComponent(format!(
-                            "Invalid radical type for atom {}: {}",
-                            entry.atom_index, entry.radical_type
-                        ))
-                        .into())
-                    }
-                };
-
-                // Check for conflicts - only conflict if both are Some and different
-                if let (Some(existing), Some(new)) = (atom.radical, radical_value) {
-                    if existing != new {
-                        return Err(ValidationError::InvalidComponent(format!(
-                            "Radical conflict for atom {}: existing Some({}) vs new Some({})",
-                            entry.atom_index, existing, new
-                        ))
-                        .into());
-                    }
-                }
+                let radical_value = convert_radical_type_code(entry.radical_type)?;
+                // Overwrite existing radical and charge values
                 atom.radical = radical_value;
+                atom.charge = 0;
             }
         }
         Ok(())
@@ -131,24 +107,9 @@ impl Apply for Vec<IsotopeEntry> {
 impl Apply for Vec<SGroupTypeEntry> {
     fn apply(self, molecule: &mut Molecule) -> Result<()> {
         for entry in self {
-            // Parse SGroup type
-            let sgroup_type = SGroup::get_type(&entry.sgroup_type)?;
-
-            // Ensure SGroup exists
-            ensure_sgroup(molecule, entry.sgroup_index)?;
-
-            // Apply the type
-            if let Some(sgroup) = molecule.sgroups.get_mut(entry.sgroup_index) {
-                // Check for conflicts
-                if sgroup.group_type != SGroupType::Generic && sgroup.group_type != sgroup_type {
-                    return Err(ValidationError::InvalidComponent(format!(
-                        "SGroup type conflict for SGroup {}: existing {:?} vs new {:?}",
-                        entry.sgroup_index, sgroup.group_type, sgroup_type
-                    ))
-                    .into());
-                }
-                sgroup.group_type = sgroup_type;
-            }
+            let sgroup_index = entry.sgroup_index;
+            make_sgroup(molecule, entry.sgroup_index)?;
+            molecule.sgroups.get_mut(&sgroup_index).unwrap().group_type = entry.sgroup_type;
         }
         Ok(())
     }
@@ -160,17 +121,30 @@ impl Apply for Vec<SGroupLabelEntry> {
             // Ensure SGroup exists
             ensure_sgroup(molecule, entry.sgroup_index)?;
 
+            // Check if label is unique
+            if molecule
+                .sgroups
+                .values()
+                .any(|s| s.label == Some(entry.label))
+            {
+                return Err(ValidationError::InvalidComponent(format!(
+                    "SGroup label conflict: label '{}' is not unique",
+                    entry.label
+                ))
+                .into());
+            }
+
             // Apply the label
-            if let Some(sgroup) = molecule.sgroups.get_mut(entry.sgroup_index) {
-                // Check for conflicts
-                if let Some(ref existing_label) = sgroup.label {
-                    if existing_label != &entry.label {
-                        return Err(ValidationError::InvalidComponent(format!(
-                            "SGroup label conflict for SGroup {}: existing '{}' vs new '{}'",
-                            entry.sgroup_index, existing_label, entry.label
-                        ))
-                        .into());
-                    }
+            if let Some(sgroup) = molecule.sgroups.get_mut(&entry.sgroup_index) {
+                // Having multiple SLB conflicting entries for the same SGroup is invalid
+                if sgroup.label.is_some() && sgroup.label != Some(entry.label) {
+                    return Err(ValidationError::InvalidComponent(format!(
+                        "Label conflict for SGroup {}: existing '{}' vs new '{}'",
+                        entry.sgroup_index,
+                        sgroup.label.unwrap(),
+                        entry.label
+                    ))
+                    .into());
                 }
                 sgroup.label = Some(entry.label);
             }
@@ -181,6 +155,9 @@ impl Apply for Vec<SGroupLabelEntry> {
 
 impl Apply for SGroupAtomListEntry {
     fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        // Ensure SGroup exists
+        ensure_sgroup(molecule, self.sgroup_index)?;
+
         // Validate all atom indices exist
         for &atom_index in &self.atom_indices {
             if atom_index >= molecule.atom_count() {
@@ -188,11 +165,8 @@ impl Apply for SGroupAtomListEntry {
             }
         }
 
-        // Ensure SGroup exists
-        ensure_sgroup(molecule, self.sgroup_index)?;
-
         // Apply the atom list
-        if let Some(sgroup) = molecule.sgroups.get_mut(self.sgroup_index) {
+        if let Some(sgroup) = molecule.sgroups.get_mut(&self.sgroup_index) {
             // Check if atoms are already assigned
             if !sgroup.atom_indices.is_empty() && sgroup.atom_indices != self.atom_indices {
                 return Err(ValidationError::InvalidComponent(format!(
@@ -209,6 +183,9 @@ impl Apply for SGroupAtomListEntry {
 
 impl Apply for SGroupBondListEntry {
     fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        // Ensure SGroup exists
+        ensure_sgroup(molecule, self.sgroup_index)?;
+
         // Validate all bond indices exist
         for &bond_index in &self.bond_indices {
             if bond_index >= molecule.bond_count() {
@@ -216,11 +193,8 @@ impl Apply for SGroupBondListEntry {
             }
         }
 
-        // Ensure SGroup exists
-        ensure_sgroup(molecule, self.sgroup_index)?;
-
         // Apply the bond list
-        if let Some(sgroup) = molecule.sgroups.get_mut(self.sgroup_index) {
+        if let Some(sgroup) = molecule.sgroups.get_mut(&self.sgroup_index) {
             // Check for conflicts
             if !sgroup.bond_indices.is_empty() && sgroup.bond_indices != self.bond_indices {
                 return Err(ValidationError::InvalidComponent(format!(
@@ -328,18 +302,20 @@ impl Apply for Vec<AttachmentPointEntry> {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
             }
 
-            if let Some(atom) = molecule.atom_mut(entry.atom_index) {
-                // Check for conflicts
-                if let Some(existing) = atom.attachment_point {
-                    if existing != entry.attachment_type {
-                        return Err(ValidationError::InvalidComponent(format!(
-                            "Attachment point conflict for atom {}: existing {} vs new {}",
-                            entry.atom_index, existing, entry.attachment_type
-                        ))
-                        .into());
+            if let Some(attachment_type) = convert_attachment_point_code(entry.attachment_type)? {
+                if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                    // Check for conflicts
+                    if let Some(existing) = atom.attachment_point {
+                        if existing != attachment_type {
+                            return Err(ValidationError::InvalidComponent(format!(
+                                "Attachment point conflict for atom {}: existing {:?} vs new {:?}",
+                                entry.atom_index, existing, attachment_type
+                            ))
+                            .into());
+                        }
                     }
+                    atom.attachment_point = Some(attachment_type);
                 }
-                atom.attachment_point = Some(entry.attachment_type);
             }
         }
         Ok(())
@@ -429,7 +405,7 @@ impl Apply for Vec<UnsaturatedAtomEntry> {
             if let Some(atom) = molecule.atom_mut(entry.atom_index) {
                 // Convert integer to boolean
                 let unsaturated_value = match entry.unsaturated {
-                    0 => None,    // Off
+                    0 => None,       // Off
                     1 => Some(true), // On
                     _ => {
                         return Err(ValidationError::InvalidComponent(format!(
@@ -467,7 +443,7 @@ impl Apply for Vec<LinkAtomEntry> {
             }
 
             if let Some(atom) = molecule.atom_mut(entry.atom_index) {
-                let link_spec = LinkAtomSpec {
+                let link_spec = LinkAtom {
                     repeat_count: entry.repeat_count,
                     bond1: entry.bond1,
                     bond2: entry.bond2,
@@ -490,14 +466,29 @@ impl Apply for Vec<LinkAtomEntry> {
     }
 }
 
-/// Ensure an SGroup with given index exists
+/// Create a new SGroup with the given index if it doesn't exist
+fn make_sgroup(molecule: &mut Molecule, sgroup_index: usize) -> Result<()> {
+    if molecule.sgroups.contains_key(&sgroup_index) {
+        return Err(ValidationError::InvalidComponent(format!(
+            "SGroup index conflict: {} already exists",
+            sgroup_index
+        ))
+        .into());
+    }
+    molecule
+        .sgroups
+        .insert(sgroup_index, SGroup::new(SGroupType::Generic));
+    Ok(())
+}
+
+/// Ensure SGroup with given index exists
 fn ensure_sgroup(molecule: &mut Molecule, sgroup_index: usize) -> Result<()> {
-    // Extend the vector to include the required index
-    while molecule.sgroups.len() <= sgroup_index {
-        let new_id = molecule.sgroups.len();
-        molecule
-            .sgroups
-            .push(SGroup::new(new_id, SGroupType::Generic));
+    if !molecule.sgroups.contains_key(&sgroup_index) {
+        return Err(ValidationError::InvalidComponent(format!(
+            "Invalid SGroup index: {}",
+            sgroup_index
+        ))
+        .into());
     }
     Ok(())
 }

@@ -1,7 +1,12 @@
 use super::*;
-use crate::io::ctab::atom::{AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity};
+use crate::io::ctab::atom::{
+    AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity,
+};
+use crate::io::ctab::query::QueryAtom;
 use float_cmp::approx_eq;
+use nom::combinator::all_consuming;
 use nom::{error::ErrorKind, Err};
+use pretty_assertions::assert_eq;
 use rstest::rstest;
 
 #[rstest]
@@ -22,7 +27,7 @@ fn test_atom_symbol_standard(
 }
 
 #[rstest]
-#[case(b"A  ", "unspecified atom", ErrorKind::MapRes)]
+#[case(b"A  ", "query atom", ErrorKind::MapRes)]
 #[case(b"L  ", "atom list", ErrorKind::MapRes)]
 #[case(b"LP ", "lone pair", ErrorKind::MapRes)]
 #[case(b"R1 ", "R group", ErrorKind::MapRes)]
@@ -43,13 +48,15 @@ fn test_atom_symbol_standard_invalid(
 }
 
 #[rstest]
-#[case(b"A  ", "A", AtomSymbol::Unspecified('A'))]
-#[case(b"Q  ", "Q", AtomSymbol::Unspecified('Q'))]
-#[case(b"*  ", "*", AtomSymbol::Unspecified('*'))]
+#[case(b"A  ", "A", AtomSymbol::Query(QueryAtom::Heavy))]
+#[case(b"Q  ", "Q", AtomSymbol::Query(QueryAtom::Heteroatom))]
+#[case(b"QH ", "QH", AtomSymbol::Query(QueryAtom::HeteroatomOrH))]
+#[case(b"*  ", "*", AtomSymbol::Query(QueryAtom::Any))]
 #[case(b"L  ", "L", AtomSymbol::AtomList(AtomList { elements: vec![] }))]
 #[case(b"LP ", "LP", AtomSymbol::LonePair)]
-#[case(b"R1 ", "R1", AtomSymbol::RGroup(0))]
-#[case(b"R3 ", "R3", AtomSymbol::RGroup(2))]
+#[case(b"R# ", "R#", AtomSymbol::RGroup(RGroup::new(None)))]
+#[case(b"R1 ", "R1", AtomSymbol::RGroup(RGroup::new(Some(0))))]
+#[case(b"R3 ", "R3", AtomSymbol::RGroup(RGroup::new(Some(2))))]
 #[case(b"H  ", "H", AtomSymbol::Element(Element::H))]
 #[case(b"C  ", "C", AtomSymbol::Element(Element::C))]
 #[case(b" C ", "C", AtomSymbol::Element(Element::C))]
@@ -73,13 +80,10 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: 
 }
 
 #[rstest]
-#[case(b"   ", "empty field", ErrorKind::Alpha)]
+#[case(b"   ", "empty field", ErrorKind::MapRes)]
 #[case(b"H", "too short", ErrorKind::Eof)]
-#[case(b"R  ", "R group index missing", ErrorKind::MapRes)]
-#[case(b"R0 ", "R group index must be between 1 and 31", ErrorKind::MapRes)]
-#[case(b"R32", "R group index must be between 1 and 31", ErrorKind::MapRes)]
 #[case(b"Xx ", "Unknown atom symbol", ErrorKind::MapRes)]
-#[case(b"LQ ", "Unknown atom symbol", ErrorKind::Eof)]
+#[case(b"LQ ", "Unknown atom symbol", ErrorKind::MapRes)]
 fn test_atom_symbol_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,

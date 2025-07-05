@@ -1,4 +1,5 @@
 use super::*;
+use pretty_assertions::assert_eq;
 use nom::{error::ErrorKind, Err};
 use rstest::rstest;
 use umol_data::Element;
@@ -109,10 +110,10 @@ fn test_isotope_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1 SUP", vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: "SUP".to_string() }])]
+#[case(b"  1   1 SUP", vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }])]
 #[case(b"  2   1 SUP   2 DAT", vec![
-    SGroupTypeEntry { sgroup_index: 0, sgroup_type: "SUP".to_string() }, 
-    SGroupTypeEntry { sgroup_index: 1, sgroup_type: "DAT".to_string() }
+    SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }, 
+    SGroupTypeEntry { sgroup_index: 1, sgroup_type: SGroupType::Data }
 ])]
 fn test_sgroup_type_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupTypeEntry>) {
     let (remaining, result) = sgroup_type_entries().parse(input).unwrap();
@@ -121,10 +122,10 @@ fn test_sgroup_type_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupTy
 }
 
 #[rstest]
-#[case(b"  1   1 Et ", vec![SGroupLabelEntry { sgroup_index: 0, label: "Et".to_string() }])]
-#[case(b"  2   1 Ph    2 Me ", vec![
-    SGroupLabelEntry { sgroup_index: 0, label: "Ph".to_string() }, 
-    SGroupLabelEntry { sgroup_index: 1, label: "Me".to_string() }
+#[case(b"  1   1   1", vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
+#[case(b"  2   1  14   2  15", vec![
+    SGroupLabelEntry { sgroup_index: 0, label: 14 }, 
+    SGroupLabelEntry { sgroup_index: 1, label: 15 }
 ])]
 fn test_sgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupLabelEntry>) {
     let (remaining, result) = sgroup_label_entries().parse(input).unwrap();
@@ -172,8 +173,8 @@ fn test_atom_value_entry(#[case] input: &[u8], #[case] expected: AtomValueEntry)
 #[case(b"M  CHG  1   1  -1", "CHG standard property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  RAD  1   1   2", "RAD standard property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
 #[case(b"M  ISO  1   1  13", "ISO standard property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
-#[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: "SUP".to_string() }]))]
-#[case(b"M  SLB  1   1 Et ", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: "Et".to_string() }]))]
+#[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
+#[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"A    1 CF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
@@ -195,8 +196,8 @@ fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expecte
 #[case(b"M  CHG  1   1  -1", "CHG standard property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  RAD  1   1   2", "RAD standard property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
 #[case(b"M  ISO  1   1  13", "ISO standard property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
-#[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: "SUP".to_string() }]))]
-#[case(b"M  SLB  1   1 Et ", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: "Et".to_string() }]))]
+#[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
+#[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"A    1 CF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]

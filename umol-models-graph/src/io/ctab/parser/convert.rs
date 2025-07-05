@@ -1,10 +1,11 @@
 //! Convert numerical codes used in MOL files to enums
 
 use crate::io::ctab::atom::{
-    AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity, AtomSymbol,
+    AtomExactChange, AtomInversionRetention, AtomRadical, AtomStereoCare, AtomStereoParity,
+    AtomSymbol, AttachmentPointType,
 };
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
-use umol::error::{ParseError, Result};
+use umol::error::{ParseError, Result, ValidationError};
 use umol_data::Element;
 
 /// Convert atom mass difference code (atom block)
@@ -41,10 +42,10 @@ pub(crate) fn convert_atom_symbol_mass_diff(
 /// Convert atom charge code (includes doublet radical).
 /// 'ccc' field: 0 = uncharged, 1 = +3, 2 = +2, 3 = +1, 4 = doublet radical, 5 = -1, 6 = -2, 7 = -3
 /// 0 if outside of range.
-pub(crate) fn convert_atom_charge_code(code: u8) -> (i8, Option<u8>) {
+pub(crate) fn convert_atom_charge_code(code: u8) -> (i8, Option<AtomRadical>) {
     match code {
         1..=3 | 5..=7 => (4 - code as i8, None),
-        4 => (0, Some(2)),
+        4 => (0, Some(AtomRadical::Doublet)),
         _ => (0, None),
     }
 }
@@ -229,6 +230,38 @@ pub(crate) fn convert_bond_reacting_center_code(code: i8) -> Result<Option<BondR
     Ok(Some(flags))
 }
 
+/// Convert radical type code (property block)
+/// radical type (0=no radical, 1=singlet (:), 2=doublet (. or ^), 3=triplet (^^))
+pub(crate) fn convert_radical_type_code(code: u8) -> Result<Option<AtomRadical>> {
+    match code {
+        0 => Ok(None),
+        1 => Ok(Some(AtomRadical::Singlet)),
+        2 => Ok(Some(AtomRadical::Doublet)),
+        3 => Ok(Some(AtomRadical::Triplet)),
+        _ => Err(ValidationError::InvalidComponent(format!(
+            "Invalid radical type code '{}'",
+            code
+        ))
+        .into()),
+    }
+}
+
+/// Convert attachment point code (property block)
+/// 'vvv' field - attachment point (0=none, 1=first, 2=second, 3=both)
+pub(crate) fn convert_attachment_point_code(code: u8) -> Result<Option<AttachmentPointType>> {
+    match code {
+        0 => Ok(None),
+        1 => Ok(Some(AttachmentPointType::First)),
+        2 => Ok(Some(AttachmentPointType::Second)),
+        3 => Ok(Some(AttachmentPointType::Both)),
+        _ => Err(ValidationError::InvalidComponent(format!(
+            "Invalid attachment point code '{}'",
+            code
+        ))
+        .into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,13 +293,13 @@ mod tests {
     #[rstest]
     #[case(0, 0, None)]
     #[case(1, 3, None)]
-    #[case(4, 0, Some(2))]
+    #[case(4, 0, Some(AtomRadical::Doublet))]
     #[case(5, -1, None)]
     #[case(8, 0, None)]
     fn test_convert_atom_charge_code(
         #[case] code: u8,
         #[case] expected_charge: i8,
-        #[case] expected_radical: Option<u8>,
+        #[case] expected_radical: Option<AtomRadical>,
     ) {
         assert_eq!(
             convert_atom_charge_code(code),
@@ -497,4 +530,21 @@ mod tests {
     fn test_convert_bond_reacting_center_code_invalid(#[case] code: i8) {
         assert!(convert_bond_reacting_center_code(code).is_err());
     }
+
+    #[rstest]
+    #[case(0, None)]
+    #[case(1, Some(AtomRadical::Singlet))]
+    #[case(2, Some(AtomRadical::Doublet))]
+    #[case(3, Some(AtomRadical::Triplet))]
+    fn test_convert_radical_type_code(#[case] code: u8, #[case] expected: Option<AtomRadical>) {
+        assert_eq!(convert_radical_type_code(code).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(4)]
+    #[case(16)]
+    fn test_convert_radical_type_code_invalid(#[case] code: u8) {
+        assert!(convert_radical_type_code(code).is_err());
+    }
+
 }

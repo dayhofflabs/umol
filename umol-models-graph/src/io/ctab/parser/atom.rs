@@ -1,16 +1,18 @@
 //! Atom block parser for CTab files.
 
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take};
-use nom::character::complete::{alpha1, space0};
-use nom::combinator::{all_consuming, complete, cond, map, map_parser, map_res, value, verify};
+use nom::bytes::complete::take;
+use nom::character::complete::space0;
+use nom::combinator::{complete, cond, map, map_res, verify};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, IResult, Parser};
 use umol_data::{Element, NamedIsotope};
 
+use super::utils::is_blanks_or_zeros;
 use crate::io::ctab::atom::{Atom, AtomList, AtomStandard, AtomSymbol};
 use crate::io::ctab::conformer::Point3D;
-use super::utils::is_blanks_or_zeros;
+use crate::io::ctab::parser::utils::trim_whitespace_3char;
+use crate::io::ctab::query::QueryAtom;
+use crate::io::ctab::rgroup::RGroup;
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,
@@ -19,8 +21,8 @@ use super::convert::{
     convert_atom_symbol_mass_diff, convert_atom_valence_code,
 };
 use super::utils::{
-    fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_minus1,
-    fixed_width_int_in_range_opt, repeat,
+    fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt,
+    repeat,
 };
 
 /// Parse atom symbol (standard atoms, Element and NamedIsotope only)
@@ -28,95 +30,52 @@ use super::utils::{
 /// See `atom_symbol` for more details.
 fn atom_symbol_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    |input| {
-        map_parser(
-            take(3usize),
-            all_consuming(alt((
-                map(
-                    map_res(delimited(space0, alpha1, space0), |s| {
-                        Element::from_symbol_bytes(s)
-                            .ok_or_else(|| error::Error::new(s, error::ErrorKind::MapRes))
-                    }),
-                    |element| AtomSymbol::Element(element),
-                ),
-                map(
-                    map_res(delimited(space0, alpha1, space0), |s| {
-                        NamedIsotope::from_symbol_bytes(s)
-                            .ok_or_else(|| error::Error::new(s, error::ErrorKind::MapRes))
-                    }),
-                    |isotope| AtomSymbol::NamedIsotope(isotope),
-                ),
-            ))),
-        )
-        .parse(input)
-    }
+    map_res(take(3usize), |s| {
+        let s = trim_whitespace_3char(s);
+        if let Some(element) = Element::from_symbol_bytes(s) {
+            Ok(AtomSymbol::Element(element))
+        } else if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
+            Ok(AtomSymbol::NamedIsotope(isotope))
+        } else {
+            Err(error::Error::new(s, error::ErrorKind::MapRes))
+        }
+    })
 }
 
 /// Parse atom symbol (all atom types allowed in MOL specification).
-/// -----------------------------------------------------------------------------
-/// | Symbol   | Type          | Parser* | Notes                                |
-/// -----------------------------------------------------------------------------
-/// | H-Og     | Element       | S, A    |                                      |
-/// | D, T     | Named Isotope | S, A    | Heavy H isotopes are an extension    |
-/// | L        | Atom List     | A       | Query molecules                      |
-/// | A, Q, *  | Unspecified   | A       | Query molecules, rarely in oligomers |
-/// | LP       | Lone Pair     | A       | Rarely used                          |
-/// | R#       | R Group       | A       | Query molecules                      |
-/// -----------------------------------------------------------------------------
-/// | *Parsers: S: standard, A: all                                             |
-/// |----------------------------------------------------------------------------
+/// --------------------------------------------------------------------------------
+/// | Symbol      | Type          | Parser* | Notes                                |
+/// --------------------------------------------------------------------------------
+/// | H-Og        | Element       | S, A    |                                      |
+/// | D, T        | Named Isotope | S, A    | Heavy H isotopes as extension        |
+/// | L           | Atom List     | A       | Query molecules                      |
+/// | *,A,Q,X,M   | Query Atom    | A       | Query molecules, rarely in oligomers |
+/// | AH,QH,XH,MH | Query Atom    | A       | Query molecules, CXSMILES extension  |
+/// | LP          | Lone Pair     | A       | Rarely used                          |
+/// | R#          | R Group       | A       | Query molecules                      |
+/// --------------------------------------------------------------------------------
+/// | *Parsers: S: standard, A: all                                                |
+/// --------------------------------------------------------------------------------
 ///
 fn atom_symbol<'a>() -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    |input| {
-        map_parser(
-            take(3usize),
-            all_consuming(alt((
-                value(AtomSymbol::LonePair, delimited(space0, tag("LP"), space0)),
-                value(
-                    AtomSymbol::AtomList(AtomList { elements: vec![] }),
-                    delimited(space0, tag("L"), space0),
-                ),
-                value(
-                    AtomSymbol::Unspecified('A'),
-                    delimited(space0, tag("A"), space0),
-                ),
-                value(
-                    AtomSymbol::Unspecified('Q'),
-                    delimited(space0, tag("Q"), space0),
-                ),
-                value(
-                    AtomSymbol::Unspecified('*'),
-                    delimited(space0, tag("*"), space0),
-                ),
-                map(
-                    delimited(
-                        space0,
-                        (
-                            tag("R"),
-                            fixed_width_int_in_range_minus1::<usize, _>(2, 1..=31),
-                        ),
-                        space0,
-                    ),
-                    |(_, idx)| AtomSymbol::RGroup(idx),
-                ),
-                map(
-                    map_res(delimited(space0, alpha1, space0), |s| {
-                        Element::from_symbol_bytes(s)
-                            .ok_or_else(|| error::Error::new(s, error::ErrorKind::MapRes))
-                    }),
-                    |element| AtomSymbol::Element(element),
-                ),
-                map(
-                    map_res(delimited(space0, alpha1, space0), |s| {
-                        NamedIsotope::from_symbol_bytes(s)
-                            .ok_or_else(|| error::Error::new(s, error::ErrorKind::MapRes))
-                    }),
-                    |isotope| AtomSymbol::NamedIsotope(isotope),
-                ),
-            ))),
-        )
-        .parse(input)
-    }
+    map_res(take(3usize), |s| {
+        let s = trim_whitespace_3char(s);
+        if let Some(element) = Element::from_symbol_bytes(s) {
+            Ok(AtomSymbol::Element(element))
+        } else if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
+            Ok(AtomSymbol::NamedIsotope(isotope))
+        } else if let Some(rgroup) = RGroup::from_symbol_bytes(s) {
+            Ok(AtomSymbol::RGroup(rgroup))
+        } else if let Some(query) = QueryAtom::from_symbol_bytes(s) {
+            Ok(AtomSymbol::Query(query))
+        } else if s == b"L" {
+            Ok(AtomSymbol::AtomList(AtomList { elements: vec![] }))
+        } else if s == b"LP" {
+            Ok(AtomSymbol::LonePair)
+        } else {
+            Err(error::Error::new(s, error::ErrorKind::MapRes))
+        }
+    })
 }
 
 /// Parse standard atom inputs with 52-69 characters (s. `atom_input` for more details).

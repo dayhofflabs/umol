@@ -1,4 +1,4 @@
-//! Bond type for the molecular graph model.
+//! Bond type for CTab format.
 
 use bitflags::bitflags;
 use std::collections::HashMap;

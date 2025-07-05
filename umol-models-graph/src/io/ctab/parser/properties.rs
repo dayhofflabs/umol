@@ -2,11 +2,13 @@
 
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::space0;
-use nom::combinator::{map, map_parser, rest};
+use nom::combinator::{map, map_parser, map_res, rest, success};
 use nom::error;
 use nom::multi::length_count;
 use nom::sequence::preceded;
 use nom::Parser;
+
+use crate::io::ctab::sgroup::{SGroup, SGroupType};
 
 use super::utils::{fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1};
 use umol_data::Element;
@@ -20,7 +22,7 @@ pub struct ChargeEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RadicalEntry {
     pub atom_index: usize,
-    pub radical_type: i8,
+    pub radical_type: u8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,13 +34,13 @@ pub struct IsotopeEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupTypeEntry {
     pub sgroup_index: usize,
-    pub sgroup_type: String,
+    pub sgroup_type: SGroupType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupLabelEntry {
     pub sgroup_index: usize,
-    pub label: String,
+    pub label: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -165,7 +167,7 @@ fn radical_entries<'a>(
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, 0..=3)),
+                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
             ),
             |(atom_index, radical_type)| RadicalEntry {
                 atom_index,
@@ -204,11 +206,19 @@ fn sgroup_type_entries<'a>(
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                map_parser(take(4usize), preceded(tag(" "), take(3usize))),
+                preceded(
+                    tag(" "),
+                    map_res(take(3usize), |bytes: &[u8]| {
+                        let s = std::str::from_utf8(bytes)
+                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
+                        SGroup::get_type(s)
+                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+                    }),
+                ),
             ),
-            |(sgroup_index, type_bytes)| SGroupTypeEntry {
+            |(sgroup_index, sgroup_type)| SGroupTypeEntry {
                 sgroup_index,
-                sgroup_type: String::from_utf8_lossy(type_bytes).trim().to_string(),
+                sgroup_type,
             },
         ),
     )
@@ -216,7 +226,7 @@ fn sgroup_type_entries<'a>(
 
 /// Parse SGroup label entries.
 /// M  SLBnn8 sss vvv ...
-/// sss: SGroup index, vvv: label (3-character string, can be longer in practice)
+/// sss: SGroup index, vvv: integer label is from 1-512
 fn sgroup_label_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<SGroupLabelEntry>, Error = error::Error<&'a [u8]>> {
     length_count(
@@ -224,12 +234,9 @@ fn sgroup_label_entries<'a>(
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                map_parser(take(4usize), preceded(tag(" "), take(3usize))),
+                preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=512)),
             ),
-            |(sgroup_index, label_bytes)| SGroupLabelEntry {
-                sgroup_index,
-                label: String::from_utf8_lossy(label_bytes).trim().to_string(),
-            },
+            |(sgroup_index, label)| SGroupLabelEntry { sgroup_index, label },
         ),
     )
 }
@@ -289,28 +296,43 @@ fn sgroup_bond_list_entry<'a>(
         )
         .parse(input)?;
 
-        // Parse the bond indices - each is 4 chars with format " bbb"
-        let mut indices = Vec::with_capacity(count as usize);
-        let mut remaining = remaining;
-        for _ in 0..count {
-            let (rest, index) = map_parser(
-                take(4usize),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            )
-            .parse(remaining)?;
-            indices.push(index);
-            remaining = rest;
-        }
+        let (remaining, bond_indices) = length_count(
+            success(count as usize),
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+        )
+        .parse(remaining)?;
 
         Ok((
             remaining,
             SGroupBondListEntry {
                 sgroup_index,
-                bond_indices: indices,
+                bond_indices,
             },
         ))
     }
 }
+
+// /// Parse SGroup bracket entries.
+// /// M  SBTnn8 sss ttt ...
+// /// sss: SGroup index, ttt: bracket type (0 or 1)
+// fn sgroup_bracket_entries<'a>(
+// ) -> impl Parser<&'a [u8], Output = Vec<SGroupBracketEntry>, Error = error::Error<&'a [u8]>> {
+//     length_count(
+//         fixed_width_int_in_range::<u8, _>(3, 1..=8),
+//         map(
+//             (
+//                 // sss: sgroup index
+//                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+//                 // ttt: bracket style
+//                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
+//             ),
+//             |(sgroup_index, style_code)| SGroupBracketEntry {
+//                 sgroup_index,
+//                 style_code,
+//             },
+//         ),
+//     )
+// }
 
 /// Parse atom alias entry.
 /// A  aaa alias_text

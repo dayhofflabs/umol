@@ -1,37 +1,44 @@
 use super::*;
-use crate::io::ctab::atom::{Atom, AtomSymbol};
+use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol};
 use crate::io::ctab::bond::{Bond, BondType};
-use crate::io::ctab::sgroup::{SGroup, SGroupType};
-use rstest::rstest;
+use crate::io::ctab::sgroup::{SGroup, SGroupBracketStyle, SGroupType};
+use pretty_assertions::assert_eq;
+use rstest::*;
 use umol::error::{DataError, Error, ValidationError};
 use umol_data::{e, Element};
 
-/// Helper to create a test molecule with specified number of atoms and bonds
-fn create_test_molecule(atom_count: usize, bond_count: usize) -> Molecule {
+#[fixture]
+fn basic_molecule() -> Molecule {
     let mut molecule = Molecule::new();
-
-    // Add atoms
-    for _i in 0..atom_count {
+    // Add 3 atoms
+    for _i in 0..3 {
         let atom = Atom::new(AtomSymbol::Element(e!(C)));
         molecule.add_atom(atom);
     }
-
-    // Add bonds (connect consecutive atoms)
-    for i in 0..bond_count.min(atom_count.saturating_sub(1)) {
-        molecule.add_bond(i, i + 1, Bond::new(BondType::Single));
-    }
-
+    // Add 2 bonds
+    molecule.add_bond(0, 1, Bond::new(BondType::Single));
+    molecule.add_bond(1, 2, Bond::new(BondType::Single));
     molecule
 }
 
-/// Helper to create a test molecule with pre-set properties for conflict testing
-fn create_molecule_with_properties() -> Molecule {
-    let mut molecule = create_test_molecule(3, 2);
+#[fixture]
+fn molecule_with_sgroup(basic_molecule: Molecule) -> Molecule {
+    let mut molecule = basic_molecule;
+    let mut sgroup = SGroup::new(SGroupType::Generic);
+    sgroup.atom_indices = vec![0, 1];
+    sgroup.bond_indices = vec![0];
+    molecule.sgroups.insert(0, sgroup);
+    molecule
+}
+
+#[fixture]
+fn molecule_with_properties(basic_molecule: Molecule) -> Molecule {
+    let mut molecule = basic_molecule;
 
     // Set some initial properties to test conflicts
     if let Some(atom) = molecule.atom_mut(0) {
         atom.charge = 1;
-        atom.radical = Some(2);
+        atom.radical = Some(AtomRadical::Doublet);
         atom.isotope_mass = Some(13);
         atom.properties
             .insert("molFileAlias".to_string(), "existing".to_string());
@@ -40,38 +47,31 @@ fn create_molecule_with_properties() -> Molecule {
     }
 
     // Add an SGroup with existing properties
-    let mut sgroup = SGroup::new(0, SGroupType::Superatom);
+    let mut sgroup = SGroup::new(SGroupType::Superatom);
     sgroup.atom_indices = vec![0, 1];
     sgroup.bond_indices = vec![0];
-    sgroup.label = Some("existing".to_string());
-    molecule.sgroups.push(sgroup);
+    sgroup.label = None;
+    sgroup.bracket_style = Some(SGroupBracketStyle::Default);
+    molecule.sgroups.insert(0, sgroup);
 
     molecule
 }
 
 #[rstest]
-#[case(vec![ChargeEntry { atom_index: 0, charge: -1 }], 0, -1)]
-#[case(vec![ChargeEntry { atom_index: 1, charge: 2 }], 1, 2)]
-fn test_apply_charge_entries(
-    #[case] entries: Vec<ChargeEntry>,
-    #[case] expected_atom_index: usize,
-    #[case] expected_charge: i8,
-) {
-    let mut molecule = create_test_molecule(3, 0);
+fn test_apply_charge_entries(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![ChargeEntry {
+        atom_index: 0,
+        charge: -1,
+    }];
 
-    // Apply charges
     entries.apply(&mut molecule).unwrap();
-
-    // Verify charge was applied
-    assert_eq!(
-        molecule.atom(expected_atom_index).unwrap().charge,
-        expected_charge
-    );
+    assert_eq!(molecule.atom(0).unwrap().charge, -1);
 }
 
-#[test]
-fn test_apply_charge_entries_multiple() {
-    let mut molecule = create_test_molecule(3, 0);
+#[rstest]
+fn test_apply_charge_entries_multiple(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entries = vec![
         ChargeEntry {
             atom_index: 0,
@@ -83,16 +83,17 @@ fn test_apply_charge_entries_multiple() {
         },
     ];
 
-    entries.apply(&mut molecule).unwrap();
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_ok());
 
     assert_eq!(molecule.atom(0).unwrap().charge, -1);
     assert_eq!(molecule.atom(1).unwrap().charge, 0); // unchanged
     assert_eq!(molecule.atom(2).unwrap().charge, 1);
 }
 
-#[test]
-fn test_apply_charge_entries_empty() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_apply_charge_entries_empty(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entries: Vec<ChargeEntry> = vec![];
 
     // Should succeed with no changes
@@ -102,9 +103,9 @@ fn test_apply_charge_entries_empty() {
     assert_eq!(molecule.atom(1).unwrap().charge, 0);
 }
 
-#[test]
-fn test_charge_entry_out_of_bounds() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_charge_entry_out_of_bounds(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entries = vec![ChargeEntry {
         atom_index: 5,
         charge: -1,
@@ -119,46 +120,61 @@ fn test_charge_entry_out_of_bounds() {
     }
 }
 
-#[test]
-fn test_charge_entry_conflict() {
-    let mut molecule = create_molecule_with_properties();
+#[rstest]
+fn test_charge_entry_overwrite(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
     let entries = vec![ChargeEntry {
         atom_index: 0,
         charge: -1,
-    }]; // conflicts with existing charge 1
+    }]; // overwrites existing charge 1
 
     let result = entries.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Charge conflict"));
-            assert!(msg.contains("existing 1 vs new -1"));
-        }
-        _ => panic!("Expected InvalidComponent error"),
-    }
+    assert!(result.is_ok());
+    let atom = molecule.atom(0).unwrap();
+    assert_eq!(atom.charge, -1);
+    assert_eq!(atom.radical, None);
 }
 
 #[rstest]
 #[case(0, None)]
-#[case(1, Some(1))]
-#[case(2, Some(2))]
-#[case(3, Some(3))]
-fn test_apply_radical_entry(#[case] radical_type: i8, #[case] expected: Option<u8>) {
-    let mut molecule = create_test_molecule(2, 0);
+#[case(1, Some(AtomRadical::Singlet))]
+#[case(2, Some(AtomRadical::Doublet))]
+#[case(3, Some(AtomRadical::Triplet))]
+fn test_apply_radical_entry(
+    basic_molecule: Molecule,
+    #[case] radical_type: u8,
+    #[case] expected: Option<AtomRadical>,
+) {
+    let mut molecule = basic_molecule;
     let entries = vec![RadicalEntry {
         atom_index: 0,
         radical_type,
     }];
 
-    entries.apply(&mut molecule).unwrap();
-
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_ok());
     assert_eq!(molecule.atom(0).unwrap().radical, expected);
 }
 
-#[test]
-fn test_radical_entry_invalid() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_radical_entry_overwrite(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    let entries = vec![RadicalEntry {
+        atom_index: 0,
+        radical_type: 1,
+    }]; // overwrites existing radical doublet
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_ok());
+
+    let atom = molecule.atom(0).unwrap();
+    assert_eq!(atom.radical, Some(AtomRadical::Singlet));
+    assert_eq!(atom.charge, 0);
+}
+
+#[rstest]
+fn test_radical_entry_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entries = vec![RadicalEntry {
         atom_index: 0,
         radical_type: 4,
@@ -175,22 +191,24 @@ fn test_radical_entry_invalid() {
     }
 }
 
-#[test]
-fn test_apply_isotope_entry() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_apply_isotope_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entries = vec![IsotopeEntry {
         atom_index: 0,
         mass: 14,
     }];
 
-    entries.apply(&mut molecule).unwrap();
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_ok());
 
-    assert_eq!(molecule.atom(0).unwrap().isotope_mass, Some(14));
+    let atom = molecule.atom(0).unwrap();
+    assert_eq!(atom.isotope_mass, Some(14));
 }
 
-#[test]
-fn test_isotope_entry_conflict() {
-    let mut molecule = create_molecule_with_properties();
+#[rstest]
+fn test_isotope_entry_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
     let entries = vec![IsotopeEntry {
         atom_index: 0,
         mass: 14,
@@ -208,54 +226,126 @@ fn test_isotope_entry_conflict() {
     }
 }
 
-#[test]
-fn test_apply_sgroup_type_entry() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_apply_sgroup_type_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entries = vec![SGroupTypeEntry {
-        sgroup_index: 0,
-        sgroup_type: "SUP".to_string(),
+        sgroup_index: 1,
+        sgroup_type: SGroupType::Superatom,
     }];
 
     entries.apply(&mut molecule).unwrap();
 
     assert_eq!(molecule.sgroups.len(), 1);
-    assert_eq!(molecule.sgroups[0].group_type, SGroupType::Superatom);
+    assert_eq!(molecule.sgroups[&1].group_type, SGroupType::Superatom);
 }
 
-#[test]
-fn test_apply_sgroup_type_entry_multiple() {
-    let mut molecule = create_test_molecule(2, 0);
-    let entries = vec![SGroupTypeEntry {
-        sgroup_index: 2,
-        sgroup_type: "DAT".to_string(),
-    }];
+#[rstest]
+fn test_apply_sgroup_type_entry_multiple(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![
+        SGroupTypeEntry {
+            sgroup_index: 0,
+            sgroup_type: SGroupType::Data,
+        },
+        SGroupTypeEntry {
+            sgroup_index: 1,
+            sgroup_type: SGroupType::Superatom,
+        },
+        SGroupTypeEntry {
+            sgroup_index: 2,
+            sgroup_type: SGroupType::RepeatingUnit,
+        },
+    ];
 
     entries.apply(&mut molecule).unwrap();
 
-    // Should create SGroups 0, 1, 2
+    // Verify all three SGroups were created with correct types
     assert_eq!(molecule.sgroups.len(), 3);
-    assert_eq!(molecule.sgroups[0].group_type, SGroupType::Generic);
-    assert_eq!(molecule.sgroups[1].group_type, SGroupType::Generic);
-    assert_eq!(molecule.sgroups[2].group_type, SGroupType::Data);
+    assert_eq!(molecule.sgroups[&0].group_type, SGroupType::Data);
+    assert_eq!(molecule.sgroups[&1].group_type, SGroupType::Superatom);
+    assert_eq!(molecule.sgroups[&2].group_type, SGroupType::RepeatingUnit);
 }
 
-#[test]
-fn test_apply_sgroup_label_entry() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_sgroup_type_conflict(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+
+    // Try to create another SGroup with same index
+    let entries = vec![SGroupTypeEntry {
+        sgroup_index: 0,
+        sgroup_type: SGroupType::Data,
+    }];
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup index conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_label_entry(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
     let entries = vec![SGroupLabelEntry {
         sgroup_index: 0,
-        label: "Ph".to_string(),
+        label: 19,
     }];
 
     entries.apply(&mut molecule).unwrap();
 
     assert_eq!(molecule.sgroups.len(), 1);
-    assert_eq!(molecule.sgroups[0].label, Some("Ph".to_string()));
+    assert_eq!(molecule.sgroups[&0].label, Some(19));
 }
 
-#[test]
-fn test_apply_sgroup_atom_list_entry() {
-    let mut molecule = create_test_molecule(3, 0);
+#[rstest]
+fn test_apply_sgroup_label_entry_nonexistent(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entries = vec![SGroupLabelEntry {
+        sgroup_index: 1,
+        label: 15,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_label_entry_conflict(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    molecule.sgroups.get_mut(&0).unwrap().label = Some(19);
+    let entries = vec![SGroupLabelEntry {
+        sgroup_index: 0,
+        label: 20,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Label conflict for SGroup"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_atom_list_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(0, sgroup);
+
     let entry = SGroupAtomListEntry {
         sgroup_index: 0,
         atom_indices: vec![0, 1, 2],
@@ -264,12 +354,14 @@ fn test_apply_sgroup_atom_list_entry() {
     entry.apply(&mut molecule).unwrap();
 
     assert_eq!(molecule.sgroups.len(), 1);
-    assert_eq!(molecule.sgroups[0].atom_indices, vec![0, 1, 2]);
+    assert_eq!(molecule.sgroups[&0].atom_indices, vec![0, 1, 2]);
 }
 
-#[test]
-fn test_sgroup_atom_list_entry_invalid_atom_index() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_sgroup_atom_list_entry_invalid_atom_index(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(0, sgroup);
     let entry = SGroupAtomListEntry {
         sgroup_index: 0,
         atom_indices: vec![0, 5], // atom 5 doesn't exist
@@ -284,9 +376,11 @@ fn test_sgroup_atom_list_entry_invalid_atom_index() {
     }
 }
 
-#[test]
-fn test_apply_sgroup_bond_list_entry() {
-    let mut molecule = create_test_molecule(3, 2);
+#[rstest]
+fn test_apply_sgroup_bond_list_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(0, sgroup);
     let entry = SGroupBondListEntry {
         sgroup_index: 0,
         bond_indices: vec![0, 1],
@@ -295,12 +389,14 @@ fn test_apply_sgroup_bond_list_entry() {
     entry.apply(&mut molecule).unwrap();
 
     assert_eq!(molecule.sgroups.len(), 1);
-    assert_eq!(molecule.sgroups[0].bond_indices, vec![0, 1]);
+    assert_eq!(molecule.sgroups[&0].bond_indices, vec![0, 1]);
 }
 
-#[test]
-fn test_sgroup_bond_list_entry_invalid_bond_index() {
-    let mut molecule = create_test_molecule(3, 1);
+#[rstest]
+fn test_sgroup_bond_list_entry_invalid_bond_index(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(0, sgroup);
     let entry = SGroupBondListEntry {
         sgroup_index: 0,
         bond_indices: vec![0, 5], // bond 5 doesn't exist
@@ -315,12 +411,53 @@ fn test_sgroup_bond_list_entry_invalid_bond_index() {
     }
 }
 
-#[test]
-fn test_apply_atom_alias_entry() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_sgroup_shared_atoms_bonds(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(0, sgroup);
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(1, sgroup);
+
+    // Assign overlapping atoms to both SGroups
+    let entry1 = SGroupAtomListEntry {
+        sgroup_index: 0,
+        atom_indices: vec![0, 1],
+    };
+    entry1.apply(&mut molecule).unwrap();
+
+    let entry2 = SGroupAtomListEntry {
+        sgroup_index: 1,
+        atom_indices: vec![1, 2],
+    };
+    entry2.apply(&mut molecule).unwrap();
+
+    // Assign same bond to both SGroups
+    let entry3 = SGroupBondListEntry {
+        sgroup_index: 0,
+        bond_indices: vec![0],
+    };
+    entry3.apply(&mut molecule).unwrap();
+
+    let entry4 = SGroupBondListEntry {
+        sgroup_index: 1,
+        bond_indices: vec![0],
+    };
+    entry4.apply(&mut molecule).unwrap();
+
+    // Verify overlapping assignments
+    assert_eq!(molecule.sgroups[&0].atom_indices, vec![0, 1]);
+    assert_eq!(molecule.sgroups[&1].atom_indices, vec![1, 2]);
+    assert_eq!(molecule.sgroups[&0].bond_indices, vec![0]);
+    assert_eq!(molecule.sgroups[&1].bond_indices, vec![0]);
+}
+
+#[rstest]
+fn test_apply_atom_alias_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entry = AtomAliasEntry {
         atom_index: 0,
-        alias: "CF3".to_string(),
+        alias: "C1".to_string(),
     };
 
     entry.apply(&mut molecule).unwrap();
@@ -331,12 +468,29 @@ fn test_apply_atom_alias_entry() {
         .properties
         .get("molFileAlias")
         .unwrap();
-    assert_eq!(alias, "CF3");
+    assert_eq!(alias, "C1");
 }
 
-#[test]
-fn test_atom_alias_entry_conflict() {
-    let mut molecule = create_molecule_with_properties();
+#[rstest]
+fn test_atom_alias_entry_invalid_atom_index(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomAliasEntry {
+        atom_index: 5,
+        alias: "C1".to_string(),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_atom_alias_entry_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
     let entry = AtomAliasEntry {
         atom_index: 0,
         alias: "new".to_string(),
@@ -354,9 +508,9 @@ fn test_atom_alias_entry_conflict() {
     }
 }
 
-#[test]
-fn test_apply_atom_value_entry() {
-    let mut molecule = create_test_molecule(2, 0);
+#[rstest]
+fn test_apply_atom_value_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
     let entry = AtomValueEntry {
         atom_index: 0,
         value: "*".to_string(),
@@ -372,3 +526,202 @@ fn test_apply_atom_value_entry() {
         .unwrap();
     assert_eq!(value, "*");
 }
+
+#[rstest]
+fn test_apply_atom_value_entry_invalid_atom_index(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomValueEntry {
+        atom_index: 5,
+        value: "*".to_string(),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_apply_atom_value_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    let entry = AtomValueEntry {
+        atom_index: 0,
+        value: "new".to_string(),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_atom_list_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomListEntry {
+        atom_index: 0,
+        exclusion: false,
+        elements: vec![e!(C), e!(Si)],
+    };
+
+    entry.apply(&mut molecule).unwrap();
+
+    assert_eq!(
+        molecule.atom(0).unwrap().symbol,
+        AtomSymbol::AtomList(AtomList {
+            elements: vec![e!(C), e!(Si)],
+        })
+    );
+}
+
+#[rstest]
+fn test_apply_atom_list_entry_invalid_atom_index(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomListEntry {
+        atom_index: 5,
+        exclusion: false,
+        elements: vec![e!(C), e!(Si)],
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_atom_list_entry_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::AtomList(AtomList {
+        elements: vec![e!(C), e!(Si)],
+    });
+
+    let entry = AtomListEntry {
+        atom_index: 0,
+        exclusion: false,
+        elements: vec![e!(C), e!(Pb)],
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Atom list conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+
+// #[rstest]
+// fn test_apply_attachment_point_entry(basic_molecule: Molecule) {
+//     let mut molecule = basic_molecule;
+//     let sgroup = SGroup::new(SGroupType::Superatom);
+//     molecule.sgroups.insert(0, sgroup);
+//     let entries = vec![AttachmentPointEntry {
+//         atom_index: 0,
+//         attachment_type: 1,
+//     }];
+
+//     entries.apply(&mut molecule).unwrap();
+
+//     let atom = molecule.atom(0).unwrap();
+//     assert_eq!(
+//         atom.properties.get("molFileAttachmentPoint").unwrap(),
+//         "1"
+//     );
+// }
+
+// #[rstest]
+// fn test_apply_attachment_point_entries_multiple(basic_molecule: Molecule) {
+//     let mut molecule = basic_molecule;
+//     let entries = vec![
+//         AttachmentPointEntry {
+//             atom_index: 0,
+//             attachment_type: 1,
+//         },
+//         AttachmentPointEntry {
+//             atom_index: 2,
+//             attachment_type: 2,
+//         },
+//     ];
+
+//     entries.apply(&mut molecule).unwrap();
+
+//     assert_eq!(
+//         molecule.atom(0).unwrap().properties.get("molFileAttachmentPoint").unwrap(),
+//         "1"
+//     );
+//     assert!(!molecule.atom(1).unwrap().properties.contains_key("molFileAttachmentPoint")); // unchanged
+//     assert_eq!(
+//         molecule.atom(2).unwrap().properties.get("molFileAttachmentPoint").unwrap(),
+//         "2"
+//     );
+// }
+
+// #[rstest]
+// fn test_apply_attachment_point_entry_invalid_atom_index(basic_molecule: Molecule) {
+//     let mut molecule = basic_molecule;
+//     let entries = vec![AttachmentPointEntry {
+//         atom_index: 5,  // invalid index
+//         attachment_type: 1,
+//     }];
+
+//     let result = entries.apply(&mut molecule);
+//     assert!(result.is_err());
+
+//     match result.unwrap_err() {
+//         Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+//         _ => panic!("Expected MissingAtomIndex error"),
+//     }
+// }
+
+// #[rstest]
+// fn test_apply_attachment_point_entry_invalid(basic_molecule: Molecule) {
+//     let mut molecule = basic_molecule;
+//     let entries = vec![AttachmentPointEntry {
+//         atom_index: 0,
+//         attachment_type: 4,  // invalid type (valid range is 0-3)
+//     }];
+
+//     let result = entries.apply(&mut molecule);
+//     assert!(result.is_err());
+
+//     match result.unwrap_err() {
+//         Error::Validation(ValidationError::InvalidComponent(msg)) => {
+//             assert!(msg.contains("Invalid attachment point type"));
+//         }
+//         _ => panic!("Expected InvalidComponent error"),
+//     }
+// }
+
+// #[rstest]
+// fn test_apply_attachment_point_entry_conflict(molecule_with_properties: Molecule) {
+//     let mut molecule = molecule_with_properties;
+//     // Set an existing attachment point
+//     molecule.atom_mut(0).unwrap().properties.insert(
+//         "molFileAttachmentPoint".to_string(),
+//         "1".to_string(),
+//     );
+
+//     let entries = vec![AttachmentPointEntry {
+//         atom_index: 0,
+//         attachment_type: 2,  // different from existing
+//     }];
+
+//     let result = entries.apply(&mut molecule);
+//     assert!(result.is_err());
+
+//     match result.unwrap_err() {
+//         Error::Validation(ValidationError::InvalidComponent(msg)) => {
+//             assert!(msg.contains("Attachment point conflict"));
+//             assert!(msg.contains("existing '1' vs new '2'"));
+//         }
+//         _ => panic!("Expected InvalidComponent error"),
+//     }
+// }

@@ -1,0 +1,117 @@
+//! R-group type for CTab format.
+
+use std::fmt::{self, Display};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RGroup {
+    pub label: Option<u32>,
+    pub explicit: bool,
+}
+
+impl RGroup {
+    pub fn new(label: Option<u32>) -> Self {
+        match label {
+            Some(label) => Self {
+                label: Some(label),
+                explicit: true,
+            },
+            None => Self {
+                label: None,
+                explicit: false,
+            },
+        }
+    }
+
+    pub fn from_symbol_bytes(input: &[u8]) -> Option<Self> {
+        debug_assert!(input.len() <= 3, "R-group symbol must be 1-3 characters");
+
+        if input.len() == 0 || input[0] != b'R' {
+            return None;
+        }
+        if input.len() == 1 {
+            return Some(Self::new(None));
+        }
+        if input[1] == b'#' {
+            if input.len() == 2 {
+                return Some(Self::new(None));
+            }
+        } else {
+            let num_str = &input[1..];
+            if num_str.len() == 1 {
+                if num_str[0] < b'0' || num_str[0] > b'9' {
+                    return None;
+                }
+                let label = (num_str[0] - b'0') as u32;
+                if label == 0 {
+                    return Some(Self::new(None));
+                }
+                return Some(Self::new(Some(label - 1)));
+            } else if num_str.len() == 2 {
+                if num_str[0] < b'0' || num_str[0] > b'9' || num_str[1] < b'0' || num_str[1] > b'9'
+                {
+                    return None;
+                }
+                let label = ((num_str[0] - b'0') * 10 + (num_str[1] - b'0')) as u32;
+                if label == 0 {
+                    return Some(Self::new(None));
+                }
+                return Some(Self::new(Some(label - 1)));
+            } else {
+                return None;
+            }
+        }
+        return None;
+    }
+
+    pub fn from_symbol_str(input: &str) -> Option<Self> {
+        Self::from_symbol_bytes(input.as_bytes())
+    }
+}
+
+impl Display for RGroup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.explicit {
+            write!(f, "R{}", self.label.unwrap_or(0))
+        } else {
+            write!(f, "R#")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    #[rstest]
+    #[case(b"R", RGroup::new(None))]
+    #[case(b"R#", RGroup::new(None))]
+    #[case(b"R1", RGroup::new(Some(0)))]
+    #[case(b"R12", RGroup::new(Some(11)))]
+    fn test_from_symbol_bytes(#[case] input: &[u8], #[case] expected: RGroup) {
+        let symbol = RGroup::from_symbol_bytes(input);
+        assert!(symbol.is_some());
+        assert_eq!(symbol.unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("R", RGroup::new(None))]
+    #[case("R#", RGroup::new(None))]
+    #[case("R1", RGroup::new(Some(0)))]
+    #[case("R12", RGroup::new(Some(11)))]
+    fn test_from_symbol_str(#[case] input: &str, #[case] expected: RGroup) {
+        let symbol = RGroup::from_symbol_str(input);
+        assert!(symbol.is_some());
+        assert_eq!(symbol.unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(b"Q")]
+    #[case(b"R-1")]
+    #[case(b"R#1")]
+    fn test_from_symbol_bytes_invalid(#[case] input: &[u8]) {
+        let symbol = RGroup::from_symbol_bytes(input);
+        assert!(symbol.is_none());
+    }
+}

@@ -1,4 +1,4 @@
-//! Conformer type for the molecular graph model.
+//! Conformer type for CTab format.
 
 /// Type alias for 3D coordinates using nalgebra.
 pub type Point3D = nalgebra::Point3<f64>;

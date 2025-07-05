@@ -232,11 +232,23 @@ fn get_aufbau_configuration(element: Element) -> Configuration {
             .iter()
             .map(|counts| counts.3)
             .sum::<u8>()
-            == element.atomic_number()
+            == element.atomic_number(),
+        "Total occupation must be equal to atomic number"
     );
-    debug_assert!(unpaired <= MAX_UNPAIRED_ELECTRONS);
-    debug_assert!(closing_subshell.0 <= MAX_N_QUANTUM_NUMBER);
-    debug_assert!(closing_subshell.1 <= MAX_L_QUANTUM_NUMBER);
+    debug_assert!(
+        unpaired <= MAX_UNPAIRED_ELECTRONS,
+        "Unpaired electrons must be less than or equal to {}",
+        MAX_UNPAIRED_ELECTRONS
+    );
+    debug_assert!(
+        closing_subshell.0 <= MAX_N_QUANTUM_NUMBER,
+        "Closing subshell n must be less than or equal to {}",
+        MAX_N_QUANTUM_NUMBER
+    );
+    debug_assert!(closing_subshell.1 <= MAX_L_QUANTUM_NUMBER,
+        "Closing subshell l must be less than or equal to {}",
+        MAX_L_QUANTUM_NUMBER
+    );
 
     let valence_occupation = get_valence_occupation(subshell_occupations, closing_subshell);
     let core_element = get_core_element(element);

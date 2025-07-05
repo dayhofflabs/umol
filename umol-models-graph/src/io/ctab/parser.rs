@@ -1,4 +1,4 @@
-//! CTAB format parser and writer.
+//! CTab format parser.
 
 pub mod apply;
 pub mod atom;
