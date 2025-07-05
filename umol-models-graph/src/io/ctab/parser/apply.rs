@@ -10,6 +10,8 @@ use super::properties::{
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
 use crate::io::ctab::parser::convert::convert_attachment_point_code;
+use crate::io::ctab::parser::properties::RGroupLabelEntry;
+use crate::io::ctab::rgroup::RGroup;
 use crate::io::ctab::sgroup::{SGroup, SGroupType};
 use umol::error::{DataError, ValidationError};
 use umol::Result;
@@ -35,10 +37,12 @@ impl Apply for PropertyEntries {
             PropertyEntries::AtomListEntry(entry) => entry.apply(molecule),
             PropertyEntries::AttachmentPointEntries(entries) => entries.apply(molecule),
             PropertyEntries::AtomAttachmentOrderEntry(entry) => entry.apply(molecule),
+            PropertyEntries::RGroupLabelEntries(entries) => entries.apply(molecule),
             PropertyEntries::RingBondCountEntries(entries) => entries.apply(molecule),
             PropertyEntries::SubstitutionCountEntries(entries) => entries.apply(molecule),
             PropertyEntries::UnsaturatedAtomEntries(entries) => entries.apply(molecule),
             PropertyEntries::LinkAtomEntries(entries) => entries.apply(molecule),
+            PropertyEntries::End => Ok(()),
         }
     }
 }
@@ -128,7 +132,7 @@ impl Apply for Vec<SGroupLabelEntry> {
                 .any(|s| s.label == Some(entry.label))
             {
                 return Err(ValidationError::InvalidComponent(format!(
-                    "SGroup label conflict: label '{}' is not unique",
+                    "SGroup label conflict: duplicate label '{}'",
                     entry.label
                 ))
                 .into());
@@ -139,7 +143,7 @@ impl Apply for Vec<SGroupLabelEntry> {
                 // Having multiple SLB conflicting entries for the same SGroup is invalid
                 if sgroup.label.is_some() && sgroup.label != Some(entry.label) {
                     return Err(ValidationError::InvalidComponent(format!(
-                        "Label conflict for SGroup {}: existing '{}' vs new '{}'",
+                        "SGroup label conflict {}: existing '{}' vs new '{}'",
                         entry.sgroup_index,
                         sgroup.label.unwrap(),
                         entry.label
@@ -340,6 +344,58 @@ impl Apply for AtomAttachmentOrderEntry {
                 }
             }
             atom.attachment_order = Some(self.attachments);
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<RGroupLabelEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            if entry.atom_index >= molecule.atom_count() {
+                return Err(DataError::MissingAtomIndex(entry.atom_index).into());
+            }
+
+            // Check for RGroup label conflicts
+            for atom in molecule.atoms() {
+                if let AtomSymbol::RGroup(rgroup) = atom.symbol {
+                    if rgroup.label.is_some() && rgroup.label.unwrap() == entry.label {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "RGroup label conflict: label '{}' is not unique",
+                            entry.label
+                        ))
+                        .into());
+                    }
+                }
+            }
+
+            // Apply RGroup label
+            if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                match atom.symbol {
+                    AtomSymbol::RGroup(ref mut rgroup) => {
+                        if rgroup.label.is_some() && rgroup.label.unwrap() != entry.label {
+                            return Err(ValidationError::InvalidComponent(format!(
+                                "RGroup label conflict: existing '{}' vs new '{:?}'",
+                                rgroup.label.unwrap(),
+                                entry.label
+                            ))
+                            .into());
+                        }
+                        rgroup.label = Some(entry.label);
+                        rgroup.explicit = true;
+                    }
+                    AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {
+                        atom.symbol = AtomSymbol::RGroup(RGroup::new(Some(entry.label)));
+                    }
+                    _ => {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "Cannot set RGroup label for atom {} with symbol {:?}",
+                            entry.atom_index, atom.symbol
+                        ))
+                        .into());
+                    }
+                }
+            }
         }
         Ok(())
     }

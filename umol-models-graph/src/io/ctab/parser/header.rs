@@ -48,7 +48,7 @@ mod tests {
         assert!(result.is_ok(), "{} should have succeeded", desc);
         let (remaining, header) = result.unwrap();
         assert!(remaining.is_empty(), "{} has remaining data", desc);
-        assert_eq!(header.title, expected.title);
+        assert_eq!(header.name, expected.name);
         assert_eq!(header.program_info, expected.program_info);
         assert_eq!(header.comment, expected.comment);
     }

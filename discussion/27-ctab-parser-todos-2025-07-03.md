@@ -19,7 +19,6 @@ This phase focuses on creating the basic data structures and implementing suppor
 2.  **Implement Superatom (`SUP`) Parsing**:
     *   I will then extend the property parser in `umol-models-graph/src/io/ctab/parser/properties.rs` to handle all properties required for superatoms.
     *   Based on the properties table, this involves implementing parsing for:
-        *   `M  SBT` (S-Group Bracket): Defines the coordinates for displaying brackets around the superatom.
         *   `M  SCN` (S-Group Connectivity): Defines how the S-Group connects to the rest of the molecule.
 
 3.  **Integrate S-Groups into the Molecule**:
@@ -57,7 +56,6 @@ These features are more specialized and can be addressed after the core S-Group 
 Here is the prioritized list of `M` line properties for S-Groups that need to be implemented, based on the plan above.
 
 **High Priority:**
-*   `M  SBT` (S-Group Bracket)
 *   `M  SCN` (S-Group Connectivity)
 
 **Medium Priority:**
@@ -69,6 +67,7 @@ Here is the prioritized list of `M` line properties for S-Groups that need to be
 *   `M  SPA` (S-Group Parent for hierarchies)
 
 **Low Priority (to be investigated alongside the above):**
+*   `M  SBT` (S-Group Bracket)
 *   `M  SDS` (S-Group Expansion)
 *   `M  CRS` (S-Group Correlation)
 *   `M  SDI` (S-Group Display)

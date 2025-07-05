@@ -45,7 +45,7 @@ impl RGroup {
                 if label == 0 {
                     return Some(Self::new(None));
                 }
-                return Some(Self::new(Some(label - 1)));
+                return Some(Self::new(Some(label)));
             } else if num_str.len() == 2 {
                 if num_str[0] < b'0' || num_str[0] > b'9' || num_str[1] < b'0' || num_str[1] > b'9'
                 {
@@ -55,7 +55,7 @@ impl RGroup {
                 if label == 0 {
                     return Some(Self::new(None));
                 }
-                return Some(Self::new(Some(label - 1)));
+                return Some(Self::new(Some(label)));
             } else {
                 return None;
             }
@@ -87,8 +87,9 @@ mod tests {
     #[rstest]
     #[case(b"R", RGroup::new(None))]
     #[case(b"R#", RGroup::new(None))]
-    #[case(b"R1", RGroup::new(Some(0)))]
-    #[case(b"R12", RGroup::new(Some(11)))]
+    #[case(b"R0", RGroup::new(None))]
+    #[case(b"R1", RGroup::new(Some(1)))]
+    #[case(b"R12", RGroup::new(Some(12)))]
     fn test_from_symbol_bytes(#[case] input: &[u8], #[case] expected: RGroup) {
         let symbol = RGroup::from_symbol_bytes(input);
         assert!(symbol.is_some());
@@ -98,8 +99,9 @@ mod tests {
     #[rstest]
     #[case("R", RGroup::new(None))]
     #[case("R#", RGroup::new(None))]
-    #[case("R1", RGroup::new(Some(0)))]
-    #[case("R12", RGroup::new(Some(11)))]
+    #[case("R0", RGroup::new(None))]
+    #[case("R1", RGroup::new(Some(1)))]
+    #[case("R12", RGroup::new(Some(12)))]
     fn test_from_symbol_str(#[case] input: &str, #[case] expected: RGroup) {
         let symbol = RGroup::from_symbol_str(input);
         assert!(symbol.is_some());

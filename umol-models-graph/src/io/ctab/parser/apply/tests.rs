@@ -27,7 +27,30 @@ fn molecule_with_sgroup(basic_molecule: Molecule) -> Molecule {
     let mut sgroup = SGroup::new(SGroupType::Generic);
     sgroup.atom_indices = vec![0, 1];
     sgroup.bond_indices = vec![0];
-    molecule.sgroups.insert(0, sgroup);
+    molecule.add_sgroup(sgroup);
+    molecule
+}
+
+#[fixture]
+fn molecule_with_labeled_sgroup(molecule_with_sgroup: Molecule) -> Molecule {
+    let mut molecule = molecule_with_sgroup;
+    molecule.sgroups.get_mut(&0).unwrap().label = Some(15);
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.add_sgroup(sgroup);
+    molecule
+}
+
+#[fixture]
+fn molecule_with_rgroup(basic_molecule: Molecule) -> Molecule {
+    let mut molecule = basic_molecule;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(None));
+    molecule
+}
+
+#[fixture]
+fn molecule_with_labeled_rgroup(molecule_with_rgroup: Molecule) -> Molecule {
+    let mut molecule = molecule_with_rgroup;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(1)));
     molecule
 }
 
@@ -104,7 +127,7 @@ fn test_apply_charge_entries_empty(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_charge_entry_out_of_bounds(basic_molecule: Molecule) {
+fn test_apply_charge_entries_out_of_bounds(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![ChargeEntry {
         atom_index: 5,
@@ -121,7 +144,7 @@ fn test_charge_entry_out_of_bounds(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_charge_entry_overwrite(molecule_with_properties: Molecule) {
+fn test_apply_charge_entries_overwrite(molecule_with_properties: Molecule) {
     let mut molecule = molecule_with_properties;
     let entries = vec![ChargeEntry {
         atom_index: 0,
@@ -140,7 +163,7 @@ fn test_charge_entry_overwrite(molecule_with_properties: Molecule) {
 #[case(1, Some(AtomRadical::Singlet))]
 #[case(2, Some(AtomRadical::Doublet))]
 #[case(3, Some(AtomRadical::Triplet))]
-fn test_apply_radical_entry(
+fn test_apply_radical_entries(
     basic_molecule: Molecule,
     #[case] radical_type: u8,
     #[case] expected: Option<AtomRadical>,
@@ -157,7 +180,7 @@ fn test_apply_radical_entry(
 }
 
 #[rstest]
-fn test_radical_entry_overwrite(molecule_with_properties: Molecule) {
+fn test_apply_radical_entries_overwrite(molecule_with_properties: Molecule) {
     let mut molecule = molecule_with_properties;
     let entries = vec![RadicalEntry {
         atom_index: 0,
@@ -173,7 +196,7 @@ fn test_radical_entry_overwrite(molecule_with_properties: Molecule) {
 }
 
 #[rstest]
-fn test_radical_entry_invalid(basic_molecule: Molecule) {
+fn test_apply_radical_entries_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![RadicalEntry {
         atom_index: 0,
@@ -192,7 +215,7 @@ fn test_radical_entry_invalid(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_apply_isotope_entry(basic_molecule: Molecule) {
+fn test_apply_isotope_entries(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![IsotopeEntry {
         atom_index: 0,
@@ -207,7 +230,7 @@ fn test_apply_isotope_entry(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_isotope_entry_conflict(molecule_with_properties: Molecule) {
+fn test_apply_isotope_entries_conflict(molecule_with_properties: Molecule) {
     let mut molecule = molecule_with_properties;
     let entries = vec![IsotopeEntry {
         atom_index: 0,
@@ -227,7 +250,7 @@ fn test_isotope_entry_conflict(molecule_with_properties: Molecule) {
 }
 
 #[rstest]
-fn test_apply_sgroup_type_entry(basic_molecule: Molecule) {
+fn test_apply_sgroup_type_entries(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![SGroupTypeEntry {
         sgroup_index: 1,
@@ -241,7 +264,7 @@ fn test_apply_sgroup_type_entry(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_apply_sgroup_type_entry_multiple(basic_molecule: Molecule) {
+fn test_apply_sgroup_type_entries_multiple(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![
         SGroupTypeEntry {
@@ -260,7 +283,6 @@ fn test_apply_sgroup_type_entry_multiple(basic_molecule: Molecule) {
 
     entries.apply(&mut molecule).unwrap();
 
-    // Verify all three SGroups were created with correct types
     assert_eq!(molecule.sgroups.len(), 3);
     assert_eq!(molecule.sgroups[&0].group_type, SGroupType::Data);
     assert_eq!(molecule.sgroups[&1].group_type, SGroupType::Superatom);
@@ -268,7 +290,7 @@ fn test_apply_sgroup_type_entry_multiple(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_sgroup_type_conflict(molecule_with_sgroup: Molecule) {
+fn test_apply_sgroup_type_entries_conflict(molecule_with_sgroup: Molecule) {
     let mut molecule = molecule_with_sgroup;
 
     // Try to create another SGroup with same index
@@ -288,7 +310,7 @@ fn test_sgroup_type_conflict(molecule_with_sgroup: Molecule) {
 }
 
 #[rstest]
-fn test_apply_sgroup_label_entry(molecule_with_sgroup: Molecule) {
+fn test_apply_sgroup_label_entries(molecule_with_sgroup: Molecule) {
     let mut molecule = molecule_with_sgroup;
     let entries = vec![SGroupLabelEntry {
         sgroup_index: 0,
@@ -302,7 +324,7 @@ fn test_apply_sgroup_label_entry(molecule_with_sgroup: Molecule) {
 }
 
 #[rstest]
-fn test_apply_sgroup_label_entry_nonexistent(molecule_with_sgroup: Molecule) {
+fn test_apply_sgroup_label_entries_invalid(molecule_with_sgroup: Molecule) {
     let mut molecule = molecule_with_sgroup;
     let entries = vec![SGroupLabelEntry {
         sgroup_index: 1,
@@ -321,7 +343,7 @@ fn test_apply_sgroup_label_entry_nonexistent(molecule_with_sgroup: Molecule) {
 }
 
 #[rstest]
-fn test_apply_sgroup_label_entry_conflict(molecule_with_sgroup: Molecule) {
+fn test_apply_sgroup_label_entries_conflict(molecule_with_sgroup: Molecule) {
     let mut molecule = molecule_with_sgroup;
     molecule.sgroups.get_mut(&0).unwrap().label = Some(19);
     let entries = vec![SGroupLabelEntry {
@@ -334,7 +356,26 @@ fn test_apply_sgroup_label_entry_conflict(molecule_with_sgroup: Molecule) {
 
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Label conflict for SGroup"));
+            assert!(msg.contains("SGroup label conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_label_entries_duplicate(molecule_with_labeled_sgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_sgroup;
+    let entries = vec![SGroupLabelEntry {
+        sgroup_index: 1,
+        label: 15,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup label conflict: duplicate label '15'"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }
@@ -358,7 +399,7 @@ fn test_apply_sgroup_atom_list_entry(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_sgroup_atom_list_entry_invalid_atom_index(basic_molecule: Molecule) {
+fn test_apply_sgroup_atom_list_entry_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let sgroup = SGroup::new(SGroupType::Superatom);
     molecule.sgroups.insert(0, sgroup);
@@ -393,7 +434,7 @@ fn test_apply_sgroup_bond_list_entry(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_sgroup_bond_list_entry_invalid_bond_index(basic_molecule: Molecule) {
+fn test_apply_sgroup_bond_list_entry_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let sgroup = SGroup::new(SGroupType::Superatom);
     molecule.sgroups.insert(0, sgroup);
@@ -412,7 +453,7 @@ fn test_sgroup_bond_list_entry_invalid_bond_index(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_sgroup_shared_atoms_bonds(basic_molecule: Molecule) {
+fn test_apply_sgroup_atom_bond_list_entries_shared(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let sgroup = SGroup::new(SGroupType::Superatom);
     molecule.sgroups.insert(0, sgroup);
@@ -472,7 +513,7 @@ fn test_apply_atom_alias_entry(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_atom_alias_entry_invalid_atom_index(basic_molecule: Molecule) {
+fn test_atom_alias_entry_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entry = AtomAliasEntry {
         atom_index: 5,
@@ -528,7 +569,7 @@ fn test_apply_atom_value_entry(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_value_entry_invalid_atom_index(basic_molecule: Molecule) {
+fn test_apply_atom_value_entry_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entry = AtomValueEntry {
         atom_index: 5,
@@ -576,7 +617,7 @@ fn test_apply_atom_list_entry(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_list_entry_invalid_atom_index(basic_molecule: Molecule) {
+fn test_apply_atom_list_entry_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entry = AtomListEntry {
         atom_index: 5,
@@ -594,7 +635,7 @@ fn test_apply_atom_list_entry_invalid_atom_index(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_atom_list_entry_conflict(molecule_with_properties: Molecule) {
+fn test_apply_atom_list_entry_conflict(molecule_with_properties: Molecule) {
     let mut molecule = molecule_with_properties;
     molecule.atom_mut(0).unwrap().symbol = AtomSymbol::AtomList(AtomList {
         elements: vec![e!(C), e!(Si)],
@@ -617,111 +658,96 @@ fn test_atom_list_entry_conflict(molecule_with_properties: Molecule) {
     }
 }
 
+#[rstest]
+fn test_apply_rgroup_label_entries(molecule_with_rgroup: Molecule) {
+    let mut molecule = molecule_with_rgroup;
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 0,
+        label: 1,
+    }];
 
-// #[rstest]
-// fn test_apply_attachment_point_entry(basic_molecule: Molecule) {
-//     let mut molecule = basic_molecule;
-//     let sgroup = SGroup::new(SGroupType::Superatom);
-//     molecule.sgroups.insert(0, sgroup);
-//     let entries = vec![AttachmentPointEntry {
-//         atom_index: 0,
-//         attachment_type: 1,
-//     }];
+    entries.apply(&mut molecule).unwrap();
 
-//     entries.apply(&mut molecule).unwrap();
+    assert_eq!(
+        molecule.atom(0).unwrap().symbol,
+        AtomSymbol::RGroup(RGroup::new(Some(1)))
+    );
+}
 
-//     let atom = molecule.atom(0).unwrap();
-//     assert_eq!(
-//         atom.properties.get("molFileAttachmentPoint").unwrap(),
-//         "1"
-//     );
-// }
+#[rstest]
+fn test_apply_rgroup_label_entries_replace(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 0,
+        label: 1,
+    }];
 
-// #[rstest]
-// fn test_apply_attachment_point_entries_multiple(basic_molecule: Molecule) {
-//     let mut molecule = basic_molecule;
-//     let entries = vec![
-//         AttachmentPointEntry {
-//             atom_index: 0,
-//             attachment_type: 1,
-//         },
-//         AttachmentPointEntry {
-//             atom_index: 2,
-//             attachment_type: 2,
-//         },
-//     ];
+    entries.apply(&mut molecule).unwrap();
 
-//     entries.apply(&mut molecule).unwrap();
+    assert_eq!(
+        molecule.atom(0).unwrap().symbol,
+        AtomSymbol::RGroup(RGroup::new(Some(1)))
+    );
+}
 
-//     assert_eq!(
-//         molecule.atom(0).unwrap().properties.get("molFileAttachmentPoint").unwrap(),
-//         "1"
-//     );
-//     assert!(!molecule.atom(1).unwrap().properties.contains_key("molFileAttachmentPoint")); // unchanged
-//     assert_eq!(
-//         molecule.atom(2).unwrap().properties.get("molFileAttachmentPoint").unwrap(),
-//         "2"
-//     );
-// }
+#[rstest]
+fn test_apply_rgroup_label_entries_invalid(molecule_with_labeled_rgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_rgroup;
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 5,
+        label: 1,
+    }];
 
-// #[rstest]
-// fn test_apply_attachment_point_entry_invalid_atom_index(basic_molecule: Molecule) {
-//     let mut molecule = basic_molecule;
-//     let entries = vec![AttachmentPointEntry {
-//         atom_index: 5,  // invalid index
-//         attachment_type: 1,
-//     }];
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
 
-//     let result = entries.apply(&mut molecule);
-//     assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
 
-//     match result.unwrap_err() {
-//         Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-//         _ => panic!("Expected MissingAtomIndex error"),
-//     }
-// }
+#[rstest]
+fn test_apply_rgroup_label_entries_conflict(molecule_with_labeled_rgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_rgroup;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(2)));
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 0,
+        label: 1,
+    }];
 
-// #[rstest]
-// fn test_apply_attachment_point_entry_invalid(basic_molecule: Molecule) {
-//     let mut molecule = basic_molecule;
-//     let entries = vec![AttachmentPointEntry {
-//         atom_index: 0,
-//         attachment_type: 4,  // invalid type (valid range is 0-3)
-//     }];
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
 
-//     let result = entries.apply(&mut molecule);
-//     assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("RGroup label conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
 
-//     match result.unwrap_err() {
-//         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-//             assert!(msg.contains("Invalid attachment point type"));
-//         }
-//         _ => panic!("Expected InvalidComponent error"),
-//     }
-// }
+#[rstest]
+fn test_apply_rgroup_label_entries_duplicate(molecule_with_labeled_rgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_rgroup;
+    let entries = vec![
+        RGroupLabelEntry {
+            atom_index: 0,
+            label: 1,
+        },
+        RGroupLabelEntry {
+            atom_index: 0,
+            label: 2,
+        },
+    ];
 
-// #[rstest]
-// fn test_apply_attachment_point_entry_conflict(molecule_with_properties: Molecule) {
-//     let mut molecule = molecule_with_properties;
-//     // Set an existing attachment point
-//     molecule.atom_mut(0).unwrap().properties.insert(
-//         "molFileAttachmentPoint".to_string(),
-//         "1".to_string(),
-//     );
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
 
-//     let entries = vec![AttachmentPointEntry {
-//         atom_index: 0,
-//         attachment_type: 2,  // different from existing
-//     }];
-
-//     let result = entries.apply(&mut molecule);
-//     assert!(result.is_err());
-
-//     match result.unwrap_err() {
-//         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-//             assert!(msg.contains("Attachment point conflict"));
-//             assert!(msg.contains("existing '1' vs new '2'"));
-//         }
-//         _ => panic!("Expected InvalidComponent error"),
-//     }
-// }
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("RGroup"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}

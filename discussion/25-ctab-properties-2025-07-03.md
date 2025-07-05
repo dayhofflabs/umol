@@ -16,10 +16,10 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Subs Count | SUB    | -              | Query   | x      | x          | x      |                       |
 | Unsat Atom | UNS    | -              | Query   | x      | x          | x      |                       |
 | Link Atom  | LIN    | -              | Query   | x      | x          | x      |                       |
-| Atom List  | ALS    | -              | Query   | x      | x          | x      |                       |
+| Atom List  | ALS    | x              | Query   | x      | x          | x      |                       |
 | Att Point  | APO    | -              | RGroup  | x      | x          | x      |                       |
 | Att Order  | AAL    | -              | RGroup  | -      | -          | x      |                       |
-| Lab Loc    | RGP    | -              | RGroup  | x      | x          | x      |                       |
+| RGrp Label | RGP    | x              | RGroup  | x      | x          | x      |                       |
 | Logic      | LOG    | -              | RGroup  | -      | x          | x      |                       |
 | Sgrp Type  | STY    | x              | SGroup  | x      | x          | x      |                       |
 | Sgrp Subt  | SST    | -              | SGroup  | x      | x          | x      |                       |
