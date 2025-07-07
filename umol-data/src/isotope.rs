@@ -1,63 +1,26 @@
 //! Isotope definitions and data
 
-use map_macro::hash_map;
-use once_cell::sync::Lazy;
+use crate::half_life::HalfLife;
+use crate::isotope_data::ISOTOPE_DATA;
+use crate::Element;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display};
 use std::str::FromStr;
 use umol::error::DataError;
 use umol::{Error, Result};
 
-use crate::Element;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd)]
 pub enum NamedIsotope {
     D,
     T,
 }
 
-/// Named isotope data:
-///
-/// 0. element
-/// 1. isotope mass number
-/// 2. isotope mass (in amu)
-/// 3. isotope symbol
-static NAMED_ISOTOPE_DATA: Lazy<HashMap<NamedIsotope, (Element, u32, &'static str)>> =
-    Lazy::new(|| {
-        hash_map! {
-            NamedIsotope::D => (Element::H, 2, "D"),
-            NamedIsotope::T => (Element::H, 3, "T"),
-        }
-    });
-
-static SYMBOL_TO_NAMED_ISOTOPE: Lazy<HashMap<&'static str, NamedIsotope>> = Lazy::new(|| {
-    NAMED_ISOTOPE_DATA
-        .iter()
-        .map(|(isotope, data)| (data.2, *isotope))
-        .collect()
-});
-
-static NAMED_ISOTOPE_SYMBOLS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    NAMED_ISOTOPE_DATA
-        .iter()
-        .map(|(_, data)| data.2) // data.2 is the &'static str symbol (e.g., "D", "T")
-        .collect()
-});
-
 impl NamedIsotope {
     // Get named isotope from symbol bytestring (allocation-free)
     pub fn from_symbol_bytes(symbol: &[u8]) -> Option<Self> {
-        match symbol.len() {
-            1 => {
-                if !symbol[0].is_ascii_alphabetic() {
-                    return None;
-                }
-                let upper_b = symbol[0].to_ascii_uppercase();
-                let mut buf = [0u8; 1];
-                buf[0] = upper_b;
-                let key_str = core::str::from_utf8(&buf).unwrap();
-                SYMBOL_TO_NAMED_ISOTOPE.get(key_str).copied()
-            }
+        match symbol {
+            b"D" | b"d" => Some(NamedIsotope::D),
+            b"T" | b"t" => Some(NamedIsotope::T),
             _ => None,
         }
     }
@@ -69,51 +32,43 @@ impl NamedIsotope {
 
     /// Only hydrogen isotope are named
     pub fn element(&self) -> Element {
-        NAMED_ISOTOPE_DATA.get(self).unwrap().0
+        Element::H
     }
 
     /// Get the isotope mass number
     pub fn mass_number(&self) -> u32 {
-        NAMED_ISOTOPE_DATA.get(self).unwrap().1
+        match self {
+            NamedIsotope::D => 2,
+            NamedIsotope::T => 3,
+        }
+    }
+
+    /// Get the isotope key (element, mass number) as a 32-bit integer
+    pub fn key(&self) -> u32 {
+        (Element::H.atomic_number() as u32) << 16 | self.mass_number()
     }
 
     /// Get the isotope mass (in amu)
     pub fn mass(&self) -> f64 {
-        ISOTOPE_DATA
-            .get(&(self.element(), self.mass_number()))
-            .unwrap()
-            .0
+        ISOTOPE_DATA.get(&self.key()).unwrap().0
     }
 
     /// Get the isotope half-life (in s)
-    pub fn half_life(&self) -> Option<f64> {
-        ISOTOPE_DATA
-            .get(&(self.element(), self.mass_number()))
-            .unwrap()
-            .1
+    pub fn half_life(&self) -> Option<HalfLife> {
+        ISOTOPE_DATA.get(&self.key()).unwrap().1
     }
 
     /// Get the isotope symbol
     pub fn symbol(&self) -> &'static str {
-        NAMED_ISOTOPE_DATA.get(self).unwrap().2
+        match self {
+            NamedIsotope::D => "D",
+            NamedIsotope::T => "T",
+        }
     }
 
     /// Check if bytestring contains valid named isotope
     pub fn is_named_isotope_bytes(symbol: &[u8]) -> bool {
-        match symbol.len() {
-            1 => {
-                if !symbol[0].is_ascii_alphabetic() {
-                    return false;
-                }
-                let upper_b = symbol[0].to_ascii_uppercase();
-                let mut key_buf = [0u8; 1];
-                key_buf[0] = upper_b;
-                // This unwrap is safe: a single ASCII char is valid UTF-8.
-                let lookup_key_str = core::str::from_utf8(&key_buf).unwrap();
-                NAMED_ISOTOPE_SYMBOLS.contains(lookup_key_str)
-            }
-            _ => false, // Named isotopes are single characters like D or T
-        }
+        symbol == b"D" || symbol == b"d" || symbol == b"T" || symbol == b"t"
     }
 
     /// Check if string contains valid named isotope
@@ -165,54 +120,19 @@ pub struct Isotope {
     mass_number: u32,
 }
 
-/// Isotope data:
+/// Isotope data is auto-generated from AME2020 and NUBASE2020 and stored in isotope_data.rs.
 ///
 /// 0. isotope mass (in amu)
-/// 1. half-life (in s)
-static ISOTOPE_DATA: Lazy<HashMap<(Element, u32), (f64, Option<f64>)>> = Lazy::new(|| {
-    hash_map! {
-        // Hydrogen
-        (Element::H, 1) => (1.00782503223, None), // Protium
-        (Element::H, 2) => (2.01410177812, None), // Deuterium
-        (Element::H, 3) => (3.0160492779, Some(3.8878e8)),  // Tritium (12.33 years)
-        // Helium
-        (Element::He, 3) => (3.0160293201, None),
-        (Element::He, 4) => (4.00260325413, None),
-        // Lithium
-        (Element::Li, 6) => (6.0151228874, None),
-        (Element::Li, 7) => (7.0160034366, None),
-        // Beryllium
-        (Element::Be, 9) => (9.012183065, None),
-        // Boron
-        (Element::B, 10) => (10.01293695, None),
-        (Element::B, 11) => (11.00930536, None),
-        // Carbon
-        (Element::C, 12) => (12.0000000, None),
-        (Element::C, 13) => (13.00335483507, None),
-        // Nitrogen
-        (Element::N, 14) => (14.00307400443, None),
-        (Element::N, 15) => (15.00010889888, None),
-        // Oxygen
-        (Element::O, 16) => (15.99491461957, None),
-        (Element::O, 17) => (16.99913175650, None),
-        (Element::O, 18) => (17.99915961286, None),
-        // Fluorine
-        (Element::F, 19) => (18.99840316273, None),
-        // Neon
-        (Element::Ne, 20) => (19.9924401762, None),
-        (Element::Ne, 21) => (20.993846685, None),
-        (Element::Ne, 22) => (21.991385114, None),
-    }
-});
-
+/// 1. half-life (value, unit)
 impl Isotope {
     /// Create a new isotope if it exists in ISOTOPE_DATA.  
     pub fn checked_new(element: Element, mass_number: u32) -> Option<Self> {
-        if ISOTOPE_DATA.contains_key(&(element, mass_number)) {
-            Some(Isotope {
-                element,
-                mass_number,
-            })
+        let isotope = Isotope {
+            element,
+            mass_number,
+        };
+        if ISOTOPE_DATA.contains_key(&isotope.key()) {
+            Some(isotope)
         } else {
             None
         }
@@ -264,20 +184,29 @@ impl Isotope {
         Self::from_symbol_bytes(symbol.as_bytes())
     }
 
+    /// Get element
+    pub const fn element(&self) -> Element {
+        self.element
+    }
+
+    /// Get mass number
+    pub const fn mass_number(&self) -> u32 {
+        self.mass_number
+    }
+
+    /// Get key (element, mass number) as a 32-bit integer
+    pub const fn key(&self) -> u32 {
+        (self.element.atomic_number() as u32) << 16 | self.mass_number
+    }
+
     /// Get isotope mass (in amu)
     pub fn mass(&self) -> f64 {
-        ISOTOPE_DATA
-            .get(&(self.element, self.mass_number))
-            .unwrap()
-            .0
+        ISOTOPE_DATA.get(&self.key()).unwrap().0
     }
 
     /// Get isotope half-life (in s)
-    pub fn half_life(&self) -> Option<f64> {
-        ISOTOPE_DATA
-            .get(&(self.element, self.mass_number))
-            .unwrap()
-            .1
+    pub fn half_life(&self) -> Option<HalfLife> {
+        ISOTOPE_DATA.get(&self.key()).unwrap().1
     }
 
     /// Get isotope symbol (AZ notation)
@@ -324,6 +253,7 @@ macro_rules! iso {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::half_life::TimeUnit;
     use float_cmp::*;
     use rstest::*;
     use serde_json;
@@ -349,14 +279,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case(NamedIsotope::D, Element::H, 2, 2.01410177812, None, "D")]
-    #[case(NamedIsotope::T, Element::H, 3, 3.0160492779, Some(3.8878e8), "T")]
+    #[case(NamedIsotope::D, Element::H, 2, 2.014102, None, "D")]
+    #[case(NamedIsotope::T, Element::H, 3, 3.016049, Some(HalfLife { value: 12.32, unit: TimeUnit::Years }), "T")]
     fn test_named_isotope_properties(
         #[case] named_isotope: NamedIsotope,
         #[case] expected_element: Element,
         #[case] expected_mass_number: u32,
         #[case] expected_mass: f64,
-        #[case] expected_half_life: Option<f64>,
+        #[case] expected_half_life: Option<HalfLife>,
         #[case] expected_symbol: &str,
     ) {
         assert_eq!(named_isotope.element(), expected_element);
@@ -474,7 +404,7 @@ mod tests {
             Isotope::checked_new(Element::C, 12).unwrap().mass_number,
             12
         );
-        assert!(Isotope::checked_new(Element::U, 235).is_none()); // Assuming U-235 is not in our small ISOTOPE_DATA table
+        assert!(Isotope::checked_new(Element::C, 40).is_none()); // 40C not in ISOTOPE_DATA
         assert!(Isotope::checked_new(Element::H, 0).is_none()); // Invalid mass number
     }
 
@@ -506,7 +436,7 @@ mod tests {
         assert!(Isotope::from_symbol_bytes(b"1").is_none()); // Mass number only
         assert!(Isotope::from_symbol_bytes(b"").is_none()); // Empty string
         assert!(Isotope::from_symbol_bytes(b"1X").is_none()); // Invalid element
-        assert!(Isotope::from_symbol_bytes(b"235U").is_none()); // Valid format, but U-235 not in ISOTOPE_DATA
+        assert!(Isotope::from_symbol_bytes(b"40C").is_none()); // Valid format, but 40C not in ISOTOPE_DATA
         assert!(Isotope::from_symbol_bytes(b"0H").is_none()); // Invalid mass number
     }
 
@@ -538,28 +468,28 @@ mod tests {
         assert!(Isotope::from_symbol("1").is_none()); // Mass number only
         assert!(Isotope::from_symbol("").is_none()); // Empty string
         assert!(Isotope::from_symbol("1X").is_none()); // Invalid element
-        assert!(Isotope::from_symbol("235U").is_none()); // Valid format, but U-235 not in ISOTOPE_DATA
+        assert!(Isotope::from_symbol("40C").is_none()); // Valid format, but 40C not in ISOTOPE_DATA
         assert!(Isotope::from_symbol("0H").is_none()); // Invalid mass number
     }
 
     #[rstest]
-    #[case("1H", 1.00782503223, None, "1H")]
-    #[case("2H", 2.01410177812, None, "2H")]
-    #[case("3H", 3.0160492779, Some(3.8878e8), "3H")]
-    #[case("4He", 4.00260325413, None, "4He")]
-    #[case("12C", 12.0000000, None, "12C")]
-    #[case("13C", 13.00335483507, None, "13C")]
-    #[case("20Ne", 19.9924401762, None, "20Ne")]
+    #[case("1H", 1.007825, None, "1H")]
+    #[case("2H", 2.014102, None, "2H")]
+    #[case("3H", 3.016049, Some(HalfLife { value: 12.32, unit: TimeUnit::Years }), "3H")]
+    #[case("4He", 4.002603, None, "4He")]
+    #[case("12C", 12.000000, None, "12C")]
+    #[case("13C", 13.003355, None, "13C")]
+    #[case("20Ne", 19.992440, None, "20Ne")]
     fn test_isotope_properties(
         #[case] sym: &str,
         #[case] mass: f64,
-        #[case] half_life: Option<f64>,
+        #[case] half_life: Option<HalfLife>,
         #[case] expected_sym: &str,
     ) {
         let isotope = Isotope::from_symbol(sym).unwrap();
         assert!(approx_eq!(f64, isotope.mass(), mass, ulps = 4));
         match (isotope.half_life(), half_life) {
-            (Some(v1), Some(v2)) => assert!(approx_eq!(f64, v1, v2, ulps = 4)),
+            (Some(v1), Some(v2)) => assert!(approx_eq!(f64, v1.value, v2.value, ulps = 4)),
             (None, None) => (),
             _ => panic!("Half-life mismatch"),
         }
@@ -585,7 +515,7 @@ mod tests {
             Isotope::from_symbol("12C").unwrap()
         );
         assert!("Invalid".parse::<Isotope>().is_err());
-        assert!("235U".parse::<Isotope>().is_err()); // Not in ISOTOPE_DATA
+        assert!("40C".parse::<Isotope>().is_err()); // 40C not in ISOTOPE_DATA
     }
 
     #[test]
@@ -615,89 +545,4 @@ mod tests {
         assert_eq!(iso!("1H"), Isotope::from_symbol("1H").unwrap());
         assert_eq!(iso!("12C"), Isotope::from_symbol("12C").unwrap());
     }
-}
-
-/// Represents a unit of time for half-life values.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TimeUnit {
-    Yoctoseconds, // 1e-24 s
-    Zeptoseconds, // 1e-21 s
-    Attoseconds,  // 1e-18 s
-    Femtoseconds, // 1e-15 s
-    Picoseconds,  // 1e-12 s
-    Nanoseconds,  // 1e-9 s
-    Microseconds, // 1e-6 s
-    Milliseconds, // 1e-3 s
-    Seconds,
-    Minutes,
-    Hours,
-    Days,
-    Years,
-    KiloYears,    // 1e3 y
-    MegaYears,    // 1e6 y
-    GigaYears,    // 1e9 y
-    TeraYears,    // 1e12 y
-    PetaYears,    // 1e15 y
-    ExaYears,     // 1e18 y
-    ZettaYears,   // 1e21 y
-    YottaYears,   // 1e24 y
-    ElectronVolts,
-    KiloElectronVolts,
-    MegaElectronVolts,
-}
-
-impl TimeUnit {
-    /// Returns the conversion factor to seconds.
-    pub fn to_seconds_factor(&self) -> f64 {
-        const S_PER_YEAR: f64 = 3.155_695_2e7; // seconds per mean tropical year
-        const H_BAR: f64 = 6.582_119_569e-16; // eV·s
-
-        match *self {
-            TimeUnit::Yoctoseconds => 1e-24,
-            TimeUnit::Zeptoseconds => 1e-21,
-            TimeUnit::Attoseconds => 1e-18,
-            TimeUnit::Femtoseconds => 1e-15,
-            TimeUnit::Picoseconds => 1e-12,
-            TimeUnit::Nanoseconds => 1e-9,
-            TimeUnit::Microseconds => 1e-6,
-            TimeUnit::Milliseconds => 1e-3,
-            TimeUnit::Seconds => 1.0,
-            TimeUnit::Minutes => 60.0,
-            TimeUnit::Hours => 3600.0,
-            TimeUnit::Days => 86400.0,
-            TimeUnit::Years => S_PER_YEAR,
-            TimeUnit::KiloYears => S_PER_YEAR * 1e3,
-            TimeUnit::MegaYears => S_PER_YEAR * 1e6,
-            TimeUnit::GigaYears => S_PER_YEAR * 1e9,
-            TimeUnit::TeraYears => S_PER_YEAR * 1e12,
-            TimeUnit::PetaYears => S_PER_YEAR * 1e15,
-            TimeUnit::ExaYears => S_PER_YEAR * 1e18,
-            TimeUnit::ZettaYears => S_PER_YEAR * 1e21,
-            TimeUnit::YottaYears => S_PER_YEAR * 1e24,
-            TimeUnit::ElectronVolts => H_BAR, // τ = ħ/Γ
-            TimeUnit::KiloElectronVolts => H_BAR / 1e3,
-            TimeUnit::MegaElectronVolts => H_BAR / 1e6,
-        }
-    }
-}
-
-/// Represents the half-life of an isotope.
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct HalfLife {
-    pub value: f64,
-    pub unit: TimeUnit,
-}
-
-impl HalfLife {
-    /// Calculates the half-life in seconds.
-    pub fn to_seconds(&self) -> f64 {
-        self.value * self.unit.to_seconds_factor()
-    }
-}
-
-/// Stores properties of a specific isotope.
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub struct IsotopeProperties {
-    pub mass: f64,
-    pub half_life: Option<HalfLife>,
 }

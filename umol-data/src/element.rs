@@ -1,9 +1,7 @@
 //! Element definitions and data
 
-use phf::PhfHash;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
-use std::hash::Hash;
 use std::str::FromStr;
 use umol::error::DataError;
 use umol::{Error, Result};
@@ -18,12 +16,6 @@ pub enum Element {
     Re, Os, Ir, Pt, Au, Hg, Tl, Pb, Bi, Po, At, Rn, Fr, Ra, Ac, Th, Pa, U,
     Np, Pu, Am, Cm, Bk, Cf, Es, Fm, Md, No, Lr, Rf, Db, Sg, Bh, Hs, Mt, Ds,
     Rg, Cn, Nh, Fl, Mc, Lv, Ts, Og,
-}
-
-impl PhfHash for Element {
-    fn phf_hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u8(self.atomic_number());
-    }
 }
 
 // Element data array indexed by atomic number - 1
@@ -619,7 +611,7 @@ impl Element {
     }
 
     // Get element from atomic number
-    pub fn from_atomic_number(number: u8) -> Option<Self> {
+    pub const fn from_atomic_number(number: u8) -> Option<Self> {
         if number >= 1 && number <= 118 {
             Some(ELEMENTS[(number - 1) as usize])
         } else {
@@ -629,7 +621,7 @@ impl Element {
 
     // Get element from period and group coordinates
     // NOTE: 32-group layout is used for unique group assignment.
-    pub fn from_period_group(period: u8, group: u8) -> Option<Self> {
+    pub const fn from_period_group(period: u8, group: u8) -> Option<Self> {
         if period == 0 || period > MAX_PERIOD_NUMBER || group == 0 || group > 32 {
             None
         } else {
@@ -638,74 +630,74 @@ impl Element {
     }
 
     // Get atomic number for element
-    pub fn atomic_number(&self) -> u8 {
+    pub const fn atomic_number(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].0
     }
 
     // Get mass number of the reference isotope for element
-    pub fn reference_mass_number(&self) -> u32 {
+    pub const fn reference_mass_number(&self) -> u32 {
         let index = *self as usize;
         ELEMENT_DATA[index].1
     }
 
     // Get atomic mass (standard atomic weight) for element
-    pub fn mass(&self) -> f64 {
+    pub const fn mass(&self) -> f64 {
         let index = *self as usize;
         ELEMENT_DATA[index].2
     }
 
     // Get symbol for element
-    pub fn symbol(&self) -> &'static str {
+    pub const fn symbol(&self) -> &'static str {
         let index = *self as usize;
         ELEMENT_DATA[index].3
     }
 
     // Get period for element
-    pub fn period(&self) -> u8 {
+    pub const fn period(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].4
     }
 
     // Get group number for element.
     // NOTE: 32-group layout is used for unique group assignment.
-    pub fn group(&self) -> u8 {
+    pub const fn group(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].5
     }
 
     // Get number of valence electrons for element
-    pub fn valence_electrons(&self) -> u8 {
+    pub const fn valence_electrons(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].6
     }
 
     // Get max valence for element
-    pub fn max_valence(&self) -> u8 {
+    pub const fn max_valence(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].7
     }
 
     // Get minimum and maximum charge for element
-    pub fn charge_bounds(&self) -> (i8, i8) {
+    pub const fn charge_bounds(&self) -> (i8, i8) {
         let index = *self as usize;
         ELEMENT_DATA[index].8
     }
 
     // Get maximum number of unpaired electrons for element
-    pub fn max_unpaired_electrons(&self) -> u8 {
+    pub const fn max_unpaired_electrons(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].9
     }
 
     // Get maximum number of implicit hydrogens for element
-    pub fn max_implicit_hydrogens(&self) -> u8 {
+    pub const fn max_implicit_hydrogens(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].10
     }
 
     // Get next element in the periodic table
-    pub fn next(&self) -> Option<Self> {
+    pub const fn next(&self) -> Option<Self> {
         let atomic_number = self.atomic_number();
         if atomic_number < MAX_ATOMIC_NUMBER {
             Self::from_atomic_number(atomic_number + 1)
@@ -715,7 +707,7 @@ impl Element {
     }
 
     // Get previous element in the periodic table
-    pub fn previous(&self) -> Option<Self> {
+    pub const fn previous(&self) -> Option<Self> {
         let atomic_number = self.atomic_number();
         if atomic_number > 1 {
             Self::from_atomic_number(atomic_number - 1)
@@ -725,7 +717,7 @@ impl Element {
     }
 
     // Get element in the next period (same group)
-    pub fn next_period(&self) -> Option<Self> {
+    pub const fn next_period(&self) -> Option<Self> {
         if self.period() == MAX_PERIOD_NUMBER {
             None
         } else {
@@ -734,7 +726,7 @@ impl Element {
     }
 
     // Get element in the previous period (same group)
-    pub fn previous_period(&self) -> Option<Self> {
+    pub const fn previous_period(&self) -> Option<Self> {
         if self.period() == MIN_PERIOD_NUMBER[self.group() as usize] {
             None
         } else {
@@ -743,7 +735,7 @@ impl Element {
     }
 
     // Get element in the next group (same period)
-    pub fn next_group(&self) -> Option<Self> {
+    pub const fn next_group(&self) -> Option<Self> {
         if self.group() == MAX_GROUP_NUMBER[self.period() as usize] {
             None
         } else {
@@ -752,7 +744,7 @@ impl Element {
     }
 
     // Get element in the previous group (same period)
-    pub fn previous_group(&self) -> Option<Self> {
+    pub const fn previous_group(&self) -> Option<Self> {
         if self.group() == 1 {
             None
         } else {
