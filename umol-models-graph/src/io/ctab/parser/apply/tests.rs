@@ -22,39 +22,6 @@ fn basic_molecule() -> Molecule {
 }
 
 #[fixture]
-fn molecule_with_sgroup(basic_molecule: Molecule) -> Molecule {
-    let mut molecule = basic_molecule;
-    let mut sgroup = SGroup::new(SGroupType::Generic);
-    sgroup.atom_indices = vec![0, 1];
-    sgroup.bond_indices = vec![0];
-    molecule.add_sgroup(sgroup);
-    molecule
-}
-
-#[fixture]
-fn molecule_with_labeled_sgroup(molecule_with_sgroup: Molecule) -> Molecule {
-    let mut molecule = molecule_with_sgroup;
-    molecule.sgroups.get_mut(&0).unwrap().label = Some(15);
-    let sgroup = SGroup::new(SGroupType::Superatom);
-    molecule.add_sgroup(sgroup);
-    molecule
-}
-
-#[fixture]
-fn molecule_with_rgroup(basic_molecule: Molecule) -> Molecule {
-    let mut molecule = basic_molecule;
-    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(None));
-    molecule
-}
-
-#[fixture]
-fn molecule_with_labeled_rgroup(molecule_with_rgroup: Molecule) -> Molecule {
-    let mut molecule = molecule_with_rgroup;
-    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(1)));
-    molecule
-}
-
-#[fixture]
 fn molecule_with_properties(basic_molecule: Molecule) -> Molecule {
     let mut molecule = basic_molecule;
 
@@ -78,6 +45,143 @@ fn molecule_with_properties(basic_molecule: Molecule) -> Molecule {
     molecule.sgroups.insert(0, sgroup);
 
     molecule
+}
+
+#[fixture]
+fn molecule_with_rgroup(basic_molecule: Molecule) -> Molecule {
+    let mut molecule = basic_molecule;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(None));
+    molecule
+}
+
+#[fixture]
+fn molecule_with_labeled_rgroup(molecule_with_rgroup: Molecule) -> Molecule {
+    let mut molecule = molecule_with_rgroup;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(1)));
+    molecule
+}
+
+#[fixture]
+fn molecule_with_sgroup(basic_molecule: Molecule) -> Molecule {
+    let mut molecule = basic_molecule;
+    let mut sgroup = SGroup::new(SGroupType::Generic);
+    sgroup.atom_indices = vec![0, 1];
+    sgroup.bond_indices = vec![0];
+    molecule.add_sgroup(sgroup);
+    molecule
+}
+
+#[fixture]
+fn molecule_with_labeled_sgroup(molecule_with_sgroup: Molecule) -> Molecule {
+    let mut molecule = molecule_with_sgroup;
+    molecule.sgroups.get_mut(&0).unwrap().label = Some(15);
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.add_sgroup(sgroup);
+    molecule
+}
+
+#[rstest]
+fn test_apply_atom_alias_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomAliasEntry {
+        atom_index: 0,
+        alias: "C1".to_string(),
+    };
+
+    entry.apply(&mut molecule).unwrap();
+
+    let alias = molecule
+        .atom(0)
+        .unwrap()
+        .properties
+        .get("molFileAlias")
+        .unwrap();
+    assert_eq!(alias, "C1");
+}
+
+#[rstest]
+fn test_atom_alias_entry_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomAliasEntry {
+        atom_index: 5,
+        alias: "C1".to_string(),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_atom_alias_entry_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    let entry = AtomAliasEntry {
+        atom_index: 0,
+        alias: "new".to_string(),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Atom alias conflict"));
+            assert!(msg.contains("existing 'existing' vs new 'new'"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_atom_value_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomValueEntry {
+        atom_index: 0,
+        value: "*".to_string(),
+    };
+
+    entry.apply(&mut molecule).unwrap();
+
+    let value = molecule
+        .atom(0)
+        .unwrap()
+        .properties
+        .get("molFileValue")
+        .unwrap();
+    assert_eq!(value, "*");
+}
+
+#[rstest]
+fn test_apply_atom_value_entry_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomValueEntry {
+        atom_index: 5,
+        value: "*".to_string(),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_apply_atom_value_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    let entry = AtomValueEntry {
+        atom_index: 0,
+        value: "new".to_string(),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
 }
 
 #[rstest]
@@ -230,6 +334,25 @@ fn test_apply_isotope_entries(basic_molecule: Molecule) {
 }
 
 #[rstest]
+fn test_apply_isotope_entries_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![IsotopeEntry {
+        atom_index: 0,
+        mass: 0,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid isotope mass"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
 fn test_apply_isotope_entries_conflict(molecule_with_properties: Molecule) {
     let mut molecule = molecule_with_properties;
     let entries = vec![IsotopeEntry {
@@ -244,6 +367,293 @@ fn test_apply_isotope_entries_conflict(molecule_with_properties: Molecule) {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
             assert!(msg.contains("Isotope conflict"));
             assert!(msg.contains("existing 13 vs new 14"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_ring_bond_count_entries(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![RingBondCountEntry {
+        atom_index: 0,
+        ring_bond_count: 2,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.atom(0).unwrap().ring_bond_count, Some(2));
+}
+
+#[rstest]
+fn test_apply_ring_bond_count_entries_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().ring_bond_count = Some(3);
+    let entries = vec![RingBondCountEntry {
+        atom_index: 0,
+        ring_bond_count: 2,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Ring bond count conflict"));
+            assert!(msg.contains("existing 1 vs new 2"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_substitution_count_entries(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![SubstitutionCountEntry {
+        atom_index: 0,
+        substitution_count: 2,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.atom(0).unwrap().substitution_count, Some(2));
+}
+
+#[rstest]
+fn test_apply_substitution_count_entries_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![SubstitutionCountEntry {
+        atom_index: 0,
+        substitution_count: 7,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid substitution count"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_substitution_count_entries_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().substitution_count = Some(1);
+    let entries = vec![SubstitutionCountEntry {
+        atom_index: 0,
+        substitution_count: 2,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Substitution count conflict"));
+            assert!(msg.contains("existing 1 vs new 2"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_unsaturated_atom_entries(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![UnsaturatedAtomEntry {
+        atom_index: 0,
+        unsaturated: 1,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.atom(0).unwrap().unsaturated, Some(true));
+}
+
+#[rstest]
+fn test_apply_unsaturated_atom_entries_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().unsaturated = Some(true);
+    let entries = vec![UnsaturatedAtomEntry {
+        atom_index: 0,
+        unsaturated: 0,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Unsaturated conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_unsaturated_atom_entries_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![UnsaturatedAtomEntry {
+        atom_index: 0,
+        unsaturated: 2,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid unsaturated atom"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_atom_list_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomListEntry {
+        atom_index: 0,
+        exclusion: false,
+        elements: vec![e!(C), e!(Si)],
+    };
+
+    entry.apply(&mut molecule).unwrap();
+    assert_eq!(
+        molecule.atom(0).unwrap().symbol,
+        AtomSymbol::AtomList(AtomList {
+            elements: vec![e!(C), e!(Si)],
+        })
+    );
+}
+
+#[rstest]
+fn test_apply_atom_list_entry_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomListEntry {
+        atom_index: 5,
+        exclusion: false,
+        elements: vec![e!(C), e!(Si)],
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_apply_atom_list_entry_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::AtomList(AtomList {
+        elements: vec![e!(C), e!(Si)],
+    });
+
+    let entry = AtomListEntry {
+        atom_index: 0,
+        exclusion: false,
+        elements: vec![e!(C), e!(Pb)],
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Atom list conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_rgroup_label_entries(molecule_with_rgroup: Molecule) {
+    let mut molecule = molecule_with_rgroup;
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 0,
+        label: 1,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+
+    assert_eq!(
+        molecule.atom(0).unwrap().symbol,
+        AtomSymbol::RGroup(RGroup::new(Some(1)))
+    );
+}
+
+#[rstest]
+fn test_apply_rgroup_label_entries_replace(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 0,
+        label: 1,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+
+    assert_eq!(
+        molecule.atom(0).unwrap().symbol,
+        AtomSymbol::RGroup(RGroup::new(Some(1)))
+    );
+}
+
+#[rstest]
+fn test_apply_rgroup_label_entries_invalid(molecule_with_labeled_rgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_rgroup;
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 5,
+        label: 1,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_apply_rgroup_label_entries_conflict(molecule_with_labeled_rgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_rgroup;
+    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(2)));
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 0,
+        label: 1,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("RGroup label conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_rgroup_label_entries_duplicate(molecule_with_labeled_rgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_rgroup;
+    let entries = vec![
+        RGroupLabelEntry {
+            atom_index: 0,
+            label: 1,
+        },
+        RGroupLabelEntry {
+            atom_index: 0,
+            label: 2,
+        },
+    ];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("RGroup"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }
@@ -491,263 +901,4 @@ fn test_apply_sgroup_atom_bond_list_entries_shared(basic_molecule: Molecule) {
     assert_eq!(molecule.sgroups[&1].atom_indices, vec![1, 2]);
     assert_eq!(molecule.sgroups[&0].bond_indices, vec![0]);
     assert_eq!(molecule.sgroups[&1].bond_indices, vec![0]);
-}
-
-#[rstest]
-fn test_apply_atom_alias_entry(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entry = AtomAliasEntry {
-        atom_index: 0,
-        alias: "C1".to_string(),
-    };
-
-    entry.apply(&mut molecule).unwrap();
-
-    let alias = molecule
-        .atom(0)
-        .unwrap()
-        .properties
-        .get("molFileAlias")
-        .unwrap();
-    assert_eq!(alias, "C1");
-}
-
-#[rstest]
-fn test_atom_alias_entry_invalid(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entry = AtomAliasEntry {
-        atom_index: 5,
-        alias: "C1".to_string(),
-    };
-
-    let result = entry.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-        _ => panic!("Expected MissingAtomIndex error"),
-    }
-}
-
-#[rstest]
-fn test_atom_alias_entry_conflict(molecule_with_properties: Molecule) {
-    let mut molecule = molecule_with_properties;
-    let entry = AtomAliasEntry {
-        atom_index: 0,
-        alias: "new".to_string(),
-    };
-
-    let result = entry.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Atom alias conflict"));
-            assert!(msg.contains("existing 'existing' vs new 'new'"));
-        }
-        _ => panic!("Expected InvalidComponent error"),
-    }
-}
-
-#[rstest]
-fn test_apply_atom_value_entry(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entry = AtomValueEntry {
-        atom_index: 0,
-        value: "*".to_string(),
-    };
-
-    entry.apply(&mut molecule).unwrap();
-
-    let value = molecule
-        .atom(0)
-        .unwrap()
-        .properties
-        .get("molFileValue")
-        .unwrap();
-    assert_eq!(value, "*");
-}
-
-#[rstest]
-fn test_apply_atom_value_entry_invalid(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entry = AtomValueEntry {
-        atom_index: 5,
-        value: "*".to_string(),
-    };
-
-    let result = entry.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-        _ => panic!("Expected MissingAtomIndex error"),
-    }
-}
-
-#[rstest]
-fn test_apply_atom_value_conflict(molecule_with_properties: Molecule) {
-    let mut molecule = molecule_with_properties;
-    let entry = AtomValueEntry {
-        atom_index: 0,
-        value: "new".to_string(),
-    };
-
-    let result = entry.apply(&mut molecule);
-    assert!(result.is_err());
-}
-
-#[rstest]
-fn test_apply_atom_list_entry(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entry = AtomListEntry {
-        atom_index: 0,
-        exclusion: false,
-        elements: vec![e!(C), e!(Si)],
-    };
-
-    entry.apply(&mut molecule).unwrap();
-
-    assert_eq!(
-        molecule.atom(0).unwrap().symbol,
-        AtomSymbol::AtomList(AtomList {
-            elements: vec![e!(C), e!(Si)],
-        })
-    );
-}
-
-#[rstest]
-fn test_apply_atom_list_entry_invalid(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entry = AtomListEntry {
-        atom_index: 5,
-        exclusion: false,
-        elements: vec![e!(C), e!(Si)],
-    };
-
-    let result = entry.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-        _ => panic!("Expected MissingAtomIndex error"),
-    }
-}
-
-#[rstest]
-fn test_apply_atom_list_entry_conflict(molecule_with_properties: Molecule) {
-    let mut molecule = molecule_with_properties;
-    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::AtomList(AtomList {
-        elements: vec![e!(C), e!(Si)],
-    });
-
-    let entry = AtomListEntry {
-        atom_index: 0,
-        exclusion: false,
-        elements: vec![e!(C), e!(Pb)],
-    };
-
-    let result = entry.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Atom list conflict"));
-        }
-        _ => panic!("Expected InvalidComponent error"),
-    }
-}
-
-#[rstest]
-fn test_apply_rgroup_label_entries(molecule_with_rgroup: Molecule) {
-    let mut molecule = molecule_with_rgroup;
-    let entries = vec![RGroupLabelEntry {
-        atom_index: 0,
-        label: 1,
-    }];
-
-    entries.apply(&mut molecule).unwrap();
-
-    assert_eq!(
-        molecule.atom(0).unwrap().symbol,
-        AtomSymbol::RGroup(RGroup::new(Some(1)))
-    );
-}
-
-#[rstest]
-fn test_apply_rgroup_label_entries_replace(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entries = vec![RGroupLabelEntry {
-        atom_index: 0,
-        label: 1,
-    }];
-
-    entries.apply(&mut molecule).unwrap();
-
-    assert_eq!(
-        molecule.atom(0).unwrap().symbol,
-        AtomSymbol::RGroup(RGroup::new(Some(1)))
-    );
-}
-
-#[rstest]
-fn test_apply_rgroup_label_entries_invalid(molecule_with_labeled_rgroup: Molecule) {
-    let mut molecule = molecule_with_labeled_rgroup;
-    let entries = vec![RGroupLabelEntry {
-        atom_index: 5,
-        label: 1,
-    }];
-
-    let result = entries.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-        _ => panic!("Expected MissingAtomIndex error"),
-    }
-}
-
-#[rstest]
-fn test_apply_rgroup_label_entries_conflict(molecule_with_labeled_rgroup: Molecule) {
-    let mut molecule = molecule_with_labeled_rgroup;
-    molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(2)));
-    let entries = vec![RGroupLabelEntry {
-        atom_index: 0,
-        label: 1,
-    }];
-
-    let result = entries.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("RGroup label conflict"));
-        }
-        _ => panic!("Expected InvalidComponent error"),
-    }
-}
-
-#[rstest]
-fn test_apply_rgroup_label_entries_duplicate(molecule_with_labeled_rgroup: Molecule) {
-    let mut molecule = molecule_with_labeled_rgroup;
-    let entries = vec![
-        RGroupLabelEntry {
-            atom_index: 0,
-            label: 1,
-        },
-        RGroupLabelEntry {
-            atom_index: 0,
-            label: 2,
-        },
-    ];
-
-    let result = entries.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("RGroup"));
-        }
-        _ => panic!("Expected InvalidComponent error"),
-    }
 }

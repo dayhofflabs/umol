@@ -14,6 +14,18 @@ use super::utils::{fixed_width_int, fixed_width_int_in_range, fixed_width_int_mi
 use umol_data::Element;
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AtomAliasEntry {
+    pub atom_index: usize,
+    pub alias: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AtomValueEntry {
+    pub atom_index: usize,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ChargeEntry {
     pub atom_index: usize,
     pub charge: i8,
@@ -29,67 +41,6 @@ pub struct RadicalEntry {
 pub struct IsotopeEntry {
     pub atom_index: usize,
     pub mass: u32,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SGroupTypeEntry {
-    pub sgroup_index: usize,
-    pub sgroup_type: SGroupType,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SGroupLabelEntry {
-    pub sgroup_index: usize,
-    pub label: u32,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SGroupAtomListEntry {
-    pub sgroup_index: usize,
-    pub atom_indices: Vec<usize>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SGroupBondListEntry {
-    pub sgroup_index: usize,
-    pub bond_indices: Vec<usize>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AtomAliasEntry {
-    pub atom_index: usize,
-    pub alias: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AtomValueEntry {
-    pub atom_index: usize,
-    pub value: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AtomListEntry {
-    pub atom_index: usize,
-    pub exclusion: bool,                   // T = NOT list, F = normal list
-    pub elements: Vec<umol_data::Element>, // Converted from 4-char symbols
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AttachmentPointEntry {
-    pub atom_index: usize,
-    pub attachment_type: u8, // 0=none, 1=first, 2=second, 3=both
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AtomAttachmentOrderEntry {
-    pub atom_index: usize,
-    pub attachments: Vec<(usize, u8)>, // (neighbor_index, order)
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RGroupLabelEntry {
-    pub atom_index: usize,
-    pub label: u32, // 0 = no label, 1-32 in CTab spec, 1-999 in RDKit
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -118,27 +69,97 @@ pub struct LinkAtomEntry {
     pub bond2: usize,     // ccc (can be 0)
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct AtomListEntry {
+    pub atom_index: usize,
+    pub exclusion: bool,                   // T = NOT list, F = normal list
+    pub elements: Vec<umol_data::Element>, // Converted from 4-char symbols
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttachmentPointEntry {
+    pub atom_index: usize,
+    pub attachment_type: u8, // 0=none, 1=first, 2=second, 3=both
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AtomAttachmentOrderEntry {
+    pub atom_index: usize,
+    pub attachments: Vec<(usize, u8)>, // (neighbor_index, order)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RGroupLabelEntry {
+    pub atom_index: usize,
+    pub label: u32, // 0 = no label, 1-32 in CTab spec, 1-999 in RDKit
+}
+
+// [LOG]
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupTypeEntry {
+    pub sgroup_index: usize,
+    pub sgroup_type: SGroupType,
+}
+
+// [SST]
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupLabelEntry {
+    pub sgroup_index: usize,
+    pub label: u32,
+}
+
+// [SCN]
+// [SDS EXP]
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupAtomListEntry {
+    pub sgroup_index: usize,
+    pub atom_indices: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupBondListEntry {
+    pub sgroup_index: usize,
+    pub bond_indices: Vec<usize>,
+}
+
 /// An enum representing a parsed property modification, containing the raw data.
 /// This avoids allocating a new Vec for every single property line in a file.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyEntries {
+    AtomAliasEntry(AtomAliasEntry),
+    AtomValueEntry(AtomValueEntry),
     ChargeEntries(Vec<ChargeEntry>),
     RadicalEntries(Vec<RadicalEntry>),
     IsotopeEntries(Vec<IsotopeEntry>),
-    SGroupTypeEntries(Vec<SGroupTypeEntry>),
-    SGroupLabelEntries(Vec<SGroupLabelEntry>),
-    SGroupAtomListEntry(SGroupAtomListEntry),
-    SGroupBondListEntry(SGroupBondListEntry),
-    AtomAliasEntry(AtomAliasEntry),
-    AtomValueEntry(AtomValueEntry),
-    AtomListEntry(AtomListEntry),
-    AttachmentPointEntries(Vec<AttachmentPointEntry>),
-    AtomAttachmentOrderEntry(AtomAttachmentOrderEntry),
-    RGroupLabelEntries(Vec<RGroupLabelEntry>),
     RingBondCountEntries(Vec<RingBondCountEntry>),
     SubstitutionCountEntries(Vec<SubstitutionCountEntry>),
     UnsaturatedAtomEntries(Vec<UnsaturatedAtomEntry>),
     LinkAtomEntries(Vec<LinkAtomEntry>),
+    AtomListEntry(AtomListEntry),
+    AttachmentPointEntries(Vec<AttachmentPointEntry>),
+    AtomAttachmentOrderEntry(AtomAttachmentOrderEntry),
+    RGroupLabelEntries(Vec<RGroupLabelEntry>),
+    // Rgroup logic [LOG]
+    SGroupTypeEntries(Vec<SGroupTypeEntry>),
+    // Sgroup subtype [SST]
+    SGroupLabelEntries(Vec<SGroupLabelEntry>),
+    // Sgroup connectivity [SCN]
+    // Sgroup expansion [SDS EXP]
+    SGroupAtomListEntry(SGroupAtomListEntry),
+    SGroupBondListEntry(SGroupBondListEntry),
+    // Sgroup parent atom [SPA]
+    // Sgroup subscript [SMT]
+    // Sgroup correspondence [CRS]
+    // Sgroup display information [SDI]
+    // Superatom bond and vector [SBV]
+    // Data sgroup fields [SDT]
+    // Data sgroup display information [SDD]
+    // Data sgroup data [SCD] / [SED]
+    // Sgroup hierarchy [SPL]
+    // Sgroup component numbers [SNC]
     End,
 }
 
@@ -240,30 +261,6 @@ pub fn property_input<'a>(
                 b"M  ISO" => isotope_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-                b"M  STY" => sgroup_type_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                b"M  SLB" => sgroup_label_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                b"M  SAL" => sgroup_atom_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
-                b"M  SBL" => sgroup_bond_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                b"M  ALS" => atom_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
-                b"M  APO" => attachment_point_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
-                b"M  AAL" => atom_attachment_order_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
-                b"M  RGP" => rgroup_label_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
                 b"M  RBC" => ring_bond_count_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
@@ -276,6 +273,35 @@ pub fn property_input<'a>(
                 b"M  LIN" => link_atom_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
+                b"M  ALS" => atom_list_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
+                b"M  APO" => attachment_point_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
+                b"M  AAL" => atom_attachment_order_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
+                b"M  RGP" => rgroup_label_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
+                // [LOG]
+                b"M  STY" => sgroup_type_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
+                // [SST]
+                b"M  SLB" => sgroup_label_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
+                // [SCN]
+                // [SDS EXP]
+                b"M  SAL" => sgroup_atom_list_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
+                b"M  SBL" => sgroup_bond_list_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                b"M  END" => success(PropertyEntries::End).parse(rest),
                 _ => Err(nom::Err::Error(error::Error::new(
                     input,
                     error::ErrorKind::Tag,
@@ -283,6 +309,40 @@ pub fn property_input<'a>(
             }
         }
     }
+}
+
+/// Parse atom alias entry.
+/// A  aaa alias_text
+/// aaa: atom index, alias_text: alias string (can contain spaces)
+fn atom_alias_entry<'a>(
+) -> impl Parser<&'a [u8], Output = AtomAliasEntry, Error = error::Error<&'a [u8]>> {
+    map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(space0, rest),
+        ),
+        |(atom_index, alias_bytes)| AtomAliasEntry {
+            atom_index,
+            alias: String::from_utf8_lossy(alias_bytes).trim().to_string(),
+        },
+    )
+}
+
+/// Parse atom value entry.
+/// V  aaa value_text
+/// aaa: atom index, value_text: value string (can contain spaces)
+fn atom_value_entry<'a>(
+) -> impl Parser<&'a [u8], Output = AtomValueEntry, Error = error::Error<&'a [u8]>> {
+    map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(space0, rest),
+        ),
+        |(atom_index, value_bytes)| AtomValueEntry {
+            atom_index,
+            value: String::from_utf8_lossy(value_bytes).trim().to_string(),
+        },
+    )
 }
 
 /// Parse charge property entries.
@@ -347,178 +407,88 @@ fn isotope_entries<'a>(
     )
 }
 
-/// Parse SGroup type entries.
-/// M  STYnn8 sss ttt ...
-/// sss: SGroup index, ttt: SGroup type (3-character string)
-fn sgroup_type_entries<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<SGroupTypeEntry>, Error = error::Error<&'a [u8]>> {
+/// Parse ring bond count property entries.
+/// M  RBCnn8 aaa vvv ...
+/// vvv: Ring bond count (-2 = as drawn (r*), -1 = no ring bonds (r0), 0 = off, 2 = r2, 3 = r3, 4 = r4+)
+fn ring_bond_count_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<RingBondCountEntry>, Error = error::Error<&'a [u8]>> {
     length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(
-                    tag(" "),
-                    map_res(take(3usize), |bytes: &[u8]| {
-                        let s = std::str::from_utf8(bytes)
-                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
-                        SGroup::get_type(s)
-                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-                    }),
-                ),
+                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=4)),
             ),
-            |(sgroup_index, sgroup_type)| SGroupTypeEntry {
-                sgroup_index,
-                sgroup_type,
+            |(atom_index, ring_bond_count)| RingBondCountEntry {
+                atom_index,
+                ring_bond_count,
             },
         ),
     )
 }
 
-/// Parse SGroup label entries.
-/// M  SLBnn8 sss vvv ...
-/// sss: SGroup index, vvv: integer label is from 1-512
-fn sgroup_label_entries<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<SGroupLabelEntry>, Error = error::Error<&'a [u8]>> {
+/// Parse substitution count property entries.
+/// M  SUBnn8 aaa vvv ...
+/// vvv: Substitution count (-2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5,
+/// 6 = s6+)
+fn substitution_count_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SubstitutionCountEntry>, Error = error::Error<&'a [u8]>> {
     length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=512)),
+                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=15)),
             ),
-            |(sgroup_index, label)| SGroupLabelEntry {
-                sgroup_index,
-                label,
+            |(atom_index, substitution_count)| SubstitutionCountEntry {
+                atom_index,
+                substitution_count,
             },
         ),
     )
 }
 
-/// Parse SGroup atom list entry.
-/// M  SAL sssn15 aaa ...
-/// sss: SGroup index (3 chars), n: count (3 chars), aaa: atom indices (each 4 chars: " aaa")
-fn sgroup_atom_list_entry<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupAtomListEntry, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
-        // Parse sgroup index and count from first 6 characters
-        let (remaining, (sgroup_index, count)) = map_parser(
-            take(6usize),
+/// Parse unsaturated atom property entries.
+/// M  UNSnn8 aaa vvv ...
+/// vvv: Unsaturated flag (0 = off, 1 = on)
+fn unsaturated_atom_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<UnsaturatedAtomEntry>, Error = error::Error<&'a [u8]>> {
+    length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
             (
-                fixed_width_int_minus1::<usize>(3),
-                fixed_width_int_in_range::<u8, _>(3, 1..=15),
-            ),
-        )
-        .parse(input)?;
-
-        // Parse the atom indices - each is 4 chars with format " aaa"
-        let mut indices = Vec::with_capacity(count as usize);
-        let mut remaining = remaining;
-        for _ in 0..count {
-            let (rest, index) = map_parser(
-                take(4usize),
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            )
-            .parse(remaining)?;
-            indices.push(index);
-            remaining = rest;
-        }
-
-        Ok((
-            remaining,
-            SGroupAtomListEntry {
-                sgroup_index,
-                atom_indices: indices,
-            },
-        ))
-    }
-}
-
-/// Parse SGroup bond list entry.
-/// M  SBL sssn15 bbb ...
-/// sss: SGroup index (3 chars), n: count (3 chars), bbb: bond indices (each 4 chars: " bbb")
-fn sgroup_bond_list_entry<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupBondListEntry, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
-        // Parse sgroup index and count from first 6 characters
-        let (remaining, (sgroup_index, count)) = map_parser(
-            take(6usize),
-            (
-                fixed_width_int_minus1::<usize>(3),
-                fixed_width_int_in_range::<u8, _>(3, 1..=15),
+                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
             ),
-        )
-        .parse(input)?;
-
-        let (remaining, bond_indices) = length_count(
-            success(count as usize),
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-        )
-        .parse(remaining)?;
-
-        Ok((
-            remaining,
-            SGroupBondListEntry {
-                sgroup_index,
-                bond_indices,
+            |(atom_index, unsaturated)| UnsaturatedAtomEntry {
+                atom_index,
+                unsaturated,
             },
-        ))
-    }
-}
-
-// /// Parse SGroup bracket entries.
-// /// M  SBTnn8 sss ttt ...
-// /// sss: SGroup index, ttt: bracket type (0 or 1)
-// fn sgroup_bracket_entries<'a>(
-// ) -> impl Parser<&'a [u8], Output = Vec<SGroupBracketEntry>, Error = error::Error<&'a [u8]>> {
-//     length_count(
-//         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-//         map(
-//             (
-//                 // sss: sgroup index
-//                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-//                 // ttt: bracket style
-//                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
-//             ),
-//             |(sgroup_index, style_code)| SGroupBracketEntry {
-//                 sgroup_index,
-//                 style_code,
-//             },
-//         ),
-//     )
-// }
-
-/// Parse atom alias entry.
-/// A  aaa alias_text
-/// aaa: atom index, alias_text: alias string (can contain spaces)
-fn atom_alias_entry<'a>(
-) -> impl Parser<&'a [u8], Output = AtomAliasEntry, Error = error::Error<&'a [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            preceded(space0, rest),
         ),
-        |(atom_index, alias_bytes)| AtomAliasEntry {
-            atom_index,
-            alias: String::from_utf8_lossy(alias_bytes).trim().to_string(),
-        },
     )
 }
 
-/// Parse atom value entry.
-/// V  aaa value_text
-/// aaa: atom index, value_text: value string (can contain spaces)
-fn atom_value_entry<'a>(
-) -> impl Parser<&'a [u8], Output = AtomValueEntry, Error = error::Error<&'a [u8]>> {
-    map(
-        (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            preceded(space0, rest),
+/// Parse link atom property entries.
+/// M  LINnn4 aaa vvv bbb ccc
+/// nn4: Count (max 4), aaa: Atom index, vvv: Repeat count (>=2), bbb/ccc: Bond indices (can be 0)
+fn link_atom_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<LinkAtomEntry>, Error = error::Error<&'a [u8]>> {
+    length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=4),
+        map(
+            (
+                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 2..=255)),
+                preceded(tag(" "), fixed_width_int::<usize>(3)),
+                preceded(tag(" "), fixed_width_int::<usize>(3)),
+            ),
+            |(atom_index, repeat_count, bond1, bond2)| LinkAtomEntry {
+                atom_index,
+                repeat_count,
+                bond1,
+                bond2,
+            },
         ),
-        |(atom_index, value_bytes)| AtomValueEntry {
-            atom_index,
-            value: String::from_utf8_lossy(value_bytes).trim().to_string(),
-        },
     )
 }
 
@@ -645,88 +615,130 @@ fn rgroup_label_entries<'a>(
     )
 }
 
-/// Parse ring bond count property entries.
-/// M  RBCnn8 aaa vvv ...
-/// vvv: Ring bond count (-2=r*, -1=r0, 0=off, 2=r2, 3=r3, 4+=r4)
-fn ring_bond_count_entries<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<RingBondCountEntry>, Error = error::Error<&'a [u8]>> {
+// [LOG]
+
+/// Parse SGroup type entries.
+/// M  STYnn8 sss ttt ...
+/// sss: SGroup index, ttt: SGroup type (3-character string)
+fn sgroup_type_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SGroupTypeEntry>, Error = error::Error<&'a [u8]>> {
     length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=15)),
+                preceded(
+                    tag(" "),
+                    map_res(take(3usize), |bytes: &[u8]| {
+                        let s = std::str::from_utf8(bytes)
+                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
+                        SGroup::get_type(s)
+                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+                    }),
+                ),
             ),
-            |(atom_index, ring_bond_count)| RingBondCountEntry {
-                atom_index,
-                ring_bond_count,
+            |(sgroup_index, sgroup_type)| SGroupTypeEntry {
+                sgroup_index,
+                sgroup_type,
             },
         ),
     )
 }
 
-/// Parse substitution count property entries.
-/// M  SUBnn8 aaa vvv ...
-/// vvv: Substitution count (-2=s*, -1=s0, 0=off, 1-5=s1-s5, 6+=s6)
-fn substitution_count_entries<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<SubstitutionCountEntry>, Error = error::Error<&'a [u8]>> {
+// [SST]
+
+/// Parse SGroup label entries.
+/// M  SLBnn8 sss vvv ...
+/// sss: SGroup index, vvv: integer label is from 1-512
+fn sgroup_label_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SGroupLabelEntry>, Error = error::Error<&'a [u8]>> {
     length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=15)),
+                preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=512)),
             ),
-            |(atom_index, substitution_count)| SubstitutionCountEntry {
-                atom_index,
-                substitution_count,
+            |(sgroup_index, label)| SGroupLabelEntry {
+                sgroup_index,
+                label,
             },
         ),
     )
 }
 
-/// Parse unsaturated atom property entries.
-/// M  UNSnn8 aaa vvv ...
-/// vvv: Unsaturated flag (0=off, 1=on)
-fn unsaturated_atom_entries<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<UnsaturatedAtomEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
-        fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
+// [SCN]
+// [SDS EXP]
+
+/// Parse SGroup atom list entry.
+/// M  SAL sssn15 aaa ...
+/// sss: SGroup index (3 chars), n: count (3 chars), aaa: atom indices (each 4 chars: " aaa")
+fn sgroup_atom_list_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupAtomListEntry, Error = error::Error<&'a [u8]>> {
+    |input: &'a [u8]| {
+        // Parse sgroup index and count from first 6 characters
+        let (remaining, (sgroup_index, count)) = map_parser(
+            take(6usize),
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
+                fixed_width_int_minus1::<usize>(3),
+                fixed_width_int_in_range::<u8, _>(3, 1..=15),
             ),
-            |(atom_index, unsaturated)| UnsaturatedAtomEntry {
-                atom_index,
-                unsaturated,
+        )
+        .parse(input)?;
+
+        // Parse the atom indices - each is 4 chars with format " aaa"
+        let mut indices = Vec::with_capacity(count as usize);
+        let mut remaining = remaining;
+        for _ in 0..count {
+            let (rest, index) = map_parser(
+                take(4usize),
+                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            )
+            .parse(remaining)?;
+            indices.push(index);
+            remaining = rest;
+        }
+
+        Ok((
+            remaining,
+            SGroupAtomListEntry {
+                sgroup_index,
+                atom_indices: indices,
             },
-        ),
-    )
+        ))
+    }
 }
 
-/// Parse link atom property entries.
-/// M  LINnn4 aaa vvv bbb ccc
-/// nn4: Count (max 4), aaa: Atom index, vvv: Repeat count (>=2), bbb/ccc: Bond indices (can be 0)
-fn link_atom_entries<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<LinkAtomEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
-        fixed_width_int_in_range::<u8, _>(3, 1..=4),
-        map(
+/// Parse SGroup bond list entry.
+/// M  SBL sssn15 bbb ...
+/// sss: SGroup index (3 chars), n: count (3 chars), bbb: bond indices (each 4 chars: " bbb")
+fn sgroup_bond_list_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupBondListEntry, Error = error::Error<&'a [u8]>> {
+    |input: &'a [u8]| {
+        // Parse sgroup index and count from first 6 characters
+        let (remaining, (sgroup_index, count)) = map_parser(
+            take(6usize),
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 2..=255)),
-                preceded(tag(" "), fixed_width_int::<usize>(3)),
-                preceded(tag(" "), fixed_width_int::<usize>(3)),
+                fixed_width_int_minus1::<usize>(3),
+                fixed_width_int_in_range::<u8, _>(3, 1..=15),
             ),
-            |(atom_index, repeat_count, bond1, bond2)| LinkAtomEntry {
-                atom_index,
-                repeat_count,
-                bond1,
-                bond2,
+        )
+        .parse(input)?;
+
+        let (remaining, bond_indices) = length_count(
+            success(count as usize),
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+        )
+        .parse(remaining)?;
+
+        Ok((
+            remaining,
+            SGroupBondListEntry {
+                sgroup_index,
+                bond_indices,
             },
-        ),
-    )
+        ))
+    }
 }
 
 #[cfg(test)]

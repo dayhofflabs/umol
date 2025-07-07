@@ -2,7 +2,9 @@
 
 pub mod configuration;
 pub mod element;
+pub mod half_life;
 pub mod isotope;
+// mod isotope_data;
 pub mod occupation;
 pub mod spin_state;
 

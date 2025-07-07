@@ -246,6 +246,51 @@ pub(crate) fn convert_radical_type_code(code: u8) -> Result<Option<AtomRadical>>
     }
 }
 
+// Convert ring bond count code (property block)
+// 'vvv' field: ring bond count (-2 = as drawn (r*), -1 = no ring bonds (r0), 0 = off, 2 = r2, 3 = r3, 4 = r4+)
+pub(crate) fn convert_ring_bond_count_code(code: i8) -> Result<Option<i8>> {
+    match code {
+        -2 => Ok(Some(0)),
+        -1 => Ok(None),
+        2..=4 => Ok(Some(code)),
+        _ => Err(ValidationError::InvalidComponent(format!(
+            "Invalid ring bond count code '{}'",
+            code
+        ))
+        .into()),
+    }
+}
+
+// Convert substitution count code (property block)
+// 'vvv' field: substitution count (-2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5,
+// 6 = s6+)
+pub(crate) fn convert_substitution_count_code(code: i8) -> Result<Option<i8>> {
+    match code {
+        -2 => Ok(Some(0)),
+        -1 => Ok(None),
+        1..=6 => Ok(Some(code)),
+        _ => Err(ValidationError::InvalidComponent(format!(
+            "Invalid substitution count code '{}'",
+            code
+        ))
+        .into()),
+    }
+}
+
+/// Convert unsaturated atom code (property block)
+/// 'vvv' field: unsaturated (0=off, 1=on)
+pub(crate) fn convert_unsaturated_atom_code(code: u8) -> Result<Option<bool>> {
+    match code {
+        0 => Ok(None),
+        1 => Ok(Some(true)),
+        _ => Err(ValidationError::InvalidComponent(format!(
+            "Invalid unsaturated atom code '{}'",
+            code
+        ))
+        .into()),
+    }
+}
+
 /// Convert attachment point code (property block)
 /// 'vvv' field - attachment point (0=none, 1=first, 2=second, 3=both)
 pub(crate) fn convert_attachment_point_code(code: u8) -> Result<Option<AttachmentPointType>> {
@@ -547,4 +592,67 @@ mod tests {
         assert!(convert_radical_type_code(code).is_err());
     }
 
+    #[rstest]
+    #[case(-2, Some(0))]
+    #[case(-1, None)]
+    #[case(2, Some(2))]
+    #[case(3, Some(3))]
+    #[case(4, Some(4))]
+    fn test_convert_ring_bond_count_code(#[case] code: i8, #[case] expected: Option<i8>) {
+        assert_eq!(convert_ring_bond_count_code(code).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(5)]
+    #[case(16)]
+    fn test_convert_ring_bond_count_code_invalid(#[case] code: i8) {
+        assert!(convert_ring_bond_count_code(code).is_err());
+    }
+
+    #[rstest]
+    #[case(-2, Some(0))]
+    #[case(-1, None)]
+    #[case(1, Some(1))]
+    #[case(6, Some(6))]
+    fn test_convert_substitution_count_code(#[case] code: i8, #[case] expected: Option<i8>) {
+        assert_eq!(convert_substitution_count_code(code).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(7)]
+    fn test_convert_substitution_count_code_invalid(#[case] code: i8) {
+        assert!(convert_substitution_count_code(code).is_err());
+    }
+
+    #[rstest]
+    #[case(0, None)]
+    #[case(1, Some(true))]
+    fn test_convert_unsaturated_atom_code(#[case] code: u8, #[case] expected: Option<bool>) {
+        assert_eq!(convert_unsaturated_atom_code(code).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(2)]
+    fn test_convert_unsaturated_atom_code_invalid(#[case] code: u8) {
+        assert!(convert_unsaturated_atom_code(code).is_err());
+    }
+
+    #[rstest]
+    #[case(0, None)]
+    #[case(1, Some(AttachmentPointType::First))]
+    #[case(2, Some(AttachmentPointType::Second))]
+    #[case(3, Some(AttachmentPointType::Both))]
+    fn test_convert_attachment_point_code(
+        #[case] code: u8,
+        #[case] expected: Option<AttachmentPointType>,
+    ) {
+        assert_eq!(convert_attachment_point_code(code).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(4)]
+    #[case(16)]
+    fn test_convert_attachment_point_code_invalid(#[case] code: u8) {
+        assert!(convert_attachment_point_code(code).is_err());
+    }
 }

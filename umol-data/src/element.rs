@@ -1,12 +1,14 @@
 //! Element definitions and data
 
+use phf::PhfHash;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
+use std::hash::Hash;
 use std::str::FromStr;
 use umol::error::DataError;
 use umol::{Error, Result};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[rustfmt::skip]
 pub enum Element {
     H, He, Li, Be, B, C, N, O, F, Ne, Na, Mg, Al, Si, P, S, Cl, Ar, K, Ca,
@@ -18,55 +20,61 @@ pub enum Element {
     Rg, Cn, Nh, Fl, Mc, Lv, Ts, Og,
 }
 
+impl PhfHash for Element {
+    fn phf_hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u8(self.atomic_number());
+    }
+}
+
 // Element data array indexed by atomic number - 1
 // Each tuple contains: (atomic_number, reference_isotope_mass, atomic_weight, symbol, period, group,
 // valence_electrons, max_valence, (min_charge, max_charge), max_unpaired_electrons, max_implicit_hydrogens)
 static ELEMENT_DATA: [(u8, u32, f64, &'static str, u8, u8, u8, u8, (i8, i8), u8, u8); 118] = [
-    (1, 1, 1.0080, "H", 1, 1, 1, 2, (-1, 1), 1, 0),       // H
-    (2, 4, 4.0026, "He", 1, 32, 0, 0, (0, 0), 0, 0),      // He: no valence electrons
-    (3, 7, 6.94, "Li", 2, 1, 1, 2, (-1, 1), 1, 0),        // Li
-    (4, 9, 9.0122, "Be", 2, 2, 2, 2, (-2, 2), 2, 0),      // Be
-    (5, 11, 10.81, "B", 2, 3, 27, 8, (-3, 3), 3, 3),      // B
-    (6, 12, 12.011, "C", 2, 28, 4, 8, (-4, 4), 4, 4),     // C
-    (7, 14, 14.007, "N", 2, 29, 5, 8, (-3, 5), 3, 3),     // N
-    (8, 16, 15.999, "O", 2, 30, 6, 8, (-2, 6), 2, 2),     // O
-    (9, 19, 18.998, "F", 2, 31, 7, 8, (-1, 7), 1, 1),     // F
-    (10, 20, 20.180, "Ne", 2, 32, 0, 0, (0, 0), 0, 0),    // Ne: no valence electrons
-    (11, 23, 22.990, "Na", 3, 1, 1, 2, (-1, 1), 1, 0),    // Na
-    (12, 24, 24.305, "Mg", 3, 2, 2, 2, (0, 2), 2, 0),     // Mg
-    (13, 27, 26.982, "Al", 3, 27, 3, 8, (-1, 3), 3, 0),   // Al
-    (14, 28, 28.085, "Si", 3, 28, 4, 8, (-4, 4), 4, 4),   // Si
-    (15, 31, 30.974, "P", 3, 29, 5, 8, (-3, 5), 3, 3),    // P
-    (16, 32, 32.06, "S", 3, 30, 6, 8, (-2, 6), 2, 2),     // S
-    (17, 35, 35.45, "Cl", 3, 31, 7, 8, (-1, 7), 1, 1),    // Cl
-    (18, 40, 39.95, "Ar", 3, 32, 0, 0, (0, 0), 0, 0),     // Ar: no valence electrons
-    (19, 39, 39.098, "K", 4, 1, 1, 2, (-1, 1), 1, 0),     // K
-    (20, 40, 40.078, "Ca", 4, 2, 2, 2, (0, 2), 2, 0),     // Ca
-    (21, 45, 44.956, "Sc", 4, 3, 3, 12, (0, 3), 3, 0),    // Sc
-    (22, 48, 47.867, "Ti", 4, 18, 4, 18, (0, 4), 4, 0),   // Ti
-    (23, 51, 50.942, "V", 4, 19, 5, 18, (0, 5), 5, 0),    // V
-    (24, 52, 51.996, "Cr", 4, 20, 6, 18, (0, 6), 6, 0),   // Cr
-    (25, 55, 54.938, "Mn", 4, 21, 7, 18, (0, 7), 7, 0),   // Mn
-    (26, 56, 55.845, "Fe", 4, 22, 8, 18, (0, 6), 6, 0),   // Fe
-    (27, 59, 58.933, "Co", 4, 23, 9, 18, (0, 5), 5, 0),   // Co
-    (28, 58, 58.693, "Ni", 4, 24, 10, 18, (0, 4), 4, 0),  // Ni
-    (29, 63, 63.546, "Cu", 4, 25, 11, 18, (0, 3), 3, 0),  // Cu
-    (30, 64, 65.38, "Zn", 4, 26, 12, 18, (0, 2), 2, 0),   // Zn
-    (31, 69, 69.723, "Ga", 4, 27, 13, 18, (0, 3), 3, 0),  // Ga
-    (32, 74, 72.630, "Ge", 4, 28, 14, 18, (0, 4), 4, 0),  // Ge
-    (33, 75, 74.922, "As", 4, 29, 15, 18, (0, 3), 3, 3),  // As
-    (34, 80, 78.971, "Se", 4, 30, 16, 18, (0, 2), 2, 2),  // Se
-    (35, 79, 79.904, "Br", 4, 31, 17, 18, (0, 1), 1, 1),  // Br
-    (36, 84, 83.798, "Kr", 4, 32, 18, 18, (0, 0), 0, 0),  // Kr: allow Kr compounds
-    (37, 85, 85.468, "Rb", 5, 1, 1, 2, (-1, 1), 1, 0),    // Rb
-    (38, 88, 87.62, "Sr", 5, 2, 2, 2, (0, 2), 2, 0),      // Sr
-    (39, 89, 88.906, "Y", 5, 3, 3, 12, (0, 3), 3, 0),     // Y
-    (40, 90, 91.224, "Zr", 5, 18, 4, 18, (0, 4), 4, 0),   // Zr
-    (41, 93, 92.906, "Nb", 5, 19, 5, 18, (0, 5), 5, 0),   // Nb
-    (42, 98, 95.95, "Mo", 5, 20, 6, 18, (0, 6), 6, 0),    // Mo
-    (43, 97, 98.0, "Tc", 5, 21, 7, 18, (0, 7), 7, 0),     // Tc: using 97Tc as reference isotope based on PubChem data
-    (44, 102, 101.07, "Ru", 5, 22, 8, 18, (0, 8), 8, 0),  // Ru
-    (45, 103, 102.91, "Rh", 5, 23, 9, 18, (0, 6), 6, 0),  // Rh
+    (1, 1, 1.0080, "H", 1, 1, 1, 2, (-1, 1), 1, 0),    // H
+    (2, 4, 4.0026, "He", 1, 32, 0, 0, (0, 0), 0, 0),   // He: no valence electrons
+    (3, 7, 6.94, "Li", 2, 1, 1, 2, (-1, 1), 1, 0),     // Li
+    (4, 9, 9.0122, "Be", 2, 2, 2, 2, (-2, 2), 2, 0),   // Be
+    (5, 11, 10.81, "B", 2, 3, 27, 8, (-3, 3), 3, 3),   // B
+    (6, 12, 12.011, "C", 2, 28, 4, 8, (-4, 4), 4, 4),  // C
+    (7, 14, 14.007, "N", 2, 29, 5, 8, (-3, 5), 3, 3),  // N
+    (8, 16, 15.999, "O", 2, 30, 6, 8, (-2, 6), 2, 2),  // O
+    (9, 19, 18.998, "F", 2, 31, 7, 8, (-1, 7), 1, 1),  // F
+    (10, 20, 20.180, "Ne", 2, 32, 0, 0, (0, 0), 0, 0), // Ne: no valence electrons
+    (11, 23, 22.990, "Na", 3, 1, 1, 2, (-1, 1), 1, 0), // Na
+    (12, 24, 24.305, "Mg", 3, 2, 2, 2, (0, 2), 2, 0),  // Mg
+    (13, 27, 26.982, "Al", 3, 27, 3, 8, (-1, 3), 3, 0), // Al
+    (14, 28, 28.085, "Si", 3, 28, 4, 8, (-4, 4), 4, 4), // Si
+    (15, 31, 30.974, "P", 3, 29, 5, 8, (-3, 5), 3, 3), // P
+    (16, 32, 32.06, "S", 3, 30, 6, 8, (-2, 6), 2, 2),  // S
+    (17, 35, 35.45, "Cl", 3, 31, 7, 8, (-1, 7), 1, 1), // Cl
+    (18, 40, 39.95, "Ar", 3, 32, 0, 0, (0, 0), 0, 0),  // Ar: no valence electrons
+    (19, 39, 39.098, "K", 4, 1, 1, 2, (-1, 1), 1, 0),  // K
+    (20, 40, 40.078, "Ca", 4, 2, 2, 2, (0, 2), 2, 0),  // Ca
+    (21, 45, 44.956, "Sc", 4, 3, 3, 12, (0, 3), 3, 0), // Sc
+    (22, 48, 47.867, "Ti", 4, 18, 4, 18, (0, 4), 4, 0), // Ti
+    (23, 51, 50.942, "V", 4, 19, 5, 18, (0, 5), 5, 0), // V
+    (24, 52, 51.996, "Cr", 4, 20, 6, 18, (0, 6), 6, 0), // Cr
+    (25, 55, 54.938, "Mn", 4, 21, 7, 18, (0, 7), 7, 0), // Mn
+    (26, 56, 55.845, "Fe", 4, 22, 8, 18, (0, 6), 6, 0), // Fe
+    (27, 59, 58.933, "Co", 4, 23, 9, 18, (0, 5), 5, 0), // Co
+    (28, 58, 58.693, "Ni", 4, 24, 10, 18, (0, 4), 4, 0), // Ni
+    (29, 63, 63.546, "Cu", 4, 25, 11, 18, (0, 3), 3, 0), // Cu
+    (30, 64, 65.38, "Zn", 4, 26, 12, 18, (0, 2), 2, 0), // Zn
+    (31, 69, 69.723, "Ga", 4, 27, 13, 18, (0, 3), 3, 0), // Ga
+    (32, 74, 72.630, "Ge", 4, 28, 14, 18, (0, 4), 4, 0), // Ge
+    (33, 75, 74.922, "As", 4, 29, 15, 18, (0, 3), 3, 3), // As
+    (34, 80, 78.971, "Se", 4, 30, 16, 18, (0, 2), 2, 2), // Se
+    (35, 79, 79.904, "Br", 4, 31, 17, 18, (0, 1), 1, 1), // Br
+    (36, 84, 83.798, "Kr", 4, 32, 18, 18, (0, 0), 0, 0), // Kr: allow Kr compounds
+    (37, 85, 85.468, "Rb", 5, 1, 1, 2, (-1, 1), 1, 0), // Rb
+    (38, 88, 87.62, "Sr", 5, 2, 2, 2, (0, 2), 2, 0),   // Sr
+    (39, 89, 88.906, "Y", 5, 3, 3, 12, (0, 3), 3, 0),  // Y
+    (40, 90, 91.224, "Zr", 5, 18, 4, 18, (0, 4), 4, 0), // Zr
+    (41, 93, 92.906, "Nb", 5, 19, 5, 18, (0, 5), 5, 0), // Nb
+    (42, 98, 95.95, "Mo", 5, 20, 6, 18, (0, 6), 6, 0), // Mo
+    (43, 97, 98.0, "Tc", 5, 21, 7, 18, (0, 7), 7, 0), // Tc: using 97Tc as reference isotope based on PubChem data
+    (44, 102, 101.07, "Ru", 5, 22, 8, 18, (0, 8), 8, 0), // Ru
+    (45, 103, 102.91, "Rh", 5, 23, 9, 18, (0, 6), 6, 0), // Rh
     (46, 106, 106.42, "Pd", 5, 24, 10, 18, (0, 5), 5, 0), // Pd
     (47, 107, 107.87, "Ag", 5, 25, 11, 18, (0, 3), 3, 0), // Ag
     (48, 114, 112.41, "Cd", 5, 26, 12, 18, (0, 2), 2, 0), // Cd
@@ -74,17 +82,17 @@ static ELEMENT_DATA: [(u8, u32, f64, &'static str, u8, u8, u8, u8, (i8, i8), u8,
     (50, 120, 118.71, "Sn", 5, 28, 14, 18, (0, 4), 4, 4), // Sn
     (51, 121, 121.76, "Sb", 5, 29, 15, 18, (0, 3), 3, 3), // Sb
     (52, 130, 127.60, "Te", 5, 30, 16, 18, (0, 2), 2, 2), // Te
-    (53, 127, 126.90, "I", 5, 31, 17, 18, (0, 1), 1, 1),  // I
+    (53, 127, 126.90, "I", 5, 31, 17, 18, (0, 1), 1, 1), // I
     (54, 132, 131.29, "Xe", 5, 32, 18, 18, (0, 0), 0, 0), // Xe: allow Xe compounds
-    (55, 133, 132.91, "Cs", 6, 1, 1, 2, (-1, 1), 1, 0),   // Cs
-    (56, 138, 137.33, "Ba", 6, 2, 2, 2, (0, 2), 2, 0),    // Ba
-    (57, 139, 138.91, "La", 6, 3, 3, 18, (0, 3), 3, 0),   // La
-    (58, 140, 140.12, "Ce", 6, 4, 4, 20, (0, 4), 4, 0),   // Ce
-    (59, 141, 140.91, "Pr", 6, 5, 5, 20, (0, 4), 4, 0),   // Pr
-    (60, 142, 144.24, "Nd", 6, 6, 6, 22, (-1, 3), 3, 0),  // Nd
-    (61, 145, 145.0, "Pm", 6, 7, 7, 22, (-1, 3), 3, 0),   // Pm
-    (62, 152, 150.36, "Sm", 6, 8, 8, 24, (-1, 3), 3, 0),  // Sm
-    (63, 153, 151.96, "Eu", 6, 9, 9, 24, (-1, 3), 3, 0),  // Eu
+    (55, 133, 132.91, "Cs", 6, 1, 1, 2, (-1, 1), 1, 0), // Cs
+    (56, 138, 137.33, "Ba", 6, 2, 2, 2, (0, 2), 2, 0), // Ba
+    (57, 139, 138.91, "La", 6, 3, 3, 18, (0, 3), 3, 0), // La
+    (58, 140, 140.12, "Ce", 6, 4, 4, 20, (0, 4), 4, 0), // Ce
+    (59, 141, 140.91, "Pr", 6, 5, 5, 20, (0, 4), 4, 0), // Pr
+    (60, 142, 144.24, "Nd", 6, 6, 6, 22, (-1, 3), 3, 0), // Nd
+    (61, 145, 145.0, "Pm", 6, 7, 7, 22, (-1, 3), 3, 0), // Pm
+    (62, 152, 150.36, "Sm", 6, 8, 8, 24, (-1, 3), 3, 0), // Sm
+    (63, 153, 151.96, "Eu", 6, 9, 9, 24, (-1, 3), 3, 0), // Eu
     (64, 158, 157.25, "Gd", 6, 10, 10, 26, (-1, 3), 3, 0), // Gd
     (65, 159, 158.93, "Tb", 6, 11, 11, 26, (-1, 4), 4, 0), // Tb
     (66, 164, 162.50, "Dy", 6, 12, 12, 28, (-1, 3), 3, 0), // Dy
@@ -93,53 +101,53 @@ static ELEMENT_DATA: [(u8, u32, f64, &'static str, u8, u8, u8, u8, (i8, i8), u8,
     (69, 169, 168.93, "Tm", 6, 15, 15, 30, (-1, 3), 3, 0), // Tm
     (70, 174, 173.05, "Yb", 6, 16, 16, 32, (-1, 3), 3, 0), // Yb
     (71, 175, 174.97, "Lu", 6, 17, 17, 32, (-1, 3), 3, 0), // Lu
-    (72, 180, 178.49, "Hf", 6, 18, 18, 32, (0, 4), 4, 0),  // Hf
-    (73, 181, 180.95, "Ta", 6, 19, 19, 32, (0, 5), 5, 0),  // Ta
-    (74, 184, 183.84, "W", 6, 20, 20, 32, (0, 6), 6, 0),   // W
-    (75, 187, 186.21, "Re", 6, 21, 21, 32, (0, 7), 7, 0),  // Re
-    (76, 192, 190.23, "Os", 6, 22, 22, 32, (0, 8), 8, 0),  // Os
-    (77, 193, 192.22, "Ir", 6, 23, 23, 32, (0, 6), 6, 0),  // Ir
-    (78, 195, 195.08, "Pt", 6, 24, 24, 32, (0, 6), 4, 0),  // Pt
-    (79, 197, 196.97, "Au", 6, 25, 25, 32, (0, 5), 1, 0),  // Au
-    (80, 202, 200.59, "Hg", 6, 26, 26, 32, (0, 2), 2, 0),  // Hg
-    (81, 205, 204.38, "Tl", 6, 27, 27, 32, (0, 3), 3, 0),  // Tl
-    (82, 208, 207.2, "Pb", 6, 28, 28, 32, (0, 4), 4, 0),   // Pb
-    (83, 209, 208.98, "Bi", 6, 29, 29, 32, (0, 3), 3, 3),  // Bi
-    (84, 209, 209.0, "Po", 6, 30, 30, 32, (0, 2), 2, 2),   // Po
-    (85, 210, 210.0, "At", 6, 31, 31, 32, (0, 7), 1, 1),   // At
-    (86, 222, 222.0, "Rn", 6, 32, 32, 32, (0, 8), 2, 0),   // Rn
-    (87, 223, 223.0, "Fr", 7, 1, 1, 2, (0, 1), 1, 0),      // Fr
-    (88, 226, 226.0, "Ra", 7, 2, 2, 2, (0, 2), 2, 0),      // Ra
-    (89, 227, 227.0, "Ac", 7, 3, 3, 18, (0, 3), 3, 0),     // Ac
-    (90, 232, 232.04, "Th", 7, 4, 4, 20, (0, 4), 4, 0),    // Th
-    (91, 231, 231.04, "Pa", 7, 5, 5, 20, (0, 5), 3, 0),    // Pa
-    (92, 238, 238.03, "U", 7, 6, 6, 22, (0, 6), 4, 0),     // U
-    (93, 237, 237.0, "Np", 7, 7, 7, 22, (0, 7), 5, 0),     // Np
-    (94, 244, 244.0, "Pu", 7, 8, 8, 24, (0, 8), 6, 0),     // Pu
-    (95, 243, 243.0, "Am", 7, 9, 9, 24, (0, 7), 7, 0),     // Am
-    (96, 247, 247.0, "Cm", 7, 10, 10, 26, (0, 6), 8, 0),   // Cm
-    (97, 247, 247.0, "Bk", 7, 11, 11, 26, (0, 5), 5, 0),   // Bk
-    (98, 251, 251.0, "Cf", 7, 12, 12, 28, (0, 5), 4, 0),   // Cf
-    (99, 252, 252.0, "Es", 7, 13, 13, 28, (0, 4), 3, 0),   // Es
-    (100, 257, 257.0, "Fm", 7, 14, 14, 30, (0, 3), 2, 0),  // Fm
-    (101, 258, 258.0, "Md", 7, 15, 15, 30, (0, 3), 1, 0),  // Md
-    (102, 259, 259.0, "No", 7, 16, 16, 32, (0, 3), 0, 0),  // No
-    (103, 266, 226.0, "Lr", 7, 17, 17, 32, (0, 3), 1, 0),  // Lr
-    (104, 267, 267.0, "Rf", 7, 18, 18, 32, (0, 4), 2, 0),  // Rf
-    (105, 268, 268.0, "Db", 7, 19, 19, 32, (0, 5), 3, 0),  // Db
-    (106, 269, 269.0, "Sg", 7, 20, 20, 32, (0, 6), 4, 0),  // Sg
-    (107, 270, 270.0, "Bh", 7, 21, 21, 32, (0, 7), 5, 0),  // Bh
-    (108, 269, 269.0, "Hs", 7, 22, 22, 32, (0, 8), 6, 0),  // Hs
-    (109, 277, 277.0, "Mt", 7, 23, 23, 32, (0, 6), 5, 0),  // Mt
-    (110, 282, 282.0, "Ds", 7, 24, 24, 32, (0, 6), 4, 0),  // Ds
-    (111, 282, 282.0, "Rg", 7, 25, 25, 32, (0, 5), 3, 0),  // Rg
-    (112, 286, 286.0, "Cn", 7, 26, 26, 32, (0, 4), 2, 0),  // Cn
-    (113, 286, 286.0, "Nh", 7, 27, 27, 32, (0, 3), 1, 0),  // Nh
-    (114, 290, 290.0, "Fl", 7, 28, 28, 32, (0, 2), 0, 0),  // Fl
-    (115, 290, 290.0, "Mc", 7, 29, 29, 32, (0, 0), 0, 0),  // Mc
-    (116, 293, 293.0, "Lv", 7, 30, 30, 32, (0, 0), 0, 0),  // Lv
-    (117, 294, 294.0, "Ts", 7, 31, 31, 32, (0, 0), 0, 0),  // Ts
-    (118, 294, 294.0, "Og", 7, 32, 32, 32, (0, 0), 0, 0),  // Og: PubChem uses 295 although only 294Og is known
+    (72, 180, 178.49, "Hf", 6, 18, 18, 32, (0, 4), 4, 0), // Hf
+    (73, 181, 180.95, "Ta", 6, 19, 19, 32, (0, 5), 5, 0), // Ta
+    (74, 184, 183.84, "W", 6, 20, 20, 32, (0, 6), 6, 0), // W
+    (75, 187, 186.21, "Re", 6, 21, 21, 32, (0, 7), 7, 0), // Re
+    (76, 192, 190.23, "Os", 6, 22, 22, 32, (0, 8), 8, 0), // Os
+    (77, 193, 192.22, "Ir", 6, 23, 23, 32, (0, 6), 6, 0), // Ir
+    (78, 195, 195.08, "Pt", 6, 24, 24, 32, (0, 6), 4, 0), // Pt
+    (79, 197, 196.97, "Au", 6, 25, 25, 32, (0, 5), 1, 0), // Au
+    (80, 202, 200.59, "Hg", 6, 26, 26, 32, (0, 2), 2, 0), // Hg
+    (81, 205, 204.38, "Tl", 6, 27, 27, 32, (0, 3), 3, 0), // Tl
+    (82, 208, 207.2, "Pb", 6, 28, 28, 32, (0, 4), 4, 0), // Pb
+    (83, 209, 208.98, "Bi", 6, 29, 29, 32, (0, 3), 3, 3), // Bi
+    (84, 209, 209.0, "Po", 6, 30, 30, 32, (0, 2), 2, 2), // Po
+    (85, 210, 210.0, "At", 6, 31, 31, 32, (0, 7), 1, 1), // At
+    (86, 222, 222.0, "Rn", 6, 32, 32, 32, (0, 8), 2, 0), // Rn
+    (87, 223, 223.0, "Fr", 7, 1, 1, 2, (0, 1), 1, 0), // Fr
+    (88, 226, 226.0, "Ra", 7, 2, 2, 2, (0, 2), 2, 0), // Ra
+    (89, 227, 227.0, "Ac", 7, 3, 3, 18, (0, 3), 3, 0), // Ac
+    (90, 232, 232.04, "Th", 7, 4, 4, 20, (0, 4), 4, 0), // Th
+    (91, 231, 231.04, "Pa", 7, 5, 5, 20, (0, 5), 3, 0), // Pa
+    (92, 238, 238.03, "U", 7, 6, 6, 22, (0, 6), 4, 0), // U
+    (93, 237, 237.0, "Np", 7, 7, 7, 22, (0, 7), 5, 0), // Np
+    (94, 244, 244.0, "Pu", 7, 8, 8, 24, (0, 8), 6, 0), // Pu
+    (95, 243, 243.0, "Am", 7, 9, 9, 24, (0, 7), 7, 0), // Am
+    (96, 247, 247.0, "Cm", 7, 10, 10, 26, (0, 6), 8, 0), // Cm
+    (97, 247, 247.0, "Bk", 7, 11, 11, 26, (0, 5), 5, 0), // Bk
+    (98, 251, 251.0, "Cf", 7, 12, 12, 28, (0, 5), 4, 0), // Cf
+    (99, 252, 252.0, "Es", 7, 13, 13, 28, (0, 4), 3, 0), // Es
+    (100, 257, 257.0, "Fm", 7, 14, 14, 30, (0, 3), 2, 0), // Fm
+    (101, 258, 258.0, "Md", 7, 15, 15, 30, (0, 3), 1, 0), // Md
+    (102, 259, 259.0, "No", 7, 16, 16, 32, (0, 3), 0, 0), // No
+    (103, 266, 226.0, "Lr", 7, 17, 17, 32, (0, 3), 1, 0), // Lr
+    (104, 267, 267.0, "Rf", 7, 18, 18, 32, (0, 4), 2, 0), // Rf
+    (105, 268, 268.0, "Db", 7, 19, 19, 32, (0, 5), 3, 0), // Db
+    (106, 269, 269.0, "Sg", 7, 20, 20, 32, (0, 6), 4, 0), // Sg
+    (107, 270, 270.0, "Bh", 7, 21, 21, 32, (0, 7), 5, 0), // Bh
+    (108, 269, 269.0, "Hs", 7, 22, 22, 32, (0, 8), 6, 0), // Hs
+    (109, 277, 277.0, "Mt", 7, 23, 23, 32, (0, 6), 5, 0), // Mt
+    (110, 282, 282.0, "Ds", 7, 24, 24, 32, (0, 6), 4, 0), // Ds
+    (111, 282, 282.0, "Rg", 7, 25, 25, 32, (0, 5), 3, 0), // Rg
+    (112, 286, 286.0, "Cn", 7, 26, 26, 32, (0, 4), 2, 0), // Cn
+    (113, 286, 286.0, "Nh", 7, 27, 27, 32, (0, 3), 1, 0), // Nh
+    (114, 290, 290.0, "Fl", 7, 28, 28, 32, (0, 2), 0, 0), // Fl
+    (115, 290, 290.0, "Mc", 7, 29, 29, 32, (0, 0), 0, 0), // Mc
+    (116, 293, 293.0, "Lv", 7, 30, 30, 32, (0, 0), 0, 0), // Lv
+    (117, 294, 294.0, "Ts", 7, 31, 31, 32, (0, 0), 0, 0), // Ts
+    (118, 294, 294.0, "Og", 7, 32, 32, 32, (0, 0), 0, 0), // Og: PubChem uses 295 although only 294Og is known
 ];
 
 /// Maximum atomic number, group number, and period number  
@@ -183,129 +191,129 @@ static ELEMENTS: [Element; 118] = [
 /// - 2-character elements: index = 26 + (first_char - 'A') * 26 + (second_char - 'a')
 static ELEMENT_LOOKUP: [bool; 702] = {
     let mut table = [false; 702];
-    
+
     // 1-character elements (indices 0-25)
-    table[1] = true;   // B
-    table[2] = true;   // C
-    table[5] = true;   // F
-    table[7] = true;   // H
-    table[8] = true;   // I
-    table[10] = true;  // K
-    table[13] = true;  // N
-    table[14] = true;  // O
-    table[15] = true;  // P
-    table[18] = true;  // S
-    table[20] = true;  // U
-    table[21] = true;  // V
-    table[22] = true;  // W
-    table[24] = true;  // Y
-    
-   // 2-character elements (indices 26-701)
-    table[28] = true;   // Ac
-    table[32] = true;   // Ag
-    table[37] = true;   // Al
-    table[38] = true;   // Am
-    table[43] = true;   // Ar
-    table[44] = true;   // As
-    table[45] = true;   // At
-    table[46] = true;   // Au
-    table[52] = true;   // Ba
-    table[56] = true;   // Be
-    table[59] = true;   // Bh
-    table[60] = true;   // Bi
-    table[62] = true;   // Bk
-    table[69] = true;   // Br
-    table[78] = true;   // Ca
-    table[81] = true;   // Cd
-    table[82] = true;   // Ce
-    table[83] = true;   // Cf
-    table[89] = true;   // Cl
-    table[90] = true;   // Cm
-    table[91] = true;   // Cn
-    table[92] = true;   // Co
-    table[95] = true;   // Cr
-    table[96] = true;   // Cs
-    table[98] = true;   // Cu
-    table[105] = true;  // Db
-    table[124] = true;  // Ds
-    table[128] = true;  // Dy
-    table[147] = true;  // Er
-    table[148] = true;  // Es
-    table[150] = true;  // Eu
-    table[160] = true;  // Fe
-    table[167] = true;  // Fl
-    table[168] = true;  // Fm
-    table[173] = true;  // Fr
-    table[182] = true;  // Ga
-    table[185] = true;  // Gd
-    table[186] = true;  // Ge
-    table[212] = true;  // He
-    table[213] = true;  // Hf
-    table[214] = true;  // Hg
-    table[222] = true;  // Ho
-    table[226] = true;  // Hs
-    table[247] = true;  // In
-    table[251] = true;  // Ir
-    table[303] = true;  // Kr
-    table[312] = true;  // La
-    table[320] = true;  // Li
-    table[329] = true;  // Lr
-    table[332] = true;  // Lu
-    table[333] = true;  // Lv
-    table[340] = true;  // Mc
-    table[341] = true;  // Md
-    table[344] = true;  // Mg
-    table[351] = true;  // Mn
-    table[352] = true;  // Mo
-    table[357] = true;  // Mt
-    table[364] = true;  // Na
-    table[365] = true;  // Nb
-    table[367] = true;  // Nd
-    table[368] = true;  // Ne
-    table[371] = true;  // Nh
-    table[372] = true;  // Ni
-    table[378] = true;  // No
-    table[379] = true;  // Np
-    table[396] = true;  // Og
-    table[408] = true;  // Os
-    table[416] = true;  // Pa
-    table[417] = true;  // Pb
-    table[419] = true;  // Pd
-    table[428] = true;  // Pm
-    table[430] = true;  // Po
-    table[433] = true;  // Pr
-    table[435] = true;  // Pt
-    table[436] = true;  // Pu
-    table[468] = true;  // Ra
-    table[469] = true;  // Rb
-    table[472] = true;  // Re
-    table[473] = true;  // Rf
-    table[474] = true;  // Rg
-    table[475] = true;  // Rh
-    table[481] = true;  // Rn
-    table[488] = true;  // Ru
-    table[495] = true;  // Sb
-    table[496] = true;  // Sc
-    table[498] = true;  // Se
-    table[500] = true;  // Sg
-    table[502] = true;  // Si
-    table[506] = true;  // Sm
-    table[507] = true;  // Sn
-    table[511] = true;  // Sr
-    table[520] = true;  // Ta
-    table[521] = true;  // Tb
-    table[522] = true;  // Tc
-    table[524] = true;  // Te
-    table[527] = true;  // Th
-    table[528] = true;  // Ti
-    table[531] = true;  // Tl
-    table[532] = true;  // Tm
-    table[538] = true;  // Ts
-    table[628] = true;  // Xe
-    table[651] = true;  // Yb
-    table[663] = true;  // Zn
-    table[667] = true;  // Zr
-    
+    table[1] = true; // B
+    table[2] = true; // C
+    table[5] = true; // F
+    table[7] = true; // H
+    table[8] = true; // I
+    table[10] = true; // K
+    table[13] = true; // N
+    table[14] = true; // O
+    table[15] = true; // P
+    table[18] = true; // S
+    table[20] = true; // U
+    table[21] = true; // V
+    table[22] = true; // W
+    table[24] = true; // Y
+
+    // 2-character elements (indices 26-701)
+    table[28] = true; // Ac
+    table[32] = true; // Ag
+    table[37] = true; // Al
+    table[38] = true; // Am
+    table[43] = true; // Ar
+    table[44] = true; // As
+    table[45] = true; // At
+    table[46] = true; // Au
+    table[52] = true; // Ba
+    table[56] = true; // Be
+    table[59] = true; // Bh
+    table[60] = true; // Bi
+    table[62] = true; // Bk
+    table[69] = true; // Br
+    table[78] = true; // Ca
+    table[81] = true; // Cd
+    table[82] = true; // Ce
+    table[83] = true; // Cf
+    table[89] = true; // Cl
+    table[90] = true; // Cm
+    table[91] = true; // Cn
+    table[92] = true; // Co
+    table[95] = true; // Cr
+    table[96] = true; // Cs
+    table[98] = true; // Cu
+    table[105] = true; // Db
+    table[124] = true; // Ds
+    table[128] = true; // Dy
+    table[147] = true; // Er
+    table[148] = true; // Es
+    table[150] = true; // Eu
+    table[160] = true; // Fe
+    table[167] = true; // Fl
+    table[168] = true; // Fm
+    table[173] = true; // Fr
+    table[182] = true; // Ga
+    table[185] = true; // Gd
+    table[186] = true; // Ge
+    table[212] = true; // He
+    table[213] = true; // Hf
+    table[214] = true; // Hg
+    table[222] = true; // Ho
+    table[226] = true; // Hs
+    table[247] = true; // In
+    table[251] = true; // Ir
+    table[303] = true; // Kr
+    table[312] = true; // La
+    table[320] = true; // Li
+    table[329] = true; // Lr
+    table[332] = true; // Lu
+    table[333] = true; // Lv
+    table[340] = true; // Mc
+    table[341] = true; // Md
+    table[344] = true; // Mg
+    table[351] = true; // Mn
+    table[352] = true; // Mo
+    table[357] = true; // Mt
+    table[364] = true; // Na
+    table[365] = true; // Nb
+    table[367] = true; // Nd
+    table[368] = true; // Ne
+    table[371] = true; // Nh
+    table[372] = true; // Ni
+    table[378] = true; // No
+    table[379] = true; // Np
+    table[396] = true; // Og
+    table[408] = true; // Os
+    table[416] = true; // Pa
+    table[417] = true; // Pb
+    table[419] = true; // Pd
+    table[428] = true; // Pm
+    table[430] = true; // Po
+    table[433] = true; // Pr
+    table[435] = true; // Pt
+    table[436] = true; // Pu
+    table[468] = true; // Ra
+    table[469] = true; // Rb
+    table[472] = true; // Re
+    table[473] = true; // Rf
+    table[474] = true; // Rg
+    table[475] = true; // Rh
+    table[481] = true; // Rn
+    table[488] = true; // Ru
+    table[495] = true; // Sb
+    table[496] = true; // Sc
+    table[498] = true; // Se
+    table[500] = true; // Sg
+    table[502] = true; // Si
+    table[506] = true; // Sm
+    table[507] = true; // Sn
+    table[511] = true; // Sr
+    table[520] = true; // Ta
+    table[521] = true; // Tb
+    table[522] = true; // Tc
+    table[524] = true; // Te
+    table[527] = true; // Th
+    table[528] = true; // Ti
+    table[531] = true; // Tl
+    table[532] = true; // Tm
+    table[538] = true; // Ts
+    table[628] = true; // Xe
+    table[651] = true; // Yb
+    table[663] = true; // Zn
+    table[667] = true; // Zr
+
     table
 };
 
@@ -316,37 +324,37 @@ pub const LAST_ELEMENT: Element = Element::Og;
 /// [period-1][group-1] -> Option<Element>
 static PERIOD_GROUP_TO_ELEMENT: [[Option<Element>; 33]; 8] = {
     let mut table = [[None; 33]; 8];
-    
+
     // Period 1
-    table[0][0] = Some(Element::H);   // (1,1)
+    table[0][0] = Some(Element::H); // (1,1)
     table[0][31] = Some(Element::He); // (1,32)
-    
+
     // Period 2
-    table[1][0] = Some(Element::Li);  // (2,1)
-    table[1][1] = Some(Element::Be);  // (2,2)
-    table[1][2] = Some(Element::B);   // (2,3)
-    table[1][27] = Some(Element::C);  // (2,28)
-    table[1][28] = Some(Element::N);  // (2,29)
-    table[1][29] = Some(Element::O);  // (2,30)
-    table[1][30] = Some(Element::F);  // (2,31)
+    table[1][0] = Some(Element::Li); // (2,1)
+    table[1][1] = Some(Element::Be); // (2,2)
+    table[1][2] = Some(Element::B); // (2,3)
+    table[1][27] = Some(Element::C); // (2,28)
+    table[1][28] = Some(Element::N); // (2,29)
+    table[1][29] = Some(Element::O); // (2,30)
+    table[1][30] = Some(Element::F); // (2,31)
     table[1][31] = Some(Element::Ne); // (2,32)
-    
+
     // Period 3
-    table[2][0] = Some(Element::Na);  // (3,1)
-    table[2][1] = Some(Element::Mg);  // (3,2)
+    table[2][0] = Some(Element::Na); // (3,1)
+    table[2][1] = Some(Element::Mg); // (3,2)
     table[2][26] = Some(Element::Al); // (3,27)
     table[2][27] = Some(Element::Si); // (3,28)
-    table[2][28] = Some(Element::P);  // (3,29)
-    table[2][29] = Some(Element::S);  // (3,30)
+    table[2][28] = Some(Element::P); // (3,29)
+    table[2][29] = Some(Element::S); // (3,30)
     table[2][30] = Some(Element::Cl); // (3,31)
     table[2][31] = Some(Element::Ar); // (3,32)
-    
+
     // Period 4
-    table[3][0] = Some(Element::K);   // (4,1)
-    table[3][1] = Some(Element::Ca);  // (4,2)
-    table[3][2] = Some(Element::Sc);  // (4,3)
+    table[3][0] = Some(Element::K); // (4,1)
+    table[3][1] = Some(Element::Ca); // (4,2)
+    table[3][2] = Some(Element::Sc); // (4,3)
     table[3][17] = Some(Element::Ti); // (4,18)
-    table[3][18] = Some(Element::V);  // (4,19)
+    table[3][18] = Some(Element::V); // (4,19)
     table[3][19] = Some(Element::Cr); // (4,20)
     table[3][20] = Some(Element::Mn); // (4,21)
     table[3][21] = Some(Element::Fe); // (4,22)
@@ -360,11 +368,11 @@ static PERIOD_GROUP_TO_ELEMENT: [[Option<Element>; 33]; 8] = {
     table[3][29] = Some(Element::Se); // (4,30)
     table[3][30] = Some(Element::Br); // (4,31)
     table[3][31] = Some(Element::Kr); // (4,32)
-    
+
     // Period 5
-    table[4][0] = Some(Element::Rb);  // (5,1)
-    table[4][1] = Some(Element::Sr);  // (5,2)
-    table[4][2] = Some(Element::Y);   // (5,3)
+    table[4][0] = Some(Element::Rb); // (5,1)
+    table[4][1] = Some(Element::Sr); // (5,2)
+    table[4][2] = Some(Element::Y); // (5,3)
     table[4][17] = Some(Element::Zr); // (5,18)
     table[4][18] = Some(Element::Nb); // (5,19)
     table[4][19] = Some(Element::Mo); // (5,20)
@@ -378,20 +386,20 @@ static PERIOD_GROUP_TO_ELEMENT: [[Option<Element>; 33]; 8] = {
     table[4][27] = Some(Element::Sn); // (5,28)
     table[4][28] = Some(Element::Sb); // (5,29)
     table[4][29] = Some(Element::Te); // (5,30)
-    table[4][30] = Some(Element::I);  // (5,31)
+    table[4][30] = Some(Element::I); // (5,31)
     table[4][31] = Some(Element::Xe); // (5,32)
-    
+
     // Period 6
-    table[5][0] = Some(Element::Cs);  // (6,1)
-    table[5][1] = Some(Element::Ba);  // (6,2)
-    table[5][2] = Some(Element::La);  // (6,3)
-    table[5][3] = Some(Element::Ce);  // (6,4)
-    table[5][4] = Some(Element::Pr);  // (6,5)
-    table[5][5] = Some(Element::Nd);  // (6,6)
-    table[5][6] = Some(Element::Pm);  // (6,7)
-    table[5][7] = Some(Element::Sm);  // (6,8)
-    table[5][8] = Some(Element::Eu);  // (6,9)
-    table[5][9] = Some(Element::Gd);  // (6,10)
+    table[5][0] = Some(Element::Cs); // (6,1)
+    table[5][1] = Some(Element::Ba); // (6,2)
+    table[5][2] = Some(Element::La); // (6,3)
+    table[5][3] = Some(Element::Ce); // (6,4)
+    table[5][4] = Some(Element::Pr); // (6,5)
+    table[5][5] = Some(Element::Nd); // (6,6)
+    table[5][6] = Some(Element::Pm); // (6,7)
+    table[5][7] = Some(Element::Sm); // (6,8)
+    table[5][8] = Some(Element::Eu); // (6,9)
+    table[5][9] = Some(Element::Gd); // (6,10)
     table[5][10] = Some(Element::Tb); // (6,11)
     table[5][11] = Some(Element::Dy); // (6,12)
     table[5][12] = Some(Element::Ho); // (6,13)
@@ -401,7 +409,7 @@ static PERIOD_GROUP_TO_ELEMENT: [[Option<Element>; 33]; 8] = {
     table[5][16] = Some(Element::Lu); // (6,17)
     table[5][17] = Some(Element::Hf); // (6,18)
     table[5][18] = Some(Element::Ta); // (6,19)
-    table[5][19] = Some(Element::W);  // (6,20)
+    table[5][19] = Some(Element::W); // (6,20)
     table[5][20] = Some(Element::Re); // (6,21)
     table[5][21] = Some(Element::Os); // (6,22)
     table[5][22] = Some(Element::Ir); // (6,23)
@@ -414,18 +422,18 @@ static PERIOD_GROUP_TO_ELEMENT: [[Option<Element>; 33]; 8] = {
     table[5][29] = Some(Element::Po); // (6,30)
     table[5][30] = Some(Element::At); // (6,31)
     table[5][31] = Some(Element::Rn); // (6,32)
-    
+
     // Period 7
-    table[6][0] = Some(Element::Fr);  // (7,1)
-    table[6][1] = Some(Element::Ra);  // (7,2)
-    table[6][2] = Some(Element::Ac);  // (7,3)
-    table[6][3] = Some(Element::Th);  // (7,4)
-    table[6][4] = Some(Element::Pa);  // (7,5)
-    table[6][5] = Some(Element::U);   // (7,6)
-    table[6][6] = Some(Element::Np);  // (7,7)
-    table[6][7] = Some(Element::Pu);  // (7,8)
-    table[6][8] = Some(Element::Am);  // (7,9)
-    table[6][9] = Some(Element::Cm);  // (7,10)
+    table[6][0] = Some(Element::Fr); // (7,1)
+    table[6][1] = Some(Element::Ra); // (7,2)
+    table[6][2] = Some(Element::Ac); // (7,3)
+    table[6][3] = Some(Element::Th); // (7,4)
+    table[6][4] = Some(Element::Pa); // (7,5)
+    table[6][5] = Some(Element::U); // (7,6)
+    table[6][6] = Some(Element::Np); // (7,7)
+    table[6][7] = Some(Element::Pu); // (7,8)
+    table[6][8] = Some(Element::Am); // (7,9)
+    table[6][9] = Some(Element::Cm); // (7,10)
     table[6][10] = Some(Element::Bk); // (7,11)
     table[6][11] = Some(Element::Cf); // (7,12)
     table[6][12] = Some(Element::Es); // (7,13)
@@ -448,7 +456,7 @@ static PERIOD_GROUP_TO_ELEMENT: [[Option<Element>; 33]; 8] = {
     table[6][29] = Some(Element::Lv); // (7,30)
     table[6][30] = Some(Element::Ts); // (7,31)
     table[6][31] = Some(Element::Og); // (7,32)
-    
+
     table
 };
 
@@ -786,7 +794,6 @@ impl Element {
     pub fn is_element(symbol: &str) -> bool {
         Self::is_element_bytes(symbol.as_bytes())
     }
-
 }
 
 impl TryFrom<&str> for Element {
@@ -1213,12 +1220,12 @@ mod tests {
         assert_eq!(Element::from_period_group(4, 22), Some(Element::Fe));
         assert_eq!(Element::from_period_group(6, 24), Some(Element::Pt));
         assert_eq!(Element::from_period_group(7, 32), Some(Element::Og));
-        
+
         assert_eq!(Element::from_period_group(0, 1), None);
         assert_eq!(Element::from_period_group(8, 1), None);
         assert_eq!(Element::from_period_group(1, 0), None);
         assert_eq!(Element::from_period_group(1, 33), None);
-        
+
         assert_eq!(Element::from_period_group(2, 4), None);
         assert_eq!(Element::from_period_group(3, 4), None);
     }
@@ -1329,6 +1336,4 @@ mod tests {
         assert_eq!(e!(H), Element::H);
         assert_eq!(e!(Fe), Element::Fe);
     }
-
-
 }
