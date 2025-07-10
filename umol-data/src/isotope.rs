@@ -1,7 +1,7 @@
 //! Isotope definitions and data
 
 use crate::half_life::HalfLife;
-use crate::isotope_data::ISOTOPE_DATA;
+use crate::isotope_data::{ISOTOPE_DATA, LIGHT_ISOTOPE_MAP};
 use crate::Element;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
@@ -214,6 +214,10 @@ impl Isotope {
 
     /// Check if isotope is catalogued (stable or has >= 1 ns half-life)
     pub fn is_catalogued(element: Element, mass_number: u32) -> bool {
+        let atomic_number = element.atomic_number() as usize;
+        if atomic_number > 0 && atomic_number <= 20 && mass_number < 60 {
+            return LIGHT_ISOTOPE_MAP[atomic_number - 1][mass_number as usize];
+        }
         ISOTOPE_DATA.contains_key(&((element.atomic_number() as u32) << 16 | mass_number))
     }
 }

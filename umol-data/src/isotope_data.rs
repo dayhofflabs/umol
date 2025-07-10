@@ -13,9 +13,175 @@
 //! Excluded nuclides:
 //! - Half-lives < 1 ns or unknown
 //! - Nuclide isomers, metastable states, and excited states
+//!
+//! Nulides of elements with Z <= 20 are additionally listed in the LIGHT_ISOTOPE_MAP lookup table
+//! for fast lookup.
 
 use crate::half_life::{HalfLife, TimeUnit};
 use phf::phf_map;
+
+pub const LIGHT_ISOTOPE_MAP: [[bool; 60]; 20] = [
+    [
+        // H
+        false, true, true, true, true, true, true, true, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false,
+    ],
+    [
+        // He
+        false, false, false, true, true, true, true, true, true, true, true, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false,
+    ],
+    [
+        // Li
+        false, false, false, true, true, true, true, true, true, true, true, true, true, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false,
+    ],
+    [
+        // Be
+        false, false, false, false, false, true, true, true, true, true, true, true, true, false,
+        true, true, true, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false,
+    ],
+    [
+        // B
+        false, false, false, false, false, false, false, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // C
+        false, false, false, false, false, false, false, false, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // N
+        false, false, false, false, false, false, false, false, false, false, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // O
+        false, false, false, false, false, false, false, false, false, false, false, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
+        true, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // F
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // Ne
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false,
+    ],
+    [
+        // Na
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // Mg
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false,
+    ],
+    [
+        // Al
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false,
+    ],
+    [
+        // Si
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // P
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, false, false, false, false, false, false, false, false,
+        false, false, false, false, false,
+    ],
+    [
+        // S
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, false, false, false, false, false,
+        false, false, false, false, false,
+    ],
+    [
+        // Cl
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, false, false,
+        false, false, false, false, false, false,
+    ],
+    [
+        // Ar
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
+        false, false, false, false, false,
+    ],
+    [
+        // K
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, false, false, false,
+    ],
+    [
+        // Ca
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, false,
+    ],
+];
 
 pub static ISOTOPE_DATA: phf::Map<u32, (f64, Option<HalfLife>)> = phf_map! {
         65537u32 => (1.007825, None), // 1H

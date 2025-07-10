@@ -70,7 +70,6 @@ fn data_benchmarks(c: &mut Criterion) {
             ("12C".to_string(), Isotope::checked_new(e!(C), 12)),
             ("63Cu".to_string(), Isotope::checked_new(e!(Cu), 63)),
             ("209Bi".to_string(), Isotope::checked_new(e!(Bi), 209)),
-            ("294Og".to_string(), Isotope::checked_new(e!(Og), 294)),
         ] {
             group.bench_with_input(symbol, isotope, |b, isotope| {
                 b.iter(|| {
@@ -86,9 +85,9 @@ fn data_benchmarks(c: &mut Criterion) {
         for (symbol, inputs) in &vec![
             ("12C".to_string(), (e!(C), 12)),
             ("40C".to_string(), (e!(C), 40)),
+            ("31P".to_string(), (e!(P), 31)),
             ("63Cu".to_string(), (e!(Cu), 63)),
             ("209Bi".to_string(), (e!(Bi), 209)),
-            ("294Og".to_string(), (e!(Og), 294)),
         ] {
             group.bench_with_input(symbol, inputs, |b, &(element, mass_number)| {
                 b.iter(|| {
