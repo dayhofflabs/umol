@@ -127,15 +127,13 @@ pub struct Isotope {
 impl Isotope {
     /// Create a new isotope if it exists in ISOTOPE_DATA.  
     pub fn checked_new(element: Element, mass_number: u32) -> Option<Self> {
-        let isotope = Isotope {
+        if !Self::is_catalogued(element, mass_number) {
+            return None;
+        }
+        Some(Isotope {
             element,
             mass_number,
-        };
-        if ISOTOPE_DATA.contains_key(&isotope.key()) {
-            Some(isotope)
-        } else {
-            None
-        }
+        })
     }
 
     /// Create a new isotope from symbol bytestring
@@ -212,6 +210,11 @@ impl Isotope {
     /// Get isotope symbol (AZ notation)
     pub fn symbol(&self) -> String {
         format!("{}{}", self.mass_number, self.element.symbol())
+    }
+
+    /// Check if isotope is catalogued (stable or has >= 1 ns half-life)
+    pub fn is_catalogued(element: Element, mass_number: u32) -> bool {
+        ISOTOPE_DATA.contains_key(&((element.atomic_number() as u32) << 16 | mass_number))
     }
 }
 
@@ -544,5 +547,20 @@ mod tests {
     fn test_iso_macro() {
         assert_eq!(iso!("1H"), Isotope::from_symbol("1H").unwrap());
         assert_eq!(iso!("12C"), Isotope::from_symbol("12C").unwrap());
+    }
+
+    #[rstest]
+    #[case(Element::H, 1, true)]
+    #[case(Element::H, 2, true)]
+    #[case(Element::H, 3, true)]
+    #[case(Element::H, 4, false)]
+    #[case(Element::C, 12, true)]
+    #[case(Element::C, 40, false)]
+    fn test_isotope_is_catalogued(
+        #[case] element: Element,
+        #[case] mass_number: u32,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(Isotope::is_catalogued(element, mass_number), expected);
     }
 }

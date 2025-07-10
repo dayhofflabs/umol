@@ -752,6 +752,11 @@ impl Element {
         }
     }
 
+    /// Get all elements
+    pub const fn all() -> &'static [Self] {
+        &ELEMENTS
+    }
+
     /// Check if bytestring contains valid element symbol using direct indexing
     pub fn is_element_bytes(symbol: &[u8]) -> bool {
         if let Some((key_buf, len)) = normalize_symbol_bytes(symbol) {
