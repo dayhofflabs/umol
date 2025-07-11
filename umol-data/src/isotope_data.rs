@@ -14,173 +14,37 @@
 //! - Half-lives < 1 ns or unknown
 //! - Nuclide isomers, metastable states, and excited states
 //!
-//! Nulides of elements with Z <= 20 are additionally listed in the LIGHT_ISOTOPE_MAP lookup table
+//! Nuclides of elements with Z <= 20 are additionally listed in the LIGHT_ISOTOPE_MAP lookup table
 //! for fast lookup.
 
+use std::marker::PhantomData;
+
 use crate::half_life::{HalfLife, TimeUnit};
+use bitvec::prelude::*;
 use phf::phf_map;
 
-pub const LIGHT_ISOTOPE_MAP: [[bool; 60]; 20] = [
-    [
-        // H
-        false, true, true, true, true, true, true, true, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false,
-    ],
-    [
-        // He
-        false, false, false, true, true, true, true, true, true, true, true, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false,
-    ],
-    [
-        // Li
-        false, false, false, true, true, true, true, true, true, true, true, true, true, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false,
-    ],
-    [
-        // Be
-        false, false, false, false, false, true, true, true, true, true, true, true, true, false,
-        true, true, true, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false,
-    ],
-    [
-        // B
-        false, false, false, false, false, false, false, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // C
-        false, false, false, false, false, false, false, false, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // N
-        false, false, false, false, false, false, false, false, false, false, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // O
-        false, false, false, false, false, false, false, false, false, false, false, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
-        true, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // F
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // Ne
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false,
-    ],
-    [
-        // Na
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // Mg
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false,
-    ],
-    [
-        // Al
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false,
-    ],
-    [
-        // Si
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // P
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, false, false, false, false, false, false, false, false,
-        false, false, false, false, false,
-    ],
-    [
-        // S
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, false, false, false, false, false,
-        false, false, false, false, false,
-    ],
-    [
-        // Cl
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, false, false,
-        false, false, false, false, false, false,
-    ],
-    [
-        // Ar
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, false,
-        false, false, false, false, false,
-    ],
-    [
-        // K
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, false, false, false,
-    ],
-    [
-        // Ca
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false, false, false, false, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, false,
-    ],
+#[rustfmt::skip]
+pub const LIGHT_ISOTOPE_MAP: [BitArray<[u8; 8]>; 20] = [
+    BitArray::<[u8; 8], Lsb0> {data: [14, 0, 0, 0, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [88, 1, 0, 0, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [192, 11, 0, 0, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [128, 94, 0, 0, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 253, 10, 0, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 254, 95, 0, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 240, 255, 0, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 224, 255, 1, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 254, 175, 0, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 254, 255, 5, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 240, 255, 175, 0, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 240, 255, 127, 1, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 192, 255, 255, 15, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 192, 255, 255, 63, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 0, 252, 255, 255, 0, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 0, 248, 255, 255, 3, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 0, 128, 255, 255, 31, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 0, 128, 255, 255, 127, 0], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 0, 0, 248, 255, 255, 15], _ord: PhantomData::<Lsb0>},
+    BitArray::<[u8; 8], Lsb0> {data: [0, 0, 0, 0, 248, 255, 255, 15], _ord: PhantomData::<Lsb0>},
 ];
 
 pub static ISOTOPE_DATA: phf::Map<u32, (f64, Option<HalfLife>)> = phf_map! {
