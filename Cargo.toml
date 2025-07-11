@@ -9,3 +9,6 @@ members = [
     "umol-models-geometric",
 ]
 resolver = "2"
+
+[profile.bench]
+debug = true

@@ -1,8 +1,8 @@
 //! Apply property entries to molecule
 
 use super::convert::{
-    convert_attachment_point_code, convert_radical_type_code, convert_ring_bond_count_code,
-    convert_substitution_count_code, convert_unsaturated_atom_code,
+    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
+    convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
 };
 use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
@@ -15,7 +15,7 @@ use crate::io::ctab::molecule::Molecule;
 use crate::io::ctab::rgroup::RGroup;
 use crate::io::ctab::sgroup::{SGroup, SGroupType};
 use umol::error::{DataError, ValidationError};
-use umol::Result;
+use umol::{Error, Result};
 
 /// Trait for applying property entries to molecule
 pub trait Apply {
@@ -142,29 +142,27 @@ impl Apply for Vec<IsotopeEntry> {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
             }
-            // TODO: Only allow isotopes for atom symbols Element and NamedIsotope
-            // TODO: Validate the existence of the isotope for the given element
-            // Use data from materials/isotopes/nubase_4.mas20
-            // TODO: Check isotope mass conflicts for NamedIsotope
-            if entry.mass == 0 {
-                return Err(ValidationError::InvalidComponent(format!(
-                    "Invalid isotope mass for atom {}: {}",
-                    entry.atom_index, entry.mass
-                ))
-                .into());
-            }
-
             if let Some(atom) = molecule.atom_mut(entry.atom_index) {
+                let element = match atom.symbol {
+                    AtomSymbol::Element(element) => Ok::<_, Error>(element),
+                    AtomSymbol::NamedIsotope(isotope) => Ok::<_, Error>(isotope.element()),
+                    _ => Err(ValidationError::InvalidComponent(format!(
+                        "Cannot set isotope for atom {}: {:?}",
+                        entry.atom_index, atom.symbol
+                    ))
+                    .into()),
+                }?;
+                let mass_number = convert_atom_isotope_mass_number(element, entry.mass)?;
                 if let Some(existing) = atom.isotope_mass {
-                    if existing != entry.mass {
+                    if Some(existing) != mass_number {
                         return Err(ValidationError::InvalidComponent(format!(
-                            "Isotope conflict for atom {}: existing {} vs new {}",
-                            entry.atom_index, existing, entry.mass
+                            "Isotope conflict for atom {}: existing {:?} vs new {:?}",
+                            entry.atom_index, existing, mass_number
                         ))
                         .into());
                     }
                 }
-                atom.isotope_mass = Some(entry.mass);
+                atom.isotope_mass = mass_number;
             }
         }
         Ok(())

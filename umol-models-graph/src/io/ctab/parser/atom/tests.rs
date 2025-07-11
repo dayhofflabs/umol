@@ -108,7 +108,10 @@ fn test_atom_symbol_invalid(
     Some(10),
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0",
@@ -117,7 +120,10 @@ fn test_atom_symbol_invalid(
     Some(9),
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0",
@@ -126,7 +132,10 @@ fn test_atom_symbol_invalid(
     Some(16),
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4  0  0  0  0  0  0",
@@ -135,7 +144,10 @@ fn test_atom_symbol_invalid(
     None,
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4  0  0  0  0  0  0",
@@ -144,7 +156,10 @@ fn test_atom_symbol_invalid(
     None,
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4  0  0  0  0  0  0",
@@ -153,7 +168,10 @@ fn test_atom_symbol_invalid(
     Some(10),
     0,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  0  0  0  0  4  0  0  0  1  0  0",
@@ -162,7 +180,10 @@ fn test_atom_symbol_invalid(
     Some(10),
     0,
     Some(4),
-    Some(1)
+    Some(1),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  3  0     0  4  0  0  0  0  0  0",
@@ -171,7 +192,10 @@ fn test_atom_symbol_invalid(
     Some(10),
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4     0  0  0  0  0",
@@ -180,7 +204,10 @@ fn test_atom_symbol_invalid(
     Some(10),
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0      ",
@@ -189,7 +216,10 @@ fn test_atom_symbol_invalid(
     Some(10),
     1,
     Some(4),
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4           1 0    ",
@@ -198,7 +228,10 @@ fn test_atom_symbol_invalid(
     Some(10),
     1,
     Some(4),
-    Some(1)
+    Some(1),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard69(
     #[case] input: &[u8],
@@ -208,10 +241,13 @@ fn test_atom_input_standard69(
     #[case] expected_charge: i8,
     #[case] expected_valence: Option<u8>,
     #[case] expected_atom_map_num: Option<u32>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard69(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         atom.element, expected_element,
@@ -237,6 +273,27 @@ fn test_atom_input_standard69(
         atom.atom_map_num, expected_atom_map_num,
         "{} has returned atom map num {:?}, expected {:?}",
         desc, atom.atom_map_num, expected_atom_map_num,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
     );
 }
 
@@ -279,7 +336,10 @@ fn test_atom_input_standard69_invalid(
     Element::C,
     Some(10),
     1,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4",
@@ -287,7 +347,10 @@ fn test_atom_input_standard69_invalid(
     Element::C,
     Some(9),
     1,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4",
@@ -295,7 +358,10 @@ fn test_atom_input_standard69_invalid(
     Element::C,
     Some(16),
     1,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4",
@@ -303,7 +369,10 @@ fn test_atom_input_standard69_invalid(
     Element::C,
     None,
     1,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4",
@@ -311,7 +380,10 @@ fn test_atom_input_standard69_invalid(
     Element::C,
     None,
     1,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4",
@@ -319,7 +391,10 @@ fn test_atom_input_standard69_invalid(
     Element::C,
     Some(10),
     0,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard51(
     #[case] input: &[u8],
@@ -328,10 +403,13 @@ fn test_atom_input_standard51(
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
     #[case] expected_valence: Option<u8>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard51(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, pos)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
@@ -339,24 +417,24 @@ fn test_atom_input_standard51(
         desc, atom.element, expected_element,
     );
     assert!(
-        approx_eq!(f64, pos.x, 1.2345),
+        approx_eq!(f64, atom.position.unwrap().x, 1.2345),
         "{} has returned x {:?}, expected {:?}",
         desc,
-        pos.x,
+        atom.position.unwrap().x,
         1.2345,
     );
     assert!(
-        approx_eq!(f64, pos.y, 2.3456),
+        approx_eq!(f64, atom.position.unwrap().y, 2.3456),
         "{} has returned y {:?}, expected {:?}",
         desc,
-        pos.y,
+        atom.position.unwrap().y,
         2.3456,
     );
     assert!(
-        approx_eq!(f64, pos.z, 3.4567),
+        approx_eq!(f64, atom.position.unwrap().z, 3.4567),
         "{} has returned z {:?}, expected {:?}",
         desc,
-        pos.z,
+        atom.position.unwrap().z,
         3.4567,
     );
     assert_eq!(
@@ -373,6 +451,27 @@ fn test_atom_input_standard51(
         atom.valence, expected_valence,
         "{} has returned valence {:?}, expected {:?}",
         desc, atom.valence, expected_valence,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
     );
 }
 
@@ -419,21 +518,30 @@ fn test_atom_input_standard51_invalid(
     "blank mass diff",
     None,
     1,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2     0  0  0  4",
     "blank charge",
     Some(10),
     0,
-    Some(4)
+    Some(4),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0   ",
     "blank valence",
     Some(10),
     1,
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard51_empty_fields(
     #[case] input: &[u8],
@@ -441,10 +549,13 @@ fn test_atom_input_standard51_empty_fields(
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
     #[case] expected_valence: Option<u8>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard51(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
@@ -461,6 +572,27 @@ fn test_atom_input_standard51_empty_fields(
         "{} has returned valence {:?}, expected {:?}",
         desc, atom.valence, expected_valence,
     );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
+    );
 }
 
 #[rstest]
@@ -470,7 +602,10 @@ fn test_atom_input_standard51_empty_fields(
     Element::C,
     None,
     1,
-    Some(AtomStereoParity::Odd)
+    Some(AtomStereoParity::Odd),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C   0  3   0  ",
@@ -478,7 +613,10 @@ fn test_atom_input_standard51_empty_fields(
     Element::C,
     None,
     1,
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard42(
     #[case] input: &[u8],
@@ -487,10 +625,13 @@ fn test_atom_input_standard42(
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
     #[case] expected_stereo_parity: Option<AtomStereoParity>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard42(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
@@ -511,6 +652,27 @@ fn test_atom_input_standard42(
         atom.stereo_parity, expected_stereo_parity,
         "{} has returned stereo parity {:?}, expected {:?}",
         desc, atom.stereo_parity, expected_stereo_parity,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
     );
 }
 
@@ -563,7 +725,10 @@ fn test_atom_input_standard42_invalid(
     Element::C,
     None,
     1,
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C      3  0",
@@ -571,7 +736,10 @@ fn test_atom_input_standard42_invalid(
     Element::C,
     None,
     1,
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard42_empty_fields(
     #[case] input: &[u8],
@@ -580,10 +748,13 @@ fn test_atom_input_standard42_empty_fields(
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
     #[case] expected_stereo_parity: Option<AtomStereoParity>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard42(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         atom.element, expected_element,
@@ -605,6 +776,27 @@ fn test_atom_input_standard42_empty_fields(
         "{} has returned stereo parity {:?}, expected {:?}",
         desc, atom.stereo_parity, expected_stereo_parity,
     );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
+    );
 }
 
 #[rstest]
@@ -619,7 +811,7 @@ fn test_atom_input_standard42_empty_fields(
 fn test_atom_input_standard42_ignored_gap(#[case] input: &[u8], #[case] desc: &str) {
     let result = atom_input_standard42(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(atom.charge, 1);
 }
@@ -630,21 +822,30 @@ fn test_atom_input_standard42_ignored_gap(#[case] input: &[u8], #[case] desc: &s
     "standard valid",
     Element::C,
     Some(10),
-    1
+    1,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -4  3",
     "mass diff out-of-range low",
     Element::C,
     None,
-    1
+    1,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -2  8",
     "charge out-of-range high",
     Element::C,
     Some(10),
-    0
+    0,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard39(
     #[case] input: &[u8],
@@ -652,10 +853,14 @@ fn test_atom_input_standard39(
     #[case] expected_element: Element,
     #[case] expected_isotope_mass: Option<u32>,
     #[case] expected_charge: i8,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard39(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, pos)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
+    let position = atom.position.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
@@ -678,11 +883,25 @@ fn test_atom_input_standard39(
         desc, atom.valence, None as Option<u8>
     );
     assert!(
-        approx_eq!(f64, pos.x, 1.2345),
+        approx_eq!(f64, position.x, expected_x_position),
         "{} has returned x {:?}, expected {:?}",
         desc,
-        pos.x,
-        1.2345,
+        position.x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, position.y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        position.y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, position.z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        position.z,
+        expected_z_position,
     );
 }
 
@@ -735,7 +954,7 @@ fn test_atom_input_standard39_empty_fields(
 ) {
     let result = atom_input_standard39(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (_, (atom, _)) = result.unwrap();
+    let (_, atom) = result.unwrap();
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
         "{} has returned isotope mass {:?}, expected {:?}",
@@ -754,7 +973,7 @@ fn test_atom_input_standard39_empty_fields(
 fn test_atom_input_standard39_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let result = all_consuming(terminated(atom_input_standard39, space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(atom.charge, 1);
 }
@@ -764,23 +983,32 @@ fn test_atom_input_standard39_whitespace_padded(#[case] input: &[u8], #[case] de
     b"    1.2345    2.3456    3.4567 C  -2",
     "standard valid",
     Element::C,
-    Some(10)
+    Some(10),
+    1.2345,
+    2.3456,
+    3.4567
 )]
 #[case(
     b"    1.2345    2.3456    3.4567 C  -4",
     "mass diff out-of-range low",
     Element::C,
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard36(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
     #[case] expected_isotope_mass: Option<u32>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard36(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
@@ -801,6 +1029,27 @@ fn test_atom_input_standard36(
         atom.valence, None,
         "{} has returned valence {:?}, expected {:?}",
         desc, atom.valence, None as Option<u8>
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
     );
 }
 
@@ -840,7 +1089,7 @@ fn test_atom_input_standard36_empty_fields(
 ) {
     let result = atom_input_standard36(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (_, (atom, _)) = result.unwrap();
+    let (_, atom) = result.unwrap();
     assert_eq!(
         atom.isotope_mass, expected_isotope_mass,
         "{} has returned isotope mass {:?}, expected {:?}",
@@ -856,7 +1105,7 @@ fn test_atom_input_standard36_empty_fields(
 fn test_atom_input_standard36_whitespace_padded(#[case] input: &[u8], #[case] _desc: &str) {
     let result = all_consuming(terminated(atom_input_standard36, space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", _desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", _desc);
     assert_eq!(atom.isotope_mass, Some(10));
 }
@@ -866,17 +1115,23 @@ fn test_atom_input_standard36_whitespace_padded(#[case] input: &[u8], #[case] _d
     b"    1.2345    2.3456    3.4567 C  ",
     "standard valid",
     Element::C,
-    None
+    None,
+    1.2345,
+    2.3456,
+    3.4567
 )]
 fn test_atom_input_standard34(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_element: Element,
     #[case] expected_isotope_mass: Option<u32>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let result = atom_input_standard34(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.element, expected_element,
@@ -897,6 +1152,27 @@ fn test_atom_input_standard34(
         atom.valence, None,
         "{} has returned valence {:?}, expected {:?}",
         desc, atom.valence, None as Option<u8>
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
     );
 }
 
@@ -935,7 +1211,7 @@ fn test_atom_input_standard34_invalid(
 fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let result = all_consuming(terminated(atom_input_standard34, space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(atom.element, Element::C);
 }
@@ -953,7 +1229,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C   ",
@@ -967,7 +1246,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C  -2",
@@ -981,7 +1263,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C  -2  ",
@@ -995,7 +1280,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C  -2  3",
@@ -1009,7 +1297,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C  -2  3  1",
@@ -1023,7 +1314,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4",
@@ -1037,7 +1331,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     Some(AtomStereoCare::Care),
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4 ",
@@ -1051,7 +1348,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000
 )]
 #[case(
     b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0           1  2  1",
@@ -1065,7 +1365,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     Some(1),
     Some(AtomInversionRetention::Retained),
-    Some(AtomExactChange::Match)
+    Some(AtomExactChange::Match),
+    0.0000,
+    0.0000,
+    0.0000,
 )]
 #[case(
     b"    1.0000    2.0000    3.0000 L   0  0  0  0  0  4",
@@ -1079,7 +1382,10 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
     None,
     None,
     None,
-    None
+    None,
+    1.0000,
+    2.0000,
+    3.0000,
 )]
 fn test_atom_input(
     #[case] input: &[u8],
@@ -1094,11 +1400,14 @@ fn test_atom_input(
     #[case] expected_atom_map_num: Option<u32>,
     #[case] expected_inversion_retention: Option<AtomInversionRetention>,
     #[case] expected_exact_change: Option<AtomExactChange>,
+    #[case] expected_x_position: f64,
+    #[case] expected_y_position: f64,
+    #[case] expected_z_position: f64,
 ) {
     let mut parser = atom_input();
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.symbol, expected_symbol,
@@ -1149,6 +1458,27 @@ fn test_atom_input(
         atom.exact_change, expected_exact_change,
         "{} has returned exact_change {:?}, expected {:?}",
         desc, atom.exact_change, expected_exact_change,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().x, expected_x_position),
+        "{} has returned x {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().x,
+        expected_x_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().y, expected_y_position),
+        "{} has returned y {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().y,
+        expected_y_position,
+    );
+    assert!(
+        approx_eq!(f64, atom.position.unwrap().z, expected_z_position),
+        "{} has returned z {:?}, expected {:?}",
+        desc,
+        atom.position.unwrap().z,
+        expected_z_position,
     );
 }
 
@@ -1215,7 +1545,7 @@ fn test_atom_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
     let mut parser = atom_input();
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc,);
-    let (remaining, (atom, _)) = result.unwrap();
+    let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
     assert_eq!(
         atom.charge, 1,

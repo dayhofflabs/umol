@@ -9,7 +9,6 @@ use nom::{error, IResult, Parser};
 
 use super::super::ctab::atom::{Atom, AtomStandard, AtomSymbol};
 use super::super::ctab::bond::{Bond, BondStandard};
-use super::super::ctab::conformer::{Conformer, Point3D};
 use super::super::ctab::molecule::{AtomIndex, Header, Molecule, MoleculeStandard, ParsedMol};
 
 use super::super::ctab::parser::apply::Apply;
@@ -25,10 +24,10 @@ pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Err
     let (remaining, counts) = terminated(counts_input(), line_ending).parse(remaining)?;
     let atom_count = counts.atoms() as usize;
     let bond_count = counts.bonds() as usize;
-    let (remaining, atoms_and_coords) = atom_block(atom_count).parse(remaining)?;
+    let (remaining, atoms) = atom_block(atom_count).parse(remaining)?;
     let (remaining, bonds) = bond_block(bond_count).parse(remaining)?;
     let (remaining, properties) = properties_block(remaining)?;
-    let (molecule, is_query) = build_molecule(header, atoms_and_coords, bonds, properties);
+    let (molecule, is_query) = build_molecule(header, atoms, bonds, properties);
     Ok((remaining, ParsedMol::new(molecule, is_query)))
 }
 
@@ -38,21 +37,21 @@ pub fn mol_block_standard<'a>(input: &'a [u8]) -> IResult<&'a [u8], MoleculeStan
     let (remaining, counts) = terminated(counts_input(), line_ending).parse(remaining)?;
     let atom_count = counts.atoms() as usize;
     let bond_count = counts.bonds() as usize;
-    let (remaining, atoms_and_coords) = atom_block_standard(atom_count).parse(remaining)?;
+    let (remaining, atoms) = atom_block_standard(atom_count).parse(remaining)?;
     let (remaining, bonds) = bond_block_standard(bond_count).parse(remaining)?;
     let (remaining, properties) = properties_block_standard(remaining)?;
-    let molecule = build_molecule_standard(header, atoms_and_coords, bonds, properties);
+    let molecule = build_molecule_standard(header, atoms, bonds, properties);
     Ok((remaining, molecule))
 }
 
 /// Parse atom block
 fn atom_block<'a>(
     atom_count: usize,
-) -> impl Parser<&'a [u8], Output = Vec<(Atom, Point3D)>, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = Vec<Atom>, Error = error::Error<&'a [u8]>> {
     count(
         |input| {
-            let (input, (atom, coord)) = terminated(atom_input(), line_ending).parse(input)?;
-            Ok((input, (atom, coord)))
+            let (input, atom) = terminated(atom_input(), line_ending).parse(input)?;
+            Ok((input, atom))
         },
         atom_count,
     )
@@ -61,11 +60,11 @@ fn atom_block<'a>(
 /// Parse atom block (standard parser)
 fn atom_block_standard<'a>(
     atom_count: usize,
-) -> impl Parser<&'a [u8], Output = Vec<(AtomStandard, Point3D)>, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = Vec<AtomStandard>, Error = error::Error<&'a [u8]>> {
     count(
         |input| {
-            let (input, (atom, coord)) = terminated(atom_input_standard(), line_ending).parse(input)?;
-            Ok((input, (atom, coord)))
+            let (input, atom) = terminated(atom_input_standard(), line_ending).parse(input)?;
+            Ok((input, atom))
         },
         atom_count,
     )
@@ -142,12 +141,12 @@ fn properties_block_standard<'a>(
 
 /// Detect if molecule contains query features
 fn detect_query_features(
-    atoms: &[(Atom, Point3D)],
+    atoms: &[Atom],
     _bonds: &[(usize, usize, Bond)],
     properties: &[PropertyEntries],
 ) -> bool {
     // Check atoms for query symbols
-    for (atom, _) in atoms {
+    for atom in atoms {
         match &atom.symbol {
             AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {
                 // Standard atoms
@@ -198,22 +197,19 @@ fn detect_query_features(
 /// Build molecule from parsed components
 fn build_molecule(
     header: Header,
-    atoms_and_coords: Vec<(Atom, Point3D)>,
+    atoms: Vec<Atom>,
     bonds: Vec<(usize, usize, Bond)>,
     properties: Vec<PropertyEntries>,
 ) -> (Molecule, bool) {
     // Detect query features
-    let is_query = detect_query_features(&atoms_and_coords, &bonds, &properties);
+    let is_query = detect_query_features(&atoms, &bonds, &properties);
 
     // Create molecule
     let mut molecule = Molecule::new();
     molecule.header = header;
 
-    // Extract coordinates for conformer
-    let coordinates: Vec<Point3D> = atoms_and_coords.iter().map(|(_, coord)| *coord).collect();
-
     // Add atoms to molecule
-    for (atom, _) in atoms_and_coords {
+    for atom in atoms {
         molecule.add_atom(atom);
     }
 
@@ -231,22 +227,13 @@ fn build_molecule(
         }
     }
 
-    // Add conformer if we have coordinates
-    if !coordinates.is_empty() {
-        let conformer = Conformer::from_positions(coordinates);
-        if let Err(e) = molecule.add_conformer(conformer) {
-            // This shouldn't happen if we parsed correctly, but handle gracefully
-            eprintln!("Warning: Failed to add conformer: {}", e);
-        }
-    }
-
     (molecule, is_query)
 }
 
 /// Build standard molecule from parsed standard components
 fn build_molecule_standard(
     header: Header,
-    atoms_and_coords: Vec<(AtomStandard, Point3D)>,
+    atoms: Vec<AtomStandard>,
     bonds: Vec<(usize, usize, BondStandard)>,
     properties: Vec<PropertyEntries>,
 ) -> MoleculeStandard {
@@ -254,11 +241,8 @@ fn build_molecule_standard(
     let mut molecule = MoleculeStandard::new();
     molecule.header = header;
 
-    // Extract coordinates for conformer
-    let coordinates: Vec<Point3D> = atoms_and_coords.iter().map(|(_, coord)| *coord).collect();
-
     // Add atoms to molecule
-    for (atom, _) in atoms_and_coords {
+    for atom in atoms {
         molecule.add_atom(atom);
     }
 
@@ -273,12 +257,6 @@ fn build_molecule_standard(
     // Standard molecules should only have basic properties that are handled in atom parsing
     if !properties.is_empty() {
         eprintln!("Warning: Properties found in standard parser - some may be ignored");
-    }
-
-    // Add conformer if we have coordinates
-    if !coordinates.is_empty() {
-        let conformer = Conformer::from_positions(coordinates);
-        molecule.conformers.push(conformer);
     }
 
     molecule

@@ -1,8 +1,7 @@
 //! Molecule type for CTab format.
 
-use crate::io::ctab::atom::{Atom, AtomStandard, AtomSymbol};
+use crate::io::ctab::atom::{Atom, AtomStandard, AtomSymbol, Point3D};
 use crate::io::ctab::bond::{Bond, BondType};
-use crate::io::ctab::conformer::{Conformer, Point3D};
 use crate::io::ctab::sgroup::SGroup;
 use crate::io::mol::parser::{mol_block, mol_block_standard};
 use petgraph::graph::{EdgeIndex, NodeIndex};
@@ -54,7 +53,6 @@ impl Default for Header {
 #[derive(Debug, Clone)]
 pub struct Molecule {
     pub graph: StableGraph<Atom, Bond, Undirected, usize>,
-    pub conformers: Vec<Conformer>,
     pub sgroups: BTreeMap<usize, SGroup>,
     pub properties: HashMap<String, String>,
     pub header: Header,
@@ -64,7 +62,6 @@ pub struct Molecule {
 #[derive(Debug, Clone)]
 pub struct MoleculeStandard {
     pub graph: StableGraph<AtomStandard, Bond, Undirected, usize>,
-    pub conformers: Vec<Conformer>,
     pub sgroups: BTreeMap<usize, SGroup>,
     pub properties: HashMap<String, String>,
     pub header: Header,
@@ -206,7 +203,6 @@ impl Molecule {
     pub fn new() -> Self {
         Self {
             graph: StableGraph::<Atom, Bond, Undirected, usize>::default(),
-            conformers: Vec::new(),
             sgroups: BTreeMap::new(),
             properties: HashMap::new(),
             header: Header::empty(),
@@ -325,38 +321,6 @@ impl Molecule {
         self.graph.neighbors(AtomIndex::new(idx)).map(|i| i.index())
     }
 
-    /// Get immutable slice of all conformers
-    pub fn conformers(&self) -> &[Conformer] {
-        &self.conformers
-    }
-
-    /// Get mutable reference to vector of conformers
-    pub fn conformers_mut(&mut self) -> &mut Vec<Conformer> {
-        &mut self.conformers
-    }
-
-    /// Add conformer to the molecule
-    ///
-    /// - `conformer`: Conformer to add
-    ///
-    /// Return error if the number of positions in the conformer does not match
-    /// the number of atoms in the molecule.
-    pub fn add_conformer(&mut self, conformer: Conformer) -> Result<()> {
-        let num_atoms = self.atom_count();
-        let num_positions = conformer.positions.len();
-
-        if num_atoms != num_positions {
-            return Err(DataError::InvalidConformer(format!(
-                "Expected {} positions, found {}",
-                num_atoms, num_positions
-            ))
-            .into());
-        }
-
-        self.conformers.push(conformer);
-        Ok(())
-    }
-
     /// Get iterator over sgroup indices
     pub fn sgroup_indices(&self) -> impl Iterator<Item = usize> + '_ {
         self.sgroups.keys().copied()
@@ -388,7 +352,6 @@ impl MoleculeStandard {
     pub fn new() -> Self {
         Self {
             graph: StableGraph::<AtomStandard, Bond, Undirected, usize>::default(),
-            conformers: Vec::new(),
             sgroups: BTreeMap::new(),
             properties: HashMap::new(),
             header: Header::empty(),
@@ -462,22 +425,9 @@ impl Molecule {
             atom_count, bond_count
         ));
 
-        // Get first conformer for coordinates (or use zero coordinates)
-        let empty_coords: Vec<Point3D> = Vec::new();
-        let coordinates = self
-            .conformers
-            .first()
-            .map(|c| &c.positions)
-            .unwrap_or_else(|| &empty_coords);
-
         // Write atom block
-        for (i, node_idx) in self.graph.node_indices().enumerate() {
+        for node_idx in self.graph.node_indices() {
             if let Some(atom) = self.graph.node_weight(node_idx) {
-                let coord = coordinates
-                    .get(i)
-                    .copied()
-                    .unwrap_or(Point3D::new(0.0, 0.0, 0.0));
-
                 // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
                 let symbol_str = match &atom.symbol {
                     AtomSymbol::Element(element) => element.to_string(),
@@ -492,6 +442,7 @@ impl Molecule {
                     AtomSymbol::LonePair => "LP".to_string(),
                     AtomSymbol::RGroup(rgroup) => format!("R{}", rgroup.to_string()),
                 };
+                let coord = atom.position.unwrap_or(Point3D::new(0.0, 0.0, 0.0));
 
                 // Use precise F10.4 format: 10 characters wide, 4 decimal places, right-aligned
                 // Symbol is exactly 3 characters, left-aligned after a single space
@@ -570,21 +521,10 @@ impl MoleculeStandard {
             atom_count, bond_count
         ));
 
-        // Get first conformer for coordinates (or use zero coordinates)
-        let empty_coords: Vec<Point3D> = Vec::new();
-        let coordinates = self
-            .conformers
-            .first()
-            .map(|c| &c.positions)
-            .unwrap_or(&empty_coords);
-
         // Write atom block
-        for (i, node_idx) in self.graph.node_indices().enumerate() {
+        for node_idx in self.graph.node_indices() {
             if let Some(atom) = self.graph.node_weight(node_idx) {
-                let coord = coordinates
-                    .get(i)
-                    .copied()
-                    .unwrap_or(Point3D::new(0.0, 0.0, 0.0));
+                let coord = atom.position.unwrap_or(Point3D::new(0.0, 0.0, 0.0));
 
                 // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
                 let symbol_str = atom.element.symbol().to_string();

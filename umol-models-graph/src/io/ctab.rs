@@ -2,7 +2,6 @@
 
 pub mod atom;
 pub mod bond;
-pub mod conformer;
 pub mod molecule;
 pub mod parser;
 pub mod rgroup;

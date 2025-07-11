@@ -8,8 +8,7 @@ use nom::{error, IResult, Parser};
 use umol_data::{Element, NamedIsotope};
 
 use super::utils::is_blanks_or_zeros;
-use crate::io::ctab::atom::{Atom, AtomList, AtomStandard, AtomSymbol};
-use crate::io::ctab::conformer::Point3D;
+use crate::io::ctab::atom::{Atom, AtomList, AtomStandard, AtomSymbol, Point3D};
 use crate::io::ctab::parser::utils::trim_whitespace_3char;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
@@ -82,7 +81,7 @@ fn atom_symbol<'a>() -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error
 /// Includes atom mapping number. Ignores whitespace padding.
 fn atom_input_standard69<'a>(
     input: &'a [u8],
-) -> IResult<&'a [u8], (AtomStandard, Point3D), error::Error<&'a [u8]>> {
+) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -120,7 +119,7 @@ fn atom_input_standard69<'a>(
         |(x, y, z, symbol, mass_diff, charge_radical, valence, atom_map_num)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            let atom = AtomStandard {
+            AtomStandard {
                 element,
                 charge,
                 radical,
@@ -129,10 +128,9 @@ fn atom_input_standard69<'a>(
                 hydrogen_count: None,
                 valence,
                 atom_map_num,
+                position: Some(Point3D::new(x, y, z)),
                 properties: std::collections::HashMap::new(),
-            };
-
-            (atom, Point3D::new(x, y, z))
+            }
         },
     )
     .parse(input)
@@ -142,7 +140,7 @@ fn atom_input_standard69<'a>(
 /// Includes mass difference, charge/radical and valence fields.
 fn atom_input_standard51<'a>(
     input: &'a [u8],
-) -> IResult<&'a [u8], (AtomStandard, Point3D), error::Error<&'a [u8]>> {
+) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -179,7 +177,7 @@ fn atom_input_standard51<'a>(
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity, valence)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            let atom = AtomStandard {
+            AtomStandard {
                 element,
                 charge,
                 radical,
@@ -188,10 +186,9 @@ fn atom_input_standard51<'a>(
                 hydrogen_count: None,
                 valence,
                 atom_map_num: None,
+                position: Some(Point3D::new(x, y, z)),
                 properties: std::collections::HashMap::new(),
-            };
-
-            (atom, Point3D::new(x, y, z))
+            }
         },
     )
     .parse(input)
@@ -202,7 +199,7 @@ fn atom_input_standard51<'a>(
 /// (substituted by defaults).
 fn atom_input_standard42<'a>(
     input: &'a [u8],
-) -> IResult<&'a [u8], (AtomStandard, Point3D), error::Error<&'a [u8]>> {
+) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -236,26 +233,28 @@ fn atom_input_standard42<'a>(
 
     let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
     let (charge, radical) = charge_radical;
-    let atom = AtomStandard {
-        element,
-        charge,
-        radical,
-        isotope_mass,
-        stereo_parity,
-        hydrogen_count: None,
-        valence: None,
-        atom_map_num: None,
-        properties: std::collections::HashMap::new(),
-    };
-
-    Ok((remaining, (atom, Point3D::new(x, y, z))))
+    Ok((
+        remaining,
+        AtomStandard {
+            element,
+            charge,
+            radical,
+            isotope_mass,
+            stereo_parity,
+            hydrogen_count: None,
+            valence: None,
+            atom_map_num: None,
+            position: Some(Point3D::new(x, y, z)),
+            properties: std::collections::HashMap::new(),
+        },
+    ))
 }
 
 /// Parse standard atom inputs with 37-41 characters (s. `atom_input` for more details).
 /// Lacks trailing stereo parity, valence and atom mapping fields (substituted by defaults).
 fn atom_input_standard39<'a>(
     input: &'a [u8],
-) -> IResult<&'a [u8], (AtomStandard, Point3D), error::Error<&'a [u8]>> {
+) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -279,7 +278,7 @@ fn atom_input_standard39<'a>(
         |(x, y, z, symbol, mass_diff, charge_radical)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            let atom = AtomStandard {
+            AtomStandard {
                 element,
                 charge,
                 radical,
@@ -288,10 +287,9 @@ fn atom_input_standard39<'a>(
                 hydrogen_count: None,
                 valence: None,
                 atom_map_num: None,
+                position: Some(Point3D::new(x, y, z)),
                 properties: std::collections::HashMap::new(),
-            };
-
-            (atom, Point3D::new(x, y, z))
+            }
         },
     )
     .parse(input)
@@ -301,7 +299,7 @@ fn atom_input_standard39<'a>(
 /// Lacks trailing charge/radical, valence and atom mapping fields (substituted by defaults).
 fn atom_input_standard36<'a>(
     input: &'a [u8],
-) -> IResult<&'a [u8], (AtomStandard, Point3D), error::Error<&'a [u8]>> {
+) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -314,7 +312,7 @@ fn atom_input_standard36<'a>(
         (x, y, z, preceded(take(1usize), symbol), complete(mass_diff)),
         |(x, y, z, symbol, mass_diff)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-            let atom = AtomStandard {
+            AtomStandard {
                 element,
                 charge: 0,
                 radical: None,
@@ -323,10 +321,9 @@ fn atom_input_standard36<'a>(
                 hydrogen_count: None,
                 valence: None,
                 atom_map_num: None,
+                position: Some(Point3D::new(x, y, z)),
                 properties: std::collections::HashMap::new(),
-            };
-
-            (atom, Point3D::new(x, y, z))
+            }
         },
     )
     .parse(input)
@@ -337,7 +334,7 @@ fn atom_input_standard36<'a>(
 /// (substituted by defaults).
 fn atom_input_standard34<'a>(
     input: &'a [u8],
-) -> IResult<&'a [u8], (AtomStandard, Point3D), error::Error<&'a [u8]>> {
+) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -347,7 +344,7 @@ fn atom_input_standard34<'a>(
         (x, y, z, preceded(take(1usize), symbol)),
         |(x, y, z, symbol)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, None);
-            let atom = AtomStandard {
+            AtomStandard {
                 element,
                 charge: 0,
                 radical: None,
@@ -356,10 +353,9 @@ fn atom_input_standard34<'a>(
                 hydrogen_count: None,
                 valence: None,
                 atom_map_num: None,
+                position: Some(Point3D::new(x, y, z)),
                 properties: std::collections::HashMap::new(),
-            };
-
-            (atom, Point3D::new(x, y, z))
+            }
         },
     )
     .parse(input)
@@ -384,7 +380,7 @@ fn atom_input_standard34<'a>(
 /// ------------------------------------------------------------------------------
 ///
 pub fn atom_input_standard<'a>(
-) -> impl Parser<&'a [u8], Output = (AtomStandard, Point3D), Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = AtomStandard, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let len = input.len();
         let parser = match len {
@@ -429,7 +425,7 @@ pub fn atom_input_standard<'a>(
 /// | eee   | exact change       | 0, 1         | Reaction                                  |
 /// -----------------------------------------------------------------------------------------
 ///
-fn atom_input_inner(input: &[u8]) -> IResult<&[u8], (Atom, Point3D), error::Error<&[u8]>> {
+fn atom_input_inner(input: &[u8]) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
     let (i, x) = fixed_width_float::<f64>(10, 4).parse(input)?;
     let (i, y) = fixed_width_float::<f64>(10, 4).parse(i)?;
     let (i, z) = fixed_width_float::<f64>(10, 4).parse(i)?;
@@ -487,35 +483,33 @@ fn atom_input_inner(input: &[u8]) -> IResult<&[u8], (Atom, Point3D), error::Erro
         _ => mass_diff.map(|diff| diff.unsigned_abs() as u32),
     };
 
-    let atom = Atom {
-        symbol: atom_symbol,
-        charge,
-        radical,
-        isotope_mass,
-        stereo_parity: stereo_parity.flatten(),
-        hydrogen_count: hydrogen_count.flatten(),
-        stereo_care: stereo_care.flatten(),
-        valence: valence.flatten(),
-        atom_map_num,
-        inversion_retention: inversion_flag.flatten(),
-        exact_change: exact_change_flag.flatten(),
-        properties: std::collections::HashMap::new(),
-
-        // Query-specific properties - default to None during parsing
-        attachment_point: None,
-        attachment_order: None,
-        ring_bond_count: None,
-        substitution_count: None,
-        unsaturated: None,
-        link_atom: None,
-    };
-
-    let point = Point3D::new(x, y, z);
-    Ok((i, (atom, point)))
+    Ok((
+        i,
+        Atom {
+            symbol: atom_symbol,
+            charge,
+            radical,
+            isotope_mass,
+            stereo_parity: stereo_parity.flatten(),
+            hydrogen_count: hydrogen_count.flatten(),
+            stereo_care: stereo_care.flatten(),
+            valence: valence.flatten(),
+            atom_map_num,
+            inversion_retention: inversion_flag.flatten(),
+            exact_change: exact_change_flag.flatten(),
+            attachment_point: None,
+            attachment_order: None,
+            ring_bond_count: None,
+            substitution_count: None,
+            unsaturated: None,
+            link_atom: None,
+            position: Some(Point3D::new(x, y, z)),
+            properties: std::collections::HashMap::new(),
+        },
+    ))
 }
 
-pub fn atom_input<'a>(
-) -> impl Parser<&'a [u8], Output = (Atom, Point3D), Error = error::Error<&'a [u8]>> {
+pub fn atom_input<'a>() -> impl Parser<&'a [u8], Output = Atom, Error = error::Error<&'a [u8]>> {
     terminated(atom_input_inner, space0)
 }
 

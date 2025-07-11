@@ -10,12 +10,10 @@ use umol_data::{e, Element};
 #[fixture]
 fn basic_molecule() -> Molecule {
     let mut molecule = Molecule::new();
-    // Add 3 atoms
-    for _i in 0..3 {
+    for _ in 0..3 {
         let atom = Atom::new(AtomSymbol::Element(e!(C)));
         molecule.add_atom(atom);
     }
-    // Add 2 bonds
     molecule.add_bond(0, 1, Bond::new(BondType::Single));
     molecule.add_bond(1, 2, Bond::new(BondType::Single));
     molecule
@@ -338,17 +336,17 @@ fn test_apply_isotope_entries_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![IsotopeEntry {
         atom_index: 0,
-        mass: 0,
+        mass: 40,
     }];
 
     let result = entries.apply(&mut molecule);
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Invalid isotope mass"));
+        Error::Data(DataError::InvalidIsotope(msg)) => {
+            assert!(msg.contains("Invalid isotope mass number 40 for element C"));
         }
-        _ => panic!("Expected InvalidComponent error"),
+        _ => panic!("Expected InvalidIsotope error"),
     }
 }
 
@@ -365,8 +363,22 @@ fn test_apply_isotope_entries_conflict(molecule_with_properties: Molecule) {
 
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Isotope conflict"));
-            assert!(msg.contains("existing 13 vs new 14"));
+            assert!(msg.contains("Isotope conflict for atom 0"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+
+    let entries = vec![IsotopeEntry {
+        atom_index: 0,
+        mass: 0,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Isotope conflict for atom 0"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }

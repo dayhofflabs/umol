@@ -2,8 +2,12 @@
 
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
+use nalgebra;
 use std::collections::HashMap;
 use umol_data::{Element, NamedIsotope};
+
+/// 3D coordinate type
+pub type Point3D = nalgebra::Point3<f64>;
 
 /// Tetrahedral chirality specified in MOL files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -60,6 +64,7 @@ pub struct AtomStandard {
     pub hydrogen_count: Option<u8>,
     pub valence: Option<u8>,
     pub atom_map_num: Option<u32>,
+    pub position: Option<Point3D>,
     pub properties: HashMap<String, String>,
 }
 
@@ -75,6 +80,7 @@ impl AtomStandard {
             hydrogen_count: None,
             valence: None,
             atom_map_num: None,
+            position: None,
             properties: HashMap::new(),
         }
     }
@@ -124,6 +130,7 @@ pub struct Atom {
     pub substitution_count: Option<i8>,
     pub unsaturated: Option<bool>,
     pub link_atom: Option<LinkAtom>,
+    pub position: Option<Point3D>,
     pub properties: HashMap<String, String>,
 }
 
@@ -147,6 +154,7 @@ impl Atom {
             substitution_count: None,
             unsaturated: None,
             link_atom: None,
+            position: None,
             properties: HashMap::new(),
         }
     }
@@ -172,6 +180,7 @@ impl From<AtomStandard> for Atom {
             substitution_count: None,
             unsaturated: None,
             link_atom: None,
+            position: atom.position,
             properties: atom.properties,
         }
     }

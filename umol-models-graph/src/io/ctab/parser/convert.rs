@@ -5,8 +5,8 @@ use crate::io::ctab::atom::{
     AtomSymbol, AttachmentPointType,
 };
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
-use umol::error::{ParseError, Result, ValidationError};
-use umol_data::Element;
+use umol::error::{DataError, ParseError, Result, ValidationError};
+use umol_data::{Element, Isotope};
 
 /// Convert atom mass difference code (atom block)
 /// 'dd' field: mass difference (-3..=4), None if 0 or value outside of this range
@@ -47,6 +47,26 @@ pub(crate) fn convert_atom_charge_code(code: u8) -> (i8, Option<AtomRadical>) {
         1..=3 | 5..=7 => (4 - code as i8, None),
         4 => (0, Some(AtomRadical::Doublet)),
         _ => (0, None),
+    }
+}
+
+/// Validate atom isotope mass number (property block)
+/// 'mmm' field: isotope mass number
+pub(crate) fn convert_atom_isotope_mass_number(
+    element: Element,
+    mass_number: u32,
+) -> Result<Option<u32>> {
+    if mass_number == 0 {
+        return Ok(None);
+    }
+    if Isotope::is_catalogued(element, mass_number) {
+        return Ok(Some(mass_number));
+    } else {
+        return Err(DataError::InvalidIsotope(format!(
+            "Invalid isotope mass number {} for element {}",
+            mass_number, element
+        ))
+        .into());
     }
 }
 
@@ -349,6 +369,35 @@ mod tests {
         assert_eq!(
             convert_atom_charge_code(code),
             (expected_charge, expected_radical)
+        );
+    }
+
+    #[rstest]
+    #[case(Element::C, 0, None)]
+    #[case(Element::C, 12, Some(12))]
+    #[case(Element::C, 13, Some(13))]
+    fn test_convert_atom_isotope_mass_number(
+        #[case] element: Element,
+        #[case] mass_number: u32,
+        #[case] expected: Option<u32>,
+    ) {
+        assert_eq!(
+            convert_atom_isotope_mass_number(element, mass_number).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case(Element::C, 40, "40C is not catalogued")]
+    fn test_convert_atom_isotope_mass_number_invalid(
+        #[case] element: Element,
+        #[case] mass_number: u32,
+        #[case] desc: &str,
+    ) {
+        assert!(
+            convert_atom_isotope_mass_number(element, mass_number).is_err(),
+            "{} should have failed",
+            desc
         );
     }
 
