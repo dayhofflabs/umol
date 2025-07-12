@@ -20,7 +20,7 @@ use umol_data::Element;
 #[case(b"M  RBC  1   1   2", "RBC query property", PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }]))]
 #[case(b"M  SUB  1   1   3", "SUB query property", PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }]))]
 #[case(b"M  UNS  1   1   1", "UNS query property", PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }]))]
-#[case(b"M  LIN  1   1   2   5   7", "LIN query property", PropertyEntries::LinkAtomEntries(vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, bond1: 5, bond2: 7 }]))]
+#[case(b"M  LIN  1   1   2   5   7", "LIN query property", PropertyEntries::LinkAtomEntries(vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }]))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -315,10 +315,10 @@ fn test_unsaturated_atom_entries(#[case] input: &[u8], #[case] expected: Vec<Uns
 }
 
 #[rstest]
-#[case(b"  1   1   2   5   7", vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, bond1: 5, bond2: 7 }])]
-#[case(b"  2   3   3   0   0   8   4   1   2", vec![
-    LinkAtomEntry { atom_index: 2, repeat_count: 3, bond1: 0, bond2: 0 },
-    LinkAtomEntry { atom_index: 7, repeat_count: 4, bond1: 1, bond2: 2 }
+#[case(b"  1   1   2   5   7", vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }])]
+#[case(b"  2   3   3   1   3   8   4   5   6", vec![
+    LinkAtomEntry { atom_index: 2, repeat_count: 3, subs_index1: 0, subs_index2: Some(2) },
+    LinkAtomEntry { atom_index: 7, repeat_count: 4, subs_index1: 4, subs_index2: Some(5) }
 ])]
 fn test_link_atom_entries(#[case] input: &[u8], #[case] expected: Vec<LinkAtomEntry>) {
     let (remaining, result) = link_atom_entries().parse(input).unwrap();

@@ -106,8 +106,8 @@ pub enum AttachmentPointType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LinkAtom {
     pub repeat_count: u8, // LIN vvv >= 2
-    pub bond1: usize,     // LIN bbb (can be 0)
-    pub bond2: usize,     // LIN ccc (can be 0)
+    pub subs_index1: usize, // LIN bbb
+    pub subs_index2: Option<usize>, // LIN ccc (optional)
 }
 
 /// Generalized atom symbol (for atom-like objects in MOL files)

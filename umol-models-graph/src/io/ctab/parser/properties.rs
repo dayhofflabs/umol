@@ -2,7 +2,7 @@
 
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::space0;
-use nom::combinator::{map, map_parser, map_res, rest, success};
+use nom::combinator::{map, map_parser, map_res, opt, rest, success};
 use nom::error;
 use nom::multi::length_count;
 use nom::sequence::preceded;
@@ -65,8 +65,8 @@ pub struct UnsaturatedAtomEntry {
 pub struct LinkAtomEntry {
     pub atom_index: usize,
     pub repeat_count: u8, // vvv >= 2
-    pub bond1: usize,     // bbb (can be 0)
-    pub bond2: usize,     // ccc (can be 0)
+    pub subs_index1: usize, // bbb
+    pub subs_index2: Option<usize>, // ccc (optional)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -470,7 +470,8 @@ fn unsaturated_atom_entries<'a>(
 
 /// Parse link atom property entries.
 /// M  LINnn4 aaa vvv bbb ccc
-/// nn4: Count (max 4), aaa: Atom index, vvv: Repeat count (>=2), bbb/ccc: Bond indices (can be 0)
+/// nn4: Count (max 4), aaa: Atom index, vvv: Upper repeat count (>= 2, lower repeat count is 1),
+/// bbb/ccc: Substituent indices (can be 0)
 fn link_atom_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<LinkAtomEntry>, Error = error::Error<&'a [u8]>> {
     length_count(
@@ -479,14 +480,14 @@ fn link_atom_entries<'a>(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 2..=255)),
-                preceded(tag(" "), fixed_width_int::<usize>(3)),
-                preceded(tag(" "), fixed_width_int::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                opt(preceded(tag(" "), fixed_width_int_minus1::<usize>(3))),
             ),
-            |(atom_index, repeat_count, bond1, bond2)| LinkAtomEntry {
+            |(atom_index, repeat_count, subs_index1, subs_index2)| LinkAtomEntry {
                 atom_index,
                 repeat_count,
-                bond1,
-                bond2,
+                subs_index1,
+                subs_index2,
             },
         ),
     )

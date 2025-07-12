@@ -253,17 +253,45 @@ impl Apply for Vec<LinkAtomEntry> {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
             }
+            if entry.subs_index1 >= molecule.atom_count() {
+                return Err(DataError::MissingAtomIndex(entry.subs_index1).into());
+            }
+            if entry.subs_index1 == entry.atom_index {
+                return Err(ValidationError::InvalidComponent(format!(
+                    "Invalid link atom: subs index 1 cannot be the same as the atom index",
+                ))
+                .into());
+            }
+            if let Some(subs_index2) = entry.subs_index2 {
+                if subs_index2 >= molecule.atom_count() {
+                    return Err(DataError::MissingAtomIndex(subs_index2).into());
+                }
+                if subs_index2 == entry.atom_index {
+                    return Err(ValidationError::InvalidComponent(format!(
+                        "Invalid link atom: subs index 2 cannot be the same as the atom index",
+                    ))
+                    .into());
+                }
+            }
+
+            if entry.repeat_count < 2 {
+                return Err(ValidationError::InvalidComponent(format!(
+                    "Invalid link atom: repeat count must be >= 2, got {}",
+                    entry.repeat_count
+                ))
+                .into());
+            }
 
             if let Some(atom) = molecule.atom_mut(entry.atom_index) {
-                let link_spec = LinkAtom {
+                let link_atom = LinkAtom {
                     repeat_count: entry.repeat_count,
-                    bond1: entry.bond1,
-                    bond2: entry.bond2,
+                    subs_index1: entry.subs_index1,
+                    subs_index2: entry.subs_index2,
                 };
 
                 // Check for conflicts
-                if let Some(ref existing) = atom.link_atom {
-                    if *existing != link_spec {
+                if let Some(existing) = atom.link_atom {
+                    if existing != link_atom {
                         return Err(ValidationError::InvalidComponent(format!(
                             "Link atom conflict for atom {}: existing vs new link specification",
                             entry.atom_index
@@ -271,7 +299,7 @@ impl Apply for Vec<LinkAtomEntry> {
                         .into());
                     }
                 }
-                atom.link_atom = Some(link_spec);
+                atom.link_atom = Some(link_atom);
             }
         }
         Ok(())

@@ -229,7 +229,7 @@ fn test_apply_charge_entries_empty(basic_molecule: Molecule) {
 }
 
 #[rstest]
-fn test_apply_charge_entries_out_of_bounds(basic_molecule: Molecule) {
+fn test_apply_charge_entries_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![ChargeEntry {
         atom_index: 5,
@@ -282,22 +282,6 @@ fn test_apply_radical_entries(
 }
 
 #[rstest]
-fn test_apply_radical_entries_overwrite(molecule_with_properties: Molecule) {
-    let mut molecule = molecule_with_properties;
-    let entries = vec![RadicalEntry {
-        atom_index: 0,
-        radical_type: 1,
-    }]; // overwrites existing radical doublet
-
-    let result = entries.apply(&mut molecule);
-    assert!(result.is_ok());
-
-    let atom = molecule.atom(0).unwrap();
-    assert_eq!(atom.radical, Some(AtomRadical::Singlet));
-    assert_eq!(atom.charge, 0);
-}
-
-#[rstest]
 fn test_apply_radical_entries_invalid(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![RadicalEntry {
@@ -317,6 +301,22 @@ fn test_apply_radical_entries_invalid(basic_molecule: Molecule) {
 }
 
 #[rstest]
+fn test_apply_radical_entries_overwrite(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    let entries = vec![RadicalEntry {
+        atom_index: 0,
+        radical_type: 1,
+    }]; // overwrites existing radical doublet
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_ok());
+
+    let atom = molecule.atom(0).unwrap();
+    assert_eq!(atom.radical, Some(AtomRadical::Singlet));
+    assert_eq!(atom.charge, 0);
+}
+
+#[rstest]
 fn test_apply_isotope_entries(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![IsotopeEntry {
@@ -329,25 +329,6 @@ fn test_apply_isotope_entries(basic_molecule: Molecule) {
 
     let atom = molecule.atom(0).unwrap();
     assert_eq!(atom.isotope_mass, Some(14));
-}
-
-#[rstest]
-fn test_apply_isotope_entries_invalid(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entries = vec![IsotopeEntry {
-        atom_index: 0,
-        mass: 40,
-    }];
-
-    let result = entries.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Data(DataError::InvalidIsotope(msg)) => {
-            assert!(msg.contains("Invalid isotope mass number 40 for element C"));
-        }
-        _ => panic!("Expected InvalidIsotope error"),
-    }
 }
 
 #[rstest]
@@ -385,6 +366,25 @@ fn test_apply_isotope_entries_conflict(molecule_with_properties: Molecule) {
 }
 
 #[rstest]
+fn test_apply_isotope_entries_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![IsotopeEntry {
+        atom_index: 0,
+        mass: 40,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Data(DataError::InvalidIsotope(msg)) => {
+            assert!(msg.contains("Invalid isotope mass number 40 for element C"));
+        }
+        _ => panic!("Expected InvalidIsotope error"),
+    }
+}
+
+#[rstest]
 fn test_apply_ring_bond_count_entries(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let entries = vec![RingBondCountEntry {
@@ -394,6 +394,24 @@ fn test_apply_ring_bond_count_entries(basic_molecule: Molecule) {
 
     entries.apply(&mut molecule).unwrap();
     assert_eq!(molecule.atom(0).unwrap().ring_bond_count, Some(2));
+}
+
+#[rstest]
+fn test_apply_ring_bond_count_entries_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![RingBondCountEntry {
+        atom_index: 0,
+        ring_bond_count: 7,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid ring bond count"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
 }
 
 #[rstest]
@@ -410,8 +428,7 @@ fn test_apply_ring_bond_count_entries_conflict(molecule_with_properties: Molecul
 
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Ring bond count conflict"));
-            assert!(msg.contains("existing 1 vs new 2"));
+            assert!(msg.contains("Ring bond count conflict for atom 0"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }
@@ -461,8 +478,7 @@ fn test_apply_substitution_count_entries_conflict(molecule_with_properties: Mole
 
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Substitution count conflict"));
-            assert!(msg.contains("existing 1 vs new 2"));
+            assert!(msg.contains("Substitution count conflict for atom 0"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }
@@ -481,6 +497,24 @@ fn test_apply_unsaturated_atom_entries(basic_molecule: Molecule) {
 }
 
 #[rstest]
+fn test_apply_unsaturated_atom_entries_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![UnsaturatedAtomEntry {
+        atom_index: 0,
+        unsaturated: 2,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid unsaturated atom"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
 fn test_apply_unsaturated_atom_entries_conflict(molecule_with_properties: Molecule) {
     let mut molecule = molecule_with_properties;
     molecule.atom_mut(0).unwrap().unsaturated = Some(true);
@@ -494,25 +528,68 @@ fn test_apply_unsaturated_atom_entries_conflict(molecule_with_properties: Molecu
 
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Unsaturated conflict"));
+            assert!(msg.contains("Unsaturated conflict for atom 0"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }
 }
 
 #[rstest]
-fn test_apply_unsaturated_atom_entries_invalid(basic_molecule: Molecule) {
+fn test_link_atom_entries(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
-    let entries = vec![UnsaturatedAtomEntry {
+    let entries = vec![LinkAtomEntry {
         atom_index: 0,
-        unsaturated: 2,
+        repeat_count: 2,
+        subs_index1: 1,
+        subs_index2: Some(2),
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+    assert_eq!(
+        molecule.atom(0).unwrap().link_atom,
+        Some(LinkAtom {
+            repeat_count: 2,
+            subs_index1: 1,
+            subs_index2: Some(2),
+        })
+    );
+}
+
+#[rstest]
+#[case(LinkAtomEntry { atom_index: 0, repeat_count: 1, subs_index1: 1, subs_index2: Some(2) }, "invalid repeat count")]
+#[case(LinkAtomEntry { atom_index: 12, repeat_count: 1, subs_index1: 1, subs_index2: Some(2) }, "invalid link atom index")]
+#[case(LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 12, subs_index2: Some(2) }, "invalid link atom subs index 1")]
+#[case(LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 1, subs_index2: Some(12) }, "invalid link atom subs index 2")]
+#[case(LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 0, subs_index2: Some(2) }, "invalid link atom subs index 2")]
+#[case(LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 1, subs_index2: Some(0) }, "invalid link atom subs index 2")]
+fn test_apply_link_atom_entries_invalid(basic_molecule: Molecule, #[case] entry: LinkAtomEntry, #[case] desc: &str) {
+    let mut molecule = basic_molecule;
+    let entries = vec![entry];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err(), "{} should have failed", desc);
+}
+
+#[rstest]
+fn test_apply_link_atom_entries_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().link_atom = Some(LinkAtom {
+        repeat_count: 2,
+        subs_index1: 1,
+        subs_index2: Some(2),
+    });
+    let entries = vec![LinkAtomEntry {
+        atom_index: 0,
+        repeat_count: 3,
+        subs_index1: 1,
+        subs_index2: Some(2),
     }];
 
     let result = entries.apply(&mut molecule);
     assert!(result.is_err());
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Invalid unsaturated atom"));
+            assert!(msg.contains("Link atom conflict for atom 0"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }
@@ -594,22 +671,6 @@ fn test_apply_rgroup_label_entries(molecule_with_rgroup: Molecule) {
 }
 
 #[rstest]
-fn test_apply_rgroup_label_entries_replace(basic_molecule: Molecule) {
-    let mut molecule = basic_molecule;
-    let entries = vec![RGroupLabelEntry {
-        atom_index: 0,
-        label: 1,
-    }];
-
-    entries.apply(&mut molecule).unwrap();
-
-    assert_eq!(
-        molecule.atom(0).unwrap().symbol,
-        AtomSymbol::RGroup(RGroup::new(Some(1)))
-    );
-}
-
-#[rstest]
 fn test_apply_rgroup_label_entries_invalid(molecule_with_labeled_rgroup: Molecule) {
     let mut molecule = molecule_with_labeled_rgroup;
     let entries = vec![RGroupLabelEntry {
@@ -624,6 +685,22 @@ fn test_apply_rgroup_label_entries_invalid(molecule_with_labeled_rgroup: Molecul
         Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
         _ => panic!("Expected MissingAtomIndex error"),
     }
+}
+
+#[rstest]
+fn test_apply_rgroup_label_entries_replace(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![RGroupLabelEntry {
+        atom_index: 0,
+        label: 1,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+
+    assert_eq!(
+        molecule.atom(0).unwrap().symbol,
+        AtomSymbol::RGroup(RGroup::new(Some(1)))
+    );
 }
 
 #[rstest]
