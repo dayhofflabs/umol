@@ -609,6 +609,7 @@ fn test_apply_atom_list_entry(basic_molecule: Molecule) {
         molecule.atom(0).unwrap().symbol,
         AtomSymbol::AtomList(AtomList {
             elements: vec![e!(C), e!(Si)],
+            exclusion: false,
         })
     );
 }
@@ -635,6 +636,7 @@ fn test_apply_atom_list_entry_conflict(molecule_with_properties: Molecule) {
     let mut molecule = molecule_with_properties;
     molecule.atom_mut(0).unwrap().symbol = AtomSymbol::AtomList(AtomList {
         elements: vec![e!(C), e!(Si)],
+        exclusion: false,
     });
 
     let entry = AtomListEntry {

@@ -16,7 +16,9 @@ use super::super::ctab::parser::atom::{atom_input, atom_input_standard};
 use super::super::ctab::parser::bond::{bond_input, bond_input_standard};
 use super::super::ctab::parser::counts::counts_input;
 use super::super::ctab::parser::header::header;
-use super::super::ctab::parser::properties::{property_input, property_input_standard, PropertyEntries};
+use super::super::ctab::parser::properties::{
+    property_input, property_input_standard, PropertyEntries,
+};
 
 /// Parse MOL block (general parser, handles all features)
 pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Error<&'a [u8]>> {
@@ -32,7 +34,9 @@ pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Err
 }
 
 /// Parse MOL block (standard parser, optimized for performance, standard molecules only)
-pub fn mol_block_standard<'a>(input: &'a [u8]) -> IResult<&'a [u8], MoleculeStandard, error::Error<&'a [u8]>> {
+pub fn mol_block_standard<'a>(
+    input: &'a [u8],
+) -> IResult<&'a [u8], MoleculeStandard, error::Error<&'a [u8]>> {
     let (remaining, header) = header().parse(input)?;
     let (remaining, counts) = terminated(counts_input(), line_ending).parse(remaining)?;
     let atom_count = counts.atoms() as usize;
@@ -87,7 +91,8 @@ fn bond_block<'a>(
 /// Parse bond block (standard parser)
 fn bond_block_standard<'a>(
     bond_count: usize,
-) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, BondStandard)>, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, BondStandard)>, Error = error::Error<&'a [u8]>>
+{
     count(
         |input| {
             let (input, (atom1, atom2, bond)) =
@@ -98,7 +103,7 @@ fn bond_block_standard<'a>(
     )
 }
 
-/// Parse properties block (until M  END or end of input)
+/// Parse properties block
 fn properties_block<'a>(
     input: &'a [u8],
 ) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
@@ -111,32 +116,9 @@ fn properties_block<'a>(
 fn properties_block_standard<'a>(
     input: &'a [u8],
 ) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
-    let mut properties = Vec::new();
-    let mut remaining = input;
-    
-    loop {
-        // Check if we've reached M  END or end of input
-        if remaining.is_empty() || remaining.starts_with(b"M  END") {
-            break;
-        }
-        
-        // Parse a property line
-        match terminated(property_input_standard, line_ending).parse(remaining) {
-            Ok((new_remaining, property)) => {
-                properties.push(property);
-                remaining = new_remaining;
-            }
-            Err(_) => {
-                // If we can't parse as a property, we might have hit M  END or EOF
-                break;
-            }
-        }
-    }
-    
-    // Consume M  END if present
-    let (remaining, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(remaining)?;
-    
-    Ok((remaining, properties))
+    let (input, properties) = many0(terminated(property_input_standard, line_ending)).parse(input)?;
+    let (input, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(input)?;
+    Ok((input, properties))
 }
 
 /// Detect if molecule contains query features
@@ -250,7 +232,9 @@ fn build_molecule_standard(
     for (idx1, idx2, bond_standard) in bonds {
         // Convert BondStandard to Bond by creating a new Bond with the same type
         let bond = Bond::new(bond_standard.bond_type);
-        molecule.graph.add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond);
+        molecule
+            .graph
+            .add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond);
     }
 
     // Apply properties - for now, ignore properties in standard parser

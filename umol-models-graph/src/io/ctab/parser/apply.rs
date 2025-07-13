@@ -313,9 +313,9 @@ impl Apply for AtomListEntry {
         }
 
         if let Some(atom) = molecule.atom_mut(self.atom_index) {
-            // Create AtomList from elements
             let atom_list = AtomList {
                 elements: self.elements,
+                exclusion: self.exclusion,
             };
 
             // Check for conflicts - if atom already has a symbol set

@@ -12,9 +12,10 @@ use umol_data::Element;
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
-#[case(b"A    1 CF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
+#[case(b"A    1\nCF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 #[case(b"V    1 *", "V atom value property", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
-#[case(b"M  ALS  1  3FC   N   O   ", "ALS query property", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] }))]
+#[case(b"M  ALS   1  3   F   N   O   ", "ALS normal (F) query property", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
+#[case(b"M  ALS   1  3 T F   N   O   ", "ALS exclusion (T) query property", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]
 #[case(b"M  APO  1   1   1", "APO query property", PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry { atom_index: 0, attachment_type: 1 }]))]
 #[case(b"M  AAL  1 1   2   1", "AAL query property", PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry { atom_index: 0, attachments: vec![(1, 1)] }))]
 #[case(b"M  RBC  1   1   2", "RBC query property", PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }]))]
@@ -35,7 +36,7 @@ fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expecte
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
-#[case(b"A    1 CF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
+#[case(b"A    1\nCF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 #[case(b"V    1 *", "V atom value property", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
 fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input_standard(input).unwrap();
@@ -210,8 +211,8 @@ fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBon
 }
 
 #[rstest]
-#[case(b"  1 CF3", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
-#[case(b" 15 Et", AtomAliasEntry { atom_index: 14, alias: "Et".to_string() })]
+#[case(b"  1\nCF3", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
+#[case(b" 15\n  Et", AtomAliasEntry { atom_index: 14, alias: "Et".to_string() })]
 fn test_atom_alias_entry(#[case] input: &[u8], #[case] expected: AtomAliasEntry) {
     let (remaining, result) = atom_alias_entry().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -229,9 +230,9 @@ fn test_atom_value_entry(#[case] input: &[u8], #[case] expected: AtomValueEntry)
 
 
 #[rstest]
-#[case(b"  1  3FC   N   O   ", AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
-#[case(b"  5  2TCl  Br  ", AtomListEntry { atom_index: 4, exclusion: true, elements: vec![Element::Cl, Element::Br] })]
-#[case(b" 10  1FH   ", AtomListEntry { atom_index: 9, exclusion: false, elements: vec![Element::H] })]
+#[case(b"   1  3 F C   N   O   ", AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
+#[case(b"   5  2 T Cl  Br  ", AtomListEntry { atom_index: 4, exclusion: true, elements: vec![Element::Cl, Element::Br] })]
+#[case(b"  10  1   H   ", AtomListEntry { atom_index: 9, exclusion: false, elements: vec![Element::H] })]
 fn test_atom_list_entry(#[case] input: &[u8], #[case] expected: AtomListEntry) {
     let (remaining, result) = atom_list_entry().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -239,10 +240,10 @@ fn test_atom_list_entry(#[case] input: &[u8], #[case] expected: AtomListEntry) {
 }
 
 #[rstest]
-#[case(b"  1  0FC   ", "count is zero", ErrorKind::Verify)]
-#[case(b"  1 17FC   N   ", "count exceeds 16", ErrorKind::Verify)]
-#[case(b"  1  1XC   ", "invalid exclusion flag", ErrorKind::Tag)]
-#[case(b"  1  1FXX  ", "invalid element symbol", ErrorKind::MapRes)]
+#[case(b"   1  0 F C   ", "count is zero", ErrorKind::Verify)]
+#[case(b"   1 17 F C   N   ", "count exceeds 16", ErrorKind::Verify)]
+#[case(b"   1  1 X C   ", "invalid exclusion flag", ErrorKind::Tag)]
+#[case(b"   1  1 F XX  ", "invalid element symbol", ErrorKind::MapRes)]
 fn test_atom_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,

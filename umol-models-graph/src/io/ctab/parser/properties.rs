@@ -1,11 +1,11 @@
 //! Properties block parser for CTab files.
 
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::space0;
-use nom::combinator::{map, map_parser, map_res, opt, rest, success};
+use nom::character::complete::{line_ending, not_line_ending};
+use nom::combinator::{map, map_parser, map_res, opt, success};
 use nom::error;
 use nom::multi::length_count;
-use nom::sequence::preceded;
+use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
 use crate::io::ctab::sgroup::{SGroup, SGroupType};
@@ -64,8 +64,8 @@ pub struct UnsaturatedAtomEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkAtomEntry {
     pub atom_index: usize,
-    pub repeat_count: u8, // vvv >= 2
-    pub subs_index1: usize, // bbb
+    pub repeat_count: u8,           // vvv >= 2
+    pub subs_index1: usize,         // bbb
     pub subs_index2: Option<usize>, // ccc (optional)
 }
 
@@ -312,14 +312,18 @@ pub fn property_input<'a>(
 }
 
 /// Parse atom alias entry.
-/// A  aaa alias_text
-/// aaa: atom index, alias_text: alias string (can contain spaces)
+/// A  aaa
+/// x..
+/// aaa: atom index, x..: alias string (can contain spaces)
 fn atom_alias_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomAliasEntry, Error = error::Error<&'a [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            preceded(space0, rest),
+            terminated(
+                map_parser(not_line_ending, fixed_width_int_minus1::<usize>(3)),
+                line_ending,
+            ),
+            not_line_ending,
         ),
         |(atom_index, alias_bytes)| AtomAliasEntry {
             atom_index,
@@ -329,14 +333,14 @@ fn atom_alias_entry<'a>(
 }
 
 /// Parse atom value entry.
-/// V  aaa value_text
-/// aaa: atom index, value_text: value string (can contain spaces)
+/// V  aaa v..
+/// aaa: atom index, v..: value string (can contain spaces)
 fn atom_value_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomValueEntry, Error = error::Error<&'a [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            preceded(space0, rest),
+            fixed_width_int_minus1::<usize>(3),
+            preceded(tag(" "), not_line_ending),
         ),
         |(atom_index, value_bytes)| AtomValueEntry {
             atom_index,
@@ -500,16 +504,18 @@ fn atom_list_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomListEntry, Error = error::Error<&'a [u8]>> {
     |input: &'a [u8]| {
         // Parse atom index (3 chars)
-        let (remaining, atom_index) = fixed_width_int_minus1::<usize>(3).parse(input)?;
+        let (remaining, atom_index) =
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
 
         // Parse count (3 chars, max 16)
         let (remaining, count) = fixed_width_int_in_range::<u8, _>(3, 1..=16).parse(remaining)?;
 
         // Parse exclusion flag (1 char)
-        let (remaining, exclusion_byte) = take(1usize).parse(remaining)?;
+        let (remaining, exclusion_byte) =
+            delimited(tag(" "), take(1usize), tag(" ")).parse(remaining)?;
         let exclusion = match exclusion_byte {
             b"T" => true,
-            b"F" => false,
+            b"F" | b" " => false,
             _ => {
                 return Err(nom::Err::Error(error::Error::new(
                     input,

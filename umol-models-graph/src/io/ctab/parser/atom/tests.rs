@@ -52,7 +52,7 @@ fn test_atom_symbol_standard_invalid(
 #[case(b"Q  ", "Q", AtomSymbol::Query(QueryAtom::Heteroatom))]
 #[case(b"QH ", "QH", AtomSymbol::Query(QueryAtom::HeteroatomOrH))]
 #[case(b"*  ", "*", AtomSymbol::Query(QueryAtom::Any))]
-#[case(b"L  ", "L", AtomSymbol::AtomList(AtomList { elements: vec![] }))]
+#[case(b"L  ", "L", AtomSymbol::AtomList(AtomList { elements: vec![], exclusion: false }))]
 #[case(b"LP ", "LP", AtomSymbol::LonePair)]
 #[case(b"R# ", "R#", AtomSymbol::RGroup(RGroup::new(None)))]
 #[case(b"R1 ", "R1", AtomSymbol::RGroup(RGroup::new(Some(1))))]
@@ -1373,7 +1373,7 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
 #[case(
     b"    1.0000    2.0000    3.0000 L   0  0  0  0  0  4",
     "atom list",
-    AtomSymbol::AtomList(AtomList { elements: vec![]}),
+    AtomSymbol::AtomList(AtomList { elements: vec![], exclusion: false }),
     None,
     0,
     Some(4),

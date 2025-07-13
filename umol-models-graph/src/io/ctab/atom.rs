@@ -40,6 +40,7 @@ pub enum AtomExactChange {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomList {
     pub elements: Vec<Element>,
+    pub exclusion: bool,
 }
 
 /// Generalized atom kind (for atom-like objects in MOL files)

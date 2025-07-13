@@ -68,7 +68,10 @@ fn atom_symbol<'a>() -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error
         } else if let Some(query) = QueryAtom::from_symbol_bytes(s) {
             Ok(AtomSymbol::Query(query))
         } else if s == b"L" {
-            Ok(AtomSymbol::AtomList(AtomList { elements: vec![] }))
+            Ok(AtomSymbol::AtomList(AtomList {
+                elements: vec![],
+                exclusion: false,
+            }))
         } else if s == b"LP" {
             Ok(AtomSymbol::LonePair)
         } else {
@@ -367,17 +370,17 @@ fn atom_input_standard34<'a>(
 /// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
 ///
 /// *Values in the atom block*
-/// ------------------------------------------------------------------------------
-/// | Field | Meaning            | Values       | Notes                          |
-/// |-------|--------------------|--------------|---------------------------------
-/// | x,y,z | atom coordinates   |              | Generic, F10.4 format          |
-/// | aaa   | atom symbol        | s. above     | Generic, Query, 3D, RGroup     |
-/// | dd    | mass difference    | -3..=4       | Generic, s. also M  ISO        |
-/// | ccc   | charge code        | 0..=7        | Generic, s. also M  CHG/M  RAD |
-/// | sss   | stereo parity      | 0..=3        | Generic, used in practice      |
-/// | vvv   | valence code       | 0..=15       | Generic                        |
-/// | mmm   | atom mapping       | 1..=#atoms   | Reaction, accepted as extnsion |
-/// ------------------------------------------------------------------------------
+/// -------------------------------------------------------------------------------
+/// | Field | Meaning            | Values       | Notes                           |
+/// |-------|--------------------|--------------|----------------------------------
+/// | x,y,z | atom coordinates   |              | Generic, F10.4 format           |
+/// | aaa   | atom symbol        | s. above     | Generic, Query, 3D, RGroup      |
+/// | dd    | mass difference    | -3..=4       | Generic, s. also M  ISO         |
+/// | ccc   | charge code        | 0..=7        | Generic, s. also M  CHG/M  RAD  |
+/// | sss   | stereo parity      | 0..=3        | Generic, used in practice       |
+/// | vvv   | valence code       | 0..=15       | Generic                         |
+/// | mmm   | atom mapping       | 1..=#atoms   | Reaction, accepted as extension |
+/// -------------------------------------------------------------------------------
 ///
 pub fn atom_input_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomStandard, Error = error::Error<&'a [u8]>> {

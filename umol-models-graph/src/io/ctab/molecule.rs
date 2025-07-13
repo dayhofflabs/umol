@@ -1,7 +1,7 @@
 //! Molecule type for CTab format.
 
-use crate::io::ctab::atom::{Atom, AtomStandard, AtomSymbol, Point3D};
-use crate::io::ctab::bond::{Bond, BondType};
+use crate::io::ctab::atom::{Atom, AtomStandard};
+use crate::io::ctab::bond::Bond;
 use crate::io::ctab::sgroup::SGroup;
 use crate::io::mol::parser::{mol_block, mol_block_standard};
 use petgraph::graph::{EdgeIndex, NodeIndex};
@@ -288,7 +288,7 @@ impl Molecule {
         self.graph.node_weight_mut(AtomIndex::new(idx))
     }
 
-    /// Get itertor over bond indices
+    /// Get iterator over bond indices
     pub fn bond_indices(&self) -> impl Iterator<Item = usize> + '_ {
         self.graph.edge_indices().map(|i| i.index())
     }
@@ -387,200 +387,6 @@ impl MoleculeStandard {
     }
 }
 
-impl Molecule {
-    /// Serialize to MOL format string
-    pub fn to_mol_string(&self) -> String {
-        let mut output = String::new();
-        self.write_mol_to_string(&mut output);
-        output
-    }
-
-    /// Write MOL format to writer
-    pub fn write_mol<W: std::io::Write>(&self, mut writer: W) -> Result<()> {
-        let mol_string = self.to_mol_string();
-        writer.write_all(mol_string.as_bytes()).map_err(|e| {
-            let serialization_error: umol::error::SerializationError =
-                umol::error::SerializationError::IoError(e);
-            let umol_error: umol::Error = serialization_error.into();
-            umol_error
-        })?;
-        Ok(())
-    }
-
-    /// Internal method to write MOL format to string
-    fn write_mol_to_string(&self, output: &mut String) {
-        // Write header (3 lines)
-        output.push_str(&self.header.name);
-        output.push('\n');
-        output.push_str(&self.header.program_info);
-        output.push('\n');
-        output.push_str(&self.header.comment);
-        output.push('\n');
-
-        // Write counts line
-        let atom_count = self.graph.node_count();
-        let bond_count = self.graph.edge_count();
-        output.push_str(&format!(
-            "{:3}{:3}  0  0  0  0  0  0  0  0999 V2000\n",
-            atom_count, bond_count
-        ));
-
-        // Write atom block
-        for node_idx in self.graph.node_indices() {
-            if let Some(atom) = self.graph.node_weight(node_idx) {
-                // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
-                let symbol_str = match &atom.symbol {
-                    AtomSymbol::Element(element) => element.to_string(),
-                    AtomSymbol::NamedIsotope(isotope) => isotope.element().to_string(),
-                    // TODO: Implement atom list serialization
-                    AtomSymbol::AtomList(atom_list) => atom_list
-                        .elements
-                        .first()
-                        .unwrap_or(&umol_data::Element::C)
-                        .to_string(),
-                    AtomSymbol::Query(query_atom) => query_atom.to_string(),
-                    AtomSymbol::LonePair => "LP".to_string(),
-                    AtomSymbol::RGroup(rgroup) => format!("R{}", rgroup.to_string()),
-                };
-                let coord = atom.position.unwrap_or(Point3D::new(0.0, 0.0, 0.0));
-
-                // Use precise F10.4 format: 10 characters wide, 4 decimal places, right-aligned
-                // Symbol is exactly 3 characters, left-aligned after a single space
-                output.push_str(&format!(
-                    "{:10.4}{:10.4}{:10.4} {:<3} 0  0  0  0  0  0  0  0  0  0  0  0\n",
-                    coord.x, coord.y, coord.z, symbol_str
-                ));
-            }
-        }
-
-        // Write bond block
-        for edge_idx in self.graph.edge_indices() {
-            if let Some((idx1, idx2)) = self.graph.edge_endpoints(edge_idx) {
-                if let Some(bond) = self.graph.edge_weight(edge_idx) {
-                    let idx1_1based = idx1.index() + 1;
-                    let idx2_1based = idx2.index() + 1;
-                    let bond_type_code = match bond.bond_type {
-                        BondType::Single => 1,
-                        BondType::Double => 2,
-                        BondType::Triple => 3,
-                        BondType::Aromatic => 4,
-                        _ => 1, // Fallback
-                    };
-
-                    output.push_str(&format!(
-                        "{:3}{:3}{:3}  0  0  0  0\n",
-                        idx1_1based, idx2_1based, bond_type_code
-                    ));
-                }
-            }
-        }
-
-        // Write properties block (simplified for now)
-        // TODO: Implement property serialization
-
-        // Write M  END
-        output.push_str("M  END\n");
-    }
-}
-
-impl MoleculeStandard {
-    /// Serialize to MOL format string
-    pub fn to_mol_string(&self) -> String {
-        let mut output = String::new();
-        self.write_mol_to_string(&mut output);
-        output
-    }
-
-    /// Write MOL format to writer
-    pub fn write_mol<W: std::io::Write>(&self, mut writer: W) -> Result<()> {
-        let mol_string = self.to_mol_string();
-        writer.write_all(mol_string.as_bytes()).map_err(|e| {
-            let serialization_error: umol::error::SerializationError =
-                umol::error::SerializationError::IoError(e);
-            let umol_error: umol::Error = serialization_error.into();
-            umol_error
-        })?;
-        Ok(())
-    }
-
-    /// Internal method to write MOL format to string
-    fn write_mol_to_string(&self, output: &mut String) {
-        // Write header (3 lines)
-        output.push_str(&self.header.name);
-        output.push('\n');
-        output.push_str(&self.header.program_info);
-        output.push('\n');
-        output.push_str(&self.header.comment);
-        output.push('\n');
-
-        // Write counts line
-        let atom_count = self.graph.node_count();
-        let bond_count = self.graph.edge_count();
-        output.push_str(&format!(
-            "{:3}{:3}  0  0  0  0  0  0  0  0999 V2000\n",
-            atom_count, bond_count
-        ));
-
-        // Write atom block
-        for node_idx in self.graph.node_indices() {
-            if let Some(atom) = self.graph.node_weight(node_idx) {
-                let coord = atom.position.unwrap_or(Point3D::new(0.0, 0.0, 0.0));
-
-                // Format: x10.4, y10.4, z10.4, symbol3, mass_diff2, charge3
-                let symbol_str = atom.element.symbol().to_string();
-
-                // Use precise F10.4 format: 10 characters wide, 4 decimal places, right-aligned
-                // Symbol is exactly 3 characters, left-aligned after a single space
-                output.push_str(&format!(
-                    "{:10.4}{:10.4}{:10.4} {:<3} 0  0  0  0  0  0  0  0  0  0  0  0\n",
-                    coord.x, coord.y, coord.z, symbol_str
-                ));
-            }
-        }
-
-        // Write bond block
-        for edge_idx in self.graph.edge_indices() {
-            if let Some((idx1, idx2)) = self.graph.edge_endpoints(edge_idx) {
-                if let Some(bond) = self.graph.edge_weight(edge_idx) {
-                    let idx1_1based = idx1.index() + 1;
-                    let idx2_1based = idx2.index() + 1;
-                    let bond_type_code = match bond.bond_type {
-                        BondType::Single => 1,
-                        BondType::Double => 2,
-                        BondType::Triple => 3,
-                        BondType::Aromatic => 4,
-                        _ => 1, // Fallback
-                    };
-
-                    output.push_str(&format!(
-                        "{:3}{:3}{:3}  0  0  0  0\n",
-                        idx1_1based, idx2_1based, bond_type_code
-                    ));
-                }
-            }
-        }
-
-        // Write properties block (simplified for now)
-        // TODO: Implement property serialization
-
-        // Write M  END
-        output.push_str("M  END\n");
-    }
-}
-
-// Standard library integration
-impl std::fmt::Display for Molecule {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.to_mol_string())
-    }
-}
-
-impl std::fmt::Display for MoleculeStandard {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.to_mol_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -623,33 +429,6 @@ mod tests {
             "{} header comment should match",
             desc
         );
-    }
-
-    #[test]
-    fn test_write_mol() {
-        // Create a simple molecule
-        let mut molecule = Molecule::new();
-        molecule.header = Header::new(
-            "Test Molecule".to_string(),
-            "umol-test      ".to_string(),
-            "Test comment".to_string(),
-        );
-
-        // Add a carbon atom
-        let atom = Atom::new(AtomSymbol::Element(umol_data::Element::C));
-        molecule.add_atom(atom);
-
-        // Test serialization
-        let mol_string = molecule.to_mol_string();
-
-        // Basic checks
-        assert!(mol_string.contains("Test Molecule"));
-        assert!(mol_string.contains("umol-test"));
-        assert!(mol_string.contains("Test comment"));
-        assert!(mol_string.contains("  1  0  0  0  0  0  0  0  0  0999 V2000"));
-        assert!(mol_string.contains("M  END"));
-
-        println!("Generated MOL:\n{}", mol_string);
     }
 
     #[rstest]
@@ -703,66 +482,5 @@ mod tests {
             "Error should mention parsing failure: {}",
             error_string
         );
-    }
-
-    #[test]
-    fn test_write_mol_standard() {
-        // Create a simple standard molecule
-        let mut molecule = MoleculeStandard::new();
-        molecule.header = Header::new(
-            "Test Standard".to_string(),
-            "umol-standard  ".to_string(),
-            "Standard comment".to_string(),
-        );
-
-        // Add two carbon atoms
-        let atom1 = AtomStandard::new(umol_data::Element::C);
-        let atom2 = AtomStandard::new(umol_data::Element::N);
-        molecule.add_atom(atom1);
-        molecule.add_atom(atom2);
-
-        // Add a bond directly to the graph (since MoleculeStandard doesn't have add_bond)
-        let bond = Bond::new(BondType::Single);
-        molecule
-            .graph
-            .add_edge(AtomIndex::new(0), AtomIndex::new(1), bond);
-
-        // Test serialization
-        let mol_string = molecule.to_mol_string();
-
-        // Basic checks
-        assert!(mol_string.contains("Test Standard"));
-        assert!(mol_string.contains("umol-standard"));
-        assert!(mol_string.contains("Standard comment"));
-        assert!(mol_string.contains("  2  1  0  0  0  0  0  0  0  0999 V2000"));
-        assert!(mol_string.contains("C  "));
-        assert!(mol_string.contains("N  "));
-        assert!(mol_string.contains("  1  2  1  0  0  0  0"));
-        assert!(mol_string.contains("M  END"));
-
-        println!("Generated Standard MOL:\n{}", mol_string);
-    }
-
-    #[test]
-    fn test_round_trip_standard() {
-        // Test that we can parse a standard MOL and write it back
-        let original_mol = b"Methanol\nRDKit          3D\nSimple molecule\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.4300    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n";
-
-        // Parse with standard parser
-        let parsed = parse_mol_standard(original_mol).unwrap();
-
-        // Write back to string
-        let regenerated = parsed.to_mol_string();
-        println!("Original bytes: {:?}", original_mol);
-        println!("Regenerated string: {:?}", regenerated);
-        println!("Regenerated bytes: {:?}", regenerated.as_bytes());
-
-        // Parse the regenerated string to verify it's valid
-        let reparsed = parse_mol_standard(regenerated.as_bytes()).unwrap();
-
-        // Verify structure is preserved
-        assert_eq!(reparsed.atom_count(), 2);
-        assert_eq!(reparsed.bond_count(), 1);
-        assert_eq!(reparsed.header.name, "Methanol");
     }
 }
