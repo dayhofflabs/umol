@@ -186,7 +186,7 @@ where
     )
 }
 
-/// Parse a fixed-width field as an optional integer type. If range check fails, return None.
+/// Parse a fixed-width field as optional integer type. If range check fails, return None.
 pub(crate) fn fixed_width_int_in_range_opt<'a, T, R>(
     width: usize,
     range: R,
@@ -201,7 +201,20 @@ where
     )
 }
 
-/// Parse a fixed-width field as a float type with Fortran semantics (Fw.d).
+/// Parse a fixed-width field as integer, allow partial fields
+pub(crate) fn fixed_width_int_partial<'a, T>(
+    width: usize,
+) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
+where
+    T: IntParser,
+{
+    complete(map(
+        fixed_width_partial(width, delimited(space0, T::nom_parser(), space0), true),
+        |opt| opt.unwrap_or_else(T::zero),
+    ))
+}
+
+/// Parse a fixed-width field as float with Fortran semantics (Fw.d).
 pub(crate) fn fixed_width_float<'a, T>(
     width: usize,
     precision: usize,
@@ -607,6 +620,55 @@ mod tests {
         #[case] expected_kind: ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_int_in_range_opt::<i32, _>(3, 0..=10));
+        let result = parser.parse(input);
+        assert!(result.is_err(), "{} should have failed", desc);
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
+        );
+    }
+
+    #[rstest]
+    #[case(b"123", 123i32)]
+    #[case(b"12", 12i32)]
+    #[case(b"1", 1i32)]
+    #[case(b"", 0i32)]
+    #[case(b"12 ", 12i32)]
+    #[case(b"1  ", 1i32)]
+    #[case(b" 12", 12i32)]
+    #[case(b"  1", 1i32)]
+    #[case(b" 1 ", 1i32)]
+    #[case(b"   ", 0i32)]
+    #[case(b"  ", 0i32)]
+    #[case(b" ", 0i32)]
+    #[case(b" -1", -1i32)]
+    fn test_fixed_width_int_partial(#[case] input: &[u8], #[case] expected: i32) {
+        let mut parser = all_consuming(fixed_width_int_partial::<i32>(3));
+        let result = parser.parse(input);
+        assert!(
+            result.is_ok(),
+            "Test for '{}' should have succeeded but failed with {:?}",
+            String::from_utf8_lossy(input),
+            result
+        );
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case(b"1234", "too many characters", ErrorKind::Eof)]
+    #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
+    #[case(b"1a ", "trailing characters", ErrorKind::Eof)]
+    fn test_fixed_width_int_partial_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
+        let mut parser = all_consuming(fixed_width_int_partial::<i32>(3));
         let result = parser.parse(input);
         assert!(result.is_err(), "{} should have failed", desc);
         assert!(
