@@ -2,9 +2,9 @@
 
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{line_ending, not_line_ending};
-use nom::combinator::{map, map_parser, map_res, opt, success};
+use nom::combinator::{map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
-use nom::multi::length_count;
+use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
@@ -161,6 +161,47 @@ pub enum PropertyEntries {
     // Sgroup hierarchy [SPL]
     // Sgroup component numbers [SNC]
     End,
+}
+
+/// Parse a legacy atom list entry (e.g., "  1  2 C  N   ")
+pub fn legacy_atom_list_input<'a>(
+    input: &'a [u8],
+) -> nom::IResult<&'a [u8], PropertyEntries, error::Error<&'a [u8]>> {
+    // Parse atom index (3 chars)
+    let (remaining, atom_index) = fixed_width_int_minus1::<usize>(3).parse(input)?;
+
+    // Parse exclusion flag (1 char)
+    let (remaining, exclusion_byte) =
+        delimited(tag(" "), take(1usize), tag("    ")).parse(remaining)?;
+    let exclusion = match exclusion_byte {
+        b"T" => true,
+        b"F" | b" " => false,
+        _ => {
+            return Err(nom::Err::Error(error::Error::new(
+                input,
+                error::ErrorKind::Tag,
+            )))
+        }
+    };
+
+    // Parse atom list (at most 5, each 3 chars, delimited by spaces)
+    let (remaining, elements) = length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=5),
+        preceded(
+            tag(" "),
+            map_opt(fixed_width_int::<u8>(3), Element::from_atomic_number),
+        ),
+    )
+    .parse(remaining)?;
+
+    Ok((
+        remaining,
+        PropertyEntries::AtomListEntry(AtomListEntry {
+            atom_index,
+            exclusion,
+            elements,
+        }),
+    ))
 }
 
 /// Parse property line (standard properties only - no queries)
@@ -508,7 +549,8 @@ fn atom_list_entry<'a>(
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
 
         // Parse count (3 chars, max 16)
-        let (remaining, count) = fixed_width_int_in_range::<u8, _>(3, 1..=16).parse(remaining)?;
+        let (remaining, count) =
+            fixed_width_int_in_range::<usize, _>(3, 1..=16).parse(remaining)?;
 
         // Parse exclusion flag (1 char)
         let (remaining, exclusion_byte) =
@@ -525,20 +567,16 @@ fn atom_list_entry<'a>(
         };
 
         // Parse 4-char atom symbols
-        let mut elements = Vec::with_capacity(count as usize);
-        let mut remaining = remaining;
-        for _ in 0..count {
-            let (rest, symbol_bytes) = take(4usize).parse(remaining)?;
-            let symbol_cow = String::from_utf8_lossy(symbol_bytes);
-            let symbol_str = symbol_cow.trim();
-
-            // Convert to Element
-            let element = Element::from_symbol(symbol_str).ok_or_else(|| {
-                nom::Err::Error(error::Error::new(input, error::ErrorKind::MapRes))
-            })?;
-            elements.push(element);
-            remaining = rest;
-        }
+        let (remaining, elements) = many_m_n(
+            count,
+            count,
+            map_opt(take(4usize), |bytes| {
+                let symbol_cow = String::from_utf8_lossy(bytes);
+                let symbol_str = symbol_cow.trim();
+                Element::from_symbol(symbol_str)
+            }),
+        )
+        .parse(remaining)?;
 
         Ok((
             remaining,

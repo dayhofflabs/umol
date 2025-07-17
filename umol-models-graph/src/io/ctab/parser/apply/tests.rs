@@ -562,7 +562,11 @@ fn test_link_atom_entries(basic_molecule: Molecule) {
 #[case(LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 1, subs_index2: Some(12) }, "invalid link atom subs index 2")]
 #[case(LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 0, subs_index2: Some(2) }, "invalid link atom subs index 2")]
 #[case(LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 1, subs_index2: Some(0) }, "invalid link atom subs index 2")]
-fn test_apply_link_atom_entries_invalid(basic_molecule: Molecule, #[case] entry: LinkAtomEntry, #[case] desc: &str) {
+fn test_apply_link_atom_entries_invalid(
+    basic_molecule: Molecule,
+    #[case] entry: LinkAtomEntry,
+    #[case] desc: &str,
+) {
     let mut molecule = basic_molecule;
     let entries = vec![entry];
 

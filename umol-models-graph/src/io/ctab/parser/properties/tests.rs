@@ -5,6 +5,16 @@ use rstest::rstest;
 use umol_data::Element;
 
 #[rstest]
+#[case(b"  1 F    3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
+#[case(b"  1 T    3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]   
+// TODO: Add parsing without trailing spaces (e.g., "  1 T    3   9   7   8")
+fn test_legacy_atom_list_input(#[case] input: &[u8], #[case] expected: PropertyEntries) {
+    let (remaining, result) = legacy_atom_list_input(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
 #[case(b"M  CHG  1   1  -1", "CHG standard property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  RAD  1   1   2", "RAD standard property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
 #[case(b"M  ISO  1   1  13", "ISO standard property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
@@ -243,7 +253,7 @@ fn test_atom_list_entry(#[case] input: &[u8], #[case] expected: AtomListEntry) {
 #[case(b"   1  0 F C   ", "count is zero", ErrorKind::Verify)]
 #[case(b"   1 17 F C   N   ", "count exceeds 16", ErrorKind::Verify)]
 #[case(b"   1  1 X C   ", "invalid exclusion flag", ErrorKind::Tag)]
-#[case(b"   1  1 F XX  ", "invalid element symbol", ErrorKind::MapRes)]
+#[case(b"   1  1 F XX  ", "invalid element symbol", ErrorKind::MapOpt)]
 fn test_atom_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,

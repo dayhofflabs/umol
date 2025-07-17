@@ -17,7 +17,7 @@ use super::super::ctab::parser::bond::{bond_input, bond_input_standard};
 use super::super::ctab::parser::counts::counts_input;
 use super::super::ctab::parser::header::header;
 use super::super::ctab::parser::properties::{
-    property_input, property_input_standard, PropertyEntries,
+    legacy_atom_list_input, property_input, property_input_standard, PropertyEntries,
 };
 
 /// Parse MOL block (general parser, handles all features)
@@ -28,7 +28,9 @@ pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Err
     let bond_count = counts.bonds() as usize;
     let (remaining, atoms) = atom_block(atom_count).parse(remaining)?;
     let (remaining, bonds) = bond_block(bond_count).parse(remaining)?;
+    let (remaining, legacy_properties) = legacy_atom_list_block(remaining)?;
     let (remaining, properties) = properties_block(remaining)?;
+    let properties = properties.into_iter().chain(legacy_properties).collect();
     let (molecule, is_query) = build_molecule(header, atoms, bonds, properties);
     Ok((remaining, ParsedMol::new(molecule, is_query)))
 }
@@ -103,6 +105,15 @@ fn bond_block_standard<'a>(
     )
 }
 
+/// Parse legacy atom list block
+fn legacy_atom_list_block<'a>(
+    input: &'a [u8],
+) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
+    let (input, legacy_properties) =
+        many0(terminated(legacy_atom_list_input, line_ending)).parse(input)?;
+    Ok((input, legacy_properties))
+}
+
 /// Parse properties block
 fn properties_block<'a>(
     input: &'a [u8],
@@ -116,7 +127,8 @@ fn properties_block<'a>(
 fn properties_block_standard<'a>(
     input: &'a [u8],
 ) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
-    let (input, properties) = many0(terminated(property_input_standard, line_ending)).parse(input)?;
+    let (input, properties) =
+        many0(terminated(property_input_standard, line_ending)).parse(input)?;
     let (input, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(input)?;
     Ok((input, properties))
 }

@@ -16,7 +16,7 @@ use nom::combinator::{complete, map, opt, recognize, verify};
 use nom::error;
 use nom::multi::fold_many_m_n;
 use nom::sequence::delimited;
-use nom::Parser;
+use nom::{Input, Parser};
 use num::{Float, Integer};
 use smallvec::{Array, SmallVec};
 
@@ -77,38 +77,54 @@ impl IntParser for usize {
 }
 
 /// Parse a fixed-width field, making it optional.
+/// See `fixed_width_opt_partial` for more details.
+pub(crate) fn fixed_width_opt<'a, O, P>(
+    width: usize,
+    inner: P,
+) -> impl Parser<&'a [u8], Output = Option<O>, Error = error::Error<&'a [u8]>>
+where
+    P: Parser<&'a [u8], Output = O, Error = error::Error<&'a [u8]>>,
+{
+    fixed_width_partial(width, inner, false)
+}
+
+/// Parse a fixed-width field, making it optional.
 ///
-/// This is the foundational parser for fixed-width fields. It handles two cases of "optionality":
+/// This parser handles two cases of "optionality":
 /// 1. The line is truncated, and the field is not present at all.
 /// 2. The field is present but consists only of whitespace.
 ///
 /// In both cases, it succeeds with `None`. If the field contains non-whitespace data, it runs
-/// the `inner_parser`. If `inner_parser` fails on that data, it's a fatal error, which is the
-/// desired behavior for malformed data.
-pub(crate) fn fixed_width_opt<'a, O, P>(
+/// the `inner_parser`. If `inner_parser` fails on that data, it's a fatal error.
+///
+/// If `partial_ok` is true, the parser will succeed with `None` if the field is present but
+/// consists only of whitespace. Otherwise, it will return an error.
+pub(crate) fn fixed_width_partial<'a, O, P>(
     width: usize,
     mut inner: P,
+    partial_ok: bool,
 ) -> impl Parser<&'a [u8], Output = Option<O>, Error = error::Error<&'a [u8]>>
 where
     P: Parser<&'a [u8], Output = O, Error = error::Error<&'a [u8]>>,
 {
     move |input: &'a [u8]| {
         let n_to_take = width.min(input.len());
-        let (remaining, field_slice) = take(n_to_take).parse(input)?;
+        let (remaining, field) = take(n_to_take).parse(input)?;
 
-        // If the slice is shorter than the expected width, it's only valid if it's all whitespace.
-        if field_slice.len() < width && !field_slice.iter().all(|&b| b == b' ') {
+        // If the slice is shorter than the expected width, it's only valid if it's all whitespace
+        // or if `partial_ok` is true.
+        if !partial_ok && field.len() < width && !field.iter().all(|&b| b == b' ') {
             return Err(nom::Err::Error(error::Error::new(
                 input,
                 nom::error::ErrorKind::Eof,
             )));
         }
 
-        if field_slice.iter().all(|&b| b == b' ') {
+        if field.iter().all(|&b| b == b' ') {
             return Ok((remaining, None));
         }
 
-        match inner.parse(field_slice) {
+        match inner.parse(field) {
             Ok((unconsumed, val)) => {
                 if unconsumed.is_empty() {
                     Ok((remaining, Some(val)))
@@ -319,27 +335,28 @@ pub(crate) fn trim_whitespace(input: &[u8]) -> &[u8] {
 }
 
 /// Apply the parser `p` exactly `n` times, discarding the results.
-pub(crate) fn repeat<I, O, P, E>(n: usize, p: P) -> impl Parser<I, Output = (), Error = E>
+pub(crate) fn repeat<I, O, P>(
+    n: usize,
+    p: P,
+) -> impl Parser<I, Output = (), Error = error::Error<I>>
 where
-    I: nom::Input,
-    P: Parser<I, Output = O, Error = E>,
-    E: error::ParseError<I>,
+    I: Input,
+    P: Parser<I, Output = O, Error = error::Error<I>>,
 {
     fold_many_m_n(n, n, p, || (), |_, _| ())
 }
 
 /// SmallVec-based parser combinator for length_count expressions.
 #[allow(dead_code)]
-pub(crate) fn small_length_count<I, A, C, E, F>(
+pub(crate) fn small_length_count<I, A, C, F>(
     mut count: C,
     mut f: F,
-) -> impl Parser<I, Output = SmallVec<A>, Error = E>
+) -> impl Parser<I, Output = SmallVec<A>, Error = error::Error<I>>
 where
     I: nom::Input,
     A: Array,
-    C: Parser<I, Output = usize, Error = E>,
-    F: Parser<I, Output = <A as Array>::Item, Error = E>,
-    E: error::ParseError<I>,
+    C: Parser<I, Output = usize, Error = error::Error<I>>,
+    F: Parser<I, Output = <A as Array>::Item, Error = error::Error<I>>,
 {
     move |input: I| {
         let (remaining, count) = count.parse(input)?;
@@ -365,6 +382,34 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::rstest;
     use smallvec::smallvec;
+
+    #[rstest]
+    #[case(b"", None)]
+    #[case(b"  ", None)]
+    #[case(b"   ", None)]
+    #[case(b"42", Some(42))]
+    #[case(b" 42", Some(42))]
+    #[case(b"42 ", Some(42))]
+    #[case(b"042", Some(42))]
+    fn test_fixed_width_partial(#[case] input: &[u8], #[case] expected_val: Option<i32>) {
+        let mut parser = fixed_width_partial(3, delimited(space0, nom_i32, space0), true);
+
+        let result = parser.parse(input);
+        assert!(
+            result.is_ok(),
+            "Test for '{}' should have succeeded but failed with {:?}",
+            String::from_utf8_lossy(input),
+            result
+        );
+        let (remaining, value) = result.unwrap();
+        assert_eq!(
+            value,
+            expected_val,
+            "Mismatched value for '{}'",
+            String::from_utf8_lossy(input)
+        );
+        assert!(remaining.is_empty(), "remaining should be empty");
+    }
 
     #[rstest]
     #[case(b"", None)]
@@ -685,7 +730,7 @@ mod tests {
     #[rstest]
     #[case(b"abcabcabc")]
     fn test_repeat(#[case] input: &[u8]) {
-        let mut parser = all_consuming(repeat::<_, _, _, error::Error<_>>(3, tag(&b"abc"[..])));
+        let mut parser = all_consuming(repeat::<_, _, _>(3, tag(&b"abc"[..])));
         let result = parser.parse(input);
         assert!(
             result.is_ok(),
@@ -701,7 +746,7 @@ mod tests {
     #[case(b"abc", ErrorKind::Tag)]
     #[case(b"", ErrorKind::Tag)]
     fn test_repeat_invalid(#[case] input: &[u8], #[case] expected_kind: ErrorKind) {
-        let mut parser = all_consuming(repeat::<_, _, _, error::Error<_>>(3, tag(&b"abc"[..])));
+        let mut parser = all_consuming(repeat::<_, _, _>(3, tag(&b"abc"[..])));
         let result = parser.parse(input);
         assert!(result.is_err(), "{:?}: should have failed", input);
         assert!(
@@ -723,7 +768,7 @@ mod tests {
     ) {
         let count = map_parser(take(1u8), nom_usize);
         let item = map_parser(take(1u8), nom_u8);
-        let mut parser = small_length_count::<_, [u8; 8], _, error::Error<&[u8]>, _>(count, item);
+        let mut parser = small_length_count::<_, [u8; 8], _, _>(count, item);
         let result = parser.parse(input);
 
         assert!(result.is_ok(), "{}: should have succeeded", desc);
@@ -742,7 +787,7 @@ mod tests {
     ) {
         let count = map_parser(take(1u8), nom_usize);
         let item = map_parser(take(1u8), nom_u8);
-        let mut parser = small_length_count::<_, [u8; 8], _, error::Error<&[u8]>, _>(count, item);
+        let mut parser = small_length_count::<_, [u8; 8], _, _>(count, item);
         let result = parser.parse(input);
 
         assert!(result.is_err(), "{}: should have failed", desc);
