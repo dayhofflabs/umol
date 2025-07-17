@@ -10,7 +10,10 @@ use nom::Parser;
 
 use crate::io::ctab::sgroup::{SGroup, SGroupType};
 
-use super::utils::{fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1};
+use super::utils::{
+    fixed_width_element_partial, fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1,
+    fixed_width_int_partial,
+};
 use umol_data::Element;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -189,7 +192,10 @@ pub fn legacy_atom_list_input<'a>(
         fixed_width_int_in_range::<u8, _>(3, 1..=5),
         preceded(
             tag(" "),
-            map_opt(fixed_width_int::<u8>(3), Element::from_atomic_number),
+            map_opt(
+                fixed_width_int_partial::<u8>(3),
+                Element::from_atomic_number,
+            ),
         ),
     )
     .parse(remaining)?;
@@ -567,16 +573,8 @@ fn atom_list_entry<'a>(
         };
 
         // Parse 4-char atom symbols
-        let (remaining, elements) = many_m_n(
-            count,
-            count,
-            map_opt(take(4usize), |bytes| {
-                let symbol_cow = String::from_utf8_lossy(bytes);
-                let symbol_str = symbol_cow.trim();
-                Element::from_symbol(symbol_str)
-            }),
-        )
-        .parse(remaining)?;
+        let (remaining, elements) =
+            many_m_n(count, count, fixed_width_element_partial(4)).parse(remaining)?;
 
         Ok((
             remaining,

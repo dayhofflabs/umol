@@ -5,17 +5,25 @@ use std::{
     ops::{Range, RangeInclusive},
 };
 
+use umol_data::Element;
+
 use fast_float::FastFloat;
-use nom::branch::alt;
-use nom::bytes::{complete::tag, take};
 use nom::character::complete::{
-    digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
-    u8 as nom_u8, usize as nom_usize,
+    digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, u32 as nom_u32, u8 as nom_u8,
+    usize as nom_usize,
 };
 use nom::combinator::{complete, map, opt, recognize, verify};
 use nom::error;
 use nom::multi::fold_many_m_n;
-use nom::sequence::delimited;
+use nom::{branch::alt, combinator::map_opt};
+use nom::{
+    bytes::{complete::tag, take},
+    combinator::map_res,
+};
+use nom::{
+    character::complete::{alpha1, space0},
+    sequence::delimited,
+};
 use nom::{Input, Parser};
 use num::{Float, Integer};
 use smallvec::{Array, SmallVec};
@@ -237,6 +245,20 @@ where
     ))
 }
 
+/// Parse a fixed-width field as element symbol, allow partial fields
+pub(crate) fn fixed_width_element_partial<'a>(
+    width: usize,
+) -> impl Parser<&'a [u8], Output = Element, Error = error::Error<&'a [u8]>> {
+    map_res(
+        fixed_width_partial(
+            width,
+            delimited(space0, map_opt(alpha1, Element::from_symbol_bytes), space0),
+            true,
+        ),
+        |opt| opt.ok_or_else(|| error::Error::new(&b""[..], error::ErrorKind::Verify)),
+    )
+}
+
 /// Verify that a slice contains only blanks or zeros
 pub(crate) fn is_blanks_or_zeros(input: &[u8]) -> bool {
     // Trim leading spaces.
@@ -422,6 +444,26 @@ mod tests {
             String::from_utf8_lossy(input)
         );
         assert!(remaining.is_empty(), "remaining should be empty");
+    }
+
+    #[rstest]
+    #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
+    #[case(b"1a ", "trailing characters", ErrorKind::Eof)]
+    fn test_fixed_width_partial_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
+        let mut parser = fixed_width_partial(3, delimited(space0, nom_i32, space0), true);
+        let result = parser.parse(input);
+        assert!(result.is_err(), "{} should have failed", desc);
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for '{}', expected {:?}, got {:?}",
+            String::from_utf8_lossy(input),
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code)
+        );
     }
 
     #[rstest]
@@ -674,6 +716,55 @@ mod tests {
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
+        );
+    }
+
+    #[rstest]
+    #[case(b"C", Element::C)]
+    #[case(b" C", Element::C)]
+    #[case(b"Cu", Element::Cu)]
+    #[case(b" Cu", Element::Cu)]
+    #[case(b"  Cu", Element::Cu)]
+    #[case(b" Cu ", Element::Cu)]
+    #[case(b"Cu  ", Element::Cu)]
+    #[case(b"   C", Element::C)]
+    #[case(b"  C ", Element::C)]
+    #[case(b" C  ", Element::C)]
+    #[case(b"C   ", Element::C)]
+    fn test_fixed_width_element_partial(#[case] input: &[u8], #[case] expected: Element) {
+        let mut parser = all_consuming(fixed_width_element_partial(4));
+        let result = parser.parse(input);
+        assert!(
+            result.is_ok(),
+            "{} should have succeeded",
+            String::from_utf8_lossy(input)
+        );
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case(b"Cu   ", "trailing characters", ErrorKind::Eof)]
+    #[case(b" X  ", "invalid element symbol", ErrorKind::MapOpt)]
+    fn test_fixed_width_element_partial_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
+        let mut parser = all_consuming(fixed_width_element_partial(4));
+        let result = parser.parse(input);
+        assert!(
+            result.is_err(),
+            "{} should have failed",
+            String::from_utf8_lossy(input)
+        );
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {:?}",
             desc,
             expected_kind,
             result.clone().unwrap_err().map(|e| e.code),

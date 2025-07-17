@@ -7,11 +7,30 @@ use umol_data::Element;
 #[rstest]
 #[case(b"  1 F    3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
 #[case(b"  1 T    3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]   
-// TODO: Add parsing without trailing spaces (e.g., "  1 T    3   9   7   8")
+#[case(b"  1      3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
+#[case(b"  1 F    3   9   7   8", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
+#[case(b"  1 T    3   9   7   8", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]   
 fn test_legacy_atom_list_input(#[case] input: &[u8], #[case] expected: PropertyEntries) {
     let (remaining, result) = legacy_atom_list_input(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  1 F    0   9  ", "count is zero", ErrorKind::Verify)]
+#[case(b"  1 F    6    9  ", "count exceeds 5", ErrorKind::Verify)]
+#[case(b"  1 X    1   9  ", "invalid exclusion flag", ErrorKind::Tag)]
+#[case(b"  1 F    1   0  ", "invalid element atomic number", ErrorKind::MapOpt)]
+fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = legacy_atom_list_input(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+        "Expected {:?} error for {}, got {:?}",
+        expected_kind,
+        desc,
+        result
+    );
 }
 
 #[rstest]
@@ -238,9 +257,9 @@ fn test_atom_value_entry(#[case] input: &[u8], #[case] expected: AtomValueEntry)
     assert_eq!(result, expected);
 }
 
-
 #[rstest]
 #[case(b"   1  3 F C   N   O   ", AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
+#[case(b"   1  3 F C   N   O", AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
 #[case(b"   5  2 T Cl  Br  ", AtomListEntry { atom_index: 4, exclusion: true, elements: vec![Element::Cl, Element::Br] })]
 #[case(b"  10  1   H   ", AtomListEntry { atom_index: 9, exclusion: false, elements: vec![Element::H] })]
 fn test_atom_list_entry(#[case] input: &[u8], #[case] expected: AtomListEntry) {
