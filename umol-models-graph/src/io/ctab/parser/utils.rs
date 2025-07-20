@@ -172,12 +172,12 @@ where
     T: IntParser,
     R: Contains<T> + Clone,
 {
-    complete(map(
-        verify(
+    complete(verify(
+        map(
             fixed_width_opt(width, delimited(space0, T::nom_parser(), space0)),
-            move |opt: &Option<T>| opt.map_or(true, |val| range.contains(&val)),
+            |opt| opt.unwrap_or_else(T::zero),
         ),
-        |opt| opt.unwrap_or_else(T::zero),
+        move |val: &T| range.contains(val),
     ))
 }
 
@@ -575,6 +575,8 @@ mod tests {
     }
 
     #[rstest]
+    #[case(b"   ", "blank field not in range", ErrorKind::Verify)]
+    #[case(b"11 ", "value is out of range", ErrorKind::Verify)]
     #[case(b"1234", "too many characters", ErrorKind::Verify)]
     #[case(b"8", "too few characters", ErrorKind::Eof)]
     #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
@@ -584,7 +586,7 @@ mod tests {
         #[case] desc: &str,
         #[case] expected_kind: ErrorKind,
     ) {
-        let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, -10i8..=10i8));
+        let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, 1i8..=10i8));
         let result = parser.parse(input);
         assert!(result.is_err(), "{} should have failed", desc);
         assert!(

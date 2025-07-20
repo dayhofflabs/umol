@@ -2,7 +2,7 @@
 
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{line_ending, not_line_ending};
-use nom::combinator::{map, map_opt, map_parser, map_res, opt, success};
+use nom::combinator::{all_consuming, map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
 use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
@@ -88,7 +88,7 @@ pub struct AttachmentPointEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomAttachmentOrderEntry {
     pub atom_index: usize,
-    pub attachments: Vec<(usize, u8)>, // (neighbor_index, order)
+    pub attachments: Vec<(usize, u8)>, // (neighbor index, attachment order)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -168,46 +168,47 @@ pub enum PropertyEntries {
 
 /// Parse a legacy atom list entry (e.g., "  1  2 C  N   ")
 pub fn legacy_atom_list_input<'a>(
-    input: &'a [u8],
-) -> nom::IResult<&'a [u8], PropertyEntries, error::Error<&'a [u8]>> {
-    // Parse atom index (3 chars)
-    let (remaining, atom_index) = fixed_width_int_minus1::<usize>(3).parse(input)?;
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
+    |input: &'a [u8]| {
+        // Parse atom index (3 chars)
+        let (remaining, atom_index) = fixed_width_int_minus1::<usize>(3).parse(input)?;
 
-    // Parse exclusion flag (1 char)
-    let (remaining, exclusion_byte) =
-        delimited(tag(" "), take(1usize), tag("    ")).parse(remaining)?;
-    let exclusion = match exclusion_byte {
-        b"T" => true,
-        b"F" | b" " => false,
-        _ => {
-            return Err(nom::Err::Error(error::Error::new(
-                input,
-                error::ErrorKind::Tag,
-            )))
-        }
-    };
+        // Parse exclusion flag (1 char)
+        let (remaining, exclusion_byte) =
+            delimited(tag(" "), take(1usize), tag("    ")).parse(remaining)?;
+        let exclusion = match exclusion_byte {
+            b"T" => true,
+            b"F" | b" " => false,
+            _ => {
+                return Err(nom::Err::Error(error::Error::new(
+                    input,
+                    error::ErrorKind::Tag,
+                )))
+            }
+        };
 
-    // Parse atom list (at most 5, each 3 chars, delimited by spaces)
-    let (remaining, elements) = length_count(
-        fixed_width_int_in_range::<u8, _>(3, 1..=5),
-        preceded(
-            tag(" "),
-            map_opt(
-                fixed_width_int_partial::<u8>(3),
-                Element::from_atomic_number,
+        // Parse atom list (at most 5, each 3 chars, delimited by spaces)
+        let (remaining, elements) = length_count(
+            fixed_width_int_in_range::<u8, _>(3, 1..=5),
+            preceded(
+                tag(" "),
+                map_opt(
+                    fixed_width_int_partial::<u8>(3),
+                    Element::from_atomic_number,
+                ),
             ),
-        ),
-    )
-    .parse(remaining)?;
+        )
+        .parse(remaining)?;
 
-    Ok((
-        remaining,
-        PropertyEntries::AtomListEntry(AtomListEntry {
-            atom_index,
-            exclusion,
-            elements,
-        }),
-    ))
+        Ok((
+            remaining,
+            PropertyEntries::AtomListEntry(AtomListEntry {
+                atom_index,
+                exclusion,
+                elements,
+            }),
+        ))
+    }
 }
 
 /// Parse property line (standard properties only - no queries)
@@ -401,7 +402,7 @@ fn atom_value_entry<'a>(
 /// vvv: -15..= 15.
 fn charge_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<ChargeEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
@@ -416,7 +417,7 @@ fn charge_entries<'a>(
             ),
             |(atom_index, charge)| ChargeEntry { atom_index, charge },
         ),
-    )
+    ))
 }
 
 /// Parse radical property entries.
@@ -424,19 +425,25 @@ fn charge_entries<'a>(
 /// vvv: 0..= 3: 0 = no radical, 1 = singlet (:), 2 = doublet (. or ^), 3 = triplet (^^).
 fn radical_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<RadicalEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
+                ),
             ),
             |(atom_index, radical_type)| RadicalEntry {
                 atom_index,
                 radical_type,
             },
         ),
-    )
+    ))
 }
 
 /// Parse isotope property entries.
@@ -446,16 +453,22 @@ fn radical_entries<'a>(
 /// should be in the range -18..=12.
 fn isotope_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<IsotopeEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int::<u32>(3)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int::<u32>(3)),
+                ),
             ),
             |(atom_index, mass)| IsotopeEntry { atom_index, mass },
         ),
-    )
+    ))
 }
 
 /// Parse ring bond count property entries.
@@ -463,19 +476,25 @@ fn isotope_entries<'a>(
 /// vvv: Ring bond count (-2 = as drawn (r*), -1 = no ring bonds (r0), 0 = off, 2 = r2, 3 = r3, 4 = r4+)
 fn ring_bond_count_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<RingBondCountEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=4)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=4)),
+                ),
             ),
             |(atom_index, ring_bond_count)| RingBondCountEntry {
                 atom_index,
                 ring_bond_count,
             },
         ),
-    )
+    ))
 }
 
 /// Parse substitution count property entries.
@@ -484,19 +503,25 @@ fn ring_bond_count_entries<'a>(
 /// 6 = s6+)
 fn substitution_count_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<SubstitutionCountEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=15)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=15)),
+                ),
             ),
             |(atom_index, substitution_count)| SubstitutionCountEntry {
                 atom_index,
                 substitution_count,
             },
         ),
-    )
+    ))
 }
 
 /// Parse unsaturated atom property entries.
@@ -504,19 +529,25 @@ fn substitution_count_entries<'a>(
 /// vvv: Unsaturated flag (0 = off, 1 = on)
 fn unsaturated_atom_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<UnsaturatedAtomEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
+                ),
             ),
             |(atom_index, unsaturated)| UnsaturatedAtomEntry {
                 atom_index,
                 unsaturated,
             },
         ),
-    )
+    ))
 }
 
 /// Parse link atom property entries.
@@ -525,14 +556,26 @@ fn unsaturated_atom_entries<'a>(
 /// bbb/ccc: Substituent indices (can be 0)
 fn link_atom_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<LinkAtomEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=4),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 2..=255)),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                opt(preceded(tag(" "), fixed_width_int_minus1::<usize>(3))),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 2..=255)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                opt(map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                )),
             ),
             |(atom_index, repeat_count, subs_index1, subs_index2)| LinkAtomEntry {
                 atom_index,
@@ -541,7 +584,7 @@ fn link_atom_entries<'a>(
                 subs_index2,
             },
         ),
-    )
+    ))
 }
 
 /// Parse atom list property entry.
@@ -588,57 +631,62 @@ fn atom_list_entry<'a>(
 }
 
 /// Parse attachment point property entries.
+/// Atom aaa is typically on ordinary atom, does not have to be a RGroup (opposite of AAL)
+/// Attachment point does not appear in the atom list
 /// M  APOnn2 aaa vvv ...
-/// nn2: Count (max 2), aaa: Atom index, vvv: Attachment type (0-3)
+/// nn2: count (max 2), aaa: atom index, vvv: attachment type (0-3)
+/// 0 = no attachment, 1 = first attachment point, 2 = second attachment point, 3 = both attachment points
 fn attachment_point_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<AttachmentPointEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=2),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
+                ),
             ),
             |(atom_index, attachment_type)| AttachmentPointEntry {
                 atom_index,
                 attachment_type,
             },
         ),
-    )
+    ))
 }
 
 /// Parse atom attachment order entry.
 /// M  AAL aaan2 111 v1v 222 v2v ...
-/// aaa: Atom index, n2: Pair count (max 2), 111/222: Neighbor indices, v1v/v2v: Orders
+/// Atom aaa refers to an RGroup, atoms 111, 222 are ordinary atoms (opposite of APO)
+/// aaa: atom index, n2: pair count (max 2), 111/222: neighbor indices, v1v/v2v: attachment orders
 fn atom_attachment_order_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomAttachmentOrderEntry, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
-        // Parse atom index (3 chars)
-        let (remaining, atom_index) = fixed_width_int_minus1::<usize>(3).parse(input)?;
-
-        // Parse pair count (2 chars, max 2)
-        let (remaining, count) = fixed_width_int_in_range::<u8, _>(2, 1..=2).parse(remaining)?;
-
-        // Parse neighbor-order pairs
-        let mut attachments = Vec::with_capacity(count as usize);
-        let mut remaining = remaining;
-        for _ in 0..count {
-            let (rest, neighbor_index) =
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(remaining)?;
-            let (rest, order) =
-                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 1..=2)).parse(rest)?;
-            attachments.push((neighbor_index, order));
-            remaining = rest;
-        }
-
-        Ok((
-            remaining,
-            AtomAttachmentOrderEntry {
-                atom_index,
-                attachments,
-            },
-        ))
-    }
+    map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            length_count(
+                fixed_width_int_in_range::<u8, _>(3, 1..=2),
+                (
+                    map_parser(
+                        take(4usize),
+                        preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                    ),
+                    map_parser(
+                        take(4usize),
+                        preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 1..=2)),
+                    ),
+                ),
+            ),
+        ),
+        |(atom_index, attachments)| AtomAttachmentOrderEntry {
+            atom_index,
+            attachments,
+        },
+    )
 }
 
 /// Parse RGroup label property entries.
@@ -646,16 +694,22 @@ fn atom_attachment_order_entry<'a>(
 /// aaa: atom index, rrr: RGroup label (0 = no label, 1-32 in CTab spec, 1-999 in RDKit)
 fn rgroup_label_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<RGroupLabelEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int::<u32>(3)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 0..=999)),
+                ),
             ),
             |(atom_index, label)| RGroupLabelEntry { atom_index, label },
         ),
-    )
+    ))
 }
 
 // [LOG]
@@ -665,19 +719,25 @@ fn rgroup_label_entries<'a>(
 /// sss: SGroup index, ttt: SGroup type (3-character string)
 fn sgroup_type_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<SGroupTypeEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(
-                    tag(" "),
-                    map_res(take(3usize), |bytes: &[u8]| {
-                        let s = std::str::from_utf8(bytes)
-                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
-                        SGroup::get_type(s)
-                            .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-                    }),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(
+                        tag(" "),
+                        map_res(take(3usize), |bytes: &[u8]| {
+                            let s = std::str::from_utf8(bytes)
+                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
+                            SGroup::get_type(s)
+                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+                        }),
+                    ),
                 ),
             ),
             |(sgroup_index, sgroup_type)| SGroupTypeEntry {
@@ -685,7 +745,7 @@ fn sgroup_type_entries<'a>(
                 sgroup_type,
             },
         ),
-    )
+    ))
 }
 
 // [SST]
@@ -695,30 +755,35 @@ fn sgroup_type_entries<'a>(
 /// sss: SGroup index, vvv: integer label is from 1-512
 fn sgroup_label_entries<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<SGroupLabelEntry>, Error = error::Error<&'a [u8]>> {
-    length_count(
+    all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=512)),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=512)),
+                ),
             ),
             |(sgroup_index, label)| SGroupLabelEntry {
                 sgroup_index,
                 label,
             },
         ),
-    )
+    ))
 }
 
 // [SCN]
 // [SDS EXP]
 
-/// Parse SGroup atom list entry.
 /// M  SAL sssn15 aaa ...
 /// sss: SGroup index (3 chars), n: count (3 chars), aaa: atom indices (each 4 chars: " aaa")
 fn sgroup_atom_list_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupAtomListEntry, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
+    all_consuming(|input: &'a [u8]| {
         // Parse sgroup index and count from first 6 characters
         let (remaining, (sgroup_index, count)) = map_parser(
             take(6usize),
@@ -749,15 +814,14 @@ fn sgroup_atom_list_entry<'a>(
                 atom_indices: indices,
             },
         ))
-    }
+    })
 }
 
-/// Parse SGroup bond list entry.
 /// M  SBL sssn15 bbb ...
 /// sss: SGroup index (3 chars), n: count (3 chars), bbb: bond indices (each 4 chars: " bbb")
 fn sgroup_bond_list_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupBondListEntry, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
+    all_consuming(|input: &'a [u8]| {
         // Parse sgroup index and count from first 6 characters
         let (remaining, (sgroup_index, count)) = map_parser(
             take(6usize),
@@ -768,11 +832,17 @@ fn sgroup_bond_list_entry<'a>(
         )
         .parse(input)?;
 
-        let (remaining, bond_indices) = length_count(
-            success(count as usize),
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-        )
-        .parse(remaining)?;
+        let mut bond_indices = Vec::with_capacity(count as usize);
+        let mut remaining = remaining;
+        for _ in 0..count {
+            let (rest, index) = map_parser(
+                take(4usize),
+                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            )
+            .parse(remaining)?;
+            bond_indices.push(index);
+            remaining = rest;
+        }
 
         Ok((
             remaining,
@@ -781,7 +851,7 @@ fn sgroup_bond_list_entry<'a>(
                 bond_indices,
             },
         ))
-    }
+    })
 }
 
 #[cfg(test)]

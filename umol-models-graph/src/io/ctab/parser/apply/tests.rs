@@ -1,5 +1,5 @@
 use super::*;
-use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol};
+use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol, AttachmentPointType};
 use crate::io::ctab::bond::{Bond, BondType};
 use crate::io::ctab::sgroup::{SGroup, SGroupBracketStyle, SGroupType};
 use pretty_assertions::assert_eq;
@@ -655,6 +655,73 @@ fn test_apply_atom_list_entry_conflict(molecule_with_properties: Molecule) {
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
             assert!(msg.contains("Atom list conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_attachment_point_entries(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![AttachmentPointEntry {
+        atom_index: 0,
+        attachment_type: 1,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+
+    assert_eq!(
+        molecule.atom(0).unwrap().attachment_point,
+        Some(AttachmentPointType::First)
+    );
+}
+
+#[rstest]
+fn test_apply_attachment_point_entries_invalid(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entries = vec![AttachmentPointEntry {
+        atom_index: 0,
+        attachment_type: 4,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid attachment point"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+
+    let entries = vec![AttachmentPointEntry {
+        atom_index: 5,
+        attachment_type: 1,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
+        _ => panic!("Expected MissingAtomIndex error"),
+    }
+}
+
+#[rstest]
+fn test_apply_attachment_point_entries_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().attachment_point = Some(AttachmentPointType::First);
+    let entries = vec![AttachmentPointEntry {
+        atom_index: 0,
+        attachment_type: 2,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Attachment point conflict"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }

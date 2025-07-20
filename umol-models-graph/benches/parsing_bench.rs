@@ -6,7 +6,7 @@ use umol_models_graph::io::ctab::parser::{
     atom::{atom_input, atom_input_standard},
     bond::{bond_input, bond_input_standard},
     counts::counts_input,
-    properties::{property_input, property_input_standard},
+    properties::{legacy_atom_list_input, property_input, property_input_standard},
 };
 
 fn parsing_benchmarks(c: &mut Criterion) {
@@ -14,10 +14,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("mol_parsing/counts");
         let test_cases = [
             ("valid", &b"  6  5  0  0  1  0  0  0  0  0999 V2000"[..]),
-            (
-                "invalid",
-                &b"  4  2  0     0  0            999 V1000"[..],
-            ),
+            ("invalid", &b"  4  2  0     0  0            999 V1000"[..]),
         ];
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
@@ -71,10 +68,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
                 "len36_standard_invalid",
                 &b"   -0.1234    0.4560    0.7890 C   X"[..],
             ),
-            (
-                "len34_standard",
-                &b"   -0.1234    0.4560    0.7890 C  "[..],
-            ),
+            ("len34_standard", &b"   -0.1234    0.4560    0.7890 C  "[..]),
             (
                 "len34_standard_invalid",
                 &b"   -0.1234    0.4560    0.7890 X  "[..],
@@ -84,7 +78,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| atom_input_standard().parse(std::hint::black_box(input)))
-        });
+            });
         }
 
         group.finish();
@@ -134,10 +128,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
                 "len36_general_invalid",
                 &b"   -0.1234    0.4560    0.7890 C   X"[..],
             ),
-            (
-                "len34_general",
-                &b"   -0.1234    0.4560    0.7890 C  "[..],
-            ),
+            ("len34_general", &b"   -0.1234    0.4560    0.7890 C  "[..]),
             (
                 "len34_general_invalid",
                 &b"   -0.1234    0.4560    0.7890 X  "[..],
@@ -147,7 +138,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| atom_input().parse(std::hint::black_box(input)))
-        });
+            });
         }
 
         group.finish();
@@ -194,6 +185,21 @@ fn parsing_benchmarks(c: &mut Criterion) {
     }
 
     {
+        let mut group = c.benchmark_group("mol_parsing/legacy_atom_list");
+        let test_cases = [
+            ("no_exclusion", &b"  1 F    3   9   7   8  "[..]),
+            ("exclusion", &b"  1 T    3   9   7   8  "[..]),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| legacy_atom_list_input().parse(std::hint::black_box(input)))
+            });
+        }
+        group.finish();
+    }
+
+    {
         let mut group = c.benchmark_group("mol_parsing/properties_standard");
         let test_cases = [
             ("chg1_standard", &b"M  CHG  1   1  -1"[..]),
@@ -209,7 +215,10 @@ fn parsing_benchmarks(c: &mut Criterion) {
             ),
             ("rad_standard_invalid", &b"M  RAD  1   1   4"[..]),
             ("iso1_standard", &b"M  ISO  1   1  13"[..]),
-            ("iso8_standard", &b"M  ISO  8   1  13   2  14   3  12   4  13   5  14   6  12   7  13   8  14"[..]),
+            (
+                "iso8_standard",
+                &b"M  ISO  8   1  13   2  14   3  12   4  13   5  14   6  12   7  13   8  14"[..],
+            ),
             ("iso_standard_invalid", &b"M  ISO  1   1  40"[..]),
             ("sty1_standard", &b"M  STY  1   1 SUP"[..]),
             ("sty2_standard", &b"M  STY  2   1 SUP   2 DAT"[..]),
@@ -243,26 +252,50 @@ fn parsing_benchmarks(c: &mut Criterion) {
             ),
             ("rad1_general", &b"M  RAD  1   1   2"[..]),
             ("sty1_general", &b"M  STY  1   1 SUP"[..]),
-            ("sty8_general", &b"M  STY  8   1 SUP   2 DAT   3 MUL   4 SRU   5 GEN   6 SUP   7 DAT   8 MUL"[..]),
+            (
+                "sty8_general",
+                &b"M  STY  8   1 SUP   2 DAT   3 MUL   4 SRU   5 GEN   6 SUP   7 DAT   8 MUL"[..],
+            ),
             ("slb1_general", &b"M  SLB  1   1 Et "[..]),
-            ("sal_complex_general", &b"M  SAL  3  5   1   2   3   4   5"[..]),
+            (
+                "sal_complex_general",
+                &b"M  SAL  3  5   1   2   3   4   5"[..],
+            ),
             ("sbl_complex_general", &b"M  SBL  2  4   1   2   3   4"[..]),
             ("alias_general", &b"A    1 CF3"[..]),
             ("value_general", &b"V    1 *"[..]),
             ("als1_general", &b"M  ALS  1  3FC   N   O   "[..]),
-            ("als_complex_general", &b"M  ALS  5  4TF   C   N   O   S"[..]),
+            (
+                "als_complex_general",
+                &b"M  ALS  5  4TF   C   N   O   S"[..],
+            ),
             ("apo1_general", &b"M  APO  1   1   1"[..]),
-            ("apo4_general", &b"M  APO  4   1   1   2   2   3   3   4   1"[..]),
+            (
+                "apo4_general",
+                &b"M  APO  4   1   1   2   2   3   3   4   1"[..],
+            ),
             ("aal1_general", &b"M  AAL  1 1   2   1"[..]),
             ("aal2_general", &b"M  AAL  3 2   4   1   5   2"[..]),
             ("rbc1_general", &b"M  RBC  1   1   2"[..]),
-            ("rbc8_general", &b"M  RBC  8   1  -2   2  -1   3   0   4   2   5   3   6   4   7   5   8   6"[..]),
+            (
+                "rbc8_general",
+                &b"M  RBC  8   1  -2   2  -1   3   0   4   2   5   3   6   4   7   5   8   6"[..],
+            ),
             ("sub1_general", &b"M  SUB  1   1   3"[..]),
-            ("sub8_general", &b"M  SUB  8   1  -2   2  -1   3   0   4   1   5   2   6   3   7   4   8   5"[..]),
+            (
+                "sub8_general",
+                &b"M  SUB  8   1  -2   2  -1   3   0   4   1   5   2   6   3   7   4   8   5"[..],
+            ),
             ("uns1_general", &b"M  UNS  1   1   1"[..]),
-            ("uns4_general", &b"M  UNS  4   1   1   2   1   3   0   4   1"[..]),
+            (
+                "uns4_general",
+                &b"M  UNS  4   1   1   2   1   3   0   4   1"[..],
+            ),
             ("lin1_general", &b"M  LIN  1   1   2   5   7"[..]),
-            ("lin2_general", &b"M  LIN  2   1   2   5   7   3   3   0   0"[..]),
+            (
+                "lin2_general",
+                &b"M  LIN  2   1   2   5   7   3   3   0   0"[..],
+            ),
         ];
 
         for (id, data) in test_cases.iter() {

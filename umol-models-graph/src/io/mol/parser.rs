@@ -110,7 +110,7 @@ fn legacy_atom_list_block<'a>(
     input: &'a [u8],
 ) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
     let (input, legacy_properties) =
-        many0(terminated(legacy_atom_list_input, line_ending)).parse(input)?;
+        many0(terminated(legacy_atom_list_input(), line_ending)).parse(input)?;
     Ok((input, legacy_properties))
 }
 

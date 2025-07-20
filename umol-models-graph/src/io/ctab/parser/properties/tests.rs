@@ -11,7 +11,7 @@ use umol_data::Element;
 #[case(b"  1 F    3   9   7   8", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
 #[case(b"  1 T    3   9   7   8", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]   
 fn test_legacy_atom_list_input(#[case] input: &[u8], #[case] expected: PropertyEntries) {
-    let (remaining, result) = legacy_atom_list_input(input).unwrap();
+    let (remaining, result) = legacy_atom_list_input().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
 }
@@ -22,7 +22,7 @@ fn test_legacy_atom_list_input(#[case] input: &[u8], #[case] expected: PropertyE
 #[case(b"  1 X    1   9  ", "invalid exclusion flag", ErrorKind::Tag)]
 #[case(b"  1 F    1   0  ", "invalid element atomic number", ErrorKind::MapOpt)]
 fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
-    let result = legacy_atom_list_input(input);
+    let result = legacy_atom_list_input().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
@@ -46,7 +46,7 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  ALS   1  3   F   N   O   ", "ALS normal (F) query property", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
 #[case(b"M  ALS   1  3 T F   N   O   ", "ALS exclusion (T) query property", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]
 #[case(b"M  APO  1   1   1", "APO query property", PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry { atom_index: 0, attachment_type: 1 }]))]
-#[case(b"M  AAL  1 1   2   1", "AAL query property", PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry { atom_index: 0, attachments: vec![(1, 1)] }))]
+#[case(b"M  AAL   4  2  14   1   9   2", "AAL query property", PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] }))]
 #[case(b"M  RBC  1   1   2", "RBC query property", PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }]))]
 #[case(b"M  SUB  1   1   3", "SUB query property", PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }]))]
 #[case(b"M  UNS  1   1   1", "UNS query property", PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }]))]
@@ -55,6 +55,24 @@ fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expecte
     let (remaining, result) = property_input(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
     assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"M  CHG  1   1  -1  a", "trailing chars", ErrorKind::Eof)]
+#[case(b"M  CHG  2   1  -1", "count does not match item list", ErrorKind::Eof)]
+#[case(b"M  CHG  0", "count is zero", ErrorKind::Verify)]
+#[case(b"M  CHG  1   0 -10", "atom index is zero", ErrorKind::Verify)]
+#[case(b"M  XXX  1   1  -1", "invalid property tag", ErrorKind::Tag)]
+fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = property_input(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+        "Expected {:?} error for {}, got {:?}",
+        expected_kind,
+        desc,
+        result
+    );
 }
 
 #[rstest]
@@ -114,23 +132,18 @@ fn test_charge_entries(#[case] input: &[u8], #[case] expected: Vec<ChargeEntry>)
 }
 
 #[rstest]
-#[case(b"M  CHG  1   1  -1  a", "trailing chars", ErrorKind::Digit)]
-#[case(b"M  CHG  2   1  -1", "count does not match item list", ErrorKind::Digit)]
-#[case(
-    b"M  CHG  1   1  -1   4   1",
-    "item list longer than count",
-    ErrorKind::Digit
-)]
-#[case(b"M  CHG  0", "count is zero", ErrorKind::Digit)]
-#[case(b"M  CHG  1   0 -10", "atom index is zero", ErrorKind::Digit)]
-#[case(b"M  XXX  1   1  -1", "invalid property tag", ErrorKind::Digit)]
-#[case(b"X  CHG  1   1  -1", "invalid prefix", ErrorKind::Digit)]
+#[case(b"  1   1  -1  a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  2   1  -1", "count exceeds item list length", ErrorKind::Eof)]
+#[case(b"  2   1  -1   4   1   5   6", "item list exceeds count", ErrorKind::Eof)]
+#[case(b"  0", "count is zero", ErrorKind::Verify)]
+#[case(b"  1   0 -10", "atom index is zero", ErrorKind::Verify)]
 fn test_charge_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
     let result = charge_entries().parse(input);
+    println!("{:?}", result);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -151,8 +164,13 @@ fn test_radical_entries(#[case] input: &[u8], #[case] expected: Vec<RadicalEntry
 }
 
 #[rstest]
-#[case(b"M  RAD  1   1   4", "value out of range", ErrorKind::Digit)]
-#[case(b"M  RAD  1   1  -1", "value out of range", ErrorKind::Digit)]
+#[case(b"  1   1   4", "value out of range", ErrorKind::Verify)]
+#[case(b"  1   1  -1", "value is negative", ErrorKind::Digit)]
+#[case(b"  2   1   1", "count exceeds item list length", ErrorKind::Eof)]
+#[case(b"  2   1   1   4   1   5   1", "item list exceeds count", ErrorKind::Eof)]
+#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  0", "count is zero", ErrorKind::Verify)]
+#[case(b"  1   0   2", "atom index is zero", ErrorKind::Verify)]
 fn test_radical_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -179,8 +197,12 @@ fn test_isotope_entries(#[case] input: &[u8], #[case] expected: Vec<IsotopeEntry
 }
 
 #[rstest]
-#[case(b"M  ISO  1   1  13", "value out of range", ErrorKind::Digit)]
-#[case(b"M  ISO  1   1  -1", "value out of range", ErrorKind::Digit)]
+#[case(b"  1   1  -1", "value is negative", ErrorKind::Digit)]
+#[case(b"  2   1  10", "count exceeds item list length", ErrorKind::Eof)]
+#[case(b"  2   1  10   4   1   5   1", "item list exceeds count", ErrorKind::Eof)]
+#[case(b"  1   1  12 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  0", "count is zero", ErrorKind::Verify)]
+#[case(b"  1   0  12", "atom index is zero", ErrorKind::Verify)]
 fn test_isotope_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -210,6 +232,25 @@ fn test_sgroup_type_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupTy
 }
 
 #[rstest]
+#[case(b"  1   1 FOO", "invalid sgroup type", ErrorKind::MapRes)]
+#[case(b"  1   1 SUP a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_type_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_type_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
 #[case(b"  1   1   1", vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
 #[case(b"  2   1  14   2  15", vec![
     SGroupLabelEntry { sgroup_index: 0, label: 14 }, 
@@ -222,6 +263,26 @@ fn test_sgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupL
 }
 
 #[rstest]
+#[case(b"  1   1   0", "label out of range", ErrorKind::Verify)]
+#[case(b"  1   1 513", "label out of range", ErrorKind::Verify)]
+#[case(b"  1   1   1 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_label_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_label_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
 #[case(b"  1  2   1   2", SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![0, 1] })]
 #[case(b"  3  1  15", SGroupAtomListEntry { sgroup_index: 2, atom_indices: vec![14] })]
 fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAtomListEntry) {
@@ -231,12 +292,50 @@ fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAto
 }
 
 #[rstest]
+#[case(b"  1 16   1", "count exceeds 15", ErrorKind::Verify)]
+#[case(b"  1  1   1 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_atom_list_entry_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_atom_list_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
 #[case(b"  1  2   1   2", SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![0, 1] })]
 #[case(b"  3  1  15", SGroupBondListEntry { sgroup_index: 2, bond_indices: vec![14] })]
 fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBondListEntry) {
     let (remaining, result) = sgroup_bond_list_entry().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  1 16   1", "count exceeds 15", ErrorKind::Verify)]
+#[case(b"  1  1   1 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_bond_list_entry_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_bond_list_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
 }
 
 #[rstest]
@@ -299,9 +398,14 @@ fn test_rgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<RGroupL
 }
 
 #[rstest]
-#[case(b"  0   1   2", "pair count is zero", ErrorKind::Verify)]
-#[case(b"  1   0   1   2", "atom index is zero", ErrorKind::Verify)]
-fn test_rgroup_label_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  9   1   2", "count exceeds 8", ErrorKind::Verify)]
+#[case(b"  1   0   2", "atom index is zero", ErrorKind::Verify)]
+#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
+fn test_rgroup_label_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
     let result = rgroup_label_entries().parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
@@ -325,6 +429,26 @@ fn test_ring_bond_count_entries(#[case] input: &[u8], #[case] expected: Vec<Ring
 }
 
 #[rstest]
+#[case(b"  1   1   5", "value out of range", ErrorKind::Verify)]
+#[case(b"  1   1  -3", "value out of range", ErrorKind::Verify)]
+#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
+fn test_ring_bond_count_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = ring_bond_count_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
 #[case(b"  1   1   3", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }])]
 #[case(b"  2   1  -1   4   6", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: -1 }, SubstitutionCountEntry { atom_index: 3, substitution_count: 6 }])]
 #[case(b"  1   5  -2", vec![SubstitutionCountEntry { atom_index: 4, substitution_count: -2 }])]
@@ -332,6 +456,26 @@ fn test_substitution_count_entries(#[case] input: &[u8], #[case] expected: Vec<S
     let (remaining, result) = substitution_count_entries().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  1   1  16", "value out of range", ErrorKind::Verify)]
+#[case(b"  1   1  -3", "value out of range", ErrorKind::Verify)]
+#[case(b"  1   1   3 a", "trailing characters", ErrorKind::Eof)]
+fn test_substitution_count_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = substitution_count_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
 }
 
 #[rstest]
@@ -357,8 +501,9 @@ fn test_link_atom_entries(#[case] input: &[u8], #[case] expected: Vec<LinkAtomEn
 }
 
 #[rstest]
-#[case(b"  1   1   1", "repeat count less than 2", ErrorKind::Verify)]
-#[case(b"  5   1   2", "count exceeds 4", ErrorKind::Verify)]
+#[case(b"  1   1   1   5   7", "repeat count less than 2", ErrorKind::Verify)]
+#[case(b"  5   1   2   5   7", "count exceeds 4", ErrorKind::Verify)]
+#[case(b"  1   1   2   5   7 a", "trailing characters", ErrorKind::Eof)]
 fn test_link_atom_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -372,5 +517,84 @@ fn test_link_atom_entries_invalid(
         desc,
         expected_kind,
         result.unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"  1   1   2", vec![AttachmentPointEntry { atom_index: 0, attachment_type: 2 }])]
+#[case(b"  2   1   1   2   3", vec![AttachmentPointEntry { atom_index: 0, attachment_type: 1 }, AttachmentPointEntry { atom_index: 1, attachment_type: 3 }])]
+fn test_attachment_point_entries(#[case] input: &[u8], #[case] expected: Vec<AttachmentPointEntry>) {
+    let (remaining, result) = attachment_point_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  1   1   4", "attachment type out of range", ErrorKind::Verify)]
+#[case(b"  3   1   1   2   2   3   3", "count exceeds 2", ErrorKind::Verify)]
+#[case(b"  1   1   1 a", "trailing characters", ErrorKind::Eof)]
+fn test_attachment_point_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = attachment_point_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"   4  2  14   1   9   2", AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] })]
+fn test_atom_attachment_order_entry(#[case] input: &[u8], #[case] expected: AtomAttachmentOrderEntry) {
+    let (remaining, result) = atom_attachment_order_entry().parse(input).unwrap();
+    println!("{:?}", String::from_utf8_lossy(remaining));
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"   1   0", "count is zero", ErrorKind::Verify)]
+// #[case(b"   1   3   1   2", "count exceeds 2", ErrorKind::Verify)]
+// #[case(b"   0   1   1   2", "atom index is zero", ErrorKind::Verify)]
+fn test_atom_attachment_order_entry_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = atom_attachment_order_entry().parse(input);
+    println!("{:?}", result);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {:?}",
+        desc,
+        expected_kind,
+        result.unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"  1   1   2", "value out of range", ErrorKind::Verify)]
+#[case(b"  1   1  -1", "unsigned value is negative", ErrorKind::Digit)]
+#[case(b"  1   1   1 a", "trailing characters", ErrorKind::Eof)]
+fn test_unsaturated_atom_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = unsaturated_atom_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
     );
 }
