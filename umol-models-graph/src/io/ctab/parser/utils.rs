@@ -14,7 +14,7 @@ use nom::character::complete::{
 };
 use nom::combinator::{complete, map, opt, recognize, verify};
 use nom::error;
-use nom::multi::fold_many_m_n;
+use nom::multi::{fold_many_m_n, separated_list1};
 use nom::{branch::alt, combinator::map_opt};
 use nom::{
     bytes::{complete::tag, take},
@@ -27,6 +27,8 @@ use nom::{
 use nom::{Input, Parser};
 use num::{Float, Integer};
 use smallvec::{Array, SmallVec};
+
+use crate::io::ctab::rgroup::RGroupOccurrence;
 
 pub(crate) trait Contains<T: PartialOrd> {
     fn contains(&self, value: &T) -> bool;
@@ -405,6 +407,37 @@ where
         }
         Ok((input, v))
     }
+}
+
+/// Parse a single RGroup occurrence.
+pub(crate) fn rgroup_occurrence<'a>(
+) -> impl Parser<&'a [u8], Output = RGroupOccurrence, Error = error::Error<&'a [u8]>> {
+    alt((
+        map((nom_u8, tag("-"), nom_u8), |(n, _, m)| {
+            RGroupOccurrence::Range(n, m)
+        }),
+        map(nom_u8, |n| RGroupOccurrence::Exactly(n)),
+        map((tag(">"), nom_u8), |(_, n)| {
+            RGroupOccurrence::GreaterThan(n)
+        }),
+        map((tag("<"), nom_u8), |(_, n)| RGroupOccurrence::FewerThan(n)),
+    ))
+}
+
+/// Parse a comma-separated list of RGroup occurrences.
+pub(crate) fn rgroup_occurrences<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<RGroupOccurrence>, Error = error::Error<&'a [u8]>> {
+    alt((
+        map(
+            delimited(
+                space0,
+                separated_list1(tag(","), rgroup_occurrence()),
+                space0,
+            ),
+            |occurrences| occurrences,
+        ),
+        map(tag(""), |_| vec![RGroupOccurrence::GreaterThan(0)]),
+    ))
 }
 
 #[cfg(test)]
@@ -946,6 +979,56 @@ mod tests {
         let result = parser.parse(input);
 
         assert!(result.is_err(), "{}: should have failed", desc);
+        assert!(
+            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "Mismatched error kind for {}, expected {:?}, got {}",
+            desc,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code),
+        );
+    }
+
+    #[rstest]
+    #[case(b"", vec![RGroupOccurrence::GreaterThan(0)])]
+    #[case(b"1", vec![RGroupOccurrence::Exactly(1)])]
+    #[case(b"1,2", vec![RGroupOccurrence::Exactly(1), RGroupOccurrence::Exactly(2)])]
+    #[case(b">1", vec![RGroupOccurrence::GreaterThan(1)])]
+    #[case(b"<2", vec![RGroupOccurrence::FewerThan(2)])]
+    #[case(b"1-3", vec![RGroupOccurrence::Range(1, 3)])]
+    #[case(b"0,>0", vec![RGroupOccurrence::Exactly(0), RGroupOccurrence::GreaterThan(0)])]
+    fn test_rgroup_occurrences(#[case] input: &[u8], #[case] expected: Vec<RGroupOccurrence>) {
+        let mut parser = all_consuming(rgroup_occurrences());
+        let result = parser.parse(input);
+        assert!(
+            result.is_ok(),
+            "{}: should have succeeded",
+            String::from_utf8_lossy(input)
+        );
+        let (remaining, val) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(
+            val,
+            expected,
+            "{}: value mismatch",
+            String::from_utf8_lossy(input)
+        );
+    }
+
+    #[rstest]
+    #[case(b"a", "invalid character", ErrorKind::Eof)]
+    #[case(b"-3", "negative value", ErrorKind::Eof)]
+    fn test_rgroup_occurrences_invalid(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] expected_kind: ErrorKind,
+    ) {
+        let mut parser = all_consuming(rgroup_occurrences());
+        let result = parser.parse(input);
+        assert!(
+            result.is_err(),
+            "{}: should have failed",
+            String::from_utf8_lossy(input)
+        );
         assert!(
             matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
             "Mismatched error kind for {}, expected {:?}, got {}",

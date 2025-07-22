@@ -1,6 +1,7 @@
 use super::*;
 use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol, AttachmentPointType};
 use crate::io::ctab::bond::{Bond, BondType};
+use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{SGroup, SGroupBracketStyle, SGroupType};
 use pretty_assertions::assert_eq;
 use rstest::*;
@@ -818,6 +819,28 @@ fn test_apply_rgroup_label_entries_duplicate(molecule_with_labeled_rgroup: Molec
             assert!(msg.contains("RGroup"));
         }
         _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_rgroup_logic_entry(molecule_with_labeled_rgroup: Molecule) {
+    let mut molecule = molecule_with_labeled_rgroup;
+    let entry = RGroupLogicEntry {
+        label: 1,
+        dependent_label: Some(2),
+        rgroup_or_h: true,
+        occurrence: vec![RGroupOccurrence::Exactly(1)],
+    };
+
+    entry.apply(&mut molecule).unwrap();
+
+    let symbol = molecule.atom(0).unwrap().symbol.clone();
+    assert!(matches!(symbol, AtomSymbol::RGroup(RGroup { label: Some(1), .. })));
+    if let AtomSymbol::RGroup(rgroup) = symbol {
+        assert_eq!(rgroup.label, Some(1));
+        assert_eq!(rgroup.dependent_label, Some(2));
+        assert_eq!(rgroup.rgroup_or_h, true);
+        assert_eq!(rgroup.occurrence, vec![RGroupOccurrence::Exactly(1)]);
     }
 }
 

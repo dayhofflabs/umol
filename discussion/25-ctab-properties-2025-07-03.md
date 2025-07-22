@@ -17,10 +17,10 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Unsat Atom | UNS    | x    | Query   | x      | x         | x      | x       |                       |
 | Link Atom  | LIN    | x    | Query   | x ->   | x         | -      | -       | >Only has 2-bond var. |
 | Atom List  | ALS    | x    | Query   | x      | x         | x      | x       |                       |
-| Att Point  | APO    | -    | RGroup  | x      | x         | x      | x       |                       |
-| Att Order  | AAL    | -    | RGroup  | -      | -         | x      | x       |                       |
+| Att Point  | APO    | x    | RGroup  | x      | x         | x      | x       |                       |
+| Att Order  | AAL    | x    | RGroup  | -      | -         | x      | x       |                       |
 | RGrp Label | RGP    | x    | RGroup  | x      | x         | x      | x       |                       |
-| Logic      | LOG    | -    | RGroup  | -      | x         | x      | x       |                       |
+| Logic      | LOG    | x    | RGroup  | -      | x         | x      | x       |                       |
 | Sgrp Type  | STY    | x    | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Subt  | SST    | -    | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Label | SLB    | x    | SGroup  | x      | -         | x      | -       |                       |

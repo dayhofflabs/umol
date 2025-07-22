@@ -8,11 +8,12 @@ use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
+use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{SGroup, SGroupType};
 
 use super::utils::{
     fixed_width_element_partial, fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1,
-    fixed_width_int_partial,
+    fixed_width_int_partial, rgroup_occurrences,
 };
 use umol_data::Element;
 
@@ -97,7 +98,17 @@ pub struct RGroupLabelEntry {
     pub label: u32, // 0 = no label, 1-32 in CTab spec, 1-999 in RDKit
 }
 
-// [LOG]
+#[derive(Debug, Clone, PartialEq)]
+pub struct RGroupLogicEntry {
+    pub label: u32,                   // 0 = no label, 1-32 in CTab spec
+    pub dependent_label: Option<u32>, // None = no dependent label
+    pub rgroup_or_h: bool,            // false = off, true = on: RGroup or H atom
+    pub occurrence: Vec<RGroupOccurrence>,
+    // n=exactly n, n-m=from n through m (inclusive), >n=greater n,
+    // <n=fewer than n, blank (default): > 0.
+    // Any non-contradictory combination of the preceding values is allowed,
+    //separated by commas.
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupTypeEntry {
@@ -145,7 +156,7 @@ pub enum PropertyEntries {
     AttachmentPointEntries(Vec<AttachmentPointEntry>),
     AtomAttachmentOrderEntry(AtomAttachmentOrderEntry),
     RGroupLabelEntries(Vec<RGroupLabelEntry>),
-    // Rgroup logic [LOG]
+    RGroupLogicEntry(RGroupLogicEntry),
     SGroupTypeEntries(Vec<SGroupTypeEntry>),
     // Sgroup subtype [SST]
     SGroupLabelEntries(Vec<SGroupLabelEntry>),
@@ -333,6 +344,9 @@ pub fn property_input<'a>(
                 b"M  RGP" => rgroup_label_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
+                b"M  LOG" => rgroup_logic_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
                 // [LOG]
                 b"M  STY" => sgroup_type_entries()
                     .parse(rest)
@@ -461,10 +475,7 @@ fn isotope_entries<'a>(
                     take(4usize),
                     preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
                 ),
-                map_parser(
-                    take(4usize),
-                    preceded(tag(" "), fixed_width_int::<u32>(3)),
-                ),
+                map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u32>(3))),
             ),
             |(atom_index, mass)| IsotopeEntry { atom_index, mass },
         ),
@@ -712,7 +723,63 @@ fn rgroup_label_entries<'a>(
     ))
 }
 
-// [LOG]
+// Parse RGroup logic entry.
+/// M  LOGnn1 rrr iii hhh ooo...
+/// nn1: count (max 1), rrr: RGroup label (1-32 in CTab spec, 1-999 in RDKit)
+/// iii: Number of dependent Rgroup (IF rrr THEN iii)
+/// hhh: REstH property of rrr (0 (default)=off, 1=on): RGroup or H atom
+/// ooo...: Range of RGroup occurrence required: n=exactly n, n-m=from n through m (inclusive),
+/// >n=greater n, <n=fewer than n, blank (default): > 0.
+/// Any non-contradictory combination of the preceding values is allowed, separated by commas.
+fn rgroup_logic_entry<'a>(
+) -> impl Parser<&'a [u8], Output = RGroupLogicEntry, Error = error::Error<&'a [u8]>> {
+    |input: &'a [u8]| {
+        let (remaining, _) = fixed_width_int_in_range::<u8, _>(3, 1..=1).parse(input)?;
+
+        let (remaining, label) = map_parser(
+            take(4usize),
+            preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=999)),
+        )
+        .parse(remaining)?;
+
+        let (remaining, dependent_label) =
+            map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u32>(3)))
+                .parse(remaining)?;
+
+        let (remaining, rgroup_or_h) = if remaining.len() >= 4 {
+            let (rest, value) = map_parser(
+                take(4usize),
+                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
+            )
+            .parse(remaining)?;
+            (rest, value)
+        } else {
+            (remaining, 0) // default value
+        };
+
+        let (remaining, occurrence) = if !remaining.is_empty() {
+            let (rest, occurrence_bytes) = preceded(tag(" "), not_line_ending).parse(remaining)?;
+            let (_, occurrence) = rgroup_occurrences().parse(occurrence_bytes)?;
+            (rest, occurrence)
+        } else {
+            (remaining, vec![RGroupOccurrence::GreaterThan(0)])
+        };
+
+        Ok((
+            remaining,
+            RGroupLogicEntry {
+                label,
+                dependent_label: if dependent_label == 0 {
+                    None
+                } else {
+                    Some(dependent_label)
+                },
+                rgroup_or_h: rgroup_or_h != 0,
+                occurrence,
+            },
+        ))
+    }
+}
 
 /// Parse SGroup type entries.
 /// M  STYnn8 sss ttt ...

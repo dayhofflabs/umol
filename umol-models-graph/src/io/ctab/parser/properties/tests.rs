@@ -398,6 +398,7 @@ fn test_rgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<RGroupL
 }
 
 #[rstest]
+#[case(b"  1   0", "label is zero", ErrorKind::Verify)]
 #[case(b"  9   1   2", "count exceeds 8", ErrorKind::Verify)]
 #[case(b"  1   0   2", "atom index is zero", ErrorKind::Verify)]
 #[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
@@ -414,6 +415,39 @@ fn test_rgroup_label_entries_invalid(
         expected_kind,
         desc,
         result
+    );
+}
+
+#[rstest]
+#[case(b"  1   1   0   0  >2", RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(2)] })]
+#[case(b"  1   1   0   0  0,>0", RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::Exactly(0), RGroupOccurrence::GreaterThan(0)] })]
+#[case(b"  1   1   2   0", RGroupLogicEntry { label: 1, dependent_label: Some(2), rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
+#[case(b"  1   1   0   1", RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: true, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
+#[case(b"  1   1   2", RGroupLogicEntry { label: 1, dependent_label: Some(2), rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
+fn test_rgroup_logic_entry(#[case] input: &[u8], #[case] expected: RGroupLogicEntry) {
+    let (remaining, result) = rgroup_logic_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
+#[case(b"  2   1   0", "count exceeds 1", ErrorKind::Verify)]
+#[case(b"  1   0   0", "label is zero", ErrorKind::Verify)]
+#[case(b"  1   1   0   2", "rgroup_or_h out of range", ErrorKind::Verify)]
+fn test_rgroup_logic_entry_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = rgroup_logic_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
     );
 }
 

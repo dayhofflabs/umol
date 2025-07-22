@@ -2,10 +2,32 @@
 
 use std::fmt::{self, Display};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum RGroupOccurrence {
+    Exactly(u8),
+    Range(u8, u8),   // Inclusive
+    GreaterThan(u8), // Default is > 0
+    FewerThan(u8),
+}
+
+impl RGroupOccurrence {
+    pub fn contains(&self, count: u8) -> bool {
+        match self {
+            RGroupOccurrence::Exactly(n) => *n == count,
+            RGroupOccurrence::Range(n, m) => count >= *n && count <= *m,
+            RGroupOccurrence::GreaterThan(n) => count > *n,
+            RGroupOccurrence::FewerThan(n) => count < *n,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct RGroup {
     pub label: Option<u32>,
     pub explicit: bool,
+    pub dependent_label: Option<u32>,
+    pub rgroup_or_h: bool,
+    pub occurrence: Vec<RGroupOccurrence>,
 }
 
 impl RGroup {
@@ -14,10 +36,16 @@ impl RGroup {
             Some(label) => Self {
                 label: Some(label),
                 explicit: true,
+                dependent_label: None,
+                rgroup_or_h: false,
+                occurrence: vec![RGroupOccurrence::GreaterThan(0)],
             },
             None => Self {
                 label: None,
                 explicit: false,
+                dependent_label: None,
+                rgroup_or_h: false,
+                occurrence: vec![RGroupOccurrence::GreaterThan(0)],
             },
         }
     }

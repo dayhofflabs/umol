@@ -6,8 +6,8 @@ use super::convert::{
 };
 use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
-    ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RadicalEntry,
-    RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry, SGroupLabelEntry,
+    ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
+    RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry, SGroupLabelEntry,
     SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
@@ -39,7 +39,7 @@ impl Apply for PropertyEntries {
             PropertyEntries::AttachmentPointEntries(entries) => entries.apply(molecule),
             PropertyEntries::AtomAttachmentOrderEntry(entry) => entry.apply(molecule),
             PropertyEntries::RGroupLabelEntries(entries) => entries.apply(molecule),
-            // [LOG]
+            PropertyEntries::RGroupLogicEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupTypeEntries(entries) => entries.apply(molecule),
             // [SST]
             PropertyEntries::SGroupLabelEntries(entries) => entries.apply(molecule),
@@ -403,13 +403,15 @@ impl Apply for Vec<RGroupLabelEntry> {
 
             // Check for RGroup label conflicts
             for atom in molecule.atoms() {
-                if let AtomSymbol::RGroup(rgroup) = atom.symbol {
-                    if rgroup.label.is_some() && rgroup.label.unwrap() == entry.label {
-                        return Err(ValidationError::InvalidComponent(format!(
-                            "RGroup label conflict: label '{}' is not unique",
-                            entry.label
-                        ))
-                        .into());
+                if let AtomSymbol::RGroup(ref rgroup) = atom.symbol {
+                    if let Some(label) = rgroup.label {
+                        if label == entry.label {
+                            return Err(ValidationError::InvalidComponent(format!(
+                                "RGroup label conflict: label '{}' is not unique",
+                                entry.label
+                            ))
+                            .into());
+                        }
                     }
                 }
             }
@@ -446,7 +448,31 @@ impl Apply for Vec<RGroupLabelEntry> {
     }
 }
 
-// [LOG]
+impl Apply for RGroupLogicEntry {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        let mut index = 0;
+        for atom_index in molecule.atom_indices() {
+            if let Some(atom) = molecule.atom(atom_index) {
+                if let AtomSymbol::RGroup(ref rgroup) = atom.symbol {
+                    if let Some(label) = rgroup.label {
+                        if label == self.label {
+                            index = atom_index;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(atom) = molecule.atom_mut(index) {
+            if let AtomSymbol::RGroup(ref mut rgroup) = atom.symbol {
+                rgroup.dependent_label = self.dependent_label;
+                rgroup.rgroup_or_h = self.rgroup_or_h;
+                rgroup.occurrence = self.occurrence;
+            }
+        }
+        Ok(())
+    }
+}
 
 impl Apply for Vec<SGroupTypeEntry> {
     fn apply(self, molecule: &mut Molecule) -> Result<()> {
