@@ -377,6 +377,14 @@ impl Apply for AtomAttachmentOrderEntry {
             return Err(DataError::MissingAtomIndex(self.atom_index).into());
         }
 
+        if self.attachments.len() > 2 {
+            return Err(ValidationError::InvalidComponent(format!(
+                "Attachment order invalid for atom {}: more than 2 attachments",
+                self.atom_index
+            ))
+            .into());
+        }
+
         if let Some(atom) = molecule.atom_mut(self.atom_index) {
             // Check for conflicts
             if let Some(ref existing) = atom.attachment_order {
@@ -583,6 +591,8 @@ impl Apply for SGroupBondListEntry {
         Ok(())
     }
 }
+
+// Utilities
 
 /// Create a new SGroup with the given index if it doesn't exist
 fn make_sgroup(molecule: &mut Molecule, sgroup_index: usize) -> Result<()> {

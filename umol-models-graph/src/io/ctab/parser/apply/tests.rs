@@ -729,6 +729,62 @@ fn test_apply_attachment_point_entries_conflict(molecule_with_properties: Molecu
 }
 
 #[rstest]
+fn test_apply_atom_attachment_order_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let entry = AtomAttachmentOrderEntry {
+        atom_index: 0,
+        attachments: vec![(13, 1), (14, 2)],
+    };
+
+    entry.apply(&mut molecule).unwrap();
+
+    assert_eq!(
+        molecule.atom(0).unwrap().attachment_order,
+        Some(vec![(13, 1), (14, 2)])
+    );
+}
+
+#[rstest]
+#[case(AtomAttachmentOrderEntry { atom_index: 1, attachments: vec![(13, 1), (14, 2), (15, 3)] }, "more than 2 attachments")]
+#[case(AtomAttachmentOrderEntry { atom_index: 100, attachments: vec![(13, 1), (14, 2)] }, "invalid atom index")]
+fn test_apply_atom_attachment_order_entry_invalid(
+    basic_molecule: Molecule,
+    #[case] entry: AtomAttachmentOrderEntry,
+    #[case] desc: &str,
+) {
+    let mut molecule = basic_molecule;
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err(), "{} should have failed", desc);
+}
+
+#[rstest]
+fn test_apply_atom_attachment_order_entry_conflict(molecule_with_properties: Molecule) {
+    let mut molecule = molecule_with_properties;
+    molecule.atom_mut(0).unwrap().attachment_order = Some(vec![(13, 1), (14, 2)]);
+    let entry = AtomAttachmentOrderEntry {
+        atom_index: 0,
+        attachments: vec![(13, 1), (14, 2)],
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_ok(),"should be able to set valid attachment order");
+
+    let entry = AtomAttachmentOrderEntry {
+        atom_index: 0,
+        attachments: vec![(11, 1), (12, 2)],
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Attachment order conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
 fn test_apply_rgroup_label_entries(molecule_with_rgroup: Molecule) {
     let mut molecule = molecule_with_rgroup;
     let entries = vec![RGroupLabelEntry {
@@ -835,7 +891,10 @@ fn test_apply_rgroup_logic_entry(molecule_with_labeled_rgroup: Molecule) {
     entry.apply(&mut molecule).unwrap();
 
     let symbol = molecule.atom(0).unwrap().symbol.clone();
-    assert!(matches!(symbol, AtomSymbol::RGroup(RGroup { label: Some(1), .. })));
+    assert!(matches!(
+        symbol,
+        AtomSymbol::RGroup(RGroup { label: Some(1), .. })
+    ));
     if let AtomSymbol::RGroup(rgroup) = symbol {
         assert_eq!(rgroup.label, Some(1));
         assert_eq!(rgroup.dependent_label, Some(2));
@@ -903,6 +962,8 @@ fn test_apply_sgroup_type_entries_conflict(molecule_with_sgroup: Molecule) {
         _ => panic!("Expected InvalidComponent error"),
     }
 }
+
+// [SST]
 
 #[rstest]
 fn test_apply_sgroup_label_entries(molecule_with_sgroup: Molecule) {
@@ -975,6 +1036,9 @@ fn test_apply_sgroup_label_entries_duplicate(molecule_with_labeled_sgroup: Molec
         _ => panic!("Expected InvalidComponent error"),
     }
 }
+
+// [SCN]
+// [SDS]
 
 #[rstest]
 fn test_apply_sgroup_atom_list_entry(basic_molecule: Molecule) {
