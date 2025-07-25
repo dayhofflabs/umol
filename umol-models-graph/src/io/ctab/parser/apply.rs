@@ -8,8 +8,8 @@ use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
     RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
-    SGroupConnectivityEntry, SGroupLabelEntry, SGroupSubtypeEntry, SGroupTypeEntry,
-    SubstitutionCountEntry, UnsaturatedAtomEntry,
+    SGroupConnectivityEntry, SGroupExpansionEntry, SGroupLabelEntry, SGroupSubtypeEntry,
+    SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
@@ -45,7 +45,7 @@ impl Apply for PropertyEntries {
             PropertyEntries::SGroupSubtypeEntries(entries) => entries.apply(molecule),
             PropertyEntries::SGroupLabelEntries(entries) => entries.apply(molecule),
             PropertyEntries::SGroupConnectivityEntries(entries) => entries.apply(molecule),
-            // [SDS EXP]
+            PropertyEntries::SGroupExpansionEntries(entries) => entries.apply(molecule),
             PropertyEntries::SGroupAtomListEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule),
             PropertyEntries::End => Ok(()),
@@ -531,6 +531,17 @@ impl Apply for Vec<SGroupConnectivityEntry> {
                 .into());
             }
             sgroup.connectivity = Some(entry.connectivity);
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<SGroupExpansionEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            ensure_sgroup(molecule, entry.sgroup_index)?;
+            let sgroup = molecule.sgroups.get_mut(&entry.sgroup_index).unwrap();
+            sgroup.expansion = true;
         }
         Ok(())
     }

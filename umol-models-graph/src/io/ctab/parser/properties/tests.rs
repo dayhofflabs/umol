@@ -52,8 +52,8 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
 #[case(b"M  SST  1   1 ALT", "SST SGroup property", PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
-// [SCN]
-// [SDS]
+#[case(b"M  SCN  1   1 HH ", "SCN SGroup property", PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToHead }]))]
+#[case(b"M  SDS EXP  1   1", "SDS SGroup property", PropertyEntries::SGroupExpansionEntries(vec![SGroupExpansionEntry { sgroup_index: 0 }]))]
 #[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
@@ -107,6 +107,8 @@ fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case
 #[case(b"M  AAL  1 1   2   1", "AAL query property not supported in standard parser")]
 #[case(b"M  RGP   1   1   2", "RGP RGroup property not supported in standard parser")]
 #[case(b"M  LOG   1   1   0   0  >2", "LOG RGroup property not supported in standard parser")]
+#[case(b"M  SCN  1   1 HH ", "SCN SGroup property not supported in standard parser")]
+#[case(b"M  SDS EXP  1   1", "SDS SGroup property not supported in standard parser")]
 fn test_property_input_standard_invalid(#[case] input: &[u8], #[case] desc: &str) {
     let result = property_input_standard(input);
     assert!(result.is_err(), "{}", desc);
@@ -660,6 +662,7 @@ fn test_sgroup_connectivity_entries(#[case] input: &[u8], #[case] expected: Vec<
 }
 
 #[rstest]
+#[case(b"  0", "count is zero", ErrorKind::Verify)]
 #[case(b"  1   1 FOO", "invalid connectivity", ErrorKind::MapRes)]
 #[case(b"  1   1 HT a", "trailing characters", ErrorKind::Eof)]
 fn test_sgroup_connectivity_entries_invalid(
@@ -678,7 +681,36 @@ fn test_sgroup_connectivity_entries_invalid(
     );
 }
 
-// [SDS]
+#[rstest]
+#[case(b" EXP  1   1", vec![SGroupExpansionEntry { sgroup_index: 0 }])]
+#[case(b" EXP  2   1   2", vec![
+    SGroupExpansionEntry { sgroup_index: 0 },
+    SGroupExpansionEntry { sgroup_index: 1 }
+])]
+fn test_sgroup_expansion_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupExpansionEntry>) {
+    let (remaining, result) = sgroup_expansion_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b" EXP  0   1", "count is zero", ErrorKind::Verify)]
+#[case(b" EXP  1   1 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_expansion_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_expansion_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
 
 #[rstest]
 #[case(b"  1  2   1   2", SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![0, 1] })]

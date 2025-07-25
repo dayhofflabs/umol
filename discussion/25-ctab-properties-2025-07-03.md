@@ -22,10 +22,10 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | RGrp Label | RGP    | x    | RGroup  | x      | x         | x      | x       |                       |
 | Logic      | LOG    | x    | RGroup  | -      | x         | x      | x       |                       |
 | Sgrp Type  | STY    | x S  | SGroup  | x      | x         | x      | x       |                       |
-| Sgrp Subt  | SST    | -    | SGroup  | x      | x         | x      | x       |                       |
+| Sgrp Subt  | SST    | x S  | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Label | SLB    | x S  | SGroup  | x      | -         | x      | -       |                       |
-| Sgrp Conn  | SCN    | -    | SGroup  | x      | x         | x      | x       |                       |
-| Sgrp Expan | SDS    | -    | SGroup  | x      | x         | x      | x       |                       |
+| Sgrp Conn  | SCN    | x    | SGroup  | x      | x         | x      | x       |                       |
+| Sgrp Expan | SDS    | x    | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Atoms | SAL    | x S  | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Bonds | SBL    | x S  | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Parnt | SPA    | -    | SGroup  | x      | x         | x      | x       |                       |

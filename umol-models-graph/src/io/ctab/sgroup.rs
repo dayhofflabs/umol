@@ -54,6 +54,7 @@ pub struct SGroup {
     pub group_type: SGroupType,                   // STY: SGroup type
     pub group_subtype: Option<SGroupSubtype>,     // SST: polymer subtype (ALT, RAN, BLO)
     pub connectivity: Option<SGroupConnectivity>, // SCN: connectivity (HH, HT, EU)
+    pub expansion: bool,                          // SDS: expansion flag
     pub multiplier: Option<String>,               // SMT: multiplier for multiple groups
     pub atom_indices: Vec<usize>,                 // SAL: atoms in SGroup
     pub bond_indices: Vec<usize>,                 // SBL: bonds in SGroup
@@ -70,20 +71,21 @@ impl SGroup {
     /// Create new SGroup
     pub fn new(group_type: SGroupType) -> Self {
         Self {
-            group_type,
-            group_subtype: None,
             label: None,
             subscript: None,
+            group_type,
+            group_subtype: None,
+            connectivity: None,
+            expansion: false,
+            multiplier: None,
             atom_indices: Vec::new(),
             bond_indices: Vec::new(),
-            connectivity: None,
-            multiplier: None,
             parent_atom_indices: None,
             bracket_style: None,
-            data_field_name: None,
+            data_field_name: None, 
             data_field_info: None,
             data_content: None,
-            hierarchy_parent: None,
+            hierarchy_parent: None, 
             component_number: None,
         }
     }

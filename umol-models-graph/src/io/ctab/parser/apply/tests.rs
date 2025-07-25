@@ -1031,61 +1031,6 @@ fn test_apply_sgroup_subtype_entries_conflict(molecule_with_sgroup: Molecule) {
 }
 
 #[rstest]
-fn test_apply_sgroup_connectivity_entries(molecule_with_sgroup: Molecule) {
-    let mut molecule = molecule_with_sgroup;
-    let entries = vec![SGroupConnectivityEntry {
-        sgroup_index: 0,
-        connectivity: SGroupConnectivity::HeadToTail,
-    }];
-
-    entries.apply(&mut molecule).unwrap();
-
-    assert_eq!(molecule.sgroups.len(), 1);
-    assert_eq!(
-        molecule.sgroups[&0].connectivity,
-        Some(SGroupConnectivity::HeadToTail)
-    );
-}
-
-#[rstest]
-fn test_apply_sgroup_connectivity_entries_invalid(molecule_with_sgroup: Molecule) {
-    let mut molecule = molecule_with_sgroup;
-    let entries = vec![SGroupConnectivityEntry {
-        sgroup_index: 1,
-        connectivity: SGroupConnectivity::HeadToTail,
-    }];
-
-    let result = entries.apply(&mut molecule);
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("Invalid SGroup index"));
-        }
-        _ => panic!("Expected InvalidComponent error"),
-    }
-}
-
-#[rstest]
-fn test_apply_sgroup_connectivity_entries_conflict(molecule_with_sgroup: Molecule) {
-    let mut molecule = molecule_with_sgroup;
-    molecule.sgroups.get_mut(&0).unwrap().connectivity = Some(SGroupConnectivity::HeadToTail);
-    let entries = vec![SGroupConnectivityEntry {
-        sgroup_index: 0,
-        connectivity: SGroupConnectivity::HeadToHead,
-    }];
-
-    let result = entries.apply(&mut molecule);
-    assert!(result.is_err());
-    match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
-            assert!(msg.contains("SGroup connectivity conflict"));
-        }
-        _ => panic!("Expected InvalidComponent error"),
-    }
-}
-
-#[rstest]
 fn test_apply_sgroup_label_entries(molecule_with_sgroup: Molecule) {
     let mut molecule = molecule_with_sgroup;
     let entries = vec![SGroupLabelEntry {
@@ -1157,8 +1102,76 @@ fn test_apply_sgroup_label_entries_duplicate(molecule_with_labeled_sgroup: Molec
     }
 }
 
-// [SCN]
-// [SDS]
+#[rstest]
+fn test_apply_sgroup_connectivity_entries(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entries = vec![SGroupConnectivityEntry {
+        sgroup_index: 0,
+        connectivity: SGroupConnectivity::HeadToTail,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+
+    assert_eq!(molecule.sgroups.len(), 1);
+    assert_eq!(
+        molecule.sgroups[&0].connectivity,
+        Some(SGroupConnectivity::HeadToTail)
+    );
+}
+
+#[rstest]
+fn test_apply_sgroup_connectivity_entries_invalid(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entries = vec![SGroupConnectivityEntry {
+        sgroup_index: 1,
+        connectivity: SGroupConnectivity::HeadToTail,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_connectivity_entries_conflict(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    molecule.sgroups.get_mut(&0).unwrap().connectivity = Some(SGroupConnectivity::HeadToTail);
+    let entries = vec![SGroupConnectivityEntry {
+        sgroup_index: 0,
+        connectivity: SGroupConnectivity::HeadToHead,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup connectivity conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_expansion_entries(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entries = vec![SGroupExpansionEntry { sgroup_index: 0 }];
+    entries.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.sgroups[&0].expansion, true);
+}
+
+#[rstest]
+fn test_apply_sgroup_expansion_entries_invalid(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entries = vec![SGroupExpansionEntry { sgroup_index: 1 }];
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+}
 
 #[rstest]
 fn test_apply_sgroup_atom_list_entry(basic_molecule: Molecule) {

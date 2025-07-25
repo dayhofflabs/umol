@@ -135,6 +135,11 @@ pub struct SGroupConnectivityEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct SGroupExpansionEntry {
+    pub sgroup_index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SGroupAtomListEntry {
     pub sgroup_index: usize,
     pub atom_indices: Vec<usize>,
@@ -168,7 +173,7 @@ pub enum PropertyEntries {
     SGroupSubtypeEntries(Vec<SGroupSubtypeEntry>),
     SGroupLabelEntries(Vec<SGroupLabelEntry>),
     SGroupConnectivityEntries(Vec<SGroupConnectivityEntry>),
-    // Sgroup expansion [SDS EXP]
+    SGroupExpansionEntries(Vec<SGroupExpansionEntry>),
     SGroupAtomListEntry(SGroupAtomListEntry),
     SGroupBondListEntry(SGroupBondListEntry),
     // Sgroup parent atom [SPA]
@@ -369,7 +374,9 @@ pub fn property_input<'a>(
                 b"M  SCN" => sgroup_connectivity_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
-                // [SDS EXP]
+                b"M  SDS" => sgroup_expansion_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
                 b"M  SAL" => sgroup_atom_list_entry()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
@@ -888,6 +895,7 @@ fn sgroup_label_entries<'a>(
     ))
 }
 
+/// Parse SGroup connectivity entries.
 /// M  SCNnn8 sss ttt ...
 /// sss: SGroup index, ttt: SGroup connectivity (2-character string), left-justified
 fn sgroup_connectivity_entries<'a>(
@@ -921,8 +929,27 @@ fn sgroup_connectivity_entries<'a>(
     ))
 }
 
-// [SDS EXP]
+/// Parse SGroup expansion entries.
+/// M SDS EXPn15 sss ...
+/// sss: SGroup index, n15: count (max 15)
+fn sgroup_expansion_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SGroupExpansionEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(preceded(
+        tag(" EXP"),
+        length_count(
+            fixed_width_int_in_range::<u8, _>(3, 1..=15),
+            map(
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                |sgroup_index| SGroupExpansionEntry { sgroup_index },
+            ),
+        ),
+    ))
+}
 
+/// Parse SGroup atom list entry.
 /// M  SAL sssn15 aaa ...
 /// sss: SGroup index, n15: count (max 15), aaa: atom indices (each 4 chars: " aaa")
 fn sgroup_atom_list_entry<'a>(
@@ -961,6 +988,7 @@ fn sgroup_atom_list_entry<'a>(
     })
 }
 
+/// Parse SGroup bond list entry.
 /// M  SBL sssn15 bbb ...
 /// sss: SGroup index (3 chars), n: count (3 chars), bbb: bond indices (each 4 chars: " bbb")
 fn sgroup_bond_list_entry<'a>(
