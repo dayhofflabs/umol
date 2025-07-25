@@ -23,20 +23,20 @@ pub enum SGroupType {
     Generic, // GEN
 }
 
-/// SGroup connectivity types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SGroupConnectivity {
-    HeadToHead,      // HH
-    HeadToTail,      // HT
-    EitherUnknown,   // EU
-}
-
 /// SGroup subtype for polymers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupSubtype {
     Alternating,     // ALT
     Random,          // RAN
     Block,           // BLO
+}
+
+/// SGroup connectivity types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SGroupConnectivity {
+    HeadToHead,      // HH
+    HeadToTail,      // HT
+    EitherUnknown,   // EU
 }
 
 /// SGroup bracket style
@@ -52,7 +52,7 @@ pub struct SGroup {
     pub label: Option<u32>,                              // Label for SUP, SRU, etc. (SLB)
     pub subscript: Option<String>,                       // Subscript text (e.g., "n", "2") (SMT)
     pub group_type: SGroupType,                          // STY: SGroup type
-    pub subtype: Option<SGroupSubtype>,                  // SST: polymer subtype (ALT, RAN, BLO)
+    pub group_subtype: Option<SGroupSubtype>,                  // SST: polymer subtype (ALT, RAN, BLO)
     pub connectivity: Option<SGroupConnectivity>,        // SCN: connectivity (HH, HT, EU)
     pub multiplier: Option<String>,                      // SMT: multiplier for multiple groups
     pub atom_indices: Vec<usize>,                        // SAL: atoms in SGroup
@@ -71,11 +71,11 @@ impl SGroup {
     pub fn new(group_type: SGroupType) -> Self {
         Self {
             group_type,
+            group_subtype: None,
             label: None,
             subscript: None,
             atom_indices: Vec::new(),
             bond_indices: Vec::new(),
-            subtype: None,
             connectivity: None,
             multiplier: None,
             parent_atom_indices: None,
@@ -108,6 +108,19 @@ impl SGroup {
             "GEN" => Ok(SGroupType::Generic),
             _ => Err(DataError::InvalidFragment(format!(
                 "Unknown SGroup type: {}",
+                input
+            )).into()),
+        }
+    }
+
+    /// Parse SGroup subtype string
+    pub fn get_subtype(input: &str) -> Result<SGroupSubtype> {
+        match input {
+            "ALT" => Ok(SGroupSubtype::Alternating),
+            "RAN" => Ok(SGroupSubtype::Random),
+            "BLO" => Ok(SGroupSubtype::Block),
+            _ => Err(DataError::InvalidFragment(format!(
+                "Unknown SGroup subtype: {}",
                 input
             )).into()),
         }

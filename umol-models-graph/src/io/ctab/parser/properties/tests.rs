@@ -50,7 +50,7 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  RGP  1   1   2", "RGP RGroup property", PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry { atom_index: 0, label: 2 }]))]
 #[case(b"M  LOG  1   1   0   0  >2", "LOG RGroup property", PropertyEntries::RGroupLogicEntry(RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(2)] }))]
 #[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
-// [SST]
+#[case(b"M  SST  1   1 ALT", "SST SGroup property", PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 // [SCN]
 // [SDS]
@@ -87,6 +87,7 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case]
 #[case(b"M  RAD  1   1   2", "RAD standard property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
 #[case(b"M  ISO  1   1  13", "ISO standard property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
 #[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
+#[case(b"M  SST  1   1 ALT", "SST SGroup property", PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
@@ -578,7 +579,37 @@ fn test_sgroup_type_entries_invalid(
     );
 }
 
-// [SST]
+#[rstest]
+#[case(b"  1   1 ALT", vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }])]
+#[case(b"  2   1 RAN   2 BLO", vec![
+    SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Random }, 
+    SGroupSubtypeEntry { sgroup_index: 1, sgroup_subtype: SGroupSubtype::Block }
+])]
+fn test_sgroup_subtype_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupSubtypeEntry>) {
+    let (remaining, result) = sgroup_subtype_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  1   1 FOO", "invalid sgroup subtype", ErrorKind::MapRes)]
+#[case(b"  1   1 ALT a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_subtype_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_subtype_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}   
+
 
 #[rstest]
 #[case(b"  1   1   1", vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]

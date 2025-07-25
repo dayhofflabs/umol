@@ -9,7 +9,7 @@ use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
 use crate::io::ctab::rgroup::RGroupOccurrence;
-use crate::io::ctab::sgroup::{SGroup, SGroupType};
+use crate::io::ctab::sgroup::{SGroup, SGroupSubtype, SGroupType};
 
 use super::utils::{
     fixed_width_element_partial, fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1,
@@ -116,7 +116,11 @@ pub struct SGroupTypeEntry {
     pub sgroup_type: SGroupType,
 }
 
-// [SST]
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupSubtypeEntry {
+    pub sgroup_index: usize,
+    pub sgroup_subtype: SGroupSubtype,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupLabelEntry {
@@ -158,7 +162,7 @@ pub enum PropertyEntries {
     RGroupLabelEntries(Vec<RGroupLabelEntry>),
     RGroupLogicEntry(RGroupLogicEntry),
     SGroupTypeEntries(Vec<SGroupTypeEntry>),
-    // Sgroup subtype [SST]
+    SGroupSubtypeEntries(Vec<SGroupSubtypeEntry>),
     SGroupLabelEntries(Vec<SGroupLabelEntry>),
     // Sgroup connectivity [SCN]
     // Sgroup expansion [SDS EXP]
@@ -263,6 +267,9 @@ pub fn property_input_standard<'a>(
                 b"M  STY" => sgroup_type_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
+                b"M  SST" => sgroup_subtype_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
                 b"M  SLB" => sgroup_label_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
@@ -347,11 +354,12 @@ pub fn property_input<'a>(
                 b"M  LOG" => rgroup_logic_entry()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
-                // [LOG]
                 b"M  STY" => sgroup_type_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                // [SST]
+                b"M  SST" => sgroup_subtype_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
                 b"M  SLB" => sgroup_label_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
@@ -815,7 +823,39 @@ fn sgroup_type_entries<'a>(
     ))
 }
 
-// [SST]
+/// Parse SGroup subtype entries.
+/// M  SSTnn8 sss ttt ...
+/// sss: SGroup index, ttt: SGroup subtype (3-character string)
+fn sgroup_subtype_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SGroupSubtypeEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
+            (
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(
+                        tag(" "),
+                        map_res(take(3usize), |bytes: &[u8]| {
+                            let s = std::str::from_utf8(bytes)
+                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
+                            SGroup::get_subtype(s)
+                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+                        }),
+                    ),
+                ),
+            ),
+            |(sgroup_index, sgroup_subtype)| SGroupSubtypeEntry {
+                sgroup_index,
+                sgroup_subtype,
+            },
+        ),
+    ))
+}
 
 /// Parse SGroup label entries.
 /// M  SLBnn8 sss vvv ...

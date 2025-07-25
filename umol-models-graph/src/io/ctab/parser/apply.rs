@@ -8,7 +8,7 @@ use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
     RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry, SGroupLabelEntry,
-    SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
@@ -41,7 +41,7 @@ impl Apply for PropertyEntries {
             PropertyEntries::RGroupLabelEntries(entries) => entries.apply(molecule),
             PropertyEntries::RGroupLogicEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupTypeEntries(entries) => entries.apply(molecule),
-            // [SST]
+            PropertyEntries::SGroupSubtypeEntries(entries) => entries.apply(molecule),
             PropertyEntries::SGroupLabelEntries(entries) => entries.apply(molecule),
             // [SCN]
             // [SDS EXP]
@@ -493,7 +493,26 @@ impl Apply for Vec<SGroupTypeEntry> {
     }
 }
 
-// [SST]
+impl Apply for Vec<SGroupSubtypeEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            let sgroup_index = entry.sgroup_index;
+            ensure_sgroup(molecule, entry.sgroup_index)?;
+            let sgroup = molecule.sgroups.get_mut(&sgroup_index).unwrap();
+
+            if sgroup.group_subtype.is_some() && sgroup.group_subtype != Some(entry.sgroup_subtype)
+            {
+                return Err(ValidationError::InvalidComponent(format!(
+                    "SGroup subtype conflict for SGroup {}: existing {:?} vs new {:?}",
+                    sgroup_index, sgroup.group_subtype, entry.sgroup_subtype
+                ))
+                .into());
+            }
+            sgroup.group_subtype = Some(entry.sgroup_subtype);
+        }
+        Ok(())
+    }
+}
 
 impl Apply for Vec<SGroupLabelEntry> {
     fn apply(self, molecule: &mut Molecule) -> Result<()> {
