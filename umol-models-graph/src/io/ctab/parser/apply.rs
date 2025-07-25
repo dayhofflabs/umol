@@ -7,8 +7,9 @@ use super::convert::{
 use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
-    RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry, SGroupLabelEntry,
-    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+    RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
+    SGroupConnectivityEntry, SGroupLabelEntry, SGroupSubtypeEntry, SGroupTypeEntry,
+    SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
@@ -43,7 +44,7 @@ impl Apply for PropertyEntries {
             PropertyEntries::SGroupTypeEntries(entries) => entries.apply(molecule),
             PropertyEntries::SGroupSubtypeEntries(entries) => entries.apply(molecule),
             PropertyEntries::SGroupLabelEntries(entries) => entries.apply(molecule),
-            // [SCN]
+            PropertyEntries::SGroupConnectivityEntries(entries) => entries.apply(molecule),
             // [SDS EXP]
             PropertyEntries::SGroupAtomListEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule),
@@ -509,6 +510,27 @@ impl Apply for Vec<SGroupSubtypeEntry> {
                 .into());
             }
             sgroup.group_subtype = Some(entry.sgroup_subtype);
+        }
+        Ok(())
+    }
+}
+
+impl Apply for Vec<SGroupConnectivityEntry> {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        for entry in self {
+            let sgroup_index = entry.sgroup_index;
+            ensure_sgroup(molecule, entry.sgroup_index)?;
+            let sgroup = molecule.sgroups.get_mut(&sgroup_index).unwrap();
+
+            // Check for conflicts
+            if sgroup.connectivity.is_some() && sgroup.connectivity != Some(entry.connectivity) {
+                return Err(ValidationError::InvalidComponent(format!(
+                    "SGroup connectivity conflict for SGroup {}: existing {:?} vs new {:?}",
+                    sgroup_index, sgroup.connectivity, entry.connectivity
+                ))
+                .into());
+            }
+            sgroup.connectivity = Some(entry.connectivity);
         }
         Ok(())
     }

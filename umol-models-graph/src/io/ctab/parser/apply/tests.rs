@@ -2,7 +2,9 @@ use super::*;
 use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol, AttachmentPointType};
 use crate::io::ctab::bond::{Bond, BondType};
 use crate::io::ctab::rgroup::RGroupOccurrence;
-use crate::io::ctab::sgroup::{SGroup, SGroupBracketStyle, SGroupSubtype, SGroupType};
+use crate::io::ctab::sgroup::{
+    SGroup, SGroupBracketStyle, SGroupConnectivity, SGroupSubtype, SGroupType,
+};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol::error::{DataError, Error, ValidationError};
@@ -1023,6 +1025,61 @@ fn test_apply_sgroup_subtype_entries_conflict(molecule_with_sgroup: Molecule) {
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
             assert!(msg.contains("SGroup subtype conflict"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_connectivity_entries(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entries = vec![SGroupConnectivityEntry {
+        sgroup_index: 0,
+        connectivity: SGroupConnectivity::HeadToTail,
+    }];
+
+    entries.apply(&mut molecule).unwrap();
+
+    assert_eq!(molecule.sgroups.len(), 1);
+    assert_eq!(
+        molecule.sgroups[&0].connectivity,
+        Some(SGroupConnectivity::HeadToTail)
+    );
+}
+
+#[rstest]
+fn test_apply_sgroup_connectivity_entries_invalid(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entries = vec![SGroupConnectivityEntry {
+        sgroup_index: 1,
+        connectivity: SGroupConnectivity::HeadToTail,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_connectivity_entries_conflict(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    molecule.sgroups.get_mut(&0).unwrap().connectivity = Some(SGroupConnectivity::HeadToTail);
+    let entries = vec![SGroupConnectivityEntry {
+        sgroup_index: 0,
+        connectivity: SGroupConnectivity::HeadToHead,
+    }];
+
+    let result = entries.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup connectivity conflict"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }

@@ -1,4 +1,4 @@
-//! Properties block parser for CTab files.
+//! Parsers for CTab property lines.
 
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{line_ending, not_line_ending};
@@ -9,7 +9,7 @@ use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
 use crate::io::ctab::rgroup::RGroupOccurrence;
-use crate::io::ctab::sgroup::{SGroup, SGroupSubtype, SGroupType};
+use crate::io::ctab::sgroup::{SGroup, SGroupConnectivity, SGroupSubtype, SGroupType};
 
 use super::utils::{
     fixed_width_element_partial, fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1,
@@ -128,8 +128,11 @@ pub struct SGroupLabelEntry {
     pub label: u32,
 }
 
-// [SCN]
-// [SDS EXP]
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupConnectivityEntry {
+    pub sgroup_index: usize,
+    pub connectivity: SGroupConnectivity,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupAtomListEntry {
@@ -164,7 +167,7 @@ pub enum PropertyEntries {
     SGroupTypeEntries(Vec<SGroupTypeEntry>),
     SGroupSubtypeEntries(Vec<SGroupSubtypeEntry>),
     SGroupLabelEntries(Vec<SGroupLabelEntry>),
-    // Sgroup connectivity [SCN]
+    SGroupConnectivityEntries(Vec<SGroupConnectivityEntry>),
     // Sgroup expansion [SDS EXP]
     SGroupAtomListEntry(SGroupAtomListEntry),
     SGroupBondListEntry(SGroupBondListEntry),
@@ -363,7 +366,9 @@ pub fn property_input<'a>(
                 b"M  SLB" => sgroup_label_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                // [SCN]
+                b"M  SCN" => sgroup_connectivity_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
                 // [SDS EXP]
                 b"M  SAL" => sgroup_atom_list_entry()
                     .parse(rest)
@@ -883,11 +888,43 @@ fn sgroup_label_entries<'a>(
     ))
 }
 
-// [SCN]
+/// M  SCNnn8 sss ttt ...
+/// sss: SGroup index, ttt: SGroup connectivity (2-character string), left-justified
+fn sgroup_connectivity_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SGroupConnectivityEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
+            (
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(
+                        tag(" "),
+                        map_res(take(2usize), |bytes: &[u8]| {
+                            let s = std::str::from_utf8(bytes)
+                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
+                            SGroup::get_connectivity(s)
+                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+                        }),
+                    ),
+                ),
+            ),
+            |(sgroup_index, connectivity)| SGroupConnectivityEntry {
+                sgroup_index,
+                connectivity,
+            },
+        ),
+    ))
+}
+
 // [SDS EXP]
 
 /// M  SAL sssn15 aaa ...
-/// sss: SGroup index (3 chars), n: count (3 chars), aaa: atom indices (each 4 chars: " aaa")
+/// sss: SGroup index, n15: count (max 15), aaa: atom indices (each 4 chars: " aaa")
 fn sgroup_atom_list_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupAtomListEntry, Error = error::Error<&'a [u8]>> {
     all_consuming(|input: &'a [u8]| {

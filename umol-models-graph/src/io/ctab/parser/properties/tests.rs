@@ -643,7 +643,41 @@ fn test_sgroup_label_entries_invalid(
     );
 }
 
-// [SCN]
+#[rstest]
+#[case(b"  3   1 HT    2 HT    3 HT ", vec![
+    SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail },
+    SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::HeadToTail },
+    SGroupConnectivityEntry { sgroup_index: 2, connectivity: SGroupConnectivity::HeadToTail }
+])]
+#[case(b"  2   1 HT    2 EU ", vec![
+    SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail },
+    SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::EitherUnknown }
+])]
+fn test_sgroup_connectivity_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupConnectivityEntry>) {
+    let (remaining, result) = sgroup_connectivity_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  1   1 FOO", "invalid connectivity", ErrorKind::MapRes)]
+#[case(b"  1   1 HT a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_connectivity_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_connectivity_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
 // [SDS]
 
 #[rstest]
