@@ -8,8 +8,8 @@ use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
     RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
-    SGroupConnectivityEntry, SGroupExpansionEntry, SGroupLabelEntry, SGroupSubtypeEntry,
-    SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+    SGroupConnectivityEntry, SGroupExpansionEntry, SGroupLabelEntry, SGroupParentAtomEntry,
+    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
@@ -48,6 +48,7 @@ impl Apply for PropertyEntries {
             PropertyEntries::SGroupExpansionEntries(entries) => entries.apply(molecule),
             PropertyEntries::SGroupAtomListEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule),
+            PropertyEntries::SGroupParentAtomEntry(entry) => entry.apply(molecule),
             PropertyEntries::End => Ok(()),
         }
     }
@@ -640,6 +641,32 @@ impl Apply for SGroupBondListEntry {
             }
             sgroup.bond_indices = self.bond_indices;
         }
+        Ok(())
+    }
+}
+
+/// Apply SGroup parent atom entries.
+impl Apply for SGroupParentAtomEntry {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        ensure_sgroup(molecule, self.sgroup_index)?;
+        let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
+
+        if sgroup.group_type != SGroupType::MultipleGroup {
+            return Err(ValidationError::InvalidComponent(format!(
+                "SGroup parent atom entries are only valid for multiple groups",
+            ))
+            .into());
+        }
+
+        if sgroup.parent_atom_indices.is_some() {
+            return Err(ValidationError::InvalidComponent(format!(
+                "SGroup parent atom entries conflict for SGroup {}",
+                self.sgroup_index
+            ))
+            .into());
+        }
+
+        sgroup.parent_atom_indices = Some(self.atom_indices);
         Ok(())
     }
 }

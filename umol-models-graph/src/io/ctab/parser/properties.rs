@@ -151,6 +151,12 @@ pub struct SGroupBondListEntry {
     pub bond_indices: Vec<usize>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupParentAtomEntry {
+    pub sgroup_index: usize,
+    pub atom_indices: Vec<usize>,
+}
+
 /// An enum representing a parsed property modification, containing the raw data.
 /// This avoids allocating a new Vec for every single property line in a file.
 #[derive(Debug, Clone, PartialEq)]
@@ -176,7 +182,7 @@ pub enum PropertyEntries {
     SGroupExpansionEntries(Vec<SGroupExpansionEntry>),
     SGroupAtomListEntry(SGroupAtomListEntry),
     SGroupBondListEntry(SGroupBondListEntry),
-    // Sgroup parent atom [SPA]
+    SGroupParentAtomEntry(SGroupParentAtomEntry),
     // Sgroup subscript [SMT]
     // Sgroup correspondence [CRS]
     // Sgroup display information [SDI]
@@ -383,6 +389,9 @@ pub fn property_input<'a>(
                 b"M  SBL" => sgroup_bond_list_entry()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                b"M  SPA" => sgroup_parent_atom_entries()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
                 b"M  END" => success(PropertyEntries::End).parse(rest),
                 _ => Err(nom::Err::Error(error::Error::new(
                     input,
@@ -954,38 +963,25 @@ fn sgroup_expansion_entries<'a>(
 /// sss: SGroup index, n15: count (max 15), aaa: atom indices (each 4 chars: " aaa")
 fn sgroup_atom_list_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupAtomListEntry, Error = error::Error<&'a [u8]>> {
-    all_consuming(|input: &'a [u8]| {
-        // Parse sgroup index and count from first 6 characters
-        let (remaining, (sgroup_index, count)) = map_parser(
-            take(6usize),
+    all_consuming(preceded(
+        tag(" "),
+        map(
             (
                 fixed_width_int_minus1::<usize>(3),
-                fixed_width_int_in_range::<u8, _>(3, 1..=15),
+                length_count(
+                    fixed_width_int_in_range::<u8, _>(3, 1..=15),
+                    map_parser(
+                        take(4usize),
+                        preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                    ),
+                ),
             ),
-        )
-        .parse(input)?;
-
-        // Parse the atom indices - each is 4 chars with format " aaa"
-        let mut indices = Vec::with_capacity(count as usize);
-        let mut remaining = remaining;
-        for _ in 0..count {
-            let (rest, index) = map_parser(
-                take(4usize),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            )
-            .parse(remaining)?;
-            indices.push(index);
-            remaining = rest;
-        }
-
-        Ok((
-            remaining,
-            SGroupAtomListEntry {
+            |(sgroup_index, atom_indices)| SGroupAtomListEntry {
                 sgroup_index,
-                atom_indices: indices,
+                atom_indices,
             },
-        ))
-    })
+        ),
+    ))
 }
 
 /// Parse SGroup bond list entry.
@@ -993,37 +989,51 @@ fn sgroup_atom_list_entry<'a>(
 /// sss: SGroup index (3 chars), n: count (3 chars), bbb: bond indices (each 4 chars: " bbb")
 fn sgroup_bond_list_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupBondListEntry, Error = error::Error<&'a [u8]>> {
-    all_consuming(|input: &'a [u8]| {
-        // Parse sgroup index and count from first 6 characters
-        let (remaining, (sgroup_index, count)) = map_parser(
-            take(6usize),
+    all_consuming(preceded(
+        tag(" "),
+        map(
             (
                 fixed_width_int_minus1::<usize>(3),
-                fixed_width_int_in_range::<u8, _>(3, 1..=15),
+                length_count(
+                    fixed_width_int_in_range::<u8, _>(3, 1..=15),
+                    map_parser(
+                        take(4usize),
+                        preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                    ),
+                ),
             ),
-        )
-        .parse(input)?;
-
-        let mut bond_indices = Vec::with_capacity(count as usize);
-        let mut remaining = remaining;
-        for _ in 0..count {
-            let (rest, index) = map_parser(
-                take(4usize),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            )
-            .parse(remaining)?;
-            bond_indices.push(index);
-            remaining = rest;
-        }
-
-        Ok((
-            remaining,
-            SGroupBondListEntry {
+            |(sgroup_index, bond_indices)| SGroupBondListEntry {
                 sgroup_index,
                 bond_indices,
             },
-        ))
-    })
+        ),
+    ))
+}
+
+/// Parse SGroup parent atom entries.
+/// M  SPA sssn15 aaa ...
+/// sss: SGroup index, n15: count (max 15), aaa: atom indices (each 4 chars: " aaa")
+fn sgroup_parent_atom_entries<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupParentAtomEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(preceded(
+        tag(" "),
+        map(
+            (
+                fixed_width_int_minus1::<usize>(3),
+                length_count(
+                    fixed_width_int_in_range::<u8, _>(3, 1..=15),
+                    map_parser(
+                        take(4usize),
+                        preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                    ),
+                ),
+            ),
+            |(sgroup_index, atom_indices)| SGroupParentAtomEntry {
+                sgroup_index,
+                atom_indices,
+            },
+        ),
+    ))
 }
 
 #[cfg(test)]

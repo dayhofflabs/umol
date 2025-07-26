@@ -54,8 +54,9 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SCN  1   1 HH ", "SCN SGroup property", PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToHead }]))]
 #[case(b"M  SDS EXP  1   1", "SDS SGroup property", PropertyEntries::SGroupExpansionEntries(vec![SGroupExpansionEntry { sgroup_index: 0 }]))]
-#[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
-#[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
+#[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
+#[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
+#[case(b"M  SPA   1 12   3   4   5   6   9  10  11  12  13  14  15  16", "SPA SGroup property", PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15] }))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -89,8 +90,8 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case]
 #[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
 #[case(b"M  SST  1   1 ALT", "SST SGroup property", PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
-#[case(b"M  SAL  1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
-#[case(b"M  SBL  1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
+#[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
+#[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input_standard(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -713,8 +714,8 @@ fn test_sgroup_expansion_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1  2   1   2", SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![0, 1] })]
-#[case(b"  3  1  15", SGroupAtomListEntry { sgroup_index: 2, atom_indices: vec![14] })]
+#[case(b"   1  2   1   2", SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![0, 1] })]
+#[case(b"   3  1  15", SGroupAtomListEntry { sgroup_index: 2, atom_indices: vec![14] })]
 fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAtomListEntry) {
     let (remaining, result) = sgroup_atom_list_entry().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -722,8 +723,8 @@ fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAto
 }
 
 #[rstest]
-#[case(b"  1 16   1", "count exceeds 15", ErrorKind::Verify)]
-#[case(b"  1  1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"   1 16   1", "count exceeds 15", ErrorKind::Verify)]
+#[case(b"   1  1   1 a", "trailing characters", ErrorKind::Eof)]
 fn test_sgroup_atom_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -741,8 +742,8 @@ fn test_sgroup_atom_list_entry_invalid(
 }
 
 #[rstest]
-#[case(b"  1  2   1   2", SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![0, 1] })]
-#[case(b"  3  1  15", SGroupBondListEntry { sgroup_index: 2, bond_indices: vec![14] })]
+#[case(b"   1  2   1   2", SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![0, 1] })]
+#[case(b"   3  1  15", SGroupBondListEntry { sgroup_index: 2, bond_indices: vec![14] })]
 fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBondListEntry) {
     let (remaining, result) = sgroup_bond_list_entry().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -750,14 +751,41 @@ fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBon
 }
 
 #[rstest]
-#[case(b"  1 16   1", "count exceeds 15", ErrorKind::Verify)]
-#[case(b"  1  1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"   1 16   1", "count exceeds 15", ErrorKind::Verify)]
+#[case(b"   1  1   1 a", "trailing characters", ErrorKind::Eof)]
 fn test_sgroup_bond_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: ErrorKind,
 ) {
     let result = sgroup_bond_list_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"   1  4   3   4   5   6", SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5] })]
+fn test_sgroup_parent_atom_entries(#[case] input: &[u8], #[case] expected: SGroupParentAtomEntry) {
+    let (remaining, result) = sgroup_parent_atom_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"   1 16   3", "count exceeds 15", ErrorKind::Verify)]
+#[case(b"   1  4   3   4   5   6 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_parent_atom_entries_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_parent_atom_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),

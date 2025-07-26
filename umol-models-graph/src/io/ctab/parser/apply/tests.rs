@@ -1284,3 +1284,54 @@ fn test_apply_sgroup_atom_bond_list_entries_shared(basic_molecule: Molecule) {
     assert_eq!(molecule.sgroups[&0].bond_indices, vec![0]);
     assert_eq!(molecule.sgroups[&1].bond_indices, vec![0]);
 }
+
+#[rstest]
+fn test_apply_sgroup_parent_atom_entries(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::MultipleGroup);
+    molecule.sgroups.insert(0, sgroup);
+    let entry = SGroupParentAtomEntry {
+        sgroup_index: 0,
+        atom_indices: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    };
+    entry.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.sgroups[&0].parent_atom_indices, Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]));
+}
+
+#[rstest]
+fn test_apply_sgroup_parent_atom_entries_invalid(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entry = SGroupParentAtomEntry {
+        sgroup_index: 0,
+        atom_indices: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup parent atom entries are only valid for multiple groups"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_parent_atom_entries_conflict(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::MultipleGroup);
+    molecule.sgroups.insert(0, sgroup);
+    molecule.sgroups.get_mut(&0).unwrap().parent_atom_indices = Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    let entry = SGroupParentAtomEntry {
+        sgroup_index: 0,
+        atom_indices: vec![6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            println!("{}", msg);
+            assert!(msg.contains("SGroup parent atom entries conflict for SGroup 0"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
