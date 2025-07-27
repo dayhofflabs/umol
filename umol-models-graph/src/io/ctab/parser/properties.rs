@@ -12,8 +12,8 @@ use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{SGroup, SGroupConnectivity, SGroupSubtype, SGroupType};
 
 use super::utils::{
-    fixed_width_element_partial, fixed_width_int, fixed_width_int_in_range, fixed_width_int_minus1,
-    fixed_width_int_partial, rgroup_occurrences,
+    fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
+    fixed_width_int_minus1, fixed_width_int_partial, rgroup_occurrences,
 };
 use umol_data::Element;
 
@@ -163,6 +163,18 @@ pub struct SGroupSubscriptEntry {
     pub subscript: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupCorrespondenceEntry {
+    pub sgroup_index: usize,
+    pub bond_indices: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupDisplayInfoEntry {
+    pub sgroup_index: usize,
+    pub bracket_coords: Vec<f64>,
+}
+
 /// An enum representing a parsed property modification, containing the raw data.
 /// This avoids allocating a new Vec for every single property line in a file.
 #[derive(Debug, Clone, PartialEq)]
@@ -190,8 +202,8 @@ pub enum PropertyEntries {
     SGroupBondListEntry(SGroupBondListEntry),
     SGroupParentAtomEntry(SGroupParentAtomEntry),
     SGroupSubscriptEntry(SGroupSubscriptEntry),
-    // Sgroup correspondence [CRS]
-    // Sgroup display information [SDI]
+    SGroupCorrespondenceEntry(SGroupCorrespondenceEntry),
+    SGroupDisplayInfoEntry(SGroupDisplayInfoEntry),
     // Superatom bond and vector [SBV]
     // Data sgroup fields [SDT]
     // Data sgroup display information [SDD]
@@ -404,6 +416,12 @@ pub fn property_input<'a>(
                 b"M  SMT" => sgroup_subscript_entry()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                b"M  CRS" => sgroup_correspondence_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
+                b"M  SDI" => sgroup_display_info_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
                 b"M  END" => success(PropertyEntries::End).parse(rest),
                 _ => Err(nom::Err::Error(error::Error::new(
                     input,
@@ -1048,7 +1066,7 @@ fn sgroup_parent_atom_entries<'a>(
     ))
 }
 
-/// Parse SGroup subscript entries.
+/// Parse SGroup subscript entry.
 /// M  SMT sss m...
 /// sss: SGroup index, m: subscript text
 /// For multiple groups, m... is the text representation of the multiple group multiplier.For superatoms,
@@ -1064,6 +1082,58 @@ fn sgroup_subscript_entry<'a>(
             sgroup_index,
             subscript: String::from_utf8_lossy(subscript).trim().to_string(),
         },
+    ))
+}
+
+/// Parse SGroup correspondence entry.
+/// M  CRS sssnn6 bb1 bb2 bb3
+/// sss: SGroup index, nn6: count (max 6), bb1-bb3: bond indices
+/// bb1, bb2: Crossing bonds that share a common bracket
+/// bb3: Crossing bond in repeating unit that connects to bond bb1
+fn sgroup_correspondence_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupCorrespondenceEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(preceded(
+        tag(" "),
+        map(
+            (
+                fixed_width_int_minus1::<usize>(3),
+                length_count(
+                    fixed_width_int_in_range::<usize, _>(3, 1..=6),
+                    map_parser(
+                        take(4usize),
+                        preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                    ),
+                ),
+            ),
+            |(sgroup_index, bond_indices)| SGroupCorrespondenceEntry {
+                sgroup_index,
+                bond_indices,
+            },
+        ),
+    ))
+}
+
+/// Parse SGroup display info entry.
+/// M SDI sssnn4 x1 y1 x2 y2
+/// sss: SGroup index, nn4: count (max 4), x1, y1: coordinates of opening bracket, x2, y2: coordinates of closing bracket
+/// (f10.4)
+fn sgroup_display_info_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupDisplayInfoEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(preceded(
+        tag(" "),
+        map(
+            (
+                fixed_width_int_minus1::<usize>(3),
+                length_count(
+                    fixed_width_int_in_range::<usize, _>(3, 1..=4),
+                    fixed_width_float::<f64>(10, 4),
+                ),
+            ),
+            |(sgroup_index, bracket_coords)| SGroupDisplayInfoEntry {
+                sgroup_index,
+                bracket_coords,
+            },
+        ),
     ))
 }
 

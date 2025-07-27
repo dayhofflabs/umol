@@ -7,14 +7,14 @@ use super::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry, AttachmentPointEntry,
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
     RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
-    SGroupConnectivityEntry, SGroupExpansionEntry, SGroupLabelEntry, SGroupParentAtomEntry,
-    SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry,
-    UnsaturatedAtomEntry,
+    SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDisplayInfoEntry,
+    SGroupExpansionEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
+    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
 use crate::io::ctab::rgroup::RGroup;
-use crate::io::ctab::sgroup::{SGroup, SGroupType};
+use crate::io::ctab::sgroup::{SGroup, SGroupBracketCoords, SGroupType};
 use umol::error::{DataError, ValidationError};
 use umol::{Error, Result};
 
@@ -50,6 +50,8 @@ impl Apply for PropertyEntries {
             PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupParentAtomEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupSubscriptEntry(entry) => entry.apply(molecule),
+            PropertyEntries::SGroupCorrespondenceEntry(entry) => entry.apply(molecule),
+            PropertyEntries::SGroupDisplayInfoEntry(entry) => entry.apply(molecule),
             PropertyEntries::End => Ok(()),
         }
     }
@@ -707,6 +709,49 @@ impl Apply for SGroupSubscriptEntry {
                 sgroup.subscript = Some(self.subscript);
             }
         }
+        Ok(())
+    }
+}
+
+impl Apply for SGroupCorrespondenceEntry {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        ensure_sgroup(molecule, self.sgroup_index)?;
+        let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
+
+        if sgroup.group_type != SGroupType::Crosslink {
+            return Err(ValidationError::InvalidComponent(format!(
+                "SGroup correspondence entries are only valid for crosslinks",
+            ))
+            .into());
+        }
+
+        if let Some(ref existing) = sgroup.correspondence {
+            if existing != &self.bond_indices {
+                return Err(ValidationError::InvalidComponent(format!(
+                    "SGroup correspondence entries conflict for SGroup {}",
+                    self.sgroup_index
+                ))
+                .into());
+            }
+        }
+        sgroup.correspondence = Some(self.bond_indices);
+        Ok(())
+    }
+}
+
+impl Apply for SGroupDisplayInfoEntry {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        ensure_sgroup(molecule, self.sgroup_index)?;
+        let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
+        let x1 = self.bracket_coords.get(0).copied().unwrap_or(0.0);
+        let y1 = self.bracket_coords.get(1).copied().unwrap_or(0.0);
+        let x2 = self.bracket_coords.get(2).copied().unwrap_or(0.0);
+        let y2 = self.bracket_coords.get(3).copied().unwrap_or(0.0);
+
+        sgroup.bracket_coords = Some(SGroupBracketCoords {
+            bracket1: (x1, y1),
+            bracket2: (x2, y2),
+        });
         Ok(())
     }
 }

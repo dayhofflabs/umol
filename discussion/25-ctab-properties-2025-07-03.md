@@ -30,8 +30,8 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Sgrp Bonds | SBL    | x S  | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Parnt | SPA    | X    | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Subs  | SMT    | x S  | SGroup  | x      | x         | x      | x       |                       |
-| Sgrp Corr  | CRS    | -    | SGroup  | x      | -         | x      | -       |                       |
-| Sgrp Disp  | SDI    | -    | SGroup  | x      | x         | x      | x       |                       |
+| Sgrp Corr  | CRS    | x    | SGroup  | x      | -         | x      | -       |                       |
+| Sgrp Disp  | SDI    | x    | SGroup  | x      | x         | x      | x       |                       |
 | Sup Bd Vec | SBV    | -    | SGroup  | x      | -         | x      | x       |                       |
 | Data Flds  | SDT    | -    | SGroup  | x      | x         | x      | x       |                       |
 | Data Disp  | SDD    | -    | SGroup  | x      | x         | x      | x       |                       |

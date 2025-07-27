@@ -3,6 +3,7 @@ use pretty_assertions::assert_eq;
 use nom::{error::ErrorKind, Err};
 use rstest::rstest;
 use umol_data::Element;
+use float_cmp::approx_eq;
 
 #[rstest]
 #[case(b"  1 F    3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
@@ -58,6 +59,8 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"M  SPA   1 12   3   4   5   6   9  10  11  12  13  14  15  16", "SPA SGroup property", PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15] }))]
 #[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
+#[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property", PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry { sgroup_index: 0, bond_indices: vec![9, 8, 3] }))]
+#[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property", PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry { sgroup_index: 2, bracket_coords: vec![4.4700, -3.1700, 4.4700, -5.7500] }))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -112,6 +115,8 @@ fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case
 #[case(b"M  LOG   1   1   0   0  >2", "LOG RGroup property not supported in standard parser")]
 #[case(b"M  SCN  1   1 HH ", "SCN SGroup property not supported in standard parser")]
 #[case(b"M  SDS EXP  1   1", "SDS SGroup property not supported in standard parser")]
+#[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property not supported in standard parser")]
+#[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property not supported in standard parser")]
 fn test_property_input_standard_invalid(#[case] input: &[u8], #[case] desc: &str) {
     let result = property_input_standard(input);
     assert!(result.is_err(), "{}", desc);
@@ -816,6 +821,62 @@ fn test_sgroup_subscript_entry_invalid(
     #[case] expected_kind: ErrorKind,
 ) {
     let result = sgroup_subscript_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"   3  3  10   9   4", SGroupCorrespondenceEntry { sgroup_index: 2, bond_indices: vec![9, 8, 3] })]
+fn test_sgroup_correspondence_entry(#[case] input: &[u8], #[case] expected: SGroupCorrespondenceEntry) {
+    let (remaining, result) = sgroup_correspondence_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"   3  0", "count is zero", ErrorKind::Verify)]
+#[case(b"   3  3  10   9   4 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_correspondence_entry_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_correspondence_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"   1  4  -13.0153    4.4289  -13.0153    8.2211", SGroupDisplayInfoEntry
+       { sgroup_index: 0,  bracket_coords: vec![-13.0153, 4.4289, -13.0153, 8.2211]})]
+fn test_sgroup_display_info_entry(#[case] input: &[u8], #[case] expected: SGroupDisplayInfoEntry) {
+
+    let (remaining, result) = sgroup_display_info_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+
+    assert_eq!(result.sgroup_index, expected.sgroup_index);
+    for i in 0..result.bracket_coords.len() {
+        assert!(approx_eq!(f64, result.bracket_coords[i], expected.bracket_coords[i]));
+    }
+}
+
+#[rstest]
+#[case(b"   0  4    4.4700   -3.1700    4.4700   -5.7500", "sgroup index is zero", ErrorKind::Verify)]
+#[case(b"   1  0", "count is zero", ErrorKind::Verify)]
+fn test_sgroup_display_info_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = sgroup_display_info_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),

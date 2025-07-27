@@ -46,6 +46,13 @@ pub enum SGroupMultiplier {
     N,
 }
 
+/// SGroup bracket coordinates
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SGroupBracketCoords {
+    pub bracket1: (f64, f64),
+    pub bracket2: (f64, f64),
+}
+
 /// SGroup bracket style
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupBracketStyle {
@@ -66,12 +73,14 @@ pub struct SGroup {
     pub atom_indices: Vec<usize>,                 // SAL: atoms in SGroup
     pub bond_indices: Vec<usize>,                 // SBL: bonds in SGroup
     pub parent_atom_indices: Option<Vec<usize>>,  // SPA: parent atoms for multiple groups
-    pub bracket_style: Option<SGroupBracketStyle>, // SBT: bracket display style
+    pub correspondence: Option<Vec<usize>>,       // CRS: correspondence for crosslinks
+    pub bracket_coords: Option<SGroupBracketCoords>, // SDI: bracket display info
     pub data_field_name: Option<String>,          // SDT: data field name for DAT SGroups
     pub data_field_info: Option<String>,          // SDT: data field info for DAT SGroups
     pub data_content: Option<Vec<String>>,        // SCD/SED: actual data content
     pub hierarchy_parent: Option<usize>,          // SPL: parent SGroup for hierarchies
     pub component_number: Option<u32>,            // SNC: component order number
+    pub bracket_style: Option<SGroupBracketStyle>, // SBT: bracket display style
 }
 
 impl SGroup {
@@ -88,12 +97,14 @@ impl SGroup {
             atom_indices: Vec::new(),
             bond_indices: Vec::new(),
             parent_atom_indices: None,
-            bracket_style: None,
+            correspondence: None,
+            bracket_coords: None,
             data_field_name: None,
             data_field_info: None,
             data_content: None,
             hierarchy_parent: None,
             component_number: None,
+            bracket_style: None,
         }
     }
 

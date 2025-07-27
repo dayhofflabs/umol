@@ -5,6 +5,7 @@ use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
     SGroup, SGroupBracketStyle, SGroupConnectivity, SGroupMultiplier, SGroupSubtype, SGroupType,
 };
+use float_cmp::approx_eq;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol::error::{DataError, Error, ValidationError};
@@ -1402,6 +1403,128 @@ fn test_apply_sgroup_subscript_entries_conflict(molecule_with_sgroup: Molecule) 
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
             assert!(msg.contains("SGroup subscript entries conflict for SGroup 0"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_correspondence_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Crosslink);
+    molecule.sgroups.insert(0, sgroup);
+    let entry = SGroupCorrespondenceEntry {
+        sgroup_index: 0,
+        bond_indices: vec![0, 1, 2],
+    };
+    entry.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.sgroups[&0].correspondence, Some(vec![0, 1, 2]));
+}
+
+#[rstest]
+fn test_apply_sgroup_correspondence_entry_invalid(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entry = SGroupCorrespondenceEntry {
+        sgroup_index: 1,
+        bond_indices: vec![0, 1, 2],
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index: 1"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+
+    let entry = SGroupCorrespondenceEntry {
+        sgroup_index: 0,
+        bond_indices: vec![0, 1, 2],
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup correspondence entries are only valid for crosslinks"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_correspondence_entry_conflict(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Crosslink);
+    molecule.sgroups.insert(0, sgroup);
+    molecule.sgroups.get_mut(&0).unwrap().correspondence = Some(vec![0, 1, 2]);
+    let entry = SGroupCorrespondenceEntry {
+        sgroup_index: 0,
+        bond_indices: vec![0, 1, 2],
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_ok());
+
+    let entry = SGroupCorrespondenceEntry {
+        sgroup_index: 0,
+        bond_indices: vec![0, 1, 3],
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup correspondence entries conflict for SGroup 0"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_display_info_entry(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(0, sgroup);
+    let entry = SGroupDisplayInfoEntry {
+        sgroup_index: 0,
+        bracket_coords: vec![-13.0153, 4.4289, -13.0153, 8.2211],
+    };
+    entry.apply(&mut molecule).unwrap();
+
+    assert!(approx_eq!(
+        f64,
+        molecule.sgroups[&0].bracket_coords.unwrap().bracket1.0,
+        -13.0153
+    ));
+    assert!(approx_eq!(
+        f64,
+        molecule.sgroups[&0].bracket_coords.unwrap().bracket1.1,
+        4.4289
+    ));
+    assert!(approx_eq!(
+        f64,
+        molecule.sgroups[&0].bracket_coords.unwrap().bracket2.0,
+        -13.0153
+    ));
+    assert!(approx_eq!(
+        f64,
+        molecule.sgroups[&0].bracket_coords.unwrap().bracket2.1,
+        8.2211
+    ));
+}
+
+#[rstest]
+fn test_apply_sgroup_display_info_entry_invalid(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entry = SGroupDisplayInfoEntry {
+        sgroup_index: 1,
+        bracket_coords: vec![-13.0153, 4.4289, -13.0153, 8.2211],
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index: 1"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }
