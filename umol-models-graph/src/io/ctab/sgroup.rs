@@ -39,6 +39,13 @@ pub enum SGroupConnectivity {
     EitherUnknown, // EU
 }
 
+/// SGroup multiplier
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SGroupMultiplier {
+    Count(u32),
+    N,
+}
+
 /// SGroup bracket style
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupBracketStyle {
@@ -55,7 +62,7 @@ pub struct SGroup {
     pub group_subtype: Option<SGroupSubtype>,     // SST: polymer subtype (ALT, RAN, BLO)
     pub connectivity: Option<SGroupConnectivity>, // SCN: connectivity (HH, HT, EU)
     pub expansion: bool,                          // SDS: expansion flag
-    pub multiplier: Option<String>,               // SMT: multiplier for multiple groups
+    pub multiplier: Option<SGroupMultiplier>,     // SMT: multiplier for multiple groups
     pub atom_indices: Vec<usize>,                 // SAL: atoms in SGroup
     pub bond_indices: Vec<usize>,                 // SBL: bonds in SGroup
     pub parent_atom_indices: Option<Vec<usize>>,  // SPA: parent atoms for multiple groups
@@ -82,10 +89,10 @@ impl SGroup {
             bond_indices: Vec::new(),
             parent_atom_indices: None,
             bracket_style: None,
-            data_field_name: None, 
+            data_field_name: None,
             data_field_info: None,
             data_content: None,
-            hierarchy_parent: None, 
+            hierarchy_parent: None,
             component_number: None,
         }
     }
@@ -134,6 +141,22 @@ impl SGroup {
                 DataError::InvalidFragment(format!("Unknown SGroup connectivity: {}", input))
                     .into(),
             ),
+        }
+    }
+
+    /// Parse SGroup multiplier string
+    pub fn get_multiplier(input: &str) -> Result<SGroupMultiplier> {
+        if input == "n" || input == "N" {
+            Ok(SGroupMultiplier::N)
+        } else {
+            match input.parse::<u32>() {
+                Ok(count) => Ok(SGroupMultiplier::Count(count)),
+                Err(_) => Err(DataError::InvalidFragment(format!(
+                    "Invalid SGroup multiplier: {}",
+                    input
+                ))
+                .into()),
+            }
         }
     }
 }

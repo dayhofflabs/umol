@@ -28,8 +28,8 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Sgrp Expan | SDS    | x    | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Atoms | SAL    | x S  | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Bonds | SBL    | x S  | SGroup  | x      | x         | x      | x       |                       |
-| Sgrp Parnt | SPA    | -    | SGroup  | x      | x         | x      | x       |                       |
-| Sgrp Subs  | SMT    | -    | SGroup  | x      | x         | x      | x       |                       |
+| Sgrp Parnt | SPA    | X    | SGroup  | x      | x         | x      | x       |                       |
+| Sgrp Subs  | SMT    | x S  | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Corr  | CRS    | -    | SGroup  | x      | -         | x      | -       |                       |
 | Sgrp Disp  | SDI    | -    | SGroup  | x      | x         | x      | x       |                       |
 | Sup Bd Vec | SBV    | -    | SGroup  | x      | -         | x      | x       |                       |

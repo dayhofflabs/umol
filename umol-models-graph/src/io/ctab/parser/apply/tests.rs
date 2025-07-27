@@ -3,7 +3,7 @@ use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol, AttachmentPointType};
 use crate::io::ctab::bond::{Bond, BondType};
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
-    SGroup, SGroupBracketStyle, SGroupConnectivity, SGroupSubtype, SGroupType,
+    SGroup, SGroupBracketStyle, SGroupConnectivity, SGroupMultiplier, SGroupSubtype, SGroupType,
 };
 use pretty_assertions::assert_eq;
 use rstest::*;
@@ -1295,7 +1295,10 @@ fn test_apply_sgroup_parent_atom_entries(basic_molecule: Molecule) {
         atom_indices: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     };
     entry.apply(&mut molecule).unwrap();
-    assert_eq!(molecule.sgroups[&0].parent_atom_indices, Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]));
+    assert_eq!(
+        molecule.sgroups[&0].parent_atom_indices,
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+    );
 }
 
 #[rstest]
@@ -1320,7 +1323,8 @@ fn test_apply_sgroup_parent_atom_entries_conflict(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
     let sgroup = SGroup::new(SGroupType::MultipleGroup);
     molecule.sgroups.insert(0, sgroup);
-    molecule.sgroups.get_mut(&0).unwrap().parent_atom_indices = Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    molecule.sgroups.get_mut(&0).unwrap().parent_atom_indices =
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     let entry = SGroupParentAtomEntry {
         sgroup_index: 0,
         atom_indices: vec![6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -1331,6 +1335,73 @@ fn test_apply_sgroup_parent_atom_entries_conflict(basic_molecule: Molecule) {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
             println!("{}", msg);
             assert!(msg.contains("SGroup parent atom entries conflict for SGroup 0"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+#[case(SGroupSubscriptEntry {sgroup_index: 0, subscript: "n".to_string()}, Some(SGroupMultiplier::N), None)]
+#[case(SGroupSubscriptEntry {sgroup_index: 0, subscript: "2".to_string()}, Some(SGroupMultiplier::Count(2)), None)]
+fn test_apply_sgroup_subscript_entries_multiple_group(
+    basic_molecule: Molecule,
+    #[case] entry: SGroupSubscriptEntry,
+    #[case] multiplier: Option<SGroupMultiplier>,
+    #[case] subscript: Option<String>,
+) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::MultipleGroup);
+    molecule.sgroups.insert(0, sgroup);
+
+    entry.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.sgroups[&0].multiplier, multiplier);
+    assert_eq!(molecule.sgroups[&0].subscript, subscript);
+}
+
+#[rstest]
+fn test_apply_sgroup_subscript_entries_superatom(basic_molecule: Molecule) {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    molecule.sgroups.insert(0, sgroup);
+    let entry = SGroupSubscriptEntry {
+        sgroup_index: 0,
+        subscript: "n".to_string(),
+    };
+    entry.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.sgroups[&0].multiplier, None);
+    assert_eq!(molecule.sgroups[&0].subscript, Some("n".to_string()));
+}
+
+#[rstest]
+fn test_apply_sgroup_subscript_entries_invalid(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    let entry = SGroupSubscriptEntry {
+        sgroup_index: 1,
+        subscript: "Ph".to_string(),
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index: 1"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_subscript_entries_conflict(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    molecule.sgroups.get_mut(&0).unwrap().subscript = Some("n".to_string());
+    let entry = SGroupSubscriptEntry {
+        sgroup_index: 0,
+        subscript: "2".to_string(),
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("SGroup subscript entries conflict for SGroup 0"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }

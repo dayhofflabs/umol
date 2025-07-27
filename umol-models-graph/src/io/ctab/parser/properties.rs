@@ -157,6 +157,12 @@ pub struct SGroupParentAtomEntry {
     pub atom_indices: Vec<usize>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupSubscriptEntry {
+    pub sgroup_index: usize,
+    pub subscript: String,
+}
+
 /// An enum representing a parsed property modification, containing the raw data.
 /// This avoids allocating a new Vec for every single property line in a file.
 #[derive(Debug, Clone, PartialEq)]
@@ -183,7 +189,7 @@ pub enum PropertyEntries {
     SGroupAtomListEntry(SGroupAtomListEntry),
     SGroupBondListEntry(SGroupBondListEntry),
     SGroupParentAtomEntry(SGroupParentAtomEntry),
-    // Sgroup subscript [SMT]
+    SGroupSubscriptEntry(SGroupSubscriptEntry),
     // Sgroup correspondence [CRS]
     // Sgroup display information [SDI]
     // Superatom bond and vector [SBV]
@@ -293,6 +299,9 @@ pub fn property_input_standard<'a>(
                 b"M  SBL" => sgroup_bond_list_entry()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                b"M  SMT" => sgroup_subscript_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
                 b"M  END" => success(PropertyEntries::End).parse(rest),
                 _ => Err(nom::Err::Error(error::Error::new(
                     input,
@@ -392,6 +401,9 @@ pub fn property_input<'a>(
                 b"M  SPA" => sgroup_parent_atom_entries()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
+                b"M  SMT" => sgroup_subscript_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
                 b"M  END" => success(PropertyEntries::End).parse(rest),
                 _ => Err(nom::Err::Error(error::Error::new(
                     input,
@@ -1033,6 +1045,25 @@ fn sgroup_parent_atom_entries<'a>(
                 atom_indices,
             },
         ),
+    ))
+}
+
+/// Parse SGroup subscript entries.
+/// M  SMT sss m...
+/// sss: SGroup index, m: subscript text
+/// For multiple groups, m... is the text representation of the multiple group multiplier.For superatoms,
+/// m... is the text of the superatom label.)
+fn sgroup_subscript_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupSubscriptEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), not_line_ending),
+        ),
+        |(sgroup_index, subscript)| SGroupSubscriptEntry {
+            sgroup_index,
+            subscript: String::from_utf8_lossy(subscript).trim().to_string(),
+        },
     ))
 }
 

@@ -57,6 +57,7 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"M  SPA   1 12   3   4   5   6   9  10  11  12  13  14  15  16", "SPA SGroup property", PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15] }))]
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -92,6 +93,7 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
 fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input_standard(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -786,6 +788,34 @@ fn test_sgroup_parent_atom_entries_invalid(
     #[case] expected_kind: ErrorKind,
 ) {
     let result = sgroup_parent_atom_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"   1 1", SGroupSubscriptEntry { sgroup_index: 0, subscript: "1".to_string() })]
+#[case(b"   1 n", SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() })]
+#[case(b"   1 Ph", SGroupSubscriptEntry { sgroup_index: 0, subscript: "Ph".to_string() })]
+fn test_sgroup_subscript_entry(#[case] input: &[u8], #[case] expected: SGroupSubscriptEntry) {
+    let (remaining, result) = sgroup_subscript_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"   0 1", "sgroup index is zero", ErrorKind::Verify)]
+fn test_sgroup_subscript_entry_invalid(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_kind: ErrorKind,
+) {
+    let result = sgroup_subscript_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),

@@ -1,5 +1,4 @@
 //! Apply property entries to molecule
-
 use super::convert::{
     convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
     convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
@@ -9,7 +8,8 @@ use super::properties::{
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
     RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
     SGroupConnectivityEntry, SGroupExpansionEntry, SGroupLabelEntry, SGroupParentAtomEntry,
-    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+    SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry,
+    UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
@@ -49,6 +49,7 @@ impl Apply for PropertyEntries {
             PropertyEntries::SGroupAtomListEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule),
             PropertyEntries::SGroupParentAtomEntry(entry) => entry.apply(molecule),
+            PropertyEntries::SGroupSubscriptEntry(entry) => entry.apply(molecule),
             PropertyEntries::End => Ok(()),
         }
     }
@@ -667,6 +668,45 @@ impl Apply for SGroupParentAtomEntry {
         }
 
         sgroup.parent_atom_indices = Some(self.atom_indices);
+        Ok(())
+    }
+}
+
+/// Apply SGroup subscript entries.
+impl Apply for SGroupSubscriptEntry {
+    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+        ensure_sgroup(molecule, self.sgroup_index)?;
+        let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
+
+        match sgroup.group_type {
+            SGroupType::MultipleGroup | SGroupType::RepeatingUnit => {
+                let multiplier = SGroup::get_multiplier(&self.subscript)?;
+                if sgroup.multiplier.is_some() && sgroup.multiplier != Some(multiplier) {
+                    return Err(ValidationError::InvalidComponent(format!(
+                        "SGroup subscript entries conflict for SGroup {}: existing {:?} vs new {:?}",
+                        self.sgroup_index,
+                        sgroup.multiplier.unwrap(),
+                        multiplier
+                    ))
+                    .into());
+                }
+                sgroup.multiplier = Some(multiplier);
+            }
+            _ => {
+                if let Some(ref existing) = sgroup.subscript {
+                    if existing != &self.subscript {
+                        return Err(ValidationError::InvalidComponent(format!(
+                            "SGroup subscript entries conflict for SGroup {}: existing {:?} vs new {:?}",
+                            self.sgroup_index,
+                            existing,
+                            self.subscript
+                        ))
+                        .into());
+                    }
+                }
+                sgroup.subscript = Some(self.subscript);
+            }
+        }
         Ok(())
     }
 }
