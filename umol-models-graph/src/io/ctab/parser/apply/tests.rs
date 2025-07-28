@@ -82,6 +82,24 @@ fn molecule_with_labeled_sgroup(molecule_with_sgroup: Molecule) -> Molecule {
     molecule
 }
 
+#[fixture]
+fn molecule_with_superatom_sgroup(basic_molecule: Molecule) -> Molecule {
+    let sgroup = SGroup::new(SGroupType::Superatom);
+    let mut molecule = basic_molecule;
+    molecule.sgroups.insert(0, sgroup);
+    let entry1 = SGroupAtomListEntry {
+        sgroup_index: 0,
+        atom_indices: vec![0, 1],
+    };
+    entry1.apply(&mut molecule).unwrap();
+    let entry2 = SGroupBondListEntry {
+        sgroup_index: 0,
+        bond_indices: vec![0],
+    };
+    entry2.apply(&mut molecule).unwrap();
+    molecule
+}
+
 #[rstest]
 fn test_apply_atom_alias_entry(basic_molecule: Molecule) {
     let mut molecule = basic_molecule;
@@ -1525,6 +1543,89 @@ fn test_apply_sgroup_display_info_entry_invalid(molecule_with_sgroup: Molecule) 
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
             assert!(msg.contains("Invalid SGroup index: 1"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_connecting_bond_entry(molecule_with_superatom_sgroup: Molecule) {
+    let mut molecule = molecule_with_superatom_sgroup;
+
+    let entry = SGroupConnectingBondEntry {
+        sgroup_index: 0,
+        bond_index: 0,
+        bond_vector: (1.0, 2.0),
+    };
+    entry.apply(&mut molecule).unwrap();
+    assert_eq!(
+        molecule.sgroups[&0].connecting_bond,
+        Some(SGroupConnectingBond {
+            bond_index: 0,
+            bond_vector: (1.0, 2.0),
+        })
+    );
+}
+
+#[rstest]
+fn test_apply_sgroup_connecting_bond_entry_nonexistent_bond(
+    molecule_with_superatom_sgroup: Molecule,
+) {
+    let mut molecule = molecule_with_superatom_sgroup;
+
+    // Try to use a bond that doesn't exist in the molecule
+    let entry = SGroupConnectingBondEntry {
+        sgroup_index: 0,
+        bond_index: 999,
+        bond_vector: (1.0, 2.0),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Data(DataError::MissingBondIndex(idx)) => assert_eq!(idx, 999),
+        _ => panic!("Expected MissingBondIndex error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_connecting_bond_entry_invalid_type(molecule_with_sgroup: Molecule) {
+    let mut molecule = molecule_with_sgroup;
+    // The fixture already has a Generic SGroup at index 0
+
+    let entry = SGroupConnectingBondEntry {
+        sgroup_index: 0,
+        bond_index: 0,
+        bond_vector: (1.0, 2.0),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Connecting bonds are only valid for Superatom SGroups"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_connecting_bond_entry_invalid_bond(molecule_with_superatom_sgroup: Molecule) {
+    let mut molecule = molecule_with_superatom_sgroup;
+    // The fixture already has bond 0 in the SGroup
+
+    // Try to use bond 1, which exists in molecule but not in SGroup bond list
+    let entry = SGroupConnectingBondEntry {
+        sgroup_index: 0,
+        bond_index: 1,
+        bond_vector: (1.0, 2.0),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Connecting bond index 1 is not present in SGroup 0 bond list"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }

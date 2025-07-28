@@ -175,6 +175,12 @@ pub struct SGroupDisplayInfoEntry {
     pub bracket_coords: Vec<f64>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupConnectingBondEntry {
+    pub sgroup_index: usize,
+    pub bond_index: usize,
+    pub bond_vector: (f64, f64),
+}
 /// An enum representing a parsed property modification, containing the raw data.
 /// This avoids allocating a new Vec for every single property line in a file.
 #[derive(Debug, Clone, PartialEq)]
@@ -204,7 +210,7 @@ pub enum PropertyEntries {
     SGroupSubscriptEntry(SGroupSubscriptEntry),
     SGroupCorrespondenceEntry(SGroupCorrespondenceEntry),
     SGroupDisplayInfoEntry(SGroupDisplayInfoEntry),
-    // Superatom bond and vector [SBV]
+    SGroupConnectingBondEntry(SGroupConnectingBondEntry),
     // Data sgroup fields [SDT]
     // Data sgroup display information [SDD]
     // Data sgroup data [SCD] / [SED]
@@ -422,6 +428,9 @@ pub fn property_input<'a>(
                 b"M  SDI" => sgroup_display_info_entry()
                     .parse(rest)
                     .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
+                b"M  SBV" => sgroup_connecting_bond_entry()
+                    .parse(rest)
+                    .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
                 b"M  END" => success(PropertyEntries::End).parse(rest),
                 _ => Err(nom::Err::Error(error::Error::new(
                     input,
@@ -1114,9 +1123,8 @@ fn sgroup_correspondence_entry<'a>(
 }
 
 /// Parse SGroup display info entry.
-/// M SDI sssnn4 x1 y1 x2 y2
-/// sss: SGroup index, nn4: count (max 4), x1, y1: coordinates of opening bracket, x2, y2: coordinates of closing bracket
-/// (f10.4)
+/// M  SDI sssnn4 x1 y1 x2 y2
+/// sss: SGroup index, nn4: count (max 4), x1, y1: opening bracket, x2, y2: closing bracket (f10.4)
 fn sgroup_display_info_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDisplayInfoEntry, Error = error::Error<&'a [u8]>> {
     all_consuming(preceded(
@@ -1134,6 +1142,26 @@ fn sgroup_display_info_entry<'a>(
                 bracket_coords,
             },
         ),
+    ))
+}
+
+/// Parse SGroup connecting bond entry.
+/// M  SBV sss bb1 x1 y1
+/// sss: SGroup index, bb1: bond index, x1, y1: bond vector (f10.4)
+fn sgroup_connecting_bond_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupConnectingBondEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            fixed_width_float::<f64>(10, 4),
+            fixed_width_float::<f64>(10, 4),
+        ),
+        |(sgroup_index, bond_index, x1, y1)| SGroupConnectingBondEntry {
+            sgroup_index,
+            bond_index,
+            bond_vector: (x1, y1),
+        },
     ))
 }
 

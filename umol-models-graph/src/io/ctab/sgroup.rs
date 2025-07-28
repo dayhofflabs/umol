@@ -53,6 +53,13 @@ pub struct SGroupBracketCoords {
     pub bracket2: (f64, f64),
 }
 
+/// SGroup connecting bond
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SGroupConnectingBond {
+    pub bond_index: usize,
+    pub bond_vector: (f64, f64),
+}
+
 /// SGroup bracket style
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SGroupBracketStyle {
@@ -74,6 +81,7 @@ pub struct SGroup {
     pub bond_indices: Vec<usize>,                 // SBL: bonds in SGroup
     pub parent_atom_indices: Option<Vec<usize>>,  // SPA: parent atoms for multiple groups
     pub correspondence: Option<Vec<usize>>,       // CRS: correspondence for crosslinks
+    pub connecting_bond: Option<SGroupConnectingBond>, // CBV: connecting bond
     pub bracket_coords: Option<SGroupBracketCoords>, // SDI: bracket display info
     pub data_field_name: Option<String>,          // SDT: data field name for DAT SGroups
     pub data_field_info: Option<String>,          // SDT: data field info for DAT SGroups
@@ -98,6 +106,7 @@ impl SGroup {
             bond_indices: Vec::new(),
             parent_atom_indices: None,
             correspondence: None,
+            connecting_bond: None,
             bracket_coords: None,
             data_field_name: None,
             data_field_info: None,

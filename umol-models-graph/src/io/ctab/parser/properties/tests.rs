@@ -61,6 +61,7 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
 #[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property", PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry { sgroup_index: 0, bond_indices: vec![9, 8, 3] }))]
 #[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property", PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry { sgroup_index: 2, bracket_coords: vec![4.4700, -3.1700, 4.4700, -5.7500] }))]
+#[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property", PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry { sgroup_index: 0, bond_index: 10, bond_vector: (0.6400, 0.9700) }))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -117,6 +118,7 @@ fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case
 #[case(b"M  SDS EXP  1   1", "SDS SGroup property not supported in standard parser")]
 #[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property not supported in standard parser")]
 #[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property not supported in standard parser")]
+#[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property not supported in standard parser")]
 fn test_property_input_standard_invalid(#[case] input: &[u8], #[case] desc: &str) {
     let result = property_input_standard(input);
     assert!(result.is_err(), "{}", desc);
@@ -877,6 +879,33 @@ fn test_sgroup_display_info_entry(#[case] input: &[u8], #[case] expected: SGroup
 #[case(b"   1  0", "count is zero", ErrorKind::Verify)]
 fn test_sgroup_display_info_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
     let result = sgroup_display_info_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"   1   6   -0.7200   -0.4200", SGroupConnectingBondEntry { sgroup_index: 0, bond_index: 5, bond_vector: (-0.7200, -0.4200) })]
+fn test_sgroup_connecting_bond_entry(#[case] input: &[u8], #[case] expected: SGroupConnectingBondEntry) {
+    let (remaining, result) = sgroup_connecting_bond_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result.sgroup_index, expected.sgroup_index);
+    assert_eq!(result.bond_index, expected.bond_index);
+    assert!(approx_eq!(f64, result.bond_vector.0, expected.bond_vector.0));
+    assert!(approx_eq!(f64, result.bond_vector.1, expected.bond_vector.1));
+}
+
+#[rstest]
+#[case(b"   0   1   -0.7200   -0.4200", "sgroup index is zero", ErrorKind::Verify)]
+#[case(b"   1   0   -0.7200   -0.4200", "bond index is zero", ErrorKind::Verify)]
+#[case(b"   1   1   -0.7200   -0.4200 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_connecting_bond_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = sgroup_connecting_bond_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
