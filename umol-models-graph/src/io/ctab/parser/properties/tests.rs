@@ -20,7 +20,7 @@ fn test_legacy_atom_list_input(#[case] input: &[u8], #[case] expected: PropertyE
 #[rstest]
 #[case(b"  1 F    0   9  ", "count is zero", ErrorKind::Verify)]
 #[case(b"  1 F    6    9  ", "count exceeds 5", ErrorKind::Verify)]
-#[case(b"  1 X    1   9  ", "invalid exclusion flag", ErrorKind::Tag)]
+#[case(b"  1 X    1   9  ", "invalid exclusion flag", ErrorKind::MapRes)]
 #[case(b"  1 F    1   0  ", "invalid element atomic number", ErrorKind::MapOpt)]
 fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
     let result = legacy_atom_list_input().parse(input);

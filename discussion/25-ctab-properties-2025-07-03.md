@@ -32,7 +32,7 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Sgrp Subs  | SMT    | x S  | SGroup  | x      | x         | x      | x       |                       |
 | Sgrp Corr  | CRS    | x    | SGroup  | x      | -         | x      | -       |                       |
 | Sgrp Disp  | SDI    | x    | SGroup  | x      | x         | x      | x       |                       |
-| Sup Bd Vec | SBV    | -    | SGroup  | x      | -         | x      | x       |                       |
+| Sup Bd Vec | SBV    | x    | SGroup  | x      | -         | x      | x       |                       |
 | Data Flds  | SDT    | -    | SGroup  | x      | x         | x      | x       |                       |
 | Data Disp  | SDD    | -    | SGroup  | x      | x         | x      | x       |                       |
 | Data Sgrp  | SCD    | -    | SGroup  | x      | x         | x      | x       | Continued data line   |

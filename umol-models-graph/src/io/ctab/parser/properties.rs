@@ -2,7 +2,7 @@
 
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{line_ending, not_line_ending};
-use nom::combinator::{all_consuming, map, map_opt, map_parser, map_res, opt, success};
+use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
 use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
@@ -181,6 +181,24 @@ pub struct SGroupConnectingBondEntry {
     pub bond_index: usize,
     pub bond_vector: (f64, f64),
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SGroupDataType {
+    Formatted,
+    Numeric,
+    Text,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupDataDescriptionEntry {
+    pub sgroup_index: usize,
+    pub field_name: String,
+    pub field_type: SGroupDataType,
+    pub field_units: Option<String>,
+    pub query_identifier: Option<String>,
+    pub data_query_operator: Option<String>,
+}
+
 /// An enum representing a parsed property modification, containing the raw data.
 /// This avoids allocating a new Vec for every single property line in a file.
 #[derive(Debug, Clone, PartialEq)]
@@ -219,49 +237,40 @@ pub enum PropertyEntries {
     End,
 }
 
-/// Parse a legacy atom list entry (e.g., "  1  2 C  N   ")
+/// Parse a legacy atom list entry (e.g., "  1 F    3   9   7   8  ")
 pub fn legacy_atom_list_input<'a>(
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
-        // Parse atom index (3 chars)
-        let (remaining, atom_index) = fixed_width_int_minus1::<usize>(3).parse(input)?;
-
-        // Parse exclusion flag (1 char)
-        let (remaining, exclusion_byte) =
-            delimited(tag(" "), take(1usize), tag("    ")).parse(remaining)?;
-        let exclusion = match exclusion_byte {
-            b"T" => true,
-            b"F" | b" " => false,
-            _ => {
-                return Err(nom::Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Tag,
-                )))
-            }
-        };
-
-        // Parse atom list (at most 5, each 3 chars, delimited by spaces)
-        let (remaining, elements) = length_count(
-            fixed_width_int_in_range::<u8, _>(3, 1..=5),
-            preceded(
+    all_consuming(map(
+        (
+            fixed_width_int_minus1::<usize>(3),
+            delimited(
                 tag(" "),
-                map_opt(
-                    fixed_width_int_partial::<u8>(3),
-                    Element::from_atomic_number,
+                map_res(take(1usize), |b: &[u8]| match b {
+                    b"T" => Ok(true),
+                    b"F" | b" " => Ok(false),
+                    _ => Err(error::Error::new(b, error::ErrorKind::Tag)),
+                }),
+                tag("    "),
+            ),
+            length_count(
+                fixed_width_int_in_range::<u8, _>(3, 1..=5),
+                preceded(
+                    tag(" "),
+                    map_opt(
+                        fixed_width_int_partial::<u8>(3),
+                        Element::from_atomic_number,
+                    ),
                 ),
             ),
-        )
-        .parse(remaining)?;
-
-        Ok((
-            remaining,
+        ),
+        |(atom_index, exclusion, elements)| {
             PropertyEntries::AtomListEntry(AtomListEntry {
                 atom_index,
                 exclusion,
                 elements,
-            }),
-        ))
-    }
+            })
+        },
+    ))
 }
 
 /// Parse property line (standard properties only - no queries)
@@ -1163,6 +1172,60 @@ fn sgroup_connecting_bond_entry<'a>(
             bond_vector: (x1, y1),
         },
     ))
+}
+
+/// Parse SGroup data field description entry.
+/// M  SDT sss fff..fffgghh...hhhiijjj..,
+/// sss: SGroup index, fff..fff: field name (30 chars), gg: field type (2 chars, F=formatted, N=numeric, T=text)
+/// hh: field units or format (20 chars), ii: Query identifier (MQ: MACCS-II, IQ: ISIS, PQ: program code)
+/// jjj: data query operator
+fn sgroup_data_description_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupDataDescriptionEntry, Error = error::Error<&'a [u8]>> {
+    |input: &'a [u8]| {
+        // Parse SGroup index
+        let (i, sgroup_index) =
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
+
+        // Parse field name
+        let (i, field_name) = take(30usize).parse(i)?;
+
+        // Parse field type
+        let (i, field_type) = take(2usize).parse(i)?;
+        let field_type = match field_type {
+            b"F" => SGroupDataType::Formatted,
+            b"N" => SGroupDataType::Numeric,
+            b"T" => SGroupDataType::Text,
+            _ => {
+                return Err(nom::Err::Error(error::Error::new(
+                    i,
+                    error::ErrorKind::Verify,
+                )))
+            }
+        };
+
+        // Parse optional field units
+        let (i, field_units) = cond(i.len() >= 20, take(20usize)).parse(i)?;
+
+        // Parse optional query identifier
+        let (i, query_identifier) = cond(i.len() >= 2, take(2usize)).parse(i)?;
+
+        // Parse optional data query operator
+        let (i, data_query_operator) = cond(i.len() >= 1, not_line_ending).parse(i)?;
+
+        Ok((
+            i,
+            SGroupDataDescriptionEntry {
+                sgroup_index,
+                field_name: String::from_utf8_lossy(field_name).trim().to_string(),
+                field_type,
+                field_units: field_units.map(|s| String::from_utf8_lossy(s).trim().to_string()),
+                query_identifier: query_identifier
+                    .map(|s| String::from_utf8_lossy(s).trim().to_string()),
+                data_query_operator: data_query_operator
+                    .map(|s| String::from_utf8_lossy(s).trim().to_string()),
+            },
+        ))
+    }
 }
 
 #[cfg(test)]
