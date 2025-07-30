@@ -42,7 +42,7 @@ impl Configuration {
 
     /// Return core occupation
     pub fn core_occupation(&self) -> Option<Occupation> {
-        self.core_element.map(|core| get_total_occupation(core))
+        self.core_element.map(get_total_occupation)
     }
 
     /// Return computed valence occupation
@@ -110,7 +110,7 @@ pub struct GroundState(Configuration);
 impl GroundState {
     pub fn new(element: Element) -> Self {
         if let Some(gs) = GROUND_STATE_EXCEPTIONS.get(&element) {
-            return gs.clone();
+            *gs
         } else {
             GroundState(get_aufbau_configuration(element))
         }
@@ -131,9 +131,9 @@ impl Deref for GroundState {
     }
 }
 
-impl Into<Configuration> for GroundState {
-    fn into(self) -> Configuration {
-        self.0
+impl From<GroundState> for Configuration {
+    fn from(gs: GroundState) -> Self {
+        gs.0
     }
 }
 

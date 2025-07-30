@@ -12,6 +12,7 @@ use umol::Result;
 /// Interrelations between properties are not validated here, they are checked as part of the
 /// `AtomType` matching.
 pub struct AtomValidator {
+    #[allow(clippy::type_complexity)]
     validators: Vec<Box<dyn Fn(&AtomBuilder) -> Result<()> + Send + Sync>>,
 }
 
@@ -73,10 +74,6 @@ impl AtomValidator {
         })])
     }
 
-    pub fn default() -> Self {
-        Self::strict()
-    }
-
     pub fn lenient() -> Self {
         Self::always()
     }
@@ -103,7 +100,7 @@ impl AtomValidator {
 
 impl Default for AtomValidator {
     fn default() -> Self {
-        Self::default()
+        Self::strict()
     }
 }
 

@@ -21,7 +21,8 @@ pub enum Element {
 // Element data array indexed by atomic number - 1
 // Each tuple contains: (atomic_number, reference_isotope_mass, atomic_weight, symbol, period, group,
 // valence_electrons, max_valence, (min_charge, max_charge), max_unpaired_electrons, max_implicit_hydrogens)
-static ELEMENT_DATA: [(u8, u32, f64, &'static str, u8, u8, u8, u8, (i8, i8), u8, u8); 118] = [
+#[allow(clippy::type_complexity)]
+static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, (i8, i8), u8, u8); 118] = [
     (1, 1, 1.0080, "H", 1, 1, 1, 2, (-1, 1), 1, 0),    // H
     (2, 4, 4.0026, "He", 1, 32, 0, 0, (0, 0), 0, 0),   // He: no valence electrons
     (3, 7, 6.94, "Li", 2, 1, 1, 2, (-1, 1), 1, 0),     // Li
@@ -763,6 +764,7 @@ impl Element {
             match len {
                 1 => {
                     let first = key_buf[0];
+                    #[allow(clippy::manual_range_contains)]
                     if first >= b'A' && first <= b'Z' {
                         let index = (first - b'A') as usize;
                         ELEMENT_LOOKUP[index]
@@ -773,6 +775,7 @@ impl Element {
                 2 => {
                     let first = key_buf[0];
                     let second = key_buf[1];
+                    #[allow(clippy::manual_range_contains)]
                     if first >= b'A' && first <= b'Z' && second >= b'a' && second <= b'z' {
                         let index = 26 + (first - b'A') as usize * 26 + (second - b'a') as usize;
                         ELEMENT_LOOKUP[index]

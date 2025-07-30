@@ -294,12 +294,10 @@ pub(crate) fn trim_whitespace_2char(s: &[u8]) -> &[u8] {
         } else {
             &s[1..2]
         }
+    } else if s[1] == b' ' {
+        &s[0..1]
     } else {
-        if s[1] == b' ' {
-            &s[0..1]
-        } else {
-            s
-        }
+        s
     }
 }
 
@@ -416,7 +414,7 @@ pub(crate) fn rgroup_occurrence<'a>(
         map((nom_u8, tag("-"), nom_u8), |(n, _, m)| {
             RGroupOccurrence::Range(n, m)
         }),
-        map(nom_u8, |n| RGroupOccurrence::Exactly(n)),
+        map(nom_u8, RGroupOccurrence::Exactly),
         map((tag(">"), nom_u8), |(_, n)| {
             RGroupOccurrence::GreaterThan(n)
         }),

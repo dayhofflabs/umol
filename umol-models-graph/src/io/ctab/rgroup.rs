@@ -53,42 +53,39 @@ impl RGroup {
     pub fn from_symbol_bytes(input: &[u8]) -> Option<Self> {
         debug_assert!(input.len() <= 3, "R-group symbol must be 1-3 characters");
 
-        if input.len() == 0 || input[0] != b'R' {
-            return None;
-        }
-        if input.len() == 1 {
-            return Some(Self::new(None));
-        }
-        if input[1] == b'#' {
-            if input.len() == 2 {
-                return Some(Self::new(None));
-            }
+        if input.is_empty() || input[0] != b'R' {
+            None
+        } else if input.len() == 1 || input[1] == b'#' {
+            Some(Self::new(None))
         } else {
             let num_str = &input[1..];
             if num_str.len() == 1 {
                 if num_str[0] < b'0' || num_str[0] > b'9' {
-                    return None;
+                    None
+                } else {
+                    let label = (num_str[0] - b'0') as u32;
+                    if label == 0 {
+                        Some(Self::new(None))
+                    } else {
+                        Some(Self::new(Some(label)))
+                    }
                 }
-                let label = (num_str[0] - b'0') as u32;
-                if label == 0 {
-                    return Some(Self::new(None));
-                }
-                return Some(Self::new(Some(label)));
             } else if num_str.len() == 2 {
                 if num_str[0] < b'0' || num_str[0] > b'9' || num_str[1] < b'0' || num_str[1] > b'9'
                 {
-                    return None;
+                    None
+                } else {
+                    let label = ((num_str[0] - b'0') * 10 + (num_str[1] - b'0')) as u32;
+                    if label == 0 {
+                        Some(Self::new(None))
+                    } else {
+                        Some(Self::new(Some(label)))
+                    }
                 }
-                let label = ((num_str[0] - b'0') * 10 + (num_str[1] - b'0')) as u32;
-                if label == 0 {
-                    return Some(Self::new(None));
-                }
-                return Some(Self::new(Some(label)));
             } else {
-                return None;
+                None
             }
         }
-        return None;
     }
 
     pub fn from_symbol_str(input: &str) -> Option<Self> {

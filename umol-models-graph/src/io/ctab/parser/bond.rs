@@ -15,8 +15,6 @@ use super::convert::{
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1};
 
-
-
 fn bond_input_standard21(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStandard)> {
     terminated(
         map(
@@ -126,60 +124,65 @@ pub fn bond_input_standard<'a>(
 }
 
 fn bond_input_inner<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], (usize, usize, Bond), error::Error<&'a [u8]>> {
-    let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
-    let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
-    let (i, bond_type) =
-        map_res(fixed_width_int::<u8>(3), |code| convert_bond_type_code(code)).parse(i)?;
+) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
+    move |input: &'a [u8]| {
+        let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
+        let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
+        let (i, bond_type) = map_res(fixed_width_int::<u8>(3), |code| {
+            convert_bond_type_code(code)
+        })
+        .parse(i)?;
 
-    let (i, stereo_dir) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int::<u8>(3), |code| {
-            convert_bond_stereo_dir_code(code)
-        }),
-    )
-    .parse(i)?;
+        let (i, stereo_dir) = cond(
+            i.len() >= 3,
+            map_res(fixed_width_int::<u8>(3), |code| {
+                convert_bond_stereo_dir_code(code)
+            }),
+        )
+        .parse(i)?;
 
-    let (i, _) = cond(i.len() >= 3, take(3usize)).parse(i)?; // xxx field
+        let (i, _) = cond(i.len() >= 3, take(3usize)).parse(i)?; // xxx field
 
-    let (i, topology) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int::<u8>(3), |code| {
-            convert_bond_topology_code(code)
-        }),
-    )
-    .parse(i)?;
+        let (i, topology) = cond(
+            i.len() >= 3,
+            map_res(fixed_width_int::<u8>(3), |code| {
+                convert_bond_topology_code(code)
+            }),
+        )
+        .parse(i)?;
 
-    let (i, reacting_center) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int::<i8>(3), |code| {
-            convert_bond_reacting_center_code(code)
-        }),
-    )
-    .parse(i)?;
+        let (i, reacting_center) = cond(
+            i.len() >= 3,
+            map_res(fixed_width_int::<i8>(3), |code| {
+                convert_bond_reacting_center_code(code)
+            }),
+        )
+        .parse(i)?;
 
-    let mut bond = Bond::new(bond_type);
-    if let Some((stereo_val, dir_val)) = stereo_dir {
-        match bond.bond_type {
-            BondType::Single => {
-                bond.dir = dir_val;
+        let mut bond = Bond::new(bond_type);
+        if let Some((stereo_val, dir_val)) = stereo_dir {
+            match bond.bond_type {
+                BondType::Single => {
+                    bond.dir = dir_val;
+                }
+                BondType::Double => {
+                    bond.stereo = stereo_val;
+                }
+                _ => (),
             }
-            BondType::Double => {
-                bond.stereo = stereo_val;
-            }
-            _ => (),
         }
-    }
-    bond.topology = topology.flatten();
-    bond.reacting_center = reacting_center.flatten();
+        bond.topology = topology.flatten();
+        bond.reacting_center = reacting_center.flatten();
 
-    Ok((i, (first_atom, second_atom, bond)))
+        Ok((i, (first_atom, second_atom, bond)))
+    }
 }
 
 pub fn bond_input<'a>(
 ) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
-    terminated(bond_input_inner, space0)
+    move |input: &'a [u8]| {
+        terminated(bond_input_inner(), space0).parse(input)
+    }
 }
 
 #[cfg(test)]

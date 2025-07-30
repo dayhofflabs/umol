@@ -3,7 +3,8 @@ use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol, AttachmentPointType};
 use crate::io::ctab::bond::{Bond, BondType};
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
-    SGroup, SGroupBracketStyle, SGroupConnectivity, SGroupMultiplier, SGroupSubtype, SGroupType,
+    SGroup, SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType, SGroupMultiplier,
+    SGroupSubtype, SGroupType,
 };
 use float_cmp::approx_eq;
 use pretty_assertions::assert_eq;
@@ -97,6 +98,14 @@ fn molecule_with_superatom_sgroup(basic_molecule: Molecule) -> Molecule {
         bond_indices: vec![0],
     };
     entry2.apply(&mut molecule).unwrap();
+    molecule
+}
+
+#[fixture]
+fn molecule_with_data_sgroup(basic_molecule: Molecule) -> Molecule {
+    let mut molecule = basic_molecule;
+    let sgroup = SGroup::new(SGroupType::Data);
+    molecule.sgroups.insert(0, sgroup);
     molecule
 }
 
@@ -1568,9 +1577,26 @@ fn test_apply_sgroup_connecting_bond_entry(molecule_with_superatom_sgroup: Molec
 }
 
 #[rstest]
-fn test_apply_sgroup_connecting_bond_entry_nonexistent_bond(
-    molecule_with_superatom_sgroup: Molecule,
-) {
+fn test_apply_sgroup_connecting_bond_entry_no_sgroup(molecule_with_superatom_sgroup: Molecule) {
+    let mut molecule = molecule_with_superatom_sgroup;
+    let entry = SGroupConnectingBondEntry {
+        sgroup_index: 1,
+        bond_index: 0,
+        bond_vector: (1.0, 2.0),
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index: 1"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_connecting_bond_entry_no_bond(molecule_with_superatom_sgroup: Molecule) {
     let mut molecule = molecule_with_superatom_sgroup;
 
     // Try to use a bond that doesn't exist in the molecule
@@ -1626,6 +1652,105 @@ fn test_apply_sgroup_connecting_bond_entry_invalid_bond(molecule_with_superatom_
     match result.unwrap_err() {
         Error::Validation(ValidationError::InvalidComponent(msg)) => {
             assert!(msg.contains("Connecting bond index 1 is not present in SGroup 0 bond list"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_data_description_entry(molecule_with_data_sgroup: Molecule) {
+    let mut molecule = molecule_with_data_sgroup;
+    let entry = SGroupDataDescriptionEntry {
+        sgroup_index: 0,
+        field_name: "pH".to_string(),
+        field_type: SGroupDataType::Text,
+        field_units: None,
+        query_identifier: None,
+        data_query_operator: None,
+    };
+    entry.apply(&mut molecule).unwrap();
+    assert_eq!(molecule.sgroups[&0].data.len(), 1);
+    assert_eq!(
+        molecule.sgroups[&0].data.get("pH").unwrap(),
+        &SGroupData {
+            field_type: SGroupDataType::Text,
+            field_units: None,
+            query_identifier: None,
+            data_query_operator: None,
+            data_content: Some(vec![]),
+        }
+    );
+}
+
+#[rstest]
+fn test_apply_sgroup_data_description_entry_invalid(molecule_with_data_sgroup: Molecule) {
+    let mut molecule = molecule_with_data_sgroup;
+    let entry = SGroupDataDescriptionEntry {
+        sgroup_index: 1,
+        field_name: "pH".to_string(),
+        field_type: SGroupDataType::Text,
+        field_units: None,
+        query_identifier: None,
+        data_query_operator: None,
+    };
+
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Invalid SGroup index: 1"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_data_description_entry_invalid_type(molecule_with_superatom_sgroup: Molecule) {
+    let mut molecule = molecule_with_superatom_sgroup;
+    let entry = SGroupDataDescriptionEntry {
+        sgroup_index: 0,
+        field_name: "pH".to_string(),
+        field_type: SGroupDataType::Numeric,
+        field_units: None,
+        query_identifier: None,
+        data_query_operator: None,
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Data description entries are only valid for Data SGroups"));
+        }
+        _ => panic!("Expected InvalidComponent error"),
+    }
+}
+
+#[rstest]
+fn test_apply_sgroup_data_description_entry_conflict(molecule_with_data_sgroup: Molecule) {
+    let mut molecule = molecule_with_data_sgroup;
+    molecule.sgroups.get_mut(&0).unwrap().data.insert(
+        "pH".to_string(),
+        SGroupData {
+            field_type: SGroupDataType::Text,
+            field_units: None,
+            query_identifier: None,
+            data_query_operator: None,
+            data_content: Some(vec![]),
+        },
+    );
+    let entry = SGroupDataDescriptionEntry {
+        sgroup_index: 0,
+        field_name: "pH".to_string(),
+        field_type: SGroupDataType::Text,
+        field_units: None,
+        query_identifier: None,
+        data_query_operator: None,
+    };
+    let result = entry.apply(&mut molecule);
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+            assert!(msg.contains("Data description entries conflict for SGroup 0"));
         }
         _ => panic!("Expected InvalidComponent error"),
     }

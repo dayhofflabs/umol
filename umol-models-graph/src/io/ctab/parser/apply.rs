@@ -1,4 +1,5 @@
 //! Apply property entries to molecule
+use super::context::Context;
 use super::convert::{
     convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
     convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
@@ -8,52 +9,56 @@ use super::properties::{
     ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry, RGroupLogicEntry,
     RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
     SGroupConnectingBondEntry, SGroupConnectivityEntry, SGroupCorrespondenceEntry,
-    SGroupDisplayInfoEntry, SGroupExpansionEntry, SGroupLabelEntry, SGroupParentAtomEntry,
-    SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry,
-    UnsaturatedAtomEntry,
+    SGroupDataDescriptionEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
+    SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry, SGroupSubtypeEntry,
+    SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::io::ctab::atom::{AtomList, AtomSymbol, LinkAtom};
 use crate::io::ctab::molecule::Molecule;
 use crate::io::ctab::rgroup::RGroup;
-use crate::io::ctab::sgroup::{SGroup, SGroupBracketCoords, SGroupConnectingBond, SGroupType};
+use crate::io::ctab::sgroup::{
+    SGroup, SGroupBracketCoords, SGroupConnectingBond, SGroupData, SGroupType,
+};
 use umol::error::{DataError, ValidationError};
 use umol::{Error, Result};
 
 /// Trait for applying property entries to molecule
 pub trait Apply {
-    fn apply(self, molecule: &mut Molecule) -> Result<()>;
+    fn apply(self, molecule: &mut Molecule, context: &mut Context) -> Result<()>;
 }
 
 /// Implementation for PropertyEntries enum - dispatches to specific implementations
 impl Apply for PropertyEntries {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, context: &mut Context) -> Result<()> {
         match self {
-            PropertyEntries::AtomAliasEntry(entry) => entry.apply(molecule),
-            PropertyEntries::AtomValueEntry(entry) => entry.apply(molecule),
-            PropertyEntries::ChargeEntries(entries) => entries.apply(molecule),
-            PropertyEntries::RadicalEntries(entries) => entries.apply(molecule),
-            PropertyEntries::IsotopeEntries(entries) => entries.apply(molecule),
-            PropertyEntries::RingBondCountEntries(entries) => entries.apply(molecule),
-            PropertyEntries::SubstitutionCountEntries(entries) => entries.apply(molecule),
-            PropertyEntries::UnsaturatedAtomEntries(entries) => entries.apply(molecule),
-            PropertyEntries::LinkAtomEntries(entries) => entries.apply(molecule),
-            PropertyEntries::AtomListEntry(entry) => entry.apply(molecule),
-            PropertyEntries::AttachmentPointEntries(entries) => entries.apply(molecule),
-            PropertyEntries::AtomAttachmentOrderEntry(entry) => entry.apply(molecule),
-            PropertyEntries::RGroupLabelEntries(entries) => entries.apply(molecule),
-            PropertyEntries::RGroupLogicEntry(entry) => entry.apply(molecule),
-            PropertyEntries::SGroupTypeEntries(entries) => entries.apply(molecule),
-            PropertyEntries::SGroupSubtypeEntries(entries) => entries.apply(molecule),
-            PropertyEntries::SGroupLabelEntries(entries) => entries.apply(molecule),
-            PropertyEntries::SGroupConnectivityEntries(entries) => entries.apply(molecule),
-            PropertyEntries::SGroupExpansionEntries(entries) => entries.apply(molecule),
-            PropertyEntries::SGroupAtomListEntry(entry) => entry.apply(molecule),
-            PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule),
-            PropertyEntries::SGroupParentAtomEntry(entry) => entry.apply(molecule),
-            PropertyEntries::SGroupSubscriptEntry(entry) => entry.apply(molecule),
-            PropertyEntries::SGroupCorrespondenceEntry(entry) => entry.apply(molecule),
-            PropertyEntries::SGroupDisplayInfoEntry(entry) => entry.apply(molecule),
-            PropertyEntries::SGroupConnectingBondEntry(entry) => entry.apply(molecule),
+            PropertyEntries::AtomAliasEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::AtomValueEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::ChargeEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::RadicalEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::IsotopeEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::RingBondCountEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::SubstitutionCountEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::UnsaturatedAtomEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::LinkAtomEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::AtomListEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::AttachmentPointEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::AtomAttachmentOrderEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::RGroupLabelEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::RGroupLogicEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupTypeEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::SGroupSubtypeEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::SGroupLabelEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::SGroupConnectivityEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::SGroupExpansionEntries(entries) => entries.apply(molecule, context),
+            PropertyEntries::SGroupAtomListEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupBondListEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupParentAtomEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupSubscriptEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupCorrespondenceEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupDisplayInfoEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupConnectingBondEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupDataDescriptionEntry(entry) => entry.apply(molecule, context),
+            PropertyEntries::SGroupDataEntry(entry) => entry.apply(molecule, context),
             PropertyEntries::End => Ok(()),
         }
     }
@@ -61,7 +66,7 @@ impl Apply for PropertyEntries {
 
 /// Apply AtomAliasEntry (A)
 impl Apply for AtomAliasEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         if self.atom_index >= molecule.atom_count() {
             return Err(DataError::MissingAtomIndex(self.atom_index).into());
         }
@@ -86,7 +91,7 @@ impl Apply for AtomAliasEntry {
 
 /// Apply AtomValueEntry (V)
 impl Apply for AtomValueEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         if self.atom_index >= molecule.atom_count() {
             return Err(DataError::MissingAtomIndex(self.atom_index).into());
         }
@@ -111,7 +116,7 @@ impl Apply for AtomValueEntry {
 
 /// Apply ChargeEntries (CHG)
 impl Apply for Vec<ChargeEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -129,7 +134,7 @@ impl Apply for Vec<ChargeEntry> {
 
 /// Apply RadicalEntries (RAD)
 impl Apply for Vec<RadicalEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -149,7 +154,7 @@ impl Apply for Vec<RadicalEntry> {
 
 /// Apply IsotopeEntries (ISO)
 impl Apply for Vec<IsotopeEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -183,7 +188,7 @@ impl Apply for Vec<IsotopeEntry> {
 
 /// Apply RingBondCountEntries (RB)
 impl Apply for Vec<RingBondCountEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -210,7 +215,7 @@ impl Apply for Vec<RingBondCountEntry> {
 
 /// Apply SubstitutionCountEntries (SUB)
 impl Apply for Vec<SubstitutionCountEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -237,7 +242,7 @@ impl Apply for Vec<SubstitutionCountEntry> {
 
 /// Apply UnsaturatedAtomEntries (UNS)
 impl Apply for Vec<UnsaturatedAtomEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -264,7 +269,7 @@ impl Apply for Vec<UnsaturatedAtomEntry> {
 
 /// Apply LinkAtomEntries (LIN)
 impl Apply for Vec<LinkAtomEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -273,9 +278,9 @@ impl Apply for Vec<LinkAtomEntry> {
                 return Err(DataError::MissingAtomIndex(entry.subs_index1).into());
             }
             if entry.subs_index1 == entry.atom_index {
-                return Err(ValidationError::InvalidComponent(format!(
-                    "Invalid link atom: subs index 1 cannot be the same as the atom index",
-                ))
+                return Err(ValidationError::InvalidComponent(
+                    "Invalid link atom: subs index 1 cannot be the same as the atom index".to_string(),
+                )
                 .into());
             }
             if let Some(subs_index2) = entry.subs_index2 {
@@ -283,9 +288,9 @@ impl Apply for Vec<LinkAtomEntry> {
                     return Err(DataError::MissingAtomIndex(subs_index2).into());
                 }
                 if subs_index2 == entry.atom_index {
-                    return Err(ValidationError::InvalidComponent(format!(
-                        "Invalid link atom: subs index 2 cannot be the same as the atom index",
-                    ))
+                    return Err(ValidationError::InvalidComponent(
+                        "Invalid link atom: subs index 2 cannot be the same as the atom index".to_string(),
+                    )
                     .into());
                 }
             }
@@ -324,7 +329,7 @@ impl Apply for Vec<LinkAtomEntry> {
 
 /// Apply AtomListEntry (ALS)
 impl Apply for AtomListEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         if self.atom_index >= molecule.atom_count() {
             return Err(DataError::MissingAtomIndex(self.atom_index).into());
         }
@@ -363,7 +368,7 @@ impl Apply for AtomListEntry {
 
 /// Apply AttachmentPointEntries (APO)
 impl Apply for Vec<AttachmentPointEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -391,7 +396,7 @@ impl Apply for Vec<AttachmentPointEntry> {
 
 /// Apply AtomAttachmentOrderEntry (AAL)
 impl Apply for AtomAttachmentOrderEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         if self.atom_index >= molecule.atom_count() {
             return Err(DataError::MissingAtomIndex(self.atom_index).into());
         }
@@ -423,7 +428,7 @@ impl Apply for AtomAttachmentOrderEntry {
 
 /// Apply RGroupLabelEntries (RGP)
 impl Apply for Vec<RGroupLabelEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             if entry.atom_index >= molecule.atom_count() {
                 return Err(DataError::MissingAtomIndex(entry.atom_index).into());
@@ -478,7 +483,7 @@ impl Apply for Vec<RGroupLabelEntry> {
 
 /// Apply RGroupLogicEntry (LOG)
 impl Apply for RGroupLogicEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         let mut index = 0;
         for atom_index in molecule.atom_indices() {
             if let Some(atom) = molecule.atom(atom_index) {
@@ -505,7 +510,7 @@ impl Apply for RGroupLogicEntry {
 
 /// Apply SGroupTypeEntries (STY)
 impl Apply for Vec<SGroupTypeEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             let sgroup_index = entry.sgroup_index;
             make_sgroup(molecule, entry.sgroup_index)?;
@@ -517,7 +522,7 @@ impl Apply for Vec<SGroupTypeEntry> {
 
 /// Apply SGroupSubtypeEntries (SST)
 impl Apply for Vec<SGroupSubtypeEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             let sgroup_index = entry.sgroup_index;
             ensure_sgroup(molecule, entry.sgroup_index)?;
@@ -539,7 +544,7 @@ impl Apply for Vec<SGroupSubtypeEntry> {
 
 /// Apply SGroupLabelEntries (SLB)
 impl Apply for Vec<SGroupLabelEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             // Ensure SGroup exists
             ensure_sgroup(molecule, entry.sgroup_index)?;
@@ -578,7 +583,7 @@ impl Apply for Vec<SGroupLabelEntry> {
 
 /// Apply SGroupConnectivityEntries (SCN)
 impl Apply for Vec<SGroupConnectivityEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             let sgroup_index = entry.sgroup_index;
             ensure_sgroup(molecule, entry.sgroup_index)?;
@@ -600,7 +605,7 @@ impl Apply for Vec<SGroupConnectivityEntry> {
 
 /// Apply SGroupExpansionEntries (SDS EXP)
 impl Apply for Vec<SGroupExpansionEntry> {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         for entry in self {
             ensure_sgroup(molecule, entry.sgroup_index)?;
             let sgroup = molecule.sgroups.get_mut(&entry.sgroup_index).unwrap();
@@ -612,7 +617,7 @@ impl Apply for Vec<SGroupExpansionEntry> {
 
 /// Apply SGroupAtomListEntry (SAL)
 impl Apply for SGroupAtomListEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         // Ensure SGroup exists
         ensure_sgroup(molecule, self.sgroup_index)?;
 
@@ -641,7 +646,7 @@ impl Apply for SGroupAtomListEntry {
 
 /// Apply SGroupBondListEntry (SBL)
 impl Apply for SGroupBondListEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         // Ensure SGroup exists
         ensure_sgroup(molecule, self.sgroup_index)?;
 
@@ -670,22 +675,21 @@ impl Apply for SGroupBondListEntry {
 
 /// Apply SGroupParentAtomEntry (SPA)
 impl Apply for SGroupParentAtomEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         ensure_sgroup(molecule, self.sgroup_index)?;
         let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
 
         if sgroup.group_type != SGroupType::MultipleGroup {
-            return Err(ValidationError::InvalidComponent(format!(
-                "SGroup parent atom entries are only valid for multiple groups",
-            ))
+            return Err(ValidationError::InvalidComponent(
+                "SGroup parent atom entries are only valid for multiple groups".to_string(),
+            )
             .into());
         }
 
         if sgroup.parent_atom_indices.is_some() {
-            return Err(ValidationError::InvalidComponent(format!(
-                "SGroup parent atom entries conflict for SGroup {}",
-                self.sgroup_index
-            ))
+            return Err(ValidationError::InvalidComponent(
+                format!("SGroup parent atom entries conflict for SGroup {}", self.sgroup_index),
+            )
             .into());
         }
 
@@ -696,7 +700,7 @@ impl Apply for SGroupParentAtomEntry {
 
 /// Apply SGroupSubscriptEntry (SMT)
 impl Apply for SGroupSubscriptEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         ensure_sgroup(molecule, self.sgroup_index)?;
         let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
 
@@ -735,14 +739,14 @@ impl Apply for SGroupSubscriptEntry {
 
 /// Apply SGroupCorrespondenceEntry (CRS)
 impl Apply for SGroupCorrespondenceEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         ensure_sgroup(molecule, self.sgroup_index)?;
         let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
 
         if sgroup.group_type != SGroupType::Crosslink {
-            return Err(ValidationError::InvalidComponent(format!(
-                "SGroup correspondence entries are only valid for crosslinks",
-            ))
+            return Err(ValidationError::InvalidComponent(
+                "SGroup correspondence entries are only valid for crosslinks".to_string(),
+            )
             .into());
         }
 
@@ -762,10 +766,10 @@ impl Apply for SGroupCorrespondenceEntry {
 
 /// Apply SGroupDisplayInfoEntry (SDI)
 impl Apply for SGroupDisplayInfoEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         ensure_sgroup(molecule, self.sgroup_index)?;
         let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
-        let x1 = self.bracket_coords.get(0).copied().unwrap_or(0.0);
+        let x1 = self.bracket_coords.first().copied().unwrap_or(0.0);
         let y1 = self.bracket_coords.get(1).copied().unwrap_or(0.0);
         let x2 = self.bracket_coords.get(2).copied().unwrap_or(0.0);
         let y2 = self.bracket_coords.get(3).copied().unwrap_or(0.0);
@@ -780,7 +784,7 @@ impl Apply for SGroupDisplayInfoEntry {
 
 /// Apply SGroupConnectingBondEntry (SBV)
 impl Apply for SGroupConnectingBondEntry {
-    fn apply(self, molecule: &mut Molecule) -> Result<()> {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
         ensure_sgroup(molecule, self.sgroup_index)?;
 
         // Validate bond exists in molecule
@@ -813,6 +817,52 @@ impl Apply for SGroupConnectingBondEntry {
             bond_vector: self.bond_vector,
         });
         Ok(())
+    }
+}
+
+/// Apply SGroupDataDescriptionEntry (SDT)
+impl Apply for SGroupDataDescriptionEntry {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
+        ensure_sgroup(molecule, self.sgroup_index)?;
+
+        let sgroup = molecule.sgroups.get_mut(&self.sgroup_index).unwrap();
+
+        // Check that SGroup type is Data
+        if sgroup.group_type != SGroupType::Data {
+            return Err(ValidationError::InvalidComponent(format!(
+                "Data description entries are only valid for Data SGroups, but SGroup {} has type {:?}",
+                self.sgroup_index, sgroup.group_type
+            ))
+            .into());
+        }
+
+        if sgroup.data.contains_key(&self.field_name) {
+            return Err(ValidationError::InvalidComponent(format!(
+                "Data description entries conflict for SGroup {}: field name '{}' already exists",
+                self.sgroup_index, self.field_name
+            ))
+            .into());
+        }
+
+        sgroup.data.insert(
+            self.field_name,
+            SGroupData {
+                field_type: self.field_type,
+                field_units: self.field_units,
+                query_identifier: self.query_identifier,
+                data_query_operator: self.data_query_operator,
+                data_content: Some(vec![]),
+            },
+        );
+        Ok(())
+    }
+}
+
+/// Apply SGroupDataEntry (SCD/SED)
+impl Apply for SGroupDataEntry {
+    fn apply(self, molecule: &mut Molecule, _context: &mut Context) -> Result<()> {
+        ensure_sgroup(molecule, self.sgroup_index)?;
+        todo!();
     }
 }
 

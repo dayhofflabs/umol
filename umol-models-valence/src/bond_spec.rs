@@ -267,27 +267,15 @@ impl BondSpec {
     }
 
     pub fn increase(self) -> Option<Self> {
-        if let Some(order) = self.order.increase() {
-            Some(BondSpec::new(order, self.donation))
-        } else {
-            None
-        }
+        self.order.increase().map(|order| Self::new(order, self.donation))
     }
 
     pub fn decrease(self) -> Option<Self> {
-        if let Some(order) = self.order.decrease() {
-            Some(BondSpec::new(order, self.donation))
-        } else {
-            None
-        }
+        self.order.decrease().map(|order| Self::new(order, self.donation))
     }
 
     pub fn reverse(self) -> Option<Self> {
-        if let Some(donation) = self.donation.reverse() {
-            Some(BondSpec::new(self.order, donation))
-        } else {
-            None
-        }
+        self.donation.reverse().map(|donation| Self::new(self.order, donation))
     }
 }
 

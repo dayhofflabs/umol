@@ -47,6 +47,7 @@ pub const LIGHT_ISOTOPE_MAP: [BitArray<[u8; 8]>; 20] = [
     BitArray::<[u8; 8], Lsb0> {data: [0, 0, 0, 0, 248, 255, 255, 15], _ord: PhantomData::<Lsb0>},
 ];
 
+#[allow(clippy::approx_constant)]
 pub static ISOTOPE_DATA: phf::Map<u32, (f64, Option<HalfLife>)> = phf_map! {
         65537u32 => (1.007825, None), // 1H
         65538u32 => (2.014102, None), // 2H
@@ -2209,7 +2210,7 @@ pub static ISOTOPE_DATA: phf::Map<u32, (f64, Option<HalfLife>)> = phf_map! {
         4653217u32 => (160.943572, Some(HalfLife { value: 77.0, unit: TimeUnit::Seconds })), // 161Lu
         4653218u32 => (161.943283, Some(HalfLife { value: 1.37, unit: TimeUnit::Minutes })), // 162Lu
         4653219u32 => (162.941179, Some(HalfLife { value: 3.97, unit: TimeUnit::Minutes })), // 163Lu
-        4653220u32 => (163.941339, Some(HalfLife { value: 3.14, unit: TimeUnit::Minutes })), // 164Lu
+        4653220u32 => (163.941339, Some(HalfLife { value: 3.14, unit: TimeUnit::Minutes })), // 164Lu 
         4653221u32 => (164.939407, Some(HalfLife { value: 10.74, unit: TimeUnit::Minutes })), // 165Lu
         4653222u32 => (165.939859, Some(HalfLife { value: 2.65, unit: TimeUnit::Minutes })), // 166Lu
         4653223u32 => (166.938243, Some(HalfLife { value: 51.5, unit: TimeUnit::Minutes })), // 167Lu

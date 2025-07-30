@@ -1,5 +1,7 @@
 //! SGroup types for CTab format.
 
+use std::collections::HashMap;
+
 use umol::error::DataError;
 use umol::error::Result;
 
@@ -67,6 +69,23 @@ pub enum SGroupBracketStyle {
     Curved,  // 1 = curved (parenthetic) brackets
 }
 
+/// SGroup data type
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SGroupDataType {
+    Formatted,
+    Numeric,
+    Text,
+}
+/// SGroup data
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupData {
+    pub field_type: SGroupDataType,
+    pub field_units: Option<String>,
+    pub query_identifier: Option<String>,
+    pub data_query_operator: Option<String>,
+    pub data_content: Option<Vec<String>>,
+}
+
 /// SGroup (Superatom group)
 #[derive(Debug, Clone)]
 pub struct SGroup {
@@ -83,12 +102,10 @@ pub struct SGroup {
     pub correspondence: Option<Vec<usize>>,       // CRS: correspondence for crosslinks
     pub connecting_bond: Option<SGroupConnectingBond>, // CBV: connecting bond
     pub bracket_coords: Option<SGroupBracketCoords>, // SDI: bracket display info
-    pub data_field_name: Option<String>,          // SDT: data field name for DAT SGroups
-    pub data_field_info: Option<String>,          // SDT: data field info for DAT SGroups
-    pub data_content: Option<Vec<String>>,        // SCD/SED: actual data content
     pub hierarchy_parent: Option<usize>,          // SPL: parent SGroup for hierarchies
     pub component_number: Option<u32>,            // SNC: component order number
     pub bracket_style: Option<SGroupBracketStyle>, // SBT: bracket display style
+    pub data: HashMap<String, SGroupData>,        // SDT, SCD, SED: data for DAT SGroups
 }
 
 impl SGroup {
@@ -108,12 +125,10 @@ impl SGroup {
             correspondence: None,
             connecting_bond: None,
             bracket_coords: None,
-            data_field_name: None,
-            data_field_info: None,
-            data_content: None,
             hierarchy_parent: None,
             component_number: None,
             bracket_style: None,
+            data: HashMap::new(),
         }
     }
 

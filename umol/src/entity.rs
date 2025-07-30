@@ -5,6 +5,7 @@
 //! - Conformers
 //! - Resonance structures
 //! - Reactions
+//! 
 //! Relations are typed associations between entities:
 //! - Transformations
 //! - Generalizations

@@ -8,8 +8,11 @@ use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
+use crate::io::ctab::parser::utils::trim_whitespace_2char;
 use crate::io::ctab::rgroup::RGroupOccurrence;
-use crate::io::ctab::sgroup::{SGroup, SGroupConnectivity, SGroupSubtype, SGroupType};
+use crate::io::ctab::sgroup::{
+    SGroup, SGroupConnectivity, SGroupDataType, SGroupSubtype, SGroupType,
+};
 
 use super::utils::{
     fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
@@ -182,13 +185,6 @@ pub struct SGroupConnectingBondEntry {
     pub bond_vector: (f64, f64),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum SGroupDataType {
-    Formatted,
-    Numeric,
-    Text,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupDataDescriptionEntry {
     pub sgroup_index: usize,
@@ -197,6 +193,13 @@ pub struct SGroupDataDescriptionEntry {
     pub field_units: Option<String>,
     pub query_identifier: Option<String>,
     pub data_query_operator: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupDataEntry {
+    pub sgroup_index: usize,
+    pub data_content: String,
+    pub is_end: bool,
 }
 
 /// An enum representing a parsed property modification, containing the raw data.
@@ -229,9 +232,9 @@ pub enum PropertyEntries {
     SGroupCorrespondenceEntry(SGroupCorrespondenceEntry),
     SGroupDisplayInfoEntry(SGroupDisplayInfoEntry),
     SGroupConnectingBondEntry(SGroupConnectingBondEntry),
-    // Data sgroup fields [SDT]
-    // Data sgroup display information [SDD]
-    // Data sgroup data [SCD] / [SED]
+    // SGroup data display information [SDD]
+    SGroupDataDescriptionEntry(SGroupDataDescriptionEntry),
+    SGroupDataEntry(SGroupDataEntry),
     // Sgroup hierarchy [SPL]
     // Sgroup component numbers [SNC]
     End,
@@ -275,65 +278,66 @@ pub fn legacy_atom_list_input<'a>(
 
 /// Parse property line (standard properties only - no queries)
 pub fn property_input_standard<'a>(
-    input: &'a [u8],
-) -> nom::IResult<&'a [u8], PropertyEntries, error::Error<&'a [u8]>> {
-    if input.len() < 3 {
-        return Err(nom::Err::Error(error::Error::new(
-            input,
-            error::ErrorKind::Eof,
-        )));
-    }
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
+    move |input: &'a [u8]| {
+        if input.len() < 3 {
+            return Err(nom::Err::Error(error::Error::new(
+                input,
+                error::ErrorKind::Eof,
+            )));
+        }
 
-    // Handle A and V lines (different format from M lines)
-    match &input[0..3] {
-        b"A  " => atom_alias_entry()
-            .parse(&input[3..])
-            .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
-        b"V  " => atom_value_entry()
-            .parse(&input[3..])
-            .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
-        _ => {
-            // Handle M lines
-            if input.len() < 6 {
-                return Err(nom::Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Eof,
-                )));
-            }
-            let (rest, tag) = take(6u8)(input)?;
-            match tag {
-                b"M  CHG" => charge_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
-                b"M  RAD" => radical_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
-                b"M  ISO" => isotope_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-                b"M  STY" => sgroup_type_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                b"M  SST" => sgroup_subtype_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
-                b"M  SLB" => sgroup_label_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                b"M  SAL" => sgroup_atom_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
-                b"M  SBL" => sgroup_bond_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                b"M  SMT" => sgroup_subscript_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
-                b"M  END" => success(PropertyEntries::End).parse(rest),
-                _ => Err(nom::Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Tag,
-                ))),
+        // Handle A and V lines (different format from M lines)
+        match &input[0..3] {
+            b"A  " => atom_alias_entry()
+                .parse(&input[3..])
+                .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
+            b"V  " => atom_value_entry()
+                .parse(&input[3..])
+                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
+            _ => {
+                // Handle M lines
+                if input.len() < 6 {
+                    return Err(nom::Err::Error(error::Error::new(
+                        input,
+                        error::ErrorKind::Eof,
+                    )));
+                }
+                let (rest, tag) = take(6u8)(input)?;
+                match tag {
+                    b"M  CHG" => charge_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
+                    b"M  RAD" => radical_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
+                    b"M  ISO" => isotope_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
+                    b"M  STY" => sgroup_type_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
+                    b"M  SST" => sgroup_subtype_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
+                    b"M  SLB" => sgroup_label_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
+                    b"M  SAL" => sgroup_atom_list_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
+                    b"M  SBL" => sgroup_bond_list_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                    b"M  SMT" => sgroup_subscript_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                    b"M  END" => success(PropertyEntries::End).parse(rest),
+                    _ => Err(nom::Err::Error(error::Error::new(
+                        input,
+                        error::ErrorKind::Tag,
+                    ))),
+                }
             }
         }
     }
@@ -341,110 +345,120 @@ pub fn property_input_standard<'a>(
 
 /// Parse property line (all properties including queries)
 pub fn property_input<'a>(
-    input: &'a [u8],
-) -> nom::IResult<&'a [u8], PropertyEntries, error::Error<&'a [u8]>> {
-    if input.len() < 3 {
-        return Err(nom::Err::Error(error::Error::new(
-            input,
-            error::ErrorKind::Eof,
-        )));
-    }
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
+    move |input: &'a [u8]| {
+        if input.len() < 3 {
+            return Err(nom::Err::Error(error::Error::new(
+                input,
+                error::ErrorKind::Eof,
+            )));
+        }
 
-    // Handle A and V lines (different format from M lines)
-    match &input[0..3] {
-        b"A  " => atom_alias_entry()
-            .parse(&input[3..])
-            .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
-        b"V  " => atom_value_entry()
-            .parse(&input[3..])
-            .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
-        _ => {
-            // Handle M lines
-            if input.len() < 6 {
-                return Err(nom::Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Eof,
-                )));
-            }
-            let (rest, tag) = take(6u8)(input)?;
-            match tag {
-                b"M  CHG" => charge_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
-                b"M  RAD" => radical_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
-                b"M  ISO" => isotope_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-                b"M  RBC" => ring_bond_count_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
-                b"M  SUB" => substitution_count_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SubstitutionCountEntries(o))),
-                b"M  UNS" => unsaturated_atom_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::UnsaturatedAtomEntries(o))),
-                b"M  LIN" => link_atom_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
-                b"M  ALS" => atom_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
-                b"M  APO" => attachment_point_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
-                b"M  AAL" => atom_attachment_order_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
-                b"M  RGP" => rgroup_label_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
-                b"M  LOG" => rgroup_logic_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
-                b"M  STY" => sgroup_type_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                b"M  SST" => sgroup_subtype_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
-                b"M  SLB" => sgroup_label_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                b"M  SCN" => sgroup_connectivity_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
-                b"M  SDS" => sgroup_expansion_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
-                b"M  SAL" => sgroup_atom_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
-                b"M  SBL" => sgroup_bond_list_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                b"M  SPA" => sgroup_parent_atom_entries()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
-                b"M  SMT" => sgroup_subscript_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
-                b"M  CRS" => sgroup_correspondence_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
-                b"M  SDI" => sgroup_display_info_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
-                b"M  SBV" => sgroup_connecting_bond_entry()
-                    .parse(rest)
-                    .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
-                b"M  END" => success(PropertyEntries::End).parse(rest),
-                _ => Err(nom::Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Tag,
-                ))),
+        // Handle A and V lines (different format from M lines)
+        match &input[0..3] {
+            b"A  " => atom_alias_entry()
+                .parse(&input[3..])
+                .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
+            b"V  " => atom_value_entry()
+                .parse(&input[3..])
+                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
+            _ => {
+                // Handle M lines
+                if input.len() < 6 {
+                    return Err(nom::Err::Error(error::Error::new(
+                        input,
+                        error::ErrorKind::Eof,
+                    )));
+                }
+                let (rest, tag) = take(6u8)(input)?;
+                match tag {
+                    b"M  CHG" => charge_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
+                    b"M  RAD" => radical_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
+                    b"M  ISO" => isotope_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
+                    b"M  RBC" => ring_bond_count_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
+                    b"M  SUB" => substitution_count_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SubstitutionCountEntries(o))),
+                    b"M  UNS" => unsaturated_atom_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::UnsaturatedAtomEntries(o))),
+                    b"M  LIN" => link_atom_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
+                    b"M  ALS" => atom_list_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
+                    b"M  APO" => attachment_point_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
+                    b"M  AAL" => atom_attachment_order_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
+                    b"M  RGP" => rgroup_label_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
+                    b"M  LOG" => rgroup_logic_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
+                    b"M  STY" => sgroup_type_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
+                    b"M  SST" => sgroup_subtype_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
+                    b"M  SLB" => sgroup_label_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
+                    b"M  SCN" => sgroup_connectivity_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
+                    b"M  SDS" => sgroup_expansion_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
+                    b"M  SAL" => sgroup_atom_list_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
+                    b"M  SBL" => sgroup_bond_list_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                    b"M  SPA" => sgroup_parent_atom_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
+                    b"M  SMT" => sgroup_subscript_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                    b"M  CRS" => sgroup_correspondence_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
+                    b"M  SDI" => sgroup_display_info_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
+                    b"M  SBV" => sgroup_connecting_bond_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
+                    b"M  SDT" => sgroup_data_description_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
+                    b"M  SCD" => sgroup_data_continuation_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
+                    b"M  SED" => sgroup_data_end_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
+                    b"M  END" => success(PropertyEntries::End).parse(rest),
+                    _ => Err(nom::Err::Error(error::Error::new(
+                        input,
+                        error::ErrorKind::Tag,
+                    ))),
+                }
             }
         }
     }
@@ -810,19 +824,23 @@ fn rgroup_label_entries<'a>(
 /// Any non-contradictory combination of the preceding values is allowed, separated by commas.
 fn rgroup_logic_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = RGroupLogicEntry, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
+    move |input: &'a [u8]| {
+        // Parse count (3 chars, max 1)
         let (remaining, _) = fixed_width_int_in_range::<u8, _>(3, 1..=1).parse(input)?;
 
+        // Parse label (4 chars, 1-999)
         let (remaining, label) = map_parser(
             take(4usize),
             preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=999)),
         )
         .parse(remaining)?;
 
+        // Parse dependent label (4 chars, 1-999)
         let (remaining, dependent_label) =
             map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u32>(3)))
                 .parse(remaining)?;
 
+        // Parse RGroup or H atom flag (4 chars, 0-1)
         let (remaining, rgroup_or_h) = if remaining.len() >= 4 {
             let (rest, value) = map_parser(
                 take(4usize),
@@ -834,6 +852,7 @@ fn rgroup_logic_entry<'a>(
             (remaining, 0) // default value
         };
 
+        // Parse occurrence (variable length)
         let (remaining, occurrence) = if !remaining.is_empty() {
             let (rest, occurrence_bytes) = preceded(tag(" "), not_line_ending).parse(remaining)?;
             let (_, occurrence) = rgroup_occurrences().parse(occurrence_bytes)?;
@@ -1187,45 +1206,87 @@ fn sgroup_data_description_entry<'a>(
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
 
         // Parse field name
-        let (i, field_name) = take(30usize).parse(i)?;
+        let (i, field_name) = take(i.len().min(30usize)).parse(i)?;
 
         // Parse field type
-        let (i, field_type) = take(2usize).parse(i)?;
-        let field_type = match field_type {
-            b"F" => SGroupDataType::Formatted,
-            b"N" => SGroupDataType::Numeric,
-            b"T" => SGroupDataType::Text,
-            _ => {
-                return Err(nom::Err::Error(error::Error::new(
-                    i,
-                    error::ErrorKind::Verify,
-                )))
-            }
+        let (i, field_type) = if i.len() >= 2 {
+            map_res(take(2usize), |s| {
+                let field_type = trim_whitespace_2char(s);
+                match field_type {
+                    b"F" => Ok(SGroupDataType::Formatted),
+                    b"N" => Ok(SGroupDataType::Numeric),
+                    b"T" => Ok(SGroupDataType::Text),
+                    _ => Err(error::Error::new(i, error::ErrorKind::Verify)),
+                }
+            })
+            .parse(i)?
+        } else {
+            (i, SGroupDataType::Text)
         };
 
         // Parse optional field units
-        let (i, field_units) = cond(i.len() >= 20, take(20usize)).parse(i)?;
+        let (i, field_units) = cond(!i.is_empty(), take(i.len().min(20usize))).parse(i)?;
 
         // Parse optional query identifier
-        let (i, query_identifier) = cond(i.len() >= 2, take(2usize)).parse(i)?;
+        let (i, query_identifier) = cond(!i.is_empty(), take(i.len().min(2usize))).parse(i)?;
 
         // Parse optional data query operator
-        let (i, data_query_operator) = cond(i.len() >= 1, not_line_ending).parse(i)?;
+        let (i, data_query_operator) = cond(!i.is_empty(), not_line_ending).parse(i)?;
 
-        Ok((
-            i,
-            SGroupDataDescriptionEntry {
-                sgroup_index,
-                field_name: String::from_utf8_lossy(field_name).trim().to_string(),
-                field_type,
-                field_units: field_units.map(|s| String::from_utf8_lossy(s).trim().to_string()),
-                query_identifier: query_identifier
-                    .map(|s| String::from_utf8_lossy(s).trim().to_string()),
-                data_query_operator: data_query_operator
-                    .map(|s| String::from_utf8_lossy(s).trim().to_string()),
-            },
-        ))
+        let entry = SGroupDataDescriptionEntry {
+            sgroup_index,
+            field_name: String::from_utf8_lossy(field_name).trim().to_string(),
+            field_type,
+            field_units: field_units.map(|s| String::from_utf8_lossy(s).trim().to_string()),
+            query_identifier: query_identifier
+                .map(|s| String::from_utf8_lossy(s).trim().to_string()),
+            data_query_operator: data_query_operator
+                .map(|s| String::from_utf8_lossy(s).trim().to_string()),
+        };
+
+        Ok((i, entry))
     }
+}
+
+/// Parse SGroup data continuation entry.
+/// M  SCD sss d...
+/// sss: SGroup index, d...: data content (max 69 chars)
+fn sgroup_data_continuation_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(preceded(
+        tag(" "),
+        map(
+            (fixed_width_int_minus1::<usize>(3), not_line_ending),
+            |(sgroup_index, data_content)| SGroupDataEntry {
+                sgroup_index,
+                data_content: String::from_utf8_lossy(&data_content[..69])
+                    .trim()
+                    .to_string(),
+                is_end: false,
+            },
+        ),
+    ))
+}
+
+/// Parse SGroup data end entry.
+/// M  SED sss d...
+/// sss: SGroup index, d...: data content (max 69 chars)
+/// The data content is the same as the data content in the SCD entry.
+fn sgroup_data_end_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(preceded(
+        tag(" "),
+        map(
+            (fixed_width_int_minus1::<usize>(3), not_line_ending),
+            |(sgroup_index, data_content)| SGroupDataEntry {
+                sgroup_index,
+                data_content: String::from_utf8_lossy(&data_content[..69])
+                    .trim()
+                    .to_string(),
+                is_end: true,
+            },
+        ),
+    ))
 }
 
 #[cfg(test)]

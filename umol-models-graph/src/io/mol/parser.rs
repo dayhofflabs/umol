@@ -14,6 +14,7 @@ use super::super::ctab::molecule::{AtomIndex, Header, Molecule, MoleculeStandard
 use super::super::ctab::parser::apply::Apply;
 use super::super::ctab::parser::atom::{atom_input, atom_input_standard};
 use super::super::ctab::parser::bond::{bond_input, bond_input_standard};
+use super::super::ctab::parser::context::Context;
 use super::super::ctab::parser::counts::counts_input;
 use super::super::ctab::parser::header::header;
 use super::super::ctab::parser::properties::{
@@ -21,7 +22,7 @@ use super::super::ctab::parser::properties::{
 };
 
 /// Parse MOL block (general parser, handles all features)
-pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Error<&'a [u8]>> {
+pub fn mol_block(input: &[u8]) -> IResult<&[u8], ParsedMol, error::Error<&[u8]>> {
     let (remaining, header) = header().parse(input)?;
     let (remaining, counts) = terminated(counts_input(), line_ending).parse(remaining)?;
     let atom_count = counts.atoms() as usize;
@@ -36,9 +37,7 @@ pub fn mol_block<'a>(input: &'a [u8]) -> IResult<&'a [u8], ParsedMol, error::Err
 }
 
 /// Parse MOL block (standard parser, optimized for performance, standard molecules only)
-pub fn mol_block_standard<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], MoleculeStandard, error::Error<&'a [u8]>> {
+pub fn mol_block_standard(input: &[u8]) -> IResult<&[u8], MoleculeStandard, error::Error<&[u8]>> {
     let (remaining, header) = header().parse(input)?;
     let (remaining, counts) = terminated(counts_input(), line_ending).parse(remaining)?;
     let atom_count = counts.atoms() as usize;
@@ -106,29 +105,23 @@ fn bond_block_standard<'a>(
 }
 
 /// Parse legacy atom list block
-fn legacy_atom_list_block<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
+fn legacy_atom_list_block(input: &[u8]) -> IResult<&[u8], Vec<PropertyEntries>, error::Error<&[u8]>> {
     let (input, legacy_properties) =
         many0(terminated(legacy_atom_list_input(), line_ending)).parse(input)?;
     Ok((input, legacy_properties))
 }
 
 /// Parse properties block
-fn properties_block<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
-    let (input, properties) = many0(terminated(property_input, line_ending)).parse(input)?;
+fn properties_block(input: &[u8]) -> IResult<&[u8], Vec<PropertyEntries>, error::Error<&[u8]>> {
+    let (input, properties) = many0(terminated(property_input(), line_ending)).parse(input)?;
     let (input, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(input)?;
     Ok((input, properties))
 }
 
 /// Parse properties block (standard parser)
-fn properties_block_standard<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], Vec<PropertyEntries>, error::Error<&'a [u8]>> {
+fn properties_block_standard(input: &[u8]) -> IResult<&[u8], Vec<PropertyEntries>, error::Error<&[u8]>> {
     let (input, properties) =
-        many0(terminated(property_input_standard, line_ending)).parse(input)?;
+        many0(terminated(property_input_standard(), line_ending)).parse(input)?;
     let (input, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(input)?;
     Ok((input, properties))
 }
@@ -167,6 +160,7 @@ fn detect_query_features(
 
     // Check properties for query-specific entries
     for property in properties {
+        // TODO: Implement query property detection in PropertyEntries
         match property {
             PropertyEntries::AtomListEntry(_)
             | PropertyEntries::AttachmentPointEntries(_)
@@ -213,12 +207,19 @@ fn build_molecule(
     }
 
     // Apply properties
+    // TODO: Create context object
+    let mut context = Context::new();
     for property in properties {
-        if let Err(e) = property.apply(&mut molecule) {
+        if let Err(e) = property.apply(&mut molecule, &mut context) {
             // For now, ignore property application errors and continue
             // In the future, we might want to collect warnings
             eprintln!("Warning: Failed to apply property: {}", e);
         }
+    }
+
+    // Finalize context
+    if let Err(e) = context.finalize(&mut molecule) {
+        eprintln!("Warnings: {}", e);
     }
 
     (molecule, is_query)

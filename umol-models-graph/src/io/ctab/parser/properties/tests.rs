@@ -62,8 +62,9 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property", PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry { sgroup_index: 0, bond_indices: vec![9, 8, 3] }))]
 #[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property", PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry { sgroup_index: 2, bracket_coords: vec![4.4700, -3.1700, 4.4700, -5.7500] }))]
 #[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property", PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry { sgroup_index: 0, bond_index: 10, bond_vector: (0.6400, 0.9700) }))]
+#[case(b"M  SDT   1 pH   ", "SDT SGroup property", PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry { sgroup_index: 0, field_name: "pH".to_string(), field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None }))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
-    let (remaining, result) = property_input(input).unwrap();
+    let (remaining, result) = property_input().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
     assert_eq!(result, expected);
 }
@@ -75,7 +76,7 @@ fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expecte
 #[case(b"M  CHG  1   0 -10", "atom index is zero", ErrorKind::Verify)]
 #[case(b"M  XXX  1   1  -1", "invalid property tag", ErrorKind::Tag)]
 fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
-    let result = property_input(input);
+    let result = property_input().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
@@ -99,7 +100,7 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
 fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
-    let (remaining, result) = property_input_standard(input).unwrap();
+    let (remaining, result) = property_input_standard().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
     assert_eq!(result, expected);
 }
@@ -119,8 +120,9 @@ fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case
 #[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property not supported in standard parser")]
 #[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property not supported in standard parser")]
 #[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property not supported in standard parser")]
+#[case(b"M  SDT   1 pH   ", "SDT SGroup property not supported in standard parser")]
 fn test_property_input_standard_invalid(#[case] input: &[u8], #[case] desc: &str) {
-    let result = property_input_standard(input);
+    let result = property_input_standard().parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
         matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == ErrorKind::Tag),
@@ -914,4 +916,22 @@ fn test_sgroup_connecting_bond_entry_invalid(#[case] input: &[u8], #[case] desc:
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code),
     );
+}
+
+#[rstest]
+#[case(b"   1 pH   ", SGroupDataDescriptionEntry { sgroup_index: 0, field_name: "pH".to_string(), field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None })]
+#[case(b"   3 WEIGHT_PERCENT                N %", SGroupDataDescriptionEntry { sgroup_index: 2, field_name: "WEIGHT_PERCENT".to_string(), field_type: SGroupDataType::Numeric, field_units: Some("%".to_string()), query_identifier: None, data_query_operator: None })]
+fn test_sgroup_data_description_entry(#[case] input: &[u8], #[case] expected: SGroupDataDescriptionEntry) {
+    let (remaining, result) = sgroup_data_description_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"   0 pH   ", "sgroup index is zero", ErrorKind::Verify)]
+#[case(b"   1 pH                            X", "invalid field type", ErrorKind::MapRes)]
+fn test_sgroup_data_description_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = sgroup_data_description_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
 }

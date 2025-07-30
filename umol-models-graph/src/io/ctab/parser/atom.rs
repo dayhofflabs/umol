@@ -82,9 +82,7 @@ fn atom_symbol<'a>() -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error
 
 /// Parse standard atom inputs with 52-69 characters (s. `atom_input` for more details).
 /// Includes atom mapping number. Ignores whitespace padding.
-fn atom_input_standard69<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
+fn atom_input_standard69(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -141,9 +139,7 @@ fn atom_input_standard69<'a>(
 
 /// Parse standard atom inputs with 49-51 characters (s. `atom_input` for more details).
 /// Includes mass difference, charge/radical and valence fields.
-fn atom_input_standard51<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
+fn atom_input_standard51(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -200,9 +196,7 @@ fn atom_input_standard51<'a>(
 /// Parse standard atom inputs with 42-48 characters including up to 6 characters of ignored data
 /// (s. `atom_input` for more details). Lacks trailing valence and atom mapping fields
 /// (substituted by defaults).
-fn atom_input_standard42<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
+fn atom_input_standard42(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -255,9 +249,7 @@ fn atom_input_standard42<'a>(
 
 /// Parse standard atom inputs with 37-41 characters (s. `atom_input` for more details).
 /// Lacks trailing stereo parity, valence and atom mapping fields (substituted by defaults).
-fn atom_input_standard39<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
+fn atom_input_standard39(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -300,9 +292,7 @@ fn atom_input_standard39<'a>(
 
 /// Parse standard atom inputs with 35-36 characters (s. `atom_input` for more details).
 /// Lacks trailing charge/radical, valence and atom mapping fields (substituted by defaults).
-fn atom_input_standard36<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
+fn atom_input_standard36(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -335,9 +325,7 @@ fn atom_input_standard36<'a>(
 /// Parse standard atom inputs with 34 characters (s. `atom_input` for more details).
 /// Lacks trailing mass difference, charge/radical, valence and atom mapping fields
 /// (substituted by defaults).
-fn atom_input_standard34<'a>(
-    input: &'a [u8],
-) -> IResult<&'a [u8], AtomStandard, error::Error<&'a [u8]>> {
+fn atom_input_standard34(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);

@@ -60,13 +60,12 @@ pub(crate) fn convert_atom_isotope_mass_number(
         return Ok(None);
     }
     if Isotope::is_catalogued(element, mass_number) {
-        return Ok(Some(mass_number));
+        Ok(Some(mass_number))
     } else {
-        return Err(DataError::InvalidIsotope(format!(
+        Err(DataError::InvalidIsotope(format!(
             "Invalid isotope mass number {} for element {}",
             mass_number, element
-        ))
-        .into());
+        )).into())
     }
 }
 
@@ -108,7 +107,7 @@ pub(crate) fn convert_atom_stereo_care_code(code: u8) -> Result<Option<AtomStere
 pub(crate) fn convert_atom_valence_code(code: u8) -> Result<Option<u8>> {
     match code {
         0 => Ok(None),                   // default/unspecified valence
-        v @ 1..=14 => Ok(Some(v as u8)), // explicit valences
+        v @ 1..=14 => Ok(Some(v)),   // explicit valences
         15 => Ok(Some(0)),               // explicit zero valence
         _ => Err(ParseError::Invalid(format!("Invalid valence code '{}'", code)).into()),
     }
@@ -203,7 +202,7 @@ pub(crate) fn convert_bond_reacting_center_code(code: i8) -> Result<Option<BondR
     if code == -1 {
         return Ok(Some(BondReactingCenter::NOT_CENTER));
     }
-    if code < -1 || code > 15 {
+    if !(-1..=15).contains(&code) {
         return Err(
             ParseError::Invalid(format!("Invalid reacting center code \'{}\'", code)).into(),
         );

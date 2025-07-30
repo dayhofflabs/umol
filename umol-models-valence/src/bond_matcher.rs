@@ -27,10 +27,6 @@ impl BondMatcher {
         }))
     }
 
-    pub fn default() -> Self {
-        Self::always()
-    }
-
     pub fn lenient() -> Self {
         Self::always()
     }
@@ -59,7 +55,7 @@ impl BondMatcher {
 
 impl Default for BondMatcher {
     fn default() -> Self {
-        Self::default()
+        Self::always()
     }
 }
 

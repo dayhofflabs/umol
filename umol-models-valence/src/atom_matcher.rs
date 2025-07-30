@@ -61,11 +61,6 @@ impl AtomMatcher {
         }))
     }
 
-    /// Atom matching defaults to strict matching.
-    pub fn default() -> Self {
-        Self::strict()
-    }
-
     /// Lenient matcher that matches all atom builders.
     pub fn lenient() -> Self {
         Self::always()
@@ -103,7 +98,7 @@ impl AtomMatcher {
 
 impl Default for AtomMatcher {
     fn default() -> Self {
-        Self::default()
+        Self::strict()
     }
 }
 

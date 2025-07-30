@@ -221,7 +221,7 @@ impl TryFrom<&str> for AtomSpec {
 
         let val_state_pattern = Regex::new(r"^\[([A-Z][a-z]?)((?:[-+/<>*Hv^]\d*)*)]$").unwrap();
         if !val_state_pattern.is_match(s) {
-            return Err(DataError::InvalidAtomSpec(format!("{}", s)).into());
+            return Err(DataError::InvalidAtomSpec(s.to_string()).into());
         }
 
         let caps = val_state_pattern.captures(s).unwrap();
@@ -337,12 +337,10 @@ impl TryFrom<&str> for AtomSpec {
                             "Duplicate multiplicity".to_string(),
                         )
                         .into());
+                    } else if value.is_empty() {
+                        Some(1)
                     } else {
-                        if value.is_empty() {
-                            Some(1)
-                        } else {
-                            value.parse::<u8>().ok()
-                        }
+                        value.parse::<u8>().ok()
                     }
                 }
                 "H" => {
@@ -364,12 +362,10 @@ impl TryFrom<&str> for AtomSpec {
                         return Err(
                             DataError::InvalidAtomSpec("Duplicate valence".to_string()).into()
                         );
+                    } else if value.is_empty() {
+                        Some(0)
                     } else {
-                        if value.is_empty() {
-                            Some(0)
-                        } else {
-                            value.parse::<u8>().ok()
-                        }
+                        value.parse::<u8>().ok()
                     }
                 }
                 _ => unreachable!(),
