@@ -477,7 +477,7 @@ fn normalize_symbol_bytes(bytes: &[u8]) -> Option<([u8; 2], usize)> {
 }
 
 impl Element {
-    // Get element from symbol bytestring (allocation-free)
+    // Get element from symbol byte string (allocation-free)
     pub fn from_symbol_bytes(symbol: &[u8]) -> Option<Self> {
         if let Some((key_buf, len)) = normalize_symbol_bytes(symbol) {
             match &key_buf[..len] {
@@ -758,7 +758,7 @@ impl Element {
         &ELEMENTS
     }
 
-    /// Check if bytestring contains valid element symbol using direct indexing
+    /// Check if byte string contains valid element symbol using direct indexing
     pub fn is_element_bytes(symbol: &[u8]) -> bool {
         if let Some((key_buf, len)) = normalize_symbol_bytes(symbol) {
             match len {

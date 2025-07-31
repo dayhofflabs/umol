@@ -55,7 +55,7 @@ impl RGroup {
 
         if input.is_empty() || input[0] != b'R' {
             None
-        } else if input.len() == 1 || input[1] == b'#' {
+        } else if input.len() == 1 || input.len() == 2 && input[1] == b'#' {
             Some(Self::new(None))
         } else {
             let num_str = &input[1..];

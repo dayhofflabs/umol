@@ -191,7 +191,6 @@ fn get_total_occupation(element: Element) -> Occupation {
         occupations[3],
     )
 }
-
 /// Compute configurations from Aufbau principle, Madelung rule, and Hund's rules
 fn get_aufbau_configuration(element: Element) -> Configuration {
     if GROUND_STATE_EXCEPTIONS.contains_key(&element) {

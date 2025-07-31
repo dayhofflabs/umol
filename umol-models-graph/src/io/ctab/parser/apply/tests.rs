@@ -1,6 +1,7 @@
 use super::*;
 use crate::io::ctab::atom::{Atom, AtomRadical, AtomSymbol, AttachmentPointType};
 use crate::io::ctab::bond::{Bond, BondType};
+use crate::io::ctab::parser::context::Context;
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
     SGroup, SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType, SGroupMultiplier,
@@ -11,6 +12,11 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 use umol::error::{DataError, Error, ValidationError};
 use umol_data::{e, Element};
+
+#[fixture]
+fn empty_context() -> Context {
+    Context::new()
+}
 
 #[fixture]
 fn basic_molecule() -> Molecule {
@@ -84,7 +90,10 @@ fn molecule_with_labeled_sgroup(molecule_with_sgroup: Molecule) -> Molecule {
 }
 
 #[fixture]
-fn molecule_with_superatom_sgroup(basic_molecule: Molecule) -> Molecule {
+fn molecule_with_superatom_sgroup(
+    basic_molecule: Molecule,
+    empty_context: Context,
+) -> Molecule {
     let sgroup = SGroup::new(SGroupType::Superatom);
     let mut molecule = basic_molecule;
     molecule.sgroups.insert(0, sgroup);

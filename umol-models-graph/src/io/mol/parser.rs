@@ -207,10 +207,9 @@ fn build_molecule(
     }
 
     // Apply properties
-    // TODO: Create context object
     let mut context = Context::new();
     for property in properties {
-        if let Err(e) = property.apply(&mut molecule, &mut context) {
+        if let Err(e) = property.apply(&mut molecule) {
             // For now, ignore property application errors and continue
             // In the future, we might want to collect warnings
             eprintln!("Warning: Failed to apply property: {}", e);
