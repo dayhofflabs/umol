@@ -103,11 +103,41 @@ pub enum AttachmentPointType {
     Both,   // APO vvv = 3
 }
 
+/// Ring bond count for RBC property
+/// -2 = as drawn (r*), -1 = no ring bonds (r0), 0 = off, 2 = r2, 3 = r3, 4 = r4+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RingBondCount {
+    AsDrawn,     // r*
+    NoRingBonds, // r0
+    R2,          // 2
+    R3,          // 3
+    R4Plus,      // 4+
+}
+
+/// Substitution count for SUB property
+/// -2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5, 6 = s6+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SubstitutionCount {
+    AsDrawn,        // s*
+    NoSubstitution, // s0
+    S1,             // 1
+    S2,             // 2
+    S3,             // 3
+    S4,             // 4
+    S5,             // 5
+    S6Plus,         // 6+
+}
+
+/// Unsaturated atom for UNS property
+/// 0 = off, 1 = on
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UnsaturatedAtom;
+
 /// Link atom for LIN property
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LinkAtom {
-    pub repeat_count: u8, // LIN vvv >= 2
-    pub subs_index1: usize, // LIN bbb
+    pub repeat_count: u8,           // LIN vvv >= 2
+    pub subs_index1: usize,         // LIN bbb
     pub subs_index2: Option<usize>, // LIN ccc (optional)
 }
 
@@ -127,9 +157,9 @@ pub struct Atom {
     pub exact_change: Option<AtomExactChange>,
     pub attachment_point: Option<AttachmentPointType>,
     pub attachment_order: Option<Vec<(usize, u8)>>,
-    pub ring_bond_count: Option<i8>,
-    pub substitution_count: Option<i8>,
-    pub unsaturated: Option<bool>,
+    pub ring_bond_count: Option<RingBondCount>,
+    pub substitution_count: Option<SubstitutionCount>,
+    pub unsaturated: Option<UnsaturatedAtom>,
     pub link_atom: Option<LinkAtom>,
     pub position: Option<Point3D>,
     pub properties: HashMap<String, String>,

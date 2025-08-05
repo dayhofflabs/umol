@@ -342,8 +342,8 @@ impl Molecule {
     }
 
     /// Add sgroup to the molecule
-    pub fn add_sgroup(&mut self, sgroup: SGroup) {
-        self.sgroups.insert(self.sgroups.len(), sgroup);
+    pub fn add_sgroup(&mut self, sgroup_index: usize, sgroup: SGroup) {
+        self.sgroups.insert(sgroup_index, sgroup);
     }
 }
 

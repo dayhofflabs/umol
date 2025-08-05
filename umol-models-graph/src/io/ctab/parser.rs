@@ -1,6 +1,6 @@
 //! CTab format parser.
 
-pub mod apply;
+pub mod accumulator;
 pub mod atom;
 pub mod bond;
 pub mod context;

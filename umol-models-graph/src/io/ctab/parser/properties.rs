@@ -202,8 +202,7 @@ pub struct SGroupDataEntry {
     pub is_end: bool,
 }
 
-/// An enum representing a parsed property modification, containing the raw data.
-/// This avoids allocating a new Vec for every single property line in a file.
+/// Parsed property entries
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyEntries {
     AtomAliasEntry(AtomAliasEntry),

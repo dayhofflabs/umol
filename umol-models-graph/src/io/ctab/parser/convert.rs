@@ -2,7 +2,7 @@
 
 use crate::io::ctab::atom::{
     AtomExactChange, AtomInversionRetention, AtomRadical, AtomStereoCare, AtomStereoParity,
-    AtomSymbol, AttachmentPointType,
+    AtomSymbol, AttachmentPointType, RingBondCount, SubstitutionCount, UnsaturatedAtom,
 };
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use umol::error::{DataError, ParseError, Result, ValidationError};
@@ -65,7 +65,8 @@ pub(crate) fn convert_atom_isotope_mass_number(
         Err(DataError::InvalidIsotope(format!(
             "Invalid isotope mass number {} for element {}",
             mass_number, element
-        )).into())
+        ))
+        .into())
     }
 }
 
@@ -106,9 +107,9 @@ pub(crate) fn convert_atom_stereo_care_code(code: u8) -> Result<Option<AtomStere
 /// Returns error for invalid valence codes.
 pub(crate) fn convert_atom_valence_code(code: u8) -> Result<Option<u8>> {
     match code {
-        0 => Ok(None),                   // default/unspecified valence
-        v @ 1..=14 => Ok(Some(v)),   // explicit valences
-        15 => Ok(Some(0)),               // explicit zero valence
+        0 => Ok(None),             // default/unspecified valence
+        v @ 1..=14 => Ok(Some(v)), // explicit valences
+        15 => Ok(Some(0)),         // explicit zero valence
         _ => Err(ParseError::Invalid(format!("Invalid valence code '{}'", code)).into()),
     }
 }
@@ -267,11 +268,14 @@ pub(crate) fn convert_radical_type_code(code: u8) -> Result<Option<AtomRadical>>
 
 // Convert ring bond count code (property block)
 // 'vvv' field: ring bond count (-2 = as drawn (r*), -1 = no ring bonds (r0), 0 = off, 2 = r2, 3 = r3, 4 = r4+)
-pub(crate) fn convert_ring_bond_count_code(code: i8) -> Result<Option<i8>> {
+pub(crate) fn convert_ring_bond_count_code(code: i8) -> Result<Option<RingBondCount>> {
     match code {
-        -2 => Ok(Some(0)),
-        -1 => Ok(None),
-        2..=4 => Ok(Some(code)),
+        -2 => Ok(Some(RingBondCount::AsDrawn)),
+        -1 => Ok(Some(RingBondCount::NoRingBonds)),
+        0 => Ok(None),
+        2 => Ok(Some(RingBondCount::R2)),
+        3 => Ok(Some(RingBondCount::R3)),
+        4 => Ok(Some(RingBondCount::R4Plus)),
         _ => Err(ValidationError::InvalidComponent(format!(
             "Invalid ring bond count code '{}'",
             code
@@ -283,11 +287,17 @@ pub(crate) fn convert_ring_bond_count_code(code: i8) -> Result<Option<i8>> {
 // Convert substitution count code (property block)
 // 'vvv' field: substitution count (-2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5,
 // 6 = s6+)
-pub(crate) fn convert_substitution_count_code(code: i8) -> Result<Option<i8>> {
+pub(crate) fn convert_substitution_count_code(code: i8) -> Result<Option<SubstitutionCount>> {
     match code {
-        -2 => Ok(Some(0)),
-        -1 => Ok(None),
-        1..=6 => Ok(Some(code)),
+        -2 => Ok(Some(SubstitutionCount::AsDrawn)),
+        -1 => Ok(Some(SubstitutionCount::NoSubstitution)),
+        0 => Ok(None),
+        1 => Ok(Some(SubstitutionCount::S1)),
+        2 => Ok(Some(SubstitutionCount::S2)),
+        3 => Ok(Some(SubstitutionCount::S3)),
+        4 => Ok(Some(SubstitutionCount::S4)),
+        5 => Ok(Some(SubstitutionCount::S5)),
+        6 => Ok(Some(SubstitutionCount::S6Plus)),
         _ => Err(ValidationError::InvalidComponent(format!(
             "Invalid substitution count code '{}'",
             code
@@ -298,10 +308,10 @@ pub(crate) fn convert_substitution_count_code(code: i8) -> Result<Option<i8>> {
 
 /// Convert unsaturated atom code (property block)
 /// 'vvv' field: unsaturated (0=off, 1=on)
-pub(crate) fn convert_unsaturated_atom_code(code: u8) -> Result<Option<bool>> {
+pub(crate) fn convert_unsaturated_atom_code(code: u8) -> Result<Option<UnsaturatedAtom>> {
     match code {
         0 => Ok(None),
-        1 => Ok(Some(true)),
+        1 => Ok(Some(UnsaturatedAtom)),
         _ => Err(ValidationError::InvalidComponent(format!(
             "Invalid unsaturated atom code '{}'",
             code
@@ -641,12 +651,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(-2, Some(0))]
-    #[case(-1, None)]
-    #[case(2, Some(2))]
-    #[case(3, Some(3))]
-    #[case(4, Some(4))]
-    fn test_convert_ring_bond_count_code(#[case] code: i8, #[case] expected: Option<i8>) {
+    #[case(-2, Some(RingBondCount::AsDrawn))]
+    #[case(-1, Some(RingBondCount::NoRingBonds))]
+    #[case(2, Some(RingBondCount::R2))]
+    #[case(3, Some(RingBondCount::R3))]
+    #[case(4, Some(RingBondCount::R4Plus))]
+    fn test_convert_ring_bond_count_code(#[case] code: i8, #[case] expected: Option<RingBondCount>) {
         assert_eq!(convert_ring_bond_count_code(code).unwrap(), expected);
     }
 
@@ -658,11 +668,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(-2, Some(0))]
-    #[case(-1, None)]
-    #[case(1, Some(1))]
-    #[case(6, Some(6))]
-    fn test_convert_substitution_count_code(#[case] code: i8, #[case] expected: Option<i8>) {
+    #[case(-2, Some(SubstitutionCount::AsDrawn))]
+    #[case(-1, Some(SubstitutionCount::NoSubstitution))]
+    #[case(1, Some(SubstitutionCount::S1))]
+    #[case(6, Some(SubstitutionCount::S6Plus))]
+    fn test_convert_substitution_count_code(#[case] code: i8, #[case] expected: Option<SubstitutionCount>) {
         assert_eq!(convert_substitution_count_code(code).unwrap(), expected);
     }
 
@@ -674,8 +684,8 @@ mod tests {
 
     #[rstest]
     #[case(0, None)]
-    #[case(1, Some(true))]
-    fn test_convert_unsaturated_atom_code(#[case] code: u8, #[case] expected: Option<bool>) {
+    #[case(1, Some(UnsaturatedAtom))]
+    fn test_convert_unsaturated_atom_code(#[case] code: u8, #[case] expected: Option<UnsaturatedAtom>) {
         assert_eq!(convert_unsaturated_atom_code(code).unwrap(), expected);
     }
 

@@ -11,10 +11,9 @@ use super::super::ctab::atom::{Atom, AtomStandard, AtomSymbol};
 use super::super::ctab::bond::{Bond, BondStandard};
 use super::super::ctab::molecule::{AtomIndex, Header, Molecule, MoleculeStandard, ParsedMol};
 
-use super::super::ctab::parser::apply::Apply;
+use super::super::ctab::parser::accumulator::MoleculeProperties;
 use super::super::ctab::parser::atom::{atom_input, atom_input_standard};
 use super::super::ctab::parser::bond::{bond_input, bond_input_standard};
-use super::super::ctab::parser::context::Context;
 use super::super::ctab::parser::counts::counts_input;
 use super::super::ctab::parser::header::header;
 use super::super::ctab::parser::properties::{
@@ -127,6 +126,7 @@ fn properties_block_standard(input: &[u8]) -> IResult<&[u8], Vec<PropertyEntries
 }
 
 /// Detect if molecule contains query features
+/// TODO: Update with remaining properties
 fn detect_query_features(
     atoms: &[Atom],
     _bonds: &[(usize, usize, Bond)],
@@ -206,19 +206,17 @@ fn build_molecule(
         molecule.add_bond(idx1, idx2, bond);
     }
 
-    // Apply properties
-    let mut context = Context::new();
-    for property in properties {
-        if let Err(e) = property.apply(&mut molecule) {
-            // For now, ignore property application errors and continue
-            // In the future, we might want to collect warnings
-            eprintln!("Warning: Failed to apply property: {}", e);
+    // Create a new MoleculeProperties accumulator
+    let mut acc = MoleculeProperties::new();
+    for entry in properties {
+        if let Err(e) = acc.add_entry(entry) {
+            eprintln!("Warning: Failed to add property entry: {}", e);
         }
     }
 
-    // Finalize context
-    if let Err(e) = context.finalize(&mut molecule) {
-        eprintln!("Warnings: {}", e);
+    // Apply the accumulated properties to the molecule
+    if let Err(e) = acc.apply(&mut molecule) {
+        eprintln!("Warning: Failed to apply properties: {}", e);
     }
 
     (molecule, is_query)
@@ -249,10 +247,17 @@ fn build_molecule_standard(
             .add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond);
     }
 
-    // Apply properties - for now, ignore properties in standard parser
-    // Standard molecules should only have basic properties that are handled in atom parsing
-    if !properties.is_empty() {
-        eprintln!("Warning: Properties found in standard parser - some may be ignored");
+    // Create a new MoleculeProperties accumulator
+    let mut acc = MoleculeProperties::new();
+    for entry in properties {
+        if let Err(e) = acc.add_entry(entry) {
+            eprintln!("Warning: Failed to add property entry: {}", e);
+        }
+    }
+
+    // Apply the accumulated properties to the molecule
+    if let Err(e) = acc.apply_standard(&mut molecule) {
+        eprintln!("Warning: Failed to apply properties: {}", e);
     }
 
     molecule
