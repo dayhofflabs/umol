@@ -1,17 +1,19 @@
 //! Parsers for CTab property lines.
 
+use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::{line_ending, not_line_ending};
+use nom::character::complete::{line_ending, not_line_ending, space0};
+use nom::character::complete::u8 as nom_u8;
 use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
 use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
-use crate::io::ctab::parser::utils::trim_whitespace_2char;
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
-    SGroup, SGroupConnectivity, SGroupDataType, SGroupSubtype, SGroupType,
+    SGroup, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
+    SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupSubtype, SGroupType,
 };
 
 use super::utils::{
@@ -196,12 +198,47 @@ pub struct SGroupDataDescriptionEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SGroupDataEntry {
-    pub sgroup_index: usize,
-    pub data_content: String,
-    pub is_end: bool,
+pub enum SGroupDataEntry {
+    Continuation {
+        sgroup_index: usize,
+        data_content: String,
+    },
+    End,
+    SingleLine {
+        sgroup_index: usize,
+        data_content: String,
+    },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupDataDisplayEntry {
+    pub sgroup_index: usize,
+    pub coords: (f64, f64),
+    pub display_type: SGroupDataDisplayType,
+    pub display_placement: SGroupDataDisplayPlacement,
+    pub display_units: SGroupDataDisplayUnits,
+    pub display_chars: SGroupDataDisplayChars,
+    pub display_tag: Option<u8>, // 0 = no tag, 1-9 = tag
+    pub display_position: u8,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupComponentEntry {
+    pub sgroup_index: usize,
+    pub component_number: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SGroupHierarchyEntry {
+    pub sgroup_index: usize,
+    pub parent_sgroup_index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ZeroOrderBondEntry {
+    pub bond_index: usize,
+    pub bond_order: u32,
+}
 /// Parsed property entries
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyEntries {
@@ -231,11 +268,12 @@ pub enum PropertyEntries {
     SGroupCorrespondenceEntry(SGroupCorrespondenceEntry),
     SGroupDisplayInfoEntry(SGroupDisplayInfoEntry),
     SGroupConnectingBondEntry(SGroupConnectingBondEntry),
-    // SGroup data display information [SDD]
     SGroupDataDescriptionEntry(SGroupDataDescriptionEntry),
     SGroupDataEntry(SGroupDataEntry),
-    // Sgroup hierarchy [SPL]
-    // Sgroup component numbers [SNC]
+    SGroupDataDisplayEntry(SGroupDataDisplayEntry),
+    SGroupHierarchyEntries(Vec<SGroupHierarchyEntry>),
+    SGroupComponentEntries(Vec<SGroupComponentEntry>),
+    ZeroOrderBondEntries(Vec<ZeroOrderBondEntry>),
     End,
 }
 
@@ -446,12 +484,24 @@ pub fn property_input<'a>(
                     b"M  SDT" => sgroup_data_description_entry()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
+                    b"M  SDD" => sgroup_data_display_entry()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
                     b"M  SCD" => sgroup_data_continuation_entry()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
                     b"M  SED" => sgroup_data_end_entry()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
+                    b"M  SPL" => sgroup_hierarchy_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupHierarchyEntries(o))),
+                    b"M  SNC" => sgroup_component_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupComponentEntries(o))),
+                    b"M  ZBO" => zero_order_bond_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::ZeroOrderBondEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
                     _ => Err(nom::Err::Error(error::Error::new(
                         input,
@@ -894,9 +944,8 @@ fn sgroup_type_entries<'a>(
                     preceded(
                         tag(" "),
                         map_res(take(3usize), |bytes: &[u8]| {
-                            let s = std::str::from_utf8(bytes)
-                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
-                            SGroup::get_type(s)
+                            let s = String::from_utf8_lossy(bytes).trim().to_string();
+                            SGroup::get_type(&s)
                                 .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
                         }),
                     ),
@@ -928,9 +977,8 @@ fn sgroup_subtype_entries<'a>(
                     preceded(
                         tag(" "),
                         map_res(take(3usize), |bytes: &[u8]| {
-                            let s = std::str::from_utf8(bytes)
-                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
-                            SGroup::get_subtype(s)
+                            let s = String::from_utf8_lossy(bytes).trim().to_string();
+                            SGroup::get_subtype(&s)
                                 .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
                         }),
                     ),
@@ -988,9 +1036,8 @@ fn sgroup_connectivity_entries<'a>(
                     preceded(
                         tag(" "),
                         map_res(take(2usize), |bytes: &[u8]| {
-                            let s = std::str::from_utf8(bytes)
-                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))?;
-                            SGroup::get_connectivity(s)
+                            let s = String::from_utf8_lossy(bytes).trim().to_string();
+                            SGroup::get_connectivity(&s)
                                 .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
                         }),
                     ),
@@ -1209,14 +1256,10 @@ fn sgroup_data_description_entry<'a>(
 
         // Parse field type
         let (i, field_type) = if i.len() >= 2 {
-            map_res(take(2usize), |s| {
-                let field_type = trim_whitespace_2char(s);
-                match field_type {
-                    b"F" => Ok(SGroupDataType::Formatted),
-                    b"N" => Ok(SGroupDataType::Numeric),
-                    b"T" => Ok(SGroupDataType::Text),
-                    _ => Err(error::Error::new(i, error::ErrorKind::Verify)),
-                }
+            map_res(take(2usize), |bytes| {
+                let s = String::from_utf8_lossy(bytes).trim().to_string();
+                SGroup::get_data_type(&s)
+                    .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
             })
             .parse(i)?
         } else {
@@ -1247,6 +1290,71 @@ fn sgroup_data_description_entry<'a>(
     }
 }
 
+/// Parse SGroup data display entry.
+/// M  SDD sss xxxxx.xxxxyyyyy.yyyy eeefgh i jjjkkk ll m  noo
+/// sss: SGroup index, x, y: coordinates (f10.4), eee: skipped, f: data display (A=attached, D=detached)
+/// g: absolute, relative placement (A=absolute, R=relative), h: display units (" "=none, U=display units)
+/// i: skipped, jjj: number of characters to display (1-999 or ALL), kkk: number of lines to display (unused, always 1)
+/// ll: skipped, m: tag character (if non-blank), n: Data display DASP position (1-9), oo: skipped
+fn sgroup_data_display_entry<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupDataDisplayEntry, Error = error::Error<&'a [u8]>> {
+    all_consuming(map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_float::<f64>(10, 4)),
+            terminated(fixed_width_float::<f64>(10, 4), tag(" ")),
+            preceded(
+                take(3usize),
+                map_res(take(1usize), |bytes: &[u8]| {
+                    let s = String::from_utf8_lossy(bytes);
+                    SGroup::get_data_display_type(&s)
+                        .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+                }),
+            ),
+            map_res(take(1usize), |bytes: &[u8]| {
+                let s = String::from_utf8_lossy(bytes);
+                SGroup::get_data_display_placement(&s)
+                    .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+            }),
+            map_res(take(1usize), |bytes: &[u8]| {
+                let s = String::from_utf8_lossy(bytes);
+                SGroup::get_data_display_units(&s)
+                    .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+            }),
+            preceded(
+                take(3usize),
+                map_res(take(3usize), |bytes: &[u8]| {
+                    let s = String::from_utf8_lossy(bytes);
+                    SGroup::get_data_display_chars(&s)
+                        .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
+                }),
+            ),
+            preceded(take(7usize), map_parser(take(1usize), opt(nom_u8))),
+            delimited(tag("  "), fixed_width_int::<u8>(1), opt(take(2usize))),
+        ),
+        |(
+            sgroup_index,
+            x,
+            y,
+            display_type,
+            display_placement,
+            display_units,
+            display_chars,
+            display_tag,
+            display_position,
+        )| SGroupDataDisplayEntry {
+            sgroup_index,
+            coords: (x, y),
+            display_type,
+            display_placement,
+            display_units,
+            display_chars,
+            display_tag,
+            display_position,
+        },
+    ))
+}
+
 /// Parse SGroup data continuation entry.
 /// M  SCD sss d...
 /// sss: SGroup index, d...: data content (max 69 chars)
@@ -1256,33 +1364,108 @@ fn sgroup_data_continuation_entry<'a>(
         tag(" "),
         map(
             (fixed_width_int_minus1::<usize>(3), not_line_ending),
-            |(sgroup_index, data_content)| SGroupDataEntry {
+            |(sgroup_index, data_content)| SGroupDataEntry::Continuation {
                 sgroup_index,
-                data_content: String::from_utf8_lossy(&data_content[..69])
+                data_content: String::from_utf8_lossy(&data_content[..data_content.len().min(69)])
                     .trim()
                     .to_string(),
-                is_end: false,
             },
         ),
     ))
 }
 
 /// Parse SGroup data end entry.
-/// M  SED sss d...
+/// M  SED sss d... OR
+/// M  SED
 /// sss: SGroup index, d...: data content (max 69 chars)
 /// The data content is the same as the data content in the SCD entry.
+/// The second form is used to indicate the end of the data content, in which case it should be empty.
 fn sgroup_data_end_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> {
-    all_consuming(preceded(
-        tag(" "),
+    all_consuming(alt((
         map(
-            (fixed_width_int_minus1::<usize>(3), not_line_ending),
-            |(sgroup_index, data_content)| SGroupDataEntry {
+            preceded(
+                tag(" "),
+                (fixed_width_int_minus1::<usize>(3), not_line_ending),
+            ),
+            |(sgroup_index, data_content)| SGroupDataEntry::SingleLine {
                 sgroup_index,
-                data_content: String::from_utf8_lossy(&data_content[..69])
+                data_content: String::from_utf8_lossy(&data_content[..data_content.len().min(69)])
                     .trim()
                     .to_string(),
-                is_end: true,
+            },
+        ),
+        space0.map(|_| SGroupDataEntry::End),
+    )))
+}
+
+/// Parse SGroup hierarchy entries.
+/// M  SPLnn8 sss ppp ...
+/// sss: SGroup index, ppp: Parent SGroup index
+fn sgroup_hierarchy_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SGroupHierarchyEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
+            (
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+            ),
+            |(sgroup_index, parent_sgroup_index)| SGroupHierarchyEntry {
+                sgroup_index,
+                parent_sgroup_index,
+            },
+        ),
+    ))
+}
+
+/// Parse SGroup component number entries.
+/// M  SNCnn8 sss ccc ...
+/// sss: SGroup index, ccc: Component number
+fn sgroup_component_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<SGroupComponentEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
+            (
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u32>(3))),
+            ),
+            |(sgroup_index, component_number)| SGroupComponentEntry {
+                sgroup_index,
+                component_number,
+            },
+        ),
+    ))
+}
+
+/// Parse zero-order bond entries.
+/// M  ZBOnn8 bbb vvv ...
+/// bbb: bond index, vvv: bond vector override (>= 0)
+fn zero_order_bond_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<ZeroOrderBondEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
+            (
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u32>(3))),
+            ),
+            |(bond_index, bond_order)| ZeroOrderBondEntry {
+                bond_index,
+                bond_order,
             },
         ),
     ))

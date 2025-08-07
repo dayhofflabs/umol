@@ -33,20 +33,21 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Sgrp Corr  | CRS    | x    | SGroup  | x      | -         | x      | -       |                       |
 | Sgrp Disp  | SDI    | x    | SGroup  | x      | x         | x      | x       |                       |
 | Sup Bd Vec | SBV    | x    | SGroup  | x      | -         | x      | x       |                       |
-| Data Flds  | SDT    | -    | SGroup  | x      | x         | x      | x       |                       |
-| Data Disp  | SDD    | -    | SGroup  | x      | x         | x      | x       |                       |
-| Data Sgrp  | SCD    | -    | SGroup  | x      | x         | x      | x       | Continued data line   |
-| Data Sgrp  | SED    | -    | SGroup  | x      | x         | x      | x       | End of data line      |
-| Sgrp Hier  | SPL    | -    | SGroup  | x      | x         | x      | x       | Parent list           |
-| Sgrp Comp# | SNC    | -    | SGroup  | x      | x         | x      | -       |                       |
+| Data Flds  | SDT    | x    | SGroup  | x      | x         | x      | x       |                       |
+| Data Disp  | SDD    | x    | SGroup  | x      | x         | x      | x       |                       |
+| Data Sgrp  | SCD    | x    | SGroup  | x      | x         | x      | x       | Continued data line   |
+| Data Sgrp  | SED    | x    | SGroup  | x      | x         | x      | x       | End of data line      |
+| Sgrp Hier  | SPL    | x    | SGroup  | x      | x         | x      | x       | Parent list           |
+| Sgrp Comp# | SNC    | x    | SGroup  | x      | x         | x      | -       |                       |
 | 3D Feat    | $3D    | -    | 3D      | -      | -         | x      | x       |                       |
 | Phantom    | PXA    | -    | ISIS    | x      | -         | -      | -       |                       |
 | Sup Att Pt | SAP    | -    | ISIS    | x      | x         | -      | x       |                       |
 | Sup Class  | SCL    | -    | ISIS    | x      | -         | -      | x       |                       |
 | Regno      | REG    | -    | ISIS    | -      | -         | -      | -       |                       |
 | Sgrp Brkt  | SBT    | -    | ISIS    | x      | x         | x      | x       |                       |
-| 0-Order Bd | ZBO    | -    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
-| Virt Hs    | ZCH    | -    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
+| 0-Order Bd | ZBO    | x    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
+| Atom charge| ZCH    | -    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
+| Virt Hs    | HYD    | -    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
 | Marvin SM  | MRV    | -    | Marvin  | x      | x         | -      | x       |                       |
 | Atom Label | ZZC    | -    | ADC     | -      | -         | x      | -       |                       |
 | Skip       | SKIP   | -    | Generic | ?      | -         | x      | -       |                       |

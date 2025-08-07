@@ -935,3 +935,133 @@ fn test_sgroup_data_description_entry_invalid(#[case] input: &[u8], #[case] desc
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
 }
+
+#[rstest]
+#[case(b"   1 4.6", SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() })]
+#[case(b"   2 E/Z unknown", SGroupDataEntry::Continuation { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
+#[case(b"   1", SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "".to_string() })]
+fn tests_sgroup_data_continuation_entry(#[case] input: &[u8], #[case] expected: SGroupDataEntry) {
+    let (remaining, result) = sgroup_data_continuation_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"   0 4.6", "sgroup index is zero", ErrorKind::Verify)]
+fn test_sgroup_data_continuation_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = sgroup_data_continuation_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"   1 4.6", SGroupDataEntry::SingleLine { sgroup_index: 0, data_content: "4.6".to_string() })]
+#[case(b"   2 E/Z unknown", SGroupDataEntry::SingleLine { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
+#[case(b"", SGroupDataEntry::End)]
+#[case(b"    ", SGroupDataEntry::End)]
+fn tests_sgroup_data_end_entry(#[case] input: &[u8], #[case] expected: SGroupDataEntry) {
+    let (remaining, result) = sgroup_data_end_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"   0  1", "sgroup index is zero", ErrorKind::Eof)]
+fn test_sgroup_data_end_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = sgroup_data_end_entry().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
+}
+
+#[rstest]
+//      " sss xxxxx.xxxxyyyyy.yyyy eeefgh i jjjkkk ll m  noo"
+#[case(b"   1     0.0000    0.0000    DR    ALL  0       0",
+    SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached, display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None, display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]
+#[case(b"   2     0.0000    0.0000    DR    ALL  1       6",
+    SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached, display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None, display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 6 })]
+#[case(b"   1     0.0000    0.0000    DR    ALL  0       0",
+    SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached, display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None, display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]
+fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroupDataDisplayEntry) {
+    let (remaining, result) = sgroup_data_display_entry().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  1   1   2", vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }])]
+#[case(b"  3   1   4   2   4   3   2", vec![
+    SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 3 },
+    SGroupHierarchyEntry { sgroup_index: 1, parent_sgroup_index: 3 },
+    SGroupHierarchyEntry { sgroup_index: 2, parent_sgroup_index: 1 }
+])]
+fn test_sgroup_hierarchy_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupHierarchyEntry>) {
+    let (remaining, result) = sgroup_hierarchy_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  0   1   2", "count is zero", ErrorKind::Verify)]
+#[case(b"  1   0   2", "sgroup index is zero", ErrorKind::Verify)]
+#[case(b"  1   1   0", "parent sgroup index is zero", ErrorKind::Verify)]
+#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_hierarchy_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = sgroup_hierarchy_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {}, expected {:?}, got {}",
+        desc,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code),
+    );
+}
+
+#[rstest]
+#[case(b"  2   1   1   2   2", vec![
+    SGroupComponentEntry { sgroup_index: 0, component_number: 1 },
+    SGroupComponentEntry { sgroup_index: 1, component_number: 2 }
+])]
+fn test_sgroup_component_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupComponentEntry>) {
+    let (remaining, result) = sgroup_component_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  0   1   2", "count is zero", ErrorKind::Verify)]
+#[case(b"  1   0   2", "component number is zero", ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
+fn test_sgroup_component_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = sgroup_component_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
+}
+
+#[rstest]
+#[case(b"  1   1   0", vec![ZeroOrderBondEntry { bond_index: 0, bond_order: 0 }])]
+#[case(b"  2   1   2   3   4", vec![
+    ZeroOrderBondEntry { bond_index: 0, bond_order: 2 },
+    ZeroOrderBondEntry { bond_index: 2, bond_order: 4 },
+])]
+fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<ZeroOrderBondEntry>) {
+    let (remaining, result) = zero_order_bond_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  0   1   0", "bv index is zero", ErrorKind::Verify)]
+#[case(b"  1   0   0", "bond index is zero", ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
+fn test_zero_order_bond_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = zero_order_bond_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
+}

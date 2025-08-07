@@ -86,6 +86,30 @@ pub struct SGroupData {
     pub data_content: Option<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SGroupDataDisplayType {
+    Attached,
+    Detached,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SGroupDataDisplayPlacement {
+    Absolute,
+    Relative,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SGroupDataDisplayUnits {
+    None,
+    DisplayUnits,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SGroupDataDisplayChars {
+    All,
+    Number(u32),
+}
+
 /// SGroup (Superatom group)
 #[derive(Debug, Clone)]
 pub struct SGroup {
@@ -192,6 +216,74 @@ impl SGroup {
                 ))
                 .into()),
             }
+        }
+    }
+
+    /// Parse SGroup data type
+    pub fn get_data_type(input: &str) -> Result<SGroupDataType> {
+        match input {
+            "F" => Ok(SGroupDataType::Formatted),
+            "N" => Ok(SGroupDataType::Numeric),
+            "T" => Ok(SGroupDataType::Text),
+            _ => Err(DataError::InvalidFragment(format!(
+                "Unknown SGroup data type: {}",
+                input
+            ))
+            .into()),
+        }
+    }
+
+    /// Parse SGroup data display type
+    pub fn get_data_display_type(input: &str) -> Result<SGroupDataDisplayType> {
+        match input {
+            "A" => Ok(SGroupDataDisplayType::Attached),
+            "D" => Ok(SGroupDataDisplayType::Detached),
+            _ => Err(DataError::InvalidFragment(format!(
+                "Unknown SGroup data display type: {}",
+                input
+            ))
+            .into()),
+        }
+    }
+
+    /// Parse SGroup data display placement
+    pub fn get_data_display_placement(input: &str) -> Result<SGroupDataDisplayPlacement> {
+        match input {
+            "A" => Ok(SGroupDataDisplayPlacement::Absolute),
+            "R" => Ok(SGroupDataDisplayPlacement::Relative),
+            _ => Err(DataError::InvalidFragment(format!(
+                "Unknown SGroup data display placement: {}",
+                input
+            ))
+            .into()),
+        }
+    }
+
+    /// Parse SGroup data display units
+    pub fn get_data_display_units(input: &str) -> Result<SGroupDataDisplayUnits> {
+        match input {
+            " " => Ok(SGroupDataDisplayUnits::None),
+            "U" => Ok(SGroupDataDisplayUnits::DisplayUnits),
+            _ => Err(DataError::InvalidFragment(format!(
+                "Unknown SGroup data display units: {}",
+                input
+            ))
+            .into()),
+        }
+    }
+
+    /// Parse SGroup data display chars
+    pub fn get_data_display_chars(input: &str) -> Result<SGroupDataDisplayChars> {
+        match input {
+            "ALL" => Ok(SGroupDataDisplayChars::All),
+            _ => match input.parse::<u32>() {
+                Ok(count) => Ok(SGroupDataDisplayChars::Number(count)),
+                Err(_) => Err(DataError::InvalidFragment(format!(
+                    "Invalid SGroup data display chars: {}",
+                    input
+                ))
+                .into()),
+            },
         }
     }
 }

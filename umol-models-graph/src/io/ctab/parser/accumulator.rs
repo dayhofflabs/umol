@@ -70,6 +70,8 @@ pub struct SGroupProperties {
     pub correspondence: Option<Vec<usize>>,
     pub bracket_coords: Option<SGroupBracketCoords>,
     pub connecting_bond: Option<SGroupConnectingBond>,
+    pub hierarchy_parent: Option<usize>,
+    pub component_number: Option<u32>,
     pub data: HashMap<String, SGroupData>,
 }
 
@@ -383,12 +385,34 @@ impl MoleculeProperties {
                 };
                 props.data.insert(entry.field_name, data);
             }
-            PropertyEntries::SGroupDataEntry(entry) => {
-                self.context.add_sgroup_data(
-                    entry.sgroup_index,
-                    entry.data_content,
-                    entry.is_end,
-                )?;
+            // TODO: SGroupDataEntry
+            PropertyEntries::SGroupHierarchyEntries(entries) => {
+                for entry in entries {
+                    let props = self
+                        .sgroup_properties
+                        .get_mut(&entry.sgroup_index)
+                        .ok_or_else(|| {
+                            DataError::InvalidFragment(format!(
+                                "S-group hierarchy for undefined S-group {}",
+                                entry.sgroup_index
+                            ))
+                        })?;
+                    props.hierarchy_parent = Some(entry.parent_sgroup_index);
+                }
+            }
+            PropertyEntries::SGroupComponentEntries(entries) => {
+                for entry in entries {
+                    let props = self
+                        .sgroup_properties
+                        .get_mut(&entry.sgroup_index)
+                        .ok_or_else(|| {
+                            DataError::InvalidFragment(format!(
+                                "S-group component for undefined S-group {}",
+                                entry.sgroup_index
+                            ))
+                        })?;
+                    props.component_number = Some(entry.component_number);
+                }
             }
             _ => { /* Other properties will be handled in subsequent steps */ }
         }
@@ -789,6 +813,12 @@ impl MoleculeProperties {
             }
             if let Some(connecting_bond) = &props.connecting_bond {
                 sgroup.connecting_bond = Some(*connecting_bond);
+            }
+            if let Some(hierarchy_parent) = &props.hierarchy_parent {
+                sgroup.hierarchy_parent = Some(*hierarchy_parent);
+            }
+            if let Some(component_number) = &props.component_number {
+                sgroup.component_number = Some(*component_number);
             }
             if !props.data.is_empty() {
                 sgroup.data = props.data.clone();

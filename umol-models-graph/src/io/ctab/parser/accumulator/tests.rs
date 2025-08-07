@@ -855,9 +855,7 @@ fn test_apply_sgroup_connectivity_entries(
             sgroup_index: 1,
             connectivity: SGroupConnectivity::HeadToTail,
         }]);
-    acc_with_sgroup_type
-        .add_entry(connectivity_entry)
-        .unwrap();
+    acc_with_sgroup_type.add_entry(connectivity_entry).unwrap();
     acc_with_sgroup_type.apply(&mut basic_molecule).unwrap();
 
     assert_eq!(basic_molecule.sgroups().count(), 1);
@@ -966,9 +964,7 @@ fn test_apply_sgroup_parent_atom_entry(
         sgroup_index: 1,
         atom_indices: vec![0, 1],
     });
-    acc_with_sgroup_type
-        .add_entry(parent_atom_entry)
-        .unwrap();
+    acc_with_sgroup_type.add_entry(parent_atom_entry).unwrap();
     acc_with_sgroup_type.apply(&mut basic_molecule).unwrap();
 
     assert_eq!(basic_molecule.sgroups().count(), 1);
@@ -1056,9 +1052,7 @@ fn test_apply_sgroup_display_info_entry(
         sgroup_index: 1,
         bracket_coords: vec![1.0, 2.0, 3.0, 4.0],
     });
-    acc_with_sgroup_type
-        .add_entry(display_info_entry)
-        .unwrap();
+    acc_with_sgroup_type.add_entry(display_info_entry).unwrap();
     acc_with_sgroup_type.apply(&mut basic_molecule).unwrap();
 
     assert_eq!(basic_molecule.sgroups().count(), 1);
@@ -1088,11 +1082,7 @@ fn test_apply_sgroup_data_entry(
     mut basic_molecule: Molecule,
     mut acc_with_data_sgroup: MoleculeProperties,
 ) {
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry {
-        sgroup_index: 1,
-        data_content: "content".to_string(),
-        is_end: true,
-    });
+    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::End);
     acc_with_data_sgroup.add_entry(data_entry).unwrap();
     acc_with_data_sgroup.apply(&mut basic_molecule).unwrap();
 
@@ -1105,11 +1095,7 @@ fn test_apply_sgroup_data_entry(
 #[rstest]
 fn test_apply_sgroup_data_entry_no_type() {
     let mut acc = MoleculeProperties::new();
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry {
-        sgroup_index: 1,
-        data_content: "content".to_string(),
-        is_end: true,
-    });
+    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::End);
     let result = acc.add_entry(data_entry);
     assert!(result.is_err());
 }
@@ -1122,11 +1108,7 @@ fn test_apply_sgroup_data_entry_no_description() {
         sgroup_type: SGroupType::Data,
     }]);
     acc.add_entry(type_entry).unwrap();
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry {
-        sgroup_index: 1,
-        data_content: "content".to_string(),
-        is_end: true,
-    });
+    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::End);
     let result = acc.add_entry(data_entry);
     assert!(result.is_err());
 }
@@ -1176,9 +1158,7 @@ fn test_apply_sgroup_data_description_entry(
     mut basic_molecule: Molecule,
     mut acc_with_data_sgroup: MoleculeProperties,
 ) {
-    acc_with_data_sgroup
-        .apply(&mut basic_molecule)
-        .unwrap();
+    acc_with_data_sgroup.apply(&mut basic_molecule).unwrap();
 
     assert_eq!(basic_molecule.sgroups().count(), 1);
     let sgroup = basic_molecule.sgroup(1).unwrap();
