@@ -1,9 +1,10 @@
 use super::*;
 use crate::io::ctab::{
     atom::{
-        Atom, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, UnsaturatedAtom,
+        Atom, AtomList, AtomRadical, AtomStandard, AtomSymbol, AttachmentPointType, LinkAtom, UnsaturatedAtom,
     },
-    bond::{Bond, BondType},
+    bond::{Bond, BondStandard, BondType},
+    molecule::MoleculeStandard,
     parser::properties::{
         AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry,
         AttachmentPointEntry, ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries,
@@ -53,6 +54,31 @@ fn molecule_with_properties(mut basic_molecule: Molecule) -> Molecule {
 fn molecule_with_rgroup(mut basic_molecule: Molecule) -> Molecule {
     basic_molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(1)));
     basic_molecule
+}
+
+#[fixture]
+fn molecule_with_bond() -> Molecule {
+    let mut molecule = Molecule::new();
+    molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));
+    molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));
+    molecule.add_bond(0, 1, Bond::new(BondType::Single));
+    molecule
+}
+
+#[fixture]
+fn basic_molecule_standard() -> MoleculeStandard {
+    let mut molecule = MoleculeStandard::new();
+    molecule.add_atom(AtomStandard::new(e!(C)));
+    molecule
+}
+
+#[fixture]
+fn molecule_with_bond_standard() -> MoleculeStandard {
+    let mut molecule = MoleculeStandard::new();
+    molecule.add_atom(AtomStandard::new(e!(C)));
+    molecule.add_atom(AtomStandard::new(e!(C)));
+    molecule.add_bond(0, 1, BondStandard::new(BondType::Single));
+    molecule
 }
 
 #[fixture]
@@ -1240,7 +1266,6 @@ fn test_apply_sgroup_data_entry_no_description() {
     assert!(result.is_err());
 }
 
-
 #[rstest]
 fn test_apply_sgroup_data_entry_auto_finalization(
     mut basic_molecule: Molecule,
@@ -1370,32 +1395,24 @@ fn test_apply_sgroup_component_entries_no_type() {
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_entries() {
+fn test_apply_zero_order_bond_entries(mut molecule_with_bond: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = Molecule::new();
-    
-    // Add two atoms
-    molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));
-    molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));
-    
-    // Add a bond between them
-    molecule.add_bond(0, 1, Bond::new(BondType::Single));
     
     let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
         bond_index: 0,
         bond_order: 0,
     }]);
     acc.add_entry(zero_order_entry).unwrap();
-    acc.apply(&mut molecule).unwrap();
+    acc.apply(&mut molecule_with_bond).unwrap();
 
-    let bond = molecule.bond(0).unwrap();
+    let bond = molecule_with_bond.bond(0).unwrap();
     assert_eq!(bond.bond_type, BondType::Zero);
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_entries_invalid_bond() {
+fn test_apply_zero_order_bond_entries_invalid_bond(basic_molecule: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = Molecule::new();
+    let mut molecule = basic_molecule;
     
     let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
         bond_index: 5,
@@ -1403,5 +1420,183 @@ fn test_apply_zero_order_bond_entries_invalid_bond() {
     }]);
     acc.add_entry(zero_order_entry).unwrap();
     let result = acc.apply(&mut molecule);
+    assert!(result.is_err());
+}
+
+// Tests for MoleculeStandard apply methods
+
+#[rstest]
+fn test_apply_atom_alias_standard(mut basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    
+    let alias_entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
+        atom_index: 0,
+        alias: "CF3".to_string(),
+    });
+    acc.add_entry(alias_entry).unwrap();
+    acc.apply_standard(&mut basic_molecule_standard).unwrap();
+
+    let atom = basic_molecule_standard.atom(0).unwrap();
+    assert_eq!(atom.properties.get("molFileAlias"), Some(&"CF3".to_string()));
+}
+
+#[rstest]
+fn test_apply_atom_alias_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+    
+    let alias_entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
+        atom_index: 5,
+        alias: "CF3".to_string(),
+    });
+    acc.add_entry(alias_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_atom_value_standard(mut basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    
+    let value_entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
+        atom_index: 0,
+        value: "*".to_string(),
+    });
+    acc.add_entry(value_entry).unwrap();
+    acc.apply_standard(&mut basic_molecule_standard).unwrap();
+
+    let atom = basic_molecule_standard.atom(0).unwrap();
+    assert_eq!(atom.properties.get("molFileValue"), Some(&"*".to_string()));
+}
+
+#[rstest]
+fn test_apply_atom_value_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+    
+    let value_entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
+        atom_index: 5,
+        value: "*".to_string(),
+    });
+    acc.add_entry(value_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_charge_standard(mut basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    
+    let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
+        atom_index: 0,
+        charge: -1,
+    }]);
+    acc.add_entry(charge_entry).unwrap();
+    acc.apply_standard(&mut basic_molecule_standard).unwrap();
+
+    let atom = basic_molecule_standard.atom(0).unwrap();
+    assert_eq!(atom.charge, -1);
+    assert_eq!(atom.radical, None);
+}
+
+#[rstest]
+fn test_apply_charge_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+    
+    let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
+        atom_index: 5,
+        charge: -1,
+    }]);
+    acc.add_entry(charge_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_radical_standard(mut basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    
+    let radical_entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
+        atom_index: 0,
+        radical_type: 2, // Doublet
+    }]);
+    acc.add_entry(radical_entry).unwrap();
+    acc.apply_standard(&mut basic_molecule_standard).unwrap();
+
+    let atom = basic_molecule_standard.atom(0).unwrap();
+    assert_eq!(atom.radical, Some(AtomRadical::Doublet));
+    assert_eq!(atom.charge, 0);
+}
+
+#[rstest]
+fn test_apply_radical_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+    
+    let radical_entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
+        atom_index: 5,
+        radical_type: 2,
+    }]);
+    acc.add_entry(radical_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_isotope_standard(mut basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    
+    let isotope_entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
+        atom_index: 0,
+        mass: 13, // Carbon-13
+    }]);
+    acc.add_entry(isotope_entry).unwrap();
+    acc.apply_standard(&mut basic_molecule_standard).unwrap();
+
+    let atom = basic_molecule_standard.atom(0).unwrap();
+    assert_eq!(atom.isotope_mass, Some(13));
+}
+
+#[rstest]
+fn test_apply_isotope_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+    
+    let isotope_entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
+        atom_index: 5,
+        mass: 13,
+    }]);
+    acc.add_entry(isotope_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_zero_order_bond_standard(mut molecule_with_bond_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    
+    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+        bond_index: 0,
+        bond_order: 0,
+    }]);
+    acc.add_entry(zero_order_entry).unwrap();
+    acc.apply_standard(&mut molecule_with_bond_standard).unwrap();
+
+    let bond = molecule_with_bond_standard.bond(0).unwrap();
+    assert_eq!(bond.bond_type, BondType::Zero);
+}
+
+#[rstest]
+fn test_apply_zero_order_bond_standard_invalid_bond(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+    
+    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+        bond_index: 5,
+        bond_order: 0,
+    }]);
+    acc.add_entry(zero_order_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
     assert!(result.is_err());
 }

@@ -375,6 +375,9 @@ pub fn property_input_standard<'a>(
                     b"M  SMT" => sgroup_subscript_entry()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                    b"M  ZBO" => zero_order_bond_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::ZeroOrderBondEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
                     _ => Err(nom::Err::Error(error::Error::new(
                         input,

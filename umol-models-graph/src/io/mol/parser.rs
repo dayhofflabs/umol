@@ -9,7 +9,7 @@ use nom::{error, IResult, Parser};
 
 use super::super::ctab::atom::{Atom, AtomStandard, AtomSymbol};
 use super::super::ctab::bond::{Bond, BondStandard};
-use super::super::ctab::molecule::{AtomIndex, Header, Molecule, MoleculeStandard, ParsedMol};
+use super::super::ctab::molecule::{Header, Molecule, MoleculeStandard, ParsedMol};
 
 use super::super::ctab::parser::accumulator::MoleculeProperties;
 use super::super::ctab::parser::atom::{atom_input, atom_input_standard};
@@ -104,7 +104,9 @@ fn bond_block_standard<'a>(
 }
 
 /// Parse legacy atom list block
-fn legacy_atom_list_block(input: &[u8]) -> IResult<&[u8], Vec<PropertyEntries>, error::Error<&[u8]>> {
+fn legacy_atom_list_block(
+    input: &[u8],
+) -> IResult<&[u8], Vec<PropertyEntries>, error::Error<&[u8]>> {
     let (input, legacy_properties) =
         many0(terminated(legacy_atom_list_input(), line_ending)).parse(input)?;
     Ok((input, legacy_properties))
@@ -118,7 +120,9 @@ fn properties_block(input: &[u8]) -> IResult<&[u8], Vec<PropertyEntries>, error:
 }
 
 /// Parse properties block (standard parser)
-fn properties_block_standard(input: &[u8]) -> IResult<&[u8], Vec<PropertyEntries>, error::Error<&[u8]>> {
+fn properties_block_standard(
+    input: &[u8],
+) -> IResult<&[u8], Vec<PropertyEntries>, error::Error<&[u8]>> {
     let (input, properties) =
         many0(terminated(property_input_standard(), line_ending)).parse(input)?;
     let (input, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(input)?;
@@ -238,13 +242,9 @@ fn build_molecule_standard(
         molecule.add_atom(atom);
     }
 
-    // Add bonds to molecule (convert BondStandard to Bond)
-    for (idx1, idx2, bond_standard) in bonds {
-        // Convert BondStandard to Bond by creating a new Bond with the same type
-        let bond = Bond::new(bond_standard.bond_type);
-        molecule
-            .graph
-            .add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond);
+    // Add bonds to molecule
+    for (idx1, idx2, bond) in bonds {
+        molecule.add_bond(idx1, idx2, bond);
     }
 
     // Create a new MoleculeProperties accumulator

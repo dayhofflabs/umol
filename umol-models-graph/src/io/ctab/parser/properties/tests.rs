@@ -65,6 +65,12 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  SDT   1 pH   ", "SDT SGroup property", PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry { sgroup_index: 0, field_name: "pH".to_string(), field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None }))]
 #[case(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", "SDD SGroup property", PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry { sgroup_index: 0,
     coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached, display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None, display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 6 }))]
+#[case(b"M  SCD   1 4.6", "SCD SGroup property", PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() }))]
+#[case(b"M  SED   2 E/Z unknown", "SED SGroup property", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() }))]
+#[case(b"M  SED   1", "SED SGroup property", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 }))]
+#[case(b"M  SPL  1   1   2", "SPL SGroup property", PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }]))]
+#[case(b"M  SNC  2   1   1   2   2", "SNC SGroup property", PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry { sgroup_index: 0, component_number: 1 }, SGroupComponentEntry { sgroup_index: 1, component_number: 2 }]))]
+#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry { bond_index: 0, bond_order: 0 }]))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -92,15 +98,16 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case]
 #[rstest]
 #[case(b"A    1\nCF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 #[case(b"V    1 *", "V atom value property", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
-#[case(b"M  CHG  1   1  -1", "CHG standard property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case(b"M  RAD  1   1   2", "RAD standard property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
-#[case(b"M  ISO  1   1  13", "ISO standard property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
+#[case(b"M  CHG  1   1  -1", "CHG atom property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  RAD  1   1   2", "RAD atom property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
+#[case(b"M  ISO  1   1  13", "ISO atom property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
 #[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
 #[case(b"M  SST  1   1 ALT", "SST SGroup property", PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
+#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry { bond_index: 0, bond_order: 0 }]))]
 fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input_standard().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -124,6 +131,10 @@ fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case
 #[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property not supported in standard parser")]
 #[case(b"M  SDT   1 pH   ", "SDT SGroup property not supported in standard parser")]
 #[case(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", "SDD SGroup property not supported in standard parser")]
+#[case(b"M  SCD   1   1   0", "SCD SGroup property not supported in standard parser")]
+#[case(b"M  SED   1   1   0", "SED SGroup property not supported in standard parser")]
+#[case(b"M  SPL   1   1   0", "SPL SGroup property not supported in standard parser")]
+#[case(b"M  SNC   1   1   0", "SNC SGroup property not supported in standard parser")]
 fn test_property_input_standard_invalid(#[case] input: &[u8], #[case] desc: &str) {
     let result = property_input_standard().parse(input);
     assert!(result.is_err(), "{}", desc);
@@ -1090,7 +1101,7 @@ fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<Zero
 }
 
 #[rstest]
-#[case(b"  0   1   0", "bv index is zero", ErrorKind::Verify)]
+#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
 #[case(b"  1   0   0", "bond index is zero", ErrorKind::Verify)]
 #[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
 fn test_zero_order_bond_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {

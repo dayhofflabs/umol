@@ -1,7 +1,7 @@
 //! Molecule type for CTab format.
 
 use crate::io::ctab::atom::{Atom, AtomStandard};
-use crate::io::ctab::bond::Bond;
+use crate::io::ctab::bond::{Bond, BondStandard};
 use crate::io::ctab::sgroup::SGroup;
 use crate::io::mol::parser::{mol_block, mol_block_standard};
 use petgraph::graph::{EdgeIndex, NodeIndex};
@@ -61,7 +61,7 @@ pub struct Molecule {
 /// Graph-based molecule representation for standard (non-query) molecules only
 #[derive(Debug, Clone)]
 pub struct MoleculeStandard {
-    pub graph: StableGraph<AtomStandard, Bond, Undirected, usize>,
+    pub graph: StableGraph<AtomStandard, BondStandard, Undirected, usize>,
     pub sgroups: BTreeMap<usize, SGroup>,
     pub properties: HashMap<String, String>,
     pub header: Header,
@@ -240,20 +240,11 @@ impl Molecule {
     }
 
     /// Add atom to the molecule and update index mappings
-    ///
-    /// - `atom`: Atom to add (Molecule takes ownership)
-    ///
-    /// Return index of added atom.
     pub fn add_atom(&mut self, atom: Atom) -> usize {
         self.graph.add_node(atom).index()
     }
 
     /// Add bond between two atoms specified by external/MOL indices
-    ///
-    /// - `idx1`, `idx2`: Atom indices
-    /// - `bond`: Bond to add (Molecule takes ownership)
-    ///
-    /// Return index of added bond.
     pub fn add_bond(&mut self, idx1: usize, idx2: usize, bond: Bond) -> usize {
         self.graph
             .add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond)
@@ -271,19 +262,11 @@ impl Molecule {
     }
 
     /// Get immutable reference to atom by index
-    ///
-    /// - `idx`: Atom index
-    ///
-    /// Return immutable reference to atom.
     pub fn atom(&self, idx: usize) -> Option<&Atom> {
         self.graph.node_weight(AtomIndex::new(idx))
     }
 
     /// Get mutable reference to atom by index
-    ///
-    /// - `idx`: Atom index
-    ///
-    /// Return mutable reference to atom.
     pub fn atom_mut(&mut self, idx: usize) -> Option<&mut Atom> {
         self.graph.node_weight_mut(AtomIndex::new(idx))
     }
@@ -299,19 +282,11 @@ impl Molecule {
     }
 
     /// Get immutable reference to bond by index
-    ///
-    /// - `idx`: Bond index
-    ///
-    /// Return immutable reference to bond.
     pub fn bond(&self, idx: usize) -> Option<&Bond> {
         self.graph.edge_weight(BondIndex::new(idx))
     }
 
     /// Get mutable reference to bond by index
-    ///
-    /// - `idx`: Bond index
-    ///
-    /// Return mutable reference to bond.
     pub fn bond_mut(&mut self, idx: usize) -> Option<&mut Bond> {
         self.graph.edge_weight_mut(BondIndex::new(idx))
     }
@@ -351,7 +326,7 @@ impl MoleculeStandard {
     /// Create empty standard molecule
     pub fn new() -> Self {
         Self {
-            graph: StableGraph::<AtomStandard, Bond, Undirected, usize>::default(),
+            graph: StableGraph::<AtomStandard, BondStandard, Undirected, usize>::default(),
             sgroups: BTreeMap::new(),
             properties: HashMap::new(),
             header: Header::empty(),
@@ -369,21 +344,35 @@ impl MoleculeStandard {
     }
 
     /// Add atom to the molecule and update index mappings
-    ///
-    /// - `atom`: Atom to add (MoleculeStandard takes ownership)
-    ///
-    /// Return index of added atom.
     pub fn add_atom(&mut self, atom: AtomStandard) -> usize {
         self.graph.add_node(atom).index()
     }
 
+    /// Add bond between two atoms specified by external/MOL indices
+    pub fn add_bond(&mut self, idx1: usize, idx2: usize, bond: BondStandard) -> usize {
+        self.graph
+            .add_edge(AtomIndex::new(idx1), AtomIndex::new(idx2), bond)
+            .index()
+    }
+
+    /// Get immutable reference to atom by index
+    pub fn atom(&self, idx: usize) -> Option<&AtomStandard> {
+        self.graph.node_weight(AtomIndex::new(idx))
+    }
+
     /// Get mutable reference to atom by index
-    ///
-    /// - `idx`: Atom index
-    ///
-    /// Return mutable reference to atom.
     pub fn atom_mut(&mut self, idx: usize) -> Option<&mut AtomStandard> {
         self.graph.node_weight_mut(AtomIndex::new(idx))
+    }
+
+    /// Get immutable reference to bond by index
+    pub fn bond(&self, idx: usize) -> Option<&BondStandard> {
+        self.graph.edge_weight(BondIndex::new(idx))
+    }
+
+    /// Get mutable reference to bond by index
+    pub fn bond_mut(&mut self, idx: usize) -> Option<&mut BondStandard> {
+        self.graph.edge_weight_mut(BondIndex::new(idx))
     }
 }
 
