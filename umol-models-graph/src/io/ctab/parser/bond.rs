@@ -129,7 +129,7 @@ fn bond_input_inner<'a>(
         let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
         let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
         let (i, bond_type) = map_res(fixed_width_int::<u8>(3), |code| {
-            convert_bond_type_code(code)
+            convert_bond_type_code(code, false)
         })
         .parse(i)?;
 

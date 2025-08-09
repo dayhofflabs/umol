@@ -63,7 +63,7 @@ CDPKit comes bundled with a set of ready-to-use command line tools and GUI appli
 
 ### Question:
 
-In a separate conversation, we're have been working on an implementation of molecular structures in Rust. In preparation for the implementation, I've been collecting code samples from existing implementations for inspiration. Here is the code from the MolecularGraph.jl library. I don't know Julia at all, although I can guess a lot from Python/Perl experience. I'd like to ask you to analyze this implementation of the base MolGraph class , in particular with respect to its approach to storage and manipulation of the molecular graph structure. If I understand it correctly, it is fundamentally a mutable structure with cached properties, much like the RDKit implementation. Is that correct? What are the modes for building the structure from scratch, not via parsing a string respresentation like SMILES? How well-develeoped is that interface? What other key design patterns can you recorgnize in this implementation? In your estimation, is it a useful model for designing a modern molecule building interface, regardless of programming language? Let me know if I need to include additional files.
+In a separate conversation, we're have been working on an implementation of molecular structures in Rust. In preparation for the implementation, I've been collecting code samples from existing implementations for inspiration. Here is the code from the MolecularGraph.jl library. I don't know Julia at all, although I can guess a lot from Python/Perl experience. I'd like to ask you to analyze this implementation of the base MolGraph class , in particular with respect to its approach to storage and manipulation of the molecular graph structure. If I understand it correctly, it is fundamentally a mutable structure with cached properties, much like the RDKit implementation. Is that correct? What are the modes for building the structure from scratch, not via parsing a string representation like SMILES? How well-develeoped is that interface? What other key design patterns can you recorgnize in this implementation? In your estimation, is it a useful model for designing a modern molecule building interface, regardless of programming language? Let me know if I need to include additional files.
 
 ### Partial Response:
 
@@ -151,7 +151,7 @@ Properties are recomputed only when needed
 
     __Both atom and bond parity rely on stable atomic IDs__. After an atom is assigned an ID, it can never change in a way that affects relative ordering to neighbors. Fortunately, this constraint is easy to achieve.
 
-* Claims that atoms and bonds are not unnecessary as concepts, can be replaced by atom indices or pairs of atom indices. Don't understand how he can make this big claim without having written necesssary code. Seems stupid.
+* Claims that atoms and bonds are not unnecessary as concepts, can be replaced by atom indices or pairs of atom indices. Don't understand how he can make this big claim without having written necessary code. Seems stupid.
 
 * Molecule extends graph. Fair enough but not natural; the terminology is different, which should create some strong friction.
 
@@ -190,7 +190,7 @@ Molecular encoder/featurizer using rdkit and OCaml
 * Paper: [Höck, S., Riedl, R. chemf: A purely functional chemistry toolkit. J Cheminform 4, 38 (2012)].(https://doi.org/10.1186/1758-2946-4-38).
 * Immutable data structure for molecular graphs
 * Complete SMILES parser in accordance with the OpenSMILES specification.
-* Labeled graph representation for molecules, parametrized over the vertex and egde label types.
+* Labeled graph representation for molecules, parametrized over the vertex and edge label types.
 ```scala
 trait LGraph[+E,+V] {
     def graph: Graph

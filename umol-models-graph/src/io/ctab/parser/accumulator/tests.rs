@@ -3,19 +3,21 @@ use crate::io::ctab::{
     atom::{
         Atom, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, UnsaturatedAtom,
     },
+    bond::{Bond, BondType},
     parser::properties::{
         AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry,
         AttachmentPointEntry, ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries,
         RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry,
-        SGroupBondListEntry, SGroupConnectingBondEntry, SGroupConnectivityEntry,
-        SGroupCorrespondenceEntry, SGroupDataDescriptionEntry, SGroupDataEntry,
-        SGroupDisplayInfoEntry, SGroupExpansionEntry, SGroupLabelEntry, SGroupParentAtomEntry,
+        SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry, SGroupConnectivityEntry,
+        SGroupCorrespondenceEntry, SGroupDataDescriptionEntry, SGroupDataDisplayEntry, SGroupDataEntry,
+        SGroupDisplayInfoEntry, SGroupExpansionEntry, SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry,
         SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry,
-        UnsaturatedAtomEntry,
+        UnsaturatedAtomEntry, ZeroOrderBondEntry,
     },
     rgroup::{RGroup, RGroupOccurrence},
     sgroup::{
-        SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupDataType,
+        SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupDataDisplayChars,
+        SGroupDataDisplayPlacement, SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType,
         SGroupSubtype, SGroupType,
     },
 };
@@ -1077,41 +1079,6 @@ fn test_apply_sgroup_display_info_entry_no_type() {
     assert!(result.is_err());
 }
 
-#[rstest]
-fn test_apply_sgroup_data_entry(
-    mut basic_molecule: Molecule,
-    mut acc_with_data_sgroup: MoleculeProperties,
-) {
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::End);
-    acc_with_data_sgroup.add_entry(data_entry).unwrap();
-    acc_with_data_sgroup.apply(&mut basic_molecule).unwrap();
-
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(1).unwrap();
-    let data = sgroup.data.get("test").unwrap();
-    assert_eq!(data.data_content, Some(vec!["content".to_string()]));
-}
-
-#[rstest]
-fn test_apply_sgroup_data_entry_no_type() {
-    let mut acc = MoleculeProperties::new();
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::End);
-    let result = acc.add_entry(data_entry);
-    assert!(result.is_err());
-}
-
-#[rstest]
-fn test_apply_sgroup_data_entry_no_description() {
-    let mut acc = MoleculeProperties::new();
-    let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
-        sgroup_index: 1,
-        sgroup_type: SGroupType::Data,
-    }]);
-    acc.add_entry(type_entry).unwrap();
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::End);
-    let result = acc.add_entry(data_entry);
-    assert!(result.is_err());
-}
 
 #[rstest]
 fn test_apply_sgroup_connecting_bond_entry(
@@ -1153,6 +1120,7 @@ fn test_apply_sgroup_connecting_bond_entry_no_type() {
     assert!(result.is_err());
 }
 
+
 #[rstest]
 fn test_apply_sgroup_data_description_entry(
     mut basic_molecule: Molecule,
@@ -1182,5 +1150,258 @@ fn test_apply_sgroup_data_description_entry_no_type() {
             data_query_operator: Some("=".to_string()),
         });
     let result = acc.add_entry(data_description_entry);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_sgroup_data_display_entry(
+    mut basic_molecule: Molecule,
+    mut acc_with_sgroup_type: MoleculeProperties,
+) {
+    let display_entry = PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry {
+        sgroup_index: 1,
+        coords: (10.0, 20.0),
+        display_type: SGroupDataDisplayType::Detached,
+        display_placement: SGroupDataDisplayPlacement::Relative,
+        display_units: SGroupDataDisplayUnits::DisplayUnits,
+        display_chars: SGroupDataDisplayChars::Number(5),
+        display_tag: Some(5),
+        display_position: 3,
+    });
+    acc_with_sgroup_type.add_entry(display_entry).unwrap();
+    acc_with_sgroup_type.apply(&mut basic_molecule).unwrap();
+
+    assert_eq!(basic_molecule.sgroups().count(), 1);
+    let sgroup = basic_molecule.sgroup(1).unwrap();
+    let display = sgroup.display.as_ref().unwrap();
+    assert_eq!(display.coords, (10.0, 20.0));
+    assert_eq!(display.display_type, SGroupDataDisplayType::Detached);
+    assert_eq!(display.display_placement, SGroupDataDisplayPlacement::Relative);
+    assert_eq!(display.display_units, SGroupDataDisplayUnits::DisplayUnits);
+    assert_eq!(display.display_chars, SGroupDataDisplayChars::Number(5));
+}
+
+#[rstest]
+fn test_apply_sgroup_data_display_entry_no_type() {
+    let mut acc = MoleculeProperties::new();
+    let display_entry = PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry {
+        sgroup_index: 1,
+        coords: (10.0, 20.0),
+        display_type: SGroupDataDisplayType::Detached,
+        display_placement: SGroupDataDisplayPlacement::Relative,
+        display_units: SGroupDataDisplayUnits::DisplayUnits,
+        display_chars: SGroupDataDisplayChars::All,
+        display_tag: None,
+        display_position: 0,
+    });
+    let result = acc.add_entry(display_entry);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_sgroup_data_entry(
+    mut basic_molecule: Molecule,
+    mut acc_with_data_sgroup: MoleculeProperties,
+) {
+    let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
+        sgroup_index: 1, 
+        data_content: "content".to_string() 
+    });
+    acc_with_data_sgroup.add_entry(continuation_entry).unwrap();
+    
+    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
+    acc_with_data_sgroup.add_entry(data_entry).unwrap();
+    acc_with_data_sgroup.apply(&mut basic_molecule).unwrap();
+
+    assert_eq!(basic_molecule.sgroups().count(), 1);
+    let sgroup = basic_molecule.sgroup(1).unwrap();
+    let data = sgroup.data.get("test").unwrap();
+    assert_eq!(data.data_content, Some(vec!["content".to_string()]));
+}
+
+#[rstest]
+fn test_apply_sgroup_data_entry_no_type() {
+    let mut acc = MoleculeProperties::new();
+    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
+    let result = acc.add_entry(data_entry);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_sgroup_data_entry_no_description() {
+    let mut acc = MoleculeProperties::new();
+    let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
+        sgroup_index: 1,
+        sgroup_type: SGroupType::Data,
+    }]);
+    acc.add_entry(type_entry).unwrap();
+    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
+    let result = acc.add_entry(data_entry);
+    assert!(result.is_err());
+}
+
+
+#[rstest]
+fn test_apply_sgroup_data_entry_auto_finalization(
+    mut basic_molecule: Molecule,
+    mut acc_with_data_sgroup: MoleculeProperties,
+) {
+    let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
+        sgroup_index: 1, 
+        data_content: "incomplete".to_string() 
+    });
+    acc_with_data_sgroup.add_entry(continuation_entry).unwrap();
+    
+    // Apply without SED - should auto-finalize
+    acc_with_data_sgroup.apply(&mut basic_molecule).unwrap();
+
+    assert_eq!(basic_molecule.sgroups().count(), 1);
+    let sgroup = basic_molecule.sgroup(1).unwrap();
+    let data = sgroup.data.get("test").unwrap();
+    assert_eq!(data.data_content, Some(vec!["incomplete".to_string()]));
+}
+
+#[rstest]
+fn test_apply_sgroup_data_entry_multi_continuation() {
+    let mut acc = MoleculeProperties::new();
+    let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
+        sgroup_index: 1,
+        sgroup_type: SGroupType::Data,
+    }]);
+    acc.add_entry(type_entry).unwrap();
+    
+    let data_description_entry = PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
+        sgroup_index: 1,
+        field_name: "test".to_string(),
+        field_type: SGroupDataType::Text,
+        field_units: None,
+        query_identifier: None,
+        data_query_operator: None,
+    });
+    acc.add_entry(data_description_entry).unwrap();
+    
+    let continuation1 = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
+        sgroup_index: 1, 
+        data_content: "part1".to_string() 
+    });
+    acc.add_entry(continuation1).unwrap();
+    
+    let continuation2 = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
+        sgroup_index: 1, 
+        data_content: "part2".to_string() 
+    });
+    acc.add_entry(continuation2).unwrap();
+    
+    let end_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData { 
+        sgroup_index: 1, 
+        data_content: "final".to_string() 
+    });
+    acc.add_entry(end_entry).unwrap();
+    
+    let mut molecule = Molecule::new();
+    acc.apply(&mut molecule).unwrap();
+    
+    let sgroup = molecule.sgroup(1).unwrap();
+    let data = sgroup.data.get("test").unwrap();
+    assert_eq!(data.data_content, Some(vec!["part1part2final".to_string()]));
+}
+
+#[rstest]
+fn test_apply_sgroup_hierarchy_entries(
+    mut basic_molecule: Molecule,
+    mut acc_with_sgroup_type: MoleculeProperties,
+) {
+    // Add a second SGroup as parent
+    let parent_type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
+        sgroup_index: 2,
+        sgroup_type: SGroupType::Superatom,
+    }]);
+    acc_with_sgroup_type.add_entry(parent_type_entry).unwrap();
+    
+    let hierarchy_entry = PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry {
+        sgroup_index: 1,
+        parent_sgroup_index: 2,
+    }]);
+    acc_with_sgroup_type.add_entry(hierarchy_entry).unwrap();
+    acc_with_sgroup_type.apply(&mut basic_molecule).unwrap();
+
+    assert_eq!(basic_molecule.sgroups().count(), 2);
+    let child_sgroup = basic_molecule.sgroup(1).unwrap();
+    assert_eq!(child_sgroup.hierarchy_parent, Some(2));
+}
+
+#[rstest]
+fn test_apply_sgroup_hierarchy_entries_no_type() {
+    let mut acc = MoleculeProperties::new();
+    let hierarchy_entry = PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry {
+        sgroup_index: 1,
+        parent_sgroup_index: 2,
+    }]);
+    let result = acc.add_entry(hierarchy_entry);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_sgroup_component_entries(
+    mut basic_molecule: Molecule,
+    mut acc_with_sgroup_type: MoleculeProperties,
+) {
+    let component_entry = PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry {
+        sgroup_index: 1,
+        component_number: 42,
+    }]);
+    acc_with_sgroup_type.add_entry(component_entry).unwrap();
+    acc_with_sgroup_type.apply(&mut basic_molecule).unwrap();
+
+    assert_eq!(basic_molecule.sgroups().count(), 1);
+    let sgroup = basic_molecule.sgroup(1).unwrap();
+    assert_eq!(sgroup.component_number, Some(42));
+}
+
+#[rstest]
+fn test_apply_sgroup_component_entries_no_type() {
+    let mut acc = MoleculeProperties::new();
+    let component_entry = PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry {
+        sgroup_index: 1,
+        component_number: 42,
+    }]);
+    let result = acc.add_entry(component_entry);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_zero_order_bond_entries() {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = Molecule::new();
+    
+    // Add two atoms
+    molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));
+    molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));
+    
+    // Add a bond between them
+    molecule.add_bond(0, 1, Bond::new(BondType::Single));
+    
+    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+        bond_index: 0,
+        bond_order: 0,
+    }]);
+    acc.add_entry(zero_order_entry).unwrap();
+    acc.apply(&mut molecule).unwrap();
+
+    let bond = molecule.bond(0).unwrap();
+    assert_eq!(bond.bond_type, BondType::Zero);
+}
+
+#[rstest]
+fn test_apply_zero_order_bond_entries_invalid_bond() {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = Molecule::new();
+    
+    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+        bond_index: 5,
+        bond_order: 0,
+    }]);
+    acc.add_entry(zero_order_entry).unwrap();
+    let result = acc.apply(&mut molecule);
     assert!(result.is_err());
 }

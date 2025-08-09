@@ -6,88 +6,16 @@ use nom::{error::ErrorKind, Err, Parser};
 use rstest::rstest;
 
 #[rstest]
-#[case(
-    b"  1  2  1  1  0  0  0",
-    "single wedge",
-    0,
-    1,
-    BondType::Single,
-    None,
-    Some(BondDir::Wedge)
-)]
-#[case(
-    b"  2  5  1  0  0  0  0",
-    "single unknown",
-    1,
-    4,
-    BondType::Single,
-    None,
-    None
-)]
-#[case(
-    b"  2  5  2  1  0  0  0",
-    "double cis",
-    1,
-    4,
-    BondType::Double,
-    Some(BondStereo::Cis),
-    None
-)]
-#[case(
-    b"  2  5  2  6  0  0  0",
-    "double trans",
-    1,
-    4,
-    BondType::Double,
-    Some(BondStereo::Trans),
-    None
-)]
-#[case(
-    b"  2  5  2  4  0  0  0",
-    "double either",
-    1,
-    4,
-    BondType::Double,
-    Some(BondStereo::Either),
-    None
-)]
-#[case(
-    b"  2  5  2  0  0  0  0",
-    "double none",
-    1,
-    4,
-    BondType::Double,
-    None,
-    None
-)]
+#[case(b"  1  2  1  1  0  0  0", "single wedge", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
+#[case(b"  2  5  1  0  0  0  0", "single unknown", 1, 4, BondType::Single, None, None)]
+#[case(b"  2  5  2  1  0  0  0", "double cis", 1, 4, BondType::Double, Some(BondStereo::Cis), None)]
+#[case(b"  2  5  2  6  0  0  0", "double trans", 1, 4, BondType::Double, Some(BondStereo::Trans), None)]
+#[case(b"  2  5  2  4  0  0  0", "double either", 1, 4, BondType::Double, Some(BondStereo::Either), None)]
+#[case(b"  2  5  2  0  0  0  0", "double none", 1, 4, BondType::Double, None, None)]
 #[case(b"  2  5  3  0  0  0  0", "triple", 1, 4, BondType::Triple, None, None)]
-#[case(
-    b"  2  5  4  0  0  0  0",
-    "aromatic",
-    1,
-    4,
-    BondType::Aromatic,
-    None,
-    None
-)]
-#[case(
-    b"  2  5  3  1  0  0  0",
-    "triple ignored stereo",
-    1,
-    4,
-    BondType::Triple,
-    None,
-    None
-)]
-#[case(
-    b"  2  5  3  1         ",
-    "triple empty fields",
-    1,
-    4,
-    BondType::Triple,
-    None,
-    None
-)]
+#[case(b"  2  5  4  0  0  0  0", "aromatic", 1, 4, BondType::Aromatic, None, None)]
+#[case(b"  2  5  3  1  0  0  0", "triple ignored stereo", 1, 4, BondType::Triple, None, None)]
+#[case(b"  2  5  3  1         ", "triple empty fields", 1, 4, BondType::Triple, None, None)]
 fn test_bond_input_standard21(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -148,43 +76,11 @@ fn test_bond_input_standard21_invalid(
 }
 
 #[rstest]
-#[case(
-    b"  1  3  1  1",
-    "single wedge",
-    0,
-    2,
-    BondType::Single,
-    None,
-    Some(BondDir::Wedge)
-)]
-#[case(
-    b"  1  3  2  1",
-    "double cis",
-    0,
-    2,
-    BondType::Double,
-    Some(BondStereo::Cis),
-    None
-)]
+#[case(b"  1  3  1  1", "single wedge", 0, 2, BondType::Single, None, Some(BondDir::Wedge))]
+#[case(b"  1  3  2  1", "double cis", 0, 2, BondType::Double, Some(BondStereo::Cis), None)]
 #[case(b"  2  5  2  0", "double none", 1, 4, BondType::Double, None, None)]
-#[case(
-    b"  2  4  1  6",
-    "single dash",
-    1,
-    3,
-    BondType::Single,
-    None,
-    Some(BondDir::Dash)
-)]
-#[case(
-    b"  2  5  3   ",
-    "triple empty fields",
-    1,
-    4,
-    BondType::Triple,
-    None,
-    None
-)]
+#[case(b"  2  4  1  6", "single dash", 1, 3, BondType::Single, None, Some(BondDir::Dash))]
+#[case(b"  2  5  3   ", "triple empty fields", 1, 4, BondType::Triple, None, None)]
 fn test_bond_input_standard12(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -301,33 +197,9 @@ fn test_bond_input_standard9_invalid(
 #[rstest]
 #[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None)]
 #[case(b"  1  2  1 ", "len 10 padded", 0, 1, BondType::Single, None, None)]
-#[case(
-    b"  1  3  2  1",
-    "len 12",
-    0,
-    2,
-    BondType::Double,
-    Some(BondStereo::Cis),
-    None
-)]
-#[case(
-    b"  1  3  1  6 ",
-    "len 13 padded",
-    0,
-    2,
-    BondType::Single,
-    None,
-    Some(BondDir::Dash)
-)]
-#[case(
-    b"  2  5  2  1  0  0  0",
-    "len to 21",
-    1,
-    4,
-    BondType::Double,
-    Some(BondStereo::Cis),
-    None
-)]
+#[case(b"  1  3  2  1", "len 12", 0, 2, BondType::Double, Some(BondStereo::Cis), None)]
+#[case(b"  1  3  1  6 ", "len 13 padded", 0, 2, BondType::Single, None, Some(BondDir::Dash))]
+#[case(b"  2  5  2  1  0  0  0", "len to 21", 1, 4, BondType::Double, Some(BondStereo::Cis), None)]
 fn test_bond_input_standard(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -411,72 +283,12 @@ fn test_bond_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
 
 #[rstest]
 #[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None, None, None)]
-#[case(
-    b"  1  2  2  3",
-    "len 12 double either",
-    0,
-    1,
-    BondType::Double,
-    Some(BondStereo::Either),
-    None,
-    None,
-    None
-)]
-#[case(
-    b"  1  2  1  6  ",
-    "len 13 single dash padded",
-    0,
-    1,
-    BondType::Single,
-    None,
-    Some(BondDir::Dash),
-    None,
-    None
-)]
-#[case(
-    b"  1  2  8  0     1",
-    "len 18 any bond, ring",
-    0,
-    1,
-    BondType::Any,
-    None,
-    None,
-    Some(BondTopology::Ring),
-    None
-)]
-#[case(
-    b"  1  2  1  0     2  1",
-    "len 21 full, chain, center",
-    0,
-    1,
-    BondType::Single,
-    None,
-    None,
-    Some(BondTopology::Chain),
-    Some(BondReactingCenter::CENTER)
-)]
-#[case(
-    b"  1  2  1  0     2 -1",
-    "len 21 full, not center",
-    0,
-    1,
-    BondType::Single,
-    None,
-    None,
-    Some(BondTopology::Chain),
-    Some(BondReactingCenter::NOT_CENTER)
-)]
-#[case(
-    b"  1  2  1            ",
-    "len 21 only mandatory fields",
-    0,
-    1,
-    BondType::Single,
-    None,
-    None,
-    Some(BondTopology::Either),
-    Some(BondReactingCenter::UNMARKED)
-)]
+#[case(b"  1  2  2  3", "len 12 double either", 0, 1, BondType::Double, Some(BondStereo::Either), None, None, None)]
+#[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondType::Single, None, Some(BondDir::Dash), None, None)]
+#[case(b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
+#[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondType::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
+#[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondType::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
+#[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None, None, Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] desc: &str,

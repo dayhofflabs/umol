@@ -369,7 +369,7 @@ all approaches but it's worth exploring the API with this type of usage in mind.
 To be clear, in many codes, the molecular construction is done by parsing
 textual representations (SMILES, MOL, PDB, etc), which makes designing a good
 interface for humans not the only consideration. On the other hand, I would
-think that the *absense* of a good molecular construction API is why most people
+think that the *absence* of a good molecular construction API is why most people
 limit themselves to the expressivity of the textual formats, each of which has
 its own problems, because they don't want to go through the whole song and
 dance. Moreover, library generation (given a starting scaffold and set of

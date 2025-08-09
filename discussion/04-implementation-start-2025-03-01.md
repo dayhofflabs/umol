@@ -635,7 +635,7 @@ broader ValidMolecule type that guarantees certain properties.
 
 # Question
 
-I have a few questions first. Don't we also need a function add_atom, wich
+I have a few questions first. Don't we also need a function add_atom, which
 presumably takes an element name or a graph atom? We have a fluent interface, is
 that an advantage? Should we have a fluent interface for GraphBond as well?
 Currently, this would not compile since the elements of GraphBond are private so

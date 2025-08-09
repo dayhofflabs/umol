@@ -288,7 +288,7 @@ The semantic model aligns well with Rust's trait-based programming model:
    }
    
    impl ConvertTo<QuantumModel> for GraphModel { // DR: How to organize families of models?
-                                                 // For example, all DFT methods have effectively the same capabilites
+                                                 // For example, all DFT methods have effectively the same capabilities
                                                  // What is a concise way of expressing that?
        type Error = ConversionError;
        fn convert_to(&self) -> Result<QuantumModel, Self::Error> {
@@ -451,7 +451,7 @@ These enhancements would make the semantic model more robust and flexible, bette
 
 # Question
 
-Let's additionally reason through the blurry boundary between model and structure graphs. Based on our conversation thus far, do you see a principled approach that allows to cleanly separate these concerns? Or is it best to explictly acknowledge the uncertainty and provide conversions between specific combinations of structures and models? I do not particularly like the entanglement of the structure and model concept, even if it's potentially unavoidable. It does make composition much more complex. Can the three-graph model be modified to better take the structure-model uncertainty into consideration?
+Let's additionally reason through the blurry boundary between model and structure graphs. Based on our conversation thus far, do you see a principled approach that allows to cleanly separate these concerns? Or is it best to explicitly acknowledge the uncertainty and provide conversions between specific combinations of structures and models? I do not particularly like the entanglement of the structure and model concept, even if it's potentially unavoidable. It does make composition much more complex. Can the three-graph model be modified to better take the structure-model uncertainty into consideration?
 
 # Response
 

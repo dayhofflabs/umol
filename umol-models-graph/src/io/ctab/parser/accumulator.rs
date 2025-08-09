@@ -1,20 +1,21 @@
 //! Accumulator for molecular properties from a CTAB file
 use super::context::Context;
 use super::convert::{
-    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
-    convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
+    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_bond_type_code,
+    convert_radical_type_code, convert_ring_bond_count_code, convert_substitution_count_code,
+    convert_unsaturated_atom_code,
 };
 use crate::io::ctab::atom::{
     Atom, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, RingBondCount,
     SubstitutionCount, UnsaturatedAtom,
 };
+
 use crate::io::ctab::molecule::{Molecule, MoleculeStandard};
-use crate::io::ctab::parser::properties::PropertyEntries;
+use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry, ZeroOrderBondEntry};
 use crate::io::ctab::rgroup::{RGroup, RGroupOccurrence};
-use crate::io::ctab::sgroup::SGroup;
 use crate::io::ctab::sgroup::{
-    SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupMultiplier,
-    SGroupSubtype, SGroupType,
+    SGroup, SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData,
+    SGroupDataDisplay, SGroupMultiplier, SGroupSubtype, SGroupType,
 };
 use std::collections::HashMap;
 use umol::error::{DataError, ValidationError};
@@ -73,6 +74,7 @@ pub struct SGroupProperties {
     pub hierarchy_parent: Option<usize>,
     pub component_number: Option<u32>,
     pub data: HashMap<String, SGroupData>,
+    pub display: Option<SGroupDataDisplay>,
 }
 
 impl SGroupProperties {
@@ -92,6 +94,7 @@ pub struct MoleculeProperties {
     pub bond_properties: HashMap<usize, BondProperties>,
     pub rgroup_properties: HashMap<usize, RGroupProperties>,
     pub sgroup_properties: HashMap<usize, SGroupProperties>,
+    pub zero_order_bonds: Vec<ZeroOrderBondEntry>,
 }
 
 impl MoleculeProperties {
@@ -102,6 +105,7 @@ impl MoleculeProperties {
             bond_properties: HashMap::new(),
             rgroup_properties: HashMap::new(),
             sgroup_properties: HashMap::new(),
+            zero_order_bonds: Vec::new(),
         }
     }
 
@@ -375,17 +379,114 @@ impl MoleculeProperties {
                             entry.sgroup_index
                         ))
                     })?;
-                self.context.current_data_field = Some(entry.field_name.clone());
-                let data = SGroupData {
-                    field_type: entry.field_type,
-                    field_units: entry.field_units,
-                    query_identifier: entry.query_identifier,
-                    data_query_operator: entry.data_query_operator,
-                    data_content: None,
-                };
-                props.data.insert(entry.field_name, data);
+                props.data.insert(
+                    entry.field_name.clone(),
+                    SGroupData {
+                        field_type: entry.field_type,
+                        field_units: entry.field_units,
+                        query_identifier: entry.query_identifier,
+                        data_query_operator: entry.data_query_operator,
+                        data_content: None,
+                    },
+                );
+                
+                self.context.current_sgroup_index = Some(entry.sgroup_index);
+                self.context.current_data_field = Some(entry.field_name);
             }
-            // TODO: SGroupDataEntry
+            PropertyEntries::SGroupDataDisplayEntry(entry) => {
+                let props = self
+                    .sgroup_properties
+                    .get_mut(&entry.sgroup_index)
+                    .ok_or_else(|| {
+                        DataError::InvalidFragment(format!(
+                            "S-group data description for undefined S-group {}",
+                            entry.sgroup_index
+                        ))
+                    })?;
+                props.display = Some(SGroupDataDisplay {
+                    coords: entry.coords,
+                    display_type: entry.display_type,
+                    display_placement: entry.display_placement,
+                    display_units: entry.display_units,
+                    display_chars: entry.display_chars,
+                });
+            }
+            PropertyEntries::SGroupDataEntry(entry) => {
+                match entry {
+                    SGroupDataEntry::Continuation { sgroup_index, data_content } => {
+                        if self.context.current_sgroup_index.is_none() {
+                            return Err(DataError::InvalidFragment(
+                                "SCD entry found without SDT context".to_string()
+                            ).into());
+                        }
+                        
+                        let context_sgroup = self.context.current_sgroup_index.unwrap();
+                        if sgroup_index != context_sgroup {
+                            return Err(DataError::InvalidFragment(format!(
+                                "SCD sgroup_index {} doesn't match context sgroup {}",
+                                sgroup_index, context_sgroup
+                            )).into());
+                        }
+
+                        if self.context.current_data_content.is_none() {
+                            self.context.current_data_content = Some(Vec::new());
+                        }
+                        
+                        let buffer = self.context.current_data_content.as_mut().unwrap();
+                        if buffer.is_empty() {
+                            buffer.push(data_content.clone());
+                        } else {
+                            let last_line = buffer.last_mut().unwrap();
+                            last_line.push_str(&data_content);
+                        }
+                    }
+                    
+                    SGroupDataEntry::EndWithData { sgroup_index, data_content } => {
+                        if let Some(context_sgroup) = self.context.current_sgroup_index {
+                            if sgroup_index != context_sgroup {
+                                return Err(DataError::InvalidFragment(format!(
+                                    "SED sgroup_index {} doesn't match context sgroup {}",
+                                    sgroup_index, context_sgroup
+                                )).into());
+                            }
+
+                            if self.context.current_data_content.is_none() {
+                                self.context.current_data_content = Some(Vec::new());
+                            }
+                            
+                            let buffer = self.context.current_data_content.as_mut().unwrap();
+                            if buffer.is_empty() {
+                                buffer.push(data_content.clone());
+                            } else {
+                                let last_line = buffer.last_mut().unwrap();
+                                last_line.push_str(&data_content);
+                            }
+                            
+                            self.finalize_sgroup_data(sgroup_index, None)?;
+                        } else {
+                            self.finalize_sgroup_data(sgroup_index, Some(data_content.clone()))?;
+                        }
+                    }
+                    
+                    SGroupDataEntry::EndBlank { sgroup_index } => {
+                        if self.context.current_sgroup_index.is_none() {
+                            return Err(DataError::InvalidFragment(
+                                "Blank SED entry found without SDT context".to_string()
+                            ).into());
+                        }
+                        
+                        let context_sgroup = self.context.current_sgroup_index.unwrap();
+                        if sgroup_index != context_sgroup {
+                            return Err(DataError::InvalidFragment(format!(
+                                "Blank SED sgroup_index {} doesn't match context sgroup {}",
+                                sgroup_index, context_sgroup
+                            )).into());
+                        }
+
+                        self.finalize_sgroup_data(sgroup_index, None)?;
+                    }
+                }
+            }
             PropertyEntries::SGroupHierarchyEntries(entries) => {
                 for entry in entries {
                     let props = self
@@ -414,7 +515,16 @@ impl MoleculeProperties {
                     props.component_number = Some(entry.component_number);
                 }
             }
-            _ => { /* Other properties will be handled in subsequent steps */ }
+            PropertyEntries::ZeroOrderBondEntries(entries) => {
+                for entry in entries {
+                    self.zero_order_bonds.push(entry);
+                }
+            }
+            props => {
+                return Err(
+                    DataError::InvalidFeature(format!("unknown property: {:?}", props)).into(),
+                );
+            }
         }
         Ok(())
     }
@@ -469,8 +579,9 @@ impl MoleculeProperties {
         for (rgroup_label, props) in &self.rgroup_properties {
             self.apply_rgroup_logic(*rgroup_label, props, molecule)?;
         }
+        self.validate_sgroup_data()?;
         self.apply_sgroup(molecule)?;
-        self.context.finalize(molecule)?;
+        self.apply_zero_order_bonds(molecule)?;
         Ok(())
     }
 
@@ -823,8 +934,84 @@ impl MoleculeProperties {
             if !props.data.is_empty() {
                 sgroup.data = props.data.clone();
             }
+            if let Some(display) = &props.display {
+                sgroup.display = Some(*display);
+            }
             molecule.add_sgroup(*sgroup_index, sgroup);
         }
+        Ok(())
+    }
+
+    fn validate_sgroup_data(&mut self) -> Result<()> {
+        if self.context.current_sgroup_index.is_some() {
+            let sgroup_index = self.context.current_sgroup_index.unwrap();
+            self.finalize_sgroup_data(sgroup_index, None)?;
+            self.context.current_sgroup_index = None;
+            self.context.current_data_field = None;
+        }
+        Ok(())
+    }
+
+    fn apply_zero_order_bonds(&self, molecule: &mut Molecule) -> Result<()> {
+        for entry in &self.zero_order_bonds {
+            if let Some(bond) = molecule.bond_mut(entry.bond_index) {
+                bond.bond_type = convert_bond_type_code(entry.bond_order, true)?;
+            } else {
+                return Err(DataError::InvalidFragment(format!(
+                    "Zero-order bond for undefined bond {}",
+                    entry.bond_index
+                )).into());
+            }
+        }
+        Ok(())
+    }
+
+    fn finalize_sgroup_data(&mut self, sgroup_index: usize, sed_content: Option<String>) -> Result<()> {
+        let data_field = self.context.current_data_field.as_ref()
+            .ok_or_else(|| DataError::InvalidFragment(
+                "No data field context when finalizing S-group data".to_string()
+            ))?;
+
+        let props = self.sgroup_properties
+            .get_mut(&sgroup_index)
+            .ok_or_else(|| DataError::InvalidFragment(format!(
+                "S-group data content for undefined S-group {}",
+                sgroup_index
+            )))?;
+
+        let has_sed_content = sed_content.is_some();
+        
+        let buffer = self.context.current_data_content.as_mut();
+        let mut content = if let Some(buffer) = buffer {
+            if buffer.is_empty() {
+                String::new()
+            } else {
+                buffer.join("")
+            }
+        } else {
+            String::new()
+        };
+
+        if let Some(sed_data) = sed_content {
+            content.push_str(&sed_data);
+        }
+
+        if content.len() > 200 {
+            content.truncate(200);
+        }
+        let content = content.trim_end().to_string();
+
+        if let Some(data) = props.data.get_mut(data_field) {
+            if !content.is_empty() || has_sed_content {
+                if let Some(existing_content) = &mut data.data_content {
+                    existing_content.push(content);
+                } else {
+                    data.data_content = Some(vec![content]);
+                }
+            }
+        }
+
+        self.context.current_data_content = None;
         Ok(())
     }
 }

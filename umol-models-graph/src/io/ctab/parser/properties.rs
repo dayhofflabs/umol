@@ -2,7 +2,7 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::{line_ending, not_line_ending, space0};
+use nom::character::complete::{line_ending, not_line_ending};
 use nom::character::complete::u8 as nom_u8;
 use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
@@ -199,14 +199,19 @@ pub struct SGroupDataDescriptionEntry {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SGroupDataEntry {
+    /// SCD - Continuation data (exactly 69 characters)
     Continuation {
         sgroup_index: usize,
-        data_content: String,
+        data_content: String, // Should be exactly 69 chars
     },
-    End,
-    SingleLine {
+    /// SED - End with data (≤69 characters)
+    EndWithData {
         sgroup_index: usize,
-        data_content: String,
+        data_content: String, // 0-69 chars
+    },
+    /// SED - End without data (blank, processes buffered data)
+    EndBlank {
+        sgroup_index: usize,
     },
 }
 
@@ -237,8 +242,9 @@ pub struct SGroupHierarchyEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ZeroOrderBondEntry {
     pub bond_index: usize,
-    pub bond_order: u32,
+    pub bond_order: u8,
 }
+
 /// Parsed property entries
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyEntries {
@@ -1382,21 +1388,24 @@ fn sgroup_data_continuation_entry<'a>(
 /// The second form is used to indicate the end of the data content, in which case it should be empty.
 fn sgroup_data_end_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> {
-    all_consuming(alt((
-        map(
-            preceded(
-                tag(" "),
-                (fixed_width_int_minus1::<usize>(3), not_line_ending),
+    all_consuming(preceded(
+        tag(" "),
+        alt((
+            map(
+                (fixed_width_int_minus1::<usize>(3), preceded(tag(" "), not_line_ending)),
+                |(sgroup_index, data_content)| SGroupDataEntry::EndWithData {
+                    sgroup_index,
+                    data_content: String::from_utf8_lossy(&data_content[..data_content.len().min(69)])
+                        .trim()
+                        .to_string(),
+                },
             ),
-            |(sgroup_index, data_content)| SGroupDataEntry::SingleLine {
-                sgroup_index,
-                data_content: String::from_utf8_lossy(&data_content[..data_content.len().min(69)])
-                    .trim()
-                    .to_string(),
-            },
-        ),
-        space0.map(|_| SGroupDataEntry::End),
-    )))
+            map(
+                fixed_width_int_minus1::<usize>(3),
+                |sgroup_index| SGroupDataEntry::EndBlank { sgroup_index },
+            ),
+        )),
+    ))
 }
 
 /// Parse SGroup hierarchy entries.
@@ -1461,7 +1470,7 @@ fn zero_order_bond_entries<'a>(
                     take(4usize),
                     preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
                 ),
-                map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u32>(3))),
+                map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u8>(3))),
             ),
             |(bond_index, bond_order)| ZeroOrderBondEntry {
                 bond_index,

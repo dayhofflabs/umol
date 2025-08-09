@@ -10,11 +10,11 @@ pub enum BondType {
     Double,           // MOL code 2
     Triple,           // MOL code 3
     Aromatic,         // MOL code 4
-    Other,            // Placeholder for less common types
     SingleOrDouble,   // MOL code 5
     SingleOrAromatic, // MOL code 6
     DoubleOrAromatic, // MOL code 7
     Any,              // MOL code 8
+    Zero,             // zero-order bond, via ZBO property
 }
 
 /// Double bond stereochemistry specified in MOL V2000 files.

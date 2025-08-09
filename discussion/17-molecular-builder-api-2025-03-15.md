@@ -440,7 +440,7 @@ Enforcing valence rules during construction is crucial. Here are some strategies
 * **Context-sensitive submodes:** Limit the available bond types based on the valence of the selected atoms. For example, if a carbon atom has three bonds, only single bonds should be allowed.
 * **Predefined building blocks:** Use predefined molecular fragments (e.g., functional groups) that are guaranteed to be valid.
 * **Error handling:** Provide clear error messages when a valence rule is violated.
-* **Implicit Hydrogen addition:** When adding atoms, implictly add hydrogens to satisfy valence rules, and remove them when other bonds are added.
+* **Implicit Hydrogen addition:** When adding atoms, implicitly add hydrogens to satisfy valence rules, and remove them when other bonds are added.
 
 **Formalization as a Grammar:**
 

@@ -236,7 +236,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| property_input_standard(std::hint::black_box(input)))
+                b.iter(|| property_input_standard().parse(std::hint::black_box(input)))
             });
         }
         group.finish();
@@ -300,7 +300,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| property_input(std::hint::black_box(input)))
+                b.iter(|| property_input().parse(std::hint::black_box(input)))
             });
         }
         group.finish();

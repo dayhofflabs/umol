@@ -203,7 +203,7 @@ In this design, all capabilities are clearly identified by being subtraits of `C
 
 With this setup, is it possible to probe the capabilities of a model?
 
-# Reponse
+# Response
 
 With the static, generic setup, a type’s capabilities are enforced at compile time rather than being “probeable” at runtime. In other words, if a model type is generic over a trait bound (e.g. `M: HasDensity`) the compiler ensures the capability is present. However, if you need to inspect (or “probe”) which capabilities a model has at runtime, you’d have to add extra machinery.
 

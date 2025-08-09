@@ -76,6 +76,7 @@ pub enum SGroupDataType {
     Numeric,
     Text,
 }
+
 /// SGroup data
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupData {
@@ -110,6 +111,15 @@ pub enum SGroupDataDisplayChars {
     Number(u32),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SGroupDataDisplay {
+    pub coords: (f64, f64),
+    pub display_type: SGroupDataDisplayType,
+    pub display_placement: SGroupDataDisplayPlacement,
+    pub display_units: SGroupDataDisplayUnits,
+    pub display_chars: SGroupDataDisplayChars,
+}
+
 /// SGroup (Superatom group)
 #[derive(Debug, Clone)]
 pub struct SGroup {
@@ -130,6 +140,7 @@ pub struct SGroup {
     pub component_number: Option<u32>,            // SNC: component order number
     pub bracket_style: Option<SGroupBracketStyle>, // SBT: bracket display style
     pub data: HashMap<String, SGroupData>,        // SDT, SCD, SED: data for DAT SGroups
+    pub display: Option<SGroupDataDisplay>,       // SDD: display info for DAT SGroups
 }
 
 impl SGroup {
@@ -153,6 +164,7 @@ impl SGroup {
             component_number: None,
             bracket_style: None,
             data: HashMap::new(),
+            display: None,
         }
     }
 
@@ -276,7 +288,7 @@ impl SGroup {
     pub fn get_data_display_chars(input: &str) -> Result<SGroupDataDisplayChars> {
         match input {
             "ALL" => Ok(SGroupDataDisplayChars::All),
-            _ => match input.parse::<u32>() {
+            _ => match input.trim().parse::<u32>() {
                 Ok(count) => Ok(SGroupDataDisplayChars::Number(count)),
                 Err(_) => Err(DataError::InvalidFragment(format!(
                     "Invalid SGroup data display chars: {}",

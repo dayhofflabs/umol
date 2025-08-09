@@ -150,8 +150,10 @@ pub(crate) fn convert_bond_type_code_standard(code: u8) -> Result<BondType> {
 /// Convert bond type code
 /// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic, 5=SingleOrDouble,
 /// 6=SingleOrAromatic, 7=DoubleOrAromatic, 8=Any)
-pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
+/// zero_ok: true for ZBO property, false for bond block
+pub(crate) fn convert_bond_type_code(code: u8, zero_ok: bool) -> Result<BondType> {
     match code {
+        0 if zero_ok => Ok(BondType::Zero),
         1 => Ok(BondType::Single),
         2 => Ok(BondType::Double),
         3 => Ok(BondType::Triple),
@@ -160,6 +162,7 @@ pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
         6 => Ok(BondType::SingleOrAromatic),
         7 => Ok(BondType::DoubleOrAromatic),
         8 => Ok(BondType::Any),
+        0 => Err(ParseError::Invalid("Zero-order bonds not allowed in standard bond block".to_string()).into()),
         _ => Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into()),
     }
 }
@@ -533,24 +536,39 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_convert_bond_type_code() {
-        assert_eq!(convert_bond_type_code(1).unwrap(), BondType::Single);
-        assert_eq!(convert_bond_type_code(2).unwrap(), BondType::Double);
-        assert_eq!(convert_bond_type_code(3).unwrap(), BondType::Triple);
-        assert_eq!(convert_bond_type_code(4).unwrap(), BondType::Aromatic);
-        assert_eq!(convert_bond_type_code(5).unwrap(), BondType::SingleOrDouble);
-        assert_eq!(
-            convert_bond_type_code(6).unwrap(),
-            BondType::SingleOrAromatic
-        );
-        assert_eq!(
-            convert_bond_type_code(7).unwrap(),
-            BondType::DoubleOrAromatic
-        );
-        assert_eq!(convert_bond_type_code(8).unwrap(), BondType::Any);
-        assert!(convert_bond_type_code(9).is_err());
+    #[rstest]
+    #[case(1u8, BondType::Single)]
+    #[case(2u8, BondType::Double)]
+    #[case(3u8, BondType::Triple)]
+    #[case(4u8, BondType::Aromatic)]
+    #[case(5u8, BondType::SingleOrDouble)]
+    #[case(6u8, BondType::SingleOrAromatic)]
+    #[case(7u8, BondType::DoubleOrAromatic)]
+    #[case(8u8, BondType::Any)]
+    fn test_convert_bond_type_code(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(convert_bond_type_code(code, false).unwrap(), expected);
     }
+
+    #[rstest]
+    #[case(0u8, "zero-order bond")]
+    #[case(9u8, "invalid bond type")]
+    fn test_convert_bond_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
+        assert!(convert_bond_type_code(code, false).is_err(), "{} should have failed", desc);
+    }
+
+    #[rstest]
+    #[case(0u8, BondType::Zero)]
+    #[case(1u8, BondType::Single)]
+    fn test_convert_bond_type_code_zero_ok(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(convert_bond_type_code(code, true).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(9u8, "invalid bond type")]
+    fn test_convert_bond_type_code_zero_ok_invalid(#[case] code: u8, #[case] desc: &str) {
+        assert!(convert_bond_type_code(code, true).is_err(), "{} should have failed", desc);
+    }
+
 
     #[rstest]
     #[case(1, BondType::Single)]
