@@ -1,19 +1,21 @@
 use super::*;
 use crate::io::ctab::{
     atom::{
-        Atom, AtomList, AtomRadical, AtomStandard, AtomSymbol, AttachmentPointType, LinkAtom, UnsaturatedAtom,
+        Atom, AtomList, AtomRadical, AtomStandard, AtomSymbol, AttachmentPointType, LinkAtom,
+        UnsaturatedAtom,
     },
     bond::{Bond, BondStandard, BondType},
     molecule::MoleculeStandard,
     parser::properties::{
-        AtomAliasEntry, AtomAttachmentOrderEntry, AtomListEntry, AtomValueEntry,
-        AttachmentPointEntry, ChargeEntry, IsotopeEntry, LinkAtomEntry, PropertyEntries,
-        RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry,
-        SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry, SGroupConnectivityEntry,
-        SGroupCorrespondenceEntry, SGroupDataDescriptionEntry, SGroupDataDisplayEntry, SGroupDataEntry,
-        SGroupDisplayInfoEntry, SGroupExpansionEntry, SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry,
-        SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry,
-        UnsaturatedAtomEntry, ZeroOrderBondEntry,
+        AtomAliasEntry, AtomAttachmentOrderEntry, AtomHydrogenCountEntry, AtomListEntry,
+        AtomValueEntry, AttachmentPointEntry, ChargeEntry, IsotopeEntry, LinkAtomEntry,
+        PropertyEntries, RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry,
+        SGroupAtomListEntry, SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry,
+        SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDataDescriptionEntry,
+        SGroupDataDisplayEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
+        SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
+        SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+        ZeroAtomChargeEntry, ZeroBondOrderEntry,
     },
     rgroup::{RGroup, RGroupOccurrence},
     sgroup::{
@@ -1105,7 +1107,6 @@ fn test_apply_sgroup_display_info_entry_no_type() {
     assert!(result.is_err());
 }
 
-
 #[rstest]
 fn test_apply_sgroup_connecting_bond_entry(
     mut basic_molecule: Molecule,
@@ -1145,7 +1146,6 @@ fn test_apply_sgroup_connecting_bond_entry_no_type() {
     let result = acc.add_entry(connecting_bond_entry);
     assert!(result.is_err());
 }
-
 
 #[rstest]
 fn test_apply_sgroup_data_description_entry(
@@ -1202,7 +1202,10 @@ fn test_apply_sgroup_data_display_entry(
     let display = sgroup.display.as_ref().unwrap();
     assert_eq!(display.coords, (10.0, 20.0));
     assert_eq!(display.display_type, SGroupDataDisplayType::Detached);
-    assert_eq!(display.display_placement, SGroupDataDisplayPlacement::Relative);
+    assert_eq!(
+        display.display_placement,
+        SGroupDataDisplayPlacement::Relative
+    );
     assert_eq!(display.display_units, SGroupDataDisplayUnits::DisplayUnits);
     assert_eq!(display.display_chars, SGroupDataDisplayChars::Number(5));
 }
@@ -1229,13 +1232,14 @@ fn test_apply_sgroup_data_entry(
     mut basic_molecule: Molecule,
     mut acc_with_data_sgroup: MoleculeProperties,
 ) {
-    let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
-        sgroup_index: 1, 
-        data_content: "content".to_string() 
+    let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
+        sgroup_index: 1,
+        data_content: "content".to_string(),
     });
     acc_with_data_sgroup.add_entry(continuation_entry).unwrap();
-    
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
+
+    let data_entry =
+        PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
     acc_with_data_sgroup.add_entry(data_entry).unwrap();
     acc_with_data_sgroup.apply(&mut basic_molecule).unwrap();
 
@@ -1248,7 +1252,8 @@ fn test_apply_sgroup_data_entry(
 #[rstest]
 fn test_apply_sgroup_data_entry_no_type() {
     let mut acc = MoleculeProperties::new();
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
+    let data_entry =
+        PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
     let result = acc.add_entry(data_entry);
     assert!(result.is_err());
 }
@@ -1261,7 +1266,8 @@ fn test_apply_sgroup_data_entry_no_description() {
         sgroup_type: SGroupType::Data,
     }]);
     acc.add_entry(type_entry).unwrap();
-    let data_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
+    let data_entry =
+        PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 1 });
     let result = acc.add_entry(data_entry);
     assert!(result.is_err());
 }
@@ -1271,12 +1277,12 @@ fn test_apply_sgroup_data_entry_auto_finalization(
     mut basic_molecule: Molecule,
     mut acc_with_data_sgroup: MoleculeProperties,
 ) {
-    let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
-        sgroup_index: 1, 
-        data_content: "incomplete".to_string() 
+    let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
+        sgroup_index: 1,
+        data_content: "incomplete".to_string(),
     });
     acc_with_data_sgroup.add_entry(continuation_entry).unwrap();
-    
+
     // Apply without SED - should auto-finalize
     acc_with_data_sgroup.apply(&mut basic_molecule).unwrap();
 
@@ -1294,38 +1300,39 @@ fn test_apply_sgroup_data_entry_multi_continuation() {
         sgroup_type: SGroupType::Data,
     }]);
     acc.add_entry(type_entry).unwrap();
-    
-    let data_description_entry = PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
-        sgroup_index: 1,
-        field_name: "test".to_string(),
-        field_type: SGroupDataType::Text,
-        field_units: None,
-        query_identifier: None,
-        data_query_operator: None,
-    });
+
+    let data_description_entry =
+        PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
+            sgroup_index: 1,
+            field_name: "test".to_string(),
+            field_type: SGroupDataType::Text,
+            field_units: None,
+            query_identifier: None,
+            data_query_operator: None,
+        });
     acc.add_entry(data_description_entry).unwrap();
-    
-    let continuation1 = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
-        sgroup_index: 1, 
-        data_content: "part1".to_string() 
+
+    let continuation1 = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
+        sgroup_index: 1,
+        data_content: "part1".to_string(),
     });
     acc.add_entry(continuation1).unwrap();
-    
-    let continuation2 = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { 
-        sgroup_index: 1, 
-        data_content: "part2".to_string() 
+
+    let continuation2 = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
+        sgroup_index: 1,
+        data_content: "part2".to_string(),
     });
     acc.add_entry(continuation2).unwrap();
-    
-    let end_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData { 
-        sgroup_index: 1, 
-        data_content: "final".to_string() 
+
+    let end_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData {
+        sgroup_index: 1,
+        data_content: "final".to_string(),
     });
     acc.add_entry(end_entry).unwrap();
-    
+
     let mut molecule = Molecule::new();
     acc.apply(&mut molecule).unwrap();
-    
+
     let sgroup = molecule.sgroup(1).unwrap();
     let data = sgroup.data.get("test").unwrap();
     assert_eq!(data.data_content, Some(vec!["part1part2final".to_string()]));
@@ -1342,7 +1349,7 @@ fn test_apply_sgroup_hierarchy_entries(
         sgroup_type: SGroupType::Superatom,
     }]);
     acc_with_sgroup_type.add_entry(parent_type_entry).unwrap();
-    
+
     let hierarchy_entry = PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry {
         sgroup_index: 1,
         parent_sgroup_index: 2,
@@ -1397,8 +1404,8 @@ fn test_apply_sgroup_component_entries_no_type() {
 #[rstest]
 fn test_apply_zero_order_bond_entries(mut molecule_with_bond: Molecule) {
     let mut acc = MoleculeProperties::new();
-    
-    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+
+    let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
         bond_index: 0,
         bond_order: 0,
     }]);
@@ -1410,11 +1417,11 @@ fn test_apply_zero_order_bond_entries(mut molecule_with_bond: Molecule) {
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_entries_invalid_bond(basic_molecule: Molecule) {
+fn test_apply_zero_order_bond_entries_invalid(basic_molecule: Molecule) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule;
-    
-    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+
+    let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
         bond_index: 5,
         bond_order: 0,
     }]);
@@ -1423,12 +1430,68 @@ fn test_apply_zero_order_bond_entries_invalid_bond(basic_molecule: Molecule) {
     assert!(result.is_err());
 }
 
-// Tests for MoleculeStandard apply methods
+#[rstest]
+fn test_apply_zero_atom_charge_entries(mut basic_molecule: Molecule) {
+    let mut acc = MoleculeProperties::new();
+
+    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+        atom_index: 0,
+        charge: -1,
+    }]);
+    acc.add_entry(zero_atom_charge_entry).unwrap();
+    acc.apply(&mut basic_molecule).unwrap();
+
+    let atom = basic_molecule.atom(0).unwrap();
+    assert_eq!(atom.charge, -1);
+}
+
+#[rstest]
+fn test_apply_zero_atom_charge_entries_invalid(basic_molecule: Molecule) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule;
+
+    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+        atom_index: 5,
+        charge: -1,
+    }]);
+    acc.add_entry(zero_atom_charge_entry).unwrap();
+    let result = acc.apply(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_atom_hydrogen_count_entries(mut basic_molecule: Molecule) {
+    let mut acc = MoleculeProperties::new();
+
+    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+        atom_index: 0,
+        hydrogen_count: 1,
+    }]);
+    acc.add_entry(atom_hydrogen_count_entry).unwrap();
+    acc.apply(&mut basic_molecule).unwrap();
+
+    let atom = basic_molecule.atom(0).unwrap();
+    assert_eq!(atom.hydrogen_count, Some(1));
+}
+
+#[rstest]
+fn test_apply_atom_hydrogen_count_entries_invalid(basic_molecule: Molecule) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule;
+
+    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+        atom_index: 5,
+        hydrogen_count: 1,
+    }]);
+    acc.add_entry(atom_hydrogen_count_entry).unwrap();
+    let result = acc.apply(&mut molecule);
+    assert!(result.is_err());
+}
 
 #[rstest]
 fn test_apply_atom_alias_standard(mut basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
-    
+
     let alias_entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 0,
         alias: "CF3".to_string(),
@@ -1437,14 +1500,17 @@ fn test_apply_atom_alias_standard(mut basic_molecule_standard: MoleculeStandard)
     acc.apply_standard(&mut basic_molecule_standard).unwrap();
 
     let atom = basic_molecule_standard.atom(0).unwrap();
-    assert_eq!(atom.properties.get("molFileAlias"), Some(&"CF3".to_string()));
+    assert_eq!(
+        atom.properties.get("molFileAlias"),
+        Some(&"CF3".to_string())
+    );
 }
 
 #[rstest]
-fn test_apply_atom_alias_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+fn test_apply_atom_alias_standard_invalid(basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
-    
+
     let alias_entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 5,
         alias: "CF3".to_string(),
@@ -1457,7 +1523,7 @@ fn test_apply_atom_alias_standard_invalid_atom(basic_molecule_standard: Molecule
 #[rstest]
 fn test_apply_atom_value_standard(mut basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
-    
+
     let value_entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 0,
         value: "*".to_string(),
@@ -1470,10 +1536,10 @@ fn test_apply_atom_value_standard(mut basic_molecule_standard: MoleculeStandard)
 }
 
 #[rstest]
-fn test_apply_atom_value_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+fn test_apply_atom_value_standard_invalid(basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
-    
+
     let value_entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 5,
         value: "*".to_string(),
@@ -1486,7 +1552,7 @@ fn test_apply_atom_value_standard_invalid_atom(basic_molecule_standard: Molecule
 #[rstest]
 fn test_apply_charge_standard(mut basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
-    
+
     let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 0,
         charge: -1,
@@ -1500,10 +1566,10 @@ fn test_apply_charge_standard(mut basic_molecule_standard: MoleculeStandard) {
 }
 
 #[rstest]
-fn test_apply_charge_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+fn test_apply_charge_standard_invalid(basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
-    
+
     let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 5,
         charge: -1,
@@ -1516,7 +1582,7 @@ fn test_apply_charge_standard_invalid_atom(basic_molecule_standard: MoleculeStan
 #[rstest]
 fn test_apply_radical_standard(mut basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
-    
+
     let radical_entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 2, // Doublet
@@ -1530,10 +1596,10 @@ fn test_apply_radical_standard(mut basic_molecule_standard: MoleculeStandard) {
 }
 
 #[rstest]
-fn test_apply_radical_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+fn test_apply_radical_standard_invalid(basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
-    
+
     let radical_entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 5,
         radical_type: 2,
@@ -1546,7 +1612,7 @@ fn test_apply_radical_standard_invalid_atom(basic_molecule_standard: MoleculeSta
 #[rstest]
 fn test_apply_isotope_standard(mut basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
-    
+
     let isotope_entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 13, // Carbon-13
@@ -1559,10 +1625,10 @@ fn test_apply_isotope_standard(mut basic_molecule_standard: MoleculeStandard) {
 }
 
 #[rstest]
-fn test_apply_isotope_standard_invalid_atom(basic_molecule_standard: MoleculeStandard) {
+fn test_apply_isotope_standard_invalid(basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
-    
+
     let isotope_entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 5,
         mass: 13,
@@ -1575,28 +1641,89 @@ fn test_apply_isotope_standard_invalid_atom(basic_molecule_standard: MoleculeSta
 #[rstest]
 fn test_apply_zero_order_bond_standard(mut molecule_with_bond_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
-    
-    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+
+    let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
         bond_index: 0,
         bond_order: 0,
     }]);
     acc.add_entry(zero_order_entry).unwrap();
-    acc.apply_standard(&mut molecule_with_bond_standard).unwrap();
+    acc.apply_standard(&mut molecule_with_bond_standard)
+        .unwrap();
 
     let bond = molecule_with_bond_standard.bond(0).unwrap();
     assert_eq!(bond.bond_type, BondType::Zero);
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_standard_invalid_bond(basic_molecule_standard: MoleculeStandard) {
+fn test_apply_zero_order_bond_standard_invalid(basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
-    
-    let zero_order_entry = PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry {
+
+    let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
         bond_index: 5,
         bond_order: 0,
     }]);
     acc.add_entry(zero_order_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
+    assert!(result.is_err());
+}
+
+
+#[rstest]
+fn test_apply_zero_atom_charge_entries_standard(mut basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+
+    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+        atom_index: 0,
+        charge: -1,
+    }]);
+    acc.add_entry(zero_atom_charge_entry).unwrap();
+    acc.apply_standard(&mut basic_molecule_standard).unwrap();
+
+    let atom = basic_molecule_standard.atom(0).unwrap();
+    assert_eq!(atom.charge, -1);
+}
+
+#[rstest]
+fn test_apply_zero_atom_charge_entries_standard_invalid(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+
+    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+        atom_index: 5,
+        charge: -1,
+    }]);
+    acc.add_entry(zero_atom_charge_entry).unwrap();
+    let result = acc.apply_standard(&mut molecule);
+    assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_atom_hydrogen_count_entries_standard(mut basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+
+    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+        atom_index: 0,
+        hydrogen_count: 1,
+    }]);
+
+    acc.add_entry(atom_hydrogen_count_entry).unwrap();
+    acc.apply_standard(&mut basic_molecule_standard).unwrap();
+
+    let atom = basic_molecule_standard.atom(0).unwrap();
+    assert_eq!(atom.hydrogen_count, Some(1));
+}
+
+#[rstest]
+fn test_apply_atom_hydrogen_count_entries_standard_invalid(basic_molecule_standard: MoleculeStandard) {
+    let mut acc = MoleculeProperties::new();
+    let mut molecule = basic_molecule_standard;
+
+    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+        atom_index: 5,
+        hydrogen_count: 1,
+    }]);
+    acc.add_entry(atom_hydrogen_count_entry).unwrap();
     let result = acc.apply_standard(&mut molecule);
     assert!(result.is_err());
 }

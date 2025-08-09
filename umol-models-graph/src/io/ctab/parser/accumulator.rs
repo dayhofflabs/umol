@@ -30,6 +30,7 @@ pub struct AtomProperties {
     pub charge: Option<i8>,
     pub radical: Option<AtomRadical>,
     pub isotope_mass: Option<u32>,
+    pub hydrogen_count: Option<u8>,
     pub ring_bond_count: Option<RingBondCount>,
     pub substitution_count: Option<SubstitutionCount>,
     pub unsaturated: Option<UnsaturatedAtom>,
@@ -522,7 +523,7 @@ impl MoleculeProperties {
                     props.component_number = Some(entry.component_number);
                 }
             }
-            PropertyEntries::ZeroOrderBondEntries(entries) => {
+            PropertyEntries::ZeroBondOrderEntries(entries) => {
                 for entry in entries {
                     self.bond_properties.insert(
                         entry.bond_index,
@@ -532,11 +533,19 @@ impl MoleculeProperties {
                     );
                 }
             }
-            props => {
-                return Err(
-                    DataError::InvalidFeature(format!("unknown property: {:?}", props)).into(),
-                );
+            PropertyEntries::ZeroAtomChargeEntries(entries) => {
+                for entry in entries {
+                    let props = self.atom_properties.entry(entry.atom_index).or_default();
+                    props.charge = Some(entry.charge);
+                }
             }
+            PropertyEntries::AtomHydrogenCountEntries(entries) => {
+                for entry in entries {
+                    let props = self.atom_properties.entry(entry.atom_index).or_default();
+                    props.hydrogen_count = Some(entry.hydrogen_count);
+                }
+            }
+            PropertyEntries::End => {}
         }
         Ok(())
     }
@@ -562,6 +571,9 @@ impl MoleculeProperties {
             }
             if props.isotope_mass.is_some() {
                 self.apply_isotope(props, atom)?;
+            }
+            if props.hydrogen_count.is_some() {
+                self.apply_hydrogen_count(props, atom)?;
             }
             if props.ring_bond_count.is_some() {
                 self.apply_ring_bond_count(props, atom)?;
@@ -614,6 +626,9 @@ impl MoleculeProperties {
             }
             if props.isotope_mass.is_some() {
                 self.apply_isotope_standard(*atom_index, props, molecule)?;
+            }
+            if props.hydrogen_count.is_some() {
+                self.apply_hydrogen_count_standard(*atom_index, props, molecule)?;
             }
         }
         for (bond_index, props) in &self.bond_properties {
@@ -794,6 +809,26 @@ impl MoleculeProperties {
             }
         }
         atom.isotope_mass = mass;
+        Ok(())
+    }
+
+    fn apply_hydrogen_count(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+        let hydrogen_count = props.hydrogen_count.unwrap();
+        atom.hydrogen_count = Some(hydrogen_count);
+        Ok(())
+    }
+
+    fn apply_hydrogen_count_standard(
+        &self,
+        atom_index: usize,
+        props: &AtomProperties,
+        molecule: &mut MoleculeStandard,
+    ) -> Result<()> {
+        let hydrogen_count = props.hydrogen_count.unwrap();
+        let atom = molecule
+            .atom_mut(atom_index)
+            .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+        atom.hydrogen_count = Some(hydrogen_count);
         Ok(())
     }
 

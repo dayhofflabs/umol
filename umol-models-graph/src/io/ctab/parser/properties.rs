@@ -2,8 +2,8 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::{line_ending, not_line_ending};
 use nom::character::complete::u8 as nom_u8;
+use nom::character::complete::{line_ending, not_line_ending};
 use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
 use nom::multi::{length_count, many_m_n};
@@ -210,9 +210,7 @@ pub enum SGroupDataEntry {
         data_content: String, // 0-69 chars
     },
     /// SED - End without data (blank, processes buffered data)
-    EndBlank {
-        sgroup_index: usize,
-    },
+    EndBlank { sgroup_index: usize },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,9 +238,21 @@ pub struct SGroupHierarchyEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ZeroOrderBondEntry {
+pub struct ZeroBondOrderEntry {
     pub bond_index: usize,
     pub bond_order: u8,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ZeroAtomChargeEntry {
+    pub atom_index: usize,
+    pub charge: i8,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AtomHydrogenCountEntry {
+    pub atom_index: usize,
+    pub hydrogen_count: u8,
 }
 
 /// Parsed property entries
@@ -279,7 +289,9 @@ pub enum PropertyEntries {
     SGroupDataDisplayEntry(SGroupDataDisplayEntry),
     SGroupHierarchyEntries(Vec<SGroupHierarchyEntry>),
     SGroupComponentEntries(Vec<SGroupComponentEntry>),
-    ZeroOrderBondEntries(Vec<ZeroOrderBondEntry>),
+    ZeroBondOrderEntries(Vec<ZeroBondOrderEntry>),
+    ZeroAtomChargeEntries(Vec<ZeroAtomChargeEntry>),
+    AtomHydrogenCountEntries(Vec<AtomHydrogenCountEntry>),
     End,
 }
 
@@ -375,9 +387,15 @@ pub fn property_input_standard<'a>(
                     b"M  SMT" => sgroup_subscript_entry()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
-                    b"M  ZBO" => zero_order_bond_entries()
+                    b"M  ZBO" => zero_bond_order_entries()
                         .parse(rest)
-                        .map(|(i, o)| (i, PropertyEntries::ZeroOrderBondEntries(o))),
+                        .map(|(i, o)| (i, PropertyEntries::ZeroBondOrderEntries(o))),
+                    b"M  ZCH" => zero_atom_charge_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::ZeroAtomChargeEntries(o))),
+                    b"M  HYD" => atom_hydrogen_count_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
                     _ => Err(nom::Err::Error(error::Error::new(
                         input,
@@ -508,9 +526,15 @@ pub fn property_input<'a>(
                     b"M  SNC" => sgroup_component_entries()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupComponentEntries(o))),
-                    b"M  ZBO" => zero_order_bond_entries()
+                    b"M  ZBO" => zero_bond_order_entries()
                         .parse(rest)
-                        .map(|(i, o)| (i, PropertyEntries::ZeroOrderBondEntries(o))),
+                        .map(|(i, o)| (i, PropertyEntries::ZeroBondOrderEntries(o))),
+                    b"M  ZCH" => zero_atom_charge_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::ZeroAtomChargeEntries(o))),
+                    b"M  HYD" => atom_hydrogen_count_entries()
+                        .parse(rest)
+                        .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
                     _ => Err(nom::Err::Error(error::Error::new(
                         input,
@@ -1395,18 +1419,22 @@ fn sgroup_data_end_entry<'a>(
         tag(" "),
         alt((
             map(
-                (fixed_width_int_minus1::<usize>(3), preceded(tag(" "), not_line_ending)),
+                (
+                    fixed_width_int_minus1::<usize>(3),
+                    preceded(tag(" "), not_line_ending),
+                ),
                 |(sgroup_index, data_content)| SGroupDataEntry::EndWithData {
                     sgroup_index,
-                    data_content: String::from_utf8_lossy(&data_content[..data_content.len().min(69)])
-                        .trim()
-                        .to_string(),
+                    data_content: String::from_utf8_lossy(
+                        &data_content[..data_content.len().min(69)],
+                    )
+                    .trim()
+                    .to_string(),
                 },
             ),
-            map(
-                fixed_width_int_minus1::<usize>(3),
-                |sgroup_index| SGroupDataEntry::EndBlank { sgroup_index },
-            ),
+            map(fixed_width_int_minus1::<usize>(3), |sgroup_index| {
+                SGroupDataEntry::EndBlank { sgroup_index }
+            }),
         )),
     ))
 }
@@ -1460,11 +1488,11 @@ fn sgroup_component_entries<'a>(
     ))
 }
 
-/// Parse zero-order bond entries.
+/// Parse zero bond order entries.
 /// M  ZBOnn8 bbb vvv ...
 /// bbb: bond index, vvv: bond vector override (>= 0)
-fn zero_order_bond_entries<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<ZeroOrderBondEntry>, Error = error::Error<&'a [u8]>> {
+fn zero_bond_order_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<ZeroBondOrderEntry>, Error = error::Error<&'a [u8]>> {
     all_consuming(length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
@@ -1475,9 +1503,52 @@ fn zero_order_bond_entries<'a>(
                 ),
                 map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u8>(3))),
             ),
-            |(bond_index, bond_order)| ZeroOrderBondEntry {
+            |(bond_index, bond_order)| ZeroBondOrderEntry {
                 bond_index,
                 bond_order,
+            },
+        ),
+    ))
+}
+
+/// Parse zero atom charge entries.
+/// M  ZCHnn8 aaa ccc ...
+/// aaa: atom index, ccc: atom charge override
+fn zero_atom_charge_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<ZeroAtomChargeEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
+            (
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<i8>(3))),
+            ),
+            |(atom_index, charge)| ZeroAtomChargeEntry { atom_index, charge },
+        ),
+    ))
+}
+
+/// Parse atom explicit hydrogen count entries.
+/// M  HCTnn8 aaa hhh ...
+/// aaa: atom index, hhh: atom explicit hydrogen count (>= 0)
+fn atom_hydrogen_count_entries<'a>(
+) -> impl Parser<&'a [u8], Output = Vec<AtomHydrogenCountEntry>, Error = error::Error<&'a [u8]>> {
+    all_consuming(length_count(
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        map(
+            (
+                map_parser(
+                    take(4usize),
+                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                ),
+                map_parser(take(4usize), preceded(tag(" "), fixed_width_int::<u8>(3))),
+            ),
+            |(atom_index, hydrogen_count)| AtomHydrogenCountEntry {
+                atom_index,
+                hydrogen_count,
             },
         ),
     ))

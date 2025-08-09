@@ -70,7 +70,9 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  SED   1", "SED SGroup property", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 }))]
 #[case(b"M  SPL  1   1   2", "SPL SGroup property", PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }]))]
 #[case(b"M  SNC  2   1   1   2   2", "SNC SGroup property", PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry { sgroup_index: 0, component_number: 1 }, SGroupComponentEntry { sgroup_index: 1, component_number: 2 }]))]
-#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry { bond_index: 0, bond_order: 0 }]))]
+#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
+#[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
 fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -107,7 +109,9 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case]
 #[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
-#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroOrderBondEntries(vec![ZeroOrderBondEntry { bond_index: 0, bond_order: 0 }]))]
+#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
+#[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
 fn test_property_input_standard(#[case] input: &[u8], #[case] desc: &str, #[case] expected: PropertyEntries) {
     let (remaining, result) = property_input_standard().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty for {}", desc);
@@ -1089,13 +1093,13 @@ fn test_sgroup_component_entries_invalid(#[case] input: &[u8], #[case] desc: &st
 }
 
 #[rstest]
-#[case(b"  1   1   0", vec![ZeroOrderBondEntry { bond_index: 0, bond_order: 0 }])]
+#[case(b"  1   1   0", vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }])]
 #[case(b"  2   1   2   3   4", vec![
-    ZeroOrderBondEntry { bond_index: 0, bond_order: 2 },
-    ZeroOrderBondEntry { bond_index: 2, bond_order: 4 },
+    ZeroBondOrderEntry { bond_index: 0, bond_order: 2 },
+    ZeroBondOrderEntry { bond_index: 2, bond_order: 4 },
 ])]
-fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<ZeroOrderBondEntry>) {
-    let (remaining, result) = zero_order_bond_entries().parse(input).unwrap();
+fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<ZeroBondOrderEntry>) {
+    let (remaining, result) = zero_bond_order_entries().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
 }
@@ -1104,8 +1108,52 @@ fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<Zero
 #[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
 #[case(b"  1   0   0", "bond index is zero", ErrorKind::Verify)]
 #[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
-fn test_zero_order_bond_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
-    let result = zero_order_bond_entries().parse(input);
+fn test_zero_bond_order_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = zero_bond_order_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
+}
+
+#[rstest]
+#[case(b"  1   1   0", vec![ZeroAtomChargeEntry { atom_index: 0, charge: 0 }])]
+#[case(b"  2   1   2   3  -1", vec![
+    ZeroAtomChargeEntry { atom_index: 0, charge: 2 },
+    ZeroAtomChargeEntry { atom_index: 2, charge: -1 },
+])]
+fn test_zero_atom_charge_entries(#[case] input: &[u8], #[case] expected: Vec<ZeroAtomChargeEntry>) {
+    let (remaining, result) = zero_atom_charge_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
+#[case(b"  1   0   0", "atom index is zero", ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
+fn test_zero_atom_charge_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = zero_atom_charge_entries().parse(input);
+    assert!(result.is_err(), "{} should have failed", desc);
+    assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
+}
+
+#[rstest]
+#[case(b"  1   1   0", vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 0 }])]
+#[case(b"  2   1   2   3   4", vec![
+    AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 2 },
+    AtomHydrogenCountEntry { atom_index: 2, hydrogen_count: 4 },
+])]
+fn test_atom_hydrogen_count_entries(#[case] input: &[u8], #[case] expected: Vec<AtomHydrogenCountEntry>) {
+    let (remaining, result) = atom_hydrogen_count_entries().parse(input).unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
+#[case(b"  1   0   0", "atom index is zero", ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
+fn test_atom_hydrogen_count_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+    let result = atom_hydrogen_count_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
 }
