@@ -2,23 +2,24 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::u8 as nom_u8;
 use nom::character::complete::{line_ending, not_line_ending};
+use nom::character::complete::u8 as nom_u8;
 use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
 use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
-use crate::io::ctab::rgroup::RGroupOccurrence;
-use crate::io::ctab::sgroup::{
-    SGroup, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
-    SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupSubtype, SGroupType,
-};
-
+use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
     fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
     fixed_width_int_minus1, fixed_width_int_partial, rgroup_occurrences,
+};
+use crate::io::ctab::rgroup::RGroupOccurrence;
+use crate::io::ctab::sgroup::{
+    SGroup, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
+    SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype,
+    SGroupType,
 };
 use umol_data::Element;
 
@@ -163,9 +164,15 @@ pub struct SGroupParentAtomEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum SGroupSubscriptData {
+    Multiplier(SGroupMultiplier),
+    Subscript(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SGroupSubscriptEntry {
     pub sgroup_index: usize,
-    pub subscript: String,
+    pub data: SGroupSubscriptData,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -972,17 +979,7 @@ fn sgroup_type_entries<'a>(
                     take(4usize),
                     preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
                 ),
-                map_parser(
-                    take(4usize),
-                    preceded(
-                        tag(" "),
-                        map_res(take(3usize), |bytes: &[u8]| {
-                            let s = String::from_utf8_lossy(bytes).trim().to_string();
-                            SGroup::get_type(&s)
-                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-                        }),
-                    ),
-                ),
+                map_parser(take(4usize), preceded(tag(" "), sgroup_type())),
             ),
             |(sgroup_index, sgroup_type)| SGroupTypeEntry {
                 sgroup_index,
@@ -1005,17 +1002,7 @@ fn sgroup_subtype_entries<'a>(
                     take(4usize),
                     preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
                 ),
-                map_parser(
-                    take(4usize),
-                    preceded(
-                        tag(" "),
-                        map_res(take(3usize), |bytes: &[u8]| {
-                            let s = String::from_utf8_lossy(bytes).trim().to_string();
-                            SGroup::get_subtype(&s)
-                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-                        }),
-                    ),
-                ),
+                map_parser(take(4usize), preceded(tag(" "), sgroup_subtype())),
             ),
             |(sgroup_index, sgroup_subtype)| SGroupSubtypeEntry {
                 sgroup_index,
@@ -1064,17 +1051,7 @@ fn sgroup_connectivity_entries<'a>(
                     take(4usize),
                     preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
                 ),
-                map_parser(
-                    take(4usize),
-                    preceded(
-                        tag(" "),
-                        map_res(take(2usize), |bytes: &[u8]| {
-                            let s = String::from_utf8_lossy(bytes).trim().to_string();
-                            SGroup::get_connectivity(&s)
-                                .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-                        }),
-                    ),
-                ),
+                map_parser(take(4usize), preceded(tag(" "), sgroup_connectivity())),
             ),
             |(sgroup_index, connectivity)| SGroupConnectivityEntry {
                 sgroup_index,
@@ -1192,12 +1169,16 @@ fn sgroup_subscript_entry<'a>(
     all_consuming(map(
         (
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            preceded(tag(" "), not_line_ending),
+            preceded(
+                tag(" "),
+                map(not_line_ending, |s| {
+                    SGroupSubscriptData::Subscript(
+                        String::from_utf8_lossy(s).trim().to_string(),
+                    )
+                }),
+            ),
         ),
-        |(sgroup_index, subscript)| SGroupSubscriptEntry {
-            sgroup_index,
-            subscript: String::from_utf8_lossy(subscript).trim().to_string(),
-        },
+        |(sgroup_index, data)| SGroupSubscriptEntry { sgroup_index, data },
     ))
 }
 

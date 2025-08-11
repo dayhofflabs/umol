@@ -58,7 +58,7 @@ fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str,
 #[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"M  SPA   1 12   3   4   5   6   9  10  11  12  13  14  15  16", "SPA SGroup property", PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15] }))]
-#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("n".to_string()) }))]
 #[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property", PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry { sgroup_index: 0, bond_indices: vec![9, 8, 3] }))]
 #[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property", PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry { sgroup_index: 2, bracket_coords: vec![4.4700, -3.1700, 4.4700, -5.7500] }))]
 #[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property", PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry { sgroup_index: 0, bond_index: 10, bond_vector: (0.6400, 0.9700) }))]
@@ -108,7 +108,7 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
-#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() }))]
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("n".to_string()) }))]
 #[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
@@ -826,9 +826,9 @@ fn test_sgroup_parent_atom_entries_invalid(
 }
 
 #[rstest]
-#[case(b"   1 1", SGroupSubscriptEntry { sgroup_index: 0, subscript: "1".to_string() })]
-#[case(b"   1 n", SGroupSubscriptEntry { sgroup_index: 0, subscript: "n".to_string() })]
-#[case(b"   1 Ph", SGroupSubscriptEntry { sgroup_index: 0, subscript: "Ph".to_string() })]
+#[case(b"   1 1", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("1".to_string()) })]
+#[case(b"   1 n", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("n".to_string()) })]
+#[case(b"   1 Ph", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("Ph".to_string()) })]
 fn test_sgroup_subscript_entry(#[case] input: &[u8], #[case] expected: SGroupSubscriptEntry) {
     let (remaining, result) = sgroup_subscript_entry().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");

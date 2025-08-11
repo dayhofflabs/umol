@@ -169,68 +169,6 @@ impl SGroup {
         }
     }
 
-    /// Parse SGroup type string
-    pub fn get_type(input: &str) -> Result<SGroupType> {
-        match input {
-            "SUP" => Ok(SGroupType::Superatom),
-            "MUL" => Ok(SGroupType::MultipleGroup),
-            "SRU" => Ok(SGroupType::RepeatingUnit),
-            "MON" => Ok(SGroupType::Monomer),
-            "MER" => Ok(SGroupType::Mer),
-            "COP" => Ok(SGroupType::Copolymer),
-            "CRO" => Ok(SGroupType::Crosslink),
-            "MOD" => Ok(SGroupType::Modification),
-            "GRA" => Ok(SGroupType::Graft),
-            "COM" => Ok(SGroupType::Component),
-            "MIX" => Ok(SGroupType::Mixture),
-            "FOR" => Ok(SGroupType::Formulation),
-            "DAT" => Ok(SGroupType::Data),
-            "ANY" => Ok(SGroupType::AnyPolymer),
-            "GEN" => Ok(SGroupType::Generic),
-            _ => Err(DataError::InvalidFragment(format!("Unknown SGroup type: {}", input)).into()),
-        }
-    }
-
-    /// Parse SGroup subtype string
-    pub fn get_subtype(input: &str) -> Result<SGroupSubtype> {
-        match input {
-            "ALT" => Ok(SGroupSubtype::Alternating),
-            "RAN" => Ok(SGroupSubtype::Random),
-            "BLO" => Ok(SGroupSubtype::Block),
-            _ => {
-                Err(DataError::InvalidFragment(format!("Unknown SGroup subtype: {}", input)).into())
-            }
-        }
-    }
-
-    /// Parse SGroup connectivity string
-    pub fn get_connectivity(input: &str) -> Result<SGroupConnectivity> {
-        match input {
-            "HH" => Ok(SGroupConnectivity::HeadToHead),
-            "HT" => Ok(SGroupConnectivity::HeadToTail),
-            "EU" => Ok(SGroupConnectivity::EitherUnknown),
-            _ => Err(
-                DataError::InvalidFragment(format!("Unknown SGroup connectivity: {}", input))
-                    .into(),
-            ),
-        }
-    }
-
-    /// Parse SGroup multiplier string
-    pub fn get_multiplier(input: &str) -> Result<SGroupMultiplier> {
-        if input == "n" || input == "N" {
-            Ok(SGroupMultiplier::N)
-        } else {
-            match input.parse::<u32>() {
-                Ok(count) => Ok(SGroupMultiplier::Count(count)),
-                Err(_) => Err(DataError::InvalidFragment(format!(
-                    "Invalid SGroup multiplier: {}",
-                    input
-                ))
-                .into()),
-            }
-        }
-    }
 
     /// Parse SGroup data type
     pub fn get_data_type(input: &str) -> Result<SGroupDataType> {

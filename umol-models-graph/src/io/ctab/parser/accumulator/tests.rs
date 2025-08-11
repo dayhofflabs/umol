@@ -13,9 +13,9 @@ use crate::io::ctab::{
         SGroupAtomListEntry, SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry,
         SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDataDescriptionEntry,
         SGroupDataDisplayEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
-        SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
-        SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
-        ZeroAtomChargeEntry, ZeroBondOrderEntry,
+        SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptData,
+        SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry,
+        UnsaturatedAtomEntry, ZeroAtomChargeEntry, ZeroBondOrderEntry,
     },
     rgroup::{RGroup, RGroupOccurrence},
     sgroup::{
@@ -1020,7 +1020,7 @@ fn test_apply_sgroup_subscript_entry(
 ) {
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 1,
-        subscript: "n".to_string(),
+        data: SGroupSubscriptData::Subscript("n".to_string()),
     });
     acc_with_sgroup_type.add_entry(subscript_entry).unwrap();
     acc_with_sgroup_type.apply(&mut basic_molecule).unwrap();
@@ -1035,7 +1035,7 @@ fn test_apply_sgroup_subscript_entry_no_type() {
     let mut acc = MoleculeProperties::new();
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 1,
-        subscript: "n".to_string(),
+        data: SGroupSubscriptData::Subscript("n".to_string()),
     });
     let result = acc.add_entry(subscript_entry);
     assert!(result.is_err());
@@ -1434,10 +1434,11 @@ fn test_apply_zero_order_bond_entries_invalid(basic_molecule: Molecule) {
 fn test_apply_zero_atom_charge_entries(mut basic_molecule: Molecule) {
     let mut acc = MoleculeProperties::new();
 
-    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
-        atom_index: 0,
-        charge: -1,
-    }]);
+    let zero_atom_charge_entry =
+        PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+            atom_index: 0,
+            charge: -1,
+        }]);
     acc.add_entry(zero_atom_charge_entry).unwrap();
     acc.apply(&mut basic_molecule).unwrap();
 
@@ -1450,10 +1451,11 @@ fn test_apply_zero_atom_charge_entries_invalid(basic_molecule: Molecule) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule;
 
-    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
-        atom_index: 5,
-        charge: -1,
-    }]);
+    let zero_atom_charge_entry =
+        PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+            atom_index: 5,
+            charge: -1,
+        }]);
     acc.add_entry(zero_atom_charge_entry).unwrap();
     let result = acc.apply(&mut molecule);
     assert!(result.is_err());
@@ -1463,10 +1465,11 @@ fn test_apply_zero_atom_charge_entries_invalid(basic_molecule: Molecule) {
 fn test_apply_atom_hydrogen_count_entries(mut basic_molecule: Molecule) {
     let mut acc = MoleculeProperties::new();
 
-    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
-        atom_index: 0,
-        hydrogen_count: 1,
-    }]);
+    let atom_hydrogen_count_entry =
+        PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+            atom_index: 0,
+            hydrogen_count: 1,
+        }]);
     acc.add_entry(atom_hydrogen_count_entry).unwrap();
     acc.apply(&mut basic_molecule).unwrap();
 
@@ -1479,10 +1482,11 @@ fn test_apply_atom_hydrogen_count_entries_invalid(basic_molecule: Molecule) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule;
 
-    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
-        atom_index: 5,
-        hydrogen_count: 1,
-    }]);
+    let atom_hydrogen_count_entry =
+        PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+            atom_index: 5,
+            hydrogen_count: 1,
+        }]);
     acc.add_entry(atom_hydrogen_count_entry).unwrap();
     let result = acc.apply(&mut molecule);
     assert!(result.is_err());
@@ -1668,15 +1672,15 @@ fn test_apply_zero_order_bond_standard_invalid(basic_molecule_standard: Molecule
     assert!(result.is_err());
 }
 
-
 #[rstest]
 fn test_apply_zero_atom_charge_entries_standard(mut basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
 
-    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
-        atom_index: 0,
-        charge: -1,
-    }]);
+    let zero_atom_charge_entry =
+        PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+            atom_index: 0,
+            charge: -1,
+        }]);
     acc.add_entry(zero_atom_charge_entry).unwrap();
     acc.apply_standard(&mut basic_molecule_standard).unwrap();
 
@@ -1689,10 +1693,11 @@ fn test_apply_zero_atom_charge_entries_standard_invalid(basic_molecule_standard:
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
 
-    let zero_atom_charge_entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
-        atom_index: 5,
-        charge: -1,
-    }]);
+    let zero_atom_charge_entry =
+        PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+            atom_index: 5,
+            charge: -1,
+        }]);
     acc.add_entry(zero_atom_charge_entry).unwrap();
     let result = acc.apply_standard(&mut molecule);
     assert!(result.is_err());
@@ -1702,10 +1707,11 @@ fn test_apply_zero_atom_charge_entries_standard_invalid(basic_molecule_standard:
 fn test_apply_atom_hydrogen_count_entries_standard(mut basic_molecule_standard: MoleculeStandard) {
     let mut acc = MoleculeProperties::new();
 
-    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
-        atom_index: 0,
-        hydrogen_count: 1,
-    }]);
+    let atom_hydrogen_count_entry =
+        PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+            atom_index: 0,
+            hydrogen_count: 1,
+        }]);
 
     acc.add_entry(atom_hydrogen_count_entry).unwrap();
     acc.apply_standard(&mut basic_molecule_standard).unwrap();
@@ -1715,14 +1721,17 @@ fn test_apply_atom_hydrogen_count_entries_standard(mut basic_molecule_standard: 
 }
 
 #[rstest]
-fn test_apply_atom_hydrogen_count_entries_standard_invalid(basic_molecule_standard: MoleculeStandard) {
+fn test_apply_atom_hydrogen_count_entries_standard_invalid(
+    basic_molecule_standard: MoleculeStandard,
+) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = basic_molecule_standard;
 
-    let atom_hydrogen_count_entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
-        atom_index: 5,
-        hydrogen_count: 1,
-    }]);
+    let atom_hydrogen_count_entry =
+        PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
+            atom_index: 5,
+            hydrogen_count: 1,
+        }]);
     acc.add_entry(atom_hydrogen_count_entry).unwrap();
     let result = acc.apply_standard(&mut molecule);
     assert!(result.is_err());

@@ -8,4 +8,5 @@ pub mod convert;
 pub mod counts;
 pub mod header;
 pub mod properties;
+pub mod sgroup;
 mod utils;

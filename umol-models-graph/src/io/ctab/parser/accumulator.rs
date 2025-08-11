@@ -11,7 +11,7 @@ use crate::io::ctab::atom::{
 };
 
 use crate::io::ctab::molecule::{Molecule, MoleculeStandard};
-use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry};
+use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry, SGroupSubscriptData};
 use crate::io::ctab::rgroup::{RGroup, RGroupOccurrence};
 use crate::io::ctab::sgroup::{
     SGroup, SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData,
@@ -324,7 +324,15 @@ impl MoleculeProperties {
                             entry.sgroup_index
                         ))
                     })?;
-                props.subscript = Some(entry.subscript);
+                // TODO: Validate based on the SGroup type
+                match entry.data {
+                    SGroupSubscriptData::Multiplier(mult) => {
+                        props.multiplier = Some(mult);
+                    }
+                    SGroupSubscriptData::Subscript(text) => {
+                        props.subscript = Some(text);
+                    }
+                }
             }
             PropertyEntries::SGroupCorrespondenceEntry(entry) => {
                 let props = self
