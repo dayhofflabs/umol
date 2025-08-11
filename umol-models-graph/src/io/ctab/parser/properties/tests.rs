@@ -826,6 +826,7 @@ fn test_sgroup_parent_atom_entries_invalid(
 }
 
 #[rstest]
+// TODO: Fix parsing of "1" and "n", which should return Multiplier
 #[case(b"   1 1", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("1".to_string()) })]
 #[case(b"   1 n", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("n".to_string()) })]
 #[case(b"   1 Ph", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("Ph".to_string()) })]

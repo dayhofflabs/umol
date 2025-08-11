@@ -2,24 +2,27 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::{line_ending, not_line_ending};
 use nom::character::complete::u8 as nom_u8;
+use nom::character::complete::{line_ending, not_line_ending};
 use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
 use nom::error;
 use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
-use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
+use super::sgroup::{sgroup_connectivity, sgroup_data_type, sgroup_subtype, sgroup_type};
 use super::utils::{
     fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
     fixed_width_int_minus1, fixed_width_int_partial, rgroup_occurrences,
 };
+use crate::io::ctab::parser::sgroup::{
+    sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
+    sgroup_data_display_units,
+};
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
-    SGroup, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
-    SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype,
-    SGroupType,
+    SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
+    SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
 };
 use umol_data::Element;
 
@@ -1164,6 +1167,7 @@ fn sgroup_parent_atom_entries<'a>(
 /// sss: SGroup index, m: subscript text
 /// For multiple groups, m... is the text representation of the multiple group multiplier.For superatoms,
 /// m... is the text of the superatom label.)
+// TODO: Fix parsing of "1" and "n", which should return Multiplier
 fn sgroup_subscript_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupSubscriptEntry, Error = error::Error<&'a [u8]>> {
     all_consuming(map(
@@ -1172,9 +1176,7 @@ fn sgroup_subscript_entry<'a>(
             preceded(
                 tag(" "),
                 map(not_line_ending, |s| {
-                    SGroupSubscriptData::Subscript(
-                        String::from_utf8_lossy(s).trim().to_string(),
-                    )
+                    SGroupSubscriptData::Subscript(String::from_utf8_lossy(s).trim().to_string())
                 }),
             ),
         ),
@@ -1270,12 +1272,7 @@ fn sgroup_data_description_entry<'a>(
 
         // Parse field type
         let (i, field_type) = if i.len() >= 2 {
-            map_res(take(2usize), |bytes| {
-                let s = String::from_utf8_lossy(bytes).trim().to_string();
-                SGroup::get_data_type(&s)
-                    .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-            })
-            .parse(i)?
+            sgroup_data_type().parse(i)?
         } else {
             (i, SGroupDataType::Text)
         };
@@ -1317,32 +1314,10 @@ fn sgroup_data_display_entry<'a>(
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
             preceded(tag(" "), fixed_width_float::<f64>(10, 4)),
             terminated(fixed_width_float::<f64>(10, 4), tag(" ")),
-            preceded(
-                take(3usize),
-                map_res(take(1usize), |bytes: &[u8]| {
-                    let s = String::from_utf8_lossy(bytes);
-                    SGroup::get_data_display_type(&s)
-                        .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-                }),
-            ),
-            map_res(take(1usize), |bytes: &[u8]| {
-                let s = String::from_utf8_lossy(bytes);
-                SGroup::get_data_display_placement(&s)
-                    .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-            }),
-            map_res(take(1usize), |bytes: &[u8]| {
-                let s = String::from_utf8_lossy(bytes);
-                SGroup::get_data_display_units(&s)
-                    .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-            }),
-            preceded(
-                take(3usize),
-                map_res(take(3usize), |bytes: &[u8]| {
-                    let s = String::from_utf8_lossy(bytes);
-                    SGroup::get_data_display_chars(&s)
-                        .map_err(|_| error::Error::new(bytes, error::ErrorKind::MapRes))
-                }),
-            ),
+            preceded(take(3usize), sgroup_data_display_type()),
+            sgroup_data_display_placement(),
+            sgroup_data_display_units(),
+            preceded(take(3usize), sgroup_data_display_chars()),
             preceded(take(7usize), map_parser(take(1usize), opt(nom_u8))),
             delimited(tag("  "), fixed_width_int::<u8>(1), opt(take(2usize))),
         ),
