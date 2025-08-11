@@ -87,6 +87,18 @@ impl SGroupProperties {
     }
 }
 
+/// Validate compatibility of SGroup type with subscript data type
+fn is_valid_sgroup_subscript(sgroup_type: SGroupType, data: &SGroupSubscriptData) -> bool {
+    match (sgroup_type, data) {
+        // SGroup types that accept multipliers
+        (SGroupType::MultipleGroup, SGroupSubscriptData::Multiplier(_)) => true,
+        (SGroupType::RepeatingUnit, SGroupSubscriptData::Multiplier(_)) => true,
+        // SGroup types that accept subscripts
+        (SGroupType::Superatom, SGroupSubscriptData::Subscript(_)) => true,
+        _ => false,
+    }
+}
+
 /// Accumulator for molecular properties
 #[derive(Debug)]
 pub struct MoleculeProperties {
@@ -220,6 +232,9 @@ impl MoleculeProperties {
                     }
                     let props = SGroupProperties::new(entry.sgroup_type);
                     self.sgroup_properties.insert(entry.sgroup_index, props);
+                    self.context
+                        .sgroup_types
+                        .insert(entry.sgroup_index, entry.sgroup_type);
                 }
             }
             PropertyEntries::SGroupSubtypeEntries(entries) => {
@@ -324,7 +339,28 @@ impl MoleculeProperties {
                             entry.sgroup_index
                         ))
                     })?;
-                // TODO: Validate based on the SGroup type
+                let sgroup_type = self
+                    .context
+                    .sgroup_types
+                    .get(&entry.sgroup_index)
+                    .ok_or_else(|| {
+                        DataError::InvalidFragment(format!(
+                            "S-group subscript for undefined S-group {}",
+                            entry.sgroup_index
+                        ))
+                    })?;
+                if !is_valid_sgroup_subscript(*sgroup_type, &entry.data) {
+                    return Err(DataError::InvalidFragment(format!(
+                        "S-group type {:?} does not accept {}",
+                        sgroup_type,
+                        match entry.data {
+                            SGroupSubscriptData::Multiplier(_) => "multipliers",
+                            SGroupSubscriptData::Subscript(_) => "subscripts",
+                        }
+                    ))
+                    .into());
+                }
+
                 match entry.data {
                     SGroupSubscriptData::Multiplier(mult) => {
                         props.multiplier = Some(mult);
@@ -1003,6 +1039,9 @@ impl MoleculeProperties {
             }
             if let Some(subscript) = &props.subscript {
                 sgroup.subscript = Some(subscript.clone());
+            }
+            if let Some(multiplier) = &props.multiplier {
+                sgroup.multiplier = Some(*multiplier);
             }
             if let Some(correspondence) = &props.correspondence {
                 sgroup.correspondence = Some(correspondence.clone());
