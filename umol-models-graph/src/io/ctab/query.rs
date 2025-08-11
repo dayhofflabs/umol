@@ -98,4 +98,14 @@ mod tests {
     fn test_from_symbol_str(#[case] input: &str, #[case] expected: Option<QueryAtom>) {
         assert_eq!(QueryAtom::from_symbol_str(input), expected);
     }
+
+    #[test]
+    fn test_query_atom_serialize() {
+        let query_atom = QueryAtom::Any;
+        let yaml =
+            serde_yaml::to_string(&query_atom).expect("Failed to serialize QueryAtom to YAML");
+        let deserialized: QueryAtom =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize QueryAtom from YAML");
+        assert_eq!(query_atom, deserialized);
+    }
 }

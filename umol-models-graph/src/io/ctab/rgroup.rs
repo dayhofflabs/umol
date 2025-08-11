@@ -142,4 +142,13 @@ mod tests {
         let symbol = RGroup::from_symbol_bytes(input);
         assert!(symbol.is_none());
     }
+
+    #[test]
+    fn test_rgroup_serialize() {
+        let rgroup = RGroup::new(Some(1));
+        let yaml = serde_yaml::to_string(&rgroup).expect("Failed to serialize RGroup to YAML");
+        let deserialized: RGroup =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize RGroup from YAML");
+        assert_eq!(rgroup, deserialized);
+    }
 }

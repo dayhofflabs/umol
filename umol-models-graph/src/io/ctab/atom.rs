@@ -56,7 +56,7 @@ pub enum AtomSymbol {
 }
 
 /// Atom
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtomStandard {
     pub element: Element,
     pub charge: i8,
@@ -215,5 +215,34 @@ impl From<AtomStandard> for Atom {
             position: atom.position,
             properties: atom.properties,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use umol_data::Element;
+
+    #[test]
+    fn test_atom_standard_serialize() {
+        let mut atom = AtomStandard::new(Element::C);
+        atom.charge = -1;
+        atom.radical = Some(AtomRadical::Doublet);
+        atom.hydrogen_count = Some(3);
+        atom.position = Some(nalgebra::Point3::new(1.5, -2.3, 0.8));
+
+        let yaml = serde_yaml::to_string(&atom).expect("Failed to serialize AtomStandard to YAML");
+        let deserialized: AtomStandard =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize AtomStandard from YAML");
+        assert_eq!(atom, deserialized);
+    }
+
+    #[test]
+    fn test_atom_serialize() {
+        let atom = Atom::new(AtomSymbol::Element(Element::C));
+        let yaml = serde_yaml::to_string(&atom).expect("Failed to serialize Atom to YAML");
+        let deserialized: Atom =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize Atom from YAML");
+        assert_eq!(atom, deserialized);
     }
 }

@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/serialization.rs
-expression: "&header"
----
-name: Caffeine
-program_info: Generated for testing
-comment: C8H10N4O2

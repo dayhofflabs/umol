@@ -121,8 +121,8 @@ pub struct SGroupDataDisplay {
     pub display_chars: SGroupDataDisplayChars,
 }
 
-/// SGroup (Superatom group)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// SGroup (Substance group)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SGroup {
     pub label: Option<u32>,                       // Label for SUP, SRU, etc. (SLB)
     pub subscript: Option<String>,                // Subscript text (e.g., "n", "2") (SMT)
@@ -238,11 +238,9 @@ impl SGroup {
             "F" => Ok(SGroupDataType::Formatted),
             "N" => Ok(SGroupDataType::Numeric),
             "T" => Ok(SGroupDataType::Text),
-            _ => Err(DataError::InvalidFragment(format!(
-                "Unknown SGroup data type: {}",
-                input
-            ))
-            .into()),
+            _ => Err(
+                DataError::InvalidFragment(format!("Unknown SGroup data type: {}", input)).into(),
+            ),
         }
     }
 
@@ -298,5 +296,20 @@ impl SGroup {
                 .into()),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_sgroup_serialize() {
+        let sgroup = SGroup::new(SGroupType::Superatom);
+        let yaml = serde_yaml::to_string(&sgroup).expect("Failed to serialize SGroup to YAML");
+        let deserialized: SGroup =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize SGroup from YAML");
+        assert_eq!(sgroup, deserialized);
     }
 }
