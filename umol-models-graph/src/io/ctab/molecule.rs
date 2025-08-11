@@ -7,6 +7,7 @@ use crate::io::mol::parser::{mol_block, mol_block_standard};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::stable_graph::StableGraph;
 use petgraph::Undirected;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use umol::error::DataError;
 use umol::Result;
@@ -16,7 +17,7 @@ pub type AtomIndex = NodeIndex<usize>;
 pub type BondIndex = EdgeIndex<usize>;
 
 /// MOL file header information (3 lines)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Header {
     pub name: String,         // Molecule title / name (line 1)
     pub program_info: String, // Program info (line 2)
@@ -50,7 +51,7 @@ impl Default for Header {
 }
 
 /// Graph-based molecule representation with full MOL file semantics (including queries)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Molecule {
     pub graph: StableGraph<Atom, Bond, Undirected, usize>,
     pub sgroups: BTreeMap<usize, SGroup>,
@@ -59,7 +60,7 @@ pub struct Molecule {
 }
 
 /// Graph-based molecule representation for standard (non-query) molecules only
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoleculeStandard {
     pub graph: StableGraph<AtomStandard, BondStandard, Undirected, usize>,
     pub sgroups: BTreeMap<usize, SGroup>,
@@ -68,7 +69,7 @@ pub struct MoleculeStandard {
 }
 
 /// Result of parsing a MOL file with information about query features
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedMol {
     molecule: Molecule,
     is_query_molecule: bool,

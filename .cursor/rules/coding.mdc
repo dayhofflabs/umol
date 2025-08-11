@@ -4,7 +4,7 @@ globs:
 alwaysApply: true
 ---
 * Do not write code unless explicitly asked
-* Avoid adding functionalities that were not requested
+* Prefer minimal implementations to overengineered and "future-proof" code. YAGNI.
 * Avoid superfluous and excessive commenting of the code; make the actual code legible instead
 * Attempt to write idiomatic code
 * Ignore architectural rules, for example, modularity, backward compatibility, etc. unless working on larger projects

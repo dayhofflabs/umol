@@ -1,0 +1,114 @@
+---
+source: umol-models-graph/tests/mol/real_world.rs
+expression: snapshot
+---
+format_version: "1.0"
+source_file: unknown.mol
+metadata:
+  atom_count: 7
+  bond_count: 7
+  has_properties: false
+  has_sgroups: false
+  has_rgroups: false
+atoms:
+  - index: 0
+    element: C
+    coordinates:
+      - 7.8089
+      - -1.3194
+      - 0
+    charge: 0
+    hydrogen_count: ~
+    properties: {}
+  - index: 1
+    element: C
+    coordinates:
+      - 7.0944
+      - -1.7319
+      - 0
+    charge: 0
+    hydrogen_count: ~
+    properties: {}
+  - index: 2
+    element: C
+    coordinates:
+      - 7.0944
+      - -2.5569
+      - 0
+    charge: 0
+    hydrogen_count: ~
+    properties: {}
+  - index: 3
+    element: C
+    coordinates:
+      - 7.8089
+      - -2.9694
+      - 0
+    charge: 0
+    hydrogen_count: ~
+    properties: {}
+  - index: 4
+    element: C
+    coordinates:
+      - 8.5233
+      - -2.5569
+      - 0
+    charge: 0
+    hydrogen_count: ~
+    properties: {}
+  - index: 5
+    element: C
+    coordinates:
+      - 8.5233
+      - -1.7319
+      - 0
+    charge: 0
+    hydrogen_count: ~
+    properties: {}
+  - index: 6
+    element: N
+    coordinates:
+      - 7.8089
+      - -0.4944
+      - 0
+    charge: 0
+    hydrogen_count: ~
+    properties:
+      molFileAlias: N1
+bonds:
+  - atom1: 0
+    atom2: 6
+    bond_type: Single
+    stereo: None
+  - atom1: 0
+    atom2: 5
+    bond_type: Double
+    stereo: None
+  - atom1: 0
+    atom2: 1
+    bond_type: Single
+    stereo: None
+  - atom1: 1
+    atom2: 2
+    bond_type: Double
+    stereo: None
+  - atom1: 2
+    atom2: 3
+    bond_type: Single
+    stereo: None
+  - atom1: 3
+    atom2: 4
+    bond_type: Double
+    stereo: None
+  - atom1: 4
+    atom2: 5
+    bond_type: Single
+    stereo: None
+properties:
+  charges: []
+  isotopes: []
+  radicals: []
+validation:
+  bond_indices_valid: true
+  atom_properties_consistent: true
+  molecular_formula: C6N

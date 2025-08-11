@@ -1,0 +1,28 @@
+# Insta snapshot testing configuration for umol-models-graph compliance tests
+
+settings:
+  # Use YAML format for human-readable snapshots
+  snapshot_format: yaml
+  
+  # Sort maps for consistent output
+  sort_maps: true
+  
+  # Snapshot storage locations
+  snapshot_path: "tests/mol/snapshots"
+  
+  # Enable review mode for better workflow
+  review: true
+
+# Filters to normalize non-deterministic content in snapshots
+filters:
+  # Normalize timestamps if any appear in parsed content
+  - regex: '(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'
+    replacement: '[TIMESTAMP]'
+  
+  # Normalize floating point precision to avoid minor differences
+  - regex: '(\d+\.\d{8,})'
+    replacement: '[NORMALIZED_FLOAT]'
+  
+  # Normalize any file paths that might appear
+  - regex: '(/[^/\s]+)*/(tests/compliance/data/mol/[^/\s]+\.mol)'
+    replacement: '$2'

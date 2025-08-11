@@ -1092,7 +1092,7 @@ impl MoleculeProperties {
         //     const RWMol *mol, std::pair<const int, SubstanceGroup> &sgroup) {
         //     bool res = true;
         //     int nAtoms = static_cast<int>(mol->getNumAtoms());
-        //     std::vector<SubstanceGroup::AttachPoint> &attachPoints =
+        //     std::vector<SubstanceGroup::AttachPoint> &attachPoints umol-models-graph/benches/parsing_bench.rs=
         //         sgroup.second.getAttachPoints();
         //     for (auto &attachPoint : attachPoints) {
         //         if (attachPoint.lvIdx == nAtoms) {

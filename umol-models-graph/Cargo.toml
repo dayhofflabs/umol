@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bitflags = "2.4.0"
+bitflags = { version = "2.4.0", features = ["serde"] }
 float-cmp = "0.10"
 num-traits = "0.2.19"
-nalgebra = "0.33"
+nalgebra = { version = "0.33", features = ["serde-serialize"] }
 nom = { version = "8.0.0" }
 num = "0.4.3"
-petgraph = "0.8.1"
+petgraph = { version = "0.8.1", features = ["stable_graph", "serde-1"] }
 serde = { version = "1.0", features = ["derive"] }
 umol = { path = "../umol" }
 umol-data = { path = "../umol-data" }
@@ -23,6 +23,7 @@ pretty_assertions = "1.4.0"
 criterion = "0.7"
 insta = { version = "1.31", features = ["yaml"] }
 serde_yaml = "0.9"
+serde_json = "1.0"
 tempfile = "3.0"
 walkdir = "2.0"
 

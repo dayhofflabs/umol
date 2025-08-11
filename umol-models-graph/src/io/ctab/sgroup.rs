@@ -1,12 +1,13 @@
 //! SGroup types for CTab format.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use umol::error::DataError;
 use umol::error::Result;
 
 /// SGroup type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupType {
     Superatom,     // SUP
     MultipleGroup, // MUL
@@ -26,7 +27,7 @@ pub enum SGroupType {
 }
 
 /// SGroup subtype for polymers
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupSubtype {
     Alternating, // ALT
     Random,      // RAN
@@ -34,7 +35,7 @@ pub enum SGroupSubtype {
 }
 
 /// SGroup connectivity types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupConnectivity {
     HeadToHead,    // HH
     HeadToTail,    // HT
@@ -42,35 +43,35 @@ pub enum SGroupConnectivity {
 }
 
 /// SGroup multiplier
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupMultiplier {
     Count(u32),
     N,
 }
 
 /// SGroup bracket coordinates
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SGroupBracketCoords {
     pub bracket1: (f64, f64),
     pub bracket2: (f64, f64),
 }
 
 /// SGroup connecting bond
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SGroupConnectingBond {
     pub bond_index: usize,
     pub bond_vector: (f64, f64),
 }
 
 /// SGroup bracket style
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupBracketStyle {
     Default, // 0 = default brackets
     Curved,  // 1 = curved (parenthetic) brackets
 }
 
 /// SGroup data type
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SGroupDataType {
     Formatted,
     Numeric,
@@ -78,7 +79,7 @@ pub enum SGroupDataType {
 }
 
 /// SGroup data
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SGroupData {
     pub field_type: SGroupDataType,
     pub field_units: Option<String>,
@@ -87,31 +88,31 @@ pub struct SGroupData {
     pub data_content: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupDataDisplayType {
     Attached,
     Detached,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupDataDisplayPlacement {
     Absolute,
     Relative,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupDataDisplayUnits {
     None,
     DisplayUnits,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupDataDisplayChars {
     All,
     Number(u32),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SGroupDataDisplay {
     pub coords: (f64, f64),
     pub display_type: SGroupDataDisplayType,
@@ -121,7 +122,7 @@ pub struct SGroupDataDisplay {
 }
 
 /// SGroup (Superatom group)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SGroup {
     pub label: Option<u32>,                       // Label for SUP, SRU, etc. (SLB)
     pub subscript: Option<String>,                // Subscript text (e.g., "n", "2") (SMT)

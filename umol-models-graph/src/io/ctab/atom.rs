@@ -3,6 +3,7 @@
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
 use nalgebra;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use umol_data::{Element, NamedIsotope};
 
@@ -10,7 +11,7 @@ use umol_data::{Element, NamedIsotope};
 pub type Point3D = nalgebra::Point3<f64>;
 
 /// Tetrahedral chirality specified in MOL files.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomStereoParity {
     Odd,    // sss = 1, RDKit `CHI_TETRAHEDRAL_CW` (Clockwise / R)
     Even,   // sss = 2, RDKit `CHI_TETRAHEDRAL_CCW` (Counter-Clockwise / S)
@@ -18,33 +19,33 @@ pub enum AtomStereoParity {
 }
 
 /// Include stereochemistry in query atoms
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomStereoCare {
     Care, // hhh = 1, RDKit `molStereoCare = 1`
 }
 
 /// Inversion/retention flag
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomInversionRetention {
     Inverted, // hhh = 1, RDKit `molInversionFlag = 4`
     Retained, // hhh = 2, RDKit `molInversionFlag = 8`
 }
 
 /// Atom exact change flag
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomExactChange {
     Match, // hhh = 1, RDKit `molExactChangeFlag = 4`
 }
 
 /// Atom list (for query molecules in MOL files)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtomList {
     pub elements: Vec<Element>,
     pub exclusion: bool,
 }
 
 /// Generalized atom kind (for atom-like objects in MOL files)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AtomSymbol {
     Element(Element),
     NamedIsotope(NamedIsotope),
@@ -55,7 +56,7 @@ pub enum AtomSymbol {
 }
 
 /// Atom
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AtomStandard {
     pub element: Element,
     pub charge: i8,
@@ -88,7 +89,7 @@ impl AtomStandard {
 }
 
 /// Radical type for RAD property
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomRadical {
     Singlet, // RAD vvv = 1
     Doublet, // RAD vvv = 2
@@ -96,7 +97,7 @@ pub enum AtomRadical {
 }
 
 /// Attachment point type for APO property
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AttachmentPointType {
     First,  // APO vvv = 1
     Second, // APO vvv = 2
@@ -105,7 +106,7 @@ pub enum AttachmentPointType {
 
 /// Ring bond count for RBC property
 /// -2 = as drawn (r*), -1 = no ring bonds (r0), 0 = off, 2 = r2, 3 = r3, 4 = r4+
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RingBondCount {
     AsDrawn,     // r*
     NoRingBonds, // r0
@@ -116,7 +117,7 @@ pub enum RingBondCount {
 
 /// Substitution count for SUB property
 /// -2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5, 6 = s6+
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SubstitutionCount {
     AsDrawn,        // s*
     NoSubstitution, // s0
@@ -130,11 +131,11 @@ pub enum SubstitutionCount {
 
 /// Unsaturated atom for UNS property
 /// 0 = off, 1 = on
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UnsaturatedAtom;
 
 /// Link atom for LIN property
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct LinkAtom {
     pub repeat_count: u8,           // LIN vvv >= 2
     pub subs_index1: usize,         // LIN bbb
@@ -142,7 +143,7 @@ pub struct LinkAtom {
 }
 
 /// Generalized atom symbol (for atom-like objects in MOL files)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Atom {
     pub symbol: AtomSymbol,
     pub charge: i8,

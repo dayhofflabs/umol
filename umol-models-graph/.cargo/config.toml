@@ -1,0 +1,8 @@
+# Cargo configuration for umol-models-graph crate
+
+[env]
+# Auto-update snapshots in development, but not in CI
+INSTA_UPDATE = { value = "auto", condition = { env-not-set = ["CI"] } }
+
+# Increase insta verbosity
+INSTA_VERBOSE = "1"

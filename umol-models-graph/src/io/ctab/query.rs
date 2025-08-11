@@ -1,8 +1,9 @@
 //! Query objects for CTab format.
 
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum QueryAtom {
     Any,           // * = any atom
     Heavy,         // A = all except H

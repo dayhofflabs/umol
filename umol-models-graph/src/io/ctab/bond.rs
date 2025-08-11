@@ -1,10 +1,11 @@
 //! Bond type for CTab format.
 
 use bitflags::bitflags;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Bond order, mapping common MOL V2000 codes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondType {
     Single,           // MOL code 1
     Double,           // MOL code 2
@@ -18,7 +19,7 @@ pub enum BondType {
 }
 
 /// Double bond stereochemistry specified in MOL V2000 files.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondStereo {
     Cis,    // MOL code 1
     Trans,  // MOL code 6
@@ -26,7 +27,7 @@ pub enum BondStereo {
 }
 
 /// Single bond wedging specified in MOL V2000 files.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondDir {
     Wedge, // MOL code 1 (Up / Begin Wedge)
     Dash,  // MOL code 6 (Down / Begin Dash)
@@ -34,7 +35,7 @@ pub enum BondDir {
 }
 
 /// Bond topology (chain, ring, either), if specified.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondTopology {
     Chain,  // MOL code 0
     Ring,   // MOL code 1
@@ -54,7 +55,7 @@ bitflags! {
     /// Some combinations are possible.
     /// The `CENTER` flag can be combined with `MADE_BROKEN` and/or `ORDER_CHANGED`.
     /// `NOT_CENTER` and `NO_CHANGE` are exclusive.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
     pub struct BondReactingCenter: i16 {
         const UNMARKED         = 0b00000000; // MOL code 0
         const CENTER           = 0b00000001; // MOL code 1
@@ -71,7 +72,7 @@ bitflags! {
 }
 
 /// Bond
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BondStandard {
     pub bond_type: BondType,
     pub stereo: Option<BondStereo>,
@@ -93,7 +94,7 @@ impl BondStandard {
 
 
 /// Bond
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bond {
     pub bond_type: BondType,
     pub stereo: Option<BondStereo>,

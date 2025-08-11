@@ -1,8 +1,9 @@
 //! R-group type for CTab format.
 
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RGroupOccurrence {
     Exactly(u8),
     Range(u8, u8),   // Inclusive
@@ -21,7 +22,7 @@ impl RGroupOccurrence {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RGroup {
     pub label: Option<u32>,
     pub explicit: bool,
