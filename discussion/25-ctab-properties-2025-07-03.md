@@ -3,9 +3,9 @@
 Implementation status for the Property Block MOL v2000 file
 https://en.wikipedia.org/wiki/Chemical_table_file
 
-|-----------------------------------------------------------------------------------------------------|
+|------------------------------------------------------------------------------------------------------|
 | Property   | Symbol | Impl | Class   | RDKit* | ChemAxon@ | CDK^   | Indigo+ |  Notes                |
-|------------|--------|------|---------|--------|-----------|--------|--------------------------------|
+|------------|--------|------|---------|--------|-----------|--------|---------------------------------|
 | Atom Alias | A      | x S  | ISIS    | x      | x         | x      | x       |                       |
 | Atom Value | V      | x S  | ISIS    | x      | x         | x      | -       |                       |
 ! Group Abbr | G      | -    | ISIS    | -      | -         | -      | -       | Outdated, use `M SUP` |
@@ -45,9 +45,9 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Sup Class  | SCL    | -    | ISIS    | x      | -         | -      | x       |                       |
 | Regno      | REG    | -    | ISIS    | -      | -         | -      | -       |                       |
 | Sgrp Brkt  | SBT    | -    | ISIS    | x      | x         | x      | x       |                       |
-| 0-Order Bd | ZBO    | x    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
-| Atom charge| ZCH    | -    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
-| Virt Hs    | HYD    | -    | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
+| 0-Order Bd | ZBO    | x S  | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
+| Atom charge| ZCH    | x S  | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
+| Virt Hs    | HYD    | x S  | Bd Ext  | x      | -         | -      | -       | DOI:10.1021/ci200488k |
 | Marvin SM  | MRV    | -    | Marvin  | x      | x         | -      | x       |                       |
 | Atom Label | ZZC    | -    | ADC     | -      | -         | x      | -       |                       |
 | Skip       | SKIP   | -    | Generic | ?      | -         | x      | -       |                       |

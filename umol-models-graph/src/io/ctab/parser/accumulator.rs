@@ -1086,6 +1086,34 @@ impl MoleculeProperties {
         }
 
         self.context.current_data_content = None;
+
+        // TODO: Check attachment points are valid
+        // From RDKit C++ code
+        //     const RWMol *mol, std::pair<const int, SubstanceGroup> &sgroup) {
+        //     bool res = true;
+        //     int nAtoms = static_cast<int>(mol->getNumAtoms());
+        //     std::vector<SubstanceGroup::AttachPoint> &attachPoints =
+        //         sgroup.second.getAttachPoints();
+        //     for (auto &attachPoint : attachPoints) {
+        //         if (attachPoint.lvIdx == nAtoms) {
+        //         const std::vector<unsigned int> &bonds = sgroup.second.getBonds();
+        //         if (bonds.size() == 1) {
+        //             const auto bond = mol->getBondWithIdx(bonds.front());
+        //             if (bond->getBeginAtomIdx() == attachPoint.aIdx ||
+        //                 bond->getEndAtomIdx() == attachPoint.aIdx) {
+        //             attachPoint.lvIdx = bond->getOtherAtomIdx(attachPoint.aIdx);
+        //             }
+        //         }
+        //         }
+        //         if (attachPoint.lvIdx == nAtoms) {
+        //         BOOST_LOG(rdWarningLog)
+        //             << "Could not infer missing lvIdx on malformed SAP line for SGroup "
+        //             << sgroup.first << std::endl;
+        //         res = false;
+        //         }
+        //     }
+        //     return res;
+
         Ok(())
     }
 }
