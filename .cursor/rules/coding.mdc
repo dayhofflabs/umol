@@ -3,8 +3,10 @@ description: Coding rules
 globs:
 alwaysApply: true
 ---
-* Do not write code unless explicitly asked
-* Prefer minimal implementations to overengineered and "future-proof" code. YAGNI.
-* Avoid superfluous and excessive commenting of the code; make the actual code legible instead
-* Attempt to write idiomatic code
-* Ignore architectural rules, for example, modularity, backward compatibility, etc. unless working on larger projects
+## Do not write code unless explicitly asked
+- **NEVER** proceed with an implementation as a response to a "how?" question
+- Describe implementation design before coding if it was not discussed before
+- Only write enough code to fulfill the user requirements. YAGI
+- Do not "future-proof" code. Ask whether edge cases need to be considered
+- Avoid superfluous and excessive commenting of the code; make the actual code legible instead
+- Ignore backward compatibility in this project.
