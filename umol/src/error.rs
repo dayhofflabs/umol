@@ -271,7 +271,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
+    use rstest::*;
 
     #[rstest]
     #[case(ModelError::NotFound("test".to_string()).into(), "Model not found: test")]

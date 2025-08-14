@@ -342,7 +342,7 @@ pub(crate) fn convert_attachment_point_code(code: u8) -> Result<Option<Attachmen
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
+    use rstest::*;
     use umol_data::NamedIsotope;
 
     #[rstest]

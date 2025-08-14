@@ -432,7 +432,7 @@ mod tests {
     use nom::combinator::{all_consuming, map_parser};
     use nom::{error, Err};
     use pretty_assertions::assert_eq;
-    use rstest::rstest;
+    use rstest::*;
     use smallvec::smallvec;
 
     #[rstest]

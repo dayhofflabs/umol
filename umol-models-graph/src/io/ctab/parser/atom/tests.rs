@@ -7,7 +7,7 @@ use float_cmp::approx_eq;
 use nom::combinator::all_consuming;
 use nom::{error, Err};
 use pretty_assertions::assert_eq;
-use rstest::rstest;
+use rstest::*;
 
 #[rstest]
 #[case(b"H  ", "H", AtomSymbol::Element(Element::H))]

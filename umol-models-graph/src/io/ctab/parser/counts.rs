@@ -101,10 +101,9 @@ mod tests {
     use super::*;
     use nom::combinator::all_consuming;
     use nom::{error, Err};
-    use rstest::rstest;
+    use rstest::*;
 
     #[rstest]
-    // From CTab spec (Figure 3)
     #[case(b"  6  5  0  0  1                 3 V2000", "counts",
       Counts {atoms: 6, bonds: 5, atom_lists: 0, chiral_flag: 1, stext_entries: 0, properties_lines: 3})]
     #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000", "zeroes, 999 properties",
@@ -123,23 +122,12 @@ mod tests {
         assert_eq!(counts, expected, "{} should have parsed correctly", desc);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case(
-        b"  4  2  0     0  0            999 V1000",
-        "invalid version",
-        error::ErrorKind::Verify
-    )]
+    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", error::ErrorKind::Verify)]
     #[case(b"  4  2  0     0  0            ", "too short", error::ErrorKind::Eof)]
-    #[case(
-        b" 1A  2  0     0  0            999 V2000",
-        "non-numeric atom",
-        error::ErrorKind::Eof
-    )]
-    #[case(
-        b"  4 AA  0     0  0            999 V2000",
-        "non-numeric bond",
-        error::ErrorKind::Digit
-    )]
+    #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", error::ErrorKind::Eof)]
+    #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", error::ErrorKind::Digit)]
     fn test_counts_input_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,

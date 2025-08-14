@@ -6,7 +6,15 @@ alwaysApply: true
 ## Do not write code unless explicitly asked
 - **NEVER** proceed with an implementation as a response to a "how?" question
 - Describe implementation design before coding if it was not discussed before
-- Only write enough code to fulfill the user requirements. YAGI
+- Only write enough code to fulfill the user requirements. You ain't gonna need it.
 - Do not "future-proof" code. Ask whether edge cases need to be considered
 - Avoid superfluous and excessive commenting of the code; make the actual code legible instead
-- Ignore backward compatibility in this project.
+
+## Do not take initiative in being the architect
+- **NEVER** change the design based on your internal deliberations
+- Ignore backward compatibility in this project
+
+## Use modern Rust (edition 2021) and leverage the ecosystem
+- Use <module>.rs for file names instead of <module>/mod.rs
+- Take existing high-quality crates into account for solving a problem.
+  Those are preferable to a homespun solution.
