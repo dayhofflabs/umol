@@ -5,10 +5,9 @@ use nom::bytes::complete::{tag, take};
 use nom::character::complete::u8 as nom_u8;
 use nom::character::complete::{line_ending, not_line_ending};
 use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
-use nom::error;
 use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
-use nom::Parser;
+use nom::{error, Err, Parser};
 
 use super::sgroup::{sgroup_connectivity, sgroup_data_type, sgroup_subtype, sgroup_type};
 use super::utils::{
@@ -346,7 +345,7 @@ pub fn property_input_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         if input.len() < 3 {
-            return Err(nom::Err::Error(error::Error::new(
+            return Err(Err::Error(error::Error::new(
                 input,
                 error::ErrorKind::Eof,
             )));
@@ -363,7 +362,7 @@ pub fn property_input_standard<'a>(
             _ => {
                 // Handle M lines
                 if input.len() < 6 {
-                    return Err(nom::Err::Error(error::Error::new(
+                    return Err(Err::Error(error::Error::new(
                         input,
                         error::ErrorKind::Eof,
                     )));
@@ -407,7 +406,7 @@ pub fn property_input_standard<'a>(
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
-                    _ => Err(nom::Err::Error(error::Error::new(
+                    _ => Err(Err::Error(error::Error::new(
                         input,
                         error::ErrorKind::Tag,
                     ))),
@@ -422,7 +421,7 @@ pub fn property_input<'a>(
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         if input.len() < 3 {
-            return Err(nom::Err::Error(error::Error::new(
+            return Err(Err::Error(error::Error::new(
                 input,
                 error::ErrorKind::Eof,
             )));
@@ -439,7 +438,7 @@ pub fn property_input<'a>(
             _ => {
                 // Handle M lines
                 if input.len() < 6 {
-                    return Err(nom::Err::Error(error::Error::new(
+                    return Err(Err::Error(error::Error::new(
                         input,
                         error::ErrorKind::Eof,
                     )));
@@ -546,7 +545,7 @@ pub fn property_input<'a>(
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
-                    _ => Err(nom::Err::Error(error::Error::new(
+                    _ => Err(Err::Error(error::Error::new(
                         input,
                         error::ErrorKind::Tag,
                     ))),
@@ -802,7 +801,7 @@ fn atom_list_entry<'a>(
             b"T" => true,
             b"F" | b" " => false,
             _ => {
-                return Err(nom::Err::Error(error::Error::new(
+                return Err(Err::Error(error::Error::new(
                     input,
                     error::ErrorKind::Tag,
                 )))

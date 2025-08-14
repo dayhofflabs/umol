@@ -9,7 +9,6 @@ use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::u32 as nom_u32;
 use nom::combinator::{map, map_parser, map_res, value};
-
 use nom::{error, Parser};
 
 /// Parse SGroup type string
@@ -145,8 +144,9 @@ pub fn sgroup_data_display_chars<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nom::error::ErrorKind;
+    use nom::Err;
     use rstest::*;
+    use pretty_assertions::assert_eq;
 
     #[rstest]
     #[case(b"SUP", SGroupType::Superatom)]
@@ -171,17 +171,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"XYZ", "unknown type", ErrorKind::MapRes)]
-    #[case(b"SU", "too short", ErrorKind::Eof)]
+    #[case(b"XYZ", "unknown type", error::ErrorKind::MapRes)]
+    #[case(b"SU", "too short", error::ErrorKind::Eof)]
     fn test_sgroup_type_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_type().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -200,17 +200,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"XYZ", "unknown subtype", ErrorKind::MapRes)]
-    #[case(b"SU", "too short", ErrorKind::Eof)]
+    #[case(b"XYZ", "unknown subtype", error::ErrorKind::MapRes)]
+    #[case(b"SU", "too short", error::ErrorKind::Eof)]
     fn test_sgroup_subtype_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_subtype().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -229,17 +229,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"XY", "unknown connectivity", ErrorKind::MapRes)]
-    #[case(b"H", "too short", ErrorKind::Eof)]
+    #[case(b"XY", "unknown connectivity", error::ErrorKind::MapRes)]
+    #[case(b"H", "too short", error::ErrorKind::Eof)]
     fn test_sgroup_connectivity_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_connectivity().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -258,16 +258,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown multiplier", ErrorKind::Digit)]
+    #[case(b"X", "unknown multiplier", error::ErrorKind::Digit)]
     fn test_sgroup_multiplier_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_multiplier().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -286,16 +286,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown data type", ErrorKind::Eof)]
+    #[case(b"X", "unknown data type", error::ErrorKind::Eof)]
     fn test_sgroup_data_type_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_data_type().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -306,23 +306,26 @@ mod tests {
     #[rstest]
     #[case(b"A", SGroupDataDisplayType::Attached)]
     #[case(b"D", SGroupDataDisplayType::Detached)]
-    fn test_sgroup_data_display_type(#[case] input: &[u8], #[case] expected: SGroupDataDisplayType) {
+    fn test_sgroup_data_display_type(
+        #[case] input: &[u8],
+        #[case] expected: SGroupDataDisplayType,
+    ) {
         let (remaining, result) = sgroup_data_display_type().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
     }
 
     #[rstest]
-    #[case(b"X", "unknown display type", ErrorKind::MapRes)]
+    #[case(b"X", "unknown display type", error::ErrorKind::MapRes)]
     fn test_sgroup_data_display_type_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_data_display_type().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -337,24 +340,22 @@ mod tests {
         #[case] input: &[u8],
         #[case] expected: SGroupDataDisplayPlacement,
     ) {
-        let (remaining, result) = sgroup_data_display_placement()
-            .parse(input)
-            .unwrap();
+        let (remaining, result) = sgroup_data_display_placement().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
     }
 
     #[rstest]
-    #[case(b"X", "unknown display placement", ErrorKind::MapRes)]
+    #[case(b"X", "unknown display placement", error::ErrorKind::MapRes)]
     fn test_sgroup_data_display_placement_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_data_display_placement().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -375,16 +376,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown display units", ErrorKind::MapRes)]
+    #[case(b"X", "unknown display units", error::ErrorKind::MapRes)]
     fn test_sgroup_data_display_units_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_data_display_units().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,
@@ -405,16 +406,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown display chars", ErrorKind::Eof)]
+    #[case(b"X", "unknown display chars", error::ErrorKind::Eof)]
     fn test_sgroup_data_display_chars_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let result = sgroup_data_display_chars().parse(input);
         assert!(result.is_err());
         assert!(
-            matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+            matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
             "Expected {:?} error for {}, got {:?}",
             expected_kind,
             desc,

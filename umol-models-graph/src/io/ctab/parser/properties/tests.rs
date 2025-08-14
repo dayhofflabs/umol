@@ -1,7 +1,7 @@
 use super::*;
 use pretty_assertions::assert_eq;
-use nom::{error::ErrorKind, Err};
-use rstest::rstest;
+use nom::{error, Err};
+use rstest::*;
 use umol_data::Element;
 use float_cmp::approx_eq;
 
@@ -18,15 +18,15 @@ fn test_legacy_atom_list_input(#[case] input: &[u8], #[case] expected: PropertyE
 }
 
 #[rstest]
-#[case(b"  1 F    0   9  ", "count is zero", ErrorKind::Verify)]
-#[case(b"  1 F    6    9  ", "count exceeds 5", ErrorKind::Verify)]
-#[case(b"  1 X    1   9  ", "invalid exclusion flag", ErrorKind::MapRes)]
-#[case(b"  1 F    1   0  ", "invalid element atomic number", ErrorKind::MapOpt)]
-fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  1 F    0   9  ", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1 F    6    9  ", "count exceeds 5", error::ErrorKind::Verify)]
+#[case(b"  1 X    1   9  ", "invalid exclusion flag", error::ErrorKind::MapRes)]
+#[case(b"  1 F    1   0  ", "invalid element atomic number", error::ErrorKind::MapOpt)]
+fn test_legacy_atom_list_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = legacy_atom_list_input().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
-        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
         "Expected {:?} error for {}, got {:?}",
         expected_kind,
         desc,
@@ -80,16 +80,16 @@ fn test_property_input(#[case] input: &[u8], #[case] desc: &str, #[case] expecte
 }
 
 #[rstest]
-#[case(b"M  CHG  1   1  -1  a", "trailing chars", ErrorKind::Eof)]
-#[case(b"M  CHG  2   1  -1", "count does not match item list", ErrorKind::Eof)]
-#[case(b"M  CHG  0", "count is zero", ErrorKind::Verify)]
-#[case(b"M  CHG  1   0 -10", "atom index is zero", ErrorKind::Verify)]
-#[case(b"M  XXX  1   1  -1", "invalid property tag", ErrorKind::Tag)]
-fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"M  CHG  1   1  -1  a", "trailing chars", error::ErrorKind::Eof)]
+#[case(b"M  CHG  2   1  -1", "count does not match item list", error::ErrorKind::Eof)]
+#[case(b"M  CHG  0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"M  CHG  1   0 -10", "atom index is zero", error::ErrorKind::Verify)]
+#[case(b"M  XXX  1   1  -1", "invalid property tag", error::ErrorKind::Tag)]
+fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = property_input().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
-        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
         "Expected {:?} error for {}, got {:?}",
         expected_kind,
         desc,
@@ -143,7 +143,7 @@ fn test_property_input_standard_invalid(#[case] input: &[u8], #[case] desc: &str
     let result = property_input_standard().parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
-        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == ErrorKind::Tag),
+        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == error::ErrorKind::Tag),
         "Expected Tag error for {}, got {:?}",
         desc,
         result
@@ -160,12 +160,12 @@ fn test_atom_alias_entry(#[case] input: &[u8], #[case] expected: AtomAliasEntry)
 }
 
 #[rstest]
-#[case(b"  0\n  Et", "atom index is zero", ErrorKind::Verify)]
-fn test_atom_alias_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  0\n  Et", "atom index is zero", error::ErrorKind::Verify)]
+fn test_atom_alias_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = atom_alias_entry().parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
-        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
         "Expected {:?} error for {}, got {:?}",
         expected_kind,
         desc,
@@ -183,12 +183,12 @@ fn test_atom_value_entry(#[case] input: &[u8], #[case] expected: AtomValueEntry)
 }
 
 #[rstest]
-#[case(b"  0 *", "atom index is zero", ErrorKind::Verify)]
-fn test_atom_value_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  0 *", "atom index is zero", error::ErrorKind::Verify)]
+fn test_atom_value_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = atom_value_entry().parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
-        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
         "Expected {:?} error for {}, got {:?}",
         expected_kind,
         desc,
@@ -218,15 +218,15 @@ fn test_charge_entries(#[case] input: &[u8], #[case] expected: Vec<ChargeEntry>)
 }
 
 #[rstest]
-#[case(b"  1   1  -1  a", "trailing characters", ErrorKind::Eof)]
-#[case(b"  2   1  -1", "count exceeds item list length", ErrorKind::Eof)]
-#[case(b"  2   1  -1   4   1   5   6", "item list exceeds count", ErrorKind::Eof)]
-#[case(b"  0", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0 -10", "atom index is zero", ErrorKind::Verify)]
+#[case(b"  1   1  -1  a", "trailing characters", error::ErrorKind::Eof)]
+#[case(b"  2   1  -1", "count exceeds item list length", error::ErrorKind::Eof)]
+#[case(b"  2   1  -1   4   1   5   6", "item list exceeds count", error::ErrorKind::Eof)]
+#[case(b"  0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0 -10", "atom index is zero", error::ErrorKind::Verify)]
 fn test_charge_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = charge_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -249,17 +249,17 @@ fn test_radical_entries(#[case] input: &[u8], #[case] expected: Vec<RadicalEntry
 }
 
 #[rstest]
-#[case(b"  1   1   4", "value out of range", ErrorKind::Verify)]
-#[case(b"  1   1  -1", "value is negative", ErrorKind::Digit)]
-#[case(b"  2   1   1", "count exceeds item list length", ErrorKind::Eof)]
-#[case(b"  2   1   1   4   1   5   1", "item list exceeds count", ErrorKind::Eof)]
-#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
-#[case(b"  0", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0   2", "atom index is zero", ErrorKind::Verify)]
+#[case(b"  1   1   4", "value out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1  -1", "value is negative", error::ErrorKind::Digit)]
+#[case(b"  2   1   1", "count exceeds item list length", error::ErrorKind::Eof)]
+#[case(b"  2   1   1   4   1   5   1", "item list exceeds count", error::ErrorKind::Eof)]
+#[case(b"  1   1   2 a", "trailing characters", error::ErrorKind::Eof)]
+#[case(b"  0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0   2", "atom index is zero", error::ErrorKind::Verify)]
 fn test_radical_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = radical_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -282,16 +282,16 @@ fn test_isotope_entries(#[case] input: &[u8], #[case] expected: Vec<IsotopeEntry
 }
 
 #[rstest]
-#[case(b"  1   1  -1", "value is negative", ErrorKind::Digit)]
-#[case(b"  2   1  10", "count exceeds item list length", ErrorKind::Eof)]
-#[case(b"  2   1  10   4   1   5   1", "item list exceeds count", ErrorKind::Eof)]
-#[case(b"  1   1  12 a", "trailing characters", ErrorKind::Eof)]
-#[case(b"  0", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0  12", "atom index is zero", ErrorKind::Verify)]
+#[case(b"  1   1  -1", "value is negative", error::ErrorKind::Digit)]
+#[case(b"  2   1  10", "count exceeds item list length", error::ErrorKind::Eof)]
+#[case(b"  2   1  10   4   1   5   1", "item list exceeds count", error::ErrorKind::Eof)]
+#[case(b"  1   1  12 a", "trailing characters", error::ErrorKind::Eof)]
+#[case(b"  0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0  12", "atom index is zero", error::ErrorKind::Verify)]
 fn test_isotope_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = isotope_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -316,13 +316,13 @@ fn test_ring_bond_count_entries(#[case] input: &[u8], #[case] expected: Vec<Ring
 }
 
 #[rstest]
-#[case(b"  1   1   5", "value out of range", ErrorKind::Verify)]
-#[case(b"  1   1  -3", "value out of range", ErrorKind::Verify)]
-#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1   5", "value out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1  -3", "value out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1   2 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_ring_bond_count_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = ring_bond_count_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -347,13 +347,13 @@ fn test_substitution_count_entries(#[case] input: &[u8], #[case] expected: Vec<S
 }
 
 #[rstest]
-#[case(b"  1   1  16", "value out of range", ErrorKind::Verify)]
-#[case(b"  1   1  -3", "value out of range", ErrorKind::Verify)]
-#[case(b"  1   1   3 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1  16", "value out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1  -3", "value out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1   3 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_substitution_count_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = substitution_count_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -377,13 +377,13 @@ fn test_unsaturated_atom_entries(#[case] input: &[u8], #[case] expected: Vec<Uns
 }
 
 #[rstest]
-#[case(b"  1   1   2", "value out of range", ErrorKind::Verify)]
-#[case(b"  1   1  -1", "unsigned value is negative", ErrorKind::Digit)]
-#[case(b"  1   1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1   2", "value out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1  -1", "unsigned value is negative", error::ErrorKind::Digit)]
+#[case(b"  1   1   1 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_unsaturated_atom_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = unsaturated_atom_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -409,13 +409,13 @@ fn test_link_atom_entries(#[case] input: &[u8], #[case] expected: Vec<LinkAtomEn
 }
 
 #[rstest]
-#[case(b"  1   1   1   5   7", "repeat count less than 2", ErrorKind::Verify)]
-#[case(b"  5   1   2   5   7", "count exceeds 4", ErrorKind::Verify)]
-#[case(b"  1   1   2   5   7 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1   1   5   7", "repeat count less than 2", error::ErrorKind::Verify)]
+#[case(b"  5   1   2   5   7", "count exceeds 4", error::ErrorKind::Verify)]
+#[case(b"  1   1   2   5   7 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_link_atom_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = link_atom_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -440,14 +440,14 @@ fn test_atom_list_entry(#[case] input: &[u8], #[case] expected: AtomListEntry) {
 }
 
 #[rstest]
-#[case(b"   1  0 F C   ", "count is zero", ErrorKind::Verify)]
-#[case(b"   1 17 F C   N   ", "count exceeds 16", ErrorKind::Verify)]
-#[case(b"   1  1 X C   ", "invalid exclusion flag", ErrorKind::Tag)]
-#[case(b"   1  1 F XX  ", "invalid element symbol", ErrorKind::MapOpt)]
+#[case(b"   1  0 F C   ", "count is zero", error::ErrorKind::Verify)]
+#[case(b"   1 17 F C   N   ", "count exceeds 16", error::ErrorKind::Verify)]
+#[case(b"   1  1 X C   ", "invalid exclusion flag", error::ErrorKind::Tag)]
+#[case(b"   1  1 F XX  ", "invalid element symbol", error::ErrorKind::MapOpt)]
 fn test_atom_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_list_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -470,13 +470,13 @@ fn test_attachment_point_entries(#[case] input: &[u8], #[case] expected: Vec<Att
 }
 
 #[rstest]
-#[case(b"  1   1   4", "attachment type out of range", ErrorKind::Verify)]
-#[case(b"  3   1   1   2   2   3   3", "count exceeds 2", ErrorKind::Verify)]
-#[case(b"  1   1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1   4", "attachment type out of range", error::ErrorKind::Verify)]
+#[case(b"  3   1   1   2   2   3   3", "count exceeds 2", error::ErrorKind::Verify)]
+#[case(b"  1   1   1 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_attachment_point_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = attachment_point_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -498,13 +498,13 @@ fn test_atom_attachment_order_entry(#[case] input: &[u8], #[case] expected: Atom
 }
 
 #[rstest]
-#[case(b"   1   0", "count is zero", ErrorKind::Verify)]
-#[case(b"   1   3   1   2", "count exceeds 2", ErrorKind::Verify)]
-#[case(b"   0   1   1   2", "atom index is zero", ErrorKind::Verify)]
+#[case(b"   1   0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"   1   3   1   2", "count exceeds 2", error::ErrorKind::Verify)]
+#[case(b"   0   1   1   2", "atom index is zero", error::ErrorKind::Verify)]
 fn test_atom_attachment_order_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_attachment_order_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -527,19 +527,19 @@ fn test_rgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<RGroupL
 }
 
 #[rstest]
-#[case(b"  1   0", "label is zero", ErrorKind::Verify)]
-#[case(b"  9   1   2", "count exceeds 8", ErrorKind::Verify)]
-#[case(b"  1   0   2", "atom index is zero", ErrorKind::Verify)]
-#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   0", "label is zero", error::ErrorKind::Verify)]
+#[case(b"  9   1   2", "count exceeds 8", error::ErrorKind::Verify)]
+#[case(b"  1   0   2", "atom index is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   2 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_rgroup_label_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = rgroup_label_entries().parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
-        matches!(result.as_ref(), Err(nom::Err::Error(e)) if e.code == expected_kind),
+        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
         "Expected {:?} error for {}, got {:?}",
         expected_kind,
         desc,
@@ -560,14 +560,14 @@ fn test_rgroup_logic_entry(#[case] input: &[u8], #[case] expected: RGroupLogicEn
 }
 
 #[rstest]
-#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
-#[case(b"  2   1   0", "count exceeds 1", ErrorKind::Verify)]
-#[case(b"  1   0   0", "label is zero", ErrorKind::Verify)]
-#[case(b"  1   1   0   2", "rgroup_or_h out of range", ErrorKind::Verify)]
+#[case(b"  0   1   0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  2   1   0", "count exceeds 1", error::ErrorKind::Verify)]
+#[case(b"  1   0   0", "label is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   0   2", "rgroup_or_h out of range", error::ErrorKind::Verify)]
 fn test_rgroup_logic_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = rgroup_logic_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -593,12 +593,12 @@ fn test_sgroup_type_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupTy
 }
 
 #[rstest]
-#[case(b"  1   1 FOO", "invalid sgroup type", ErrorKind::MapRes)]
-#[case(b"  1   1 SUP a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1 FOO", "invalid sgroup type", error::ErrorKind::MapRes)]
+#[case(b"  1   1 SUP a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_type_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_type_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -624,12 +624,12 @@ fn test_sgroup_subtype_entries(#[case] input: &[u8], #[case] expected: Vec<SGrou
 }
 
 #[rstest]
-#[case(b"  1   1 FOO", "invalid sgroup subtype", ErrorKind::MapRes)]
-#[case(b"  1   1 ALT a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1 FOO", "invalid sgroup subtype", error::ErrorKind::MapRes)]
+#[case(b"  1   1 ALT a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_subtype_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_subtype_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -656,13 +656,13 @@ fn test_sgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupL
 }
 
 #[rstest]
-#[case(b"  1   1   0", "label out of range", ErrorKind::Verify)]
-#[case(b"  1   1 513", "label out of range", ErrorKind::Verify)]
-#[case(b"  1   1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  1   1   0", "label out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1 513", "label out of range", error::ErrorKind::Verify)]
+#[case(b"  1   1   1 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_label_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_label_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -692,13 +692,13 @@ fn test_sgroup_connectivity_entries(#[case] input: &[u8], #[case] expected: Vec<
 }
 
 #[rstest]
-#[case(b"  0", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   1 FOO", "invalid connectivity", ErrorKind::MapRes)]
-#[case(b"  1   1 HT a", "trailing characters", ErrorKind::Eof)]
+#[case(b"  0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1 FOO", "invalid connectivity", error::ErrorKind::MapRes)]
+#[case(b"  1   1 HT a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_connectivity_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_connectivity_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -724,12 +724,12 @@ fn test_sgroup_expansion_entries(#[case] input: &[u8], #[case] expected: Vec<SGr
 }
 
 #[rstest]
-#[case(b" EXP  0   1", "count is zero", ErrorKind::Verify)]
-#[case(b" EXP  1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b" EXP  0   1", "count is zero", error::ErrorKind::Verify)]
+#[case(b" EXP  1   1 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_expansion_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_expansion_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -752,12 +752,12 @@ fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAto
 }
 
 #[rstest]
-#[case(b"   1 16   1", "count exceeds 15", ErrorKind::Verify)]
-#[case(b"   1  1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"   1 16   1", "count exceeds 15", error::ErrorKind::Verify)]
+#[case(b"   1  1   1 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_atom_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_atom_list_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -780,12 +780,12 @@ fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBon
 }
 
 #[rstest]
-#[case(b"   1 16   1", "count exceeds 15", ErrorKind::Verify)]
-#[case(b"   1  1   1 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"   1 16   1", "count exceeds 15", error::ErrorKind::Verify)]
+#[case(b"   1  1   1 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_bond_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_bond_list_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -807,12 +807,12 @@ fn test_sgroup_parent_atom_entries(#[case] input: &[u8], #[case] expected: SGrou
 }
 
 #[rstest]
-#[case(b"   1 16   3", "count exceeds 15", ErrorKind::Verify)]
-#[case(b"   1  4   3   4   5   6 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"   1 16   3", "count exceeds 15", error::ErrorKind::Verify)]
+#[case(b"   1  4   3   4   5   6 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_parent_atom_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_parent_atom_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -837,11 +837,11 @@ fn test_sgroup_subscript_entry(#[case] input: &[u8], #[case] expected: SGroupSub
 }
 
 #[rstest]
-#[case(b"   0 1", "sgroup index is zero", ErrorKind::Verify)]
+#[case(b"   0 1", "sgroup index is zero", error::ErrorKind::Verify)]
 fn test_sgroup_subscript_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_subscript_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -863,12 +863,12 @@ fn test_sgroup_correspondence_entry(#[case] input: &[u8], #[case] expected: SGro
 }
 
 #[rstest]
-#[case(b"   3  0", "count is zero", ErrorKind::Verify)]
-#[case(b"   3  3  10   9   4 a", "trailing characters", ErrorKind::Eof)]
+#[case(b"   3  0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"   3  3  10   9   4 a", "trailing characters", error::ErrorKind::Eof)]
 fn test_sgroup_correspondence_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = sgroup_correspondence_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -896,9 +896,9 @@ fn test_sgroup_display_info_entry(#[case] input: &[u8], #[case] expected: SGroup
 }
 
 #[rstest]
-#[case(b"   0  4    4.4700   -3.1700    4.4700   -5.7500", "sgroup index is zero", ErrorKind::Verify)]
-#[case(b"   1  0", "count is zero", ErrorKind::Verify)]
-fn test_sgroup_display_info_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"   0  4    4.4700   -3.1700    4.4700   -5.7500", "sgroup index is zero", error::ErrorKind::Verify)]
+#[case(b"   1  0", "count is zero", error::ErrorKind::Verify)]
+fn test_sgroup_display_info_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = sgroup_display_info_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -922,10 +922,10 @@ fn test_sgroup_connecting_bond_entry(#[case] input: &[u8], #[case] expected: SGr
 }
 
 #[rstest]
-#[case(b"   0   1   -0.7200   -0.4200", "sgroup index is zero", ErrorKind::Verify)]
-#[case(b"   1   0   -0.7200   -0.4200", "bond index is zero", ErrorKind::Verify)]
-#[case(b"   1   1   -0.7200   -0.4200 a", "trailing characters", ErrorKind::Eof)]
-fn test_sgroup_connecting_bond_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"   0   1   -0.7200   -0.4200", "sgroup index is zero", error::ErrorKind::Verify)]
+#[case(b"   1   0   -0.7200   -0.4200", "bond index is zero", error::ErrorKind::Verify)]
+#[case(b"   1   1   -0.7200   -0.4200 a", "trailing characters", error::ErrorKind::Eof)]
+fn test_sgroup_connecting_bond_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = sgroup_connecting_bond_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -947,9 +947,9 @@ fn test_sgroup_data_description_entry(#[case] input: &[u8], #[case] expected: SG
 }
 
 #[rstest]
-#[case(b"   0 pH   ", "sgroup index is zero", ErrorKind::Verify)]
-#[case(b"   1 pH                            X", "invalid field type", ErrorKind::MapRes)]
-fn test_sgroup_data_description_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"   0 pH   ", "sgroup index is zero", error::ErrorKind::Verify)]
+#[case(b"   1 pH                            X", "invalid field type", error::ErrorKind::MapRes)]
+fn test_sgroup_data_description_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = sgroup_data_description_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
@@ -975,12 +975,12 @@ fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroup
 }
 
 #[rstest]
-#[case(b"   0     0.0000    0.0000    DR    ALL  0       0", "sgroup index is zero", ErrorKind::Verify)]
-#[case(b"   1     0.0000    0.0000    XR    ALL  0       0", "invalid display type", ErrorKind::MapRes)]
-#[case(b"   1     0.0000    0.0000    DX    ALL  0       0", "invalid placement type", ErrorKind::MapRes)]
-#[case(b"   1     0.0000    0.0000    DR    NON  0       0", "invalid chars type", ErrorKind::MapRes)]
+#[case(b"   0     0.0000    0.0000    DR    ALL  0       0", "sgroup index is zero", error::ErrorKind::Verify)]
+#[case(b"   1     0.0000    0.0000    XR    ALL  0       0", "invalid display type", error::ErrorKind::MapRes)]
+#[case(b"   1     0.0000    0.0000    DX    ALL  0       0", "invalid placement type", error::ErrorKind::MapRes)]
+#[case(b"   1     0.0000    0.0000    DR    NON  0       0", "invalid chars type", error::ErrorKind::MapRes)]
 fn test_sgroup_data_display_entry_invalid(
-    #[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind
+    #[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind
 ) {
     let result = sgroup_data_display_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -1004,8 +1004,8 @@ fn tests_sgroup_data_continuation_entry(#[case] input: &[u8], #[case] expected: 
 }
 
 #[rstest]
-#[case(b"   0 4.6", "sgroup index is zero", ErrorKind::Verify)]
-fn test_sgroup_data_continuation_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"   0 4.6", "sgroup index is zero", error::ErrorKind::Verify)]
+fn test_sgroup_data_continuation_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = sgroup_data_continuation_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -1029,8 +1029,8 @@ fn tests_sgroup_data_end_entry(#[case] input: &[u8], #[case] expected: SGroupDat
 }
 
 #[rstest]
-#[case(b"   0  1", "sgroup index is zero", ErrorKind::Verify)]
-fn test_sgroup_data_end_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"   0  1", "sgroup index is zero", error::ErrorKind::Verify)]
+fn test_sgroup_data_end_entry_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = sgroup_data_end_entry().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -1056,11 +1056,11 @@ fn test_sgroup_hierarchy_entries(#[case] input: &[u8], #[case] expected: Vec<SGr
 }
 
 #[rstest]
-#[case(b"  0   1   2", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0   2", "sgroup index is zero", ErrorKind::Verify)]
-#[case(b"  1   1   0", "parent sgroup index is zero", ErrorKind::Verify)]
-#[case(b"  1   1   2 a", "trailing characters", ErrorKind::Eof)]
-fn test_sgroup_hierarchy_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  0   1   2", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0   2", "sgroup index is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   0", "parent sgroup index is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   2 a", "trailing characters", error::ErrorKind::Eof)]
+fn test_sgroup_hierarchy_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = sgroup_hierarchy_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -1084,10 +1084,10 @@ fn test_sgroup_component_entries(#[case] input: &[u8], #[case] expected: Vec<SGr
 }
 
 #[rstest]
-#[case(b"  0   1   2", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0   2", "component number is zero", ErrorKind::Verify)]
-#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
-fn test_sgroup_component_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  0   1   2", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0   2", "component number is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", error::ErrorKind::Eof)]
+fn test_sgroup_component_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = sgroup_component_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
@@ -1106,10 +1106,10 @@ fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<Zero
 }
 
 #[rstest]
-#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0   0", "bond index is zero", ErrorKind::Verify)]
-#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
-fn test_zero_bond_order_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  0   1   0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0   0", "bond index is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", error::ErrorKind::Eof)]
+fn test_zero_bond_order_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = zero_bond_order_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
@@ -1128,10 +1128,10 @@ fn test_zero_atom_charge_entries(#[case] input: &[u8], #[case] expected: Vec<Zer
 }
 
 #[rstest]
-#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0   0", "atom index is zero", ErrorKind::Verify)]
-#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
-fn test_zero_atom_charge_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  0   1   0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0   0", "atom index is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", error::ErrorKind::Eof)]
+fn test_zero_atom_charge_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = zero_atom_charge_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));
@@ -1150,10 +1150,10 @@ fn test_atom_hydrogen_count_entries(#[case] input: &[u8], #[case] expected: Vec<
 }
 
 #[rstest]
-#[case(b"  0   1   0", "count is zero", ErrorKind::Verify)]
-#[case(b"  1   0   0", "atom index is zero", ErrorKind::Verify)]
-#[case(b"  1   1   0 a", "trailing characters", ErrorKind::Eof)]
-fn test_atom_hydrogen_count_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: ErrorKind) {
+#[case(b"  0   1   0", "count is zero", error::ErrorKind::Verify)]
+#[case(b"  1   0   0", "atom index is zero", error::ErrorKind::Verify)]
+#[case(b"  1   1   0 a", "trailing characters", error::ErrorKind::Eof)]
+fn test_atom_hydrogen_count_entries_invalid(#[case] input: &[u8], #[case] desc: &str, #[case] expected_kind: error::ErrorKind) {
     let result = atom_hydrogen_count_entries().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind), "Mismatched error kind for {}, expected {:?}, got {}", desc, expected_kind, result.clone().unwrap_err().map(|e| e.code));

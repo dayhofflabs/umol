@@ -8,23 +8,16 @@ use std::{
 use umol_data::Element;
 
 use fast_float::FastFloat;
+use nom::branch::alt;
+use nom::bytes::complete::{tag, take};
 use nom::character::complete::{
-    digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, u32 as nom_u32, u8 as nom_u8,
-    usize as nom_usize,
+    alpha1, digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
+    u8 as nom_u8, usize as nom_usize,
 };
-use nom::combinator::{complete, map, opt, recognize, verify};
-use nom::error;
+use nom::combinator::{complete, map, map_opt, map_res, opt, recognize, verify};
 use nom::multi::{fold_many_m_n, separated_list1};
-use nom::{branch::alt, combinator::map_opt};
-use nom::{
-    bytes::{complete::tag, take},
-    combinator::map_res,
-};
-use nom::{
-    character::complete::{alpha1, space0},
-    sequence::delimited,
-};
-use nom::{Input, Parser};
+use nom::sequence::delimited;
+use nom::{error, Err, Input, Parser};
 use num::{Float, Integer};
 use smallvec::{Array, SmallVec};
 
@@ -124,10 +117,7 @@ where
         // If the slice is shorter than the expected width, it's only valid if it's all whitespace
         // or if `partial_ok` is true.
         if !partial_ok && field.len() < width && !field.iter().all(|&b| b == b' ') {
-            return Err(nom::Err::Error(error::Error::new(
-                input,
-                nom::error::ErrorKind::Eof,
-            )));
+            return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
         }
 
         if field.iter().all(|&b| b == b' ') {
@@ -139,15 +129,12 @@ where
                 if unconsumed.is_empty() {
                     Ok((remaining, Some(val)))
                 } else {
-                    Err(nom::Err::Error(error::Error::new(
-                        input,
-                        nom::error::ErrorKind::Eof,
-                    )))
+                    Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)))
                 }
             }
-            Err(nom::Err::Error(e)) => Err(nom::Err::Error(error::Error::new(input, e.code))),
-            Err(nom::Err::Failure(e)) => Err(nom::Err::Failure(error::Error::new(input, e.code))),
-            Err(nom::Err::Incomplete(needed)) => Err(nom::Err::Incomplete(needed)),
+            Err(Err::Error(e)) => Err(Err::Error(error::Error::new(input, e.code))),
+            Err(Err::Failure(e)) => Err(Err::Failure(error::Error::new(input, e.code))),
+            Err(Err::Incomplete(needed)) => Err(Err::Incomplete(needed)),
         }
     }
 }
@@ -443,8 +430,7 @@ mod tests {
     use super::*;
     use nom::bytes::complete::take;
     use nom::combinator::{all_consuming, map_parser};
-    use nom::error::ErrorKind;
-    use nom::Err;
+    use nom::{error, Err};
     use pretty_assertions::assert_eq;
     use rstest::rstest;
     use smallvec::smallvec;
@@ -478,12 +464,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
-    #[case(b"1a ", "trailing characters", ErrorKind::Eof)]
+    #[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
+    #[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
     fn test_fixed_width_partial_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = fixed_width_partial(3, delimited(space0, nom_i32, space0), true);
         let result = parser.parse(input);
@@ -522,13 +508,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b" abc ", "non-numeric input", ErrorKind::Digit)]
-    #[case(b" 1", "too few characters", ErrorKind::Eof)]
-    #[case(b"1", "too few characters", ErrorKind::Eof)]
+    #[case(b" abc ", "non-numeric input", error::ErrorKind::Digit)]
+    #[case(b" 1", "too few characters", error::ErrorKind::Eof)]
+    #[case(b"1", "too few characters", error::ErrorKind::Eof)]
     fn test_fixed_width_opt_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = fixed_width_opt(5, delimited(space0, nom_i32, space0));
         let result = parser.parse(input);
@@ -566,14 +552,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"1234", "too many characters", ErrorKind::Eof)]
-    #[case(b"12", "too few characters", ErrorKind::Eof)]
-    #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
-    #[case(b"1a ", "trailing characters", ErrorKind::Eof)]
+    #[case(b"1234", "too many characters", error::ErrorKind::Eof)]
+    #[case(b"12", "too few characters", error::ErrorKind::Eof)]
+    #[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
+    #[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
     fn test_fixed_width_int_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_int::<i32>(3));
         let result = parser.parse(input);
@@ -606,16 +592,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"   ", "blank field not in range", ErrorKind::Verify)]
-    #[case(b"11 ", "value is out of range", ErrorKind::Verify)]
-    #[case(b"1234", "too many characters", ErrorKind::Verify)]
-    #[case(b"8", "too few characters", ErrorKind::Eof)]
-    #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
-    #[case(b"1a ", "trailing characters", ErrorKind::Eof)]
+    #[case(b"   ", "blank field not in range", error::ErrorKind::Verify)]
+    #[case(b"11 ", "value is out of range", error::ErrorKind::Verify)]
+    #[case(b"1234", "too many characters", error::ErrorKind::Verify)]
+    #[case(b"8", "too few characters", error::ErrorKind::Eof)]
+    #[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
+    #[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
     fn test_fixed_width_int_in_range_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, 1i8..=10i8));
         let result = parser.parse(input);
@@ -687,12 +673,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
-    #[case(b"1a ", "trailing characters", ErrorKind::Eof)]
+    #[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
+    #[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
     fn test_fixed_width_int_in_range_opt_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_int_in_range_opt::<i32, _>(3, 0..=10));
         let result = parser.parse(input);
@@ -735,13 +721,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"1234", "too many characters", ErrorKind::Eof)]
-    #[case(b"abc", "non-numeric input", ErrorKind::Digit)]
-    #[case(b"1a ", "trailing characters", ErrorKind::Eof)]
+    #[case(b"1234", "too many characters", error::ErrorKind::Eof)]
+    #[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
+    #[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
     fn test_fixed_width_int_partial_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_int_partial::<i32>(3));
         let result = parser.parse(input);
@@ -781,12 +767,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"Cu   ", "trailing characters", ErrorKind::Eof)]
-    #[case(b" X  ", "invalid element symbol", ErrorKind::MapOpt)]
+    #[case(b"Cu   ", "trailing characters", error::ErrorKind::Eof)]
+    #[case(b" X  ", "invalid element symbol", error::ErrorKind::MapOpt)]
     fn test_fixed_width_element_partial_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_element_partial(4));
         let result = parser.parse(input);
@@ -822,13 +808,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"1.23a     ", "trailing characters", ErrorKind::Eof)]
-    #[case(b"1.2.3     ", "invalid decimal point", ErrorKind::Eof)]
-    #[case(b"          a", "trailing characters", ErrorKind::Eof)]
+    #[case(b"1.23a     ", "trailing characters", error::ErrorKind::Eof)]
+    #[case(b"1.2.3     ", "invalid decimal point", error::ErrorKind::Eof)]
+    #[case(b"          a", "trailing characters", error::ErrorKind::Eof)]
     fn test_fixed_width_float_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
         let result = parser.parse(input);
@@ -843,11 +829,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"  0", "value too small", ErrorKind::Verify)]
+    #[case(b"  0", "value too small", error::ErrorKind::Verify)]
     fn test_fixed_width_int_minus1_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(fixed_width_int_minus1::<usize>(3));
         let result = parser.parse(input);
@@ -928,10 +914,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"abcabc", ErrorKind::Tag)]
-    #[case(b"abc", ErrorKind::Tag)]
-    #[case(b"", ErrorKind::Tag)]
-    fn test_repeat_invalid(#[case] input: &[u8], #[case] expected_kind: ErrorKind) {
+    #[case(b"abcabc", error::ErrorKind::Tag)]
+    #[case(b"abc", error::ErrorKind::Tag)]
+    #[case(b"", error::ErrorKind::Tag)]
+    fn test_repeat_invalid(#[case] input: &[u8], #[case] expected_kind: error::ErrorKind) {
         let mut parser = all_consuming(repeat::<_, _, _>(3, tag(&b"abc"[..])));
         let result = parser.parse(input);
         assert!(result.is_err(), "{:?}: should have failed", input);
@@ -964,11 +950,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"312", ErrorKind::Eof, "incomplete items")]
-    #[case(b"x12", ErrorKind::Digit, "invalid count character")]
+    #[case(b"312", error::ErrorKind::Eof, "incomplete items")]
+    #[case(b"x12", error::ErrorKind::Digit, "invalid count character")]
     fn test_small_length_count_invalid(
         #[case] input: &[u8],
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
         #[case] desc: &str,
     ) {
         let count = map_parser(take(1u8), nom_usize);
@@ -1013,12 +999,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"a", "invalid character", ErrorKind::Eof)]
-    #[case(b"-3", "negative value", ErrorKind::Eof)]
+    #[case(b"a", "invalid character", error::ErrorKind::Eof)]
+    #[case(b"-3", "negative value", error::ErrorKind::Eof)]
     fn test_rgroup_occurrences_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let mut parser = all_consuming(rgroup_occurrences());
         let result = parser.parse(input);

@@ -5,7 +5,7 @@ use crate::io::ctab::atom::{
 use crate::io::ctab::query::QueryAtom;
 use float_cmp::approx_eq;
 use nom::combinator::all_consuming;
-use nom::{error::ErrorKind, Err};
+use nom::{error, Err};
 use pretty_assertions::assert_eq;
 use rstest::rstest;
 
@@ -27,14 +27,14 @@ fn test_atom_symbol_standard(
 }
 
 #[rstest]
-#[case(b"A  ", "query atom", ErrorKind::MapRes)]
-#[case(b"L  ", "atom list", ErrorKind::MapRes)]
-#[case(b"LP ", "lone pair", ErrorKind::MapRes)]
-#[case(b"R1 ", "R group", ErrorKind::MapRes)]
+#[case(b"A  ", "query atom", error::ErrorKind::MapRes)]
+#[case(b"L  ", "atom list", error::ErrorKind::MapRes)]
+#[case(b"LP ", "lone pair", error::ErrorKind::MapRes)]
+#[case(b"R1 ", "R group", error::ErrorKind::MapRes)]
 fn test_atom_symbol_standard_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_symbol_standard().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -80,14 +80,14 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: 
 }
 
 #[rstest]
-#[case(b"   ", "empty field", ErrorKind::MapRes)]
-#[case(b"H", "too short", ErrorKind::Eof)]
-#[case(b"Xx ", "Unknown atom symbol", ErrorKind::MapRes)]
-#[case(b"LQ ", "Unknown atom symbol", ErrorKind::MapRes)]
+#[case(b"   ", "empty field", error::ErrorKind::MapRes)]
+#[case(b"H", "too short", error::ErrorKind::Eof)]
+#[case(b"Xx ", "Unknown atom symbol", error::ErrorKind::MapRes)]
+#[case(b"LQ ", "Unknown atom symbol", error::ErrorKind::MapRes)]
 fn test_atom_symbol_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_symbol().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -190,13 +190,13 @@ fn test_atom_input_standard69(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", "non-numeric coordinate", ErrorKind::Eof)]
-#[case(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", "non-numeric atom map number", ErrorKind::Digit)]
-#[case(b"    1.2345    2.3456    3.4567 L   0  0  0  0  0  0  0  0  0  0  0  0", "non-standard atom symbol", ErrorKind::MapRes)]
+#[case(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", "non-numeric coordinate", error::ErrorKind::Eof)]
+#[case(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", "non-numeric atom map number", error::ErrorKind::Digit)]
+#[case(b"    1.2345    2.3456    3.4567 L   0  0  0  0  0  0  0  0  0  0  0  0", "non-standard atom symbol", error::ErrorKind::MapRes)]
 fn test_atom_input_standard69_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_input_standard69(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -305,17 +305,17 @@ fn test_atom_input_standard51(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"    1.234a    2.3456    3.4567 C  -2  3  0  0  0  4", "non-numeric coordinate",
-       ErrorKind::Eof)]
+       error::ErrorKind::Eof)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", "non-numeric valence",
-       ErrorKind::Digit)]
+       error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", "out-of-range valence",
-       ErrorKind::Verify)]
+       error::ErrorKind::Verify)]
 #[case(b"    1.2345    2.3456    3.4567 L  -2  3  0  0  0  4", "invalid atom symbol",
-       ErrorKind::MapRes)]
+       error::ErrorKind::MapRes)]
 fn test_atom_input_standard51_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_input_standard51(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -451,15 +451,15 @@ fn test_atom_input_standard42(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C   0  3  4", "stereo parity out of range", ErrorKind::Verify)]
-#[case(b"    1.234a    2.3456    3.4567 C   0  3  0", "non-numeric coordinate", ErrorKind::Eof)]
-#[case(b"    1.2345    2.3456    3.4567 L   0  3  0", "invalid atom symbol", ErrorKind::MapRes)]
-#[case(b"    1.2345    2.3456    3.4567 C   0  3  a", "non-numeric stereo parity", ErrorKind::Digit)]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3     a", "non-numeric data in ignored block", ErrorKind::Verify)]
+#[case(b"    1.2345    2.3456    3.4567 C   0  3  4", "stereo parity out of range", error::ErrorKind::Verify)]
+#[case(b"    1.234a    2.3456    3.4567 C   0  3  0", "non-numeric coordinate", error::ErrorKind::Eof)]
+#[case(b"    1.2345    2.3456    3.4567 L   0  3  0", "invalid atom symbol", error::ErrorKind::MapRes)]
+#[case(b"    1.2345    2.3456    3.4567 C   0  3  a", "non-numeric stereo parity", error::ErrorKind::Digit)]
+#[case(b"    1.2345    2.3456    3.4567 C  -2  3     a", "non-numeric data in ignored block", error::ErrorKind::Verify)]
 fn test_atom_input_standard42_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_input_standard42(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -616,13 +616,13 @@ fn test_atom_input_standard39(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.234a    2.3456    3.4567 C  -2  3", "non-numeric coordinate", ErrorKind::Eof)]
-#[case(b"    1.2345    2.3456    3.4567 C  -a  3", "non-numeric mass diff", ErrorKind::Digit)]
-#[case(b"    1.2345    2.3456    3.4567 L  -2  3", "invalid atom symbol", ErrorKind::MapRes)]
+#[case(b"    1.234a    2.3456    3.4567 C  -2  3", "non-numeric coordinate", error::ErrorKind::Eof)]
+#[case(b"    1.2345    2.3456    3.4567 C  -a  3", "non-numeric mass diff", error::ErrorKind::Digit)]
+#[case(b"    1.2345    2.3456    3.4567 L  -2  3", "invalid atom symbol", error::ErrorKind::MapRes)]
 fn test_atom_input_standard39_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_input_standard39(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -732,12 +732,12 @@ fn test_atom_input_standard36(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.234a    2.3456    3.4567 C  -2", "non-numeric coordinate", ErrorKind::Eof)]
-#[case(b"    1.2345    2.3456    3.4567 L  -2", "invalid atom symbol", ErrorKind::MapRes)]
+#[case(b"    1.234a    2.3456    3.4567 C  -2", "non-numeric coordinate", error::ErrorKind::Eof)]
+#[case(b"    1.2345    2.3456    3.4567 L  -2", "invalid atom symbol", error::ErrorKind::MapRes)]
 fn test_atom_input_standard36_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_input_standard36(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -839,12 +839,12 @@ fn test_atom_input_standard34(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.234a    2.3456    3.4567 C  ", "non-numeric coordinate", ErrorKind::Eof)]
-#[case(b"    1.2345    2.3456    3.4567 L  ", "invalid atom symbol", ErrorKind::MapRes)]
+#[case(b"    1.234a    2.3456    3.4567 C  ", "non-numeric coordinate", error::ErrorKind::Eof)]
+#[case(b"    1.2345    2.3456    3.4567 L  ", "invalid atom symbol", error::ErrorKind::MapRes)]
 fn test_atom_input_standard34_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = atom_input_standard34(input);
     assert!(result.is_err(), "{} should have failed", desc);
@@ -987,14 +987,14 @@ fn test_atom_input(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.0000    2.0000    3.0000 C  -2  3  4", "invalid stereo parity", ErrorKind::MapRes)]
-#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", "non-numeric hydrogen count", ErrorKind::Digit)]
-#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", "non-numeric valence", ErrorKind::Digit)]
-#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0         a ", "trailing non-whitespace", ErrorKind::Eof)]
+#[case(b"    1.0000    2.0000    3.0000 C  -2  3  4", "invalid stereo parity", error::ErrorKind::MapRes)]
+#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", "non-numeric hydrogen count", error::ErrorKind::Digit)]
+#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", "non-numeric valence", error::ErrorKind::Digit)]
+#[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0         a ", "trailing non-whitespace", error::ErrorKind::Eof)]
 fn test_atom_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let mut parser = all_consuming(atom_input());
     let result = parser.parse(input);
@@ -1015,10 +1015,10 @@ fn test_atom_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc,);
     assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == ErrorKind::Eof),
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == error::ErrorKind::Eof),
         "{} should have failed with error kind {:?}, got {:?}",
         desc,
-        ErrorKind::Eof,
+        error::ErrorKind::Eof,
         result.clone().unwrap_err().map(|e| e.code)
     );
 }

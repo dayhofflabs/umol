@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bitflags = { version = "2.4.0", features = ["serde"] }
+bstr = "1.9"
 float-cmp = "0.10"
 num-traits = "0.2.19"
 nalgebra = { version = "0.33", features = ["serde-serialize"] }

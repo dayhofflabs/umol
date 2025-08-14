@@ -5,7 +5,7 @@ use nom::character::complete::space0;
 use nom::combinator::{cond, map, map_res};
 use nom::error;
 use nom::sequence::terminated;
-use nom::{IResult, Parser};
+use nom::{Err, IResult, Parser};
 
 use crate::io::ctab::bond::{Bond, BondStandard, BondType};
 
@@ -113,7 +113,7 @@ pub fn bond_input_standard<'a>(
             10..=20 => bond_input_standard12,
             9 => bond_input_standard9,
             _ => {
-                return Err(nom::Err::Error(error::Error::new(
+                return Err(Err::Error(error::Error::new(
                     input,
                     error::ErrorKind::Eof,
                 )))

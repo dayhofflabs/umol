@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use umol::error::DataError;
 use umol::Result;
+use nom::Err;
 
 /// Type aliases for the node and edge indices
 pub type AtomIndex = NodeIndex<usize>;
@@ -164,10 +165,10 @@ pub fn parse_mol(input: &[u8]) -> Result<ParsedMol> {
             }
             Ok(parsed_mol)
         }
-        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+        Err(Err::Error(e)) | Err(Err::Failure(e)) => {
             Err(DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())
         }
-        Err(nom::Err::Incomplete(_)) => {
+        Err(Err::Incomplete(_)) => {
             Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
         }
     }
@@ -190,10 +191,10 @@ pub fn parse_mol_standard(input: &[u8]) -> Result<MoleculeStandard> {
             }
             Ok(molecule)
         }
-        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+        Err(Err::Error(e)) | Err(Err::Failure(e)) => {
             Err(DataError::InvalidMolFormat(format!("Standard MOL parsing failed: {:?}", e)).into())
         }
-        Err(nom::Err::Incomplete(_)) => {
+        Err(Err::Incomplete(_)) => {
             Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
         }
     }

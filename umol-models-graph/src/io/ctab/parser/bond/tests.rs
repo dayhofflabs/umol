@@ -1,10 +1,11 @@
 use super::*;
-use pretty_assertions::assert_eq;
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use nom::combinator::all_consuming;
-use nom::{error::ErrorKind, Err, Parser};
-use rstest::rstest;
+use nom::{error, Err, Parser};
+use pretty_assertions::assert_eq;
+use rstest::*;
 
+#[rustfmt::skip]
 #[rstest]
 #[case(b"  1  2  1  1  0  0  0", "single wedge", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
 #[case(b"  2  5  1  0  0  0  0", "single unknown", 1, 4, BondType::Single, None, None)]
@@ -57,13 +58,13 @@ fn test_bond_input_standard21(
 }
 
 #[rstest]
-#[case(b"  A  2  1  1  0  0  0", "Non-numeric atom", ErrorKind::Digit)]
-#[case(b"  1  2  A  1  0  0  0", "Non-numeric type", ErrorKind::Digit)]
-#[case(b"  1  2  1  1  0  0 ", "Line too short", ErrorKind::Eof)]
+#[case(b"  A  2  1  1  0  0  0", "Non-numeric atom", error::ErrorKind::Digit)]
+#[case(b"  1  2  A  1  0  0  0", "Non-numeric type", error::ErrorKind::Digit)]
+#[case(b"  1  2  1  1  0  0 ", "Line too short", error::ErrorKind::Eof)]
 fn test_bond_input_standard21_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = bond_input_standard21(input);
     assert!(
@@ -75,6 +76,7 @@ fn test_bond_input_standard21_invalid(
     );
 }
 
+#[rustfmt::skip]
 #[rstest]
 #[case(b"  1  3  1  1", "single wedge", 0, 2, BondType::Single, None, Some(BondDir::Wedge))]
 #[case(b"  1  3  2  1", "double cis", 0, 2, BondType::Double, Some(BondStereo::Cis), None)]
@@ -122,12 +124,12 @@ fn test_bond_input_standard12(
 }
 
 #[rstest]
-#[case(b"  1  2  1  A", "non-numeric stereo", ErrorKind::Digit)]
-#[case(b"  1  2  1 1", "Line too short", ErrorKind::Eof)]
+#[case(b"  1  2  1  A", "non-numeric stereo", error::ErrorKind::Digit)]
+#[case(b"  1  2  1 1", "Line too short", error::ErrorKind::Eof)]
 fn test_bond_input_standard12_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = bond_input_standard12(input);
     assert!(
@@ -178,12 +180,12 @@ fn test_bond_input_standard9(
 }
 
 #[rstest]
-#[case(b"  1  2", "Line too short", ErrorKind::MapRes)]
-#[case(b"  1  A  1", "Non-numeric atom 2", ErrorKind::Digit)]
+#[case(b"  1  2", "Line too short", error::ErrorKind::MapRes)]
+#[case(b"  1  A  1", "Non-numeric atom 2", error::ErrorKind::Digit)]
 fn test_bond_input_standard9_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let result = bond_input_standard9(input);
     assert!(
@@ -194,6 +196,8 @@ fn test_bond_input_standard9_invalid(
         result.clone().unwrap_err().map(|e| e.code)
     );
 }
+
+#[rustfmt::skip]
 #[rstest]
 #[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None)]
 #[case(b"  1  2  1 ", "len 10 padded", 0, 1, BondType::Single, None, None)]
@@ -242,12 +246,12 @@ fn test_bond_input_standard(
 }
 
 #[rstest]
-#[case(b"  1  2 ", "Line too short", ErrorKind::Eof)]
-#[case(b"  1  2  9", "Out of range type", ErrorKind::MapRes)]
+#[case(b"  1  2 ", "Line too short", error::ErrorKind::Eof)]
+#[case(b"  1  2  9", "Out of range type", error::ErrorKind::MapRes)]
 fn test_bond_input_standard_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let mut parser = bond_input_standard();
     let result = parser.parse(input);
@@ -281,14 +285,18 @@ fn test_bond_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
 }
 
+#[rustfmt::skip]
 #[rstest]
 #[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None, None, None)]
 #[case(b"  1  2  2  3", "len 12 double either", 0, 1, BondType::Double, Some(BondStereo::Either), None, None, None)]
 #[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondType::Single, None, Some(BondDir::Dash), None, None)]
-#[case(b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
-#[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondType::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
-#[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondType::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
-#[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None, None, Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
+#[case( b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
+#[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondType::Single, None, None,
+       Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
+#[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondType::Single, None, None,
+       Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
+#[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None, None,
+       Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -343,14 +351,18 @@ fn test_bond_input(
 }
 
 #[rstest]
-#[case(b"  1  2", "Line too short", ErrorKind::MapRes)]
-#[case(b"  1  2  9", "Out of range type", ErrorKind::MapRes)]
-#[case(b"  2  5  2  0  0  4  0", "Invalid topology", ErrorKind::MapRes)]
-#[case(b"  1  2  1  0         a", "trailing non-whitespace", ErrorKind::Eof)]
+#[case(b"  1  2", "Line too short", error::ErrorKind::MapRes)]
+#[case(b"  1  2  9", "Out of range type", error::ErrorKind::MapRes)]
+#[case(b"  2  5  2  0  0  4  0", "Invalid topology", error::ErrorKind::MapRes)]
+#[case(
+    b"  1  2  1  0         a",
+    "trailing non-whitespace",
+    error::ErrorKind::Eof
+)]
 fn test_bond_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] expected_kind: ErrorKind,
+    #[case] expected_kind: error::ErrorKind,
 ) {
     let mut parser = all_consuming(bond_input());
     let result = parser.parse(input);

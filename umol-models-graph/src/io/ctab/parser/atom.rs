@@ -4,7 +4,7 @@ use nom::bytes::complete::take;
 use nom::character::complete::space0;
 use nom::combinator::{complete, cond, map, map_res, verify};
 use nom::sequence::{delimited, preceded, terminated};
-use nom::{error, IResult, Parser};
+use nom::{error, Err, IResult, Parser};
 use umol_data::{Element, NamedIsotope};
 
 use super::utils::is_blanks_or_zeros;
@@ -382,7 +382,7 @@ pub fn atom_input_standard<'a>(
             35..=36 => atom_input_standard36,
             34 => atom_input_standard34,
             _ => {
-                return Err(nom::Err::Error(error::Error::new(
+                return Err(Err::Error(error::Error::new(
                     input,
                     error::ErrorKind::Eof,
                 )))

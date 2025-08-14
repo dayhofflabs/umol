@@ -3,9 +3,10 @@
 use nom::bytes::complete::tag;
 use nom::character::complete::{line_ending, multispace0};
 use nom::combinator::opt;
-use nom::multi::{count, many0};
+use nom::multi::many0;
 use nom::sequence::{preceded, terminated};
-use nom::{error, IResult, Parser};
+use nom::{error, Err, IResult, Parser};
+use bstr::ByteSlice;
 
 use super::super::ctab::atom::{Atom, AtomStandard, AtomSymbol};
 use super::super::ctab::bond::BondType;
@@ -55,40 +56,81 @@ pub fn mol_block_standard(input: &[u8]) -> IResult<&[u8], MoleculeStandard, erro
 fn atom_block<'a>(
     atom_count: usize,
 ) -> impl Parser<&'a [u8], Output = Vec<Atom>, Error = error::Error<&'a [u8]>> {
-    count(
-        |input| {
-            let (input, atom) = terminated(atom_input(), line_ending).parse(input)?;
-            Ok((input, atom))
-        },
-        atom_count,
-    )
+    move |input: &'a [u8]| {
+        let mut atoms = Vec::with_capacity(atom_count);
+        let mut lines_iter = input.lines();
+        
+        // Process atom_count lines
+        for _ in 0..atom_count {
+            let line = lines_iter
+                .next()
+                .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
+            
+            // Parse the atom from the line
+            let (_, atom) = atom_input().parse(line)?;
+            atoms.push(atom);
+        }
+        
+        // Calculate remaining input
+        let consumed_bytes = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
+        let remaining = &input[consumed_bytes..];
+        
+        Ok((remaining, atoms))
+    }
 }
 
 /// Parse atom block (standard parser)
 fn atom_block_standard<'a>(
     atom_count: usize,
 ) -> impl Parser<&'a [u8], Output = Vec<AtomStandard>, Error = error::Error<&'a [u8]>> {
-    count(
-        |input| {
-            let (input, atom) = terminated(atom_input_standard(), line_ending).parse(input)?;
-            Ok((input, atom))
-        },
-        atom_count,
-    )
+    move |input: &'a [u8]| {
+        let mut atoms = Vec::with_capacity(atom_count);
+        let mut lines_iter = input.lines();
+        
+        // Process atom_count lines
+        for _ in 0..atom_count {
+            let line = lines_iter
+                .next()
+                .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
+            
+            // Parse the atom from the line
+            let (_, atom) = atom_input_standard().parse(line)?;
+            atoms.push(atom);
+        }
+        
+        // Calculate remaining input
+        let consumed_bytes = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
+        let remaining = &input[consumed_bytes..];
+        
+        Ok((remaining, atoms))
+    }
 }
 
 /// Parse bond block
 fn bond_block<'a>(
     bond_count: usize,
 ) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, Bond)>, Error = error::Error<&'a [u8]>> {
-    count(
-        |input| {
-            let (input, (atom1, atom2, bond)) =
-                terminated(bond_input(), line_ending).parse(input)?;
-            Ok((input, (atom1, atom2, bond)))
-        },
-        bond_count,
-    )
+    move |input: &'a [u8]| {
+        let mut bonds = Vec::with_capacity(bond_count);
+        let mut lines_iter = input.lines();
+        
+        // Process bond_count lines
+        for _ in 0..bond_count {
+            let line = lines_iter
+                .next()
+                .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
+            
+            // Parse the bond from the line
+            let (_, (atom1, atom2, bond)) = bond_input().parse(line)?;
+            bonds.push((atom1, atom2, bond));
+        }
+        
+        // Calculate remaining input
+        let consumed_bytes = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
+        let remaining = &input[consumed_bytes..];
+        
+        Ok((remaining, bonds))
+    }
 }
 
 /// Parse bond block (standard parser)
@@ -96,14 +138,27 @@ fn bond_block_standard<'a>(
     bond_count: usize,
 ) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, BondStandard)>, Error = error::Error<&'a [u8]>>
 {
-    count(
-        |input| {
-            let (input, (atom1, atom2, bond)) =
-                terminated(bond_input_standard(), line_ending).parse(input)?;
-            Ok((input, (atom1, atom2, bond)))
-        },
-        bond_count,
-    )
+    move |input: &'a [u8]| {
+        let mut bonds = Vec::with_capacity(bond_count);
+        let mut lines_iter = input.lines();
+        
+        // Process bond_count lines
+        for _ in 0..bond_count {
+            let line = lines_iter
+                .next()
+                .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
+            
+            // Parse the bond from the line
+            let (_, (atom1, atom2, bond)) = bond_input_standard().parse(line)?;
+            bonds.push((atom1, atom2, bond));
+        }
+        
+        // Calculate remaining input
+        let consumed_bytes = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
+        let remaining = &input[consumed_bytes..];
+        
+        Ok((remaining, bonds))
+    }
 }
 
 /// Parse legacy atom list block

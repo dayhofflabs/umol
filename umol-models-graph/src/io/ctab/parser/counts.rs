@@ -99,7 +99,8 @@ impl Counts {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nom::{combinator::all_consuming, error::ErrorKind, Err};
+    use nom::combinator::all_consuming;
+    use nom::{error, Err};
     use rstest::rstest;
 
     #[rstest]
@@ -126,23 +127,23 @@ mod tests {
     #[case(
         b"  4  2  0     0  0            999 V1000",
         "invalid version",
-        ErrorKind::Verify
+        error::ErrorKind::Verify
     )]
-    #[case(b"  4  2  0     0  0            ", "too short", ErrorKind::Eof)]
+    #[case(b"  4  2  0     0  0            ", "too short", error::ErrorKind::Eof)]
     #[case(
         b" 1A  2  0     0  0            999 V2000",
         "non-numeric atom",
-        ErrorKind::Eof
+        error::ErrorKind::Eof
     )]
     #[case(
         b"  4 AA  0     0  0            999 V2000",
         "non-numeric bond",
-        ErrorKind::Digit
+        error::ErrorKind::Digit
     )]
     fn test_counts_input_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: ErrorKind,
+        #[case] expected_kind: error::ErrorKind,
     ) {
         let res = counts_input().parse(input);
         assert!(res.is_err(), "{} should have failed", desc);
