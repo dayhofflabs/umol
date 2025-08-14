@@ -8,6 +8,7 @@ use nom::sequence::terminated;
 use nom::{error, IResult, Parser};
 
 use super::super::ctab::atom::{Atom, AtomStandard, AtomSymbol};
+use super::super::ctab::bond::BondType;
 use super::super::ctab::bond::{Bond, BondStandard};
 use super::super::ctab::molecule::{Header, Molecule, MoleculeStandard, ParsedMol};
 
@@ -129,28 +130,32 @@ fn properties_block_standard(
     Ok((input, properties))
 }
 
-/// Detect if molecule contains query features
-/// TODO: Update with remaining properties
-fn detect_query_features(
+/// Detect if molecule contains non-standard/query features
+///
+/// Returns true if the molecule contains any features that are not supported
+/// in the standard MOL format, including:
+/// - Query atom symbols (atom lists, R-groups, etc.)
+/// - Query bond types (SingleOrDouble, Any, Zero, etc.)
+/// - Query-specific properties (ring bond count, topology, etc.)
+/// - Extended properties not in property_input_standard
+fn detect_nonstandard_features(
     atoms: &[Atom],
-    _bonds: &[(usize, usize, Bond)],
+    bonds: &[(usize, usize, Bond)],
     properties: &[PropertyEntries],
 ) -> bool {
-    // Check atoms for query symbols
+    // Check atoms for non-standard features
     for atom in atoms {
         match &atom.symbol {
-            AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {
-                // Standard atoms
-            }
             AtomSymbol::AtomList(_)
             | AtomSymbol::Query(_)
             | AtomSymbol::LonePair
             | AtomSymbol::RGroup(_) => {
-                return true; // Query atom found
+                return true;
             }
+            AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {}
         }
 
-        // Check for query-specific atom properties
+        // Check for non-standard atom properties
         if atom.attachment_point.is_some()
             || atom.attachment_order.is_some()
             || atom.ring_bond_count.is_some()
@@ -162,9 +167,26 @@ fn detect_query_features(
         }
     }
 
-    // Check properties for query-specific entries
+    // Check bonds for non-standard features
+    for (_from, _to, bond) in bonds {
+        match bond.bond_type {
+            BondType::SingleOrDouble
+            | BondType::SingleOrAromatic
+            | BondType::DoubleOrAromatic
+            | BondType::Any
+            | BondType::Zero => {
+                return true;
+            }
+            BondType::Single | BondType::Double | BondType::Triple | BondType::Aromatic => {}
+        }
+
+        // Check for non-standard bond properties
+        if bond.topology.is_some() || bond.reacting_center.is_some() {
+            return true;
+        }
+    }
+    // Check properties for non-standard entries
     for property in properties {
-        // TODO: Implement query property detection in PropertyEntries
         match property {
             PropertyEntries::AtomListEntry(_)
             | PropertyEntries::AttachmentPointEntries(_)
@@ -172,17 +194,23 @@ fn detect_query_features(
             | PropertyEntries::RingBondCountEntries(_)
             | PropertyEntries::SubstitutionCountEntries(_)
             | PropertyEntries::UnsaturatedAtomEntries(_)
-            | PropertyEntries::LinkAtomEntries(_) => {
-                return true; // Query property found
-            }
-            _ => {
-                // Standard properties
-            }
+            | PropertyEntries::LinkAtomEntries(_)
+            | PropertyEntries::RGroupLabelEntries(_)
+            | PropertyEntries::RGroupLogicEntry(_)
+            | PropertyEntries::SGroupConnectivityEntries(_)
+            | PropertyEntries::SGroupExpansionEntries(_)
+            | PropertyEntries::SGroupParentAtomEntry(_)
+            | PropertyEntries::SGroupCorrespondenceEntry(_)
+            | PropertyEntries::SGroupDisplayInfoEntry(_)
+            | PropertyEntries::SGroupConnectingBondEntry(_)
+            | PropertyEntries::SGroupDataDescriptionEntry(_)
+            | PropertyEntries::SGroupDataDisplayEntry(_)
+            | PropertyEntries::SGroupHierarchyEntries(_)
+            | PropertyEntries::SGroupComponentEntries(_)
+            | PropertyEntries::SGroupDataEntry(_) => return true,
+            _ => {}
         }
     }
-
-    // TODO: Check bonds for query features when implemented
-
     false
 }
 
@@ -193,24 +221,18 @@ fn build_molecule(
     bonds: Vec<(usize, usize, Bond)>,
     properties: Vec<PropertyEntries>,
 ) -> (Molecule, bool) {
-    // Detect query features
-    let is_query = detect_query_features(&atoms, &bonds, &properties);
-
-    // Create molecule
+    let is_query = detect_nonstandard_features(&atoms, &bonds, &properties);
     let mut molecule = Molecule::new();
     molecule.header = header;
 
-    // Add atoms to molecule
     for atom in atoms {
         molecule.add_atom(atom);
     }
 
-    // Add bonds to molecule
     for (idx1, idx2, bond) in bonds {
         molecule.add_bond(idx1, idx2, bond);
     }
 
-    // Create a new MoleculeProperties accumulator
     let mut acc = MoleculeProperties::new();
     for entry in properties {
         if let Err(e) = acc.add_entry(entry) {
@@ -218,7 +240,6 @@ fn build_molecule(
         }
     }
 
-    // Apply the accumulated properties to the molecule
     if let Err(e) = acc.apply(&mut molecule) {
         eprintln!("Warning: Failed to apply properties: {}", e);
     }
@@ -233,29 +254,23 @@ fn build_molecule_standard(
     bonds: Vec<(usize, usize, BondStandard)>,
     properties: Vec<PropertyEntries>,
 ) -> MoleculeStandard {
-    // Create molecule
     let mut molecule = MoleculeStandard::new();
     molecule.header = header;
 
-    // Add atoms to molecule
     for atom in atoms {
         molecule.add_atom(atom);
     }
 
-    // Add bonds to molecule
     for (idx1, idx2, bond) in bonds {
         molecule.add_bond(idx1, idx2, bond);
     }
 
-    // Create a new MoleculeProperties accumulator
     let mut acc = MoleculeProperties::new();
     for entry in properties {
         if let Err(e) = acc.add_entry(entry) {
             eprintln!("Warning: Failed to add property entry: {}", e);
         }
     }
-
-    // Apply the accumulated properties to the molecule
     if let Err(e) = acc.apply_standard(&mut molecule) {
         eprintln!("Warning: Failed to apply properties: {}", e);
     }
