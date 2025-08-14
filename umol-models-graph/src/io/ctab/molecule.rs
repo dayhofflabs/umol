@@ -72,21 +72,21 @@ pub struct MoleculeStandard {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedMol {
     molecule: Molecule,
-    is_query_molecule: bool,
+    is_nonstandard_molecule: bool,
 }
 
 impl ParsedMol {
     /// Create a new ParsedMol
-    pub fn new(molecule: Molecule, is_query_molecule: bool) -> Self {
+    pub fn new(molecule: Molecule, is_nonstandard_molecule: bool) -> Self {
         Self {
             molecule,
-            is_query_molecule,
+            is_nonstandard_molecule,
         }
     }
 
-    /// Check if the parsed molecule contains query features
-    pub fn has_query_features(&self) -> bool {
-        self.is_query_molecule
+    /// Check if the parsed molecule contains non-standard features
+    pub fn has_nonstandard_features(&self) -> bool {
+        self.is_nonstandard_molecule
     }
 
     /// Extract the molecule (works regardless of query features)
@@ -101,7 +101,7 @@ impl ParsedMol {
 
     /// Try to convert to a standard molecule (fails if query features present)
     pub fn try_into_standard(self) -> Result<MoleculeStandard> {
-        if self.is_query_molecule {
+        if self.is_nonstandard_molecule {
             Err(DataError::InvalidFeature(
                 "Query features present in molecule marked as standard".to_string(),
             )
@@ -114,8 +114,8 @@ impl ParsedMol {
     }
 
     /// Try to convert to a standard molecule, returning a reference to the error
-    pub fn as_standard(&self) -> std::result::Result<&MoleculeStandard, umol::Error> {
-        if self.is_query_molecule {
+    pub fn as_standard(&self) -> Result<&MoleculeStandard> {
+        if self.is_nonstandard_molecule {
             Err(DataError::InvalidFeature(
                 "Query features present in molecule marked as standard".to_string(),
             )
@@ -461,7 +461,7 @@ mod tests {
 
         let parsed_mol = result.unwrap();
         assert!(
-            !parsed_mol.has_query_features(),
+            !parsed_mol.has_nonstandard_features(),
             "{} should not have query features",
             desc
         );

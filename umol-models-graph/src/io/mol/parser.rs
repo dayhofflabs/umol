@@ -1,10 +1,10 @@
 //! MOL file parser
 
 use nom::bytes::complete::tag;
-use nom::character::complete::line_ending;
+use nom::character::complete::{line_ending, multispace0};
 use nom::combinator::opt;
 use nom::multi::{count, many0};
-use nom::sequence::terminated;
+use nom::sequence::{preceded, terminated};
 use nom::{error, IResult, Parser};
 
 use super::super::ctab::atom::{Atom, AtomStandard, AtomSymbol};
@@ -31,6 +31,7 @@ pub fn mol_block(input: &[u8]) -> IResult<&[u8], ParsedMol, error::Error<&[u8]>>
     let (remaining, bonds) = bond_block(bond_count).parse(remaining)?;
     let (remaining, legacy_properties) = legacy_atom_list_block(remaining)?;
     let (remaining, properties) = properties_block(remaining)?;
+    let (remaining, _) = footer(remaining)?;
     let properties = properties.into_iter().chain(legacy_properties).collect();
     let (molecule, is_query) = build_molecule(header, atoms, bonds, properties);
     Ok((remaining, ParsedMol::new(molecule, is_query)))
@@ -45,6 +46,7 @@ pub fn mol_block_standard(input: &[u8]) -> IResult<&[u8], MoleculeStandard, erro
     let (remaining, atoms) = atom_block_standard(atom_count).parse(remaining)?;
     let (remaining, bonds) = bond_block_standard(bond_count).parse(remaining)?;
     let (remaining, properties) = properties_block_standard(remaining)?;
+    let (remaining, _) = footer(remaining)?;
     let molecule = build_molecule_standard(header, atoms, bonds, properties);
     Ok((remaining, molecule))
 }
@@ -128,6 +130,61 @@ fn properties_block_standard(
         many0(terminated(property_input_standard(), line_ending)).parse(input)?;
     let (input, _) = opt(terminated(tag("M  END"), opt(line_ending))).parse(input)?;
     Ok((input, properties))
+}
+
+/// Parse optional footer content (whitespace and SDF record delimiter)
+fn footer(input: &[u8]) -> IResult<&[u8], (), error::Error<&[u8]>> {
+    let (input, _) = multispace0.parse(input)?;
+    let (input, _) = opt(preceded(tag("$$$$"), multispace0)).parse(input)?;
+    Ok((input, ()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_footer_empty() {
+        let result = footer(b"");
+        assert!(result.is_ok());
+        let (remaining, _) = result.unwrap();
+        assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn test_footer_whitespace() {
+        let result = footer(b"\n\n  \t\n");
+        assert!(result.is_ok());
+        let (remaining, _) = result.unwrap();
+        assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn test_footer_sdf_delimiter() {
+        let result = footer(b"\n$$$$\n");
+        assert!(result.is_ok());
+        let (remaining, _) = result.unwrap();
+        assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn test_footer_sdf_delimiter_with_whitespace() {
+        let result = footer(b"\n\n$$$$\n  \n");
+        assert!(result.is_ok());
+        let (remaining, _) = result.unwrap();
+        assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn test_mol_with_sdf_footer() {
+        let mol_content = b"test\nRDKit\ncomment\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n\n$$$$\n";
+        let result = mol_block(mol_content);
+        assert!(result.is_ok(), "MOL with SDF footer should parse successfully");
+        let (remaining, _) = result.unwrap();
+        assert!(remaining.is_empty(), "All content should be consumed including SDF footer");
+    }
+
+
 }
 
 /// Detect if molecule contains non-standard/query features

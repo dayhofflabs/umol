@@ -5,16 +5,16 @@ use std::io;
 use std::path::{Path, PathBuf};
 use umol_models_graph::io::ctab::molecule::{parse_mol_str, Molecule};
 
-/// Load a MOL test file from compliance test data
-/// filename can be relative to tests/compliance/data/mol/ (e.g., "basic/valid/seaborgium.mol")
+/// Load a MOL test file from test data
+/// filename can be relative to tests/data/mol/ (e.g., "basic/valid/seaborgium.mol")
 pub fn load_test_mol_file(filename: &str) -> Result<String, io::Error> {
-    let test_data_path = Path::new("tests/compliance/data/mol").join(filename);
+    let test_data_path = Path::new("tests/data/mol").join(filename);
     read_to_string(&test_data_path)
 }
 
 /// Discover MOL files in a specific category directory
 pub fn discover_mol_files(category: &str) -> Result<Vec<PathBuf>, io::Error> {
-    let dir = Path::new("tests/compliance/data/mol").join(category);
+    let dir = Path::new("tests/data/mol").join(category);
     if !dir.exists() {
         return Ok(Vec::new());
     }
