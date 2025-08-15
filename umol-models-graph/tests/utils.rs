@@ -1,9 +1,8 @@
-//! Utils for compliance testing
+//! Testing utils for MOL files
 
 use std::fs::{read_dir, read_to_string};
 use std::io;
 use std::path::{Path, PathBuf};
-use umol_models_graph::io::ctab::molecule::{parse_mol_str, Molecule};
 
 /// Load a MOL test file from test data
 /// filename can be relative to tests/data/mol/ (e.g., "basic/valid/seaborgium.mol")
@@ -27,13 +26,5 @@ pub fn discover_mol_files(category: &str) -> Result<Vec<PathBuf>, io::Error> {
             mol_files.push(path);
         }
     }
-
     Ok(mol_files)
-}
-
-/// Parse MOL file with error handling
-pub fn parse_mol_file(content: &str) -> Result<Molecule, String> {
-    parse_mol_str(content)
-        .map(|parsed| parsed.molecule().clone())
-        .map_err(|e| format!("Parse error: {e}"))
 }

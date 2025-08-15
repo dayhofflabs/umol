@@ -3,10 +3,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use nom::Parser;
 use umol_models_graph::io::ctab::parser::{
-    atom::{atom_input, atom_input_standard},
-    bond::{bond_input, bond_input_standard},
-    counts::counts_input,
-    properties::{legacy_atom_list_input, property_input, property_input_standard},
+    atom_input, atom_input_standard, bond_input, bond_input_standard, counts_input,
+    legacy_atom_list_input, property_input, property_input_standard,
 };
 
 fn parsing_benchmarks(c: &mut Criterion) {

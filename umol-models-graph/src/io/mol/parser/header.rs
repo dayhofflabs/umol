@@ -1,12 +1,30 @@
-//! Header parser for MOL files.
+//! Header parser and types for MOL files.
 
 use nom::character::complete::{line_ending, not_line_ending};
 use nom::combinator::map;
 use nom::error;
 use nom::sequence::terminated;
 use nom::Parser;
+use serde::{Deserialize, Serialize};
 
-use crate::io::ctab::molecule::Header;
+/// MOL file header information (3 lines)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Header {
+    pub name: String,         // Molecule title / name (line 1)
+    pub program_info: String, // Program info (line 2)
+    pub comment: String,      // Comment (line 3)
+}
+
+impl Header {
+    /// Create a new header
+    pub fn new(name: String, program_info: String, comment: String) -> Self {
+        Self {
+            name,
+            program_info,
+            comment,
+        }
+    }
+}
 
 /// Parse a single line from the MOL header
 pub(crate) fn header_input<'a>(

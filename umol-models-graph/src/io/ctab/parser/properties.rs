@@ -16,7 +16,7 @@ use super::utils::{
 };
 use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
-    sgroup_data_display_units,
+    sgroup_data_display_units, sgroup_multiplier,
 };
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
@@ -345,10 +345,7 @@ pub fn property_input_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         if input.len() < 3 {
-            return Err(Err::Error(error::Error::new(
-                input,
-                error::ErrorKind::Eof,
-            )));
+            return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
         }
 
         // Handle A and V lines (different format from M lines)
@@ -362,10 +359,7 @@ pub fn property_input_standard<'a>(
             _ => {
                 // Handle M lines
                 if input.len() < 6 {
-                    return Err(Err::Error(error::Error::new(
-                        input,
-                        error::ErrorKind::Eof,
-                    )));
+                    return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
                 }
                 let (rest, tag) = take(6u8)(input)?;
                 match tag {
@@ -406,10 +400,7 @@ pub fn property_input_standard<'a>(
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
-                    _ => Err(Err::Error(error::Error::new(
-                        input,
-                        error::ErrorKind::Tag,
-                    ))),
+                    _ => Err(Err::Error(error::Error::new(input, error::ErrorKind::Tag))),
                 }
             }
         }
@@ -421,10 +412,7 @@ pub fn property_input<'a>(
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         if input.len() < 3 {
-            return Err(Err::Error(error::Error::new(
-                input,
-                error::ErrorKind::Eof,
-            )));
+            return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
         }
 
         // Handle A and V lines (different format from M lines)
@@ -438,10 +426,7 @@ pub fn property_input<'a>(
             _ => {
                 // Handle M lines
                 if input.len() < 6 {
-                    return Err(Err::Error(error::Error::new(
-                        input,
-                        error::ErrorKind::Eof,
-                    )));
+                    return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
                 }
                 let (rest, tag) = take(6u8)(input)?;
                 match tag {
@@ -545,10 +530,7 @@ pub fn property_input<'a>(
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
                     b"M  END" => success(PropertyEntries::End).parse(rest),
-                    _ => Err(Err::Error(error::Error::new(
-                        input,
-                        error::ErrorKind::Tag,
-                    ))),
+                    _ => Err(Err::Error(error::Error::new(input, error::ErrorKind::Tag))),
                 }
             }
         }
@@ -800,12 +782,7 @@ fn atom_list_entry<'a>(
         let exclusion = match exclusion_byte {
             b"T" => true,
             b"F" | b" " => false,
-            _ => {
-                return Err(Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Tag,
-                )))
-            }
+            _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Tag))),
         };
 
         // Parse 4-char atom symbols
@@ -1166,7 +1143,6 @@ fn sgroup_parent_atom_entries<'a>(
 /// sss: SGroup index, m: subscript text
 /// For multiple groups, m... is the text representation of the multiple group multiplier.For superatoms,
 /// m... is the text of the superatom label.)
-// TODO: Fix parsing of "1" and "n", which should return Multiplier
 fn sgroup_subscript_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupSubscriptEntry, Error = error::Error<&'a [u8]>> {
     all_consuming(map(
@@ -1174,9 +1150,16 @@ fn sgroup_subscript_entry<'a>(
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
             preceded(
                 tag(" "),
-                map(not_line_ending, |s| {
-                    SGroupSubscriptData::Subscript(String::from_utf8_lossy(s).trim().to_string())
-                }),
+                alt((
+                    map(sgroup_multiplier(), |multiplier| {
+                        SGroupSubscriptData::Multiplier(multiplier)
+                    }),
+                    map(not_line_ending, |s| {
+                        SGroupSubscriptData::Subscript(
+                            String::from_utf8_lossy(s).trim().to_string(),
+                        )
+                    }),
+                )),
             ),
         ),
         |(sgroup_index, data)| SGroupSubscriptEntry { sgroup_index, data },
