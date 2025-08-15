@@ -18,6 +18,12 @@ pub enum BondType {
     Zero,             // zero-order bond, via ZBO property
 }
 
+impl BondType {
+    pub fn is_standard(&self) -> bool {
+        matches!(self, BondType::Single | BondType::Double | BondType::Triple | BondType::Aromatic)
+    }
+}
+
 /// Double bond stereochemistry specified in MOL V2000 files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondStereo {

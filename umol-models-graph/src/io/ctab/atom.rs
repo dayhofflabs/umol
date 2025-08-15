@@ -85,6 +85,12 @@ pub enum AtomSymbol {
     RGroup(RGroup),
 }
 
+impl AtomSymbol {
+    pub fn is_standard(&self) -> bool {
+        matches!(self, AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_))
+    }
+}
+
 /// Atom
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtomStandard {

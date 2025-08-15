@@ -2,14 +2,12 @@
 
 use nom::bytes::complete::tag;
 use nom::character::complete::multispace0;
-use nom::combinator::{map, opt, value};
+use nom::combinator::{all_consuming, complete, map, opt, value};
 use nom::sequence::terminated;
-use nom::{error, Err, Parser};
+use nom::{error, Parser};
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use serde::{Deserialize, Serialize};
 
-use crate::io::ctab::atom::AtomSymbol;
-use crate::io::ctab::bond::BondType;
 use crate::io::ctab::molecule::{Molecule, MoleculeStandard};
 use crate::io::ctab::parser::{ctab_block, ctab_block_standard};
 
@@ -18,7 +16,7 @@ use header::{header, Header};
 use umol::error::DataError;
 use umol::Result;
 
-/// Complete MOL file structure (Header + Molecule)
+/// Complete MOL file structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MolFile {
     pub header: Header,
@@ -45,56 +43,20 @@ fn mol_file<'a>() -> impl Parser<&'a [u8], Output = MolFile, Error = error::Erro
     )
 }
 
-/// Parse MOL block (general parser, handles all features)
-///
-/// This function parses just the CTAB portion (no header), starting from the counts line.
-/// Use `parse_mol_file()` for complete MOL files with headers.
-#[allow(dead_code)]
-fn mol_block<'a>() -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>>
-{
-    move |input: &'a [u8]| {
-        let (remaining, molecule) = ctab_block().parse(input)?;
-        let (remaining, _) = footer().parse(remaining)?;
-        Ok((remaining, molecule))
-    }
-}
-
-/// Parse MOL block (standard parser, optimized for performance, standard molecules only)
-///
-/// This function parses just the CTAB portion (no header), starting from the counts line.
-/// Use `parse_mol_file()` for complete MOL files with headers.
-fn mol_block_standard<'a>(
-) -> impl Parser<&'a [u8], Output = MoleculeStandard, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
-        let (remaining, molecule) = ctab_block_standard().parse(input)?;
-        let (remaining, _) = footer().parse(remaining)?;
-        Ok((remaining, molecule))
-    }
-}
-
-/// Check if molecule contains non-standard/query features
+/// Check if molecule contains non-standardquery features
 ///
 /// Returns true if the molecule contains any features that are not supported
 /// in the standard MOL format, including:
 /// - Query atom symbols (atom lists, R-groups, etc.)
 /// - Query bond types (SingleOrDouble, Any, Zero, etc.)
 /// - Query-specific properties (ring bond count, topology, etc.)
-pub fn has_query_features(molecule: &Molecule) -> bool {
+pub fn has_nonstandard_features(molecule: &Molecule) -> bool {
     // Check atoms for non-standard features
     for node_idx in molecule.graph.node_indices() {
         if let Some(atom) = molecule.graph.node_weight(node_idx) {
-            match &atom.symbol {
-                AtomSymbol::AtomList(_)
-                | AtomSymbol::Query(_)
-                | AtomSymbol::LonePair
-                | AtomSymbol::RGroup(_) => {
-                    return true;
-                }
-                AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {}
-            }
-
-            // Check for non-standard atom properties
-            if atom.attachment_point.is_some()
+            // Non-standard atom features
+            if !atom.symbol.is_standard()
+                || atom.attachment_point.is_some()
                 || atom.attachment_order.is_some()
                 || atom.ring_bond_count.is_some()
                 || atom.substitution_count.is_some()
@@ -106,35 +68,19 @@ pub fn has_query_features(molecule: &Molecule) -> bool {
         }
     }
 
-    // Check bonds for non-standard features
+    // Non-standard bond features
     for edge_ref in molecule.graph.edge_references() {
         if let Some(bond) = molecule.graph.edge_weight(edge_ref.id()) {
-            match bond.bond_type {
-                BondType::SingleOrDouble
-                | BondType::SingleOrAromatic
-                | BondType::DoubleOrAromatic
-                | BondType::Any
-                | BondType::Zero => {
-                    return true;
-                }
-                BondType::Single | BondType::Double | BondType::Triple | BondType::Aromatic => {}
-            }
-
-            // Check for non-default bond properties (actual query features)
-            if let Some(topology) = &bond.topology {
-                if !topology.is_default() {
-                    return true;
-                }
-            }
-            if let Some(reacting_center) = &bond.reacting_center {
-                if !reacting_center.is_default() {
-                    return true;
-                }
+            if !bond.bond_type.is_standard()
+                || bond.topology.map_or(false, |t| !t.is_default())
+                || bond.reacting_center.map_or(false, |r| !r.is_default())
+            {
+                return true;
             }
         }
     }
 
-    // Check for S-groups (non-standard feature)
+    // S-groups (non-standard feature)
     if !molecule.sgroups.is_empty() {
         return true;
     }
@@ -161,25 +107,7 @@ pub fn parse_mol_standard_str(input: &str) -> Result<MoleculeStandard> {
 ///
 /// This is the primary parsing function that handles both standard and query molecules.
 pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
-    match mol_file().parse(input) {
-        Ok((remaining, mol_file)) => {
-            // Check if there's unexpected remaining data
-            if !remaining.is_empty() && !remaining.iter().all(|&b| b.is_ascii_whitespace()) {
-                return Err(DataError::InvalidMolFormat(format!(
-                    "Unexpected data after MOL block: {} bytes remaining",
-                    remaining.len()
-                ))
-                .into());
-            }
-            Ok(mol_file.molecule)
-        }
-        Err(Err::Error(e)) | Err(Err::Failure(e)) => {
-            Err(DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())
-        }
-        Err(Err::Incomplete(_)) => {
-            Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
-        }
-    }
+    parse_mol_file(input).map(|mol_file| mol_file.molecule)
 }
 
 /// Parse MOL bytes into a MoleculeStandard (optimized, standard molecules only)
@@ -187,39 +115,18 @@ pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
 /// This is the high-performance parsing function for standard molecules.
 /// It will fail if the MOL file contains query features.
 pub fn parse_mol_standard(input: &[u8]) -> Result<MoleculeStandard> {
-    // Parse header first to skip it, then use the standard CTAB parser
-    match header().parse(input) {
-        Ok((remaining, _)) => {
-            // Parse the CTAB portion with the standard parser
-            match mol_block_standard().parse(remaining) {
-                Ok((remaining, molecule)) => {
-                    // Check if there's unexpected remaining data
-                    if !remaining.is_empty() && !remaining.iter().all(|&b| b.is_ascii_whitespace())
-                    {
-                        return Err(DataError::InvalidMolFormat(format!(
-                            "Unexpected data after MOL block: {} bytes remaining",
-                            remaining.len()
-                        ))
-                        .into());
-                    }
-                    Ok(molecule)
-                }
-                Err(Err::Error(e)) | Err(Err::Failure(e)) => Err(DataError::InvalidMolFormat(
-                    format!("Standard MOL parsing failed: {:?}", e),
-                )
-                .into()),
-                Err(Err::Incomplete(_)) => {
-                    Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
-                }
-            }
-        }
-        Err(Err::Error(e)) | Err(Err::Failure(e)) => {
-            Err(DataError::InvalidMolFormat(format!("Standard MOL parsing failed: {:?}", e)).into())
-        }
-        Err(Err::Incomplete(_)) => {
-            Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
-        }
-    }
+    all_consuming(terminated(
+        map(
+            complete(terminated((header(), ctab_block_standard()), footer())),
+            |(_, molecule)| molecule,
+        ),
+        multispace0,
+    ))
+    .parse(input)
+    .map(|(_, molecule)| molecule)
+    .map_err(|e| {
+        DataError::InvalidMolFormat(format!("Standard MOL parsing failed: {:?}", e)).into()
+    })
 }
 
 /// Parse MOL bytes into a MolFile (includes header information)
@@ -227,25 +134,12 @@ pub fn parse_mol_standard(input: &[u8]) -> Result<MoleculeStandard> {
 /// Use this when you need access to the MOL file header (name, program info, comment)
 /// in addition to the molecular structure.
 pub fn parse_mol_file(input: &[u8]) -> Result<MolFile> {
-    match mol_file().parse(input) {
-        Ok((remaining, mol_file)) => {
-            // Check if there's unexpected remaining data
-            if !remaining.is_empty() && !remaining.iter().all(|&b| b.is_ascii_whitespace()) {
-                return Err(DataError::InvalidMolFormat(format!(
-                    "Unexpected data after MOL block: {} bytes remaining",
-                    remaining.len()
-                ))
-                .into());
-            }
-            Ok(mol_file)
-        }
-        Err(Err::Error(e)) | Err(Err::Failure(e)) => {
-            Err(DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into())
-        }
-        Err(Err::Incomplete(_)) => {
-            Err(DataError::InvalidMolFormat("Incomplete MOL data".to_string()).into())
-        }
-    }
+    all_consuming(complete(terminated(mol_file(), multispace0)))
+        .parse(input)
+        .map(|(_, mol_file)| mol_file)
+        .map_err(|e| {
+            DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
+        })
 }
 
 #[cfg(test)]
@@ -311,12 +205,18 @@ mod tests {
         // Test standard molecule
         let standard_mol = b"Methane\nRDKit          3D\nGenerated by RDKit\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0\nM  END\n";
         let molecule = parse_mol(standard_mol).unwrap();
-        assert!(!has_query_features(&molecule), "Standard molecule should not have query features");
-        
+        assert!(
+            !has_nonstandard_features(&molecule),
+            "Standard molecule should not have query features"
+        );
+
         // Test simple ethane molecule
         let ethane_mol = b"Ethane\nRDKit\nTest molecule\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n";
         let molecule2 = parse_mol(ethane_mol).unwrap();
-        assert!(!has_query_features(&molecule2), "Simple ethane should not have query features");
+        assert!(
+            !has_nonstandard_features(&molecule2),
+            "Simple ethane should not have query features"
+        );
     }
 
     #[rstest]
@@ -333,7 +233,7 @@ mod tests {
 
         let molecule = result.unwrap();
         assert!(
-            !has_query_features(&molecule),
+            !has_nonstandard_features(&molecule),
             "{} should not have query features",
             desc
         );
