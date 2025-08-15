@@ -885,11 +885,11 @@ fn test_atom_input_standard34_whitespace_padded(#[case] input: &[u8], #[case] de
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4", "len 51 with query fields", AtomSymbol::Element(Element::C),
        Some(10), 1, Some(4), Some(AtomStereoParity::Odd), Some(1), Some(AtomStereoCare::Care), None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4 ", "len 52 padded", AtomSymbol::Element(Element::C),
-       Some(10), 1, Some(4), None, None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
+       Some(10), 1, Some(4), Some(AtomStereoParity::Either), None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case(b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0           1  2  1", "len 69 with reaction fields", AtomSymbol::Element(Element::C),
-       None, 0, None, None, None, None, Some(1), Some(AtomInversionRetention::Retained), Some(AtomExactChange::Match), 0.0000, 0.0000, 0.0000)]
+       None, 0, None, Some(AtomStereoParity::Either), None, None, Some(1), Some(AtomInversionRetention::Retained), Some(AtomExactChange::Match), 0.0000, 0.0000, 0.0000)]
 #[case(b"    1.0000    2.0000    3.0000 L   0  0  0  0  0  4", "atom list", AtomSymbol::AtomList(AtomList { elements: vec![], exclusion: false }),
-       None, 0, Some(4), None, None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
+       None, 0, Some(4), Some(AtomStereoParity::Either), None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
 fn test_atom_input(
     #[case] input: &[u8],
     #[case] desc: &str,

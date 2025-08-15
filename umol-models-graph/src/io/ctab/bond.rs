@@ -26,6 +26,18 @@ pub enum BondStereo {
     Either, // MOL code 3
 }
 
+impl Default for BondStereo {
+    fn default() -> Self {
+        BondStereo::Either
+    }
+}
+
+impl BondStereo {
+    pub fn is_default(&self) -> bool {
+        matches!(self, BondStereo::Either)
+    }
+}
+
 /// Single bond wedging specified in MOL V2000 files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondDir {
@@ -34,18 +46,42 @@ pub enum BondDir {
     Either, // MOL code 4 (Either)
 }
 
+impl Default for BondDir {
+    fn default() -> Self {
+        BondDir::Either
+    }
+}
+
+impl BondDir {
+    pub fn is_default(&self) -> bool {
+        matches!(self, BondDir::Either)
+    }
+}
+
 /// Bond topology (chain, ring, either), if specified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondTopology {
-    Chain,  // MOL code 0
+    Chain,  // MOL code 2
     Ring,   // MOL code 1
-    Either, // MOL code 2
+    Either, // MOL code 0 (default/unspecified)
+}
+
+impl Default for BondTopology {
+    fn default() -> Self {
+        BondTopology::Either
+    }
+}
+
+impl BondTopology {
+    pub fn is_default(&self) -> bool {
+        matches!(self, BondTopology::Either)
+    }
 }
 
 bitflags! {
     /// Bond reacting center status
     ///
-    /// - `0`: Unmarked
+    /// - `0`: Unmarked (default/unspecified)
     /// - `1`: A reacting center
     /// - `-1`: Not a reacting center (exclusive, cannot be combined)
     /// - `2`: No change in the bond (exclusive, cannot be combined)
@@ -57,7 +93,7 @@ bitflags! {
     /// `NOT_CENTER` and `NO_CHANGE` are exclusive.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
     pub struct BondReactingCenter: i16 {
-        const UNMARKED         = 0b00000000; // MOL code 0
+        const UNMARKED         = 0b00000000; // MOL code 0 (default/unspecified)
         const CENTER           = 0b00000001; // MOL code 1
         const NOT_CENTER       = 0b00000010; // MOL code -1 (exclusive, cannot be combined)
         const NO_CHANGE        = 0b00000100; // MOL code 2 (exclusive, cannot be combined)
@@ -71,6 +107,18 @@ bitflags! {
     }
 }
 
+impl Default for BondReactingCenter {
+    fn default() -> Self {
+        BondReactingCenter::UNMARKED
+    }
+}
+
+impl BondReactingCenter {
+    pub fn is_default(&self) -> bool {
+        *self == BondReactingCenter::UNMARKED
+    }
+}
+
 /// Bond
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BondStandard {
@@ -81,7 +129,6 @@ pub struct BondStandard {
 }
 
 impl BondStandard {
-    /// Create new BondStandard with default properties for given BondType
     pub fn new(bond_type: BondType) -> Self {
         Self {
             bond_type,
@@ -104,7 +151,6 @@ pub struct Bond {
 }
 
 impl Bond {
-    /// Create new Bond with default properties for given BondType
     pub fn new(bond_type: BondType) -> Self {
         Self {
             bond_type,

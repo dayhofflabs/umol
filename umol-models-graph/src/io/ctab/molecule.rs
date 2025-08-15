@@ -9,8 +9,6 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::Undirected;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use umol::error::DataError;
-use umol::Result;
 
 /// Type aliases for the node and edge indices
 pub type AtomIndex = NodeIndex<usize>;
@@ -32,68 +30,7 @@ pub struct MoleculeStandard {
     pub properties: HashMap<String, String>,
 }
 
-/// Result of parsing a MOL file with information about query features
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParsedMol {
-    molecule: Molecule,
-    is_nonstandard_molecule: bool,
-}
 
-impl ParsedMol {
-    /// Create a new ParsedMol
-    pub fn new(molecule: Molecule, is_nonstandard_molecule: bool) -> Self {
-        Self {
-            molecule,
-            is_nonstandard_molecule,
-        }
-    }
-
-    /// Check if the parsed molecule contains non-standard features
-    pub fn has_nonstandard_features(&self) -> bool {
-        self.is_nonstandard_molecule
-    }
-
-    /// Extract the molecule (works regardless of query features)
-    pub fn into_molecule(self) -> Molecule {
-        self.molecule
-    }
-
-    /// Get a reference to the molecule
-    pub fn molecule(&self) -> &Molecule {
-        &self.molecule
-    }
-
-    /// Try to convert to a standard molecule (fails if query features present)
-    pub fn try_into_standard(self) -> Result<MoleculeStandard> {
-        if self.is_nonstandard_molecule {
-            Err(DataError::InvalidFeature(
-                "Query features present in molecule marked as standard".to_string(),
-            )
-            .into())
-        } else {
-            // TODO: Implement conversion from Molecule to MoleculeStandard
-            // For now, this is a placeholder
-            Err(DataError::InvalidMolFormat("Conversion not yet implemented".to_string()).into())
-        }
-    }
-
-    /// Try to convert to a standard molecule, returning a reference to the error
-    pub fn as_standard(&self) -> Result<&MoleculeStandard> {
-        if self.is_nonstandard_molecule {
-            Err(DataError::InvalidFeature(
-                "Query features present in molecule marked as standard".to_string(),
-            )
-            .into())
-        } else {
-            // TODO: This would need a different approach since we can't return a reference
-            // to a converted value that doesn't exist yet
-            Err(
-                DataError::InvalidMolFormat("Reference conversion not yet implemented".to_string())
-                    .into(),
-            )
-        }
-    }
-}
 
 impl Molecule {
     /// Create empty molecule

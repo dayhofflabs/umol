@@ -152,7 +152,7 @@ fn atom_input_standard51(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
     });
     let stereo_parity = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=3),
-        convert_atom_stereo_parity_code,
+        |code| convert_atom_stereo_parity_code(code, false),
     );
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
@@ -209,7 +209,7 @@ fn atom_input_standard42(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
     });
     let stereo_parity = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=3),
-        convert_atom_stereo_parity_code,
+        |code| convert_atom_stereo_parity_code(code, false),
     );
 
     let (input, (x, y, z, symbol, mass_diff, charge_radical, stereo_parity)) = (
@@ -427,7 +427,7 @@ fn atom_input_inner(input: &[u8]) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
 
     let (i, stereo_parity) = cond(
         i.len() >= 3,
-        map_res(fixed_width_int(3), convert_atom_stereo_parity_code),
+        map_res(fixed_width_int(3), |code| convert_atom_stereo_parity_code(code, true)),
     )
     .parse(i)?;
 

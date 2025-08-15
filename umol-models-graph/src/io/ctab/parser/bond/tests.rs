@@ -291,12 +291,12 @@ fn test_bond_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
 #[case(b"  1  2  2  3", "len 12 double either", 0, 1, BondType::Double, Some(BondStereo::Either), None, None, None)]
 #[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondType::Single, None, Some(BondDir::Dash), None, None)]
 #[case( b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
-#[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondType::Single, None, None,
-       Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
-#[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondType::Single, None, None,
-       Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
-#[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None, None,
-       Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
+#[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondType::Single, None,
+       Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
+#[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondType::Single, None,
+       Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
+#[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None,
+       Some(BondDir::Either), Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] desc: &str,

@@ -18,10 +18,28 @@ pub enum AtomStereoParity {
     Either, // sss = 3, RDKit `CHI_UNSPECIFIED`
 }
 
+impl Default for AtomStereoParity {
+    fn default() -> Self {
+        AtomStereoParity::Either
+    }
+}
+
+impl AtomStereoParity {
+    pub fn is_default(&self) -> bool {
+        matches!(self, AtomStereoParity::Either)
+    }
+}
+
 /// Include stereochemistry in query atoms
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomStereoCare {
     Care, // hhh = 1, RDKit `molStereoCare = 1`
+}
+
+impl AtomStereoCare {
+    pub fn is_default(&self) -> bool {
+        false
+    }
 }
 
 /// Inversion/retention flag
@@ -31,10 +49,22 @@ pub enum AtomInversionRetention {
     Retained, // hhh = 2, RDKit `molInversionFlag = 8`
 }
 
+impl AtomInversionRetention {
+    pub fn is_default(&self) -> bool {
+        false
+    }
+}
+
 /// Atom exact change flag
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomExactChange {
     Match, // hhh = 1, RDKit `molExactChangeFlag = 4`
+}
+
+impl AtomExactChange {
+    pub fn is_default(&self) -> bool {
+        false
+    }
 }
 
 /// Atom list (for query molecules in MOL files)
@@ -94,6 +124,12 @@ pub enum AtomRadical {
     Singlet, // RAD vvv = 1
     Doublet, // RAD vvv = 2
     Triplet, // RAD vvv = 3
+}
+
+impl AtomRadical {
+    pub fn is_default(&self) -> bool {
+        false
+    }
 }
 
 /// Attachment point type for APO property

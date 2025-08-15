@@ -72,8 +72,13 @@ pub(crate) fn convert_atom_isotope_mass_number(
 
 /// Convert atom stereo parity code (not stereo, odd, even, either or unmarked).
 // 'sss' field: 0 = not stereo, 1 = odd, 2 = even, 3 = either or unmarked
-pub(crate) fn convert_atom_stereo_parity_code(code: u8) -> Result<Option<AtomStereoParity>> {
+/// nonstandard: if true, include default values (code 0), if false, return None for defaults
+pub(crate) fn convert_atom_stereo_parity_code(
+    code: u8,
+    nonstandard: bool,
+) -> Result<Option<AtomStereoParity>> {
     match code {
+        0 if nonstandard => Ok(Some(AtomStereoParity::default())),
         0 => Ok(None),
         1 => Ok(Some(AtomStereoParity::Odd)),
         2 => Ok(Some(AtomStereoParity::Even)),
@@ -94,6 +99,7 @@ pub(crate) fn convert_atom_hydrogen_count_code(code: u8) -> Result<Option<u8>> {
 
 /// Convert atom stereo care box code.
 /// 'bbb' field: 0 = ignore stereo, 1 = stereo must match
+/// Note: AtomStereoCare has no default value - 0 always means None
 pub(crate) fn convert_atom_stereo_care_code(code: u8) -> Result<Option<AtomStereoCare>> {
     match code {
         0 => Ok(None),
@@ -116,6 +122,7 @@ pub(crate) fn convert_atom_valence_code(code: u8) -> Result<Option<u8>> {
 
 /// Convert atom inversion flag code.
 /// 'nnn' field: 0 = not applicable, 1 = inverted, 2 = retained
+/// Note: AtomInversionRetention has no default value - 0 always means None
 pub(crate) fn convert_atom_inversion_flag_code(code: u8) -> Result<Option<AtomInversionRetention>> {
     match code {
         0 => Ok(None),
@@ -127,6 +134,7 @@ pub(crate) fn convert_atom_inversion_flag_code(code: u8) -> Result<Option<AtomIn
 
 /// Convert atom exact change flag code.
 /// 'eee' field: 0 = change allowed, 1 = exact change required
+/// Note: AtomExactChange has no default value - 0 always means None
 pub(crate) fn convert_atom_exact_change_flag_code(code: u8) -> Result<Option<AtomExactChange>> {
     match code {
         0 => Ok(None),
@@ -162,7 +170,10 @@ pub(crate) fn convert_bond_type_code(code: u8, zero_ok: bool) -> Result<BondType
         6 => Ok(BondType::SingleOrAromatic),
         7 => Ok(BondType::DoubleOrAromatic),
         8 => Ok(BondType::Any),
-        0 => Err(ParseError::Invalid("Zero-order bonds not allowed in standard bond block".to_string()).into()),
+        0 => Err(ParseError::Invalid(
+            "Zero-order bonds not allowed in standard bond block".to_string(),
+        )
+        .into()),
         _ => Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into()),
     }
 }
@@ -171,10 +182,13 @@ pub(crate) fn convert_bond_type_code(code: u8, zero_ok: bool) -> Result<BondType
 /// 'sss' field - can mean stereo for double bonds or direction for single bonds
 /// Stereo: (0=Not stereo, 1=Up, 3=Either, 4=Unknown, 6=Down)
 /// Direction: (1=Up, 6=Down)
+/// nonstandard: if true, include default values (code 0), if false, return None for defaults
 pub(crate) fn convert_bond_stereo_dir_code(
     code: u8,
+    nonstandard: bool,
 ) -> Result<(Option<BondStereo>, Option<BondDir>)> {
     match code {
+        0 if nonstandard => Ok((Some(BondStereo::default()), Some(BondDir::default()))),
         0 => Ok((None, None)),
         1 => Ok((Some(BondStereo::Cis), Some(BondDir::Wedge))),
         3 | 4 => Ok((Some(BondStereo::Either), Some(BondDir::Either))),
@@ -187,9 +201,14 @@ pub(crate) fn convert_bond_stereo_dir_code(
 
 /// Convert bond topology code
 /// 'rrr' field - bond topology (0=Either, 1=Ring, 2=Chain)
-pub(crate) fn convert_bond_topology_code(code: u8) -> Result<Option<BondTopology>> {
+/// nonstandard: if true, include default values (code 0), if false, return None for defaults
+pub(crate) fn convert_bond_topology_code(
+    code: u8,
+    nonstandard: bool,
+) -> Result<Option<BondTopology>> {
     match code {
-        0 => Ok(Some(BondTopology::Either)),
+        0 if nonstandard => Ok(Some(BondTopology::Either)),
+        0 => Ok(None),
         1 => Ok(Some(BondTopology::Ring)),
         2 => Ok(Some(BondTopology::Chain)),
         _ => Err(ParseError::Invalid(format!("Invalid bond topology code '{}'", code)).into()),
@@ -199,9 +218,17 @@ pub(crate) fn convert_bond_topology_code(code: u8) -> Result<Option<BondTopology
 /// Convert bond reacting center code
 /// 'ccc' field - bond reacting center (0=Not reacting, 1=Reacting, -1=Not a center,
 /// 2=No change, 4=Bond made/broken, 8=Bond order changes)
-pub(crate) fn convert_bond_reacting_center_code(code: i8) -> Result<Option<BondReactingCenter>> {
+/// nonstandard: if true, include default values (code 0), if false, return None for defaults
+pub(crate) fn convert_bond_reacting_center_code(
+    code: i8,
+    nonstandard: bool,
+) -> Result<Option<BondReactingCenter>> {
     if code == 0 {
-        return Ok(Some(BondReactingCenter::UNMARKED));
+        if nonstandard {
+            return Ok(Some(BondReactingCenter::UNMARKED));
+        } else {
+            return Ok(None);
+        }
     }
     if code == -1 {
         return Ok(Some(BondReactingCenter::NOT_CENTER));
@@ -414,22 +441,30 @@ mod tests {
     }
 
     #[rstest]
-    #[case(0, None)]
-    #[case(1, Some(AtomStereoParity::Odd))]
-    #[case(2, Some(AtomStereoParity::Even))]
-    #[case(3, Some(AtomStereoParity::Either))]
+    #[case(0, Some(AtomStereoParity::Either), None)]
+    #[case(1, Some(AtomStereoParity::Odd), Some(AtomStereoParity::Odd))]
+    #[case(2, Some(AtomStereoParity::Even), Some(AtomStereoParity::Even))]
+    #[case(3, Some(AtomStereoParity::Either), Some(AtomStereoParity::Either))]
     fn test_convert_atom_stereo_parity_code(
         #[case] code: u8,
-        #[case] expected: Option<AtomStereoParity>,
+        #[case] expected_nonstandard: Option<AtomStereoParity>,
+        #[case] expected_standard: Option<AtomStereoParity>,
     ) {
-        assert_eq!(convert_atom_stereo_parity_code(code).unwrap(), expected);
+        assert_eq!(
+            convert_atom_stereo_parity_code(code, true).unwrap(),
+            expected_nonstandard
+        );
+        assert_eq!(
+            convert_atom_stereo_parity_code(code, false).unwrap(),
+            expected_standard
+        );
     }
 
     #[rstest]
     #[case(4, "too high")]
     fn test_convert_atom_stereo_parity_code_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
-            convert_atom_stereo_parity_code(code).is_err(),
+            convert_atom_stereo_parity_code(code, true).is_err(),
             "{} should have failed",
             desc
         );
@@ -553,7 +588,11 @@ mod tests {
     #[case(0u8, "zero-order bond")]
     #[case(9u8, "invalid bond type")]
     fn test_convert_bond_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
-        assert!(convert_bond_type_code(code, false).is_err(), "{} should have failed", desc);
+        assert!(
+            convert_bond_type_code(code, false).is_err(),
+            "{} should have failed",
+            desc
+        );
     }
 
     #[rstest]
@@ -566,9 +605,17 @@ mod tests {
     #[rstest]
     #[case(9u8, "invalid bond type")]
     fn test_convert_bond_type_code_zero_ok_invalid(#[case] code: u8, #[case] desc: &str) {
-        assert!(convert_bond_type_code(code, true).is_err(), "{} should have failed", desc);
+        assert!(
+            convert_bond_type_code(code, true).is_err(),
+            "{} should have failed",
+            desc
+        );
+        assert!(
+            convert_bond_type_code(code, false).is_err(),
+            "{} should have failed",
+            desc
+        );
     }
-
 
     #[rstest]
     #[case(1, BondType::Single)]
@@ -588,16 +635,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case(0, (None, None))]
-    #[case(1, (Some(BondStereo::Cis), Some(BondDir::Wedge)))]
-    #[case(3, (Some(BondStereo::Either), Some(BondDir::Either)))]
-    #[case(4, (Some(BondStereo::Either), Some(BondDir::Either)))]
-    #[case(6, (Some(BondStereo::Trans), Some(BondDir::Dash)))]
+    #[case(0, (Some(BondStereo::Either), Some(BondDir::Either)), (None, None))] 
+    #[case(1, (Some(BondStereo::Cis), Some(BondDir::Wedge)), (Some(BondStereo::Cis), Some(BondDir::Wedge)))]
+    #[case(3, (Some(BondStereo::Either), Some(BondDir::Either)), (Some(BondStereo::Either), Some(BondDir::Either)))]
+    #[case(4, (Some(BondStereo::Either), Some(BondDir::Either)), (Some(BondStereo::Either), Some(BondDir::Either)))]
+    #[case(6, (Some(BondStereo::Trans), Some(BondDir::Dash)), (Some(BondStereo::Trans), Some(BondDir::Dash)))]
     fn test_convert_bond_stereo_dir_code(
         #[case] code: u8,
-        #[case] expected: (Option<BondStereo>, Option<BondDir>),
+        #[case] expected_nonstandard: (Option<BondStereo>, Option<BondDir>),
+        #[case] expected_standard: (Option<BondStereo>, Option<BondDir>),
     ) {
-        assert_eq!(convert_bond_stereo_dir_code(code).unwrap(), expected);
+        assert_eq!(
+            convert_bond_stereo_dir_code(code, true).unwrap(),
+            expected_nonstandard
+        );
+        assert_eq!(
+            convert_bond_stereo_dir_code(code, false).unwrap(),
+            expected_standard
+        );
     }
 
     #[rstest]
@@ -605,21 +660,32 @@ mod tests {
     #[case(5)]
     #[case(7)]
     fn test_convert_bond_stereo_dir_code_invalid(#[case] code: u8) {
-        assert!(convert_bond_stereo_dir_code(code).is_err());
+        assert!(convert_bond_stereo_dir_code(code, true).is_err());
     }
 
     #[rstest]
-    #[case(0, BondTopology::Either)]
-    #[case(1, BondTopology::Ring)]
-    #[case(2, BondTopology::Chain)]
-    fn test_convert_bond_topology_code(#[case] code: u8, #[case] topology: BondTopology) {
-        assert_eq!(convert_bond_topology_code(code).unwrap(), Some(topology));
+    #[case(0, Some(BondTopology::Either), None)]
+    #[case(1, Some(BondTopology::Ring), Some(BondTopology::Ring))]
+    #[case(2, Some(BondTopology::Chain), Some(BondTopology::Chain))]
+    fn test_convert_bond_topology_code(
+        #[case] code: u8,
+        #[case] expected_nonstandard: Option<BondTopology>,
+        #[case] expected_standard: Option<BondTopology>,
+    ) {
+        assert_eq!(
+            convert_bond_topology_code(code, true).unwrap(),
+            expected_nonstandard
+        );
+        assert_eq!(
+            convert_bond_topology_code(code, false).unwrap(),
+            expected_standard
+        );
     }
 
     #[rstest]
     #[case(3)]
     fn test_convert_bond_topology_code_invalid(#[case] code: u8) {
-        assert!(convert_bond_topology_code(code).is_err());
+        assert!(convert_bond_topology_code(code, true).is_err());
     }
 
     #[rstest]
@@ -641,7 +707,15 @@ mod tests {
         #[case] code: i8,
         #[case] expected: Option<BondReactingCenter>,
     ) {
-        assert_eq!(convert_bond_reacting_center_code(code).unwrap(), expected);
+        assert_eq!(
+            convert_bond_reacting_center_code(code, true).unwrap(),
+            expected
+        );
+        let expected_standard = if code == 0 { None } else { expected };
+        assert_eq!(
+            convert_bond_reacting_center_code(code, false).unwrap(),
+            expected_standard
+        );
     }
 
     #[rstest]
@@ -649,7 +723,7 @@ mod tests {
     #[case(16)]
     #[case(-2)]
     fn test_convert_bond_reacting_center_code_invalid(#[case] code: i8) {
-        assert!(convert_bond_reacting_center_code(code).is_err());
+        assert!(convert_bond_reacting_center_code(code, true).is_err());
     }
 
     #[rstest]
@@ -674,7 +748,10 @@ mod tests {
     #[case(2, Some(RingBondCount::R2))]
     #[case(3, Some(RingBondCount::R3))]
     #[case(4, Some(RingBondCount::R4Plus))]
-    fn test_convert_ring_bond_count_code(#[case] code: i8, #[case] expected: Option<RingBondCount>) {
+    fn test_convert_ring_bond_count_code(
+        #[case] code: i8,
+        #[case] expected: Option<RingBondCount>,
+    ) {
         assert_eq!(convert_ring_bond_count_code(code).unwrap(), expected);
     }
 
@@ -690,7 +767,10 @@ mod tests {
     #[case(-1, Some(SubstitutionCount::NoSubstitution))]
     #[case(1, Some(SubstitutionCount::S1))]
     #[case(6, Some(SubstitutionCount::S6Plus))]
-    fn test_convert_substitution_count_code(#[case] code: i8, #[case] expected: Option<SubstitutionCount>) {
+    fn test_convert_substitution_count_code(
+        #[case] code: i8,
+        #[case] expected: Option<SubstitutionCount>,
+    ) {
         assert_eq!(convert_substitution_count_code(code).unwrap(), expected);
     }
 
@@ -703,7 +783,10 @@ mod tests {
     #[rstest]
     #[case(0, None)]
     #[case(1, Some(UnsaturatedAtom))]
-    fn test_convert_unsaturated_atom_code(#[case] code: u8, #[case] expected: Option<UnsaturatedAtom>) {
+    fn test_convert_unsaturated_atom_code(
+        #[case] code: u8,
+        #[case] expected: Option<UnsaturatedAtom>,
+    ) {
         assert_eq!(convert_unsaturated_atom_code(code).unwrap(), expected);
     }
 

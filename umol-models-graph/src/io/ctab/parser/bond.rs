@@ -25,7 +25,7 @@ fn bond_input_standard21(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStan
                     convert_bond_type_code_standard(code)
                 }),
                 map_res(fixed_width_int::<u8>(3), |code| {
-                    convert_bond_stereo_dir_code(code)
+                    convert_bond_stereo_dir_code(code, false)
                 }),
             ),
             |(first_atom, second_atom, bond_type, (stereo, dir))| {
@@ -54,7 +54,7 @@ fn bond_input_standard12(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStan
                 convert_bond_type_code_standard(code)
             }),
             map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_stereo_dir_code(code)
+                convert_bond_stereo_dir_code(code, false)
             }),
         ),
         |(first_atom, second_atom, bond_type, (stereo, dir))| {
@@ -136,7 +136,7 @@ fn bond_input_inner<'a>(
         let (i, stereo_dir) = cond(
             i.len() >= 3,
             map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_stereo_dir_code(code)
+                convert_bond_stereo_dir_code(code, true)
             }),
         )
         .parse(i)?;
@@ -146,7 +146,7 @@ fn bond_input_inner<'a>(
         let (i, topology) = cond(
             i.len() >= 3,
             map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_topology_code(code)
+                convert_bond_topology_code(code, true)
             }),
         )
         .parse(i)?;
@@ -154,7 +154,7 @@ fn bond_input_inner<'a>(
         let (i, reacting_center) = cond(
             i.len() >= 3,
             map_res(fixed_width_int::<i8>(3), |code| {
-                convert_bond_reacting_center_code(code)
+                convert_bond_reacting_center_code(code, true)
             }),
         )
         .parse(i)?;
