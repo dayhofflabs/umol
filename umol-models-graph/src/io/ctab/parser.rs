@@ -223,19 +223,31 @@ fn properties_block<'a>(
                 break;
             }
 
-            match property_input().parse(line) {
-                Ok((_, property)) => {
-                    properties.push(property);
-                }
-                Err(e) => {
-                    eprintln!("Encountered an error {:?}, stopping", e);
+            // Handle atom alias (two-line property)
+            let (input_line, combined_lines): (&[u8], Vec<u8>);
+            if line.starts_with(b"A  ") {
+                if let Some(next_line) = lines_iter.next() {
+                    combined_lines = [line, b"\n", next_line].concat();
+                    input_line = &combined_lines;
+                } else {
                     let remaining = remaining_input(input, line.as_ptr());
                     return Ok((remaining, properties));
                 }
+            } else {
+                input_line = line;
             }
+
+            match property_input().parse(input_line) {
+                Ok((_, property)) => {
+                    properties.push(property);
+                }
+                Err(_) => {
+                    let remaining = remaining_input(input, line.as_ptr());
+                    return Ok((remaining, properties));
+                }
+            };
         }
 
-        eprintln!("Fell through the loop, stopping");
         let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
         Ok((remaining, properties))
     }
@@ -253,7 +265,21 @@ fn properties_block_standard<'a>(
                 break;
             }
 
-            match property_input_standard().parse(line) {
+            // Handle atom alias (two-line property)
+            let (input_line, combined_lines): (&[u8], Vec<u8>);
+            if line.starts_with(b"A  ") {
+                if let Some(next_line) = lines_iter.next() {
+                    combined_lines = [line, b"\n", next_line].concat();
+                    input_line = &combined_lines;
+                } else {
+                    let remaining = remaining_input(input, line.as_ptr());
+                    return Ok((remaining, properties));
+                }
+            } else {
+                input_line = line;
+            }
+
+            match property_input_standard().parse(input_line) {
                 Ok((_, property)) => {
                     properties.push(property);
                 }
@@ -261,7 +287,7 @@ fn properties_block_standard<'a>(
                     let remaining = remaining_input(input, line.as_ptr());
                     return Ok((remaining, properties));
                 }
-            }
+            };
         }
 
         let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
