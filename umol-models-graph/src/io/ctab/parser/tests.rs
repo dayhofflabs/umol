@@ -10,7 +10,6 @@ fn test_properties_block() {
     let input = b"M  CHG  1   2  -1\nM  END\n";
     let result = properties_block().parse(input);
     assert!(result.is_ok(), "Should parse properties block");
-
     let (remaining, properties) = result.unwrap();
     assert_eq!(properties.len(), 1, "Should have 1 property");
     assert!(remaining.is_empty(), "All input should be consumed");

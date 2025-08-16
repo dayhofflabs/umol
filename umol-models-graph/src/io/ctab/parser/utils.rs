@@ -1,9 +1,7 @@
 //! Parsing utilities for CTab files.
 
-use std::{
-    fmt::Debug,
-    ops::{Range, RangeInclusive},
-};
+use std::fmt::Debug;
+use std::ops::{Range, RangeInclusive};
 
 use umol_data::Element;
 
@@ -14,7 +12,7 @@ use nom::character::complete::{
     alpha1, digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
     u8 as nom_u8, usize as nom_usize,
 };
-use nom::combinator::{complete, map, map_opt, map_res, opt, recognize, verify};
+use nom::combinator::{complete, map, map_opt, map_res, opt, recognize, rest, verify};
 use nom::multi::{fold_many_m_n, separated_list1};
 use nom::sequence::delimited;
 use nom::{error, Err, Input, Parser};
@@ -111,8 +109,9 @@ where
     P: Parser<&'a [u8], Output = O, Error = error::Error<&'a [u8]>>,
 {
     move |input: &'a [u8]| {
-        let n_to_take = width.min(input.len());
-        let (remaining, field) = take(n_to_take).parse(input)?;
+        println!("fixed_width_partial, input: '{}'", String::from_utf8_lossy(input));
+        let min_width = width.min(input.len());
+        let (remaining, field) = take(min_width).parse(input)?;
 
         // If the slice is shorter than the expected width, it's only valid if it's all whitespace
         // or if `partial_ok` is true.
@@ -125,8 +124,8 @@ where
         }
 
         match inner.parse(field) {
-            Ok((unconsumed, val)) => {
-                if unconsumed.is_empty() {
+            Ok((remaining_inner, val)) => {
+                if remaining_inner.is_empty() {
                     Ok((remaining, Some(val)))
                 } else {
                     Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)))
@@ -232,6 +231,18 @@ where
         fixed_width_opt(width, delimited(space0, value_parser, space0)),
         |opt| opt.unwrap_or_else(T::zero),
     ))
+}
+
+/// Parse a fixed-width field as a string, allow partial fields
+pub(crate) fn fixed_width_str_partial<'a>(
+    width: usize,
+) -> impl Parser<&'a [u8], Output = Option<String>, Error = error::Error<&'a [u8]>> {
+    map(fixed_width_partial(width, rest, true), |opt| {
+        opt.map(|s| {
+            println!("fixed_width_str_partial, s: '{}'", String::from_utf8_lossy(s));
+            String::from_utf8_lossy(s).trim().to_string()
+        })
+    })
 }
 
 /// Parse a fixed-width field as element symbol, allow partial fields
@@ -423,6 +434,23 @@ pub(crate) fn rgroup_occurrences<'a>(
         ),
         map(tag(""), |_| vec![RGroupOccurrence::GreaterThan(0)]),
     ))
+}
+
+/// Calculate remaining input after consuming bytes up to the given pointer
+pub(crate) fn remaining_input<'a>(input: &'a [u8], current_ptr: *const u8) -> &'a [u8] {
+    let input_start = input.as_ptr() as usize;
+    let consumed_start = current_ptr as usize;
+
+    if consumed_start >= input_start {
+        let len = consumed_start - input_start;
+        if len <= input.len() {
+            &input[len..]
+        } else {
+            &input[input.len()..]
+        }
+    } else {
+        &input[input.len()..]
+    }
 }
 
 #[cfg(test)]
@@ -845,6 +873,31 @@ mod tests {
             expected_kind,
             result.clone().unwrap_err().map(|e| e.code),
         );
+    }
+
+    #[rstest]
+    #[case(b"abcd", 4, Some("abcd".to_string()))]
+    #[case(b"abc ", 4, Some("abc".to_string()))]
+    #[case(b"abc", 4, Some("abc".to_string()))]
+    #[case(b" abc", 4, Some("abc".to_string()))]
+    #[case(b" ab ", 4, Some("ab".to_string()))]
+    #[case(b"", 4, None)]
+    #[case(b"   ", 4, None)]
+    fn test_fixed_width_str_partial(
+        #[case] input: &[u8],
+        #[case] width: usize,
+        #[case] expected: Option<String>,
+    ) {
+        let mut parser = all_consuming(fixed_width_str_partial(width));
+        let result = parser.parse(input);
+        assert!(
+            result.is_ok(),
+            "{} should have succeeded",
+            String::from_utf8_lossy(input)
+        );
+        let (remaining, result) = result.unwrap();
+        assert!(remaining.is_empty(), "remaining should be empty");
+        assert_eq!(result, expected);
     }
 
     #[rstest]

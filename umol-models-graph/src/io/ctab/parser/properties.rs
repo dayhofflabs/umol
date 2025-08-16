@@ -2,21 +2,20 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::u8 as nom_u8;
-use nom::character::complete::{line_ending, not_line_ending};
-use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, success};
+use nom::character::complete::{line_ending, not_line_ending, space0, u8 as nom_u8};
+use nom::combinator::{all_consuming, map, map_opt, map_parser, map_res, opt, rest, success};
 use nom::multi::{length_count, many_m_n};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Err, Parser};
 
-use super::sgroup::{sgroup_connectivity, sgroup_data_type, sgroup_subtype, sgroup_type};
+use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
     fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
-    fixed_width_int_minus1, fixed_width_int_partial, rgroup_occurrences,
+    fixed_width_int_minus1, fixed_width_int_partial, fixed_width_str_partial, rgroup_occurrences,
 };
 use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
-    sgroup_data_display_units, sgroup_multiplier,
+    sgroup_data_display_units, sgroup_data_type, sgroup_multiplier,
 };
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
@@ -566,7 +565,7 @@ fn atom_value_entry<'a>(
     map(
         (
             fixed_width_int_minus1::<usize>(3),
-            preceded(tag(" "), not_line_ending),
+            preceded(tag(" "), rest),
         ),
         |(atom_index, value_bytes)| AtomValueEntry {
             atom_index,
@@ -922,7 +921,7 @@ fn rgroup_logic_entry<'a>(
 
         // Parse occurrence (variable length)
         let (remaining, occurrence) = if !remaining.is_empty() {
-            let (rest, occurrence_bytes) = preceded(tag(" "), not_line_ending).parse(remaining)?;
+            let (rest, occurrence_bytes) = preceded(tag(" "), rest).parse(remaining)?;
             let (_, occurrence) = rgroup_occurrences().parse(occurrence_bytes)?;
             (rest, occurrence)
         } else {
@@ -1154,7 +1153,8 @@ fn sgroup_subscript_entry<'a>(
                     map(sgroup_multiplier(), |multiplier| {
                         SGroupSubscriptData::Multiplier(multiplier)
                     }),
-                    map(not_line_ending, |s| {
+                    map(rest, |s| {
+                        // TODO: Fix parsing
                         SGroupSubscriptData::Subscript(
                             String::from_utf8_lossy(s).trim().to_string(),
                         )
@@ -1244,43 +1244,33 @@ fn sgroup_connecting_bond_entry<'a>(
 /// jjj: data query operator
 fn sgroup_data_description_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDescriptionEntry, Error = error::Error<&'a [u8]>> {
-    |input: &'a [u8]| {
-        // Parse SGroup index
-        let (i, sgroup_index) =
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
-
-        // Parse field name
-        let (i, field_name) = take(i.len().min(30usize)).parse(i)?;
-
-        // Parse field type
-        let (i, field_type) = if i.len() >= 2 {
-            sgroup_data_type().parse(i)?
-        } else {
-            (i, SGroupDataType::Text)
-        };
-
-        // Parse optional field units
-        let (i, field_units) = cond(!i.is_empty(), take(i.len().min(20usize))).parse(i)?;
-
-        // Parse optional query identifier
-        let (i, query_identifier) = cond(!i.is_empty(), take(i.len().min(2usize))).parse(i)?;
-
-        // Parse optional data query operator
-        let (i, data_query_operator) = cond(!i.is_empty(), not_line_ending).parse(i)?;
-
-        let entry = SGroupDataDescriptionEntry {
+    all_consuming(map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3usize)),
+            preceded(tag(" "), fixed_width_str_partial(30usize)),
+            sgroup_data_type(),
+            fixed_width_str_partial(20usize),
+            fixed_width_str_partial(2usize),
+            fixed_width_str_partial(1usize),
+        ),
+        |(
             sgroup_index,
-            field_name: String::from_utf8_lossy(field_name).trim().to_string(),
+            field_name,
             field_type,
-            field_units: field_units.map(|s| String::from_utf8_lossy(s).trim().to_string()),
-            query_identifier: query_identifier
-                .map(|s| String::from_utf8_lossy(s).trim().to_string()),
-            data_query_operator: data_query_operator
-                .map(|s| String::from_utf8_lossy(s).trim().to_string()),
-        };
-
-        Ok((i, entry))
-    }
+            field_units,
+            query_identifier,
+            data_query_operator,
+        )| {
+            SGroupDataDescriptionEntry {
+                sgroup_index,
+                field_name: field_name.unwrap_or_default(),
+                field_type,
+                field_units,
+                query_identifier,
+                data_query_operator,
+            }
+        },
+    ))
 }
 
 /// Parse SGroup data display entry.
@@ -1301,7 +1291,7 @@ fn sgroup_data_display_entry<'a>(
             sgroup_data_display_units(),
             preceded(take(3usize), sgroup_data_display_chars()),
             preceded(take(7usize), map_parser(take(1usize), opt(nom_u8))),
-            delimited(tag("  "), fixed_width_int::<u8>(1), opt(take(2usize))),
+            delimited(tag("  "), fixed_width_int::<u8>(1), space0),
         ),
         |(
             sgroup_index,
@@ -1334,7 +1324,7 @@ fn sgroup_data_continuation_entry<'a>(
     all_consuming(preceded(
         tag(" "),
         map(
-            (fixed_width_int_minus1::<usize>(3), not_line_ending),
+            (fixed_width_int_minus1::<usize>(3), rest),
             |(sgroup_index, data_content)| SGroupDataEntry::Continuation {
                 sgroup_index,
                 data_content: String::from_utf8_lossy(&data_content[..data_content.len().min(69)])
@@ -1359,7 +1349,7 @@ fn sgroup_data_end_entry<'a>(
             map(
                 (
                     fixed_width_int_minus1::<usize>(3),
-                    preceded(tag(" "), not_line_ending),
+                    preceded(tag(" "), rest),
                 ),
                 |(sgroup_index, data_content)| SGroupDataEntry::EndWithData {
                     sgroup_index,

@@ -1,6 +1,6 @@
 //! Header parser and types for MOL files.
 
-use nom::character::complete::{line_ending, not_line_ending};
+use nom::character::complete::{alpha0, line_ending};
 use nom::combinator::map;
 use nom::error;
 use nom::sequence::terminated;
@@ -29,7 +29,7 @@ impl Header {
 /// Parse a single line from the MOL header
 pub(crate) fn header_input<'a>(
 ) -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
-    map(terminated(not_line_ending, line_ending), |s: &[u8]| {
+    map(terminated(alpha0, line_ending), |s: &[u8]| {
         String::from_utf8_lossy(s).to_string()
     })
 }

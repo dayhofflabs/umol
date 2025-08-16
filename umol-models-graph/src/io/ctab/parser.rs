@@ -25,6 +25,7 @@ use nom::{error, Err, Parser};
 
 use self::accumulator::MoleculeProperties;
 use self::properties::PropertyEntries;
+use self::utils::remaining_input;
 use super::atom::{Atom, AtomStandard};
 use super::bond::{Bond, BondStandard};
 use super::molecule::{Molecule, MoleculeStandard};
@@ -34,8 +35,8 @@ use super::molecule::{Molecule, MoleculeStandard};
 /// Parses from the counts line through M END, returning a complete Molecule.
 /// This parser handles all CTAB features including query atoms, query bonds,
 /// R-groups, S-groups, and all property lines.
-pub fn ctab_block<'a>(
-) -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>> {
+pub fn ctab_block<'a>() -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>>
+{
     move |input: &'a [u8]| {
         let (remaining, counts) = terminated(counts_input(), line_ending).parse(input)?;
         let atom_count = counts.atoms() as usize;
@@ -86,9 +87,8 @@ fn atom_block<'a>(
             atoms.push(atom);
         }
 
-        // Calculate remaining input
-        let len = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
-        let remaining = &input[len..];
+        // Calculate remaining input safely
+        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
 
         Ok((remaining, atoms))
     }
@@ -111,9 +111,8 @@ fn atom_block_standard<'a>(
             atoms.push(atom);
         }
 
-        // Calculate remaining input
-        let len = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
-        let remaining = &input[len..];
+        // Calculate remaining input safely
+        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
 
         Ok((remaining, atoms))
     }
@@ -137,9 +136,8 @@ fn bond_block<'a>(
             bonds.push((atom1, atom2, bond));
         }
 
-        // Calculate remaining input
-        let len = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
-        let remaining = &input[len..];
+        // Calculate remaining input safely
+        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
 
         Ok((remaining, bonds))
     }
@@ -163,9 +161,8 @@ fn bond_block_standard<'a>(
             bonds.push((atom1, atom2, bond));
         }
 
-        // Calculate remaining input
-        let len = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
-        let remaining = &input[len..];
+        // Calculate remaining input safely
+        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
 
         Ok((remaining, bonds))
     }
@@ -184,19 +181,33 @@ fn legacy_atom_list_block<'a>(
                     properties.push(property);
                 }
                 Err(_) => {
-                    // Backtrack
-                    let line_start = line.as_ptr() as usize - input.as_ptr() as usize;
-                    let remaining = &input[line_start..];
+                    // Backtrack safely
+                    let remaining = remaining_input(input, line.as_ptr());
                     return Ok((remaining, properties));
                 }
             }
         }
 
-        // Calculate remaining input
-        let len = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
-        let remaining = &input[len..];
+        // Calculate remaining input safely
+        let remaining_bytes = lines_iter.as_bytes();
+        let input_start = input.as_ptr() as usize;
+        let remaining_start = remaining_bytes.as_ptr() as usize;
 
-        Ok((remaining, properties))
+        // Ensure we don't underflow when calculating offset
+        if remaining_start >= input_start {
+            let len = remaining_start - input_start;
+            if len <= input.len() {
+                let remaining = &input[len..];
+                Ok((remaining, properties))
+            } else {
+                // Remaining pointer is beyond input, return empty slice
+                Ok((&input[input.len()..], properties))
+            }
+        } else {
+            // Remaining pointer is before input start, something went wrong
+            // Return empty slice to avoid underflow
+            Ok((&input[input.len()..], properties))
+        }
     }
 }
 
@@ -216,19 +227,16 @@ fn properties_block<'a>(
                 Ok((_, property)) => {
                     properties.push(property);
                 }
-                Err(_) => {
-                    // Backtrack
-                    let line_start = line.as_ptr() as usize - input.as_ptr() as usize;
-                    let remaining = &input[line_start..];
+                Err(e) => {
+                    eprintln!("Encountered an error {:?}, stopping", e);
+                    let remaining = remaining_input(input, line.as_ptr());
                     return Ok((remaining, properties));
                 }
             }
         }
 
-        // Calculate remaining input
-        let len = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
-        let remaining = &input[len..];
-
+        eprintln!("Fell through the loop, stopping");
+        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
         Ok((remaining, properties))
     }
 }
@@ -250,18 +258,13 @@ fn properties_block_standard<'a>(
                     properties.push(property);
                 }
                 Err(_) => {
-                    // Backtrack
-                    let line_start = line.as_ptr() as usize - input.as_ptr() as usize;
-                    let remaining = &input[line_start..];
+                    let remaining = remaining_input(input, line.as_ptr());
                     return Ok((remaining, properties));
                 }
             }
         }
 
-        // Calculate remaining input
-        let len = lines_iter.as_bytes().as_ptr() as usize - input.as_ptr() as usize;
-        let remaining = &input[len..];
-
+        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
         Ok((remaining, properties))
     }
 }

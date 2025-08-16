@@ -1,14 +1,16 @@
 //! Auxiliary parsers for SGroup properties.
 
-use crate::io::ctab::parser::utils::{trim_whitespace_2char, trim_whitespace_3char};
+use crate::io::ctab::parser::utils::{
+    fixed_width_partial, trim_whitespace, trim_whitespace_2char, trim_whitespace_3char,
+};
 use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
 };
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take};
+use nom::bytes::complete::{tag_no_case, take};
 use nom::character::complete::u32 as nom_u32;
-use nom::combinator::{map, map_parser, map_res, value};
+use nom::combinator::{map, map_parser, map_res, rest, value};
 use nom::{error, Parser};
 
 /// Parse SGroup type string
@@ -71,8 +73,7 @@ pub fn sgroup_multiplier<'a>(
     map_parser(
         take(1usize),
         alt((
-            value(SGroupMultiplier::N, tag("N")),
-            value(SGroupMultiplier::N, tag("n")),
+            value(SGroupMultiplier::N, tag_no_case("N")),
             map(nom_u32, SGroupMultiplier::Count),
         )),
     )
@@ -81,13 +82,17 @@ pub fn sgroup_multiplier<'a>(
 // Parse SGroup data type string
 pub fn sgroup_data_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = error::Error<&'a [u8]>> {
-    map_res(take(2usize), |s| {
-        let s = trim_whitespace_2char(s);
-        match s {
-            b"F" => Ok(SGroupDataType::Formatted),
-            b"N" => Ok(SGroupDataType::Numeric),
-            b"T" => Ok(SGroupDataType::Text),
-            _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+    map_res(fixed_width_partial(2usize, rest, true), |s| {
+        if let Some(s) = s {
+            let s = trim_whitespace(s);
+            match s {
+                b"T" | b"" => Ok(SGroupDataType::Text),
+                b"F" => Ok(SGroupDataType::Formatted),
+                b"N" => Ok(SGroupDataType::Numeric),
+                _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+            }
+        } else {
+            Ok(SGroupDataType::Text)
         }
     })
 }
@@ -126,15 +131,12 @@ pub fn sgroup_data_display_units<'a>(
 pub fn sgroup_data_display_chars<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayChars, Error = error::Error<&'a [u8]>> {
     map_res(take(3usize), |s| {
-        let s = trim_whitespace_3char(s);
+        let s: &[u8] = trim_whitespace_3char(s);
         if s == b"ALL" {
             Ok(SGroupDataDisplayChars::All)
-        } else if let Ok(s_str) = std::str::from_utf8(s) {
-            if let Ok(num) = s_str.parse::<u32>() {
-                Ok(SGroupDataDisplayChars::Number(num))
-            } else {
-                Err(error::Error::new(s, error::ErrorKind::MapRes))
-            }
+            // TODO: Improve parsing
+        } else if let Ok((_, num)) = nom_u32::<_, error::Error<&[u8]>>.parse(s) {
+            Ok(SGroupDataDisplayChars::Number(num))
         } else {
             Err(error::Error::new(s, error::ErrorKind::MapRes))
         }
@@ -145,8 +147,8 @@ pub fn sgroup_data_display_chars<'a>(
 mod tests {
     use super::*;
     use nom::Err;
-    use rstest::*;
     use pretty_assertions::assert_eq;
+    use rstest::*;
 
     #[rstest]
     #[case(b"SUP", SGroupType::Superatom)]
@@ -286,7 +288,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown data type", error::ErrorKind::Eof)]
+    #[case(b"X", "unknown data type", error::ErrorKind::MapRes)]
     fn test_sgroup_data_type_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,

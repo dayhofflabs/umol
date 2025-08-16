@@ -941,6 +941,7 @@ fn test_sgroup_connecting_bond_entry_invalid(#[case] input: &[u8], #[case] desc:
 
 #[rstest]
 #[case(b"   1 pH   ", SGroupDataDescriptionEntry { sgroup_index: 0, field_name: "pH".to_string(), field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None })]
+#[case(b"   3 MRV_COORDINATE_BOND_TYPE                              ", SGroupDataDescriptionEntry { sgroup_index: 2, field_name: "MRV_COORDINATE_BOND_TYPE".to_string(), field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None })]
 #[case(b"   3 WEIGHT_PERCENT                N %", SGroupDataDescriptionEntry { sgroup_index: 2, field_name: "WEIGHT_PERCENT".to_string(), field_type: SGroupDataType::Numeric, field_units: Some("%".to_string()), query_identifier: None, data_query_operator: None })]
 fn test_sgroup_data_description_entry(#[case] input: &[u8], #[case] expected: SGroupDataDescriptionEntry) {
     let (remaining, result) = sgroup_data_description_entry().parse(input).unwrap();
@@ -959,17 +960,21 @@ fn test_sgroup_data_description_entry_invalid(#[case] input: &[u8], #[case] desc
 
 #[rstest]
 #[case(b"   1     0.0000    0.0000    DR    ALL  0       0",
-    SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
+        SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]
 #[case(b"   2     0.0000    0.0000    DR    ALL  1       6",
-    SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
+        SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 6 })]
 #[case(b"   2     0.0000    0.0000    DR    1    1       6",
-    SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
+        SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::Number(1), display_tag: None, display_position: 6 })]
+#[case(b"   3     0.0000    0.0000    DR    ALL  0       0 ",
+        SGroupDataDisplayEntry { sgroup_index: 2, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
+        display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
+        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]        
 fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroupDataDisplayEntry) {
     let (remaining, result) = sgroup_data_display_entry().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
