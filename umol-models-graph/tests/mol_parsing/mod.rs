@@ -16,6 +16,8 @@ enum TestMode {
 struct MoleculeSummary {
     atom_count: usize,
     bond_count: usize,
+    sum_formula: String,
+    graph6: String,
 }
 
 impl From<&Molecule> for MoleculeSummary {
@@ -23,6 +25,8 @@ impl From<&Molecule> for MoleculeSummary {
         Self {
             atom_count: molecule.atom_count(),
             bond_count: molecule.bond_count(),
+            sum_formula: molecule.sum_formula(),
+            graph6: molecule.graph6(),
         }
     }
 }
@@ -32,6 +36,8 @@ impl From<&MoleculeStandard> for MoleculeSummary {
         Self {
             atom_count: molecule.atom_count(),
             bond_count: molecule.bond_count(),
+            sum_formula: molecule.sum_formula(),
+            graph6: molecule.graph6(),
         }
     }
 }
