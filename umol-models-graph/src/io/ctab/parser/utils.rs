@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
 
+use bstr::ByteSlice;
 use umol_data::Element;
 
 use fast_float::FastFloat;
@@ -109,7 +110,6 @@ where
     P: Parser<&'a [u8], Output = O, Error = error::Error<&'a [u8]>>,
 {
     move |input: &'a [u8]| {
-        println!("fixed_width_partial, input: '{}'", String::from_utf8_lossy(input));
         let min_width = width.min(input.len());
         let (remaining, field) = take(min_width).parse(input)?;
 
@@ -238,10 +238,7 @@ pub(crate) fn fixed_width_str_partial<'a>(
     width: usize,
 ) -> impl Parser<&'a [u8], Output = Option<String>, Error = error::Error<&'a [u8]>> {
     map(fixed_width_partial(width, rest, true), |opt| {
-        opt.map(|s| {
-            println!("fixed_width_str_partial, s: '{}'", String::from_utf8_lossy(s));
-            String::from_utf8_lossy(s).trim().to_string()
-        })
+        opt.map(to_string)
     })
 }
 
@@ -261,110 +258,7 @@ pub(crate) fn fixed_width_element_partial<'a>(
 
 /// Verify that a slice contains only blanks or zeros
 pub(crate) fn is_blanks_or_zeros(input: &[u8]) -> bool {
-    // Trim leading spaces.
-    let mut start = 0;
-    while start < input.len() && input[start] == b' ' {
-        start += 1;
-    }
-
-    // If the slice is all spaces, it's valid.
-    if start == input.len() {
-        return true;
-    }
-
-    // Trim trailing spaces.
-    let mut end = input.len();
-    while end > start && input[end - 1] == b' ' {
-        end -= 1;
-    }
-
-    // Check if the remaining (non-empty) slice is all zeros.
-    let num_slice = &input[start..end];
-    num_slice.iter().all(|&b| b == b'0')
-}
-
-/// Remove leading and trailing whitespace from a 2-character byte slice.
-pub(crate) fn trim_whitespace_2char(s: &[u8]) -> &[u8] {
-    debug_assert_eq!(s.len(), 2, "Input must be 2 characters");
-    if s[0] == b' ' {
-        if s[1] == b' ' {
-            &b""[..]
-        } else {
-            &s[1..2]
-        }
-    } else if s[1] == b' ' {
-        &s[0..1]
-    } else {
-        s
-    }
-}
-
-/// Remove leading and trailing whitespace from a 3-character byte slice.
-pub(crate) fn trim_whitespace_3char(s: &[u8]) -> &[u8] {
-    debug_assert_eq!(s.len(), 3, "Input must be 3 characters");
-
-    // Find start (skip leading whitespace)
-    let start = if s[0] == b' ' {
-        if s[1] == b' ' {
-            if s[2] == b' ' {
-                3 // All whitespace
-            } else {
-                2 // First two are whitespace
-            }
-        } else {
-            1 // Only first is whitespace
-        }
-    } else {
-        0 // No leading whitespace
-    };
-
-    if start == 3 {
-        return &s[3..3]; // Empty slice - all whitespace
-    }
-
-    // Find end (skip trailing whitespace)
-    let end = if s[2] == b' ' {
-        if s[1] == b' ' {
-            1 // Last two are whitespace
-        } else {
-            2 // Only last is whitespace
-        }
-    } else {
-        3 // No trailing whitespace
-    };
-
-    // Ensure end is never less than start
-    let end = end.max(start);
-
-    &s[start..end]
-}
-
-/// Remove leading and trailing whitespace
-#[allow(dead_code)]
-pub(crate) fn trim_whitespace(input: &[u8]) -> &[u8] {
-    match input.len() {
-        0 => input,
-        1 => {
-            if input[0] == b' ' {
-                &input[1..1]
-            } else {
-                input
-            }
-        }
-        2 => trim_whitespace_2char(input),
-        3 => trim_whitespace_3char(input),
-        _ => {
-            let mut start = 0;
-            while start < input.len() && input[start] == b' ' {
-                start += 1;
-            }
-            let mut end = input.len();
-            while end > start && input[end - 1] == b' ' {
-                end -= 1;
-            }
-            &input[start..end]
-        }
-    }
+    input.trim_ascii().find_not_byteset(b"0").is_none()
 }
 
 /// Apply the parser `p` exactly `n` times, discarding the results.
@@ -436,21 +330,17 @@ pub(crate) fn rgroup_occurrences<'a>(
     ))
 }
 
-/// Calculate remaining input after consuming bytes up to the given pointer
-pub(crate) fn remaining_input<'a>(input: &'a [u8], current_ptr: *const u8) -> &'a [u8] {
-    let input_start = input.as_ptr() as usize;
-    let consumed_start = current_ptr as usize;
+/// Convert byte slice to string, trimming leading and trailing whitespace
+pub(crate) fn to_string(bytes: &[u8]) -> String {
+    bytes.trim_ascii().to_str_lossy().into_owned()
+}
 
-    if consumed_start >= input_start {
-        let len = consumed_start - input_start;
-        if len <= input.len() {
-            &input[len..]
-        } else {
-            &input[input.len()..]
-        }
-    } else {
-        &input[input.len()..]
-    }
+/// Calculate remaining input after consuming bytes up to the given pointer
+pub(crate) fn remaining_input(input: &[u8], current_ptr: *const u8) -> &[u8] {
+    let start = input.as_ptr() as usize;
+    let off = (current_ptr as usize).saturating_sub(start);
+    let idx = off.min(input.len());
+    &input[idx..]
 }
 
 #[cfg(test)]
@@ -915,41 +805,6 @@ mod tests {
     #[case(b"  1", false)]
     fn test_is_blanks_or_zeros(#[case] input: &[u8], #[case] expected: bool) {
         assert_eq!(is_blanks_or_zeros(input), expected);
-    }
-
-    #[rstest]
-    #[case(b"  ", &b""[..])]
-    #[case(b" 0", &b"0"[..])]
-    #[case(b"0 ", &b"0"[..])]
-    #[case(b"00", &b"00"[..])]
-    fn test_trim_whitespace_2char(#[case] input: &[u8], #[case] expected: &[u8]) {
-        assert_eq!(trim_whitespace_2char(input), expected);
-    }
-
-    #[rstest]
-    #[case(b"   ", &b""[..])]
-    #[case(b"  0", &b"0"[..])]
-    #[case(b" 0 ", &b"0"[..])]
-    #[case(b"0  ", &b"0"[..])]
-    #[case(b" 00", &b"00"[..])]
-    #[case(b"00 ", &b"00"[..])]
-    #[case(b"000", &b"000"[..])]
-    fn test_trim_whitespace_3char(#[case] input: &[u8], #[case] expected: &[u8]) {
-        assert_eq!(trim_whitespace_3char(input), expected);
-    }
-
-    #[rstest]
-    #[case(b"", &b""[..])]
-    #[case(b" ", &b""[..])]
-    #[case(b"0", &b"0"[..])]
-    #[case(b"  ", &b""[..])]
-    #[case(b" 0", &b"0"[..])]
-    #[case(b"   ", &b""[..])]
-    #[case(b"  0", &b"0"[..])]
-    #[case(b"  00", &b"00"[..])]
-    #[case(b"  000", &b"000"[..])]
-    fn test_trim_whitespace(#[case] input: &[u8], #[case] expected: &[u8]) {
-        assert_eq!(trim_whitespace(input), expected);
     }
 
     #[rstest]

@@ -1,5 +1,6 @@
 //! Header parser and types for MOL files.
 
+use bstr::ByteSlice;
 use nom::character::complete::{line_ending, not_line_ending};
 use nom::combinator::map;
 use nom::error;
@@ -30,7 +31,7 @@ impl Header {
 pub(crate) fn header_input<'a>(
 ) -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
     map(terminated(not_line_ending, line_ending), |s: &[u8]| {
-        String::from_utf8_lossy(s).to_string()
+        s.to_str_lossy().into_owned()
     })
 }
 

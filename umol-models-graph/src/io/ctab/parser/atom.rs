@@ -9,9 +9,9 @@ use umol_data::{Element, NamedIsotope};
 
 use super::utils::is_blanks_or_zeros;
 use crate::io::ctab::atom::{Atom, AtomList, AtomStandard, AtomSymbol, Point3D};
-use crate::io::ctab::parser::utils::trim_whitespace_3char;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
+use bstr::ByteSlice;
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,
@@ -29,8 +29,8 @@ use super::utils::{
 /// See `atom_symbol` for more details.
 fn atom_symbol_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s| {
-        let s = trim_whitespace_3char(s);
+    map_res(take(3usize), |s: &[u8]| {
+        let s = s.trim_with(|b| b == ' ');
         if let Some(element) = Element::from_symbol_bytes(s) {
             Ok(AtomSymbol::Element(element))
         } else if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
@@ -57,8 +57,8 @@ fn atom_symbol_standard<'a>(
 /// --------------------------------------------------------------------------------
 ///
 fn atom_symbol<'a>() -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s| {
-        let s = trim_whitespace_3char(s);
+    map_res(take(3usize), |s: &[u8]| {
+        let s = s.trim_with(|b| b == ' ');
         if let Some(element) = Element::from_symbol_bytes(s) {
             Ok(AtomSymbol::Element(element))
         } else if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {

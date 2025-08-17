@@ -17,6 +17,7 @@ use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier,
 };
+use crate::io::ctab::parser::utils::to_string;
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
@@ -550,9 +551,9 @@ fn atom_alias_entry<'a>(
             ),
             not_line_ending,
         ),
-        |(atom_index, alias_bytes)| AtomAliasEntry {
+        |(atom_index, alias)| AtomAliasEntry {
             atom_index,
-            alias: String::from_utf8_lossy(alias_bytes).trim().to_string(),
+            alias: to_string(alias),
         },
     )
 }
@@ -563,13 +564,10 @@ fn atom_alias_entry<'a>(
 fn atom_value_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomValueEntry, Error = error::Error<&'a [u8]>> {
     map(
-        (
-            fixed_width_int_minus1::<usize>(3),
-            preceded(tag(" "), rest),
-        ),
-        |(atom_index, value_bytes)| AtomValueEntry {
+        (fixed_width_int_minus1::<usize>(3), preceded(tag(" "), rest)),
+        |(atom_index, value)| AtomValueEntry {
             atom_index,
-            value: String::from_utf8_lossy(value_bytes).trim().to_string(),
+            value: to_string(value),
         },
     )
 }
@@ -1153,12 +1151,7 @@ fn sgroup_subscript_entry<'a>(
                     map(sgroup_multiplier(), |multiplier| {
                         SGroupSubscriptData::Multiplier(multiplier)
                     }),
-                    map(rest, |s| {
-                        // TODO: Fix parsing
-                        SGroupSubscriptData::Subscript(
-                            String::from_utf8_lossy(s).trim().to_string(),
-                        )
-                    }),
+                    map(rest, |s| SGroupSubscriptData::Subscript(to_string(s))),
                 )),
             ),
         ),
@@ -1327,9 +1320,7 @@ fn sgroup_data_continuation_entry<'a>(
             (fixed_width_int_minus1::<usize>(3), rest),
             |(sgroup_index, data_content)| SGroupDataEntry::Continuation {
                 sgroup_index,
-                data_content: String::from_utf8_lossy(&data_content[..data_content.len().min(69)])
-                    .trim()
-                    .to_string(),
+                data_content: to_string(&data_content[..data_content.len().min(69)]),
             },
         ),
     ))
@@ -1347,17 +1338,10 @@ fn sgroup_data_end_entry<'a>(
         tag(" "),
         alt((
             map(
-                (
-                    fixed_width_int_minus1::<usize>(3),
-                    preceded(tag(" "), rest),
-                ),
+                (fixed_width_int_minus1::<usize>(3), preceded(tag(" "), rest)),
                 |(sgroup_index, data_content)| SGroupDataEntry::EndWithData {
                     sgroup_index,
-                    data_content: String::from_utf8_lossy(
-                        &data_content[..data_content.len().min(69)],
-                    )
-                    .trim()
-                    .to_string(),
+                    data_content: to_string(&data_content[..data_content.len().min(69)]),
                 },
             ),
             map(fixed_width_int_minus1::<usize>(3), |sgroup_index| {

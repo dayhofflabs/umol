@@ -18,7 +18,7 @@ pub use self::bond::{bond_input, bond_input_standard};
 pub use self::counts::counts_input;
 pub use self::properties::{legacy_atom_list_input, property_input, property_input_standard};
 
-use bstr::ByteSlice;
+use bstr::{join, ByteSlice};
 use nom::character::complete::line_ending;
 use nom::sequence::terminated;
 use nom::{error, Err, Parser};
@@ -227,7 +227,7 @@ fn properties_block<'a>(
             let (input_line, combined_lines): (&[u8], Vec<u8>);
             if line.starts_with(b"A  ") {
                 if let Some(next_line) = lines_iter.next() {
-                    combined_lines = [line, b"\n", next_line].concat();
+                    combined_lines = join(b"\n", &[line, next_line]);
                     input_line = &combined_lines;
                 } else {
                     let remaining = remaining_input(input, line.as_ptr());
@@ -269,7 +269,7 @@ fn properties_block_standard<'a>(
             let (input_line, combined_lines): (&[u8], Vec<u8>);
             if line.starts_with(b"A  ") {
                 if let Some(next_line) = lines_iter.next() {
-                    combined_lines = [line, b"\n", next_line].concat();
+                    combined_lines = join(b"\n", &[line, next_line]);
                     input_line = &combined_lines;
                 } else {
                     let remaining = remaining_input(input, line.as_ptr());

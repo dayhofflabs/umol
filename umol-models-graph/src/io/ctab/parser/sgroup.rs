@@ -1,8 +1,6 @@
 //! Auxiliary parsers for SGroup properties.
 
-use crate::io::ctab::parser::utils::{
-    fixed_width_partial, trim_whitespace, trim_whitespace_2char, trim_whitespace_3char,
-};
+use crate::io::ctab::parser::utils::fixed_width_partial;
 use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
@@ -12,12 +10,13 @@ use nom::bytes::complete::{tag_no_case, take};
 use nom::character::complete::u32 as nom_u32;
 use nom::combinator::{map, map_parser, map_res, rest, value};
 use nom::{error, Parser};
+use bstr::ByteSlice;
 
 /// Parse SGroup type string
 pub fn sgroup_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupType, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s| {
-        let s = trim_whitespace_3char(s);
+    map_res(take(3usize), |s: &[u8]| {
+        let s = s.trim_with(|b| b == ' ');
         match s {
             b"SUP" => Ok(SGroupType::Superatom),
             b"MUL" => Ok(SGroupType::MultipleGroup),
@@ -42,8 +41,8 @@ pub fn sgroup_type<'a>(
 /// Parse SGroup subtype string
 pub fn sgroup_subtype<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupSubtype, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s| {
-        let s = trim_whitespace_3char(s);
+    map_res(take(3usize), |s: &[u8]| {
+        let s = s.trim_with(|b| b == ' ');
         match s {
             b"ALT" => Ok(SGroupSubtype::Alternating),
             b"RAN" => Ok(SGroupSubtype::Random),
@@ -56,8 +55,8 @@ pub fn sgroup_subtype<'a>(
 /// Parse SGroup connectivity string
 pub fn sgroup_connectivity<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupConnectivity, Error = error::Error<&'a [u8]>> {
-    map_res(take(2usize), |s| {
-        let s = trim_whitespace_2char(s);
+    map_res(take(2usize), |s: &[u8]| {
+        let s = s.trim_with(|b| b == ' ');
         match s {
             b"HH" => Ok(SGroupConnectivity::HeadToHead),
             b"HT" => Ok(SGroupConnectivity::HeadToTail),
@@ -84,7 +83,7 @@ pub fn sgroup_data_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = error::Error<&'a [u8]>> {
     map_res(fixed_width_partial(2usize, rest, true), |s| {
         if let Some(s) = s {
-            let s = trim_whitespace(s);
+            let s = s.trim_with(|b| b == ' ');
             match s {
                 b"T" | b"" => Ok(SGroupDataType::Text),
                 b"F" => Ok(SGroupDataType::Formatted),
@@ -130,8 +129,8 @@ pub fn sgroup_data_display_units<'a>(
 // Parse SGroup data display chars string
 pub fn sgroup_data_display_chars<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayChars, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s| {
-        let s: &[u8] = trim_whitespace_3char(s);
+    map_res(take(3usize), |s: &[u8]| {
+        let s = s.trim_with(|b| b == ' ');
         if s == b"ALL" {
             Ok(SGroupDataDisplayChars::All)
             // TODO: Improve parsing

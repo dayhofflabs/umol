@@ -22,7 +22,7 @@ smallvec = "1.15.1"
 rstest = "0.26"
 pretty_assertions = "1.4.0"
 criterion = "0.7"
-insta = { version = "1.31", features = ["yaml"] }
+insta = { version = "1.31", features = ["yaml", "glob"] }
 serde_yaml = "0.9"
 serde_json = "1.0"
 tempfile = "3.0"

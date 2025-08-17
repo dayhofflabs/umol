@@ -165,8 +165,7 @@ impl Isotope {
             return None;
         }
 
-        let mass_number_str = core::str::from_utf8(mass_number_bytes).ok()?;
-        let mass_number = mass_number_str.parse::<u32>().ok()?;
+        let mass_number = atoi::atoi::<u32>(mass_number_bytes)?;
         if mass_number == 0 {
             return None;
         }
