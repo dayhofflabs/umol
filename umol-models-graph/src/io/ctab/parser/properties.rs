@@ -541,7 +541,7 @@ pub fn property_input<'a>(
 /// A  aaa
 /// x..
 /// aaa: atom index, x..: alias string (can contain spaces)
-fn atom_alias_entry<'a>(
+pub fn atom_alias_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomAliasEntry, Error = error::Error<&'a [u8]>> {
     map(
         (

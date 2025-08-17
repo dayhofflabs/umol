@@ -81,6 +81,7 @@ fn store_full_snapshot(path: &Path, category: &str, value: serde_yaml::Value) {
     });
 }
 
+#[allow(dead_code)]
 fn run_test(path: &Path, mode: TestMode) {
     let path_str = path.to_str().unwrap();
     let category = get_category(path);

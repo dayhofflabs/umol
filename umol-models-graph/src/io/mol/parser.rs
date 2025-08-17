@@ -1,5 +1,7 @@
 //! MOL file parser
 
+use bstr::{join, ByteSlice};
+use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::multispace0;
 use nom::combinator::{all_consuming, complete, map, opt, value};
@@ -8,8 +10,15 @@ use nom::{error, Parser};
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use serde::{Deserialize, Serialize};
 
+use crate::io::ctab::atom::{Atom, AtomStandard};
+use crate::io::ctab::bond::{Bond, BondStandard};
 use crate::io::ctab::molecule::{Molecule, MoleculeStandard};
-use crate::io::ctab::parser::{ctab_block, ctab_block_standard};
+use crate::io::ctab::parser::{
+    atom_alias_entry, atom_input, atom_input_standard, bond_input, bond_input_standard,
+    counts_input, ctab_block, ctab_block_standard, legacy_atom_list_input, property_input,
+    property_input_standard, Counts, PropertyEntries,
+};
+use crate::io::mol::parser::header::header_input;
 
 pub mod header;
 use header::{header, Header};
@@ -58,7 +67,8 @@ fn mol_file<'a>() -> impl Parser<&'a [u8], Output = MolFile, Error = error::Erro
 }
 
 /// Parse complete MOL file (header + CTAB block) for standard molecules
-fn mol_file_standard<'a>() -> impl Parser<&'a [u8], Output = MolFileStandard, Error = error::Error<&'a [u8]>> {
+fn mol_file_standard<'a>(
+) -> impl Parser<&'a [u8], Output = MolFileStandard, Error = error::Error<&'a [u8]>> {
     map(
         terminated((header::header(), ctab_block_standard()), footer()),
         |(header, molecule)| MolFileStandard::new(header, molecule),
@@ -175,6 +185,163 @@ pub fn parse_mol_file_standard(input: &[u8]) -> Result<MolFileStandard> {
         .map_err(|e| {
             DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
         })
+}
+
+/// Represents the parsed content of a single logical line or multi-line block from a MOL file.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParsedMolLine {
+    Header(String),
+    Counts(Counts),
+    Atom(Atom),
+    Bond(Bond),
+    Property(PropertyEntries),
+    LegacyAtomList,
+    End,
+    Empty,
+    Unknown(String),
+}
+
+/// Represents the parsed content of a single logical line or multi-line block from a MOL file.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParsedMolStandardLine {
+    Header(String),
+    Counts(Counts),
+    Atom(AtomStandard),
+    Bond(BondStandard),
+    Property(PropertyEntries),
+    End,
+    Empty,
+    Unknown(String),
+}
+
+fn mol_input<'a>() -> impl Parser<&'a [u8], Output = ParsedMolLine, Error = error::Error<&'a [u8]>>
+{
+    alt((
+        map(counts_input(), ParsedMolLine::Counts),
+        map(atom_input(), ParsedMolLine::Atom),
+        map(bond_input(), |(_, _, bond)| ParsedMolLine::Bond(bond)),
+        map(legacy_atom_list_input(), ParsedMolLine::Property),
+        map(tag("M  END"), |_| ParsedMolLine::End),
+        map(property_input(), ParsedMolLine::Property),
+    ))
+}
+
+fn mol_input_standard<'a>(
+) -> impl Parser<&'a [u8], Output = ParsedMolStandardLine, Error = error::Error<&'a [u8]>> {
+    alt((
+        map(counts_input(), ParsedMolStandardLine::Counts),
+        map(atom_input_standard(), ParsedMolStandardLine::Atom),
+        map(bond_input_standard(), |(_, _, bond)| {
+            ParsedMolStandardLine::Bond(bond)
+        }),
+        map(tag("M  END"), |_| ParsedMolStandardLine::End),
+        map(property_input_standard(), ParsedMolStandardLine::Property),
+    ))
+}
+
+/// Progressively parse a MOL file, line by line, for diagnostic purposes.
+///
+/// This function processes one logical line at a time, handling multi-line blocks
+/// like atom aliases, and returns a vector of `ParsedMolLine` enums representing
+/// the content of each line. It uses the general parser that supports query features.
+pub fn parse_mol_progressive(input: &[u8]) -> Vec<ParsedMolLine> {
+    let mut results = Vec::new();
+    let mut lines = input.lines().peekable();
+
+    for _ in 0..3 {
+        if let Some(line) = lines.next() {
+            results.push(
+                header_input()
+                    .parse(line)
+                    .map(|(_, h)| ParsedMolLine::Header(h))
+                    .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
+            );
+        }
+    }
+
+    while let Some(line) = lines.next() {
+        if line.trim().is_empty() {
+            results.push(ParsedMolLine::Empty);
+            continue;
+        }
+
+        if line.starts_with(b"A  ") {
+            if let Some(next_line) = lines.next() {
+                let combined_lines = join(b"\n", &[&line[3..], next_line]);
+                results.push(
+                    atom_alias_entry()
+                        .parse(&combined_lines)
+                        .map(|(_, alias_entry)| {
+                            ParsedMolLine::Property(PropertyEntries::AtomAliasEntry(alias_entry))
+                        })
+                        .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
+                );
+                continue;
+            }
+        }
+        results.push(
+            mol_input()
+                .parse(line)
+                .map(|(_, parsed)| parsed)
+                .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
+        );
+    }
+    results
+}
+
+/// Progressively parse a standard MOL file, line by line, for diagnostic purposes.
+///
+/// This function processes one logical line at a time and returns a vector of
+/// `ParsedMolStandardLine` enums. It uses the optimized standard parser and will not
+/// correctly handle query features.
+pub fn parse_mol_progressive_standard(input: &[u8]) -> Vec<ParsedMolStandardLine> {
+    let mut results = Vec::new();
+    let mut lines = input.lines().peekable();
+
+    for _ in 0..3 {
+        if let Some(line) = lines.next() {
+            results.push(
+                header_input()
+                    .parse(line)
+                    .map(|(_, h)| ParsedMolStandardLine::Header(h))
+                    .unwrap_or(ParsedMolStandardLine::Unknown(
+                        line.to_str_lossy().to_string(),
+                    )),
+            );
+        }
+    }
+
+    while let Some(line) = lines.next() {
+        if line.trim().is_empty() {
+            results.push(ParsedMolStandardLine::Empty);
+            continue;
+        }
+
+        if line.starts_with(b"A  ") {
+            if let Some(next_line) = lines.next() {
+                let combined_lines = join(b"\n", &[&line[..3], next_line]);
+                results.push(
+                    atom_alias_entry()
+                        .parse(&combined_lines)
+                        .map(|(_, alias_entry)| {
+                            ParsedMolStandardLine::Property(PropertyEntries::AtomAliasEntry(alias_entry))
+                        })
+                        .unwrap_or(ParsedMolStandardLine::Unknown(line.to_str_lossy().to_string())),
+                );
+                continue;
+            }
+        }
+
+        results.push(
+            mol_input_standard()
+                .parse(line)
+                .map(|(_, parsed)| parsed)
+                .unwrap_or(ParsedMolStandardLine::Unknown(
+                    line.to_str_lossy().to_string(),
+                )),
+        );
+    }
+    results
 }
 
 #[cfg(test)]
@@ -299,8 +466,14 @@ mod tests {
       "standard ethane")]
     fn test_parse_mol_file_standard(#[case] mol_str: &[u8], #[case] desc: &str) {
         let result = parse_mol_file_standard(mol_str);
-        assert!(result.is_ok(), "{} should have succeeded: {:?}", desc, result.err());
+        assert!(
+            result.is_ok(),
+            "{} should have succeeded: {:?}",
+            desc,
+            result.err()
+        );
     }
+
 
     #[test]
     fn test_parse_mol_standard_query() {
@@ -322,4 +495,55 @@ mod tests {
             error_string
         );
     }
+
+    #[test]
+    fn test_progressive_parser_standard() {
+        let mol = b"MyMol\n\nComment\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0\nM  END\n";
+        let result = parse_mol_progressive_standard(mol);
+        assert!(matches!(result[0], ParsedMolStandardLine::Header(_)));
+        assert!(matches!(result[1], ParsedMolStandardLine::Header(_)));
+        assert!(matches!(result[2], ParsedMolStandardLine::Header(_)));
+        assert!(matches!(result[3], ParsedMolStandardLine::Counts(_)));
+        assert!(matches!(result[4], ParsedMolStandardLine::Atom(_)));
+        assert!(matches!(result[5], ParsedMolStandardLine::End));
+    }
+
+    #[test]
+    fn test_progressive_parser_alias() {
+        let mol_with_alias = b"MyMol\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0\nA    1\nCF3\nM  END\n";
+        let result = parse_mol_progressive(mol_with_alias);
+        println!("{:?}", result);
+        assert!(
+            matches!(
+                result[5],
+                ParsedMolLine::Property(PropertyEntries::AtomAliasEntry(_))
+            ),
+            "Failed to parse two-line atom alias. Got: {:?}",
+            result[5]
+        );
+    }
+
+    #[test]
+    fn test_progressive_parser_legacy_list() {
+        let mol_with_legacy = b"MyMol\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0\n  1 F    2   6   8\nM  END\n";
+        let result = parse_mol_progressive(mol_with_legacy);
+        assert!(
+            matches!(
+                result[5],
+                ParsedMolLine::Property(PropertyEntries::AtomListEntry(_))
+            ),
+            "Failed to parse legacy atom list. Got: {:?}",
+            result[5]
+        );
+    }
+
+    #[rstest]
+    #[case("src/io/mol/data/glycine-short-lines.mol", "glycine, short lines")]
+    fn test_progressive_parser_standard_from_path(#[case] path: &str, #[case] desc: &str) {
+        let input = std::fs::read(path).unwrap();
+        let result = parse_mol_progressive_standard(&input);
+        println!("{:?}", result);
+        assert_eq!(result.len(), 10, "{} should have 10 lines", desc);
+    }
+
 }

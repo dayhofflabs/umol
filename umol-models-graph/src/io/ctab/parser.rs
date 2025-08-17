@@ -3,6 +3,11 @@
 //! This module provides the main entry points for parsing Connection Table (CTAB) format,
 //! which is the core molecular structure representation used in MOL, SDF, and other formats.
 
+use bstr::{join, ByteSlice};
+use nom::character::complete::line_ending;
+use nom::sequence::terminated;
+use nom::{error, Err, Parser};
+
 mod accumulator;
 mod atom;
 mod bond;
@@ -13,18 +18,14 @@ mod properties;
 mod sgroup;
 mod utils;
 
+use self::accumulator::MoleculeProperties;
 pub use self::atom::{atom_input, atom_input_standard};
 pub use self::bond::{bond_input, bond_input_standard};
-pub use self::counts::counts_input;
-pub use self::properties::{legacy_atom_list_input, property_input, property_input_standard};
-
-use bstr::{join, ByteSlice};
-use nom::character::complete::line_ending;
-use nom::sequence::terminated;
-use nom::{error, Err, Parser};
-
-use self::accumulator::MoleculeProperties;
-use self::properties::PropertyEntries;
+pub use self::counts::{counts_input, Counts};
+pub use self::properties::{
+    atom_alias_entry, legacy_atom_list_input, property_input, property_input_standard,
+    PropertyEntries,
+};
 use self::utils::remaining_input;
 use super::atom::{Atom, AtomStandard};
 use super::bond::{Bond, BondStandard};
@@ -87,9 +88,7 @@ fn atom_block<'a>(
             atoms.push(atom);
         }
 
-        // Calculate remaining input safely
         let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
-
         Ok((remaining, atoms))
     }
 }
@@ -111,9 +110,7 @@ fn atom_block_standard<'a>(
             atoms.push(atom);
         }
 
-        // Calculate remaining input safely
         let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
-
         Ok((remaining, atoms))
     }
 }
@@ -131,14 +128,11 @@ fn bond_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            // Parse the bond from the line
             let (_, (atom1, atom2, bond)) = bond_input().parse(line)?;
             bonds.push((atom1, atom2, bond));
         }
 
-        // Calculate remaining input safely
         let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
-
         Ok((remaining, bonds))
     }
 }
@@ -161,9 +155,7 @@ fn bond_block_standard<'a>(
             bonds.push((atom1, atom2, bond));
         }
 
-        // Calculate remaining input safely
         let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
-
         Ok((remaining, bonds))
     }
 }
@@ -188,26 +180,8 @@ fn legacy_atom_list_block<'a>(
             }
         }
 
-        // Calculate remaining input safely
-        let remaining_bytes = lines_iter.as_bytes();
-        let input_start = input.as_ptr() as usize;
-        let remaining_start = remaining_bytes.as_ptr() as usize;
-
-        // Ensure we don't underflow when calculating offset
-        if remaining_start >= input_start {
-            let len = remaining_start - input_start;
-            if len <= input.len() {
-                let remaining = &input[len..];
-                Ok((remaining, properties))
-            } else {
-                // Remaining pointer is beyond input, return empty slice
-                Ok((&input[input.len()..], properties))
-            }
-        } else {
-            // Remaining pointer is before input start, something went wrong
-            // Return empty slice to avoid underflow
-            Ok((&input[input.len()..], properties))
-        }
+        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+        Ok((remaining, properties))
     }
 }
 
