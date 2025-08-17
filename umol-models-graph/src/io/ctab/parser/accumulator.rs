@@ -918,9 +918,9 @@ impl MoleculeProperties {
     }
 
     fn apply_atom_list(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
-        if !matches!(atom.symbol, AtomSymbol::Element(_)) {
+        if !matches!(atom.symbol, AtomSymbol::Element(_) | AtomSymbol::AtomList(_)) {
             return Err(ValidationError::InvalidComponent(format!(
-                "Atom list can only be applied to an element, not {:?}",
+                "Atom list can only be applied to an element or atom list, not {:?}",
                 atom.symbol
             ))
             .into());

@@ -30,6 +30,20 @@ impl MolFile {
     }
 }
 
+/// Complete MOL file structure for standard molecules
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MolFileStandard {
+    pub header: Header,
+    pub molecule: MoleculeStandard,
+}
+
+impl MolFileStandard {
+    /// Create a new MOL file
+    pub fn new(header: Header, molecule: MoleculeStandard) -> Self {
+        Self { header, molecule }
+    }
+}
+
 /// Parse optional footer content (whitespace and SDF record delimiter)
 fn footer<'a>() -> impl Parser<&'a [u8], Output = (), Error = error::Error<&'a [u8]>> {
     value((), (multispace0, opt((tag("$$$$"), multispace0))))
@@ -40,6 +54,14 @@ fn mol_file<'a>() -> impl Parser<&'a [u8], Output = MolFile, Error = error::Erro
     map(
         terminated((header::header(), ctab_block()), footer()),
         |(header, molecule)| MolFile::new(header, molecule),
+    )
+}
+
+/// Parse complete MOL file (header + CTAB block) for standard molecules
+fn mol_file_standard<'a>() -> impl Parser<&'a [u8], Output = MolFileStandard, Error = error::Error<&'a [u8]>> {
+    map(
+        terminated((header::header(), ctab_block_standard()), footer()),
+        |(header, molecule)| MolFileStandard::new(header, molecule),
     )
 }
 
@@ -135,6 +157,19 @@ pub fn parse_mol_standard(input: &[u8]) -> Result<MoleculeStandard> {
 /// in addition to the molecular structure.
 pub fn parse_mol_file(input: &[u8]) -> Result<MolFile> {
     all_consuming(complete(terminated(mol_file(), multispace0)))
+        .parse(input)
+        .map(|(_, mol_file)| mol_file)
+        .map_err(|e| {
+            DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
+        })
+}
+
+/// Parse MOL bytes into a MolFileStandard (includes header information)
+///
+/// This is the high-performance parsing function for standard molecules.
+/// It will fail if the MOL file contains query features.
+pub fn parse_mol_file_standard(input: &[u8]) -> Result<MolFileStandard> {
+    all_consuming(complete(terminated(mol_file_standard(), multispace0)))
         .parse(input)
         .map(|(_, mol_file)| mol_file)
         .map_err(|e| {
@@ -257,6 +292,14 @@ mod tests {
         let molecule = result.unwrap();
         assert_eq!(molecule.atom_count(), 2, "{} should have 2 atoms", desc);
         assert_eq!(molecule.bond_count(), 1, "{} should have 1 bond", desc);
+    }
+
+    #[rstest]
+    #[case(b"Ethane\nRDKit\nTest molecule\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n",
+      "standard ethane")]
+    fn test_parse_mol_file_standard(#[case] mol_str: &[u8], #[case] desc: &str) {
+        let result = parse_mol_file_standard(mol_str);
+        assert!(result.is_ok(), "{} should have succeeded: {:?}", desc, result.err());
     }
 
     #[test]

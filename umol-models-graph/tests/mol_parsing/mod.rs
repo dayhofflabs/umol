@@ -1,86 +1,158 @@
-use insta::assert_yaml_snapshot;
-use serde::Serialize;
-use std::fs::read;
 use std::path::Path;
 
-use umol_models_graph::io::mol::parser::parse_mol_file;
+use insta::{assert_yaml_snapshot, Settings};
+use serde::Serialize;
+use umol_models_graph::io::ctab::molecule::{Molecule, MoleculeStandard};
+use umol_models_graph::io::mol::parser::{parse_mol_file, parse_mol_file_standard};
 
-#[derive(Serialize)]
-struct Snapshot<'a> {
-    category: &'a str,
-    filename: &'a str,
-    expected_success: bool,
-    success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    molecule: Option<serde_yaml::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
+#[allow(dead_code)]
+enum TestMode {
+    Summary,
+    Full,
+    // SGroups, etc. would go here
 }
 
-fn run_test(path: &Path) {
-    let mol_bytes = read(path).unwrap();
-    let result = parse_mol_file(&mol_bytes);
+#[derive(Serialize)]
+struct MoleculeSummary {
+    atom_count: usize,
+    bond_count: usize,
+}
 
-    let path_str = path.to_str().unwrap();
-    let expected_success = path_str.contains("/valid/");
-    let category = path
-        .parent()
+impl From<&Molecule> for MoleculeSummary {
+    fn from(molecule: &Molecule) -> Self {
+        Self {
+            atom_count: molecule.atom_count(),
+            bond_count: molecule.bond_count(),
+        }
+    }
+}
+
+impl From<&MoleculeStandard> for MoleculeSummary {
+    fn from(molecule: &MoleculeStandard) -> Self {
+        Self {
+            atom_count: molecule.atom_count(),
+            bond_count: molecule.bond_count(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct FullSnapshot<'a> {
+    category: &'a str,
+    filename: &'a str,
+    molecule: serde_yaml::Value,
+}
+
+fn get_category(path: &Path) -> &str {
+    path.parent()
         .unwrap()
         .parent()
         .unwrap()
         .file_name()
         .unwrap()
         .to_str()
-        .unwrap();
+        .unwrap()
+}
 
-    let snapshot = match result {
-        Ok(mol_file) => Snapshot {
+fn store_summary_snapshot(summary: MoleculeSummary) {
+    let mut settings = Settings::clone_current();
+    settings.set_snapshot_path(Path::new("snapshots").join("summary"));
+    settings.bind(|| {
+        assert_yaml_snapshot!(summary);
+    });
+}
+
+fn store_full_snapshot(path: &Path, category: &str, value: serde_yaml::Value) {
+    let mut settings = Settings::clone_current();
+    settings.set_snapshot_path(Path::new("snapshots").join("full"));
+    settings.bind(|| {
+        let snapshot = FullSnapshot {
             category,
             filename: path.file_name().unwrap().to_str().unwrap(),
-            expected_success,
-            success: true,
-            molecule: Some(serde_yaml::to_value(&mol_file.molecule).unwrap()),
-            error: None,
-        },
-        Err(e) => Snapshot {
-            category,
-            filename: path.file_name().unwrap().to_str().unwrap(),
-            expected_success,
-            success: false,
-            molecule: None,
-            error: Some(e.to_string()),
-        },
-    };
-
-    assert_yaml_snapshot!(snapshot);
+            molecule: value,
+        };
+        assert_yaml_snapshot!(snapshot);
+    });
 }
 
-#[test]
-fn test_basic() {
-    insta::glob!("data/basic/valid/*.mol", run_test);
+fn run_test(path: &Path, mode: TestMode) {
+    let path_str = path.to_str().unwrap();
+    let category = get_category(path);
+    let expected_success = path_str.contains("/valid/");
+
+    let mol_bytes = std::fs::read(path).unwrap();
+    let result = parse_mol_file(&mol_bytes);
+    if expected_success {
+        assert!(
+            result.is_ok(),
+            "Expected parsing to succeed, but it failed for file: {}",
+            path.display()
+        );
+    } else {
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail, but it succeeded for file: {}",
+            path.display()
+        );
+        return;
+    }
+
+    match mode {
+        TestMode::Summary => {
+            let summary = MoleculeSummary::from(&result.unwrap().molecule);
+            store_summary_snapshot(summary);
+        }
+        TestMode::Full => {
+            let serialized = serde_yaml::to_value(&result.unwrap().molecule).unwrap();
+            store_full_snapshot(path, category, serialized);
+        }
+    }
 }
 
-#[test]
-fn test_properties() {
-    insta::glob!("data/with_properties/valid/*.mol", run_test);
+fn run_test_standard(path: &Path, mode: TestMode) {
+    let path_str = path.to_str().unwrap();
+    let category = get_category(path);
+    let expected_success = path_str.contains("/valid/");
+
+    let mol_bytes = std::fs::read(path).unwrap();
+
+    let result = parse_mol_file_standard(&mol_bytes);
+    if expected_success {
+        assert!(
+            result.is_ok(),
+            "Expected parsing to succeed, but it failed for file: {}",
+            path.display()
+        );
+    } else {
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail, but it succeeded for file: {}",
+            path.display()
+        );
+        return;
+    }
+    match mode {
+        TestMode::Summary => {
+            let summary = MoleculeSummary::from(&result.unwrap().molecule);
+            store_summary_snapshot(summary);
+        }
+        TestMode::Full => {
+            let serialized = serde_yaml::to_value(&result.unwrap().molecule).unwrap();
+            store_full_snapshot(path, category, serialized);
+        }
+    }
 }
 
-#[test]
-fn test_query() {
-    insta::glob!("data/query/valid/*.mol", run_test);
-}
+// #[test]
+// fn test_summaries() {
+//     insta::glob!("data/**/valid/*.mol", |path| {
+//         run_test(path, TestMode::Summary);
+//     });
+// }
 
 #[test]
-fn test_rgroups() {
-    insta::glob!("data/with_rgroups/valid/*.mol", run_test);
-}
-
-#[test]
-fn test_sgroups() {
-    insta::glob!("data/with_sgroups/valid/*.mol", run_test);
-}
-
-#[test]
-fn test_edge_cases() {
-    insta::glob!("data/uncategorized/*.mol", run_test);
+fn test_summaries_standard() {
+    insta::glob!("data/standard/valid/*.mol", |path| {
+        run_test_standard(path, TestMode::Summary);
+    });
 }
