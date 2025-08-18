@@ -6,6 +6,48 @@ use crate::io::ctab::bond::BondType;
 use umol_data::Element;
 
 #[test]
+fn test_atom_block() {
+    let atom_data = b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+ ";
+    let atom_count = 2;
+    let result = atom_block(atom_count).parse(atom_data);
+    assert!(result.is_ok(), "Atom block should parse successfully");
+
+    let (remaining, atoms) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(atoms.len(), 2, "Should have 2 atoms");
+    assert_eq!(atoms[0].symbol, AtomSymbol::Element(Element::C));
+    assert_eq!(atoms[1].symbol, AtomSymbol::Element(Element::O));
+}
+
+#[test]
+fn test_bond_block() {
+    let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
+    let bond_count = 2;
+    let result = bond_block(bond_count).parse(bond_data);
+    assert!(result.is_ok(), "Bond block should parse successfully");
+
+    let (remaining, bonds) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(bonds.len(), 2, "Should have 2 bonds");
+    assert_eq!(bonds[0].2.bond_type, BondType::Single);
+    assert_eq!(bonds[1].2.bond_type, BondType::Double);
+}
+
+#[test]
+fn test_legacy_atom_list_block() {
+    let atom_list_data = b"  1 F    3   9   7   8  ";
+    let result = legacy_atom_list_block().parse(atom_list_data);
+    assert!(result.is_ok(), "Legacy atom list block should parse successfully");
+
+    let (remaining, atom_list) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(atom_list.len(), 1, "Should have 1 atom list");
+    assert!(matches!(atom_list[0], PropertyEntries::AtomListEntry(_)));
+}
+
+#[test]
 fn test_properties_block() {
     let input = b"M  CHG  1   2  -1\nM  END\n";
     let result = properties_block().parse(input);
@@ -13,19 +55,6 @@ fn test_properties_block() {
     let (remaining, properties) = result.unwrap();
     assert_eq!(properties.len(), 1, "Should have 1 property");
     assert!(remaining.is_empty(), "All input should be consumed");
-}
-
-#[test]
-fn test_bond_block() {
-    // Test the bond block parser directly
-    let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
-    let bond_count = 2;
-    let result = bond_block(bond_count).parse(bond_data);
-    assert!(result.is_ok(), "Bond block should parse successfully");
-
-    let (remaining, bonds) = result.unwrap();
-    assert_eq!(bonds.len(), 2, "Should have 2 bonds");
-    assert_eq!(remaining, b"", "All input should be consumed");
 }
 
 #[test]
