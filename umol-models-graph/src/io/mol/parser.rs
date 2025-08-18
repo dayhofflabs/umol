@@ -18,10 +18,9 @@ use crate::io::ctab::parser::{
     counts_input, ctab_block, ctab_block_standard, legacy_atom_list_input, property_input,
     property_input_standard, Counts, PropertyEntries,
 };
-use crate::io::mol::parser::header::header_input;
+use crate::io::mol::parser::header::{header_input, header, Header};
 
 pub mod header;
-use header::{header, Header};
 use umol::error::DataError;
 use umol::Result;
 
@@ -214,31 +213,6 @@ pub enum ParsedMolStandardLine {
     Unknown(String),
 }
 
-fn mol_input<'a>() -> impl Parser<&'a [u8], Output = ParsedMolLine, Error = error::Error<&'a [u8]>>
-{
-    alt((
-        map(counts_input(), ParsedMolLine::Counts),
-        map(atom_input(), ParsedMolLine::Atom),
-        map(bond_input(), |(_, _, bond)| ParsedMolLine::Bond(bond)),
-        map(legacy_atom_list_input(), ParsedMolLine::Property),
-        map(tag("M  END"), |_| ParsedMolLine::End),
-        map(property_input(), ParsedMolLine::Property),
-    ))
-}
-
-fn mol_input_standard<'a>(
-) -> impl Parser<&'a [u8], Output = ParsedMolStandardLine, Error = error::Error<&'a [u8]>> {
-    alt((
-        map(counts_input(), ParsedMolStandardLine::Counts),
-        map(atom_input_standard(), ParsedMolStandardLine::Atom),
-        map(bond_input_standard(), |(_, _, bond)| {
-            ParsedMolStandardLine::Bond(bond)
-        }),
-        map(tag("M  END"), |_| ParsedMolStandardLine::End),
-        map(property_input_standard(), ParsedMolStandardLine::Property),
-    ))
-}
-
 /// Progressively parse a MOL file, line by line, for diagnostic purposes.
 ///
 /// This function processes one logical line at a time, handling multi-line blocks
@@ -246,7 +220,7 @@ fn mol_input_standard<'a>(
 /// the content of each line. It uses the general parser that supports query features.
 pub fn parse_mol_progressive(input: &[u8]) -> Vec<ParsedMolLine> {
     let mut results = Vec::new();
-    let mut lines = input.lines().peekable();
+    let mut lines = input.lines();
 
     for _ in 0..3 {
         if let Some(line) = lines.next() {
@@ -259,6 +233,45 @@ pub fn parse_mol_progressive(input: &[u8]) -> Vec<ParsedMolLine> {
         }
     }
 
+    let (atom_count, bond_count) = if let Some(line) = lines.next() {
+        match counts_input().parse(line) {
+            Ok((_, counts)) => {
+                let (ac, bc) = (counts.atoms() as usize, counts.bonds() as usize);
+                results.push(ParsedMolLine::Counts(counts));
+                (ac, bc)
+            }
+            Err(_) => {
+                results.push(ParsedMolLine::Unknown(line.to_str_lossy().to_string()));
+                (0, 0)
+            }
+        }
+    } else {
+        (0, 0)
+    };
+
+    for _ in 0..atom_count {
+        if let Some(line) = lines.next() {
+            results.push(
+                atom_input()
+                    .parse(line)
+                    .map(|(_, atom)| ParsedMolLine::Atom(atom))
+                    .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
+            );
+        }
+    }
+
+    for _ in 0..bond_count {
+        if let Some(line) = lines.next() {
+            results.push(
+                bond_input()
+                    .parse(line)
+                    .map(|(_, (_, _, bond))| ParsedMolLine::Bond(bond))
+                    .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
+            );
+        }
+    }
+
+    let mut lines = lines.peekable();
     while let Some(line) = lines.next() {
         if line.trim().is_empty() {
             results.push(ParsedMolLine::Empty);
@@ -267,25 +280,35 @@ pub fn parse_mol_progressive(input: &[u8]) -> Vec<ParsedMolLine> {
 
         if line.starts_with(b"A  ") {
             if let Some(next_line) = lines.next() {
-                let combined_lines = join(b"\n", &[&line[3..], next_line]);
+                let combined = join(b"\n", &[&line[3..], next_line]);
                 results.push(
                     atom_alias_entry()
-                        .parse(&combined_lines)
-                        .map(|(_, alias_entry)| {
-                            ParsedMolLine::Property(PropertyEntries::AtomAliasEntry(alias_entry))
+                        .parse(&combined)
+                        .map(|(_, entry)| {
+                            ParsedMolLine::Property(PropertyEntries::AtomAliasEntry(entry))
                         })
-                        .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
+                        .unwrap_or(ParsedMolLine::Unknown(combined.to_str_lossy().to_string())),
                 );
-                continue;
+            } else {
+                results.push(ParsedMolLine::Unknown(line.to_str_lossy().to_string()));
             }
+        } else if line.starts_with(b"M  END") {
+            results.push(ParsedMolLine::End);
+        } else {
+            // Here we must try legacy list first as it has no prefix
+            let mut property_parser = alt((
+                map(legacy_atom_list_input(), |p| p),
+                map(property_input(), |p| p),
+            ));
+            results.push(
+                property_parser
+                    .parse(line)
+                    .map(|(_, prop)| ParsedMolLine::Property(prop))
+                    .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
+            );
         }
-        results.push(
-            mol_input()
-                .parse(line)
-                .map(|(_, parsed)| parsed)
-                .unwrap_or(ParsedMolLine::Unknown(line.to_str_lossy().to_string())),
-        );
     }
+
     results
 }
 
@@ -296,7 +319,7 @@ pub fn parse_mol_progressive(input: &[u8]) -> Vec<ParsedMolLine> {
 /// correctly handle query features.
 pub fn parse_mol_progressive_standard(input: &[u8]) -> Vec<ParsedMolStandardLine> {
     let mut results = Vec::new();
-    let mut lines = input.lines().peekable();
+    let mut lines = input.lines();
 
     for _ in 0..3 {
         if let Some(line) = lines.next() {
@@ -311,6 +334,51 @@ pub fn parse_mol_progressive_standard(input: &[u8]) -> Vec<ParsedMolStandardLine
         }
     }
 
+    let (atom_count, bond_count) = if let Some(line) = lines.next() {
+        match counts_input().parse(line) {
+            Ok((_, counts)) => {
+                let (ac, bc) = (counts.atoms() as usize, counts.bonds() as usize);
+                results.push(ParsedMolStandardLine::Counts(counts));
+                (ac, bc)
+            }
+            Err(_) => {
+                results.push(ParsedMolStandardLine::Unknown(
+                    line.to_str_lossy().to_string(),
+                ));
+                (0, 0)
+            }
+        }
+    } else {
+        (0, 0)
+    };
+
+    for _ in 0..atom_count {
+        if let Some(line) = lines.next() {
+            results.push(
+                atom_input_standard()
+                    .parse(line)
+                    .map(|(_, atom)| ParsedMolStandardLine::Atom(atom))
+                    .unwrap_or(ParsedMolStandardLine::Unknown(
+                        line.to_str_lossy().to_string(),
+                    )),
+            );
+        }
+    }
+
+    for _ in 0..bond_count {
+        if let Some(line) = lines.next() {
+            results.push(
+                bond_input_standard()
+                    .parse(line)
+                    .map(|(_, (_, _, bond))| ParsedMolStandardLine::Bond(bond))
+                    .unwrap_or(ParsedMolStandardLine::Unknown(
+                        line.to_str_lossy().to_string(),
+                    )),
+            );
+        }
+    }
+
+    let mut lines = lines.peekable();
     while let Some(line) = lines.next() {
         if line.trim().is_empty() {
             results.push(ParsedMolStandardLine::Empty);
@@ -319,231 +387,38 @@ pub fn parse_mol_progressive_standard(input: &[u8]) -> Vec<ParsedMolStandardLine
 
         if line.starts_with(b"A  ") {
             if let Some(next_line) = lines.next() {
-                let combined_lines = join(b"\n", &[&line[..3], next_line]);
+                let combined = join(b"\n", &[&line[3..], next_line]);
                 results.push(
                     atom_alias_entry()
-                        .parse(&combined_lines)
-                        .map(|(_, alias_entry)| {
-                            ParsedMolStandardLine::Property(PropertyEntries::AtomAliasEntry(alias_entry))
+                        .parse(&combined)
+                        .map(|(_, entry)| {
+                            ParsedMolStandardLine::Property(PropertyEntries::AtomAliasEntry(entry))
                         })
-                        .unwrap_or(ParsedMolStandardLine::Unknown(line.to_str_lossy().to_string())),
+                        .unwrap_or(ParsedMolStandardLine::Unknown(
+                            combined.to_str_lossy().to_string(),
+                        )),
                 );
-                continue;
-            }
-        }
-
-        results.push(
-            mol_input_standard()
-                .parse(line)
-                .map(|(_, parsed)| parsed)
-                .unwrap_or(ParsedMolStandardLine::Unknown(
+            } else {
+                results.push(ParsedMolStandardLine::Unknown(
                     line.to_str_lossy().to_string(),
-                )),
-        );
+                ));
+            }
+        } else if line.starts_with(b"M  END") {
+            results.push(ParsedMolStandardLine::End);
+        } else {
+            results.push(
+                property_input_standard()
+                    .parse(line)
+                    .map(|(_, prop)| ParsedMolStandardLine::Property(prop))
+                    .unwrap_or(ParsedMolStandardLine::Unknown(
+                        line.to_str_lossy().to_string(),
+                    )),
+            );
+        }
     }
+
     results
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::*;
-
-    #[test]
-    fn test_footer_empty() {
-        let result = footer().parse(b"");
-        assert!(result.is_ok());
-        let (remaining, _) = result.unwrap();
-        assert!(remaining.is_empty());
-    }
-
-    #[test]
-    fn test_footer_whitespace() {
-        let result = footer().parse(b"\n\n  \t\n");
-        assert!(result.is_ok());
-        let (remaining, _) = result.unwrap();
-        assert!(remaining.is_empty());
-    }
-
-    #[test]
-    fn test_footer_sdf_delimiter() {
-        let result = footer().parse(b"\n$$$$\n");
-        assert!(result.is_ok());
-        let (remaining, _) = result.unwrap();
-        assert!(remaining.is_empty());
-    }
-
-    #[test]
-    fn test_footer_sdf_delimiter_with_whitespace() {
-        let result = footer().parse(b"\n\n$$$$\n  \n");
-        assert!(result.is_ok());
-        let (remaining, _) = result.unwrap();
-        assert!(remaining.is_empty());
-    }
-
-    #[test]
-    fn test_parse_mol_file() {
-        // Test parsing complete MOL file with header extraction
-        let mol_content = b"Ethane\nRDKit\nTest molecule\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n";
-        let result = parse_mol_file(mol_content);
-        assert!(
-            result.is_ok(),
-            "Complete MOL file should parse successfully"
-        );
-
-        let mol_file = result.unwrap();
-        // Check header
-        assert_eq!(mol_file.header.name, "Ethane");
-        assert_eq!(mol_file.header.program_info, "RDKit");
-        assert_eq!(mol_file.header.comment, "Test molecule");
-
-        // Check molecule
-        assert_eq!(mol_file.molecule.graph.node_count(), 2);
-        assert_eq!(mol_file.molecule.graph.edge_count(), 1);
-    }
-
-    #[test]
-    fn test_has_query_features() {
-        // Test standard molecule
-        let standard_mol = b"Methane\nRDKit          3D\nGenerated by RDKit\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0\nM  END\n";
-        let molecule = parse_mol(standard_mol).unwrap();
-        assert!(
-            !has_nonstandard_features(&molecule),
-            "Standard molecule should not have query features"
-        );
-
-        // Test simple ethane molecule
-        let ethane_mol = b"Ethane\nRDKit\nTest molecule\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n";
-        let molecule2 = parse_mol(ethane_mol).unwrap();
-        assert!(
-            !has_nonstandard_features(&molecule2),
-            "Simple ethane should not have query features"
-        );
-    }
-
-    #[rstest]
-    #[case(b"Methane\nRDKit          3D\nGenerated by RDKit\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0\nM  END\n",
-       "valid")]
-    fn test_parse_mol(#[case] mol_str: &[u8], #[case] desc: &str) {
-        let result = parse_mol(mol_str);
-        assert!(
-            result.is_ok(),
-            "{} should have succeeded: {:?}",
-            desc,
-            result.err()
-        );
-
-        let molecule = result.unwrap();
-        assert!(
-            !has_nonstandard_features(&molecule),
-            "{} should not have query features",
-            desc
-        );
-
-        assert_eq!(molecule.atom_count(), 1, "{} should have 1 atom", desc);
-        assert_eq!(molecule.bond_count(), 0, "{} should have 0 bonds", desc);
-    }
-
-    #[rstest]
-    #[case(b"Ethane\nRDKit          3D\nGenerated by RDKit\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n",
-      "standard ethane")]
-    fn test_parse_mol_standard(#[case] mol_str: &[u8], #[case] desc: &str) {
-        let result = parse_mol_standard(mol_str);
-        assert!(
-            result.is_ok(),
-            "{} should have succeeded: {:?}",
-            desc,
-            result.err()
-        );
-
-        let molecule = result.unwrap();
-        assert_eq!(molecule.atom_count(), 2, "{} should have 2 atoms", desc);
-        assert_eq!(molecule.bond_count(), 1, "{} should have 1 bond", desc);
-    }
-
-    #[rstest]
-    #[case(b"Ethane\nRDKit\nTest molecule\n  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n",
-      "standard ethane")]
-    fn test_parse_mol_file_standard(#[case] mol_str: &[u8], #[case] desc: &str) {
-        let result = parse_mol_file_standard(mol_str);
-        assert!(
-            result.is_ok(),
-            "{} should have succeeded: {:?}",
-            desc,
-            result.err()
-        );
-    }
-
-
-    #[test]
-    fn test_parse_mol_standard_query() {
-        // MOL with query atom 'A' (any atom)
-        let query_mol = b"Query\nRDKit          3D\nWith query atom\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 A   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n";
-
-        let result = parse_mol_standard(query_mol);
-        assert!(
-            result.is_err(),
-            "Standard parser should fail on query atoms"
-        );
-
-        let error = result.unwrap_err();
-        let error_string = format!("{}", error);
-        assert!(
-            error_string.contains("MOL parsing failed")
-                || error_string.contains("Standard MOL parsing failed"),
-            "Error should mention parsing failure: {}",
-            error_string
-        );
-    }
-
-    #[test]
-    fn test_progressive_parser_standard() {
-        let mol = b"MyMol\n\nComment\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0\nM  END\n";
-        let result = parse_mol_progressive_standard(mol);
-        assert!(matches!(result[0], ParsedMolStandardLine::Header(_)));
-        assert!(matches!(result[1], ParsedMolStandardLine::Header(_)));
-        assert!(matches!(result[2], ParsedMolStandardLine::Header(_)));
-        assert!(matches!(result[3], ParsedMolStandardLine::Counts(_)));
-        assert!(matches!(result[4], ParsedMolStandardLine::Atom(_)));
-        assert!(matches!(result[5], ParsedMolStandardLine::End));
-    }
-
-    #[test]
-    fn test_progressive_parser_alias() {
-        let mol_with_alias = b"MyMol\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0\nA    1\nCF3\nM  END\n";
-        let result = parse_mol_progressive(mol_with_alias);
-        println!("{:?}", result);
-        assert!(
-            matches!(
-                result[5],
-                ParsedMolLine::Property(PropertyEntries::AtomAliasEntry(_))
-            ),
-            "Failed to parse two-line atom alias. Got: {:?}",
-            result[5]
-        );
-    }
-
-    #[test]
-    fn test_progressive_parser_legacy_list() {
-        let mol_with_legacy = b"MyMol\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0\n  1 F    2   6   8\nM  END\n";
-        let result = parse_mol_progressive(mol_with_legacy);
-        assert!(
-            matches!(
-                result[5],
-                ParsedMolLine::Property(PropertyEntries::AtomListEntry(_))
-            ),
-            "Failed to parse legacy atom list. Got: {:?}",
-            result[5]
-        );
-    }
-
-    #[rstest]
-    #[case("src/io/mol/data/glycine-short-lines.mol", "glycine, short lines")]
-    fn test_progressive_parser_standard_from_path(#[case] path: &str, #[case] desc: &str) {
-        let input = std::fs::read(path).unwrap();
-        let result = parse_mol_progressive_standard(&input);
-        println!("{:?}", result);
-        assert_eq!(result.len(), 10, "{} should have 10 lines", desc);
-    }
-
-}
+mod tests;

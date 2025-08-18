@@ -2,12 +2,13 @@
 
 use nom::bytes::complete::take;
 use nom::character::complete::space0;
-use nom::combinator::{cond, map, map_res};
+use nom::combinator::{cond, map, map_res, verify};
 use nom::error;
 use nom::sequence::terminated;
 use nom::{Err, IResult, Parser};
 
 use crate::io::ctab::bond::{Bond, BondStandard, BondType};
+use crate::io::ctab::parser::utils::{is_blanks_or_zeros, repeat};
 
 use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_dir_code, convert_bond_topology_code,
@@ -15,59 +16,33 @@ use super::convert::{
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1};
 
-fn bond_input_standard21(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStandard)> {
-    terminated(
-        map(
-            (
-                fixed_width_int_minus1::<usize>(3),
-                fixed_width_int_minus1::<usize>(3),
-                map_res(fixed_width_int::<u8>(3), |code| {
-                    convert_bond_type_code_standard(code)
-                }),
-                map_res(fixed_width_int::<u8>(3), |code| {
-                    convert_bond_stereo_dir_code(code, false)
-                }),
-            ),
-            |(first_atom, second_atom, bond_type, (stereo, dir))| {
-                let mut bond = BondStandard::new(bond_type);
-                match bond.bond_type {
-                    BondType::Single => bond.dir = dir,
-                    BondType::Double => bond.stereo = stereo,
-                    _ => (),
-                }
-                (first_atom, second_atom, bond)
-            },
-        ),
-        take(9usize), // ignore rrrccc fields
-    )
-    .parse(input)
-}
-
-/// Parse standard bond inputs with 12 characters (s. `bond_input` for more details).
+/// Parse standard bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
 fn bond_input_standard12(input: &[u8]) -> IResult<&[u8], (usize, usize, BondStandard)> {
-    map(
-        (
-            fixed_width_int_minus1::<usize>(3),
-            fixed_width_int_minus1::<usize>(3),
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_type_code_standard(code)
-            }),
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_stereo_dir_code(code, false)
-            }),
-        ),
-        |(first_atom, second_atom, bond_type, (stereo, dir))| {
-            let mut bond = BondStandard::new(bond_type);
-            match bond.bond_type {
-                BondType::Single => bond.dir = dir,
-                BondType::Double => bond.stereo = stereo,
-                _ => (),
-            }
-            (first_atom, second_atom, bond)
-        },
-    )
-    .parse(input)
+    let first_atom = fixed_width_int_minus1::<usize>(3);
+    let second_atom = fixed_width_int_minus1::<usize>(3);
+    let bond_type = map_res(fixed_width_int::<u8>(3), |code| {
+        convert_bond_type_code_standard(code)
+    });
+    let stereo_dir = map_res(fixed_width_int::<u8>(3), |code| {
+        convert_bond_stereo_dir_code(code, false)
+    });
+    let (input, (first_atom, second_atom, bond_type, (stereo, dir))) =
+        (first_atom, second_atom, bond_type, stereo_dir).parse(input)?;
+
+    // Verify that ignored block has up to 3 fields of width 3 containing blanks or zeros
+    let n_to_take = 9.min(input.len());
+    let (remaining, _) =
+        repeat(n_to_take / 3, verify(take(3usize), is_blanks_or_zeros)).parse(input)?;
+
+    let mut bond = BondStandard::new(bond_type);
+    match bond.bond_type {
+        BondType::Single => bond.dir = dir,
+        BondType::Double => bond.stereo = stereo,
+        _ => (),
+    }
+
+    Ok((remaining, (first_atom, second_atom, bond)))
 }
 
 /// Parse standard bond inputs with 9 characters (s. `bond_input` for more details).
@@ -109,15 +84,9 @@ pub fn bond_input_standard<'a>(
     move |input: &'a [u8]| {
         let len = input.len();
         let parser = match len {
-            21.. => bond_input_standard21,
-            10..=20 => bond_input_standard12,
+            10.. => bond_input_standard12,
             9 => bond_input_standard9,
-            _ => {
-                return Err(Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Eof,
-                )))
-            }
+            _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
         terminated(parser, space0).parse(input)
     }
@@ -180,9 +149,7 @@ fn bond_input_inner<'a>(
 
 pub fn bond_input<'a>(
 ) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
-        terminated(bond_input_inner(), space0).parse(input)
-    }
+    move |input: &'a [u8]| terminated(bond_input_inner(), space0).parse(input)
 }
 
 #[cfg(test)]
