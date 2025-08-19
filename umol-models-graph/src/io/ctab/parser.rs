@@ -194,7 +194,12 @@ fn properties_block<'a>(
 
         while let Some(line) = lines_iter.next() {
             if line.starts_with(b"M  END") {
-                break;
+                if lines_iter.next().is_some() {
+                    let remaining = remaining_input(input, line.as_ptr());
+                    return Ok((remaining, properties));
+                } else {
+                    return Ok((b"", properties));
+                }
             }
 
             // Handle atom alias (two-line property)
@@ -236,10 +241,12 @@ fn properties_block_standard<'a>(
 
         while let Some(line) = lines_iter.next() {
             if line.starts_with(b"M  END") {
+                println!("M  END");
+                println!("line: '{}'", String::from_utf8_lossy(line));
                 break;
             }
 
-            // Handle atom alias (two-line property)
+            // Special case for atom alias (two-line property)
             let (input_line, combined_lines): (&[u8], Vec<u8>);
             if line.starts_with(b"A  ") {
                 if let Some(next_line) = lines_iter.next() {
@@ -264,7 +271,13 @@ fn properties_block_standard<'a>(
             };
         }
 
+
         let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+
+        println!("Bottom of properties block");
+        println!("remaining: '{}'", String::from_utf8_lossy(remaining));
+        println!("input: '{}'", String::from_utf8_lossy(input));
+
         Ok((remaining, properties))
     }
 }

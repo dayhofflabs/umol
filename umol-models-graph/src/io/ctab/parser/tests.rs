@@ -39,7 +39,10 @@ fn test_bond_block() {
 fn test_legacy_atom_list_block() {
     let atom_list_data = b"  1 F    3   9   7   8  ";
     let result = legacy_atom_list_block().parse(atom_list_data);
-    assert!(result.is_ok(), "Legacy atom list block should parse successfully");
+    assert!(
+        result.is_ok(),
+        "Legacy atom list block should parse successfully"
+    );
 
     let (remaining, atom_list) = result.unwrap();
     assert_eq!(remaining, b"", "All input should be consumed");
@@ -53,8 +56,36 @@ fn test_properties_block() {
     let result = properties_block().parse(input);
     assert!(result.is_ok(), "Should parse properties block");
     let (remaining, properties) = result.unwrap();
-    assert_eq!(properties.len(), 1, "Should have 1 property");
     assert!(remaining.is_empty(), "All input should be consumed");
+    assert_eq!(properties.len(), 1, "Should have 1 property");
+}
+
+#[test]
+fn test_properties_block_missing_newline() {
+    let ctab_data = b"M  END\n";
+    let result = properties_block().parse(ctab_data);
+    assert!(
+        result.is_ok(),
+        "CTAB block without terminating newline should parse successfully"
+    );
+
+    let (remaining, property_entries) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(property_entries.len(), 0, "Should have 0 property entries");
+}
+
+#[test]
+fn test_properties_block_standard_missing_newline() {
+    let ctab_data = b"M  END";
+    let result = properties_block_standard().parse(ctab_data);
+    assert!(
+        result.is_ok(),
+        "CTAB block without terminating newline should parse successfully"
+    );
+
+    let (remaining, property_entries) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(property_entries.len(), 0, "Should have 0 property entries");
 }
 
 #[test]
@@ -67,22 +98,18 @@ M  END
 ";
     let result = ctab_block().parse(ctab_data);
     assert!(result.is_ok(), "CTAB block should parse successfully");
-
     let (remaining, molecule) = result.unwrap();
     assert!(remaining.is_empty(), "All input should be consumed");
 
-    // Check molecule structure
     assert_eq!(molecule.graph.node_count(), 2, "Should have 2 atoms");
     assert_eq!(molecule.graph.edge_count(), 1, "Should have 1 bond");
 
-    // Check atoms
     let atom1 = molecule.graph.node_weight(0.into()).unwrap();
     assert!(matches!(atom1.symbol, AtomSymbol::Element(Element::C)));
 
     let atom2 = molecule.graph.node_weight(1.into()).unwrap();
     assert!(matches!(atom2.symbol, AtomSymbol::Element(Element::C)));
 
-    // Check bond
     let edge = molecule.graph.edge_indices().next().unwrap();
     let bond = molecule.graph.edge_weight(edge).unwrap();
     assert_eq!(bond.bond_type, BondType::Single);
@@ -106,18 +133,15 @@ M  END
     let (remaining, molecule) = result.unwrap();
     assert!(remaining.is_empty(), "All input should be consumed");
 
-    // Check that we have the expected structure
     assert_eq!(molecule.graph.node_count(), 2, "Should have 2 atoms");
     assert_eq!(molecule.graph.edge_count(), 1, "Should have 1 bond");
 
-    // Check charge was applied to the oxygen atom (index 1)
     let atom2 = molecule.graph.node_weight(1.into()).unwrap();
     assert_eq!(atom2.charge, -1, "Oxygen should have -1 charge from M CHG");
 }
 
 #[test]
 fn test_ctab_block_truncated_lines() {
-    // Test with truncated atom lines (missing trailing fields)
     let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    0.0000 C   0  0
     1.5400    0.0000    0.0000 C   0  0
@@ -138,7 +162,6 @@ M  END
 
 #[test]
 fn test_ctab_block_missing_m_end() {
-    // M END is optional according to spec
     let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
     1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
@@ -150,7 +173,8 @@ fn test_ctab_block_missing_m_end() {
         "CTAB block without M END should parse successfully"
     );
 
-    let (_, molecule) = result.unwrap();
+    let (remaining, molecule) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
     assert_eq!(molecule.graph.node_count(), 2, "Should have 2 atoms");
 }
 
