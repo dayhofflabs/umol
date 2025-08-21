@@ -16,6 +16,57 @@ use std::collections::{BTreeMap, HashMap};
 pub type AtomIndex = NodeIndex<usize>;
 pub type BondIndex = EdgeIndex<usize>;
 
+fn element_symbol_key(element: Element) -> [u8; 2] {
+    let symbol = element.symbol();
+    let bytes = symbol.as_bytes();
+    [
+        bytes.get(0).copied().unwrap_or(0),
+        bytes.get(1).copied().unwrap_or(0),
+    ]
+}
+
+/// Format sum formula according to Hill notation
+/// 
+/// Hill notation: C first, H second, then other elements alphabetically by symbol
+fn format_sum_formula(
+    c_count: usize,
+    h_count: usize,
+    atom_counts: BTreeMap<[u8; 2], (Element, usize)>,
+    charge: i8,
+) -> String {
+    let mut sum_formula = String::new();
+    
+    // Carbon first
+    if c_count > 1 {
+        sum_formula.push_str(&format!("C{}", c_count));
+    } else if c_count == 1 {
+        sum_formula.push_str("C");
+    }
+    
+    // Hydrogen second
+    if h_count > 1 {
+        sum_formula.push_str(&format!("H{}", h_count));
+    } else if h_count == 1 {
+        sum_formula.push_str("H");
+    }
+    
+    // Other elements alphabetically by symbol (BTreeMap with [u8; 2] keys maintains order)
+    for (_, (element, count)) in atom_counts {
+        if count > 1 {
+            sum_formula.push_str(&format!("{}{}", element, count));
+        } else {
+            sum_formula.push_str(&element.to_string());
+        }
+    }
+    
+    // Charge at the end
+    if charge != 0 {
+        sum_formula.push_str(&format!("{:+}", charge));
+    }
+    
+    sum_formula
+}
+
 /// Graph-based molecule representation with full MOL file semantics (including queries)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Molecule {
@@ -156,7 +207,7 @@ impl Molecule {
 
     /// Get sum formula
     pub fn sum_formula(&self) -> String {
-        let mut atom_counts = HashMap::new();
+        let mut atom_counts = BTreeMap::new();
         let mut c_count = 0;
         let mut h_count = 0;
         let mut charge = 0;
@@ -168,7 +219,8 @@ impl Molecule {
                     } else if element == e!(H) {
                         h_count += 1;
                     } else {
-                        *atom_counts.entry(element).or_insert(0) += 1;
+                        let key = element_symbol_key(element);
+                        atom_counts.entry(key).or_insert((element, 0)).1 += 1;
                     }
                 }
                 AtomSymbol::NamedIsotope(_) => {
@@ -179,28 +231,7 @@ impl Molecule {
             }
             charge += atom.charge;
         }
-        let mut sum_formula = String::new();
-        if c_count > 1 {
-            sum_formula.push_str(&format!("C{}", c_count));
-        } else if c_count == 1 {
-            sum_formula.push_str("C");
-        }
-        if h_count > 1 {
-            sum_formula.push_str(&format!("H{}", h_count));
-        } else if h_count == 1 {
-            sum_formula.push_str("H");
-        }
-        for (symbol, count) in atom_counts {
-            if count > 1 {
-                sum_formula.push_str(&format!("{}{}", symbol, count));
-            } else {
-                sum_formula.push_str(&symbol.to_string());
-            }
-        }
-        if charge != 0 {
-            sum_formula.push_str(&format!("{:+}", charge));
-        }
-        sum_formula
+        format_sum_formula(c_count, h_count, atom_counts, charge)
     }
 
     /// Get graph6 representation of the molecule (excluding atom and bond labels)
@@ -283,7 +314,7 @@ impl MoleculeStandard {
 
     /// Get sum formula
     pub fn sum_formula(&self) -> String {
-        let mut atom_counts = HashMap::new();
+        let mut atom_counts = BTreeMap::new();
         let mut charge = 0;
         let mut c_count = 0;
         let mut h_count = 0;
@@ -296,33 +327,13 @@ impl MoleculeStandard {
                     h_count += 1;
                 }
                 _ => {
-                    *atom_counts.entry(atom.element).or_insert(0) += 1;
+                    let key = element_symbol_key(atom.element);
+                    atom_counts.entry(key).or_insert((atom.element, 0)).1 += 1;
                 }
             }
             charge += atom.charge;
         }
-        let mut sum_formula = String::new();
-        if c_count > 1 {
-            sum_formula.push_str(&format!("C{}", c_count));
-        } else if c_count == 1 {
-            sum_formula.push_str("C");
-        }
-        if h_count > 1 {
-            sum_formula.push_str(&format!("H{}", h_count));
-        } else if h_count == 1 {
-            sum_formula.push_str("H");
-        }
-        for (symbol, count) in atom_counts {
-            if count > 1 {
-                sum_formula.push_str(&format!("{}{}", symbol, count));
-            } else {
-                sum_formula.push_str(&symbol.to_string());
-            }
-        }
-        if charge != 0 {
-            sum_formula.push_str(&format!("{:+}", charge));
-        }
-        sum_formula
+        format_sum_formula(c_count, h_count, atom_counts, charge)
     }
 
     /// Get graph6 representation of the molecule (excluding atom and bond labels)
@@ -356,6 +367,39 @@ mod tests {
     }
 
     #[test]
+    fn test_molecule_standard_sum_formula_glycine() {
+        use crate::io::ctab::atom::AtomStandard;
+        use crate::io::ctab::bond::{BondStandard, BondType};
+        use umol_data::{e, Element};
+
+        // Glycine: NH2-CH2-COOH (C2H5NO2)
+        let mut molecule = MoleculeStandard::new();
+        molecule.add_atom(AtomStandard::new(e!(N)));  // 0: N
+        molecule.add_atom(AtomStandard::new(e!(H)));  // 1: H
+        molecule.add_atom(AtomStandard::new(e!(H)));  // 2: H
+        molecule.add_atom(AtomStandard::new(e!(C)));  // 3: C
+        molecule.add_atom(AtomStandard::new(e!(H)));  // 4: H
+        molecule.add_atom(AtomStandard::new(e!(H)));  // 5: H
+        molecule.add_atom(AtomStandard::new(e!(C)));  // 6: C
+        molecule.add_atom(AtomStandard::new(e!(O)));  // 7: O
+        molecule.add_atom(AtomStandard::new(e!(O)));  // 8: O
+        molecule.add_atom(AtomStandard::new(e!(H)));  // 9: H
+        
+        // Bonds
+        molecule.add_bond(0, 1, BondStandard::new(BondType::Single));  // N-H
+        molecule.add_bond(0, 2, BondStandard::new(BondType::Single));  // N-H
+        molecule.add_bond(0, 3, BondStandard::new(BondType::Single));  // N-C
+        molecule.add_bond(3, 4, BondStandard::new(BondType::Single));  // C-H
+        molecule.add_bond(3, 5, BondStandard::new(BondType::Single));  // C-H
+        molecule.add_bond(3, 6, BondStandard::new(BondType::Single));  // C-C
+        molecule.add_bond(6, 7, BondStandard::new(BondType::Double)); // C=O
+        molecule.add_bond(6, 8, BondStandard::new(BondType::Single)); // C-O
+        molecule.add_bond(8, 9, BondStandard::new(BondType::Single)); // O-H
+        
+        assert_eq!(molecule.sum_formula(), "C2H5NO2");
+    }
+
+    #[test]
     fn test_molecule_serialize() {
         let graph = StableGraph::<Atom, Bond, Undirected, usize>::with_capacity(0, 0);
         let sgroups = BTreeMap::new();
@@ -385,6 +429,109 @@ mod tests {
         molecule.add_bond(0, 1, Bond::new(BondType::Single));
         molecule.add_bond(0, 2, Bond::new(BondType::Single));
         assert_eq!(molecule.sum_formula(), "H2O");
+    }
+
+    #[test]
+    fn test_molecule_sum_formula_glycine() {
+        use crate::io::ctab::atom::AtomSymbol;
+        use crate::io::ctab::bond::BondType;
+        use umol_data::{e, Element};
+
+        // Glycine: NH2-CH2-COOH (C2H5NO2)
+        let mut molecule = Molecule::new();
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(N))));  // 0: N
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(H))));  // 1: H
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(H))));  // 2: H
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));  // 3: C
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(H))));  // 4: H
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(H))));  // 5: H
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(C))));  // 6: C
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(O))));  // 7: O
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(O))));  // 8: O
+        molecule.add_atom(Atom::new(AtomSymbol::Element(e!(H))));  // 9: H
+        
+        // Bonds
+        molecule.add_bond(0, 1, Bond::new(BondType::Single));  // N-H
+        molecule.add_bond(0, 2, Bond::new(BondType::Single));  // N-H
+        molecule.add_bond(0, 3, Bond::new(BondType::Single));  // N-C
+        molecule.add_bond(3, 4, Bond::new(BondType::Single));  // C-H
+        molecule.add_bond(3, 5, Bond::new(BondType::Single));  // C-H
+        molecule.add_bond(3, 6, Bond::new(BondType::Single));  // C-C
+        molecule.add_bond(6, 7, Bond::new(BondType::Double)); // C=O
+        molecule.add_bond(6, 8, Bond::new(BondType::Single)); // C-O
+        molecule.add_bond(8, 9, Bond::new(BondType::Single)); // O-H
+        
+        assert_eq!(molecule.sum_formula(), "C2H5NO2");
+    }
+
+    #[test]
+    fn test_format_sum_formula() {
+        use umol_data::{e, Element};
+        use std::collections::BTreeMap;
+
+        // Empty molecule
+        assert_eq!(format_sum_formula(0, 0, BTreeMap::new(), 0), "");
+
+        // Water (H2O)
+        let mut atom_counts = BTreeMap::new();
+        atom_counts.insert(element_symbol_key(e!(O)), (e!(O), 1));
+        assert_eq!(format_sum_formula(0, 2, atom_counts, 0), "H2O");
+
+        // Methane (CH4)
+        assert_eq!(format_sum_formula(1, 4, BTreeMap::new(), 0), "CH4");
+
+        // Glycine (C2H5NO2) - alphabetical order N before O
+        let mut atom_counts = BTreeMap::new();
+        atom_counts.insert(element_symbol_key(e!(N)), (e!(N), 1));
+        atom_counts.insert(element_symbol_key(e!(O)), (e!(O), 2));
+        assert_eq!(format_sum_formula(2, 5, atom_counts, 0), "C2H5NO2");
+
+        // Charged molecule (NH4+)
+        let mut atom_counts = BTreeMap::new();
+        atom_counts.insert(element_symbol_key(e!(N)), (e!(N), 1));
+        assert_eq!(format_sum_formula(0, 4, atom_counts, 1), "H4N+1");
+
+        // Multiple elements alphabetically sorted
+        let mut atom_counts = BTreeMap::new();
+        atom_counts.insert(element_symbol_key(e!(Br)), (e!(Br), 2));
+        atom_counts.insert(element_symbol_key(e!(Cl)), (e!(Cl), 3));
+        atom_counts.insert(element_symbol_key(e!(F)), (e!(F), 1));
+        assert_eq!(format_sum_formula(1, 0, atom_counts, 0), "CBr2Cl3F");
+    }
+
+    #[test]
+    fn test_element_symbol_key() {
+        use umol_data::e;
+
+        // Single character elements (padded with 0)
+        assert_eq!(element_symbol_key(e!(C)), [b'C', 0]);
+        assert_eq!(element_symbol_key(e!(H)), [b'H', 0]);
+        assert_eq!(element_symbol_key(e!(N)), [b'N', 0]);
+        assert_eq!(element_symbol_key(e!(O)), [b'O', 0]);
+        assert_eq!(element_symbol_key(e!(F)), [b'F', 0]);
+
+        // Two character elements
+        assert_eq!(element_symbol_key(e!(Br)), [b'B', b'r']);
+        assert_eq!(element_symbol_key(e!(Cl)), [b'C', b'l']);
+
+        // Verify alphabetical ordering
+        let mut keys = vec![
+            element_symbol_key(e!(Cl)),
+            element_symbol_key(e!(Br)),
+            element_symbol_key(e!(F)),
+            element_symbol_key(e!(N)),
+            element_symbol_key(e!(O)),
+        ];
+        keys.sort();
+        
+        // Should be: Br, Cl, F, N, O (alphabetical)
+        assert_eq!(keys, vec![
+            [b'B', b'r'], // Br
+            [b'C', b'l'], // Cl
+            [b'F', 0],    // F
+            [b'N', 0],    // N
+            [b'O', 0],    // O
+        ]);
     }
 
     #[test]

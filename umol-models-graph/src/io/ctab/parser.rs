@@ -4,7 +4,9 @@
 //! which is the core molecular structure representation used in MOL, SDF, and other formats.
 
 use bstr::{join, ByteSlice};
+use nom::bytes::complete::tag;
 use nom::character::complete::line_ending;
+use nom::combinator::{opt, value};
 use nom::sequence::terminated;
 use nom::{error, Err, Parser};
 
@@ -26,10 +28,15 @@ pub use self::properties::{
     atom_alias_entry, legacy_atom_list_input, property_input, property_input_standard,
     PropertyEntries,
 };
-use self::utils::remaining_input;
+
 use super::atom::{Atom, AtomStandard};
 use super::bond::{Bond, BondStandard};
 use super::molecule::{Molecule, MoleculeStandard};
+
+/// Parse end block (M END line)
+fn end_block<'a>() -> impl Parser<&'a [u8], Output = (), Error = error::Error<&'a [u8]>> {
+    value((), opt(terminated(tag("M  END"), opt(line_ending))))
+}
 
 /// Parse CTAB block (general parser, handles all features including queries)
 ///
@@ -46,6 +53,8 @@ pub fn ctab_block<'a>() -> impl Parser<&'a [u8], Output = Molecule, Error = erro
         let (remaining, bonds) = bond_block(bond_count).parse(remaining)?;
         let (remaining, legacy_properties) = legacy_atom_list_block().parse(remaining)?;
         let (remaining, properties) = properties_block().parse(remaining)?;
+        let (remaining, _) = end_block().parse(remaining)?;
+        
         let properties = properties.into_iter().chain(legacy_properties).collect();
         let molecule = build_molecule(atoms, bonds, properties);
         Ok((remaining, molecule))
@@ -66,6 +75,8 @@ pub fn ctab_block_standard<'a>(
         let (remaining, atoms) = atom_block_standard(atom_count).parse(remaining)?;
         let (remaining, bonds) = bond_block_standard(bond_count).parse(remaining)?;
         let (remaining, properties) = properties_block_standard().parse(remaining)?;
+        let (remaining, _) = end_block().parse(remaining)?;
+        
         let molecule = build_molecule_standard(atoms, bonds, properties);
         Ok((remaining, molecule))
     }
@@ -77,18 +88,21 @@ fn atom_block<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<Atom>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
-        let mut lines_iter = input.lines();
+        let mut lines_iter = input.lines_with_terminator();
+        let mut consumed = 0;
 
-        for _ in 0..atom_count {
+        for _atom_idx in 0..atom_count {
             let line = lines_iter
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
-
-            let (_, atom) = atom_input().parse(line)?;
+            
+            let content = line.trim_end_with(|c| c == '\r' || c == '\n');
+            let (_, atom) = atom_input().parse(content)?;
             atoms.push(atom);
+            consumed += line.len();
         }
 
-        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+        let remaining = &input[consumed..];
         Ok((remaining, atoms))
     }
 }
@@ -99,18 +113,21 @@ fn atom_block_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<AtomStandard>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
-        let mut lines_iter = input.lines();
+        let mut lines_iter = input.lines_with_terminator();
+        let mut consumed = 0;
 
-        for _ in 0..atom_count {
+        for _atom_idx in 0..atom_count {
             let line = lines_iter
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
-
-            let (_, atom) = atom_input_standard().parse(line)?;
+            
+            let content = line.trim_end_with(|c| c == '\r' || c == '\n');
+            let (_, atom) = atom_input_standard().parse(content)?;
             atoms.push(atom);
+            consumed += line.len();
         }
 
-        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+        let remaining = &input[consumed..];
         Ok((remaining, atoms))
     }
 }
@@ -121,18 +138,21 @@ fn bond_block<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, Bond)>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
-        let mut lines_iter = input.lines();
+        let mut lines_iter = input.lines_with_terminator();
+        let mut consumed = 0;
 
-        for _ in 0..bond_count {
+        for _bond_idx in 0..bond_count {
             let line = lines_iter
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
-
-            let (_, (atom1, atom2, bond)) = bond_input().parse(line)?;
+            
+            let content = line.trim_end_with(|c| c == '\r' || c == '\n');
+            let (_, (atom1, atom2, bond)) = bond_input().parse(content)?;
             bonds.push((atom1, atom2, bond));
+            consumed += line.len();
         }
 
-        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+        let remaining = &input[consumed..];
         Ok((remaining, bonds))
     }
 }
@@ -144,18 +164,21 @@ fn bond_block_standard<'a>(
 {
     move |input: &'a [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
-        let mut lines_iter = input.lines();
+        let mut lines_iter = input.lines_with_terminator();
+        let mut consumed = 0;
 
-        for _ in 0..bond_count {
+        for _bond_idx in 0..bond_count {
             let line = lines_iter
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
-
-            let (_, (atom1, atom2, bond)) = bond_input_standard().parse(line)?;
+            
+            let content = line.trim_end_with(|c| c == '\r' || c == '\n');
+            let (_, (atom1, atom2, bond)) = bond_input_standard().parse(content)?;
             bonds.push((atom1, atom2, bond));
+            consumed += line.len();
         }
 
-        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+        let remaining = &input[consumed..];
         Ok((remaining, bonds))
     }
 }
@@ -165,22 +188,25 @@ fn legacy_atom_list_block<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
-        let mut lines_iter = input.lines();
+        let mut lines_iter = input.lines_with_terminator();
+        let mut consumed = 0;
 
         while let Some(line) = lines_iter.next() {
-            match legacy_atom_list_input().parse(line) {
+            let content = line.trim_end_with(|c| c == '\r' || c == '\n');
+            
+            match legacy_atom_list_input().parse(content) {
                 Ok((_, property)) => {
                     properties.push(property);
+                    consumed += line.len();
                 }
                 Err(_) => {
-                    // Backtrack safely
-                    let remaining = remaining_input(input, line.as_ptr());
-                    return Ok((remaining, properties));
+                    // Backtrack - don't consume this line
+                    break;
                 }
             }
         }
 
-        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+        let remaining = &input[consumed..];
         Ok((remaining, properties))
     }
 }
@@ -190,44 +216,53 @@ fn properties_block<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> + 'a {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
-        let mut lines_iter = input.lines();
+        let mut lines_iter = input.lines_with_terminator();
+        let mut consumed = 0;
 
         while let Some(line) = lines_iter.next() {
-            if line.starts_with(b"M  END") {
-                if lines_iter.next().is_some() {
-                    let remaining = remaining_input(input, line.as_ptr());
-                    return Ok((remaining, properties));
-                } else {
-                    return Ok((b"", properties));
-                }
+            let content = line.trim_end_with(|c| c == '\r' || c == '\n');
+            
+            if content.starts_with(b"M  END") {
+                // Include M  END line in remaining for termination
+                break;
             }
 
             // Handle atom alias (two-line property)
-            let (input_line, combined_lines): (&[u8], Vec<u8>);
-            if line.starts_with(b"A  ") {
+            if content.starts_with(b"A  ") {
                 if let Some(next_line) = lines_iter.next() {
-                    combined_lines = join(b"\n", &[line, next_line]);
-                    input_line = &combined_lines;
+                    let next_content = next_line.trim_end_with(|c| c == '\r' || c == '\n');
+                    let input_for_parser = join(b"\n", &[content, next_content]);
+                    let line_bytes = line.len() + next_line.len();
+                    
+                    match property_input().parse(&input_for_parser) {
+                        Ok((_, property)) => {
+                            properties.push(property);
+                            consumed += line_bytes;
+                        }
+                        Err(_) => {
+                            // Backtrack - don't consume these lines
+                            break;
+                        }
+                    };
                 } else {
-                    let remaining = remaining_input(input, line.as_ptr());
-                    return Ok((remaining, properties));
+                    // Incomplete atom alias - backtrack  
+                    break;
                 }
             } else {
-                input_line = line;
+                match property_input().parse(content) {
+                    Ok((_, property)) => {
+                        properties.push(property);
+                        consumed += line.len();
+                    }
+                    Err(_) => {
+                        // Backtrack - don't consume this line
+                        break;
+                    }
+                }
             }
-
-            match property_input().parse(input_line) {
-                Ok((_, property)) => {
-                    properties.push(property);
-                }
-                Err(_) => {
-                    let remaining = remaining_input(input, line.as_ptr());
-                    return Ok((remaining, properties));
-                }
-            };
         }
 
-        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
+        let remaining = &input[consumed..];
         Ok((remaining, properties))
     }
 }
@@ -237,47 +272,53 @@ fn properties_block_standard<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> + 'a {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
-        let mut lines_iter = input.lines();
+        let mut lines_iter = input.lines_with_terminator();
+        let mut consumed = 0;
 
         while let Some(line) = lines_iter.next() {
-            if line.starts_with(b"M  END") {
-                println!("M  END");
-                println!("line: '{}'", String::from_utf8_lossy(line));
+            let content = line.trim_end_with(|c| c == '\r' || c == '\n');
+            
+            if content.starts_with(b"M  END") {
+                // Include M  END line in remaining for termination
                 break;
             }
 
-            // Special case for atom alias (two-line property)
-            let (input_line, combined_lines): (&[u8], Vec<u8>);
-            if line.starts_with(b"A  ") {
+            // Handle atom alias (two-line property)
+            if content.starts_with(b"A  ") {
                 if let Some(next_line) = lines_iter.next() {
-                    combined_lines = join(b"\n", &[line, next_line]);
-                    input_line = &combined_lines;
+                    let next_content = next_line.trim_end_with(|c| c == '\r' || c == '\n');
+                    let input_for_parser = join(b"\n", &[content, next_content]);
+                    let line_bytes = line.len() + next_line.len();
+                    
+                    match property_input_standard().parse(&input_for_parser) {
+                        Ok((_, property)) => {
+                            properties.push(property);
+                            consumed += line_bytes;
+                        }
+                        Err(_) => {
+                            // Backtrack - don't consume these lines
+                            break;
+                        }
+                    };
                 } else {
-                    let remaining = remaining_input(input, line.as_ptr());
-                    return Ok((remaining, properties));
+                    // Incomplete atom alias - backtrack  
+                    break;
                 }
             } else {
-                input_line = line;
+                match property_input_standard().parse(content) {
+                    Ok((_, property)) => {
+                        properties.push(property);
+                        consumed += line.len();
+                    }
+                    Err(_) => {
+                        // Backtrack - don't consume this line
+                        break;
+                    }
+                }
             }
-
-            match property_input_standard().parse(input_line) {
-                Ok((_, property)) => {
-                    properties.push(property);
-                }
-                Err(_) => {
-                    let remaining = remaining_input(input, line.as_ptr());
-                    return Ok((remaining, properties));
-                }
-            };
         }
 
-
-        let remaining = remaining_input(input, lines_iter.as_bytes().as_ptr());
-
-        println!("Bottom of properties block");
-        println!("remaining: '{}'", String::from_utf8_lossy(remaining));
-        println!("input: '{}'", String::from_utf8_lossy(input));
-
+        let remaining = &input[consumed..];
         Ok((remaining, properties))
     }
 }

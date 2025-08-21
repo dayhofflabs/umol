@@ -335,14 +335,6 @@ pub(crate) fn to_string(bytes: &[u8]) -> String {
     bytes.trim_ascii().to_str_lossy().into_owned()
 }
 
-/// Calculate remaining input after consuming bytes up to the given pointer
-pub(crate) fn remaining_input(input: &[u8], current_ptr: *const u8) -> &[u8] {
-    let start = input.as_ptr() as usize;
-    let off = (current_ptr as usize).saturating_sub(start);
-    let idx = off.min(input.len());
-    &input[idx..]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
