@@ -2,3 +2,4 @@
 
 pub mod ctab;
 pub mod mol;
+pub mod sdf;

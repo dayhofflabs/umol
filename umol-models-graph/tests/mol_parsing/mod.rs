@@ -85,7 +85,7 @@ fn store_full_snapshot(path: &Path, category: &str, value: serde_yaml::Value) {
 fn run_test(path: &Path, mode: TestMode) {
     let path_str = path.to_str().unwrap();
     let category = get_category(path);
-    let expected_success = path_str.contains("/valid/");
+    let expected_success = path_str.contains("/valid/") || path_str.contains("data/");
 
     let mol_bytes = std::fs::read(path).unwrap();
     let result = parse_mol_file(&mol_bytes);
@@ -119,7 +119,7 @@ fn run_test(path: &Path, mode: TestMode) {
 fn run_test_standard(path: &Path, mode: TestMode) {
     let path_str = path.to_str().unwrap();
     let category = get_category(path);
-    let expected_success = path_str.contains("/valid/");
+    let expected_success = path_str.contains("/valid/") || path_str.contains("data/");
 
     let mol_bytes = std::fs::read(path).unwrap();
 
@@ -159,7 +159,36 @@ fn run_test_standard(path: &Path, mode: TestMode) {
 
 #[test]
 fn test_summaries_standard() {
-    insta::glob!("data/standard/valid/*.mol", |path| {
+    insta::glob!("data/standard/*.mol", |path| {
         run_test_standard(path, TestMode::Summary);
     });
 }
+
+#[test]
+fn test_summaries_properties() {
+    insta::glob!("data/properties/*.mol", |path| {
+        run_test(path, TestMode::Summary);
+    });
+}
+
+#[test] 
+fn test_summaries_query() {
+    insta::glob!("data/query/*.mol", |path| {
+        run_test(path, TestMode::Summary);
+    });
+}
+
+#[test]
+fn test_full_rgroups() {
+    insta::glob!("data/rgroups/*.mol", |path| {
+        run_test(path, TestMode::Full);
+    });
+}
+
+#[test]
+fn test_full_sgroups() {
+    insta::glob!("data/sgroups/*.mol", |path| {
+        run_test(path, TestMode::Full);
+    });
+}
+

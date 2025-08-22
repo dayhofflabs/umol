@@ -244,6 +244,9 @@ pub enum DataError {
 
     #[error("Invalid MOL file format: {0}")]
     InvalidMolFormat(String),
+
+    #[error("Invalid SDF file format: {0}")]
+    InvalidSdfFormat(String),
 }
 
 /// Parsing errors

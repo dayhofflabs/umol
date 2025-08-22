@@ -29,6 +29,7 @@ fn element_symbol_key(element: Element) -> [u8; 2] {
 /// Format sum formula according to Hill notation
 /// 
 /// Hill notation: C first, H second, then other elements alphabetically by symbol
+/// TODO: Use conversion to stoichiometry instead
 fn format_sum_formula(
     c_count: usize,
     h_count: usize,
