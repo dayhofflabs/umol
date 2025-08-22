@@ -186,19 +186,3 @@ fn test_progressive_parser_legacy_list() {
         result[5]
     );
 }
-
-#[rstest]
-#[case("src/io/mol/data/glycine-short-lines.mol", "glycine, short lines")]
-fn test_progressive_parser_standard_from_path(#[case] path: &str, #[case] _desc: &str) {
-    let input = std::fs::read(path).unwrap();
-    if let Ok((remaining, mol_file)) =
-        complete(terminated(mol_file_standard(), multispace0)).parse(&input)
-    {
-        println!("remaining: '{}'", String::from_utf8_lossy(remaining));
-        println!("mol_file: {:?}", mol_file);
-    };
-
-    // let result = parse_mol_progressive(&input);
-    // println!("{:?}", result);
-    // assert_eq!(result.len(), 14, "{} should have 14 lines", desc);
-}

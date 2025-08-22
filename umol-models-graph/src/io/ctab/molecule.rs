@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, HashMap};
 pub type AtomIndex = NodeIndex<usize>;
 pub type BondIndex = EdgeIndex<usize>;
 
+/// Convert element symbol to [u8; 2] key for alphabetical sorting
 fn element_symbol_key(element: Element) -> [u8; 2] {
     let symbol = element.symbol();
     let bytes = symbol.as_bytes();

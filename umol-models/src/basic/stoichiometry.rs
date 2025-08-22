@@ -3,10 +3,16 @@
 //! Simple model containing only atom counts
 
 use map_macro::hash_set;
+use nom::character::complete::one_of;
+use nom::character::complete::u32 as nom_u32;
+use nom::combinator::{map_res, opt, recognize};
+use nom::multi::many0;
+use nom::sequence::pair;
+use nom::{error, Parser};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
+use std::fmt::{self, Display, Formatter};
 use std::ops::{Add, Mul};
 use std::str::FromStr;
 
@@ -52,8 +58,8 @@ impl Model for Stoichiometry {
     }
 }
 
-impl fmt::Display for Stoichiometry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Stoichiometry {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut elements: Vec<_> = self.counts.iter().collect();
 
         // Sort elements: C first, H second, then alphabetically
@@ -76,80 +82,46 @@ impl fmt::Display for Stoichiometry {
     }
 }
 
+/// Parse element symbol (uppercase + optional lowercase letters)
+fn element_symbol<'a>() -> impl Parser<&'a str, Output = Element, Error = error::Error<&'a str>> {
+    map_res(
+        recognize((
+            one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+            opt(one_of("abcdefghijklmnopqrstuvwxyz")),
+        )),
+        |s: &str| Element::from_symbol(s).ok_or("Invalid element symbol"),
+    )
+}
+
+fn stoichiometry<'a>() -> impl Parser<&'a str, Output = Stoichiometry, Error = error::Error<&'a str>>
+{
+    many0(pair(element_symbol(), opt(nom_u32))).map(|pairs| {
+        let mut counts = HashMap::new();
+        for (element, count) in pairs {
+            *counts.entry(element).or_insert(0) += count.unwrap_or(1);
+        }
+        Stoichiometry::from_counts(counts)
+    })
+}
+
+/// Parse full stoichiometry formula
+fn parse_stoichiometry(input: &str) -> Result<Stoichiometry> {
+    let (rest, stoichiometry) = stoichiometry()
+        .parse(input)
+        .map_err(|e| Error::Serialization(SerializationError::ParseError(e.to_string())))?;
+    if !rest.is_empty() {
+        return Err(Error::Serialization(SerializationError::ParseError(
+            format!("Unexpected characters at end of formula: '{}'", rest),
+        )));
+    }
+    Ok(stoichiometry)
+}
+
 impl FromStr for Stoichiometry {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let mut counts = HashMap::new();
-        let mut current_element = None;
-        let mut current_count = String::new();
-
-        for c in s.chars() {
-            if c.is_uppercase() {
-                // If we have a previous element, add it to counts
-                if let Some(element) = current_element {
-                    let count = if current_count.is_empty() {
-                        1
-                    } else {
-                        current_count.parse().map_err(|_| {
-                            Error::Serialization(SerializationError::ParseError(format!(
-                                "Invalid count: {}",
-                                current_count
-                            )))
-                        })?
-                    };
-                    counts.insert(element, count);
-                    current_count.clear();
-                }
-
-                // Start new element
-                current_element = Some(Element::from_symbol(&c.to_string()).ok_or_else(|| {
-                    Error::Serialization(SerializationError::ParseError(format!(
-                        "Invalid element symbol: {}",
-                        c
-                    )))
-                })?);
-            } else if c.is_lowercase() {
-                // Append to current element symbol
-                if let Some(element) = current_element {
-                    let symbol = format!("{}{}", element.symbol(), c);
-                    current_element = Some(Element::from_symbol(&symbol).ok_or_else(|| {
-                        Error::Serialization(SerializationError::ParseError(format!(
-                            "Invalid element symbol: {}",
-                            symbol
-                        )))
-                    })?);
-                } else {
-                    return Err(Error::Serialization(SerializationError::ParseError(
-                        "Element symbol must start with uppercase letter".to_string(),
-                    )));
-                }
-            } else if c.is_ascii_digit() {
-                // Append to current count
-                current_count.push(c);
-            } else {
-                return Err(Error::Serialization(SerializationError::ParseError(
-                    format!("Invalid character in formula: {}", c),
-                )));
-            }
-        }
-
-        // Add the last element
-        if let Some(element) = current_element {
-            let count = if current_count.is_empty() {
-                1
-            } else {
-                current_count.parse().map_err(|_| {
-                    Error::Serialization(SerializationError::ParseError(format!(
-                        "Invalid count: {}",
-                        current_count
-                    )))
-                })?
-            };
-            counts.insert(element, count);
-        }
-
-        Ok(Self::from_counts(counts))
+        parse_stoichiometry(s)
     }
 }
 
