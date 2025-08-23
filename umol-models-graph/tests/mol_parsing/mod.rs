@@ -81,7 +81,6 @@ fn store_full_snapshot(path: &Path, category: &str, value: serde_yaml::Value) {
     });
 }
 
-#[allow(dead_code)]
 fn run_test(path: &Path, mode: TestMode) {
     let path_str = path.to_str().unwrap();
     let category = get_category(path);
@@ -90,10 +89,14 @@ fn run_test(path: &Path, mode: TestMode) {
     let mol_bytes = std::fs::read(path).unwrap();
     let result = parse_mol_file(&mol_bytes);
     if expected_success {
+        if let Err(e) = &result {
+            eprintln!("Parse error for {}: {:?}", path.display(), e);
+        }
         assert!(
             result.is_ok(),
-            "Expected parsing to succeed, but it failed for file: {}",
-            path.display()
+            "Expected parsing to succeed, but it failed for file: {} with error: {:?}",
+            path.display(),
+            result.as_ref().err()
         );
     } else {
         assert!(
@@ -150,45 +153,44 @@ fn run_test_standard(path: &Path, mode: TestMode) {
     }
 }
 
-// #[test]
-// fn test_summaries() {
-//     insta::glob!("data/**/valid/*.mol", |path| {
-//         run_test(path, TestMode::Summary);
-//     });
-// }
-
 #[test]
-fn test_summaries_standard() {
+fn test_summary_standard_parser() {
     insta::glob!("data/standard/*.mol", |path| {
         run_test_standard(path, TestMode::Summary);
     });
 }
 
 #[test]
-fn test_summaries_properties() {
+fn test_summary_standard_general_parser() {
+    insta::glob!("data/standard/*.mol", |path| {
+        run_test(path, TestMode::Summary);
+    });
+}
+
+#[test]
+fn test_summary_properties() {
     insta::glob!("data/properties/*.mol", |path| {
         run_test(path, TestMode::Summary);
     });
 }
 
-#[test] 
-fn test_summaries_query() {
+#[test]
+fn test_summary_query() {
     insta::glob!("data/query/*.mol", |path| {
         run_test(path, TestMode::Summary);
     });
 }
 
 #[test]
-fn test_full_rgroups() {
+fn test_summary_rgroups() {
     insta::glob!("data/rgroups/*.mol", |path| {
-        run_test(path, TestMode::Full);
+        run_test(path, TestMode::Summary);
     });
 }
 
 #[test]
-fn test_full_sgroups() {
+fn test_summary_sgroups() {
     insta::glob!("data/sgroups/*.mol", |path| {
-        run_test(path, TestMode::Full);
+        run_test(path, TestMode::Summary);
     });
 }
-

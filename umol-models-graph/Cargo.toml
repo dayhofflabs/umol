@@ -17,6 +17,7 @@ umol = { path = "../umol" }
 umol-data = { path = "../umol-data" }
 fast-float = "0.2.0"
 smallvec = "1.15.1"
+indexmap = { version = "2.10.0", features = ["serde"] }
 
 [dev-dependencies]
 rstest = "0.26"

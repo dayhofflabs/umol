@@ -67,7 +67,7 @@ fn test_data_block() {
     assert!(result.is_ok());
     let (remaining, fields) = result.unwrap();
     assert_eq!(fields.len(), 2);
-    assert_eq!(fields[0], ("FIELD1".to_string(), "Value1".to_string()));
-    assert_eq!(fields[1], ("FIELD2".to_string(), "Value2".to_string()));
+    assert_eq!(fields.get("FIELD1"), Some(&"Value1".to_string()));
+    assert_eq!(fields.get("FIELD2"), Some(&"Value2".to_string()));
     assert!(remaining.starts_with(b"$$$$"));
 }

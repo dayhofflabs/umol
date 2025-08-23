@@ -1,15 +1,13 @@
 //! SDF (Structure Data File) format parsing
 
 use bstr::ByteSlice;
-use nom::{
-    bytes::complete::{tag, take_until},
-    character::complete::{line_ending, multispace0, not_line_ending},
-    combinator::{all_consuming, complete, map, opt, value},
-    error,
-    multi::many1,
-    sequence::{delimited, terminated},
-    Parser,
-};
+use indexmap::IndexMap;
+use nom::bytes::complete::{tag, take_until};
+use nom::character::complete::{line_ending, multispace0, not_line_ending};
+use nom::combinator::{all_consuming, complete, eof, map, opt, peek, value};
+use nom::multi::{many1, many_till};
+use nom::sequence::{delimited, terminated};
+use nom::{branch::alt, error, Parser};
 use serde::{Deserialize, Serialize};
 
 use crate::io::mol::parser::{parse_mol_file, MolFile};
@@ -30,11 +28,11 @@ impl SdfFile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SdfCompound {
     pub mol_file: MolFile,
-    pub data_fields: Vec<(String, String)>, // Preserves insertion order
+    pub data_fields: IndexMap<String, String>,
 }
 
 impl SdfCompound {
-    pub fn new(mol_file: MolFile, data_fields: Vec<(String, String)>) -> Self {
+    pub fn new(mol_file: MolFile, data_fields: IndexMap<String, String>) -> Self {
         Self {
             mol_file,
             data_fields,
@@ -56,27 +54,22 @@ fn data_header<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Er
 
 /// Parse multi-line data value until blank line
 fn data_value<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
-        let mut lines = Vec::new();
-        let mut consumed = 0;
-
-        for line in input.lines_with_terminator() {
-            if line.trim_ascii().is_empty() {
-                consumed += line.len();
-                break; // Blank line terminates data
-            }
-            lines.push(line.trim_end_with(|c| c == '\r' || c == '\n'));
-            consumed += line.len();
-        }
-
-        let value = lines
-            .iter()
-            .map(|l| l.to_str_lossy())
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        Ok((&input[consumed..], value))
-    }
+    map(
+        many_till(
+            terminated(not_line_ending::<&[u8], error::Error<&[u8]>>, line_ending),
+            alt((
+                peek(line_ending), // blank line
+                eof,
+            )),
+        ),
+        |(lines, _)| {
+            lines
+                .iter()
+                .map(|line| line.to_str_lossy())
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    )
 }
 
 /// Parse complete data field (header + value)
@@ -92,75 +85,44 @@ fn sdf_delimiter<'a>() -> impl Parser<&'a [u8], Output = (), Error = error::Erro
 
 /// Parse multiple data fields
 fn data_block<'a>(
-) -> impl Parser<&'a [u8], Output = Vec<(String, String)>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
-        let mut fields = Vec::new();
-        let mut remaining = input;
-
-        while !remaining.is_empty() {
-            if remaining.starts_with(b"$$$$") {
-                break;
-            } else if remaining.starts_with(b">") {
-                match data_field().parse(remaining) {
-                    Ok((next_remaining, (field_name, field_value))) => {
-                        fields.push((field_name, field_value));
-                        remaining = next_remaining;
-                    }
-                    Err(_) => {
-                        // Skip invalid data field line
-                        if let Some(next_line_start) = remaining.lines_with_terminator().next() {
-                            remaining = &remaining[next_line_start.len()..];
-                        } else {
-                            break;
-                        }
-                    }
-                }
-            } else {
+) -> impl Parser<&'a [u8], Output = IndexMap<String, String>, Error = error::Error<&'a [u8]>> {
+    map(
+        many_till(
+            alt((
+                data_field(),
                 // Skip non-data lines
-                if let Some(next_line) = remaining.lines_with_terminator().next() {
-                    remaining = &remaining[next_line.len()..];
-                } else {
-                    break;
-                }
-            }
-        }
-
-        Ok((remaining, fields))
-    }
+                value(
+                    (String::new(), String::new()),
+                    terminated(not_line_ending, line_ending),
+                ),
+            )),
+            peek(alt((tag("$$$$"), eof))),
+        ),
+        |(fields, _)| {
+            fields
+                .into_iter()
+                .filter(|(name, _)| !name.is_empty())
+                .collect::<IndexMap<_, _>>()
+        },
+    )
 }
 
 /// Parse single SDF compound (MOL + data + $$$$)
 fn sdf_compound<'a>() -> impl Parser<&'a [u8], Output = SdfCompound, Error = error::Error<&'a [u8]>>
 {
     move |input: &'a [u8]| {
-        let mut mol_end = input.len();
-        let mut offset = 0;
+        let (remaining, mol_input) = alt((
+            take_until(">"),
+            take_until("$$$$"),
+            // If no data fields, take everything
+            |input: &'a [u8]| Ok((&[][..], input)),
+        ))
+        .parse(input)?;
 
-        // Find where MOL data ends and SDF data begins
-        for line in input.lines_with_terminator() {
-            if line.starts_with(b">") || line.starts_with(b"$$$$") {
-                mol_end = offset;
-                break;
-            }
-            offset += line.len();
-        }
+        let mol_file = parse_mol_file(mol_input)
+            .map_err(|_| nom::Err::Error(error::Error::new(input, error::ErrorKind::Verify)))?;
 
-        // Parse MOL file
-        let mol_input = &input[..mol_end];
-        let mol_file = match parse_mol_file(mol_input) {
-            Ok(mol_file) => mol_file,
-            Err(_) => {
-                return Err(nom::Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Verify,
-                )))
-            }
-        };
-
-        // Parse data fields
-        let (remaining, data_fields) = data_block().parse(&input[mol_end..])?;
-
-        // Parse delimiter
+        let (remaining, data_fields) = data_block().parse(remaining)?;
         let (remaining, _) = sdf_delimiter().parse(remaining)?;
 
         Ok((remaining, SdfCompound::new(mol_file, data_fields)))

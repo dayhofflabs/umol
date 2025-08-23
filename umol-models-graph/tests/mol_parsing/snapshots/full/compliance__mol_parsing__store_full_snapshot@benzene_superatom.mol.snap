@@ -1,0 +1,202 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: snapshot
+input_file: umol-models-graph/tests/mol_parsing/data/sgroups/benzene_superatom.mol
+---
+category: data
+filename: benzene_superatom.mol
+molecule:
+  graph:
+    nodes:
+      - symbol:
+          "!Element": Cs
+        charge: 1
+        radical: ~
+        isotope_mass: ~
+        stereo_parity: Either
+        stereo_care: ~
+        hydrogen_count: ~
+        valence: ~
+        atom_map_num: 0
+        inversion_retention: ~
+        exact_change: ~
+        attachment_point: ~
+        attachment_order: ~
+        ring_bond_count: ~
+        substitution_count: ~
+        unsaturated: ~
+        link_atom: ~
+        position:
+          - 1.65
+          - 1.4289
+          - 0
+        properties: {}
+      - symbol:
+          "!Element": Cs
+        charge: 1
+        radical: ~
+        isotope_mass: ~
+        stereo_parity: Either
+        stereo_care: ~
+        hydrogen_count: ~
+        valence: ~
+        atom_map_num: 0
+        inversion_retention: ~
+        exact_change: ~
+        attachment_point: ~
+        attachment_order: ~
+        ring_bond_count: ~
+        substitution_count: ~
+        unsaturated: ~
+        link_atom: ~
+        position:
+          - 1.65
+          - -1.4289
+          - 0
+        properties: {}
+      - symbol:
+          "!Element": O
+        charge: -1
+        radical: ~
+        isotope_mass: ~
+        stereo_parity: Either
+        stereo_care: ~
+        hydrogen_count: ~
+        valence: ~
+        atom_map_num: 0
+        inversion_retention: ~
+        exact_change: ~
+        attachment_point: ~
+        attachment_order: ~
+        ring_bond_count: ~
+        substitution_count: ~
+        unsaturated: ~
+        link_atom: ~
+        position:
+          - 1.2375
+          - 0.7145
+          - 0
+        properties: {}
+      - symbol:
+          "!Element": C
+        charge: 0
+        radical: ~
+        isotope_mass: ~
+        stereo_parity: Either
+        stereo_care: ~
+        hydrogen_count: ~
+        valence: ~
+        atom_map_num: 0
+        inversion_retention: ~
+        exact_change: ~
+        attachment_point: ~
+        attachment_order: ~
+        ring_bond_count: ~
+        substitution_count: ~
+        unsaturated: ~
+        link_atom: ~
+        position:
+          - 0.825
+          - 0
+          - 0
+        properties: {}
+      - symbol:
+          "!Element": O
+        charge: -1
+        radical: ~
+        isotope_mass: ~
+        stereo_parity: Either
+        stereo_care: ~
+        hydrogen_count: ~
+        valence: ~
+        atom_map_num: 0
+        inversion_retention: ~
+        exact_change: ~
+        attachment_point: ~
+        attachment_order: ~
+        ring_bond_count: ~
+        substitution_count: ~
+        unsaturated: ~
+        link_atom: ~
+        position:
+          - 1.2375
+          - -0.7145
+          - 0
+        properties: {}
+      - symbol:
+          "!Element": O
+        charge: 0
+        radical: ~
+        isotope_mass: ~
+        stereo_parity: Either
+        stereo_care: ~
+        hydrogen_count: ~
+        valence: ~
+        atom_map_num: 0
+        inversion_retention: ~
+        exact_change: ~
+        attachment_point: ~
+        attachment_order: ~
+        ring_bond_count: ~
+        substitution_count: ~
+        unsaturated: ~
+        link_atom: ~
+        position:
+          - 0
+          - 0
+          - 0
+        properties: {}
+    node_holes: []
+    edge_property: undirected
+    edges:
+      - - 2
+        - 3
+        - bond_type: Single
+          stereo: ~
+          dir: Either
+          topology: Either
+          reacting_center: ""
+          properties: {}
+      - - 3
+        - 4
+        - bond_type: Single
+          stereo: ~
+          dir: Either
+          topology: Either
+          reacting_center: ""
+          properties: {}
+      - - 3
+        - 5
+        - bond_type: Double
+          stereo: Either
+          dir: ~
+          topology: Either
+          reacting_center: ""
+          properties: {}
+  sgroups:
+    0:
+      label: 0
+      subscript: Cs2CO3
+      group_type: Superatom
+      group_subtype: ~
+      connectivity: ~
+      expansion: false
+      multiplier: ~
+      atom_indices:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+      bond_indices: []
+      parent_atom_indices: ~
+      correspondence: ~
+      connecting_bond: ~
+      bracket_coords: ~
+      hierarchy_parent: ~
+      component_number: ~
+      bracket_style: ~
+      data: {}
+      display: ~
+  properties: {}

@@ -1,0 +1,9 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+input_file: umol-models-graph/tests/mol_parsing/data/properties/alias_element.mol
+---
+atom_count: 7
+bond_count: 7
+sum_formula: C6N
+graph6: FhEK?
