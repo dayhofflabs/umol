@@ -1,9 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
-input_file: umol-models-graph/tests/mol_parsing/data/standard/butanoic_standard.mol
----
-atom_count: 14
-bond_count: 13
-sum_formula: C4H8O2
-graph6: MiOGOO@?OA?@?A??_

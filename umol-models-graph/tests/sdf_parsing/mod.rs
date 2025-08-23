@@ -1,7 +1,8 @@
 use indexmap::IndexMap;
 use insta::{assert_yaml_snapshot, Settings};
+use rstest::*;
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use umol_models_graph::io::sdf::parser::parse_sdf;
 
 #[allow(dead_code)]
@@ -149,17 +150,17 @@ fn run_test_invalid_sdf(path: &std::path::Path) {
     });
 }
 
-#[test]
-fn test_summaries() {
-    insta::glob!("data/*.sdf", |path| {
-        run_test_sdf(path, TestMode::Summary);
-    });
+// Makes snapshot files unique for each input file
+macro_rules! set_snapshot_suffix {
+    ($($expr:expr),*) => {
+        let mut settings = insta::Settings::clone_current();
+        settings.set_snapshot_suffix(format!($($expr,)*));
+        let _guard = settings.bind_to_scope();
+    }
 }
 
-// #[test]
-// fn test_invalid_files() {
-//     // Test that known invalid SDF files fail for the right reasons
-//     insta::glob!("data/invalid/*.sdf", |path| {
-//         run_test_invalid_sdf(path);
-//     });
-// }
+#[rstest]
+fn test_summary(#[files("tests/sdf_parsing/data/*.sdf")] file_path: PathBuf) {
+    set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
+    run_test_sdf(&file_path, TestMode::Summary);
+}

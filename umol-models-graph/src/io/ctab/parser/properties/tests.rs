@@ -6,11 +6,13 @@ use umol_data::Element;
 use float_cmp::approx_eq;
 
 #[rstest]
+//       aaa k    n 111 222 333 444
 #[case(b"  1 F    3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
 #[case(b"  1 T    3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]   
 #[case(b"  1      3   9   7   8  ", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
 #[case(b"  1 F    3   9   7   8", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]   
 #[case(b"  1 T    3   9   7   8", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]   
+#[case(b"  4 F    4   6   7   8  16", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 3, exclusion: false, elements: vec![Element::C, Element::N, Element::O, Element::S] }))]
 fn test_legacy_atom_list_input(#[case] input: &[u8], #[case] expected: PropertyEntries) {
     let (remaining, result) = legacy_atom_list_input().parse(input).unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");

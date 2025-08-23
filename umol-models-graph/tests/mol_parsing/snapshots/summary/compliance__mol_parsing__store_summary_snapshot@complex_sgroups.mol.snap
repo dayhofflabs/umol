@@ -1,7 +1,6 @@
 ---
 source: umol-models-graph/tests/mol_parsing/mod.rs
 expression: summary
-input_file: umol-models-graph/tests/mol_parsing/data/sgroups/complex_sgroups.mol
 ---
 atom_count: 23
 bond_count: 25

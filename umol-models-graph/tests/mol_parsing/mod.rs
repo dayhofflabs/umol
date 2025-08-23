@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use insta::{assert_yaml_snapshot, Settings};
+use rstest::*;
 use serde::Serialize;
 use umol_models_graph::io::ctab::molecule::{Molecule, MoleculeStandard};
 use umol_models_graph::io::mol::parser::{parse_mol_file, parse_mol_file_standard};
@@ -153,44 +154,47 @@ fn run_test_standard(path: &Path, mode: TestMode) {
     }
 }
 
-#[test]
-fn test_summary_standard_parser() {
-    insta::glob!("data/standard/*.mol", |path| {
-        run_test_standard(path, TestMode::Summary);
-    });
+// Makes snapshot files unique for each input file
+macro_rules! set_snapshot_suffix {
+    ($($expr:expr),*) => {
+        let mut settings = insta::Settings::clone_current();
+        settings.set_snapshot_suffix(format!($($expr,)*));
+        let _guard = settings.bind_to_scope();
+    }
 }
 
-#[test]
-fn test_summary_standard_general_parser() {
-    insta::glob!("data/standard/*.mol", |path| {
-        run_test(path, TestMode::Summary);
-    });
+#[rstest]
+fn test_summary_basic_standard(#[files("tests/mol_parsing/data/basic/*.mol")] file_path: PathBuf) {
+    set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
+    run_test_standard(&file_path, TestMode::Summary);
 }
 
-#[test]
-fn test_summary_properties() {
-    insta::glob!("data/properties/*.mol", |path| {
-        run_test(path, TestMode::Summary);
-    });
+#[rstest]
+fn test_summary_basic(#[files("tests/mol_parsing/data/basic/*.mol")] file_path: PathBuf) {
+    set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
+    run_test(&file_path, TestMode::Summary);
 }
 
-#[test]
-fn test_summary_query() {
-    insta::glob!("data/query/*.mol", |path| {
-        run_test(path, TestMode::Summary);
-    });
+#[rstest]
+fn test_summary_properties(#[files("tests/mol_parsing/data/properties/*.mol")] file_path: PathBuf) {
+    set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
+    run_test(&file_path, TestMode::Summary);
 }
 
-#[test]
-fn test_summary_rgroups() {
-    insta::glob!("data/rgroups/*.mol", |path| {
-        run_test(path, TestMode::Summary);
-    });
+#[rstest]
+fn test_summary_query(#[files("tests/mol_parsing/data/query/*.mol")] file_path: PathBuf) {
+    set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
+    run_test(&file_path, TestMode::Summary);
 }
 
-#[test]
-fn test_summary_sgroups() {
-    insta::glob!("data/sgroups/*.mol", |path| {
-        run_test(path, TestMode::Summary);
-    });
+#[rstest]
+fn test_summary_rgroups(#[files("tests/mol_parsing/data/rgroups/*.mol")] file_path: PathBuf) {
+    set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
+    run_test(&file_path, TestMode::Summary);
+}
+
+#[rstest]
+fn test_summary_sgroups(#[files("tests/mol_parsing/data/sgroups/*.mol")] file_path: PathBuf) {
+    set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
+    run_test(&file_path, TestMode::Summary);
 }

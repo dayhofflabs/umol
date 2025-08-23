@@ -1,7 +1,6 @@
 ---
 source: umol-models-graph/tests/mol_parsing/mod.rs
 expression: summary
-input_file: umol-models-graph/tests/mol_parsing/data/sgroups/benzene_superatom.mol
 ---
 atom_count: 6
 bond_count: 3

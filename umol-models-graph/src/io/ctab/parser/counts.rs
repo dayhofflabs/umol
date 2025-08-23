@@ -1,6 +1,7 @@
 //! Counts line parser for CTab files.
 
-use nom::bytes::take;
+use nom::branch::alt;
+use nom::bytes::complete::take;
 use nom::character::complete::space0;
 use nom::combinator::{complete, map, verify};
 use nom::error;
@@ -27,24 +28,30 @@ use super::utils::fixed_width_int;
 ///
 pub fn counts_input<'a>() -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>>
 {
-    let atoms = fixed_width_int::<i32>(3);
-    let bonds = fixed_width_int::<i32>(3);
-    let atom_lists = fixed_width_int::<i32>(3);
-    let chiral_flag = fixed_width_int::<i32>(3);
-    let stext_entries = fixed_width_int::<i32>(3);
-    let properties_lines = fixed_width_int::<i32>(3);
-    let version = complete(verify(take(6usize), |s: &[u8]| {
-        s == b" V2000" || s == b"V2000 "
-    }));
     terminated(
         map(
             (
-                atoms,
-                bonds,
-                atom_lists,
-                preceded(take(3usize), chiral_flag),
-                stext_entries,
-                delimited(take(12usize), properties_lines, version),
+                fixed_width_int::<i32>(3usize),
+                fixed_width_int::<i32>(3usize),
+                fixed_width_int::<i32>(3usize),
+                preceded(take(3usize), fixed_width_int::<i32>(3usize)),
+                fixed_width_int::<i32>(3usize),
+                alt((
+                    delimited(
+                        take(12usize),
+                        fixed_width_int::<i32>(3usize),
+                        complete(verify(take(6usize), |s: &[u8]| {
+                            s == b" V2000" || s == b"V2000 "
+                        })),
+                    ),
+                    delimited(
+                        take(42usize),
+                        fixed_width_int::<i32>(3usize),
+                        complete(verify(take(6usize), |s: &[u8]| {
+                            s == b" V2000" || s == b"V2000 "
+                        })),
+                    ),
+                )),
             ),
             |(atoms, bonds, atom_lists, chiral_flag, stext_entries, properties_lines)| Counts {
                 atoms,
@@ -108,10 +115,15 @@ mod tests {
       Counts {atoms: 6, bonds: 5, atom_lists: 0, chiral_flag: 1, stext_entries: 0, properties_lines: 3})]
     #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000", "zeroes, 999 properties",
       Counts {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
+    //       aaabbblllfffcccsss            mmmvvvvvv
     #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded",
       Counts {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 0})]
+    //       aaabbblllfffcccsss                                          mmmvvvvvv
+    #[case(b"  4  4  1  0  0  0                                          999 V2000", "extra spaces",
+      Counts {atoms: 4, bonds: 4, atom_lists: 1, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
     fn test_counts_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: Counts) {
         let res = all_consuming(counts_input()).parse(input);
+        println!("res: {:?}", res);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(
@@ -124,7 +136,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", error::ErrorKind::Verify)]
+    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", error::ErrorKind::Eof)]
     #[case(b"  4  2  0     0  0            ", "too short", error::ErrorKind::Eof)]
     #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", error::ErrorKind::Eof)]
     #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", error::ErrorKind::Digit)]

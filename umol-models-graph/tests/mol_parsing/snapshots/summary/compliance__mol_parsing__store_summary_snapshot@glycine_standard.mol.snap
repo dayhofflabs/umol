@@ -1,7 +1,6 @@
 ---
 source: umol-models-graph/tests/mol_parsing/mod.rs
 expression: summary
-input_file: umol-models-graph/tests/mol_parsing/data/standard/glycine_standard.mol
 ---
 atom_count: 5
 bond_count: 4

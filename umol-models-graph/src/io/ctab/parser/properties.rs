@@ -304,12 +304,17 @@ pub enum PropertyEntries {
     End,
 }
 
-/// Parse a legacy atom list entry (e.g., "  1 F    3   9   7   8  ")
+/// Parse a legacy atom list entry
+/// aaa k    n 111 222 333 444 555
+/// aaa: atom index
+/// k: exclusion flag
+/// n: count
+/// 111 222 333 444 555: element symbols
 pub fn legacy_atom_list_input<'a>(
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
-    all_consuming(map(
-        (
-            fixed_width_int_minus1::<usize>(3),
+    all_consuming(
+        map((
+            fixed_width_int_minus1::<usize>(3usize),
             delimited(
                 tag(" "),
                 map_res(take(1usize), |b: &[u8]| match b {
@@ -319,15 +324,18 @@ pub fn legacy_atom_list_input<'a>(
                 }),
                 tag("    "),
             ),
-            length_count(
-                fixed_width_int_in_range::<u8, _>(3, 1..=5),
-                preceded(
-                    tag(" "),
-                    map_opt(
-                        fixed_width_int_partial::<u8>(3),
-                        Element::from_atomic_number,
+            terminated(
+                length_count(
+                    fixed_width_int_in_range::<u8, _>(1usize, 1..=5),
+                    preceded(
+                        tag(" "),
+                        map_opt(
+                            fixed_width_int_partial::<u8>(3usize),
+                            Element::from_atomic_number,
+                        ),
                     ),
                 ),
+                space0,
             ),
         ),
         |(atom_index, exclusion, elements)| {
@@ -767,7 +775,7 @@ fn atom_list_entry<'a>(
     |input: &'a [u8]| {
         // Parse atom index (3 chars)
         let (remaining, atom_index) =
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
+            preceded(tag(" "), fixed_width_int_minus1::<usize>(3usize)).parse(input)?;
 
         // Parse count (3 chars, max 16)
         let (remaining, count) =
@@ -784,7 +792,7 @@ fn atom_list_entry<'a>(
 
         // Parse 4-char atom symbols
         let (remaining, elements) =
-            many_m_n(count, count, fixed_width_element_partial(4)).parse(remaining)?;
+            many_m_n(count, count, fixed_width_element_partial(4usize)).parse(remaining)?;
 
         Ok((
             remaining,

@@ -1,7 +1,6 @@
 ---
 source: umol-models-graph/tests/sdf_parsing/mod.rs
 expression: summary
-input_file: umol-models-graph/tests/sdf_parsing/data/cobalamin_sdf.sdf
 ---
 category: sdf_parsing
 filename: cobalamin_sdf.sdf
