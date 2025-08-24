@@ -186,3 +186,13 @@ fn test_progressive_parser_legacy_list() {
         result[5]
     );
 }
+
+#[test]
+fn test_progressive_parser_1() {
+    let input = std::fs::read(&std::path::Path::new(
+        "/Users/dr/Library/CloudStorage/Dropbox/Source/rust/umol/umol-models-graph/tests/mol_parsing/data/query/hydrogen_isotopes.mol",
+    ))
+    .unwrap();
+    let lines = parse_mol_progressive(&input);
+    println!("{:?}", &lines);
+}

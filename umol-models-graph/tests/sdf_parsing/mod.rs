@@ -2,6 +2,7 @@ use indexmap::IndexMap;
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
+use std::fs;
 use std::path::{Path, PathBuf};
 use umol_models_graph::io::sdf::parser::parse_sdf;
 
@@ -55,9 +56,8 @@ fn get_category(path: &Path) -> &str {
 fn run_test_sdf(path: &Path, mode: TestMode) {
     let path_str = path.to_str().unwrap();
     let category = get_category(path);
-    let sdf_bytes = std::fs::read(path).unwrap();
+    let sdf_bytes = fs::read(path).unwrap();
 
-    // Parse SDF file
     let sdf_file = match parse_sdf(&sdf_bytes) {
         Ok(sdf) => sdf,
         Err(e) => panic!("Failed to parse SDF file {}: {}", path_str, e),
@@ -107,7 +107,7 @@ fn run_test_sdf(path: &Path, mode: TestMode) {
                 compounds: compound_fulls,
             };
 
-            store_full_snapshot(path, category, full_snapshot);
+            store_full_snapshot(full_snapshot);
         }
     }
 }
@@ -120,7 +120,7 @@ fn store_summary_snapshot(summary: SdfSummary) {
     });
 }
 
-fn store_full_snapshot(_path: &Path, _category: &str, snapshot: SdfFullSnapshot) {
+fn store_full_snapshot(snapshot: SdfFullSnapshot) {
     let mut settings = Settings::clone_current();
     settings.set_snapshot_path(Path::new("snapshots").join("full"));
     settings.bind(|| {
@@ -129,11 +129,10 @@ fn store_full_snapshot(_path: &Path, _category: &str, snapshot: SdfFullSnapshot)
 }
 
 #[allow(dead_code)]
-fn run_test_invalid_sdf(path: &std::path::Path) {
+fn run_test_invalid_sdf(path: &Path) {
     let path_str = path.to_str().unwrap();
-    let sdf_bytes = std::fs::read(path).unwrap();
+    let sdf_bytes = fs::read(path).unwrap();
 
-    // These files should fail to parse
     let result = parse_sdf(&sdf_bytes);
     assert!(
         result.is_err(),
@@ -141,7 +140,6 @@ fn run_test_invalid_sdf(path: &std::path::Path) {
         path_str
     );
 
-    // Create snapshot of the error for regression testing
     let error_msg = format!("{}", result.unwrap_err());
     insta::with_settings!({
         description => format!("Error for invalid SDF file: {}", path.file_name().unwrap().to_str().unwrap()),
