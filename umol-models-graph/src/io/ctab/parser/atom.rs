@@ -2,16 +2,16 @@
 
 use nom::bytes::complete::take;
 use nom::character::complete::space0;
-use nom::combinator::{complete, cond, map, map_res, verify};
-use nom::sequence::{delimited, preceded, terminated};
+use nom::combinator::{cond, map, map_res, verify};
+use nom::sequence::{preceded, terminated};
 use nom::{error, Err, IResult, Parser};
+
 use umol_data::{Element, NamedIsotope};
 
-use super::utils::is_blanks_or_zeros;
-use crate::io::ctab::atom::{Atom, AtomList, AtomStandard, AtomSymbol, Point3D};
+use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol, Point3D};
+use crate::io::ctab::parser::utils::trim_whitespace;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
-use bstr::ByteSlice;
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,
@@ -21,27 +21,36 @@ use super::convert::{
 };
 use super::utils::{
     fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt,
-    repeat,
+    fixed_width_padding_n, is_all_whitespace,
 };
 
-/// Parse atom symbol (standard atoms, Element and NamedIsotope only)
-/// Returns error for non-standard atom symbols (L, A, Q, *, LP, R#).
-/// See `atom_symbol` for more details.
-fn atom_symbol_standard<'a>(
+/// Parse atom symbol (Element and NamedIsotope only).
+///
+/// Returns error for atom-like symbols (L, A, Q, *, LP, R#).
+/// If `allow_unicode` is true, allow unicode whitespace.
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+fn atom_symbol<'a>(
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
 ) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s: &[u8]| {
-        let s = s.trim_with(|b| b == ' ');
+    map_res(take(3usize), move |s: &[u8]| {
+        let s = trim_whitespace(s, allow_unicode);
         if let Some(element) = Element::from_symbol_bytes(s) {
             Ok(AtomSymbol::Element(element))
-        } else if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
-            Ok(AtomSymbol::NamedIsotope(isotope))
+        } else if allow_named_isotopes {
+            if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
+                Ok(AtomSymbol::NamedIsotope(isotope))
+            } else {
+                Err(error::Error::new(s, error::ErrorKind::MapRes))
+            }
         } else {
             Err(error::Error::new(s, error::ErrorKind::MapRes))
         }
     })
 }
 
-/// Parse atom symbol (all atom types allowed in MOL specification).
+/// Parse atom-like symbol (all atom types allowed in MOL specification).
+///
 /// --------------------------------------------------------------------------------
 /// | Symbol      | Type          | Parser* | Notes                                |
 /// --------------------------------------------------------------------------------
@@ -56,76 +65,120 @@ fn atom_symbol_standard<'a>(
 /// | *Parsers: S: standard, A: all                                                |
 /// --------------------------------------------------------------------------------
 ///
-fn atom_symbol<'a>() -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s: &[u8]| {
-        let s = s.trim_with(|b| b == ' ');
+/// If `allow_unicode` is true, allow unicode whitespace.
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+/// If `allow_rgroups` is true, allow rgroups (R#).
+/// If `allow_queries` is true, allow queries (A, Q, *, LP, R#).
+/// If `allow_extended_queries` is true, allow extended queries (AH, QH, XH, MH).
+/// If `allow_subatoms` is true, allow subatoms (LP).
+///
+fn atomlike_symbol<'a>(
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    allow_rgroups: bool,
+    allow_queries: bool,
+    allow_extended_queries: bool,
+    allow_electrons: bool,
+) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
+    map_res(take(3usize), move |s: &[u8]| {
+        let s = trim_whitespace(s, allow_unicode);
         if let Some(element) = Element::from_symbol_bytes(s) {
-            Ok(AtomSymbol::Element(element))
-        } else if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
-            Ok(AtomSymbol::NamedIsotope(isotope))
-        } else if let Some(rgroup) = RGroup::from_symbol_bytes(s) {
-            Ok(AtomSymbol::RGroup(rgroup))
-        } else if let Some(query) = QueryAtom::from_symbol_bytes(s) {
-            Ok(AtomSymbol::Query(query))
-        } else if s == b"L" {
-            Ok(AtomSymbol::AtomList(AtomList {
-                elements: vec![],
-                exclusion: false,
-            }))
-        } else if s == b"LP" {
-            Ok(AtomSymbol::LonePair)
-        } else {
-            Err(error::Error::new(s, error::ErrorKind::MapRes))
+            return Ok(AtomSymbol::Element(element));
         }
+        if allow_named_isotopes {
+            if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
+                return Ok(AtomSymbol::NamedIsotope(isotope));
+            }
+        }
+        if allow_rgroups {
+            if let Some(rgroup) = RGroup::from_symbol_bytes(s) {
+                return Ok(AtomSymbol::RGroup(rgroup));
+            }
+        }
+        if allow_electrons && s == b"LP" {
+            return Ok(AtomSymbol::LonePair);
+        }
+        if allow_queries {
+            match s {
+                b"A" | b"Q" | b"*" | b"X" | b"M" => {
+                    return QueryAtom::from_symbol_bytes(s)
+                        .map(AtomSymbol::Query)
+                        .ok_or(error::Error::new(s, error::ErrorKind::MapRes))
+                }
+                b"AH" | b"QH" | b"XH" | b"MH" => {
+                    if allow_extended_queries {
+                        return QueryAtom::from_symbol_bytes(s)
+                            .map(AtomSymbol::Query)
+                            .ok_or(error::Error::new(s, error::ErrorKind::MapRes));
+                    } else {
+                        return Err(error::Error::new(s, error::ErrorKind::MapRes));
+                    }
+                }
+                b"L" => return Ok(AtomSymbol::AtomList(AtomList::default())),
+                _ => {}
+            }
+        }
+        Err(error::Error::new(s, error::ErrorKind::MapRes))
     })
 }
 
-/// Parse standard atom inputs with 52-69 characters (s. `atom_input` for more details).
-/// Includes atom mapping number. Ignores whitespace padding.
-fn atom_input_standard69(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
-    let x = fixed_width_float::<f64>(10, 4);
-    let y = fixed_width_float::<f64>(10, 4);
-    let z = fixed_width_float::<f64>(10, 4);
-    let symbol = atom_symbol_standard();
-    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
-        convert_atom_mass_diff_code(opt.unwrap_or(0))
-    });
-    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
-        convert_atom_charge_code(opt.unwrap_or(0))
-    });
+/// Parse atom inputs with 52-69 characters (s. `atom_input` for more details).
+/// Includes atom mapping number.
+fn atom_input69(
+    input: &[u8],
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    strict_padding: bool,
+) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let x = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let y = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let z = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let mass_diff = map(
+        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
+        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+    );
+    let charge_radical = map(
+        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7, allow_unicode),
+        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
+    );
+    let stereo_parity = map_res(
+        fixed_width_int_in_range::<u8, _>(3, 0..=3, allow_unicode),
+        |code| convert_atom_stereo_parity_code(code, false),
+    );
+    let padding1 = fixed_width_padding_n(2, 3, allow_unicode, strict_padding);
     let valence = map_res(
-        fixed_width_int_in_range::<u8, _>(3, 0..=15),
+        fixed_width_int_in_range::<u8, _>(3, 0..=15, allow_unicode),
         convert_atom_valence_code,
     );
-    let atom_map_num = fixed_width_int_in_range_opt::<u32, _>(3, 1..=999);
+    let padding2 = fixed_width_padding_n(3, 3, allow_unicode, strict_padding);
+    let atom_map_num = fixed_width_int_in_range_opt::<u32, _>(3, 1..=999, allow_unicode);
+    let padding3 = fixed_width_padding_n(2, 3, allow_unicode, strict_padding);
 
     map(
         (
             x,
             y,
             z,
-            preceded(take(1usize), symbol),
-            complete(mass_diff),
-            complete(charge_radical),
             preceded(
-                repeat(3usize, verify(take(3usize), is_blanks_or_zeros)),
-                complete(valence),
+                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                symbol,
             ),
-            delimited(
-                take(9usize),
-                complete(atom_map_num),
-                repeat(2usize, verify(take(3usize), is_blanks_or_zeros)),
-            ),
+            mass_diff,
+            charge_radical,
+            terminated(stereo_parity, padding1),
+            terminated(valence, padding2),
+            terminated(atom_map_num, padding3),
         ),
-        |(x, y, z, symbol, mass_diff, charge_radical, valence, atom_map_num)| {
+        |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity, valence, atom_map_num)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            AtomStandard {
+            Atom {
                 element,
                 charge,
                 radical,
                 isotope_mass,
-                stereo_parity: None,
+                stereo_parity,
                 hydrogen_count: None,
                 valence,
                 atom_map_num,
@@ -137,25 +190,38 @@ fn atom_input_standard69(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
     .parse(input)
 }
 
-/// Parse standard atom inputs with 49-51 characters (s. `atom_input` for more details).
+/// Parse atom inputs with 49-51 characters (s. `atom_input` for more details).
 /// Includes mass difference, charge/radical and valence fields.
-fn atom_input_standard51(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
-    let x = fixed_width_float::<f64>(10, 4);
-    let y = fixed_width_float::<f64>(10, 4);
-    let z = fixed_width_float::<f64>(10, 4);
-    let symbol = atom_symbol_standard();
-    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
-        convert_atom_mass_diff_code(opt.unwrap_or(0))
-    });
-    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
-        convert_atom_charge_code(opt.unwrap_or(0))
-    });
+///
+/// If `allow_unicode` is true, allow unicode whitespace.
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+/// If `strict_padding` is true, require strict padding.
+///
+fn atom_input51(
+    input: &[u8],
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    strict_padding: bool,
+) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let x = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let y = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let z = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let mass_diff = map(
+        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
+        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+    );
+    let charge_radical = map(
+        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7, allow_unicode),
+        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
+    );
+    let padding1 = fixed_width_padding_n(2, 3, allow_unicode, strict_padding);
     let stereo_parity = map_res(
-        fixed_width_int_in_range::<u8, _>(3, 0..=3),
+        fixed_width_int_in_range::<u8, _>(3, 0..=3, allow_unicode),
         |code| convert_atom_stereo_parity_code(code, false),
     );
     let valence = map_res(
-        fixed_width_int_in_range::<u8, _>(3, 0..=15),
+        fixed_width_int_in_range::<u8, _>(3, 0..=15, allow_unicode),
         convert_atom_valence_code,
     );
 
@@ -164,19 +230,19 @@ fn atom_input_standard51(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
             x,
             y,
             z,
-            preceded(take(1usize), symbol),
-            complete(mass_diff),
-            complete(charge_radical),
-            complete(stereo_parity),
             preceded(
-                repeat(2usize, verify(take(3usize), is_blanks_or_zeros)),
-                complete(valence),
+                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                symbol,
             ),
+            mass_diff,
+            charge_radical,
+            terminated(stereo_parity, padding1),
+            valence,
         ),
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity, valence)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            AtomStandard {
+            Atom {
                 element,
                 charge,
                 radical,
@@ -196,84 +262,110 @@ fn atom_input_standard51(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
 /// Parse standard atom inputs with 42-48 characters including up to 6 characters of ignored data
 /// (s. `atom_input` for more details). Lacks trailing valence and atom mapping fields
 /// (substituted by defaults).
-fn atom_input_standard42(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
-    let x = fixed_width_float::<f64>(10, 4);
-    let y = fixed_width_float::<f64>(10, 4);
-    let z = fixed_width_float::<f64>(10, 4);
-    let symbol = atom_symbol_standard();
-    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
-        convert_atom_mass_diff_code(opt.unwrap_or(0))
-    });
-    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
-        convert_atom_charge_code(opt.unwrap_or(0))
-    });
+///
+/// If `allow_unicode` is true, allow unicode whitespace.
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+/// If `strict_padding` is true, require strict padding.
+///
+fn atom_input42(
+    input: &[u8],
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    strict_padding: bool,
+) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let x = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let y = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let z = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let mass_diff = map(
+        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
+        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+    );
+    let charge_radical = map(
+        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7, allow_unicode),
+        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
+    );
     let stereo_parity = map_res(
-        fixed_width_int_in_range::<u8, _>(3, 0..=3),
+        fixed_width_int_in_range::<u8, _>(3, 0..=3, allow_unicode),
         |code| convert_atom_stereo_parity_code(code, false),
     );
-
-    let (input, (x, y, z, symbol, mass_diff, charge_radical, stereo_parity)) = (
-        x,
-        y,
-        z,
-        preceded(take(1usize), symbol),
-        complete(mass_diff),
-        complete(charge_radical),
-        complete(stereo_parity),
-    )
-        .parse(input)?;
-
-    // Verify that ignored block has up to 2 fields of width 3 containing blanks or zeros
-    let n_to_take = 6.min(input.len());
-    let (remaining, _) =
-        repeat(n_to_take / 3, verify(take(3usize), is_blanks_or_zeros)).parse(input)?;
-
-    let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-    let (charge, radical) = charge_radical;
-    Ok((
-        remaining,
-        AtomStandard {
-            element,
-            charge,
-            radical,
-            isotope_mass,
-            stereo_parity,
-            hydrogen_count: None,
-            valence: None,
-            atom_map_num: None,
-            position: Some(Point3D::new(x, y, z)),
-            properties: std::collections::HashMap::new(),
-        },
-    ))
-}
-
-/// Parse standard atom inputs with 37-41 characters (s. `atom_input` for more details).
-/// Lacks trailing stereo parity, valence and atom mapping fields (substituted by defaults).
-fn atom_input_standard39(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
-    let x = fixed_width_float::<f64>(10, 4);
-    let y = fixed_width_float::<f64>(10, 4);
-    let z = fixed_width_float::<f64>(10, 4);
-    let symbol = atom_symbol_standard();
-    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
-        convert_atom_mass_diff_code(opt.unwrap_or(0))
-    });
-    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
-        convert_atom_charge_code(opt.unwrap_or(0))
-    });
+    let n = input.len().saturating_sub(42) / 3;
+    let padding1 = fixed_width_padding_n(n, 3, allow_unicode, strict_padding);
 
     map(
         (
             x,
             y,
             z,
-            preceded(take(1usize), symbol),
-            complete(mass_diff),
-            complete(charge_radical),
+            preceded(
+                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                symbol,
+            ),
+            mass_diff,
+            charge_radical,
+            terminated(stereo_parity, padding1),
+        ),
+        |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity)| {
+            let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
+            let (charge, radical) = charge_radical;
+            Atom {
+                element,
+                charge,
+                radical,
+                isotope_mass,
+                stereo_parity,
+                hydrogen_count: None,
+                valence: None,
+                atom_map_num: None,
+                position: Some(Point3D::new(x, y, z)),
+                properties: std::collections::HashMap::new(),
+            }
+        },
+    )
+    .parse(input)
+}
+
+/// Parse atom inputs with 37-41 characters (s. `atom_input` for more details).
+/// Lacks trailing stereo parity, valence and atom mapping fields (substituted by defaults).
+///
+/// If `allow_unicode` is true, allow unicode whitespace.
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+///
+fn atom_input39(
+    input: &[u8],
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    _strict_padding: bool,
+) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let x = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let y = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let z = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let mass_diff = map(
+        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
+        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+    );
+    let charge_radical = map(
+        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7, allow_unicode),
+        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
+    );
+
+    map(
+        (
+            x,
+            y,
+            z,
+            preceded(
+                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                symbol,
+            ),
+            mass_diff,
+            charge_radical,
         ),
         |(x, y, z, symbol, mass_diff, charge_radical)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            AtomStandard {
+            Atom {
                 element,
                 charge,
                 radical,
@@ -290,22 +382,42 @@ fn atom_input_standard39(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
     .parse(input)
 }
 
-/// Parse standard atom inputs with 35-36 characters (s. `atom_input` for more details).
+/// Parse atom inputs with 35-36 characters (s. `atom_input` for more details).
 /// Lacks trailing charge/radical, valence and atom mapping fields (substituted by defaults).
-fn atom_input_standard36(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
-    let x = fixed_width_float::<f64>(10, 4);
-    let y = fixed_width_float::<f64>(10, 4);
-    let z = fixed_width_float::<f64>(10, 4);
-    let symbol = atom_symbol_standard();
-    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
-        convert_atom_mass_diff_code(opt.unwrap_or(0))
-    });
+///
+/// If `allow_unicode` is true, allow unicode whitespace.
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+/// If `strict_padding` is true, require strict padding.
+///
+fn atom_input36(
+    input: &[u8],
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    _strict_padding: bool,
+) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let x = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let y = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let z = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let mass_diff = map(
+        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
+        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+    );
 
     map(
-        (x, y, z, preceded(take(1usize), symbol), complete(mass_diff)),
+        (
+            x,
+            y,
+            z,
+            preceded(
+                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                symbol,
+            ),
+            mass_diff,
+        ),
         |(x, y, z, symbol, mass_diff)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-            AtomStandard {
+            Atom {
                 element,
                 charge: 0,
                 radical: None,
@@ -322,20 +434,38 @@ fn atom_input_standard36(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
     .parse(input)
 }
 
-/// Parse standard atom inputs with 34 characters (s. `atom_input` for more details).
+/// Parse atom inputs with 34 characters (s. `atom_input` for more details).
 /// Lacks trailing mass difference, charge/radical, valence and atom mapping fields
 /// (substituted by defaults).
-fn atom_input_standard34(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Error<&[u8]>> {
-    let x = fixed_width_float::<f64>(10, 4);
-    let y = fixed_width_float::<f64>(10, 4);
-    let z = fixed_width_float::<f64>(10, 4);
-    let symbol = atom_symbol_standard();
+///
+/// If `allow_unicode` is true, allow unicode whitespace.
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+/// If `strict_padding` is true, require strict padding.
+///
+fn atom_input34(
+    input: &[u8],
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    _strict_padding: bool,
+) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let x = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let y = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let z = fixed_width_float::<f64>(10, 4, allow_unicode);
+    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
 
     map(
-        (x, y, z, preceded(take(1usize), symbol)),
+        (
+            x,
+            y,
+            z,
+            preceded(
+                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                symbol,
+            ),
+        ),
         |(x, y, z, symbol)| {
             let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, None);
-            AtomStandard {
+            Atom {
                 element,
                 charge: 0,
                 radical: None,
@@ -370,25 +500,27 @@ fn atom_input_standard34(input: &[u8]) -> IResult<&[u8], AtomStandard, error::Er
 /// | mmm   | atom mapping       | 1..=#atoms   | Reaction, accepted as extension |
 /// -------------------------------------------------------------------------------
 ///
-pub fn atom_input_standard<'a>(
-) -> impl Parser<&'a [u8], Output = AtomStandard, Error = error::Error<&'a [u8]>> {
+pub fn atom_input<'a>(
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    strict_padding: bool,
+) -> impl Parser<&'a [u8], Output = Atom, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let len = input.len();
         let parser = match len {
-            67.. => atom_input_standard69,
-            49..=66 => atom_input_standard51,
-            42..=48 => atom_input_standard42,
-            37..=41 => atom_input_standard39,
-            35..=36 => atom_input_standard36,
-            34 => atom_input_standard34,
-            _ => {
-                return Err(Err::Error(error::Error::new(
-                    input,
-                    error::ErrorKind::Eof,
-                )))
-            }
+            67.. => atom_input69,
+            49..=66 => atom_input51,
+            42..=48 => atom_input42,
+            37..=41 => atom_input39,
+            35..=36 => atom_input36,
+            34 => atom_input34,
+            _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
-        terminated(parser, space0).parse(input)
+        terminated(
+            move |input| parser(input, allow_unicode, allow_named_isotopes, strict_padding),
+            space0,
+        )
+        .parse(input)
     }
 }
 
@@ -411,97 +543,168 @@ pub fn atom_input_standard<'a>(
 /// | bbb   | stereo care        | 0, 1         | Query, consider double bond stereo        |
 /// |       |                    |              | when stereo care is 1 for both bond atoms |
 /// | vvv   | valence code       | 0..=15       | Generic                                   |
+/// | HHH   | ignored            |              |                                           |   
+/// | rrr   | ignored            |              |                                           |   
+/// | iii   | ignored            |              |                                           |   
 /// | mmm   | atom mapping       | 1..=#atoms   | Reaction, accepted as extension           |
 /// | nnn   | inversion          | 0..=2        | Reaction                                  |
 /// | eee   | exact change       | 0, 1         | Reaction                                  |
 /// -----------------------------------------------------------------------------------------
 ///
-fn atom_input_inner(input: &[u8]) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-    let (i, x) = fixed_width_float::<f64>(10, 4).parse(input)?;
-    let (i, y) = fixed_width_float::<f64>(10, 4).parse(i)?;
-    let (i, z) = fixed_width_float::<f64>(10, 4).parse(i)?;
-    let (i, _) = take(1usize).parse(i)?;
-    let (i, atom_symbol) = atom_symbol().parse(i)?;
-    let (i, mass_diff) = map(fixed_width_int(2), convert_atom_mass_diff_code).parse(i)?;
-    let (i, (charge, radical)) = map(fixed_width_int(3), convert_atom_charge_code).parse(i)?;
 
-    let (i, stereo_parity) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int(3), |code| convert_atom_stereo_parity_code(code, true)),
+pub fn atomlike_input<'a>(
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    allow_rgroups: bool,
+    allow_queries: bool,
+    allow_extended_queries: bool,
+    allow_electrons: bool,
+    strict_padding: bool,
+) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
+    terminated(
+        atomlike_input_inner(
+            allow_unicode,
+            allow_named_isotopes,
+            allow_rgroups,
+            allow_queries,
+            allow_extended_queries,
+            allow_electrons,
+            strict_padding,
+        ),
+        space0,
     )
-    .parse(i)?;
-
-    let (i, hydrogen_count) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int(3), convert_atom_hydrogen_count_code),
-    )
-    .parse(i)?;
-
-    let (i, stereo_care) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int(3), convert_atom_stereo_care_code),
-    )
-    .parse(i)?;
-
-    let (i, valence) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int(3), convert_atom_valence_code),
-    )
-    .parse(i)?;
-
-    // Skip unused HHH, rrr, iii fields
-    let (i, _) = cond(i.len() >= 9, take(9usize)).parse(i)?;
-
-    let (i, atom_map_num) = cond(i.len() >= 3, fixed_width_int::<u32>(3)).parse(i)?;
-
-    let (i, inversion_flag) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int(3), convert_atom_inversion_flag_code),
-    )
-    .parse(i)?;
-
-    let (i, exact_change_flag) = cond(
-        i.len() >= 3,
-        map_res(fixed_width_int(3), convert_atom_exact_change_flag_code),
-    )
-    .parse(i)?;
-
-    let isotope_mass = match &atom_symbol {
-        AtomSymbol::Element(e) => {
-            mass_diff.map(|diff| (e.reference_mass_number() as i8 + diff) as u32)
-        }
-        AtomSymbol::NamedIsotope(i) => Some(i.mass_number()),
-        _ => mass_diff.map(|diff| diff.unsigned_abs() as u32),
-    };
-
-    Ok((
-        i,
-        Atom {
-            symbol: atom_symbol,
-            charge,
-            radical,
-            isotope_mass,
-            stereo_parity: stereo_parity.flatten(),
-            hydrogen_count: hydrogen_count.flatten(),
-            stereo_care: stereo_care.flatten(),
-            valence: valence.flatten(),
-            atom_map_num,
-            inversion_retention: inversion_flag.flatten(),
-            exact_change: exact_change_flag.flatten(),
-            attachment_point: None,
-            attachment_order: None,
-            ring_bond_count: None,
-            substitution_count: None,
-            unsaturated: None,
-            link_atom: None,
-            position: Some(Point3D::new(x, y, z)),
-            properties: std::collections::HashMap::new(),
-        },
-    ))
 }
 
-pub fn atom_input<'a>() -> impl Parser<&'a [u8], Output = Atom, Error = error::Error<&'a [u8]>> {
-    terminated(atom_input_inner, space0)
+// Internal parser for atomlike_input
+fn atomlike_input_inner<'a>(
+    allow_unicode: bool,
+    allow_named_isotopes: bool,
+    allow_rgroups: bool,
+    allow_queries: bool,
+    allow_extended_queries: bool,
+    allow_electrons: bool,
+    strict_padding: bool,
+) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
+    move |input: &'a [u8]| {
+        // x, y, z coordinates
+        let (i, x) = fixed_width_float::<f64>(10, 4, allow_unicode).parse(input)?;
+        let (i, y) = fixed_width_float::<f64>(10, 4, allow_unicode).parse(i)?;
+        let (i, z) = fixed_width_float::<f64>(10, 4, allow_unicode).parse(i)?;
+
+        // Atom symbol
+        let (i, atom_symbol) = preceded(
+            verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+            atomlike_symbol(
+                allow_unicode,
+                allow_named_isotopes,
+                allow_rgroups,
+                allow_queries,
+                allow_extended_queries,
+                allow_electrons,
+            ),
+        )
+        .parse(i)?;
+
+        // Mass difference, charge/radical, stereo parity
+        let (i, mass_diff) = map(
+            fixed_width_int(2, allow_unicode),
+            convert_atom_mass_diff_code,
+        )
+        .parse(i)?;
+        let (i, (charge, radical)) =
+            map(fixed_width_int(3, allow_unicode), convert_atom_charge_code).parse(i)?;
+        let (i, stereo_parity) = cond(
+            i.len() >= 3,
+            map_res(fixed_width_int(3, allow_unicode), |code| {
+                convert_atom_stereo_parity_code(code, true)
+            }),
+        )
+        .parse(i)?;
+
+        // Hydrogen count, stereo care, valence
+        let (i, hydrogen_count) = cond(
+            i.len() >= 3,
+            map_res(
+                fixed_width_int(3, allow_unicode),
+                convert_atom_hydrogen_count_code,
+            ),
+        )
+        .parse(i)?;
+        let (i, stereo_care) = cond(
+            i.len() >= 3,
+            map_res(
+                fixed_width_int(3, allow_unicode),
+                convert_atom_stereo_care_code,
+            ),
+        )
+        .parse(i)?;
+        let (i, valence) = cond(
+            i.len() >= 3,
+            map_res(fixed_width_int(3, allow_unicode), convert_atom_valence_code),
+        )
+        .parse(i)?;
+
+        // Ignored fields
+        let (i, _) = cond(
+            i.len() > 0,
+            fixed_width_padding_n((i.len() / 3).min(3), 3, allow_unicode, strict_padding),
+        )
+        .parse(i)?;
+
+        // Atom mapping number, inversion flag, exact change flag
+        let (i, atom_map_num) =
+            cond(i.len() >= 3, fixed_width_int::<u32>(3, allow_unicode)).parse(i)?;
+        let (i, inversion_flag) = cond(
+            i.len() >= 3,
+            map_res(
+                fixed_width_int(3, allow_unicode),
+                convert_atom_inversion_flag_code,
+            ),
+        )
+        .parse(i)?;
+        let (i, exact_change_flag) = cond(
+            i.len() >= 3,
+            map_res(
+                fixed_width_int(3, allow_unicode),
+                convert_atom_exact_change_flag_code,
+            ),
+        )
+        .parse(i)?;
+
+        // Combine atom mass difference and named isotope information
+        let isotope_mass = match &atom_symbol {
+            AtomSymbol::Element(e) => {
+                mass_diff.map(|diff| (e.reference_mass_number() as i8 + diff) as u32)
+            }
+            AtomSymbol::NamedIsotope(i) => Some(i.mass_number()),
+            _ => mass_diff.map(|diff| diff.unsigned_abs() as u32),
+        };
+
+        Ok((
+            i,
+            AtomLike {
+                symbol: atom_symbol,
+                charge,
+                radical,
+                isotope_mass,
+                stereo_parity: stereo_parity.flatten(),
+                hydrogen_count: hydrogen_count.flatten(),
+                stereo_care: stereo_care.flatten(),
+                valence: valence.flatten(),
+                atom_map_num,
+                inversion_retention: inversion_flag.flatten(),
+                exact_change: exact_change_flag.flatten(),
+                attachment_point: None,
+                attachment_order: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                position: Some(Point3D::new(x, y, z)),
+                properties: std::collections::HashMap::new(),
+            },
+        ))
+    }
 }
 
 #[cfg(test)]

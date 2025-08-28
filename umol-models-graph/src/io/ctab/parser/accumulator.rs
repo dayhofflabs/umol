@@ -6,11 +6,11 @@ use super::convert::{
     convert_unsaturated_atom_code,
 };
 use crate::io::ctab::atom::{
-    Atom, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, RingBondCount,
+    AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, RingBondCount,
     SubstitutionCount, UnsaturatedAtom,
 };
 
-use crate::io::ctab::molecule::{Molecule, MoleculeStandard};
+use crate::io::ctab::molecule::{Molecule, MoleculeLike};
 use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry, SGroupSubscriptData};
 use crate::io::ctab::rgroup::{RGroup, RGroupOccurrence};
 use crate::io::ctab::sgroup::{
@@ -594,30 +594,30 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    /// Apply all properties to Molecule
-    pub fn apply(&mut self, molecule: &mut Molecule) -> Result<()> {
+    /// Apply all properties to MoleculeLike
+    pub fn update_moleculelike(&mut self, molecule: &mut MoleculeLike) -> Result<()> {
         for (&atom_index, props) in &self.atom_properties {
             let atom = molecule
                 .atom_mut(atom_index)
                 .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
 
             if props.alias.is_some() {
-                self.apply_atom_alias(props, atom)?;
+                self.apply_atomlike_alias(props, atom)?;
             }
             if props.value.is_some() {
-                self.apply_atom_value(props, atom)?;
+                self.apply_atomlike_value(props, atom)?;
             }
             if props.charge.is_some() {
-                self.apply_charge(props, atom)?;
+                self.apply_atomlike_charge(props, atom)?;
             }
             if props.radical.is_some() {
-                self.apply_radical(props, atom)?;
+                self.apply_atomlike_radical(props, atom)?;
             }
             if props.isotope_mass.is_some() {
-                self.apply_isotope(props, atom)?;
+                self.apply_atomlike_isotope(props, atom)?;
             }
             if props.hydrogen_count.is_some() {
-                self.apply_hydrogen_count(props, atom)?;
+                self.apply_atomlike_hydrogen_count(props, atom)?;
             }
             if props.ring_bond_count.is_some() {
                 self.apply_ring_bond_count(props, atom)?;
@@ -649,41 +649,41 @@ impl MoleculeProperties {
         }
         self.validate_sgroup_data()?;
         self.apply_sgroup(molecule)?;
-        self.apply_zero_order_bonds(molecule)?;
+        self.apply_atomlike_zero_order_bonds(molecule)?;
         Ok(())
     }
 
-    /// Apply all properties to MoleculeStandard
-    pub fn apply_standard(&mut self, molecule: &mut MoleculeStandard) -> Result<()> {
+    /// Apply all properties to Molecule
+    pub fn update_molecule(&mut self, molecule: &mut Molecule) -> Result<()> {
         for (atom_index, props) in &self.atom_properties {
             if props.alias.is_some() {
-                self.apply_atom_alias_standard(*atom_index, props, molecule)?;
+                self.apply_atom_alias(*atom_index, props, molecule)?;
             }
             if props.value.is_some() {
-                self.apply_atom_value_standard(*atom_index, props, molecule)?;
+                self.apply_atom_value(*atom_index, props, molecule)?;
             }
             if props.charge.is_some() {
-                self.apply_charge_standard(*atom_index, props, molecule)?;
+                self.apply_atom_charge(*atom_index, props, molecule)?;
             }
             if props.radical.is_some() {
-                self.apply_radical_standard(*atom_index, props, molecule)?;
+                self.apply_atom_radical(*atom_index, props, molecule)?;
             }
             if props.isotope_mass.is_some() {
-                self.apply_isotope_standard(*atom_index, props, molecule)?;
+                self.apply_atom_isotope(*atom_index, props, molecule)?;
             }
             if props.hydrogen_count.is_some() {
-                self.apply_hydrogen_count_standard(*atom_index, props, molecule)?;
+                self.apply_atom_hydrogen_count(*atom_index, props, molecule)?;
             }
         }
         for (bond_index, props) in &self.bond_properties {
             if props.order_override.is_some() {
-                self.apply_zero_order_bond_standard(*bond_index, props, molecule)?;
+                self.apply_atom_zero_order_bond(*bond_index, props, molecule)?;
             }
         }
         Ok(())
     }
 
-    fn apply_atom_alias(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_atomlike_alias(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         let alias = props.alias.as_ref().unwrap();
         if let Some(existing_alias) = atom.properties.get("molFileAlias") {
             if existing_alias != alias {
@@ -699,11 +699,11 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_atom_alias_standard(
+    fn apply_atom_alias(
         &self,
         atom_index: usize,
         props: &AtomProperties,
-        molecule: &mut MoleculeStandard,
+        molecule: &mut Molecule,
     ) -> Result<()> {
         let alias = props.alias.as_ref().unwrap();
         let atom = molecule
@@ -723,7 +723,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_atom_value(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_atomlike_value(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         let value = props.value.as_ref().unwrap();
         if let Some(existing_value) = atom.properties.get("molFileValue") {
             if existing_value != value {
@@ -739,11 +739,11 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_atom_value_standard(
+    fn apply_atom_value(
         &self,
         atom_index: usize,
         props: &AtomProperties,
-        molecule: &mut MoleculeStandard,
+        molecule: &mut Molecule,
     ) -> Result<()> {
         let value = props.value.as_ref().unwrap();
         let atom = molecule
@@ -763,18 +763,18 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_charge(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_atomlike_charge(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         let charge = props.charge.unwrap();
         atom.charge = charge;
         atom.radical = None;
         Ok(())
     }
 
-    fn apply_charge_standard(
+    fn apply_atom_charge(
         &self,
         atom_index: usize,
         props: &AtomProperties,
-        molecule: &mut MoleculeStandard,
+        molecule: &mut Molecule,
     ) -> Result<()> {
         let charge = props.charge.unwrap();
         let atom = molecule
@@ -785,17 +785,17 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_radical(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_atomlike_radical(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         atom.radical = props.radical;
         atom.charge = 0;
         Ok(())
     }
 
-    fn apply_radical_standard(
+    fn apply_atom_radical(
         &self,
         atom_index: usize,
         props: &AtomProperties,
-        molecule: &mut MoleculeStandard,
+        molecule: &mut Molecule,
     ) -> Result<()> {
         let atom = molecule
             .atom_mut(atom_index)
@@ -805,7 +805,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_isotope(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_atomlike_isotope(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         let element = match &atom.symbol {
             AtomSymbol::Element(element) => Ok::<_, umol::Error>(*element),
             AtomSymbol::NamedIsotope(isotope) => Ok::<_, umol::Error>(isotope.element()),
@@ -831,11 +831,11 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_isotope_standard(
+    fn apply_atom_isotope(
         &self,
         atom_index: usize,
         props: &AtomProperties,
-        molecule: &mut MoleculeStandard,
+        molecule: &mut Molecule,
     ) -> Result<()> {
         let atom = molecule
             .atom_mut(atom_index)
@@ -856,17 +856,21 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_hydrogen_count(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_atomlike_hydrogen_count(
+        &self,
+        props: &AtomProperties,
+        atom: &mut AtomLike,
+    ) -> Result<()> {
         let hydrogen_count = props.hydrogen_count.unwrap();
         atom.hydrogen_count = Some(hydrogen_count);
         Ok(())
     }
 
-    fn apply_hydrogen_count_standard(
+    fn apply_atom_hydrogen_count(
         &self,
         atom_index: usize,
         props: &AtomProperties,
-        molecule: &mut MoleculeStandard,
+        molecule: &mut Molecule,
     ) -> Result<()> {
         let hydrogen_count = props.hydrogen_count.unwrap();
         let atom = molecule
@@ -876,7 +880,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_ring_bond_count(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_ring_bond_count(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if let Some(existing) = atom.ring_bond_count {
             if Some(existing) != props.ring_bond_count {
                 return Err(ValidationError::InvalidComponent(format!(
@@ -890,7 +894,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_substitution_count(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_substitution_count(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if let Some(existing) = atom.substitution_count {
             if Some(existing) != props.substitution_count {
                 return Err(ValidationError::InvalidComponent(format!(
@@ -904,12 +908,12 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_unsaturated_atom(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_unsaturated_atom(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         atom.unsaturated = props.unsaturated;
         Ok(())
     }
 
-    fn apply_link_atom(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_link_atom(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if atom.link_atom.is_some() {
             return Err(ValidationError::InvalidComponent("Link atom conflict".to_string()).into());
         }
@@ -917,8 +921,11 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_atom_list(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
-        if !matches!(atom.symbol, AtomSymbol::Element(_) | AtomSymbol::AtomList(_)) {
+    fn apply_atom_list(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
+        if !matches!(
+            atom.symbol,
+            AtomSymbol::Element(_) | AtomSymbol::AtomList(_)
+        ) {
             return Err(ValidationError::InvalidComponent(format!(
                 "Atom list can only be applied to an element or atom list, not {:?}",
                 atom.symbol
@@ -932,7 +939,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_attachment_point(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_attachment_point(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if atom.attachment_point.is_some() {
             return Err(
                 ValidationError::InvalidComponent("Attachment point conflict".to_string()).into(),
@@ -942,7 +949,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_attachment_order(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_attachment_order(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if atom.attachment_order.is_some() {
             return Err(
                 ValidationError::InvalidComponent("Attachment order conflict".to_string()).into(),
@@ -952,7 +959,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_rgroup_label(&self, props: &AtomProperties, atom: &mut Atom) -> Result<()> {
+    fn apply_rgroup_label(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if !matches!(atom.symbol, AtomSymbol::Element(_)) {
             return Err(ValidationError::InvalidComponent(format!(
                 "R-group label can only be applied to an element, not {:?}",
@@ -968,7 +975,7 @@ impl MoleculeProperties {
         &self,
         rgroup_label: usize,
         props: &RGroupProperties,
-        molecule: &mut Molecule,
+        molecule: &mut MoleculeLike,
     ) -> Result<()> {
         for i in 0..molecule.atom_count() {
             if let Some(atom) = molecule.atom_mut(i) {
@@ -988,7 +995,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_zero_order_bonds(&self, molecule: &mut Molecule) -> Result<()> {
+    fn apply_atomlike_zero_order_bonds(&self, molecule: &mut MoleculeLike) -> Result<()> {
         for (bond_index, props) in &self.bond_properties {
             if let Some(bond) = molecule.bond_mut(*bond_index) {
                 bond.bond_type = convert_bond_type_code(props.order_override.unwrap(), true)?;
@@ -1003,11 +1010,11 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_zero_order_bond_standard(
+    fn apply_atom_zero_order_bond(
         &self,
         bond_index: usize,
         props: &BondProperties,
-        molecule: &mut MoleculeStandard,
+        molecule: &mut Molecule,
     ) -> Result<()> {
         let bond = molecule
             .bond_mut(bond_index)
@@ -1016,7 +1023,7 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_sgroup(&self, molecule: &mut Molecule) -> Result<()> {
+    fn apply_sgroup(&self, molecule: &mut MoleculeLike) -> Result<()> {
         for (sgroup_index, props) in &self.sgroup_properties {
             let sgroup_type = props.group_type.ok_or_else(|| {
                 DataError::InvalidFragment(format!("S-group {} has no type", sgroup_index))

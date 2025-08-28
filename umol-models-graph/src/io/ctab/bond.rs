@@ -4,7 +4,51 @@ use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Bond order, mapping common MOL V2000 codes.
+/// Bond
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Bond {
+    pub bond_type: BondType,
+    pub stereo: Option<BondStereo>,
+    pub dir: Option<BondDir>,
+    pub properties: HashMap<String, String>,
+}
+
+impl Bond {
+    pub fn new(bond_type: BondType) -> Self {
+        Self {
+            bond_type,
+            stereo: None,
+            dir: None,
+            properties: HashMap::new(),
+        }
+    }
+}
+
+/// Bond
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BondLike {
+    pub bond_type: BondType,
+    pub stereo: Option<BondStereo>,
+    pub dir: Option<BondDir>,
+    pub topology: Option<BondTopology>,
+    pub reacting_center: Option<BondReactingCenter>,
+    pub properties: HashMap<String, String>,
+}
+
+impl BondLike {
+    pub fn new(bond_type: BondType) -> Self {
+        Self {
+            bond_type,
+            stereo: None,
+            dir: None,
+            topology: None,
+            reacting_center: None,
+            properties: HashMap::new(),
+        }
+    }
+}
+
+/// Bond order
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondType {
     Single,           // MOL code 1
@@ -19,12 +63,20 @@ pub enum BondType {
 }
 
 impl BondType {
-    pub fn is_standard(&self) -> bool {
-        matches!(self, BondType::Single | BondType::Double | BondType::Triple | BondType::Aromatic)
+    pub fn is_bondlike(&self) -> bool {
+        !matches!(
+            self,
+            BondType::Single | BondType::Double | BondType::Triple | BondType::Aromatic
+        )
+    }
+    pub fn is_kekule(&self) -> bool {
+        matches!(self, BondType::Single | BondType::Double | BondType::Triple)
     }
 }
 
-/// Double bond stereochemistry specified in MOL V2000 files.
+/// Bond properties specified in the bond block
+
+/// Double bond stereochemistry
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondStereo {
     Cis,    // MOL code 1
@@ -125,73 +177,29 @@ impl BondReactingCenter {
     }
 }
 
-/// Bond
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BondStandard {
-    pub bond_type: BondType,
-    pub stereo: Option<BondStereo>,
-    pub dir: Option<BondDir>,
-    pub properties: HashMap<String, String>,
-}
-
-impl BondStandard {
-    pub fn new(bond_type: BondType) -> Self {
-        Self {
-            bond_type,
-            stereo: None,
-            dir: None,
-            properties: HashMap::new(),
-        }
-    }
-}
-
-/// Bond
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Bond {
-    pub bond_type: BondType,
-    pub stereo: Option<BondStereo>,
-    pub dir: Option<BondDir>,
-    pub topology: Option<BondTopology>,
-    pub reacting_center: Option<BondReactingCenter>,
-    pub properties: HashMap<String, String>,
-}
-
-impl Bond {
-    pub fn new(bond_type: BondType) -> Self {
-        Self {
-            bond_type,
-            stereo: None,
-            dir: None,
-            topology: None,
-            reacting_center: None,
-            properties: HashMap::new(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_bond_standard_serialize() {
-        let mut bond = BondStandard::new(BondType::Double);
+    fn test_bond_serialize() {
+        let mut bond = Bond::new(BondType::Double);
         bond.properties
             .insert("test_key".to_string(), "test_value".to_string());
 
         // Test YAML serialization
-        let yaml = serde_yaml::to_string(&bond).expect("Failed to serialize BondStandard to YAML");
-        let deserialized: BondStandard =
-            serde_yaml::from_str(&yaml).expect("Failed to deserialize BondStandard from YAML");
+        let yaml = serde_yaml::to_string(&bond).expect("Failed to serialize Bond to YAML");
+        let deserialized: Bond =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize Bond from YAML");
         assert_eq!(bond, deserialized);
     }
 
     #[test]
-    fn test_bond_serialize() {
-        let bond = Bond::new(BondType::Double);
-        let yaml = serde_yaml::to_string(&bond).expect("Failed to serialize Bond to YAML");
-        let deserialized: Bond =
-            serde_yaml::from_str(&yaml).expect("Failed to deserialize Bond from YAML");
+    fn test_bondlike_serialize() {
+        let bond = BondLike::new(BondType::Double);
+        let yaml = serde_yaml::to_string(&bond).expect("Failed to serialize BondLike to YAML");
+        let deserialized: BondLike =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize BondLike from YAML");
         assert_eq!(bond, deserialized);
     }
 }

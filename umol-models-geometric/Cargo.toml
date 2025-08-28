@@ -9,8 +9,8 @@ umol-data = { path = "../umol-data" }
 nom = { version = "8.0.0" }
 num = "0.4.3"
 num-traits = "0.2.19"
-nalgebra = "0.33"
+nalgebra = "0.34"
 
 [dev-dependencies]
-rstest = "0.25.0"
-criterion = "0.6.0"
+rstest = "0.26"
+criterion = "0.7"

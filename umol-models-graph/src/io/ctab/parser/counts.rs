@@ -1,14 +1,14 @@
 //! Counts line parser for CTab files.
 
+use bstr::ByteSlice;
 use nom::branch::alt;
 use nom::bytes::complete::take;
 use nom::character::complete::space0;
 use nom::combinator::{complete, map, verify};
-use nom::error;
 use nom::sequence::{delimited, preceded, terminated};
-use nom::Parser;
+use nom::{error, Parser};
 
-use super::utils::fixed_width_int;
+use super::utils::{fixed_width_int, fixed_width_padding_n};
 
 /// Parse counts line (39 characters wide)
 /// aaabbblllfffcccsssxxxrrrpppiiimmmvvvvvv
@@ -26,43 +26,47 @@ use super::utils::fixed_width_int;
 /// | vvvvvvv | version stamp              | V2000      | Generic |
 /// ---------------------------------------------------------------
 ///
-pub fn counts_input<'a>() -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>>
-{
-    terminated(
-        map(
-            (
-                fixed_width_int::<i32>(3usize),
-                fixed_width_int::<i32>(3usize),
-                fixed_width_int::<i32>(3usize),
-                preceded(take(3usize), fixed_width_int::<i32>(3usize)),
-                fixed_width_int::<i32>(3usize),
-                alt((
-                    delimited(
-                        take(12usize),
-                        fixed_width_int::<i32>(3usize),
-                        complete(verify(take(6usize), |s: &[u8]| {
-                            s == b" V2000" || s == b"V2000 "
-                        })),
-                    ),
-                    delimited(
-                        take(42usize),
-                        fixed_width_int::<i32>(3usize),
-                        complete(verify(take(6usize), |s: &[u8]| {
-                            s == b" V2000" || s == b"V2000 "
-                        })),
-                    ),
-                )),
-            ),
-            |(atoms, bonds, atom_lists, chiral_flag, stext_entries, properties_lines)| Counts {
-                atoms,
-                bonds,
-                atom_lists,
-                chiral_flag,
-                stext_entries,
-                properties_lines,
-            },
+
+pub fn counts_input<'a>(
+    allow_unicode: bool,
+    strict_padding: bool,
+) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
+    terminated(counts_input_inner(allow_unicode, strict_padding), space0)
+}
+
+/// Internal parser for counts_input
+fn counts_input_inner<'a>(
+    allow_unicode: bool,
+    strict_padding: bool,
+) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> + 'a {
+    map(
+        (
+            fixed_width_int::<i32>(3usize, allow_unicode),
+            fixed_width_int::<i32>(3usize, allow_unicode),
+            fixed_width_int::<i32>(3usize, allow_unicode),
+            preceded(take(3usize), fixed_width_int::<i32>(3usize, allow_unicode)),
+            fixed_width_int::<i32>(3usize, allow_unicode),
+            alt((
+                delimited(
+                    fixed_width_padding_n(4, 3, allow_unicode, strict_padding),
+                    fixed_width_int::<i32>(3usize, allow_unicode),
+                    complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
+                ),
+                delimited(
+                    take(42usize),
+                    fixed_width_int::<i32>(3usize, allow_unicode),
+                    complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
+                ),
+            )),
         ),
-        space0,
+        |(atoms, bonds, atom_lists, chiral_flag, stext_entries, properties_lines)| Counts {
+            atoms,
+            bonds,
+            atom_lists,
+            chiral_flag,
+            stext_entries,
+            properties_lines,
+        },
     )
 }
 
@@ -111,18 +115,25 @@ mod tests {
     use rstest::*;
 
     #[rstest]
-    #[case(b"  6  5  0  0  1                 3 V2000", "counts",
+    #[case(b"  6  5  0  0  1                 3 V2000", "counts", false,
       Counts {atoms: 6, bonds: 5, atom_lists: 0, chiral_flag: 1, stext_entries: 0, properties_lines: 3})]
-    #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000", "zeroes, 999 properties",
+    #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000", "zeroes, 999 properties", false,
       Counts {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
     //       aaabbblllfffcccsss            mmmvvvvvv
-    #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded",
+    #[case("  6  5  0  0  1\u{00A0}               3 V2000".as_bytes(), "counts", true,
+      Counts {atoms: 6, bonds: 5, atom_lists: 0, chiral_flag: 1, stext_entries: 0, properties_lines: 3})]
+    #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded", false,
       Counts {atoms: 1, bonds: 0, atom_lists: 0, chiral_flag: 0, stext_entries: 0, properties_lines: 0})]
     //       aaabbblllfffcccsss                                          mmmvvvvvv
-    #[case(b"  4  4  1  0  0  0                                          999 V2000", "extra spaces",
+    #[case(b"  4  4  1  0  0  0                                          999 V2000", "extra spaces", false,
       Counts {atoms: 4, bonds: 4, atom_lists: 1, chiral_flag: 0, stext_entries: 0, properties_lines: 999})]
-    fn test_counts_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: Counts) {
-        let res = all_consuming(counts_input()).parse(input);
+    fn test_counts_input(
+        #[case] input: &[u8],
+        #[case] desc: &str,
+        #[case] allow_unicode: bool,
+        #[case] expected: Counts,
+    ) {
+        let res = all_consuming(counts_input(allow_unicode, false)).parse(input);
         println!("res: {:?}", res);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
@@ -140,12 +151,13 @@ mod tests {
     #[case(b"  4  2  0     0  0            ", "too short", error::ErrorKind::Eof)]
     #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", error::ErrorKind::Eof)]
     #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", error::ErrorKind::Digit)]
+    #[case("  6  5  0  0  1\u{00A0}               3 V2000".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
     fn test_counts_input_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let res = counts_input().parse(input);
+        let res = counts_input(false, false).parse(input);
         assert!(res.is_err(), "{} should have failed", desc);
         assert!(
             matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),

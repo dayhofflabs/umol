@@ -7,8 +7,135 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use umol_data::{Element, NamedIsotope};
 
+/// Atom
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Atom {
+    pub element: Element,
+    pub charge: i8,
+    pub radical: Option<AtomRadical>,
+    pub isotope_mass: Option<u32>,
+    pub stereo_parity: Option<AtomStereoParity>,
+    pub hydrogen_count: Option<u8>,
+    pub valence: Option<u8>,
+    pub atom_map_num: Option<u32>,
+    pub position: Option<Point3D>,
+    pub properties: HashMap<String, String>,
+}
+
+impl Atom {
+    pub fn new(element: Element) -> Self {
+        Self {
+            element,
+            charge: 0,
+            radical: None,
+            isotope_mass: None,
+            stereo_parity: None,
+            hydrogen_count: None,
+            valence: None,
+            atom_map_num: None,
+            position: None,
+            properties: HashMap::new(),
+        }
+    }
+}
+
+/// Atom-like structure
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AtomLike {
+    pub symbol: AtomSymbol,
+    pub charge: i8,
+    pub radical: Option<AtomRadical>,
+    pub isotope_mass: Option<u32>,
+    pub stereo_parity: Option<AtomStereoParity>,
+    pub stereo_care: Option<AtomStereoCare>,
+    pub hydrogen_count: Option<u8>,
+    pub valence: Option<u8>,
+    pub atom_map_num: Option<u32>,
+    pub inversion_retention: Option<AtomInversionRetention>,
+    pub exact_change: Option<AtomExactChange>,
+    pub attachment_point: Option<AttachmentPointType>,
+    pub attachment_order: Option<Vec<(usize, u8)>>,
+    pub ring_bond_count: Option<RingBondCount>,
+    pub substitution_count: Option<SubstitutionCount>,
+    pub unsaturated: Option<UnsaturatedAtom>,
+    pub link_atom: Option<LinkAtom>,
+    pub position: Option<Point3D>,
+    pub properties: HashMap<String, String>,
+}
+
+impl AtomLike {
+    pub fn new(symbol: AtomSymbol) -> Self {
+        Self {
+            symbol,
+            charge: 0,
+            radical: None,
+            isotope_mass: None,
+            stereo_parity: None,
+            hydrogen_count: None,
+            stereo_care: None,
+            valence: None,
+            atom_map_num: None,
+            inversion_retention: None,
+            exact_change: None,
+            attachment_point: None,
+            attachment_order: None,
+            ring_bond_count: None,
+            substitution_count: None,
+            unsaturated: None,
+            link_atom: None,
+            position: None,
+            properties: HashMap::new(),
+        }
+    }
+}
+
+impl From<Atom> for AtomLike {
+    fn from(atom: Atom) -> Self {
+        Self {
+            symbol: AtomSymbol::Element(atom.element),
+            charge: atom.charge,
+            radical: atom.radical,
+            isotope_mass: atom.isotope_mass,
+            stereo_parity: atom.stereo_parity,
+            stereo_care: None,
+            hydrogen_count: atom.hydrogen_count,
+            valence: atom.valence,
+            atom_map_num: atom.atom_map_num,
+            inversion_retention: None,
+            exact_change: None,
+            attachment_point: None,
+            attachment_order: None,
+            ring_bond_count: None,
+            substitution_count: None,
+            unsaturated: None,
+            link_atom: None,
+            position: atom.position,
+            properties: atom.properties,
+        }
+    }
+}
+
+/// Atom symbol includes both elements and atom-like structures
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AtomSymbol {
+    Element(Element),
+    NamedIsotope(NamedIsotope),
+    AtomList(AtomList),
+    Query(QueryAtom),
+    LonePair,
+    RGroup(RGroup),
+}
+
+impl AtomSymbol {
+    pub fn is_atomlike(&self) -> bool {
+        !matches!(self, AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_))
+    }
+}
+
 /// 3D coordinate type
 pub type Point3D = nalgebra::Point3<f64>;
+
+/// Atom properties specified in the atom block
 
 /// Tetrahedral chirality specified in MOL files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -67,62 +194,7 @@ impl AtomExactChange {
     }
 }
 
-/// Atom list (for query molecules in MOL files)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AtomList {
-    pub elements: Vec<Element>,
-    pub exclusion: bool,
-}
-
-/// Generalized atom kind (for atom-like objects in MOL files)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum AtomSymbol {
-    Element(Element),
-    NamedIsotope(NamedIsotope),
-    AtomList(AtomList),
-    Query(QueryAtom),
-    LonePair,
-    RGroup(RGroup),
-}
-
-impl AtomSymbol {
-    pub fn is_standard(&self) -> bool {
-        matches!(self, AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_))
-    }
-}
-
-/// Atom
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AtomStandard {
-    pub element: Element,
-    pub charge: i8,
-    pub radical: Option<AtomRadical>,
-    pub isotope_mass: Option<u32>,
-    pub stereo_parity: Option<AtomStereoParity>,
-    pub hydrogen_count: Option<u8>,
-    pub valence: Option<u8>,
-    pub atom_map_num: Option<u32>,
-    pub position: Option<Point3D>,
-    pub properties: HashMap<String, String>,
-}
-
-impl AtomStandard {
-    /// Create new Atom with default properties for given element
-    pub fn new(element: Element) -> Self {
-        Self {
-            element,
-            charge: 0,
-            radical: None,
-            isotope_mass: None,
-            stereo_parity: None,
-            hydrogen_count: None,
-            valence: None,
-            atom_map_num: None,
-            position: None,
-            properties: HashMap::new(),
-        }
-    }
-}
+/// Atom properties specified in the properties block
 
 /// Radical type for RAD property
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -184,78 +256,18 @@ pub struct LinkAtom {
     pub subs_index2: Option<usize>, // LIN ccc (optional)
 }
 
-/// Generalized atom symbol (for atom-like objects in MOL files)
+/// Atom list
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Atom {
-    pub symbol: AtomSymbol,
-    pub charge: i8,
-    pub radical: Option<AtomRadical>,
-    pub isotope_mass: Option<u32>,
-    pub stereo_parity: Option<AtomStereoParity>,
-    pub stereo_care: Option<AtomStereoCare>,
-    pub hydrogen_count: Option<u8>,
-    pub valence: Option<u8>,
-    pub atom_map_num: Option<u32>,
-    pub inversion_retention: Option<AtomInversionRetention>,
-    pub exact_change: Option<AtomExactChange>,
-    pub attachment_point: Option<AttachmentPointType>,
-    pub attachment_order: Option<Vec<(usize, u8)>>,
-    pub ring_bond_count: Option<RingBondCount>,
-    pub substitution_count: Option<SubstitutionCount>,
-    pub unsaturated: Option<UnsaturatedAtom>,
-    pub link_atom: Option<LinkAtom>,
-    pub position: Option<Point3D>,
-    pub properties: HashMap<String, String>,
+pub struct AtomList {
+    pub elements: Vec<Element>,
+    pub exclusion: bool,
 }
 
-impl Atom {
-    pub fn new(symbol: AtomSymbol) -> Self {
+impl Default for AtomList {
+    fn default() -> Self {
         Self {
-            symbol,
-            charge: 0,
-            radical: None,
-            isotope_mass: None,
-            stereo_parity: None,
-            hydrogen_count: None,
-            stereo_care: None,
-            valence: None,
-            atom_map_num: None,
-            inversion_retention: None,
-            exact_change: None,
-            attachment_point: None,
-            attachment_order: None,
-            ring_bond_count: None,
-            substitution_count: None,
-            unsaturated: None,
-            link_atom: None,
-            position: None,
-            properties: HashMap::new(),
-        }
-    }
-}
-
-impl From<AtomStandard> for Atom {
-    fn from(atom: AtomStandard) -> Self {
-        Self {
-            symbol: AtomSymbol::Element(atom.element),
-            charge: atom.charge,
-            radical: atom.radical,
-            isotope_mass: atom.isotope_mass,
-            stereo_parity: atom.stereo_parity,
-            stereo_care: None,
-            hydrogen_count: atom.hydrogen_count,
-            valence: atom.valence,
-            atom_map_num: atom.atom_map_num,
-            inversion_retention: None,
-            exact_change: None,
-            attachment_point: None,
-            attachment_order: None,
-            ring_bond_count: None,
-            substitution_count: None,
-            unsaturated: None,
-            link_atom: None,
-            position: atom.position,
-            properties: atom.properties,
+            elements: vec![],
+            exclusion: false,
         }
     }
 }
@@ -266,25 +278,25 @@ mod tests {
     use umol_data::Element;
 
     #[test]
-    fn test_atom_standard_serialize() {
-        let mut atom = AtomStandard::new(Element::C);
+    fn test_atom_serialize() {
+        let mut atom = Atom::new(Element::C);
         atom.charge = -1;
         atom.radical = Some(AtomRadical::Doublet);
         atom.hydrogen_count = Some(3);
         atom.position = Some(nalgebra::Point3::new(1.5, -2.3, 0.8));
 
         let yaml = serde_yaml::to_string(&atom).expect("Failed to serialize AtomStandard to YAML");
-        let deserialized: AtomStandard =
+        let deserialized: Atom =
             serde_yaml::from_str(&yaml).expect("Failed to deserialize AtomStandard from YAML");
         assert_eq!(atom, deserialized);
     }
 
     #[test]
-    fn test_atom_serialize() {
-        let atom = Atom::new(AtomSymbol::Element(Element::C));
-        let yaml = serde_yaml::to_string(&atom).expect("Failed to serialize Atom to YAML");
-        let deserialized: Atom =
-            serde_yaml::from_str(&yaml).expect("Failed to deserialize Atom from YAML");
+    fn test_atomlike_serialize() {
+        let atom = AtomLike::new(AtomSymbol::Element(Element::C));
+        let yaml = serde_yaml::to_string(&atom).expect("Failed to serialize AtomLike to YAML");
+        let deserialized: AtomLike =
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize AtomLike from YAML");
         assert_eq!(atom, deserialized);
     }
 }

@@ -1,41 +1,53 @@
 use super::*;
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
-use nom::combinator::all_consuming;
 use nom::{error, Err, Parser};
 use pretty_assertions::assert_eq;
 use rstest::*;
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
-#[case(b"  2  5  1  0  0  0  0", "len 21 single unknown", 1, 4, BondType::Single, None, None)]
-#[case(b"  2  5  2  1  0  0  0", "len 21 double cis", 1, 4, BondType::Double, Some(BondStereo::Cis), None)]
-#[case(b"  2  5  2  6  0  0  0", "len 21 double trans", 1, 4, BondType::Double, Some(BondStereo::Trans), None)]
-#[case(b"  2  5  2  4  0  0  0", "len 21 double either", 1, 4, BondType::Double, Some(BondStereo::Either), None)]
-#[case(b"  2  5  2  0  0  0  0", "len 21 double none", 1, 4, BondType::Double, None, None)]
-#[case(b"  2  5  3  0  0  0  0", "len 21 triple", 1, 4, BondType::Triple, None, None)]
-#[case(b"  2  5  4  0  0  0  0", "len 21 aromatic", 1, 4, BondType::Aromatic, None, None)]
-#[case(b"  2  5  3  1  0  0  0", "len 21 triple ignored stereo", 1, 4, BondType::Triple, None, None)]
-#[case(b"  2  5  3  1         ", "len 21 triple empty fields", 1, 4, BondType::Triple, None, None)]
-#[case(b"  1  2  1  0  0  0", "len 18 single", 0, 1, BondType::Single, None, None)]
-#[case(b"  1  3  1  1", "len 12 single wedge", 0, 2, BondType::Single, None, Some(BondDir::Wedge))]
-#[case(b"  1  3  2  1", "len 12 double cis", 0, 2, BondType::Double, Some(BondStereo::Cis), None)]
-#[case(b"  2  5  2  0", "len 12 double none", 1, 4, BondType::Double, None, None)]
-#[case(b"  2  4  1  6", "len 12 single dash", 1, 3, BondType::Single, None, Some(BondDir::Dash))]
-#[case(b"  2  5  3   ", "len 12 triple empty fields", 1, 4, BondType::Triple, None, None)]
-fn test_bond_input_standard12(
+#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", true, true, 0, 1, BondType::Single,
+       None, Some(BondDir::Wedge))]
+#[case(b"  2  5  1  0  0  0  0", "len 21 single unknown", true, true, 1, 4, BondType::Single, None, None)]
+#[case(b"  2  5  2  1  0  0  0", "len 21 double cis", true, true, 1, 4, BondType::Double,
+       Some(BondStereo::Cis), None)]
+#[case(b"  2  5  2  6  0  0  0", "len 21 double trans", true, true, 1, 4, BondType::Double,
+       Some(BondStereo::Trans), None)]
+#[case(b"  2  5  2  4  0  0  0", "len 21 double either", true, true, 1, 4, BondType::Double,
+       Some(BondStereo::Either), None)]
+#[case(b"  2  5  2  0  0  0  0", "len 21 double none", true, true, 1, 4, BondType::Double, None, None)]
+#[case(b"  2  5  3  0  0  0  0", "len 21 triple", true, true, 1, 4, BondType::Triple, None, None)]
+#[case(b"  2  5  4  0  0  0  0", "len 21 aromatic", true, true, 1, 4, BondType::Aromatic, None, None)]
+#[case(b"  2  5  3  1  0  0  0", "len 21 triple ignored stereo", true, true, 1, 4, BondType::Triple, None, None)]
+#[case(b"  2  5  3  1         ", "len 21 triple empty fields", true, true, 1, 4, BondType::Triple, None, None)]
+#[case(b"  1  2  1  0  0  0", "len 18 single", true, true, 0, 1, BondType::Single, None, None)]
+#[case(b"  1  3  1  1", "len 12 single wedge", true, true, 0, 2, BondType::Single,
+        None, Some(BondDir::Wedge))]
+#[case(b"  1  3  2  1", "len 12 double cis", true, true, 0, 2, BondType::Double,
+       Some(BondStereo::Cis), None)]
+#[case(b"  2  5  2  0", "len 12 double none", true, true, 1, 4, BondType::Double, None, None)]
+#[case(b"  2  4  1  6", "len 12 single dash", true, true, 1, 3, BondType::Single,
+       None, Some(BondDir::Dash))]
+#[case(b"  2  5  3   ", "len 12 triple empty fields", true, true, 1, 4, BondType::Triple, None, None)]
+#[case("  1  2  1\u{00A0}1  0  0  0".as_bytes(), "unicode whitespace", true, true, 0, 1,
+       BondType::Single, None, Some(BondDir::Wedge))]
+#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", true, false, 0, 1, BondType::Single,
+       None, Some(BondDir::Wedge))]
+fn test_bond_input12(
     #[case] input: &[u8],
     #[case] desc: &str,
+    #[case] allow_unicode: bool,
+    #[case] strict_padding: bool,
     #[case] atom1: usize,
     #[case] atom2: usize,
     #[case] bond_type: BondType,
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let result = bond_input_standard12(input);
-    assert!(result.is_ok(), "{} should have succeeded", desc,);
+    let result = bond_input12(input, allow_unicode, strict_padding);
+    assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         a1, atom1,
         "{} has returned atom1 {:?}, expected {:?}",
@@ -63,17 +75,20 @@ fn test_bond_input_standard12(
     );
 }
 
+#[rustfmt::skip]
 #[rstest]
 #[case(b"  1  2  1  A", "len 12 non-numeric stereo", error::ErrorKind::Digit)]
 #[case(b"  1  2  1 1", "len 12 line too short", error::ErrorKind::Eof)]
 #[case(b"  A  2  1  1  0  0  0", "len 21 non-numeric atom", error::ErrorKind::Digit)]
 #[case(b"  1  2  A  1  0  0  0", "len 21 non-numeric type", error::ErrorKind::Digit)]
-fn test_bond_input_standard12_invalid(
+#[case("  1  2  1\u{00A0}1  0  0  0".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
+#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", error::ErrorKind::Verify)]
+fn test_bond_input12_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = bond_input_standard12(input);
+    let result = bond_input12(input, false, true);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{} should have failed with error kind {:?}, got {:?}",
@@ -88,17 +103,18 @@ fn test_bond_input_standard12_invalid(
 #[case(b"  2  5  2", "double", 1, 4, BondType::Double)]
 #[case(b"  2  5  3", "triple", 1, 4, BondType::Triple)]
 #[case(b"  2  5  4", "aromatic", 1, 4, BondType::Aromatic)]
-fn test_bond_input_standard9(
+#[case("  1\u{00A0}2  1".as_bytes(), "unicode whitespace", 0, 1, BondType::Single)]
+fn test_bond_input9(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
     #[case] atom2: usize,
     #[case] bond_type: BondType,
 ) {
-    let result = bond_input_standard9(input);
-    assert!(result.is_ok(), "{} should have succeeded", desc,);
+    let result = bond_input9(input, true, false);
+    assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         a1, atom1,
         "{} has returned atom1 {:?}, expected {:?}",
@@ -124,12 +140,13 @@ fn test_bond_input_standard9(
 #[rstest]
 #[case(b"  1  2", "Line too short", error::ErrorKind::MapRes)]
 #[case(b"  1  A  1", "Non-numeric atom 2", error::ErrorKind::Digit)]
-fn test_bond_input_standard9_invalid(
+#[case("  1\u{00A0}2  1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
+fn test_bond_input9_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = bond_input_standard9(input);
+    let result = bond_input9(input, false, false);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{} should have failed with error kind {:?}, got {:?}",
@@ -147,7 +164,7 @@ fn test_bond_input_standard9_invalid(
 #[case(b"  1  3  1  6 ", "len 13 padded", 0, 2, BondType::Single, None, Some(BondDir::Dash))]
 #[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondType::Single, None, None)]
 #[case(b"  2  5  2  1  0  0  0", "len to 21", 1, 4, BondType::Double, Some(BondStereo::Cis), None)]
-fn test_bond_input_standard(
+fn test_bond_input(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
@@ -156,11 +173,11 @@ fn test_bond_input_standard(
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let mut parser = bond_input_standard();
+    let mut parser = bond_input(false, false);
     let result = parser.parse(input);
-    assert!(result.is_ok(), "{} should have succeeded", desc,);
+    assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         a1, atom1,
         "{} has returned atom1 {:?}, expected {:?}",
@@ -191,12 +208,12 @@ fn test_bond_input_standard(
 #[rstest]
 #[case(b"  1  2 ", "Line too short", error::ErrorKind::Eof)]
 #[case(b"  1  2  9", "Out of range type", error::ErrorKind::MapRes)]
-fn test_bond_input_standard_invalid(
+fn test_bond_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = bond_input_standard();
+    let mut parser = bond_input(false, false);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -210,8 +227,8 @@ fn test_bond_input_standard_invalid(
 
 #[rstest]
 #[case(b"  1  2  1 1", "len 11")]
-fn test_bond_input_standard_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input_standard();
+fn test_bond_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
+    let mut parser = bond_input(true, false);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
 }
@@ -219,13 +236,13 @@ fn test_bond_input_standard_partial_fields(#[case] input: &[u8], #[case] desc: &
 #[rstest]
 #[case(b"  1  2  1\n", "len 9 padded")]
 #[case(b"  1  3  1  1  ", "len 12 padded")]
-fn test_bond_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input_standard();
+fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
+    let mut parser = bond_input(true, false);
     let trimmed_input = input.trim_ascii_end();
     let result = parser.parse(trimmed_input);
-    assert!(result.is_ok(), "{} should have succeeded", desc,);
+    assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (_a1, _a2, _bond)) = result.unwrap();
-    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
 }
 
 #[rustfmt::skip]
@@ -241,7 +258,9 @@ fn test_bond_input_standard_whitespace_padded(#[case] input: &[u8], #[case] desc
        Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
 #[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None,
        Some(BondDir::Either), Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
-fn test_bond_input(
+#[case("  1  2\u{00A0}1".as_bytes(), "unicode whitespace", 0, 1, BondType::Single, None, None, None, None)]
+#[case(b"  1  2  8  0XXX  1", "non-strict padding", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
+fn test_bondlike_input(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
@@ -252,11 +271,11 @@ fn test_bond_input(
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {
-    let mut parser = bond_input();
+    let mut parser = bondlike_input(true, false);
     let result = parser.parse(input);
-    assert!(result.is_ok(), "{} should have succeeded", desc,);
+    assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(remaining.is_empty(), "{} has non-empty remaining", desc,);
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
     assert_eq!(
         a1, atom1,
         "{} has returned atom1 {:?}, expected {:?}",
@@ -298,17 +317,14 @@ fn test_bond_input(
 #[case(b"  1  2", "Line too short", error::ErrorKind::MapRes)]
 #[case(b"  1  2  9", "Out of range type", error::ErrorKind::MapRes)]
 #[case(b"  2  5  2  0  0  4  0", "Invalid topology", error::ErrorKind::MapRes)]
-#[case(
-    b"  1  2  1  0         a",
-    "trailing non-whitespace",
-    error::ErrorKind::Eof
-)]
-fn test_bond_input_invalid(
+#[case("  1  2\u{00A0}1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
+#[case(b"  1  2  8  0XXX  1", "non-strict padding", error::ErrorKind::Verify)]
+fn test_bondlike_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = all_consuming(bond_input());
+    let mut parser = bondlike_input(false, true);
     let result = parser.parse(input);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),

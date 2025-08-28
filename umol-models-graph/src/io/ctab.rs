@@ -4,6 +4,6 @@ pub mod atom;
 pub mod bond;
 pub mod molecule;
 pub mod parser;
+pub mod query;
 pub mod rgroup;
 pub mod sgroup;
-pub mod query;

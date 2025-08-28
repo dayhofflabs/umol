@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::ctab::molecule::{Molecule, MoleculeStandard};
-use umol_models_graph::io::mol::parser::{parse_mol_file, parse_mol_file_standard};
+use umol_models_graph::io::ctab::molecule::{MoleculeLike, Molecule};
+use umol_models_graph::io::mol::parser::{parse_mol_moleculelike, parse_mol, MolFileLike, MolFile};
+use umol_models_graph::io::mol::parser::header::Header;
 
 #[allow(dead_code)]
 enum TestMode {
@@ -21,8 +22,8 @@ struct MoleculeSummary {
     graph6: String,
 }
 
-impl From<&Molecule> for MoleculeSummary {
-    fn from(molecule: &Molecule) -> Self {
+impl From<&MoleculeLike> for MoleculeSummary {
+    fn from(molecule: &MoleculeLike) -> Self {
         Self {
             atom_count: molecule.atom_count(),
             bond_count: molecule.bond_count(),
@@ -32,8 +33,8 @@ impl From<&Molecule> for MoleculeSummary {
     }
 }
 
-impl From<&MoleculeStandard> for MoleculeSummary {
-    fn from(molecule: &MoleculeStandard) -> Self {
+impl From<&Molecule> for MoleculeSummary {
+    fn from(molecule: &Molecule) -> Self {
         Self {
             atom_count: molecule.atom_count(),
             bond_count: molecule.bond_count(),
@@ -88,7 +89,7 @@ fn run_test(path: &Path, mode: TestMode) {
     let expected_success = path_str.contains("/valid/") || path_str.contains("data/");
 
     let mol_bytes = std::fs::read(path).unwrap();
-    let result = parse_mol_file(&mol_bytes);
+    let result = parse_mol_moleculelike(&mol_bytes).map(|mol| MolFileLike { header: Header::new(String::new(), String::new(), String::new()), molecule: mol });
     if expected_success {
         if let Err(e) = &result {
             eprintln!("Parse error for {}: {:?}", path.display(), e);
@@ -127,7 +128,7 @@ fn run_test_standard(path: &Path, mode: TestMode) {
 
     let mol_bytes = std::fs::read(path).unwrap();
 
-    let result = parse_mol_file_standard(&mol_bytes);
+    let result = parse_mol(&mol_bytes).map(|mol| MolFile { header: Header::new(String::new(), String::new(), String::new()), molecule: mol });
     if expected_success {
         assert!(
             result.is_ok(),

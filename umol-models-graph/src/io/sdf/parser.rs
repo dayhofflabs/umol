@@ -1,5 +1,6 @@
 //! SDF (Structure Data File) format parsing
 
+use crate::io::mol::parser::{mol_file_moleculelike, MolFileLike};
 use bstr::ByteSlice;
 use indexmap::IndexMap;
 use nom::bytes::complete::{tag, take_until};
@@ -9,8 +10,6 @@ use nom::multi::{many1, many_till};
 use nom::sequence::{delimited, terminated};
 use nom::{branch::alt, error, Parser};
 use serde::{Deserialize, Serialize};
-
-use crate::io::mol::parser::{parse_mol_file, MolFile};
 use umol::error::DataError;
 use umol::Result;
 
@@ -27,12 +26,12 @@ impl SdfFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SdfCompound {
-    pub mol_file: MolFile,
+    pub mol_file: MolFileLike,
     pub data_fields: IndexMap<String, String>,
 }
 
 impl SdfCompound {
-    pub fn new(mol_file: MolFile, data_fields: IndexMap<String, String>) -> Self {
+    pub fn new(mol_file: MolFileLike, data_fields: IndexMap<String, String>) -> Self {
         Self {
             mol_file,
             data_fields,
@@ -119,7 +118,8 @@ fn sdf_compound<'a>() -> impl Parser<&'a [u8], Output = SdfCompound, Error = err
         ))
         .parse(input)?;
 
-        let mol_file = parse_mol_file(mol_input)
+        let (_, mol_file) = mol_file_moleculelike()
+            .parse(mol_input)
             .map_err(|_| nom::Err::Error(error::Error::new(input, error::ErrorKind::Verify)))?;
 
         let (remaining, data_fields) = data_block().parse(remaining)?;

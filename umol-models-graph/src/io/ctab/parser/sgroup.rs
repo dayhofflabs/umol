@@ -81,7 +81,7 @@ pub fn sgroup_multiplier<'a>(
 // Parse SGroup data type string
 pub fn sgroup_data_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = error::Error<&'a [u8]>> {
-    map_res(fixed_width_partial(2usize, rest, true), |s| {
+    map_res(fixed_width_partial(2usize, rest, true, false), |s| {
         if let Some(s) = s {
             let s = s.trim_with(|b| b == ' ');
             match s {

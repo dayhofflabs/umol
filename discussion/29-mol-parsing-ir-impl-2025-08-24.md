@@ -84,23 +84,23 @@ pub struct MoleculeLike {
 
 ## Intermediate Representation (IR)
 
-### ParsedMolecule Structure
+### RawMolecule Structure
 
 Located in `io::ir::molecule.rs`:
 
 ```rust
 /// Raw intermediate representation from MOL file parsing
 /// Contains all information from the file without validation or interpretation
-pub struct ParsedMolecule {
+pub struct RawMolecule {
     pub header: Header,
-    pub atoms: Vec<ParsedAtom>,
-    pub bonds: Vec<ParsedBond>, 
+    pub atoms: Vec<RawAtom>,
+    pub bonds: Vec<RawBond>, 
     pub properties: Vec<PropertyEntries>,
     pub sgroups: Vec<SGroup>,
 }
 
 /// Union of all possible atom data from any supported format
-pub struct ParsedAtom {
+pub struct RawAtom {
     // Core properties (always present)
     pub element: Element,
     pub position: Option<(f64, f64, f64)>,
@@ -120,7 +120,7 @@ pub struct ParsedAtom {
     pub original_text: Option<String>,  // For debugging
 }
 
-pub struct ParsedBond {
+pub struct RawBond {
     pub atom_indices: (usize, usize),
     pub order: BondOrderOrQuery,
     pub stereo: Option<BondStereo>,
@@ -138,7 +138,7 @@ pub enum SourceFormat {
     SMARTS,    // For future use
 }
 
-impl ParsedMolecule {
+impl RawMolecule {
     pub fn has_query_features(&self) -> bool {
         self.atoms.iter().any(|a| a.has_query_features()) ||
         self.bonds.iter().any(|b| b.has_query_features()) ||
@@ -169,7 +169,7 @@ pub trait ParseTarget: Sized {
     
     /// Convert parsed data to target type with validation
     fn from_parsed_data(
-        parsed: ParsedMolecule,
+        parsed: RawMolecule,
         config: &MolParsingConfig,
     ) -> Result<Self, ParseError>;
 }
@@ -180,7 +180,7 @@ impl ParseTarget for Molecule {
     fn allows_rgroups() -> bool { false }
     
     fn from_parsed_data(
-        parsed: ParsedMolecule,
+        parsed: RawMolecule,
         config: &MolParsingConfig,
     ) -> Result<Self, ParseError> {
         // Strict validation
@@ -212,7 +212,7 @@ impl ParseTarget for MoleculeLike {
     fn allows_rgroups() -> bool { true }
     
     fn from_parsed_data(
-        parsed: ParsedMolecule,
+        parsed: RawMolecule,
         _config: &MolParsingConfig,
     ) -> Result<Self, ParseError> {
         // Accept everything - no validation restrictions
@@ -400,7 +400,7 @@ pub fn parse_mol_file<T: ParseTarget>(
 fn parse_to_ir(
     input: &[u8],
     config: &MolParsingConfig,
-) -> Result<ParsedMolecule, ParseError> {
+) -> Result<RawMolecule, ParseError> {
     let mut warnings = if config.collect_warnings { Some(Vec::new()) } else { None };
     
     // Preprocess input based on config
@@ -435,7 +435,7 @@ fn parse_to_ir(
         &mut warnings
     )?;
     
-    Ok(ParsedMolecule {
+    Ok(RawMolecule {
         header,
         atoms,
         bonds,
@@ -529,23 +529,23 @@ impl MoleculeLike {
 
 ```
 umol-models-graph/src/io/
-├── mod.rs                    # Re-exports and main API
 ├── config.rs                 # MolParsingConfig
+├── ir.rs
 ├── ir/                       # Intermediate representation
-│   ├── mod.rs
-│   ├── molecule.rs           # ParsedMolecule, ParsedAtom, ParsedBond  
+│   ├── molecule.rs           # RawMolecule, RawAtom, RawBond  
 │   ├── traits.rs             # ParseTarget trait
 │   └── convert.rs            # Conversion utilities
+├── mol.rs
 ├── mol/
-│   ├── mod.rs
 │   ├── parser.rs             # Main generic parser functions
 │   ├── parser/
 │   │   ├── mod.rs
 │   │   ├── header.rs         # Header parsing (unchanged)
 │   │   ├── preprocess.rs     # Input preprocessing
 │   │   └── tests.rs          # Updated tests
+├── ctab.rs
 ├── ctab/                     # CTAB parsing logic (mostly unchanged)
-│   ├── parser.rs             # Updated to produce ParsedAtom/ParsedBond
+│   ├── parser.rs             # Updated to produce RawAtom/RawBond
 │   └── ...
 └── ...
 ```
@@ -555,7 +555,7 @@ umol-models-graph/src/io/
 ### Phase 1: Foundation (Week 1)
 1. **Create module structure** - Set up `io::ir` and `io::config` modules
 2. **Define new types** - Rename existing types (breaking change)
-3. **Implement ParsedMolecule** - Basic IR structure
+3. **Implement RawMolecule** - Basic IR structure
 4. **Create MolParsingConfig** - Configuration system
 5. **Update imports** throughout codebase
 
@@ -567,7 +567,7 @@ umol-models-graph/src/io/
 
 ### Phase 3: Generic Parser Core (Week 2)
 1. **Implement parse_to_ir()** - Convert existing parsing to produce IR
-2. **Update CTAB parsers** to produce ParsedAtom/ParsedBond
+2. **Update CTAB parsers** to produce RawAtom/RawBond
 3. **Implement Unicode whitespace handling** - Immediate issue fix
 4. **Add input preprocessing** - Line ending normalization, etc.
 
@@ -627,7 +627,7 @@ let mol: Molecule = Molecule::from_mol_bytes(input)?;
 
 1. **Type System Tests**
    - Verify ParseTarget implementations work correctly
-   - Test conversion from ParsedMolecule to concrete types
+   - Test conversion from RawMolecule to concrete types
    - Validate error handling for incompatible features
 
 2. **Configuration Tests**  
@@ -712,10 +712,10 @@ pub enum ParseError {
 
 This implementation provides a natural stepping stone to the full IR architecture described in `28-intermediate-representation-2025-08-18.md`:
 
-- `ParsedMolecule` becomes the "Raw IR"
+- `RawMolecule` becomes the "Raw IR"
 - `ParseTarget::from_parsed_data()` becomes the "Validation" phase  
 - Final types (`Molecule`, `MoleculeLike`) become the "Validated Molecule" types
-- SMILES parser can target same `ParsedMolecule` IR
+- SMILES parser can target same `RawMolecule` IR
 - Validation logic can be extracted into separate validator components
 
 The modular design ensures this refactoring provides immediate value while aligning with long-term architectural goals.

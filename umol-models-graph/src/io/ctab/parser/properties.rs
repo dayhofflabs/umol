@@ -18,6 +18,7 @@ use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier,
 };
 use crate::io::ctab::parser::utils::to_string;
+use crate::io::config::MolParsingConfig;
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
@@ -348,9 +349,10 @@ pub fn legacy_atom_list_input<'a>(
     ))
 }
 
-/// Parse property line (standard properties only - no queries)
-pub fn property_input_standard<'a>(
-) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
+/// Parse property line (basic properties only)
+pub fn basic_property_input<'a>(
+    config: &'a MolParsingConfig,
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
     move |input: &'a [u8]| {
         if input.len() < 3 {
             return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
@@ -358,10 +360,10 @@ pub fn property_input_standard<'a>(
 
         // Handle A and V lines (different format from M lines)
         match &input[0..3] {
-            b"A  " => atom_alias_entry()
+            b"A  " => atom_alias_entry(config)
                 .parse(&input[3..])
                 .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
-            b"V  " => atom_value_entry()
+            b"V  " => atom_value_entry(config)
                 .parse(&input[3..])
                 .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
             _ => {
@@ -395,7 +397,7 @@ pub fn property_input_standard<'a>(
                     b"M  SBL" => sgroup_bond_list_entry()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                    b"M  SMT" => sgroup_subscript_entry()
+                    b"M  SMT" => sgroup_subscript_entry(config)
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
                     b"M  ZBO" => zero_bond_order_entries()
@@ -415,9 +417,10 @@ pub fn property_input_standard<'a>(
     }
 }
 
-/// Parse property line (all properties including queries)
+/// Parse property line
 pub fn property_input<'a>(
-) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
+    config: &'a MolParsingConfig,
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
     move |input: &'a [u8]| {
         if input.len() < 3 {
             return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
@@ -425,10 +428,10 @@ pub fn property_input<'a>(
 
         // Handle A and V lines (different format from M lines)
         match &input[0..3] {
-            b"A  " => atom_alias_entry()
+            b"A  " => atom_alias_entry(config)
                 .parse(&input[3..])
                 .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
-            b"V  " => atom_value_entry()
+            b"V  " => atom_value_entry(config)
                 .parse(&input[3..])
                 .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
             _ => {
@@ -498,7 +501,7 @@ pub fn property_input<'a>(
                     b"M  SPA" => sgroup_parent_atom_entries()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
-                    b"M  SMT" => sgroup_subscript_entry()
+                    b"M  SMT" => sgroup_subscript_entry(config)
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
                     b"M  CRS" => sgroup_correspondence_entry()
@@ -516,10 +519,10 @@ pub fn property_input<'a>(
                     b"M  SDD" => sgroup_data_display_entry()
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
-                    b"M  SCD" => sgroup_data_continuation_entry()
+                    b"M  SCD" => sgroup_data_continuation_entry(config)
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
-                    b"M  SED" => sgroup_data_end_entry()
+                    b"M  SED" => sgroup_data_end_entry(config)
                         .parse(rest)
                         .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
                     b"M  SPL" => sgroup_hierarchy_entries()
@@ -550,18 +553,20 @@ pub fn property_input<'a>(
 /// x..
 /// aaa: atom index, x..: alias string (can contain spaces)
 pub fn atom_alias_entry<'a>(
-) -> impl Parser<&'a [u8], Output = AtomAliasEntry, Error = error::Error<&'a [u8]>> {
+    config: &'a MolParsingConfig,
+) -> impl Parser<&'a [u8], Output = AtomAliasEntry, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = config.allow_unicode;
     map(
         (
             terminated(
-                map_parser(not_line_ending, fixed_width_int_minus1::<usize>(3)),
+                map_parser(not_line_ending, fixed_width_int_minus1::<usize>(3, allow_unicode)),
                 line_ending,
             ),
             not_line_ending,
         ),
-        |(atom_index, alias)| AtomAliasEntry {
+        move |(atom_index, alias)| AtomAliasEntry {
             atom_index,
-            alias: to_string(alias),
+            alias: to_string(alias, allow_unicode),
         },
     )
 }
@@ -570,12 +575,14 @@ pub fn atom_alias_entry<'a>(
 /// V  aaa v..
 /// aaa: atom index, v..: value string (can contain spaces)
 fn atom_value_entry<'a>(
-) -> impl Parser<&'a [u8], Output = AtomValueEntry, Error = error::Error<&'a [u8]>> {
+    config: &'a MolParsingConfig,
+) -> impl Parser<&'a [u8], Output = AtomValueEntry, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = config.allow_unicode;
     map(
         (fixed_width_int_minus1::<usize>(3), preceded(tag(" "), rest)),
-        |(atom_index, value)| AtomValueEntry {
+        move |(atom_index, value)| AtomValueEntry {
             atom_index,
-            value: to_string(value),
+            value: to_string(value, allow_unicode),
         },
     )
 }
@@ -1149,7 +1156,9 @@ fn sgroup_parent_atom_entries<'a>(
 /// For multiple groups, m... is the text representation of the multiple group multiplier.For superatoms,
 /// m... is the text of the superatom label.)
 fn sgroup_subscript_entry<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupSubscriptEntry, Error = error::Error<&'a [u8]>> {
+    config: &'a MolParsingConfig,
+) -> impl Parser<&'a [u8], Output = SGroupSubscriptEntry, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = config.allow_unicode;
     all_consuming(map(
         (
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
@@ -1159,7 +1168,7 @@ fn sgroup_subscript_entry<'a>(
                     map(sgroup_multiplier(), |multiplier| {
                         SGroupSubscriptData::Multiplier(multiplier)
                     }),
-                    map(rest, |s| SGroupSubscriptData::Subscript(to_string(s))),
+                    map(rest, move |s| SGroupSubscriptData::Subscript(to_string(s, allow_unicode))),
                 )),
             ),
         ),
@@ -1321,14 +1330,16 @@ fn sgroup_data_display_entry<'a>(
 /// M  SCD sss d...
 /// sss: SGroup index, d...: data content (max 69 chars)
 fn sgroup_data_continuation_entry<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> {
+    config: &'a MolParsingConfig,
+) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = config.allow_unicode;
     all_consuming(preceded(
         tag(" "),
         map(
             (fixed_width_int_minus1::<usize>(3), rest),
-            |(sgroup_index, data_content)| SGroupDataEntry::Continuation {
+            move |(sgroup_index, data_content)| SGroupDataEntry::Continuation {
                 sgroup_index,
-                data_content: to_string(&data_content[..data_content.len().min(69)]),
+                data_content: to_string(&data_content[..data_content.len().min(69)], allow_unicode),
             },
         ),
     ))
@@ -1341,15 +1352,17 @@ fn sgroup_data_continuation_entry<'a>(
 /// The data content is the same as the data content in the SCD entry.
 /// The second form is used to indicate the end of the data content, in which case it should be empty.
 fn sgroup_data_end_entry<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> {
+    config: &'a MolParsingConfig,
+) -> impl Parser<&'a [u8], Output = SGroupDataEntry, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = config.allow_unicode;
     all_consuming(preceded(
         tag(" "),
         alt((
             map(
                 (fixed_width_int_minus1::<usize>(3), preceded(tag(" "), rest)),
-                |(sgroup_index, data_content)| SGroupDataEntry::EndWithData {
+                move |(sgroup_index, data_content)| SGroupDataEntry::EndWithData {
                     sgroup_index,
-                    data_content: to_string(&data_content[..data_content.len().min(69)]),
+                    data_content: to_string(&data_content[..data_content.len().min(69)], allow_unicode),
                 },
             ),
             map(fixed_width_int_minus1::<usize>(3), |sgroup_index| {
