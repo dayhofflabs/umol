@@ -53,31 +53,28 @@ fn test_legacy_atom_list_input_invalid(
 }
 
 #[rstest]
-#[case(b"A    1\nCF3", "A atom alias property", true, true,  PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
-#[case(b"V    1 *", "V atom value property", true, true, PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
-#[case(b"M  CHG  1   1  -1", "CHG atom property", true, true, PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case(b"M  RAD  1   1   2", "RAD atom property", true, true, PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
-#[case(b"M  ISO  1   1  13", "ISO atom property", true, true, PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
-#[case(b"M  STY  1   1 SUP", "STY SGroup property", true, true, PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
-#[case(b"M  SST  1   1 ALT", "SST SGroup property", true, true, PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
-#[case(b"M  SLB  1   1  19", "SLB SGroup property", true, true, PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
-#[case(b"M  SAL   1  1   5", "SAL SGroup property", true, true, PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
-#[case(b"M  SBL   1  1   3", "SBL SGroup property", true, true, PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
-#[case(b"M  SMT   1 n", "SMT SGroup property", true, true, PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) }))]
-#[case(b"M  ZBO  1   1   0", "ZBO bond property", true, true, PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
-#[case(b"M  ZCH  1   1  -1", "ZCH atom property", true, true, PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case(b"M  HYD  1   1   1", "HYD atom property", true, true, PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
+#[case(b"A    1\nCF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
+#[case(b"V    1 *", "V atom value property", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
+#[case(b"M  CHG  1   1  -1", "CHG atom property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  RAD  1   1   2", "RAD atom property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
+#[case(b"M  ISO  1   1  13", "ISO atom property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
+#[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
+#[case(b"M  SST  1   1 ALT", "SST SGroup property", PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
+#[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
+#[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
+#[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) }))]
+#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
+#[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
 fn test_basic_property_input(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
-    #[case] allow_clark_extensions: bool,
     #[case] expected: PropertyEntries,
 ) {
-    let (remaining, result) =
-        all_consuming(basic_property_input(allow_unicode, allow_clark_extensions))
-            .parse(input)
-            .unwrap();
+    let (remaining, result) = all_consuming(basic_property_input(true, true, true))
+        .parse(input)
+        .unwrap();
     assert!(
         remaining.is_empty(),
         "remaining should be empty for {}",
@@ -108,11 +105,17 @@ fn test_basic_property_input(
 #[case(b"M  SED   1   1   0", "SED SGroup property not supported in standard parser")]
 #[case(b"M  SPL   1   1   0", "SPL SGroup property not supported in standard parser")]
 #[case(b"M  SNC   1   1   0", "SNC SGroup property not supported in standard parser")]
+#[case(b"M  STY  1   1 SUP", "STY SGroup property, requires allow_sgroups")]
+#[case(b"M  SST  1   1 ALT", "SST SGroup property, requires allow_sgroups")]
+#[case(b"M  SLB  1   1  19", "SLB SGroup property, requires allow_sgroups")]
+#[case(b"M  SAL   1  1   5", "SAL SGroup property, requires allow_sgroups")]
+#[case(b"M  SBL   1  1   3", "SBL SGroup property, requires allow_sgroups")]
+#[case(b"M  SMT   1 n", "SMT SGroup property, requires allow_sgroups")]
 #[case(b"M  ZBO  1   1   0", "ZBO bond property, requires allow_clark_extensions")]
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property, requires allow_clark_extensions")]
 #[case(b"M  HYD  1   1   1", "HYD atom property, requires allow_clark_extensions")]
 fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc: &str) {
-    let result = all_consuming(basic_property_input(false, false)).parse(input);
+    let result = all_consuming(basic_property_input(false, false, false)).parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == error::ErrorKind::Tag),
@@ -123,63 +126,56 @@ fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc
 }
 
 #[rstest]
-#[case(b"A    1\nCF3", "A atom alias property", true, true, false, PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
-#[case(b"V    1 *", "V atom value property", true, true, false, PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
-#[case(b"M  CHG  1   1  -1", "CHG standard property", true, true, false, PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case(b"M  RAD  1   1   2", "RAD standard property", true, true, false, PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
-#[case(b"M  ISO  1   1  13", "ISO standard property", true, true, false, PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
-#[case(b"M  RBC  1   1   2", "RBC query property", true, true, false, PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }]))]
-#[case(b"M  SUB  1   1   3", "SUB query property", true, true, false, PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }]))]
-#[case(b"M  UNS  1   1   1", "UNS query property", true, true, false, PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }]))]
-#[case(b"M  LIN  1   1   2   5   7", "LIN query property", true, true, false, PropertyEntries::LinkAtomEntries(vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }]))]
-#[case(b"M  ALS   1  3   F   N   O   ", "ALS normal (F) query property", true, true, false, PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
-#[case(b"M  ALS   1  3 T F   N   O   ", "ALS exclusion (T) query property", true, true, false, PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]
-#[case(b"M  APO  1   1   1", "APO query property", true, true, false, PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry { atom_index: 0, attachment_type: 1 }]))]
-#[case(b"M  AAL   4  2  14   1   9   2", "AAL query property", true, true, false, PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry {
+#[case(b"A    1\nCF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
+#[case(b"V    1 *", "V atom value property", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
+#[case(b"M  CHG  1   1  -1", "CHG standard property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  RAD  1   1   2", "RAD standard property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
+#[case(b"M  ISO  1   1  13", "ISO standard property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
+#[case(b"M  RBC  1   1   2", "RBC query property", PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }]))]
+#[case(b"M  SUB  1   1   3", "SUB query property", PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }]))]
+#[case(b"M  UNS  1   1   1", "UNS query property", PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }]))]
+#[case(b"M  LIN  1   1   2   5   7", "LIN query property", PropertyEntries::LinkAtomEntries(vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }]))]
+#[case(b"M  ALS   1  3   F   N   O   ", "ALS normal (F) query property", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
+#[case(b"M  ALS   1  3 T F   N   O   ", "ALS exclusion (T) query property", PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]
+#[case(b"M  APO  1   1   1", "APO query property", PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry { atom_index: 0, attachment_type: 1 }]))]
+#[case(b"M  AAL   4  2  14   1   9   2", "AAL query property", PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry {
         atom_index: 3, attachments: vec![(13, 1), (8, 2)] }))]
-#[case(b"M  RGP  1   1   2", "RGP RGroup property", true, true, false, PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry { atom_index: 0, label: 2 }]))]
-#[case(b"M  LOG  1   1   0   0  >2", "LOG RGroup property", true, true, false, PropertyEntries::RGroupLogicEntry(RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(2)] }))]
-#[case(b"M  STY  1   1 SUP", "STY SGroup property", true, true, false, PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
-#[case(b"M  SST  1   1 ALT", "SST SGroup property", true, true, false, PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
-#[case(b"M  SLB  1   1  19", "SLB SGroup property", true, true, false, PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
-#[case(b"M  SCN  1   1 HH ", "SCN SGroup property", true, true, false, PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToHead }]))]
-#[case(b"M  SDS EXP  1   1", "SDS SGroup property", true, true, false, PropertyEntries::SGroupExpansionEntries(vec![SGroupExpansionEntry { sgroup_index: 0 }]))]
-#[case(b"M  SAL   1  1   5", "SAL SGroup property", true, true, false, PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
-#[case(b"M  SBL   1  1   3", "SBL SGroup property", true, true, false, PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
-#[case(b"M  SPA   1 12   3   4   5   6   9  10  11  12  13  14  15  16", "SPA SGroup property", true, true, false,
+#[case(b"M  RGP  1   1   2", "RGP RGroup property", PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry { atom_index: 0, label: 2 }]))]
+#[case(b"M  LOG  1   1   0   0  >2", "LOG RGroup property", PropertyEntries::RGroupLogicEntry(RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(2)] }))]
+#[case(b"M  STY  1   1 SUP", "STY SGroup property", PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }]))]
+#[case(b"M  SST  1   1 ALT", "SST SGroup property", PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }]))]
+#[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
+#[case(b"M  SCN  1   1 HH ", "SCN SGroup property", PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToHead }]))]
+#[case(b"M  SDS EXP  1   1", "SDS SGroup property", PropertyEntries::SGroupExpansionEntries(vec![SGroupExpansionEntry { sgroup_index: 0 }]))]
+#[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
+#[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
+#[case(b"M  SPA   1 12   3   4   5   6   9  10  11  12  13  14  15  16", "SPA SGroup property",
        PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15] }))]
-#[case(b"M  SMT   1 n", "SMT SGroup property", true, true, false, PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) }))]
-#[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property", true, true, false, PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry { sgroup_index: 0, bond_indices: vec![9, 8, 3] }))]
-#[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property", true, true, false, PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry { sgroup_index: 2, bracket_coords: vec![4.4700, -3.1700, 4.4700, -5.7500] }))]
-#[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property", true, true, false, PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry { sgroup_index: 0, bond_index: 10, bond_vector: (0.6400, 0.9700) }))]
-#[case(b"M  SDT   1 pH   ", "SDT SGroup property", true, true, false, PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry { sgroup_index: 0, field_name: "pH".to_string(),
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) }))]
+#[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property", PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry { sgroup_index: 0, bond_indices: vec![9, 8, 3] }))]
+#[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property", PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry { sgroup_index: 2, bracket_coords: vec![4.4700, -3.1700, 4.4700, -5.7500] }))]
+#[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property", PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry { sgroup_index: 0, bond_index: 10, bond_vector: (0.6400, 0.9700) }))]
+#[case(b"M  SDT   1 pH   ", "SDT SGroup property", PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry { sgroup_index: 0, field_name: "pH".to_string(),
     field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None }))]
-#[case(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", "SDD SGroup property", true, true, false, PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry { sgroup_index: 0,
+#[case(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", "SDD SGroup property", PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry { sgroup_index: 0,
     coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached, display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
     display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 6 }))]
-#[case(b"M  SCD   1 4.6", "SCD SGroup property", true, true, false, PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() }))]
-#[case(b"M  SED   2 E/Z unknown", "SED SGroup property", true, true, false, PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() }))]
-#[case(b"M  SED   1", "SED SGroup property", true, true, false, PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 }))]
-#[case(b"M  SPL  1   1   2", "SPL SGroup property", true, true, false, PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }]))]
-#[case(b"M  SNC  2   1   1   2   2", "SNC SGroup property", true, true, false, PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry { sgroup_index: 0, component_number: 1 }, SGroupComponentEntry { sgroup_index: 1, component_number: 2 }]))]
-#[case(b"M  ZBO  1   1   0", "ZBO bond property", true, true, false, PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
-#[case(b"M  ZCH  1   1  -1", "ZCH atom property", true, true, false, PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case(b"M  HYD  1   1   1", "HYD atom property", true, true, false, PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
-#[case("A    1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", true, true, false, PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
+#[case(b"M  SCD   1 4.6", "SCD SGroup property", PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() }))]
+#[case(b"M  SED   2 E/Z unknown", "SED SGroup property", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() }))]
+#[case(b"M  SED   1", "SED SGroup property", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 }))]
+#[case(b"M  SPL  1   1   2", "SPL SGroup property", PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }]))]
+#[case(b"M  SNC  2   1   1   2   2", "SNC SGroup property", PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry { sgroup_index: 0, component_number: 1 }, SGroupComponentEntry { sgroup_index: 1, component_number: 2 }]))]
+#[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
+#[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
+#[case("A    1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 fn test_property_input(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
-    #[case] allow_clark_extensions: bool,
-    #[case] strict_padding: bool,
     #[case] expected: PropertyEntries,
 ) {
-    let result = all_consuming(property_input(
-        allow_unicode,
-        allow_clark_extensions,
-        strict_padding,
-    ))
-    .parse(input);
+    let result =
+        all_consuming(property_input(true, true, true, true, true, true, false)).parse(input);
     println!("result: {:?}", result);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
@@ -199,13 +195,17 @@ fn test_property_input(
 #[case(b"M  CHG  1   0 -10", "atom index is zero", error::ErrorKind::Verify)]
 #[case(b"M  XXX  1   1  -1", "invalid property tag", error::ErrorKind::Tag)]
 #[case("A    1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::MapRes)]
+#[case(b"M  RBC  1   1   2", "RBC query property, requires allow_queries", error::ErrorKind::Tag)]
+#[case(b"M  APO  1   1   1", "APO query property, requires allow_rgroups", error::ErrorKind::Tag)]
+#[case(b"M  STY  1   1 SUP", "STY SGroup property, requires allow_sgroups", error::ErrorKind::Tag)]
+#[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property, requires allow_advanced_sgroups", error::ErrorKind::Tag)]
 #[case(b"M  ZBO  1   1   0", "ZBO bond property, requires allow_clark_extensions", error::ErrorKind::Tag)]
 fn test_property_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(property_input(false, false, true)).parse(input);
+    let result = all_consuming(property_input(false, false, false, false, false, false, true)).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),

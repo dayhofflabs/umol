@@ -352,6 +352,7 @@ pub fn legacy_atom_list_input<'a>(
 /// Parse property line (basic properties only)
 pub fn basic_property_input<'a>(
     allow_unicode: bool,
+    allow_sgroups: bool,
     allow_clark_extensions: bool,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
     move |input: &'a [u8]| {
@@ -373,6 +374,7 @@ pub fn basic_property_input<'a>(
                     return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
                 }
                 let (remaining, tag) = take(6u8)(input)?;
+                // General M properties
                 match tag {
                     b"M  END" => success(PropertyEntries::End).parse(remaining),
                     b"M  CHG" => charge_entries(allow_unicode)
@@ -384,24 +386,34 @@ pub fn basic_property_input<'a>(
                     b"M  ISO" => isotope_entries(allow_unicode)
                         .parse(remaining)
                         .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-                    b"M  STY" => sgroup_type_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                    b"M  SST" => sgroup_subtype_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
-                    b"M  SLB" => sgroup_label_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                    b"M  SAL" => sgroup_atom_list_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
-                    b"M  SBL" => sgroup_bond_list_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                    b"M  SMT" => sgroup_subscript_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                    // SGroup properties
+                    tag @ (b"M  STY" | b"M  SST" | b"M  SLB" | b"M  SAL" | b"M  SBL"
+                    | b"M  SMT")
+                        if allow_sgroups =>
+                    {
+                        match tag {
+                            b"M  STY" => sgroup_type_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
+                            b"M  SST" => sgroup_subtype_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
+                            b"M  SLB" => sgroup_label_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
+                            b"M  SAL" => sgroup_atom_list_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
+                            b"M  SBL" => sgroup_bond_list_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                            b"M  SMT" => sgroup_subscript_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                            _ => unreachable!(),
+                        }
+                    }
+                    // Clark extensions
                     tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") if allow_clark_extensions => {
                         match tag {
                             b"M  ZBO" => zero_bond_order_entries(allow_unicode)
@@ -426,6 +438,10 @@ pub fn basic_property_input<'a>(
 /// Parse property line
 pub fn property_input<'a>(
     allow_unicode: bool,
+    allow_queries: bool,
+    allow_rgroups: bool,
+    allow_sgroups: bool,
+    allow_advanced_sgroups: bool,
     allow_clark_extensions: bool,
     strict_padding: bool,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
@@ -449,6 +465,7 @@ pub fn property_input<'a>(
                 }
                 let (remaining, tag) = take(6u8)(input)?;
                 match tag {
+                    // General M properties
                     b"M  END" => success(PropertyEntries::End).parse(remaining),
                     b"M  CHG" => charge_entries(allow_unicode)
                         .parse(remaining)
@@ -459,99 +476,134 @@ pub fn property_input<'a>(
                     b"M  ISO" => isotope_entries(allow_unicode)
                         .parse(remaining)
                         .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-                    b"M  RBC" => ring_bond_count_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
-                    b"M  SUB" => substitution_count_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SubstitutionCountEntries(o))),
-                    b"M  UNS" => unsaturated_atom_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::UnsaturatedAtomEntries(o))),
-                    b"M  LIN" => link_atom_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
-                    b"M  ALS" => atom_list_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
-                    b"M  APO" => attachment_point_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
-                    b"M  AAL" => atom_attachment_order_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
-                    b"M  RGP" => rgroup_label_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
-                    b"M  LOG" => rgroup_logic_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
-                    b"M  STY" => sgroup_type_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                    b"M  SST" => sgroup_subtype_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
-                    b"M  SLB" => sgroup_label_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                    b"M  SCN" => sgroup_connectivity_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
-                    b"M  SDS" => sgroup_expansion_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
-                    b"M  SAL" => sgroup_atom_list_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
-                    b"M  SBL" => sgroup_bond_list_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                    b"M  SPA" => sgroup_parent_atom_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
-                    b"M  SMT" => sgroup_subscript_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
-                    b"M  CRS" => sgroup_correspondence_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
-                    b"M  SDI" => sgroup_display_info_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
-                    b"M  SBV" => sgroup_connecting_bond_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
-                    b"M  SDT" => sgroup_data_description_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
-                    b"M  SDD" => sgroup_data_display_entry(allow_unicode, strict_padding)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
-                    b"M  SCD" => sgroup_data_continuation_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
-                    b"M  SED" => sgroup_data_end_entry(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
-                    b"M  SPL" => sgroup_hierarchy_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupHierarchyEntries(o))),
-                    b"M  SNC" => sgroup_component_entries(allow_unicode)
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::SGroupComponentEntries(o))),
-                    tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") if allow_clark_extensions => match tag {
-                        b"M  ZBO" => zero_bond_order_entries(allow_unicode)
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::ZeroBondOrderEntries(o))),
-                        b"M  ZCH" => zero_atom_charge_entries(allow_unicode)
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::ZeroAtomChargeEntries(o))),
-                        b"M  HYD" => hydrogen_count_entries(allow_unicode)
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
-                        _ => unreachable!(),
-                    },
+                    // Query properties
+                    tag @ (b"M  RBC" | b"M  SUB" | b"M  UNS" | b"M  LIN" | b"M  ALS")
+                        if allow_queries =>
+                    {
+                        match tag {
+                            b"M  RBC" => ring_bond_count_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
+                            b"M  SUB" => substitution_count_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SubstitutionCountEntries(o))),
+                            b"M  UNS" => unsaturated_atom_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::UnsaturatedAtomEntries(o))),
+                            b"M  LIN" => link_atom_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
+                            b"M  ALS" => atom_list_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
+                            _ => unreachable!(),
+                        }
+                    }
+                    // RGroup properties
+                    tag @ (b"M  APO" | b"M  AAL" | b"M  RGP" | b"M  LOG") if allow_rgroups => {
+                        match tag {
+                            b"M  APO" => attachment_point_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
+                            b"M  AAL" => atom_attachment_order_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
+                            b"M  RGP" => rgroup_label_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
+                            b"M  LOG" => rgroup_logic_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
+                            _ => unreachable!(),
+                        }
+                    }
+                    // SGroup properties
+                    tag @ (b"M  STY" | b"M  SST" | b"M  SLB" | b"M  SCN" | b"M  SDS" | b"M  SAL"
+                    | b"M  SBL" | b"M  SPA" | b"M  SMT")
+                        if allow_sgroups =>
+                    {
+                        match tag {
+                            b"M  STY" => sgroup_type_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
+                            b"M  SST" => sgroup_subtype_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
+                            b"M  SLB" => sgroup_label_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
+                            b"M  SCN" => sgroup_connectivity_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
+                            b"M  SDS" => sgroup_expansion_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
+                            b"M  SAL" => sgroup_atom_list_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
+                            b"M  SBL" => sgroup_bond_list_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                            b"M  SPA" => sgroup_parent_atom_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
+                            b"M  SMT" => sgroup_subscript_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                            _ => unreachable!(),
+                        }
+                    }
+                    // Advanced SGroup data properties
+                    tag @ (b"M  CRS" | b"M  SDI" | b"M  SBV" | b"M  SDT" | b"M  SDD"
+                    | b"M  SCD" | b"M  SED" | b"M  SPL" | b"M  SNC")
+                        if allow_advanced_sgroups =>
+                    {
+                        match tag {
+                            b"M  CRS" => sgroup_correspondence_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
+                            b"M  SDI" => sgroup_display_info_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
+                            b"M  SBV" => sgroup_connecting_bond_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
+                            b"M  SDT" => sgroup_data_description_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
+                            b"M  SDD" => sgroup_data_display_entry(allow_unicode, strict_padding)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
+                            b"M  SCD" => sgroup_data_continuation_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
+                            b"M  SED" => sgroup_data_end_entry(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
+                            b"M  SPL" => sgroup_hierarchy_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupHierarchyEntries(o))),
+                            b"M  SNC" => sgroup_component_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupComponentEntries(o))),
+                            _ => unreachable!(),
+                        }
+                    }
+                    // Clark extensions
+                    tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") if allow_clark_extensions => {
+                        match tag {
+                            b"M  ZBO" => zero_bond_order_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::ZeroBondOrderEntries(o))),
+                            b"M  ZCH" => zero_atom_charge_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::ZeroAtomChargeEntries(o))),
+                            b"M  HYD" => hydrogen_count_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
+                            _ => unreachable!(),
+                        }
+                    }
                     _ => Err(Err::Error(error::Error::new(input, error::ErrorKind::Tag))),
                 }
             }
@@ -666,20 +718,21 @@ fn ring_bond_count_entries<'a>(
     allow_unicode: bool,
 ) -> impl Parser<&'a [u8], Output = Vec<RingBondCountEntry>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-    length_count(
-        fixed_width_int_in_range::<u8, _>(3, 1..=8, allow_unicode),
-        map(
-            (
-                fixed_width_int_minus1::<usize>(4, allow_unicode),
-                fixed_width_int_in_range::<i8, _>(4, -2..=4, allow_unicode),
+        length_count(
+            fixed_width_int_in_range::<u8, _>(3, 1..=8, allow_unicode),
+            map(
+                (
+                    fixed_width_int_minus1::<usize>(4, allow_unicode),
+                    fixed_width_int_in_range::<i8, _>(4, -2..=4, allow_unicode),
+                ),
+                |(atom_index, ring_bond_count)| RingBondCountEntry {
+                    atom_index,
+                    ring_bond_count,
+                },
             ),
-            |(atom_index, ring_bond_count)| RingBondCountEntry {
-                atom_index,
-                ring_bond_count,
-            },
-        ),
-    ).parse(input)
-}
+        )
+        .parse(input)
+    }
 }
 
 /// Parse substitution count property entries.
