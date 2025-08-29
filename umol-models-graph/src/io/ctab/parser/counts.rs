@@ -9,6 +9,7 @@ use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Parser};
 
 use super::utils::{fixed_width_int, fixed_width_padding_n};
+use crate::io::config::ParseFlags;
 
 /// Parse counts line (39 characters wide)
 /// aaabbblllfffcccsssxxxrrrpppiiimmmvvvvvv
@@ -28,17 +29,17 @@ use super::utils::{fixed_width_int, fixed_width_padding_n};
 ///
 
 pub fn counts_input<'a>(
-    allow_unicode: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
-    terminated(counts_input_inner(allow_unicode, strict_padding), space0)
+    terminated(counts_input_inner(flags), space0)
 }
 
 /// Internal parser for counts_input
 fn counts_input_inner<'a>(
-    allow_unicode: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     map(
         (
             fixed_width_int::<i32>(3usize, allow_unicode),
@@ -112,7 +113,8 @@ mod tests {
         #[case] allow_unicode: bool,
         #[case] expected: Counts,
     ) {
-        let res = all_consuming(counts_input(allow_unicode, false)).parse(input);
+        let flags = if allow_unicode { ParseFlags::UNICODE } else { ParseFlags::empty() };
+        let res = all_consuming(counts_input(flags)).parse(input);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(
@@ -135,7 +137,7 @@ mod tests {
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let res = counts_input(false, false).parse(input);
+        let res = counts_input(ParseFlags::empty()).parse(input);
         assert!(res.is_err(), "{} should have failed", desc);
         assert!(
             matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),

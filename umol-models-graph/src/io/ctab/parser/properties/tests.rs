@@ -1,4 +1,5 @@
 use super::*;
+use crate::io::config::ParseFlags;
 use float_cmp::approx_eq;
 use nom::{error, Err};
 use pretty_assertions::assert_eq;
@@ -6,23 +7,22 @@ use rstest::*;
 use umol_data::Element;
 
 #[rstest]
-#[case(b"  1 F    3   9   7   8  ", "exclusion flag false", true,
+#[case(b"  1 F    3   9   7   8  ", "exclusion flag false",
        PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
-#[case(b"  1 T    3   9   7   8  ", "exclusion flag true", true,
+#[case(b"  1 T    3   9   7   8  ", "exclusion flag true",
        PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: true, elements: vec![Element::F, Element::N, Element::O] }))]
-#[case(b"  1      3   9   7   8  ", "empty exclusion flag", true,
+#[case(b"  1      3   9   7   8  ", "empty exclusion flag",
        PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
-#[case(b"  4 F    4   6   7   8  16", "partial field", true,
+#[case(b"  4 F    4   6   7   8  16", "partial field",
        PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 3, exclusion: false, elements: vec![Element::C, Element::N, Element::O, Element::S] }))]
-#[case("  1 F    3   9\u{00A0} 7   8  ".as_bytes(), "unicode whitespace", true,
+#[case("  1 F    3   9\u{00A0} 7   8  ".as_bytes(), "unicode whitespace",
        PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
 fn test_legacy_atom_list_input(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: PropertyEntries,
 ) {
-    let result = legacy_atom_list_input(allow_unicode).parse(input);
+    let result = legacy_atom_list_input(ParseFlags::LENIENT).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -41,7 +41,7 @@ fn test_legacy_atom_list_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = legacy_atom_list_input(false).parse(input);
+    let result = legacy_atom_list_input(ParseFlags::STRICT).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -72,7 +72,7 @@ fn test_basic_property_input(
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let (remaining, result) = all_consuming(basic_property_input(true, true, true))
+    let (remaining, result) = all_consuming(basic_property_input(ParseFlags::BASIC))
         .parse(input)
         .unwrap();
     assert!(
@@ -115,7 +115,7 @@ fn test_basic_property_input(
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property, requires allow_clark_extensions")]
 #[case(b"M  HYD  1   1   1", "HYD atom property, requires allow_clark_extensions")]
 fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc: &str) {
-    let result = all_consuming(basic_property_input(false, false, false)).parse(input);
+    let result = all_consuming(basic_property_input(ParseFlags::STRICT)).parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == error::ErrorKind::Tag),
@@ -174,9 +174,7 @@ fn test_property_input(
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let result =
-        all_consuming(property_input(true, true, true, true, true, true, false)).parse(input);
-    println!("result: {:?}", result);
+    let result = all_consuming(property_input(ParseFlags::LENIENT)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(
@@ -205,7 +203,7 @@ fn test_property_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(property_input(false, false, false, false, false, false, true)).parse(input);
+    let result = all_consuming(property_input(ParseFlags::STRICT)).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -217,16 +215,15 @@ fn test_property_input_invalid(
 }
 
 #[rstest]
-#[case(b"  1\nCF3", "no space", true, AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
-#[case(b" 15\n  Et", "leading space", true, AtomAliasEntry { atom_index: 14, alias: "Et".to_string() })]
-#[case("  1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", true, AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
+#[case(b"  1\nCF3", "no space", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
+#[case(b" 15\n  Et", "leading space", AtomAliasEntry { atom_index: 14, alias: "Et".to_string() })]
+#[case("  1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
 fn test_atom_alias_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: AtomAliasEntry,
 ) {
-    let result = all_consuming(atom_alias_entry(allow_unicode)).parse(input);
+    let result = all_consuming(atom_alias_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -253,16 +250,15 @@ fn test_atom_alias_entry_invalid(
 }
 
 #[rstest]
-#[case(b"  1 *", "asterisk", true, AtomValueEntry { atom_index: 0, value: "*".to_string() })]
-#[case(b" 15 query", "text", true, AtomValueEntry { atom_index: 14, value: "query".to_string() })]
-#[case("  1 *\u{00A0}".as_bytes(), "unicode whitespace", true, AtomValueEntry { atom_index: 0, value: "*".to_string() })]
+#[case(b"  1 *", "asterisk", AtomValueEntry { atom_index: 0, value: "*".to_string() })]
+#[case(b" 15 query", "text", AtomValueEntry { atom_index: 14, value: "query".to_string() })]
+#[case("  1 *\u{00A0}".as_bytes(), "unicode whitespace", AtomValueEntry { atom_index: 0, value: "*".to_string() })]
 fn test_atom_value_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: AtomValueEntry,
 ) {
-    let result = all_consuming(atom_value_entry(allow_unicode)).parse(input);
+    let result = all_consuming(atom_value_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -290,22 +286,21 @@ fn test_atom_value_entry_invalid(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1   1  -1", "single entry", true, vec![ChargeEntry { atom_index: 0, charge: -1 }])]
-#[case(b"  2   1  -1   4   1", "two entries", true, vec![ChargeEntry { atom_index: 0, charge: -1 }, ChargeEntry { atom_index: 3, charge: 1 }])]
-#[case(b"  8   1   1   2   2   3   3   4   4   5   5   6   6   7   7   8   8", "max entries", true,
+#[case(b"  1   1  -1", "single entry", vec![ChargeEntry { atom_index: 0, charge: -1 }])]
+#[case(b"  2   1  -1   4   1", "two entries", vec![ChargeEntry { atom_index: 0, charge: -1 }, ChargeEntry { atom_index: 3, charge: 1 }])]
+#[case(b"  8   1   1   2   2   3   3   4   4   5   5   6   6   7   7   8   8", "max entries",
        vec![ChargeEntry { atom_index: 0, charge: 1 }, ChargeEntry { atom_index: 1, charge: 2 },
             ChargeEntry { atom_index: 2, charge: 3 }, ChargeEntry { atom_index: 3, charge: 4 },
             ChargeEntry { atom_index: 4, charge: 5 }, ChargeEntry { atom_index: 5, charge: 6 },
             ChargeEntry { atom_index: 6, charge: 7 }, ChargeEntry { atom_index: 7, charge: 8 }])]
-#[case(b"  1  25  15", "max charge", true, vec![ChargeEntry { atom_index: 24, charge: 15 }])]
-#[case("  1   1\u{00A0}-1".as_bytes(), "unicode whitespace", true, vec![ChargeEntry { atom_index: 0, charge: -1 }])]
+#[case(b"  1  25  15", "max charge", vec![ChargeEntry { atom_index: 24, charge: 15 }])]
+#[case("  1   1\u{00A0}-1".as_bytes(), "unicode whitespace", vec![ChargeEntry { atom_index: 0, charge: -1 }])]
 fn test_charge_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<ChargeEntry>,
 ) {
-    let result = all_consuming(charge_entries(allow_unicode)).parse(input);
+    let result = all_consuming(charge_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -337,16 +332,15 @@ fn test_charge_entries_invalid(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1   1   2", "single entry", true, vec![RadicalEntry { atom_index: 0, radical_type: 2 }])]
-#[case(b"  2   1   1   4   3", "two entries", true, vec![RadicalEntry { atom_index: 0, radical_type: 1 }, RadicalEntry { atom_index: 3, radical_type: 3 }])]
-#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", true, vec![RadicalEntry { atom_index: 0, radical_type: 2 }])]
+#[case(b"  1   1   2", "single entry", vec![RadicalEntry { atom_index: 0, radical_type: 2 }])]
+#[case(b"  2   1   1   4   3", "two entries", vec![RadicalEntry { atom_index: 0, radical_type: 1 }, RadicalEntry { atom_index: 3, radical_type: 3 }])]
+#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", vec![RadicalEntry { atom_index: 0, radical_type: 2 }])]
 fn test_radical_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<RadicalEntry>,
 ) {
-    let result = all_consuming(radical_entries(allow_unicode)).parse(input);
+    let result = all_consuming(radical_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -379,16 +373,15 @@ fn test_radical_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1  13", "single entry", true, vec![IsotopeEntry { atom_index: 0, mass: 13 }])]
-#[case(b"  2  12   2  15  14", "two entries", true, vec![IsotopeEntry { atom_index: 11, mass: 2 }, IsotopeEntry { atom_index: 14, mass: 14 }])]
-#[case("  1   1\u{00A0}13".as_bytes(), "unicode whitespace", true, vec![IsotopeEntry { atom_index: 0, mass: 13 }])]
+#[case(b"  1   1  13", "single entry", vec![IsotopeEntry { atom_index: 0, mass: 13 }])]
+#[case(b"  2  12   2  15  14", "two entries", vec![IsotopeEntry { atom_index: 11, mass: 2 }, IsotopeEntry { atom_index: 14, mass: 14 }])]
+#[case("  1   1\u{00A0}13".as_bytes(), "unicode whitespace", vec![IsotopeEntry { atom_index: 0, mass: 13 }])]
 fn test_isotope_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<IsotopeEntry>,
 ) {
-    let result = all_consuming(isotope_entries(allow_unicode)).parse(input);
+    let result = all_consuming(isotope_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -421,18 +414,17 @@ fn test_isotope_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   2", "single entry", true, vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }])]
-#[case(b"  2   1  -1   4  -2", "two entries", true, vec![RingBondCountEntry { atom_index: 0, ring_bond_count: -1 }, RingBondCountEntry { atom_index: 3, ring_bond_count: -2 }])]
-#[case(b"  1   3   0", "zero value", true, vec![RingBondCountEntry { atom_index: 2, ring_bond_count: 0 }])]
-#[case(b"  1  10   4", "max value", true, vec![RingBondCountEntry { atom_index: 9, ring_bond_count: 4 }])]
-#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", true, vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }])]
+#[case(b"  1   1   2", "single entry", vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }])]
+#[case(b"  2   1  -1   4  -2", "two entries", vec![RingBondCountEntry { atom_index: 0, ring_bond_count: -1 }, RingBondCountEntry { atom_index: 3, ring_bond_count: -2 }])]
+#[case(b"  1   3   0", "zero value", vec![RingBondCountEntry { atom_index: 2, ring_bond_count: 0 }])]
+#[case(b"  1  10   4", "max value", vec![RingBondCountEntry { atom_index: 9, ring_bond_count: 4 }])]
+#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }])]
 fn test_ring_bond_count_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<RingBondCountEntry>,
 ) {
-    let result = all_consuming(ring_bond_count_entries(allow_unicode)).parse(input);
+    let result = all_consuming(ring_bond_count_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -463,17 +455,16 @@ fn test_ring_bond_count_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   3", "single entry", true, vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }])]
-#[case(b"  2   1  -1   4   6", "two entries", true, vec![SubstitutionCountEntry { atom_index: 0, substitution_count: -1 }, SubstitutionCountEntry { atom_index: 3, substitution_count: 6 }])]
-#[case(b"  1   5  -2", "negative value", true, vec![SubstitutionCountEntry { atom_index: 4, substitution_count: -2 }])]
-#[case("  1   1 \u{00A0}3".as_bytes(), "unicode whitespace", true, vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }])]
+#[case(b"  1   1   3", "single entry", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }])]
+#[case(b"  2   1  -1   4   6", "two entries", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: -1 }, SubstitutionCountEntry { atom_index: 3, substitution_count: 6 }])]
+#[case(b"  1   5  -2", "negative value", vec![SubstitutionCountEntry { atom_index: 4, substitution_count: -2 }])]
+#[case("  1   1 \u{00A0}3".as_bytes(), "unicode whitespace", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }])]
 fn test_substitution_count_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SubstitutionCountEntry>,
 ) {
-    let result = all_consuming(substitution_count_entries(allow_unicode)).parse(input);
+    let result = all_consuming(substitution_count_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -504,17 +495,16 @@ fn test_substitution_count_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   1", "single entry", true, vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }])]
-#[case(b"  2   1   0   3   1", "two entries", true, vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 0 }, UnsaturatedAtomEntry { atom_index: 2, unsaturated: 1 }])]
-#[case(b"  1  10   0", "zero value", true, vec![UnsaturatedAtomEntry { atom_index: 9, unsaturated: 0 }])]
-#[case("  1   1 \u{00A0}1".as_bytes(), "unicode whitespace", true, vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }])]
+#[case(b"  1   1   1", "single entry", vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }])]
+#[case(b"  2   1   0   3   1", "two entries", vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 0 }, UnsaturatedAtomEntry { atom_index: 2, unsaturated: 1 }])]
+#[case(b"  1  10   0", "zero value", vec![UnsaturatedAtomEntry { atom_index: 9, unsaturated: 0 }])]
+#[case("  1   1 \u{00A0}1".as_bytes(), "unicode whitespace", vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }])]
 fn test_unsaturated_atom_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<UnsaturatedAtomEntry>,
 ) {
-    let result = all_consuming(unsaturated_atom_entries(allow_unicode)).parse(input);
+    let result = all_consuming(unsaturated_atom_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -545,19 +535,18 @@ fn test_unsaturated_atom_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   2   5   7", "single entry", true, vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }])]
-#[case(b"  2   3   3   1   3   8   4   5   6", "two entries", true,
+#[case(b"  1   1   2   5   7", "single entry", vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }])]
+#[case(b"  2   3   3   1   3   8   4   5   6", "two entries",
        vec![LinkAtomEntry { atom_index: 2, repeat_count: 3, subs_index1: 0, subs_index2: Some(2) },
             LinkAtomEntry { atom_index: 7, repeat_count: 4, subs_index1: 4, subs_index2: Some(5) }])]
-#[case("  1   1 \u{00A0}2   5   7".as_bytes(), "unicode whitespace", true,
+#[case("  1   1 \u{00A0}2   5   7".as_bytes(), "unicode whitespace",
        vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }])]
 fn test_link_atom_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<LinkAtomEntry>,
 ) {
-    let result = all_consuming(link_atom_entries(allow_unicode)).parse(input);
+    let result = all_consuming(link_atom_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -589,23 +578,18 @@ fn test_link_atom_entries_invalid(
 }
 
 #[rstest]
-#[case(b"   1  3 F C   N   O   ", "exclusion flag false", true,
+#[case(b"   1  3 F C   N   O   ", "exclusion flag false",
        AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
-#[case(b"   1  3 F C   N   O", "no padding", true,
+#[case(b"   1  3 F C   N   O", "no padding",
        AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
-#[case(b"   5  2 T Cl  Br  ", "exclusion flag true", true,
+#[case(b"   5  2 T Cl  Br  ", "exclusion flag true",
        AtomListEntry { atom_index: 4, exclusion: true, elements: vec![Element::Cl, Element::Br] })]
-#[case(b"  10  1   H   ", "no exclusion flag", true,
+#[case(b"  10  1   H   ", "no exclusion flag",
        AtomListEntry { atom_index: 9, exclusion: false, elements: vec![Element::H] })]
-#[case("   1  3 F C \u{00A0}N   O   ".as_bytes(), "unicode whitespace", true,
+#[case("   1  3 F C \u{00A0}N   O   ".as_bytes(), "unicode whitespace",
        AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
-fn test_atom_list_entry(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] allow_unicode: bool,
-    #[case] expected: AtomListEntry,
-) {
-    let result = all_consuming(atom_list_entry(allow_unicode)).parse(input);
+fn test_atom_list_entry(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomListEntry) {
+    let result = all_consuming(atom_list_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -635,19 +619,17 @@ fn test_atom_list_entry_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   2", "single attachment point", true, vec![AttachmentPointEntry { atom_index: 0, attachment_type: 2 }])]
-#[case(b"  2   1   1   2   3", "two attachment points", true,
+#[case(b"  1   1   2", "single attachment point", vec![AttachmentPointEntry { atom_index: 0, attachment_type: 2 }])]
+#[case(b"  2   1   1   2   3", "two attachment points",
        vec![AttachmentPointEntry { atom_index: 0, attachment_type: 1 },
             AttachmentPointEntry { atom_index: 1, attachment_type: 3 }])]
-#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", true,
-       vec![AttachmentPointEntry { atom_index: 0, attachment_type: 2 }])]
+#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", vec![AttachmentPointEntry { atom_index: 0, attachment_type: 2 }])]
 fn test_attachment_point_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<AttachmentPointEntry>,
 ) {
-    let result = all_consuming(attachment_point_entries(allow_unicode)).parse(input);
+    let result = all_consuming(attachment_point_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -679,15 +661,14 @@ fn test_attachment_point_entries_invalid(
 }
 
 #[rstest]
-#[case(b"   4  2  14   1   9   2", "two attachments", true, AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] })]
-#[case("   4  2  14   1 \u{00A0}9   2".as_bytes(), "unicode whitespace", true, AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] })]
+#[case(b"   4  2  14   1   9   2", "two attachments", AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] })]
+#[case("   4  2  14   1 \u{00A0}9   2".as_bytes(), "unicode whitespace", AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] })]
 fn test_atom_attachment_order_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: AtomAttachmentOrderEntry,
 ) {
-    let result = all_consuming(atom_attachment_order_entry(allow_unicode)).parse(input);
+    let result = all_consuming(atom_attachment_order_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -720,18 +701,17 @@ fn test_atom_attachment_order_entry_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   2", "single entry", true, vec![RGroupLabelEntry { atom_index: 0, label: 2 }])]
-#[case(b"  2   1   1   2   2", "two entries", true,
+#[case(b"  1   1   2", "single entry", vec![RGroupLabelEntry { atom_index: 0, label: 2 }])]
+#[case(b"  2   1   1   2   2", "two entries",
        vec![RGroupLabelEntry { atom_index: 0, label: 1 }, RGroupLabelEntry { atom_index: 1, label: 2 }])]
-#[case("  1   1\u{00A0} 2".as_bytes(), "unicode whitespace", true,
+#[case("  1   1\u{00A0} 2".as_bytes(), "unicode whitespace",
        vec![RGroupLabelEntry { atom_index: 0, label: 2 }])]
 fn test_rgroup_label_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<RGroupLabelEntry>,
 ) {
-    let result = all_consuming(rgroup_label_entries(allow_unicode)).parse(input);
+    let result = all_consuming(rgroup_label_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -761,25 +741,24 @@ fn test_rgroup_label_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   0   0  >2", "greater than", true,
+#[case(b"  1   1   0   0  >2", "greater than",
        RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(2)] })]
-#[case(b"  1   1   0   0  0,>0", "exactly and greater than", true,
+#[case(b"  1   1   0   0  0,>0", "exactly and greater than",
        RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::Exactly(0), RGroupOccurrence::GreaterThan(0)] })]
-#[case(b"  1   1   2   0", "dependent label", true,
+#[case(b"  1   1   2   0", "dependent label",
        RGroupLogicEntry { label: 1, dependent_label: Some(2), rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
-#[case(b"  1   1   0   1", "rgroup or h", true,
+#[case(b"  1   1   0   1", "rgroup or h",
        RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: true, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
-#[case(b"  1   1   2", "no occurrence", true,
+#[case(b"  1   1   2", "no occurrence",
        RGroupLogicEntry { label: 1, dependent_label: Some(2), rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
-#[case("  1   1   0   0\u{00A0}>2".as_bytes(), "unicode whitespace", true,
+#[case("  1   1   0   0\u{00A0}>2".as_bytes(), "unicode whitespace",
        RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(2)] })]
 fn test_rgroup_logic_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: RGroupLogicEntry,
 ) {
-    let result = all_consuming(rgroup_logic_entry(allow_unicode)).parse(input);
+    let result = all_consuming(rgroup_logic_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -810,20 +789,19 @@ fn test_rgroup_logic_entry_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1 SUP", "single entry", true, vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }])]
-#[case(b"  2   1 SUP   2 DAT", "two entries", true, vec![
+#[case(b"  1   1 SUP", "single entry", vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }])]
+#[case(b"  2   1 SUP   2 DAT", "two entries", vec![
     SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom },
     SGroupTypeEntry { sgroup_index: 1, sgroup_type: SGroupType::Data }
 ])]
-#[case("  1 \u{00A0}1 SUP".as_bytes(), "unicode whitespace", true,
+#[case("  1 \u{00A0}1 SUP".as_bytes(), "unicode whitespace",
        vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }])]
 fn test_sgroup_type_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SGroupTypeEntry>,
 ) {
-    let result = all_consuming(sgroup_type_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_type_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -851,20 +829,19 @@ fn test_sgroup_type_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1 ALT", "single entry", true, vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }])]
-#[case(b"  2   1 RAN   2 BLO", "two entries", true, vec![
+#[case(b"  1   1 ALT", "single entry", vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }])]
+#[case(b"  2   1 RAN   2 BLO", "two entries", vec![
     SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Random },
     SGroupSubtypeEntry { sgroup_index: 1, sgroup_subtype: SGroupSubtype::Block }
 ])]
-#[case("  1 \u{00A0}1 ALT".as_bytes(), "unicode whitespace", true,
+#[case("  1 \u{00A0}1 ALT".as_bytes(), "unicode whitespace",
        vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }])]
 fn test_sgroup_subtype_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SGroupSubtypeEntry>,
 ) {
-    let result = all_consuming(sgroup_subtype_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_subtype_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -892,17 +869,16 @@ fn test_sgroup_subtype_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   1", "single entry", true, vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
-#[case(b"  2   1  14   2  15", "two entries", true,
+#[case(b"  1   1   1", "single entry", vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
+#[case(b"  2   1  14   2  15", "two entries",
        vec![SGroupLabelEntry { sgroup_index: 0, label: 14 }, SGroupLabelEntry { sgroup_index: 1, label: 15 }])]
-#[case("  1 \u{00A0}1   1".as_bytes(), "unicode whitespace", true, vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
+#[case("  1 \u{00A0}1   1".as_bytes(), "unicode whitespace", vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
 fn test_sgroup_label_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SGroupLabelEntry>,
 ) {
-    let result = all_consuming(sgroup_label_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_label_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -931,24 +907,23 @@ fn test_sgroup_label_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  3   1 HT    2 HT    3 HT ", "three entries", true, vec![
+#[case(b"  3   1 HT    2 HT    3 HT ", "three entries", vec![
     SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail },
     SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::HeadToTail },
     SGroupConnectivityEntry { sgroup_index: 2, connectivity: SGroupConnectivity::HeadToTail }
 ])]
-#[case(b"  2   1 HT    2 EU ", "two entries", true, vec![
+#[case(b"  2   1 HT    2 EU ", "two entries", vec![
     SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail },
     SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::EitherUnknown }
 ])]
-#[case("  1\u{00A0} 1 HT ".as_bytes(), "unicode whitespace", true,
+#[case("  1\u{00A0} 1 HT ".as_bytes(), "unicode whitespace",
        vec![SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail }])]
 fn test_sgroup_connectivity_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SGroupConnectivityEntry>,
 ) {
-    let result = all_consuming(sgroup_connectivity_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_connectivity_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -977,18 +952,17 @@ fn test_sgroup_connectivity_entries_invalid(
 }
 
 #[rstest]
-#[case(b" EXP  1   1", "single entry", true, vec![SGroupExpansionEntry { sgroup_index: 0 }])]
-#[case(b" EXP  2   1   2", "two entries", true, vec![
+#[case(b" EXP  1   1", "single entry", vec![SGroupExpansionEntry { sgroup_index: 0 }])]
+#[case(b" EXP  2   1   2", "two entries", vec![
     SGroupExpansionEntry { sgroup_index: 0 },
     SGroupExpansionEntry { sgroup_index: 1 }
 ])]
 fn test_sgroup_expansion_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SGroupExpansionEntry>,
 ) {
-    let result = all_consuming(sgroup_expansion_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_expansion_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1015,15 +989,14 @@ fn test_sgroup_expansion_entries_invalid(
 }
 
 #[rstest]
-#[case(b"   1  2   1   2", "two entries", true, SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![0, 1] })]
-#[case(b"   3  1  15", "single entry", true, SGroupAtomListEntry { sgroup_index: 2, atom_indices: vec![14] })]
+#[case(b"   1  2   1   2", "two entries", SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![0, 1] })]
+#[case(b"   3  1  15", "single entry", SGroupAtomListEntry { sgroup_index: 2, atom_indices: vec![14] })]
 fn test_sgroup_atom_list_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupAtomListEntry,
 ) {
-    let result = all_consuming(sgroup_atom_list_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_atom_list_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1051,15 +1024,14 @@ fn test_sgroup_atom_list_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   1  2   1   2", "two entries", true, SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![0, 1] })]
-#[case(b"   3  1  15", "single entry", true, SGroupBondListEntry { sgroup_index: 2, bond_indices: vec![14] })]
+#[case(b"   1  2   1   2", "two entries", SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![0, 1] })]
+#[case(b"   3  1  15", "single entry", SGroupBondListEntry { sgroup_index: 2, bond_indices: vec![14] })]
 fn test_sgroup_bond_list_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupBondListEntry,
 ) {
-    let result = all_consuming(sgroup_bond_list_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_bond_list_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1086,14 +1058,13 @@ fn test_sgroup_bond_list_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   1  4   3   4   5   6", "four entries", true, SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5] })]
+#[case(b"   1  4   3   4   5   6", "four entries", SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5] })]
 fn test_sgroup_parent_atom_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupParentAtomEntry,
 ) {
-    let result = all_consuming(sgroup_parent_atom_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_parent_atom_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1124,16 +1095,15 @@ fn test_sgroup_parent_atom_entries_invalid(
 }
 
 #[rstest]
-#[case(b"   1 1", "monomer", true, SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::Count(1)) })]
-#[case(b"   1 n", "n-mer", true, SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) })]
-#[case(b"   1 Ph", "Ph subscript", true, SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("Ph".to_string()) })]
+#[case(b"   1 1", "monomer", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::Count(1)) })]
+#[case(b"   1 n", "n-mer", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) })]
+#[case(b"   1 Ph", "Ph subscript", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("Ph".to_string()) })]
 fn test_sgroup_subscript_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupSubscriptEntry,
 ) {
-    let result = all_consuming(sgroup_subscript_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_subscript_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1159,15 +1129,13 @@ fn test_sgroup_subscript_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   3  3  10   9   4", "three entries", true,
-       SGroupCorrespondenceEntry { sgroup_index: 2, bond_indices: vec![9, 8, 3] })]
+#[case(b"   3  3  10   9   4", "three entries", SGroupCorrespondenceEntry { sgroup_index: 2, bond_indices: vec![9, 8, 3] })]
 fn test_sgroup_correspondence_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupCorrespondenceEntry,
 ) {
-    let result = all_consuming(sgroup_correspondence_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_correspondence_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1194,15 +1162,14 @@ fn test_sgroup_correspondence_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   1  4  -13.0153    4.4289  -13.0153    8.2211", "all coordinates", true,
+#[case(b"   1  4  -13.0153    4.4289  -13.0153    8.2211", "all coordinates",
        SGroupDisplayInfoEntry { sgroup_index: 0,  bracket_coords: vec![-13.0153, 4.4289, -13.0153, 8.2211]})]
 fn test_sgroup_display_info_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupDisplayInfoEntry,
 ) {
-    let result = all_consuming(sgroup_display_info_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_display_info_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1242,7 +1209,7 @@ fn test_sgroup_connecting_bond_entry(
     #[case] input: &[u8],
     #[case] expected: SGroupConnectingBondEntry,
 ) {
-    let (remaining, result) = all_consuming(sgroup_connecting_bond_entry(false))
+    let (remaining, result) = all_consuming(sgroup_connecting_bond_entry(true))
         .parse(input)
         .unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1282,19 +1249,18 @@ fn test_sgroup_connecting_bond_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   1 pH   ", "text field", true,
+#[case(b"   1 pH   ", "text field",
        SGroupDataDescriptionEntry { sgroup_index: 0, field_name: "pH".to_string(), field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None })]
-#[case(b"   3 MRV_COORDINATE_BOND_TYPE                              ", "Marvin extensions", true,
+#[case(b"   3 MRV_COORDINATE_BOND_TYPE                              ", "Marvin extensions",
        SGroupDataDescriptionEntry { sgroup_index: 2, field_name: "MRV_COORDINATE_BOND_TYPE".to_string(), field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None })]
-#[case(b"   3 WEIGHT_PERCENT                N %", "numerical field", true,
+#[case(b"   3 WEIGHT_PERCENT                N %", "numerical field",
        SGroupDataDescriptionEntry { sgroup_index: 2, field_name: "WEIGHT_PERCENT".to_string(), field_type: SGroupDataType::Numeric, field_units: Some("%".to_string()), query_identifier: None, data_query_operator: None })]
 fn test_sgroup_data_description_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupDataDescriptionEntry,
 ) {
-    let result = all_consuming(sgroup_data_description_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_data_description_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1322,34 +1288,29 @@ fn test_sgroup_data_description_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   1     0.0000    0.0000    DR    ALL  0       0", "detached", true, false,
+#[case(b"   1     0.0000    0.0000    DR    ALL  0       0", "detached",
         SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]
-#[case(b"   2     0.0000    0.0000    DR    ALL  1       6", "relative position", true, false,
+#[case(b"   2     0.0000    0.0000    DR    ALL  1       6", "relative position",
         SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 6 })]
-#[case(b"   2     0.0000    0.0000    DR    1    1       6", "number", true, false,
+#[case(b"   2     0.0000    0.0000    DR    1    1       6", "number",
         SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::Number(1), display_tag: None, display_position: 6 })]
-#[case(b"   3     0.0000    0.0000    DR    ALL  0       0 ", "absolute position", true, false,
+#[case(b"   3     0.0000    0.0000    DR    ALL  0       0 ", "absolute position",
         SGroupDataDisplayEntry { sgroup_index: 2, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]
 fn test_sgroup_data_display_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
-    #[case] strict_padding: bool,
     #[case] expected: SGroupDataDisplayEntry,
 ) {
-    let result = all_consuming(terminated(
-        sgroup_data_display_entry(allow_unicode, strict_padding),
-        space0,
-    ))
-    .parse(input);
+    let result =
+        all_consuming(terminated(sgroup_data_display_entry(true, false), space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1367,7 +1328,7 @@ fn test_sgroup_data_display_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_data_display_entry(false, false)).parse(input);
+    let result = all_consuming(sgroup_data_display_entry(false, true)).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1379,16 +1340,15 @@ fn test_sgroup_data_display_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   1 4.6", "numerical", true, SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() })]
-#[case(b"   2 E/Z unknown", "text", true, SGroupDataEntry::Continuation { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
-#[case(b"   1", "empty", true, SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "".to_string() })]
+#[case(b"   1 4.6", "numerical", SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() })]
+#[case(b"   2 E/Z unknown", "text", SGroupDataEntry::Continuation { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
+#[case(b"   1", "empty", SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "".to_string() })]
 fn tests_sgroup_data_continuation_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupDataEntry,
 ) {
-    let result = all_consuming(sgroup_data_continuation_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_data_continuation_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1414,16 +1374,15 @@ fn test_sgroup_data_continuation_entry_invalid(
 }
 
 #[rstest]
-#[case(b"   1 4.6", "numerical", true, SGroupDataEntry::EndWithData { sgroup_index: 0, data_content: "4.6".to_string() })]
-#[case(b"   2 E/Z unknown", "text", true, SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
-#[case(b"   1", "empty", true, SGroupDataEntry::EndBlank { sgroup_index: 0 })]
+#[case(b"   1 4.6", "numerical", SGroupDataEntry::EndWithData { sgroup_index: 0, data_content: "4.6".to_string() })]
+#[case(b"   2 E/Z unknown", "text", SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() })]
+#[case(b"   1", "empty", SGroupDataEntry::EndBlank { sgroup_index: 0 })]
 fn tests_sgroup_data_end_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: SGroupDataEntry,
 ) {
-    let result = all_consuming(sgroup_data_end_entry(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_data_end_entry(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1449,8 +1408,8 @@ fn test_sgroup_data_end_entry_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   2", "one entry", true, vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }])]
-#[case(b"  3   1   4   2   4   3   2", "multiple entries", true, vec![
+#[case(b"  1   1   2", "one entry", vec![SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 1 }])]
+#[case(b"  3   1   4   2   4   3   2", "multiple entries", vec![
     SGroupHierarchyEntry { sgroup_index: 0, parent_sgroup_index: 3 },
     SGroupHierarchyEntry { sgroup_index: 1, parent_sgroup_index: 3 },
     SGroupHierarchyEntry { sgroup_index: 2, parent_sgroup_index: 1 }
@@ -1458,10 +1417,9 @@ fn test_sgroup_data_end_entry_invalid(
 fn test_sgroup_hierarchy_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SGroupHierarchyEntry>,
 ) {
-    let result = all_consuming(sgroup_hierarchy_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_hierarchy_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1491,17 +1449,16 @@ fn test_sgroup_hierarchy_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  2   1   1   2   2", "multiple entries", true, vec![
+#[case(b"  2   1   1   2   2", "multiple entries", vec![
     SGroupComponentEntry { sgroup_index: 0, component_number: 1 },
     SGroupComponentEntry { sgroup_index: 1, component_number: 2 }
 ])]
 fn test_sgroup_component_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<SGroupComponentEntry>,
 ) {
-    let result = all_consuming(sgroup_component_entries(allow_unicode)).parse(input);
+    let result = all_consuming(sgroup_component_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1529,18 +1486,17 @@ fn test_sgroup_component_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   0", "one entry", true, vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }])]
-#[case(b"  2   1   2   3   4", "multiple entries", true, vec![
+#[case(b"  1   1   0", "one entry", vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }])]
+#[case(b"  2   1   2   3   4", "multiple entries", vec![
     ZeroBondOrderEntry { bond_index: 0, bond_order: 2 },
     ZeroBondOrderEntry { bond_index: 2, bond_order: 4 },
 ])]
 fn test_zero_order_bond_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<ZeroBondOrderEntry>,
 ) {
-    let result = all_consuming(zero_bond_order_entries(allow_unicode)).parse(input);
+    let result = all_consuming(zero_bond_order_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1568,18 +1524,17 @@ fn test_zero_bond_order_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   0",  "one entry", true, vec![ZeroAtomChargeEntry { atom_index: 0, charge: 0 }])]
-#[case(b"  2   1   2   3  -1", "multiple entries", true, vec![
+#[case(b"  1   1   0",  "one entry", vec![ZeroAtomChargeEntry { atom_index: 0, charge: 0 }])]
+#[case(b"  2   1   2   3  -1", "multiple entries", vec![
     ZeroAtomChargeEntry { atom_index: 0, charge: 2 },
     ZeroAtomChargeEntry { atom_index: 2, charge: -1 },
 ])]
 fn test_zero_atom_charge_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<ZeroAtomChargeEntry>,
 ) {
-    let result = all_consuming(zero_atom_charge_entries(allow_unicode)).parse(input);
+    let result = all_consuming(zero_atom_charge_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1607,18 +1562,17 @@ fn test_zero_atom_charge_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  1   1   0", "one entry", true, vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 0 }])]
-#[case(b"  2   1   2   3   4", "multiple entries", true, vec![
+#[case(b"  1   1   0", "one entry", vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 0 }])]
+#[case(b"  2   1   2   3   4", "multiple entries", vec![
     AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 2 },
     AtomHydrogenCountEntry { atom_index: 2, hydrogen_count: 4 },
 ])]
 fn test_atom_hydrogen_count_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
     #[case] expected: Vec<AtomHydrogenCountEntry>,
 ) {
-    let result = all_consuming(hydrogen_count_entries(allow_unicode)).parse(input);
+    let result = all_consuming(hydrogen_count_entries(true)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");

@@ -7,6 +7,7 @@ use nom::sequence::terminated;
 use nom::{Err, IResult, Parser};
 
 use crate::io::ctab::bond::{Bond, BondLike, BondType};
+use crate::io::config::ParseFlags;
 
 use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_dir_code, convert_bond_topology_code,
@@ -18,9 +19,10 @@ use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_
 /// Lacks trailing stereo/dir fields (substituted by defaults).
 fn bond_input12(
     input: &[u8],
-    allow_unicode: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], (usize, usize, Bond)> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let first_atom = fixed_width_int_minus1::<usize>(3, allow_unicode);
     let second_atom = fixed_width_int_minus1::<usize>(3, allow_unicode);
     let bond_type = map_res(
@@ -57,9 +59,9 @@ fn bond_input12(
 /// Lacks trailing stereo/dir fields (substituted by defaults).
 fn bond_input9(
     input: &[u8],
-    allow_unicode: bool,
-    _strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], (usize, usize, Bond)> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
     map(
         (
             fixed_width_int_minus1::<usize>(3, allow_unicode),
@@ -91,8 +93,7 @@ fn bond_input9(
 /// | ccc   | bond reacting center | 0..=3      | Reaction,Query |
 /// --------------------------------------------------------------
 pub fn bond_input<'a>(
-    allow_unicode: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let len = input.len();
@@ -102,7 +103,7 @@ pub fn bond_input<'a>(
             _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
         terminated(
-            move |input| parser(input, allow_unicode, strict_padding),
+            move |input| parser(input, flags),
             space0,
         )
         .parse(input)
@@ -110,9 +111,10 @@ pub fn bond_input<'a>(
 }
 
 fn bondlike_input_inner<'a>(
-    allow_unicode: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, BondLike), Error = error::Error<&'a [u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
         // Atom indices
         let (i, first_atom) = fixed_width_int_minus1::<usize>(3, allow_unicode).parse(input)?;
@@ -176,10 +178,9 @@ fn bondlike_input_inner<'a>(
 }
 
 pub fn bondlike_input<'a>(
-    allow_unicode: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, BondLike), Error = error::Error<&'a [u8]>> {
-    terminated(bondlike_input_inner(allow_unicode, strict_padding), space0)
+    terminated(bondlike_input_inner(flags), space0)
 }
 
 #[cfg(test)]

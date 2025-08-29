@@ -10,6 +10,8 @@ use nom::multi::{count as nom_count, length_count};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Err, Parser};
 
+use crate::io::config::ParseFlags;
+
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
     fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
@@ -314,8 +316,9 @@ pub enum PropertyEntries {
 /// n: count
 /// 111 222 333 444 555: element symbols
 pub fn legacy_atom_list_input<'a>(
-    allow_unicode: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
     all_consuming(map(
         (
             fixed_width_int_minus1::<usize>(3, allow_unicode),
@@ -351,10 +354,11 @@ pub fn legacy_atom_list_input<'a>(
 
 /// Parse property line (basic properties only)
 pub fn basic_property_input<'a>(
-    allow_unicode: bool,
-    allow_sgroups: bool,
-    allow_clark_extensions: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let allow_sgroups = flags.contains(ParseFlags::SGROUPS);
+    let allow_clark_extensions = flags.contains(ParseFlags::CLARK_EXTENSIONS);
     move |input: &'a [u8]| {
         if input.len() < 3 {
             return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
@@ -437,14 +441,15 @@ pub fn basic_property_input<'a>(
 
 /// Parse property line
 pub fn property_input<'a>(
-    allow_unicode: bool,
-    allow_queries: bool,
-    allow_rgroups: bool,
-    allow_sgroups: bool,
-    allow_advanced_sgroups: bool,
-    allow_clark_extensions: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let allow_queries = flags.contains(ParseFlags::QUERIES);
+    let allow_rgroups = flags.contains(ParseFlags::RGROUPS);
+    let allow_sgroups = flags.contains(ParseFlags::SGROUPS);
+    let allow_advanced_sgroups = flags.contains(ParseFlags::ADVANCED_SGROUPS);
+    let allow_clark_extensions = flags.contains(ParseFlags::CLARK_EXTENSIONS);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
         if input.len() < 3 {
             return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
@@ -518,8 +523,8 @@ pub fn property_input<'a>(
                         }
                     }
                     // SGroup properties
-                    tag @ (b"M  STY" | b"M  SST" | b"M  SLB" | b"M  SCN" | b"M  SDS" | b"M  SAL"
-                    | b"M  SBL" | b"M  SPA" | b"M  SMT")
+                    tag @ (b"M  STY" | b"M  SST" | b"M  SLB" | b"M  SCN" | b"M  SAL"
+                    | b"M  SBL" | b"M  SMT")
                         if allow_sgroups =>
                     {
                         match tag {
@@ -535,18 +540,12 @@ pub fn property_input<'a>(
                             b"M  SCN" => sgroup_connectivity_entries(allow_unicode)
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
-                            b"M  SDS" => sgroup_expansion_entries(allow_unicode)
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
                             b"M  SAL" => sgroup_atom_list_entry(allow_unicode)
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
                             b"M  SBL" => sgroup_bond_list_entry(allow_unicode)
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                            b"M  SPA" => sgroup_parent_atom_entries(allow_unicode)
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
                             b"M  SMT" => sgroup_subscript_entry(allow_unicode)
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
@@ -554,11 +553,18 @@ pub fn property_input<'a>(
                         }
                     }
                     // Advanced SGroup data properties
-                    tag @ (b"M  CRS" | b"M  SDI" | b"M  SBV" | b"M  SDT" | b"M  SDD"
-                    | b"M  SCD" | b"M  SED" | b"M  SPL" | b"M  SNC")
+                    tag @ (b"M  SDS" | b"M  SPA" | b"M  CRS" | b"M  SDI" | b"M  SBV"
+                    | b"M  SDT" | b"M  SDD" | b"M  SCD" | b"M  SED" | b"M  SPL"
+                    | b"M  SNC")
                         if allow_advanced_sgroups =>
                     {
                         match tag {
+                            b"M  SDS" => sgroup_expansion_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
+                            b"M  SPA" => sgroup_parent_atom_entries(allow_unicode)
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
                             b"M  CRS" => sgroup_correspondence_entry(allow_unicode)
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
@@ -571,9 +577,11 @@ pub fn property_input<'a>(
                             b"M  SDT" => sgroup_data_description_entry(allow_unicode)
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
-                            b"M  SDD" => sgroup_data_display_entry(allow_unicode, strict_padding)
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
+                            b"M  SDD" => {
+                                sgroup_data_display_entry(allow_unicode, strict_padding)
+                                    .parse(remaining)
+                            }
+                            .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
                             b"M  SCD" => sgroup_data_continuation_entry(allow_unicode)
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),

@@ -1,6 +1,6 @@
 //! Intermediate representation for molecular structures
 
-use crate::io::config::MolParsingConfig;
+use crate::io::config::ParsingConfig;
 use crate::io::ctab::bond::{BondStereo, BondTopology, BondType};
 use crate::io::ctab::sgroup::SGroup;
 use umol::Result;
@@ -98,10 +98,10 @@ pub trait ParseTarget: Sized {
     fn allows_sgroups() -> bool;
     fn allows_rgroups() -> bool;
 
-    fn from_parsed_data(parsed: RawMolecule, config: &MolParsingConfig) -> Result<Self>;
+    fn from_parsed_data(parsed: RawMolecule, config: &ParsingConfig) -> Result<Self>;
 }
 
-impl MolParsingConfig {
+impl ParsingConfig {
     pub fn for_target<T: ParseTarget>() -> Self {
         Self::default()
     }

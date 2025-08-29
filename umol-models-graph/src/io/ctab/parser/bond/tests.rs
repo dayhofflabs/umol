@@ -1,4 +1,5 @@
 use super::*;
+use crate::io::config::ParseFlags;
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use nom::{error, Err, Parser};
 use pretty_assertions::assert_eq;
@@ -6,45 +7,34 @@ use rstest::*;
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", true, true, 0, 1, BondType::Single,
-       None, Some(BondDir::Wedge))]
-#[case(b"  2  5  1  0  0  0  0", "len 21 single unknown", true, true, 1, 4, BondType::Single, None, None)]
-#[case(b"  2  5  2  1  0  0  0", "len 21 double cis", true, true, 1, 4, BondType::Double,
-       Some(BondStereo::Cis), None)]
-#[case(b"  2  5  2  6  0  0  0", "len 21 double trans", true, true, 1, 4, BondType::Double,
-       Some(BondStereo::Trans), None)]
-#[case(b"  2  5  2  4  0  0  0", "len 21 double either", true, true, 1, 4, BondType::Double,
-       Some(BondStereo::Either), None)]
-#[case(b"  2  5  2  0  0  0  0", "len 21 double none", true, true, 1, 4, BondType::Double, None, None)]
-#[case(b"  2  5  3  0  0  0  0", "len 21 triple", true, true, 1, 4, BondType::Triple, None, None)]
-#[case(b"  2  5  4  0  0  0  0", "len 21 aromatic", true, true, 1, 4, BondType::Aromatic, None, None)]
-#[case(b"  2  5  3  1  0  0  0", "len 21 triple ignored stereo", true, true, 1, 4, BondType::Triple, None, None)]
-#[case(b"  2  5  3  1         ", "len 21 triple empty fields", true, true, 1, 4, BondType::Triple, None, None)]
-#[case(b"  1  2  1  0  0  0", "len 18 single", true, true, 0, 1, BondType::Single, None, None)]
-#[case(b"  1  3  1  1", "len 12 single wedge", true, true, 0, 2, BondType::Single,
-        None, Some(BondDir::Wedge))]
-#[case(b"  1  3  2  1", "len 12 double cis", true, true, 0, 2, BondType::Double,
-       Some(BondStereo::Cis), None)]
-#[case(b"  2  5  2  0", "len 12 double none", true, true, 1, 4, BondType::Double, None, None)]
-#[case(b"  2  4  1  6", "len 12 single dash", true, true, 1, 3, BondType::Single,
-       None, Some(BondDir::Dash))]
-#[case(b"  2  5  3   ", "len 12 triple empty fields", true, true, 1, 4, BondType::Triple, None, None)]
-#[case("  1  2  1\u{00A0}1  0  0  0".as_bytes(), "unicode whitespace", true, true, 0, 1,
-       BondType::Single, None, Some(BondDir::Wedge))]
-#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", true, false, 0, 1, BondType::Single,
-       None, Some(BondDir::Wedge))]
+#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
+#[case(b"  2  5  1  0  0  0  0", "len 21 single unknown", 1, 4, BondType::Single, None, None)]
+#[case(b"  2  5  2  1  0  0  0", "len 21 double cis", 1, 4, BondType::Double, Some(BondStereo::Cis), None)]
+#[case(b"  2  5  2  6  0  0  0", "len 21 double trans", 1, 4, BondType::Double, Some(BondStereo::Trans), None)]
+#[case(b"  2  5  2  4  0  0  0", "len 21 double either", 1, 4, BondType::Double, Some(BondStereo::Either), None)]
+#[case(b"  2  5  2  0  0  0  0", "len 21 double none", 1, 4, BondType::Double, None, None)]
+#[case(b"  2  5  3  0  0  0  0", "len 21 triple", 1, 4, BondType::Triple, None, None)]
+#[case(b"  2  5  4  0  0  0  0", "len 21 aromatic", 1, 4, BondType::Aromatic, None, None)]
+#[case(b"  2  5  3  1  0  0  0", "len 21 triple ignored stereo", 1, 4, BondType::Triple, None, None)]
+#[case(b"  2  5  3  1         ", "len 21 triple empty fields", 1, 4, BondType::Triple, None, None)]
+#[case(b"  1  2  1  0  0  0", "len 18 single", 0, 1, BondType::Single, None, None)]
+#[case(b"  1  3  1  1", "len 12 single wedge", 0, 2, BondType::Single, None, Some(BondDir::Wedge))]
+#[case(b"  1  3  2  1", "len 12 double cis", 0, 2, BondType::Double, Some(BondStereo::Cis), None)]
+#[case(b"  2  5  2  0", "len 12 double none", 1, 4, BondType::Double, None, None)]
+#[case(b"  2  4  1  6", "len 12 single dash", 1, 3, BondType::Single, None, Some(BondDir::Dash))]
+#[case(b"  2  5  3   ", "len 12 triple empty fields", 1, 4, BondType::Triple, None, None)]
+#[case("  1  2  1\u{00A0}1  0  0  0".as_bytes(), "unicode whitespace", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
+#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
 fn test_bond_input12(
     #[case] input: &[u8],
     #[case] desc: &str,
-    #[case] allow_unicode: bool,
-    #[case] strict_padding: bool,
     #[case] atom1: usize,
     #[case] atom2: usize,
     #[case] bond_type: BondType,
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let result = bond_input12(input, allow_unicode, strict_padding);
+    let result = bond_input12(input, ParseFlags::LENIENT);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -88,7 +78,7 @@ fn test_bond_input12_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = bond_input12(input, false, true);
+    let result = bond_input12(input, ParseFlags::STRICT);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{} should have failed with error kind {:?}, got {:?}",
@@ -111,7 +101,7 @@ fn test_bond_input9(
     #[case] atom2: usize,
     #[case] bond_type: BondType,
 ) {
-    let result = bond_input9(input, true, false);
+    let result = bond_input9(input, ParseFlags::LENIENT);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -146,7 +136,7 @@ fn test_bond_input9_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = bond_input9(input, false, false);
+    let result = bond_input9(input, ParseFlags::STRICT);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{} should have failed with error kind {:?}, got {:?}",
@@ -173,7 +163,7 @@ fn test_bond_input(
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let mut parser = bond_input(false, false);
+    let mut parser = bond_input(ParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
@@ -213,7 +203,7 @@ fn test_bond_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = bond_input(false, false);
+    let mut parser = bond_input(ParseFlags::STRICT);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -228,7 +218,7 @@ fn test_bond_input_invalid(
 #[rstest]
 #[case(b"  1  2  1 1", "len 11")]
 fn test_bond_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input(true, false);
+    let mut parser = bond_input(ParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
 }
@@ -237,7 +227,7 @@ fn test_bond_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
 #[case(b"  1  2  1\n", "len 9 padded")]
 #[case(b"  1  3  1  1  ", "len 12 padded")]
 fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input(true, false);
+    let mut parser = bond_input(ParseFlags::LENIENT);
     let trimmed_input = input.trim_ascii_end();
     let result = parser.parse(trimmed_input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -271,7 +261,7 @@ fn test_bondlike_input(
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {
-    let mut parser = bondlike_input(true, false);
+    let mut parser = bondlike_input(ParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
@@ -324,7 +314,7 @@ fn test_bondlike_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = bondlike_input(false, true);
+    let mut parser = bondlike_input(ParseFlags::STRICT);
     let result = parser.parse(input);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),

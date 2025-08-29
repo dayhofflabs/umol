@@ -12,6 +12,7 @@ use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol, Point3D};
 use crate::io::ctab::parser::utils::trim_whitespace;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
+use crate::io::config::ParseFlags;
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,
@@ -30,9 +31,10 @@ use super::utils::{
 /// If `allow_unicode` is true, allow unicode whitespace.
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 fn atom_symbol<'a>(
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let allow_named_isotopes = flags.contains(ParseFlags::NAMED_ISOTOPES);
     map_res(take(3usize), move |s: &[u8]| {
         let s = trim_whitespace(s, allow_unicode);
         if let Some(element) = Element::from_symbol_bytes(s) {
@@ -73,13 +75,14 @@ fn atom_symbol<'a>(
 /// If `allow_subatoms` is true, allow subatoms (LP).
 ///
 fn atomlike_symbol<'a>(
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    allow_rgroups: bool,
-    allow_queries: bool,
-    allow_extended_queries: bool,
-    allow_electrons: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let allow_named_isotopes = flags.contains(ParseFlags::NAMED_ISOTOPES);
+    let allow_rgroups = flags.contains(ParseFlags::RGROUPS);
+    let allow_queries = flags.contains(ParseFlags::QUERIES);
+    let allow_extended_queries = flags.contains(ParseFlags::EXTENDED_QUERIES);
+    let allow_electrons = flags.contains(ParseFlags::ELECTRONS);
     map_res(take(3usize), move |s: &[u8]| {
         let s = trim_whitespace(s, allow_unicode);
         if let Some(element) = Element::from_symbol_bytes(s) {
@@ -126,14 +129,14 @@ fn atomlike_symbol<'a>(
 /// Includes atom mapping number.
 fn atom_input69(
     input: &[u8],
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
     let z = fixed_width_float::<f64>(10, 4, allow_unicode);
-    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let symbol = atom_symbol(flags);
     let mass_diff = map(
         fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
         |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
@@ -161,7 +164,7 @@ fn atom_input69(
             y,
             z,
             preceded(
-                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
                 symbol,
             ),
             mass_diff,
@@ -199,14 +202,14 @@ fn atom_input69(
 ///
 fn atom_input51(
     input: &[u8],
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
     let z = fixed_width_float::<f64>(10, 4, allow_unicode);
-    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let symbol = atom_symbol(flags);
     let mass_diff = map(
         fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
         |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
@@ -231,7 +234,7 @@ fn atom_input51(
             y,
             z,
             preceded(
-                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
                 symbol,
             ),
             mass_diff,
@@ -269,14 +272,14 @@ fn atom_input51(
 ///
 fn atom_input42(
     input: &[u8],
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
     let z = fixed_width_float::<f64>(10, 4, allow_unicode);
-    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let symbol = atom_symbol(flags);
     let mass_diff = map(
         fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
         |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
@@ -298,7 +301,7 @@ fn atom_input42(
             y,
             z,
             preceded(
-                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
                 symbol,
             ),
             mass_diff,
@@ -333,14 +336,13 @@ fn atom_input42(
 ///
 fn atom_input39(
     input: &[u8],
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    _strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
     let z = fixed_width_float::<f64>(10, 4, allow_unicode);
-    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let symbol = atom_symbol(flags);
     let mass_diff = map(
         fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
         |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
@@ -356,7 +358,7 @@ fn atom_input39(
             y,
             z,
             preceded(
-                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
                 symbol,
             ),
             mass_diff,
@@ -391,14 +393,13 @@ fn atom_input39(
 ///
 fn atom_input36(
     input: &[u8],
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    _strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
     let z = fixed_width_float::<f64>(10, 4, allow_unicode);
-    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let symbol = atom_symbol(flags);
     let mass_diff = map(
         fixed_width_int_in_range_opt::<i8, _>(2, -3..=4, allow_unicode),
         |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
@@ -410,7 +411,7 @@ fn atom_input36(
             y,
             z,
             preceded(
-                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
                 symbol,
             ),
             mass_diff,
@@ -444,14 +445,13 @@ fn atom_input36(
 ///
 fn atom_input34(
     input: &[u8],
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    _strict_padding: bool,
+    flags: ParseFlags,
 ) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
     let z = fixed_width_float::<f64>(10, 4, allow_unicode);
-    let symbol = atom_symbol(allow_unicode, allow_named_isotopes);
+    let symbol = atom_symbol(flags);
 
     map(
         (
@@ -459,7 +459,7 @@ fn atom_input34(
             y,
             z,
             preceded(
-                verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
+                verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
                 symbol,
             ),
         ),
@@ -501,9 +501,7 @@ fn atom_input34(
 /// -------------------------------------------------------------------------------
 ///
 pub fn atom_input<'a>(
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Atom, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let len = input.len();
@@ -517,7 +515,7 @@ pub fn atom_input<'a>(
             _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
         terminated(
-            move |input| parser(input, allow_unicode, allow_named_isotopes, strict_padding),
+            move |input| parser(input, flags),
             space0,
         )
         .parse(input)
@@ -553,38 +551,20 @@ pub fn atom_input<'a>(
 ///
 
 pub fn atomlike_input<'a>(
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    allow_rgroups: bool,
-    allow_queries: bool,
-    allow_extended_queries: bool,
-    allow_electrons: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
     terminated(
-        atomlike_input_inner(
-            allow_unicode,
-            allow_named_isotopes,
-            allow_rgroups,
-            allow_queries,
-            allow_extended_queries,
-            allow_electrons,
-            strict_padding,
-        ),
+        atomlike_input_inner(flags),
         space0,
     )
 }
 
 // Internal parser for atomlike_input
 fn atomlike_input_inner<'a>(
-    allow_unicode: bool,
-    allow_named_isotopes: bool,
-    allow_rgroups: bool,
-    allow_queries: bool,
-    allow_extended_queries: bool,
-    allow_electrons: bool,
-    strict_padding: bool,
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
         // x, y, z coordinates
         let (i, x) = fixed_width_float::<f64>(10, 4, allow_unicode).parse(input)?;
@@ -594,14 +574,7 @@ fn atomlike_input_inner<'a>(
         // Atom symbol
         let (i, atom_symbol) = preceded(
             verify(take(1usize), |s| is_all_whitespace(s, allow_unicode)),
-            atomlike_symbol(
-                allow_unicode,
-                allow_named_isotopes,
-                allow_rgroups,
-                allow_queries,
-                allow_extended_queries,
-                allow_electrons,
-            ),
+            atomlike_symbol(flags),
         )
         .parse(i)?;
 
