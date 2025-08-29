@@ -62,6 +62,34 @@ fn test_is_whitespace_or_zeroes(
 }
 
 #[rstest]
+#[case(b"", false, Ok(String::new()))]
+#[case(b"  ", false, Ok("".to_string()))]
+#[case(b"42", false, Ok("42".to_string()))]
+#[case(b"42 ", false, Ok("42".to_string()))]
+#[case(b" 42", false, Ok("42".to_string()))]
+#[case("2\u{00A0}".as_bytes(), true, Ok("2".to_string()))]
+fn test_to_string(
+    #[case] input: &[u8],
+    #[case] allow_unicode: bool,
+    #[case] expected: Result<String, error::Error<&[u8]>>,
+) {
+    let result = to_string(input, allow_unicode);
+    assert!(
+        result.is_ok(),
+        "{} should have succeeded",
+        String::from_utf8_lossy(input)
+    );
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case("2\u{00A0}".as_bytes(), "unicode whitespace")]
+fn test_to_string_invalid(#[case] input: &[u8], #[case] desc: &str) {
+    let result = to_string(input, false);
+    assert!(result.is_err(), "{} should have failed", desc);
+}
+
+#[rstest]
 #[case(b"", false, None)]
 #[case(b"  ", false, None)]
 #[case(b"   ", false, None)]
@@ -142,7 +170,8 @@ fn test_fixed_width_opt(
     #[case] allow_unicode: bool,
     #[case] expected_val: Option<i32>,
 ) {
-    let mut parser = fixed_width_opt(3,
+    let mut parser = fixed_width_opt(
+        3,
         move |input| {
             let s = trim_whitespace(input, allow_unicode);
             nom_i32.parse(s)
@@ -508,22 +537,22 @@ fn test_fixed_width_float_invalid(
 }
 
 #[rstest]
-#[case(b"   C", false, Element::C)]
-#[case(b"  C ", false, Element::C)]
-#[case(b" C  ", false, Element::C)]
-#[case(b"C   ", false, Element::C)]
-#[case(b"Cu  ", false, Element::Cu)]
-#[case(b" Cu ", false, Element::Cu)]
-#[case(b"  Cu", false, Element::Cu)]
-#[case(b" Cu ", false, Element::Cu)]
-#[case(b"Cu  ", false, Element::Cu)]
-#[case("Cu\u{00A0}".as_bytes(), true, Element::Cu)]
-fn test_fixed_width_element(
+#[case(b"   C", false, Some(Element::C))]
+#[case(b"  C ", false, Some(Element::C))]
+#[case(b" C  ", false, Some(Element::C))]
+#[case(b"C   ", false, Some(Element::C))]
+#[case(b"Cu  ", false, Some(Element::Cu))]
+#[case(b" Cu ", false, Some(Element::Cu))]
+#[case(b"  Cu", false, Some(Element::Cu))]
+#[case(b" Cu ", false, Some(Element::Cu))]
+#[case(b"Cu  ", false, Some(Element::Cu))]
+#[case("Cu\u{00A0}".as_bytes(), true, Some(Element::Cu))]
+fn test_fixed_width_element_partial(
     #[case] input: &[u8],
     #[case] allow_unicode: bool,
-    #[case] expected: Element,
+    #[case] expected: Option<Element>,
 ) {
-    let mut parser = all_consuming(fixed_width_element(4, allow_unicode));
+    let mut parser = all_consuming(fixed_width_element_partial(4, allow_unicode));
     let result = parser.parse(input);
     assert!(
         result.is_ok(),
@@ -538,13 +567,13 @@ fn test_fixed_width_element(
 #[rstest]
 #[case(b"Cu   ", "trailing characters", error::ErrorKind::Eof)]
 #[case(b" X  ", "invalid element symbol", error::ErrorKind::MapOpt)]
-#[case("Cu\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::MapOpt)]
-fn test_fixed_width_element_invalid(
+#[case("Cu\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::Eof)]
+fn test_fixed_width_element_partial_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = all_consuming(fixed_width_element(4, false));
+    let mut parser = all_consuming(fixed_width_element_partial(4, false));
     let result = parser.parse(input);
     assert!(
         result.is_err(),

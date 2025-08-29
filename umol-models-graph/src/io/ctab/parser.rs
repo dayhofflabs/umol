@@ -16,8 +16,8 @@ mod bond;
 // mod context;
 mod convert;
 mod counts;
-// mod properties;
-// mod sgroup;
+mod properties;
+mod sgroup;
 mod utils;
 
 // use self::accumulator::MoleculeProperties;

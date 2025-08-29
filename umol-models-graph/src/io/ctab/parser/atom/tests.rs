@@ -114,43 +114,43 @@ fn test_atomlike_symbol_invalid(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0", "basic valid",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0", "mass diff lower bound",
-       true, true, true,
+       true, true, false,
        Element::C, Some(9), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0", "mass diff upper bound",
-       true, true, true,
+       true, true, false,
        Element::C, Some(16), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4  0  0  0  0  0  0", "mass diff out-of-range low",
-       true, true, true,
+       true, true, false,
        Element::C, None, 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4  0  0  0  0  0  0", "mass diff out-of-range high",
-       true, true, true,
+       true, true, false,
        Element::C, None, 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4  0  0  0  0  0  0", "charge out-of-range high",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 0, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  0  0  0  0  4  0  0  0  1  0  0", "atom map num non-zero",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 0, Some(4), Some(1), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0     0  4  0  0  0  0  0  0", "blank block 1",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4     0  0  0  0  0", "blank block 2",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0      ", "blank block 3",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4           1 0    ", "gaps with spaces and zeros",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 1, Some(4), Some(1), 1.2345, 2.3456, 3.4567)]
 #[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0  0  0  4  0  0  0  0  0  0".as_bytes(), "unicode whitespace",
-       true, true, true,
+       true, true, false,
        Element::C, Some(10), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", "named isotope",
-       true, true, true,
+       true, true, false,
        Element::H, Some(2), 1, Some(1), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4  0  0  0  0  0  0", "non-strict padding",
        true, true, false,

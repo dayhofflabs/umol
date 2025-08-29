@@ -1,6 +1,7 @@
 //! Auxiliary parsers for SGroup properties.
 
 use crate::io::ctab::parser::utils::fixed_width_partial;
+use crate::io::ctab::parser::utils::trim_whitespace;
 use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
@@ -10,59 +11,49 @@ use nom::bytes::complete::{tag_no_case, take};
 use nom::character::complete::u32 as nom_u32;
 use nom::combinator::{map, map_parser, map_res, rest, value};
 use nom::{error, Parser};
-use bstr::ByteSlice;
 
 /// Parse SGroup type string
 pub fn sgroup_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupType, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s: &[u8]| {
-        let s = s.trim_with(|b| b == ' ');
-        match s {
-            b"SUP" => Ok(SGroupType::Superatom),
-            b"MUL" => Ok(SGroupType::MultipleGroup),
-            b"SRU" => Ok(SGroupType::RepeatingUnit),
-            b"MON" => Ok(SGroupType::Monomer),
-            b"MER" => Ok(SGroupType::Mer),
-            b"COP" => Ok(SGroupType::Copolymer),
-            b"CRO" => Ok(SGroupType::Crosslink),
-            b"MOD" => Ok(SGroupType::Modification),
-            b"GRA" => Ok(SGroupType::Graft),
-            b"COM" => Ok(SGroupType::Component),
-            b"MIX" => Ok(SGroupType::Mixture),
-            b"FOR" => Ok(SGroupType::Formulation),
-            b"DAT" => Ok(SGroupType::Data),
-            b"ANY" => Ok(SGroupType::AnyPolymer),
-            b"GEN" => Ok(SGroupType::Generic),
-            _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
-        }
+    map_res(take(3usize), move |s: &[u8]| match s {
+        b"SUP" => Ok(SGroupType::Superatom),
+        b"MUL" => Ok(SGroupType::MultipleGroup),
+        b"SRU" => Ok(SGroupType::RepeatingUnit),
+        b"MON" => Ok(SGroupType::Monomer),
+        b"MER" => Ok(SGroupType::Mer),
+        b"COP" => Ok(SGroupType::Copolymer),
+        b"CRO" => Ok(SGroupType::Crosslink),
+        b"MOD" => Ok(SGroupType::Modification),
+        b"GRA" => Ok(SGroupType::Graft),
+        b"COM" => Ok(SGroupType::Component),
+        b"MIX" => Ok(SGroupType::Mixture),
+        b"FOR" => Ok(SGroupType::Formulation),
+        b"DAT" => Ok(SGroupType::Data),
+        b"ANY" => Ok(SGroupType::AnyPolymer),
+        b"GEN" => Ok(SGroupType::Generic),
+        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
     })
 }
 
 /// Parse SGroup subtype string
 pub fn sgroup_subtype<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupSubtype, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s: &[u8]| {
-        let s = s.trim_with(|b| b == ' ');
-        match s {
-            b"ALT" => Ok(SGroupSubtype::Alternating),
-            b"RAN" => Ok(SGroupSubtype::Random),
-            b"BLO" => Ok(SGroupSubtype::Block),
-            _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
-        }
+    map_res(take(3usize), move |s: &[u8]| match s {
+        b"ALT" => Ok(SGroupSubtype::Alternating),
+        b"RAN" => Ok(SGroupSubtype::Random),
+        b"BLO" => Ok(SGroupSubtype::Block),
+        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
     })
 }
 
 /// Parse SGroup connectivity string
 pub fn sgroup_connectivity<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupConnectivity, Error = error::Error<&'a [u8]>> {
-    map_res(take(2usize), |s: &[u8]| {
-        let s = s.trim_with(|b| b == ' ');
-        match s {
-            b"HH" => Ok(SGroupConnectivity::HeadToHead),
-            b"HT" => Ok(SGroupConnectivity::HeadToTail),
-            b"EU" => Ok(SGroupConnectivity::EitherUnknown),
-            _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
-        }
+    map_res(take(2usize), move |s: &[u8]| match s {
+        b"HH" => Ok(SGroupConnectivity::HeadToHead),
+        b"HT" => Ok(SGroupConnectivity::HeadToTail),
+        b"EU" => Ok(SGroupConnectivity::EitherUnknown),
+        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
     })
 }
 
@@ -80,10 +71,11 @@ pub fn sgroup_multiplier<'a>(
 
 // Parse SGroup data type string
 pub fn sgroup_data_type<'a>(
+    allow_unicode: bool,
 ) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = error::Error<&'a [u8]>> {
-    map_res(fixed_width_partial(2usize, rest, true, false), |s| {
+    map_res(fixed_width_partial(2usize, rest, true, false), move |s| {
         if let Some(s) = s {
-            let s = s.trim_with(|b| b == ' ');
+            let s = trim_whitespace(s, allow_unicode);
             match s {
                 b"T" | b"" => Ok(SGroupDataType::Text),
                 b"F" => Ok(SGroupDataType::Formatted),
@@ -99,7 +91,7 @@ pub fn sgroup_data_type<'a>(
 // Parse SGroup data display type string
 pub fn sgroup_data_display_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayType, Error = error::Error<&'a [u8]>> {
-    map_res(take(1usize), |s: &[u8]| match s {
+    map_res(take(1usize), move |s: &[u8]| match s {
         b"A" => Ok(SGroupDataDisplayType::Attached),
         b"D" => Ok(SGroupDataDisplayType::Detached),
         _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
@@ -109,7 +101,7 @@ pub fn sgroup_data_display_type<'a>(
 // Parse SGroup data display placement string
 pub fn sgroup_data_display_placement<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayPlacement, Error = error::Error<&'a [u8]>> {
-    map_res(take(1usize), |s: &[u8]| match s {
+    map_res(take(1usize), move |s: &[u8]| match s {
         b"A" => Ok(SGroupDataDisplayPlacement::Absolute),
         b"R" => Ok(SGroupDataDisplayPlacement::Relative),
         _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
@@ -119,7 +111,7 @@ pub fn sgroup_data_display_placement<'a>(
 // Parse SGroup data display units string
 pub fn sgroup_data_display_units<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayUnits, Error = error::Error<&'a [u8]>> {
-    map_res(take(1usize), |s: &[u8]| match s {
+    map_res(take(1usize), move |s: &[u8]| match s {
         b" " => Ok(SGroupDataDisplayUnits::None),
         b"U" => Ok(SGroupDataDisplayUnits::DisplayUnits),
         _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
@@ -128,17 +120,15 @@ pub fn sgroup_data_display_units<'a>(
 
 // Parse SGroup data display chars string
 pub fn sgroup_data_display_chars<'a>(
+    allow_unicode: bool,
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayChars, Error = error::Error<&'a [u8]>> {
-    map_res(take(3usize), |s: &[u8]| {
-        let s = s.trim_with(|b| b == ' ');
-        if s == b"ALL" {
-            Ok(SGroupDataDisplayChars::All)
-            // TODO: Improve parsing
-        } else if let Ok((_, num)) = nom_u32::<_, error::Error<&[u8]>>.parse(s) {
-            Ok(SGroupDataDisplayChars::Number(num))
-        } else {
-            Err(error::Error::new(s, error::ErrorKind::MapRes))
-        }
+    map_parser(take(3usize), move |s: &'a [u8]| {
+        let s = trim_whitespace(s, allow_unicode);
+        alt((
+            value(SGroupDataDisplayChars::All, tag_no_case("ALL")),
+            map(nom_u32, SGroupDataDisplayChars::Number),
+        ))
+        .parse(s)
     })
 }
 
@@ -277,11 +267,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"F ", SGroupDataType::Formatted)]
-    #[case(b"N ", SGroupDataType::Numeric)]
-    #[case(b"T ", SGroupDataType::Text)]
-    fn test_sgroup_data_type(#[case] input: &[u8], #[case] expected: SGroupDataType) {
-        let (remaining, result) = sgroup_data_type().parse(input).unwrap();
+    #[case(b"F ", true, SGroupDataType::Formatted)]
+    #[case(b"N ", true, SGroupDataType::Numeric)]
+    #[case(b"T ", true, SGroupDataType::Text)]
+    #[case(b"  ", false, SGroupDataType::Text)]
+    #[case("\u{00A0}".as_bytes(), true, SGroupDataType::Text)]
+    fn test_sgroup_data_type(
+        #[case] input: &[u8],
+        #[case] allow_unicode: bool,
+        #[case] expected: SGroupDataType,
+    ) {
+        let (remaining, result) = sgroup_data_type(allow_unicode).parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
     }
@@ -293,7 +289,7 @@ mod tests {
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let result = sgroup_data_type().parse(input);
+        let result = sgroup_data_type(true).parse(input);
         assert!(result.is_err());
         assert!(
             matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -395,25 +391,30 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"ALL", SGroupDataDisplayChars::All)]
-    #[case(b"  1", SGroupDataDisplayChars::Number(1))]
+    #[case(b"ALL", true, SGroupDataDisplayChars::All)]
+    #[case(b"  1", false, SGroupDataDisplayChars::Number(1))]
+    #[case("\u{00A0}1".as_bytes(), true, SGroupDataDisplayChars::Number(1))]
     fn test_sgroup_data_display_chars(
         #[case] input: &[u8],
+        #[case] allow_unicode: bool,
         #[case] expected: SGroupDataDisplayChars,
     ) {
-        let (remaining, result) = sgroup_data_display_chars().parse(input).unwrap();
+        let (remaining, result) = sgroup_data_display_chars(allow_unicode)
+            .parse(input)
+            .unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
     }
 
     #[rstest]
     #[case(b"X", "unknown display chars", error::ErrorKind::Eof)]
+    #[case("\u{00A0}1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
     fn test_sgroup_data_display_chars_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let result = sgroup_data_display_chars().parse(input);
+        let result = sgroup_data_display_chars(false).parse(input);
         assert!(result.is_err());
         assert!(
             matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),

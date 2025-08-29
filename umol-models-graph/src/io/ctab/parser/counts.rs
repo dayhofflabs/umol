@@ -72,39 +72,18 @@ fn counts_input_inner<'a>(
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Counts {
-    atoms: i32,      // 'aaa' - number of atoms (max 255)
-    bonds: i32,      // 'bbb' - number of bonds (max 255)
-    atom_lists: i32, // 'lll' - number of atom lists (max 30)
+    pub atoms: i32,      // 'aaa' - number of atoms (max 255)
+    pub bonds: i32,      // 'bbb' - number of bonds (max 255)
+    pub atom_lists: i32, // 'lll' - number of atom lists (max 30)
     // fff is obsolete, skipping
-    chiral_flag: i32,   // 'ccc' - chiral flag (0=not chiral, 1=chiral)
-    stext_entries: i32, // 'sss' - number of stext entries
+    pub chiral_flag: i32,   // 'ccc' - chiral flag (0=not chiral, 1=chiral)
+    pub stext_entries: i32, // 'sss' - number of stext entries
     // xxx is obsolete, skipping
     // rrr is obsolete, skipping
     // ppp is obsolete, skipping
     // iii is obsolete, skipping
-    properties_lines: i32, // 'mmm' - number of additional properties lines
-                           // 'vvvvvv' - version stamp (V2000), fixed string, skipping
-}
-
-impl Counts {
-    pub fn atoms(&self) -> i32 {
-        self.atoms
-    }
-    pub fn bonds(&self) -> i32 {
-        self.bonds
-    }
-    pub fn atom_lists(&self) -> i32 {
-        self.atom_lists
-    }
-    pub fn chiral_flag(&self) -> i32 {
-        self.chiral_flag
-    }
-    pub fn stext_entries(&self) -> i32 {
-        self.stext_entries
-    }
-    pub fn properties_lines(&self) -> i32 {
-        self.properties_lines
-    }
+    pub properties_lines: i32, // 'mmm' - number of additional properties lines
+                               // 'vvvvvv' - version stamp (V2000), fixed string, skipping
 }
 
 #[cfg(test)]
@@ -134,7 +113,6 @@ mod tests {
         #[case] expected: Counts,
     ) {
         let res = all_consuming(counts_input(allow_unicode, false)).parse(input);
-        println!("res: {:?}", res);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(

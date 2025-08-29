@@ -10,8 +10,8 @@ use fast_float::FastFloat;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{
-    digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, u32 as nom_u32, u8 as nom_u8,
-    usize as nom_usize,
+    alpha1, digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, u32 as nom_u32,
+    u8 as nom_u8, usize as nom_usize,
 };
 use nom::combinator::{complete, map, map_opt, opt, recognize, rest, verify};
 use nom::multi::{count as nom_count, separated_list1};
@@ -106,10 +106,13 @@ pub(crate) fn is_all_whitespace_or_zeroes(input: &[u8], allow_unicode: bool) -> 
 }
 
 /// Convert byte slice to string, trimming leading and trailing whitespace
-pub(crate) fn to_string(bytes: &[u8], allow_unicode: bool) -> String {
-    trim_whitespace(bytes, allow_unicode)
-        .to_str_lossy()
-        .into_owned()
+pub(crate) fn to_string(bytes: &[u8], allow_unicode: bool) -> Result<String, error::Error<&[u8]>> {
+    let s = trim_whitespace(bytes, allow_unicode);
+    if !allow_unicode && s.find_non_ascii_byte().is_some() {
+        Err(error::Error::new(bytes, error::ErrorKind::Verify))
+    } else {
+        Ok(s.to_str_lossy().into_owned())
+    }
 }
 
 /// Parse a fixed-width field, making it optional.
@@ -315,14 +318,19 @@ where
 }
 
 /// Parse a fixed-width field as element symbol
-pub(crate) fn fixed_width_element<'a>(
+pub(crate) fn fixed_width_element_partial<'a>(
     width: usize,
     allow_unicode: bool,
-) -> impl Parser<&'a [u8], Output = Element, Error = error::Error<&'a [u8]>> {
-    map_opt(take(width), move |input| {
-        let s = trim_whitespace(input, allow_unicode);
-        Element::from_symbol_bytes(s)
-    })
+) -> impl Parser<&'a [u8], Output = Option<Element>, Error = error::Error<&'a [u8]>> {
+    fixed_width_partial(
+        width,
+        move |s| {
+            let s = trim_whitespace(s, allow_unicode);
+            map_opt(alpha1, Element::from_symbol_bytes).parse(s)
+        },
+        true,
+        allow_unicode,
+    )
 }
 
 /// Padding field of fixed width `width`
@@ -377,7 +385,7 @@ pub(crate) fn fixed_width_str_partial<'a>(
 ) -> impl Parser<&'a [u8], Output = Option<String>, Error = error::Error<&'a [u8]>> {
     map(
         fixed_width_partial(width, rest, true, allow_unicode),
-        move |opt| opt.map(|bytes| to_string(bytes, allow_unicode)),
+        move |opt| opt.and_then(|s| to_string(s, allow_unicode).ok()),
     )
 }
 
