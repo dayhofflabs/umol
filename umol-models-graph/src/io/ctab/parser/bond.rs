@@ -1,13 +1,13 @@
 //! Bond block parser for CTab files.
 
+use crate::io::config::ParseFlags;
+use crate::io::ctab::bond::{Bond, BondLike, BondType};
+use bstr::ByteSlice;
 use nom::character::complete::space0;
 use nom::combinator::{cond, map, map_res};
 use nom::error;
 use nom::sequence::terminated;
 use nom::{Err, IResult, Parser};
-
-use crate::io::config::ParseFlags;
-use crate::io::ctab::bond::{Bond, BondLike, BondType};
 
 use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_dir_code, convert_bond_topology_code,
@@ -90,12 +90,14 @@ pub fn bond_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         let len = input.len();
         let parser = match len {
             10.. => bond_input12,
             9 => bond_input9,
             _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
+
         terminated(move |input| parser(input, flags), space0).parse(input)
     }
 }
@@ -170,7 +172,10 @@ fn bondlike_input_inner<'a>(
 pub fn bondlike_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, BondLike), Error = error::Error<&'a [u8]>> {
-    terminated(bondlike_input_inner(flags), space0)
+    move |input: &'a [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+        terminated(bondlike_input_inner(flags), space0).parse(input)
+    }
 }
 
 #[cfg(test)]

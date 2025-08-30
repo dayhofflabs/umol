@@ -1,5 +1,6 @@
 //! Parsers for CTab property lines.
 
+use bstr::ByteSlice;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{line_ending, not_line_ending, space0, u8 as nom_u8};
@@ -319,37 +320,41 @@ pub fn legacy_atom_list_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
-    map(
-        (
-            fixed_width_int_minus1::<usize>(3, allow_unicode),
-            delimited(
-                verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
-                map_res(take(1usize), |b: &[u8]| match b {
-                    b"T" => Ok(true),
-                    b"F" | b" " => Ok(false),
-                    _ => Err(error::Error::new(b, error::ErrorKind::Tag)),
-                }),
-                verify(take(4usize), move |s| is_all_whitespace(s, allow_unicode)),
-            ),
-            terminated(
-                length_count(
-                    fixed_width_int_in_range::<u8, _>(1, 1..=5, allow_unicode),
-                    map_opt(
-                        fixed_width_int_partial::<u8>(4, allow_unicode),
-                        Element::from_atomic_number,
-                    ),
+    move |input: &'a [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+        map(
+            (
+                fixed_width_int_minus1::<usize>(3, allow_unicode),
+                delimited(
+                    verify(take(1usize), move |s| is_all_whitespace(s, allow_unicode)),
+                    map_res(take(1usize), |b: &[u8]| match b {
+                        b"T" => Ok(true),
+                        b"F" | b" " => Ok(false),
+                        _ => Err(error::Error::new(b, error::ErrorKind::Tag)),
+                    }),
+                    verify(take(4usize), move |s| is_all_whitespace(s, allow_unicode)),
                 ),
-                space0,
+                terminated(
+                    length_count(
+                        fixed_width_int_in_range::<u8, _>(1, 1..=5, allow_unicode),
+                        map_opt(
+                            fixed_width_int_partial::<u8>(4, allow_unicode),
+                            Element::from_atomic_number,
+                        ),
+                    ),
+                    space0,
+                ),
             ),
-        ),
-        |(atom_index, exclusion, elements)| {
-            PropertyEntries::AtomListEntry(AtomListEntry {
-                atom_index,
-                exclusion,
-                elements,
-            })
-        },
-    )
+            |(atom_index, exclusion, elements)| {
+                PropertyEntries::AtomListEntry(AtomListEntry {
+                    atom_index,
+                    exclusion,
+                    elements,
+                })
+            },
+        )
+        .parse(input)
+    }
 }
 
 /// Wrapper for atom_alias_entry (needed for basic_property_block and property_block)
@@ -376,6 +381,7 @@ pub fn basic_property_input<'a>(
     let allow_sgroups = flags.contains(ParseFlags::SGROUPS);
     let allow_clark_extensions = flags.contains(ParseFlags::CLARK_EXTENSIONS);
     move |input: &'a [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         if input.len() < 3 {
             return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
         }
@@ -428,7 +434,8 @@ pub fn basic_property_input<'a>(
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
                             b"M  SMT" => sgroup_subscript_entry(allow_unicode)
-                                .parse(remaining).map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                                .parse(remaining)
+                                .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
                             _ => unreachable!(),
                         }
                     }
@@ -468,6 +475,8 @@ pub fn property_input<'a>(
     let allow_clark_extensions = flags.contains(ParseFlags::CLARK_EXTENSIONS);
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+
         if input.len() < 3 {
             return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
         }
@@ -523,6 +532,7 @@ pub fn property_input<'a>(
                     }
                     // RGroup properties
                     tag @ (b"M  APO" | b"M  AAL" | b"M  RGP" | b"M  LOG") if allow_rgroups => {
+
                         match tag {
                             b"M  APO" => attachment_point_entries(allow_unicode)
                                 .parse(remaining)

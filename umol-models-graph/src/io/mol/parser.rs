@@ -70,7 +70,7 @@ pub(crate) fn mol_file_moleculelike<'a>(
 ) -> impl Parser<&'a [u8], Output = MolFileLike, Error = error::Error<&'a [u8]>> {
     map(
         terminated(
-            (header::header(), ctab_block(ParseFlags::LENIENT)),
+            (header::header(), ctab_block(ParseFlags::LENIENT | ParseFlags::DEBUG)),
             footer(),
         ),
         |(header, molecule)| MolFileLike::new(header, molecule),
@@ -141,7 +141,7 @@ pub fn parse_mol_str(input: &str) -> Result<Molecule> {
 ///
 /// This is the primary parsing function that handles both basic and query molecules.
 pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
-    all_consuming(complete(terminated(mol_file_moleculelike(), multispace0)))
+    all_consuming(complete(mol_file_moleculelike()))
         .parse(input)
         .map(|(_, mol_file)| mol_file.molecule)
         .map_err(|e| {
@@ -154,7 +154,7 @@ pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
 /// This is the high-performance parsing function for basic molecules.
 /// It will fail if the MOL file contains query features.
 pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
-    all_consuming(complete(terminated(mol_file(), multispace0)))
+    all_consuming(complete(mol_file()))
         .parse(input)
         .map(|(_, mol_file)| mol_file.molecule)
         .map_err(|e| DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())

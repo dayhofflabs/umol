@@ -2,9 +2,9 @@
 
 use bstr::ByteSlice;
 use nom::branch::alt;
-use nom::bytes::complete::take;
-use nom::character::complete::space0;
-use nom::combinator::{complete, map, verify};
+use nom::bytes::complete::{is_not, take};
+use nom::character::complete::{line_ending, space0};
+use nom::combinator::{complete, map, map_parser, verify};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Parser};
 
@@ -31,13 +31,16 @@ use crate::io::config::ParseFlags;
 pub fn counts_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
-    terminated(counts_input_inner(flags), space0)
+    map_parser(
+        terminated(is_not("\r\n"), line_ending),
+        terminated(counts_input_inner(flags), space0),
+    )
 }
 
 /// Internal parser for counts_input
 fn counts_input_inner<'a>(
     flags: ParseFlags,
-) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> + 'a {
+) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     map(

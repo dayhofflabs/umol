@@ -1,0 +1,9 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 68
+expression: summary
+---
+atom_count: 4
+bond_count: 4
+sum_formula: C3
+graph6: "C{"

@@ -1,11 +1,11 @@
 //! Atom block parser for CTab files.
 
+use bstr::ByteSlice;
 use nom::bytes::complete::take;
 use nom::character::complete::space0;
 use nom::combinator::{cond, map, map_res, verify};
 use nom::sequence::{preceded, terminated};
 use nom::{error, Err, IResult, Parser};
-
 use umol_data::{Element, NamedIsotope};
 
 use crate::io::config::ParseFlags;
@@ -486,6 +486,7 @@ pub fn atom_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Atom, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         let len = input.len();
         let parser = match len {
             67.. => atom_input69,
@@ -531,7 +532,10 @@ pub fn atom_input<'a>(
 pub fn atomlike_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
-    terminated(atomlike_input_inner(flags), space0)
+    move |input: &'a [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+        terminated(atomlike_input_inner(flags), space0).parse(input)
+    }
 }
 
 // Internal parser for atomlike_input

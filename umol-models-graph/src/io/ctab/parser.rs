@@ -5,7 +5,7 @@
 
 use bstr::{join, ByteSlice};
 use nom::bytes::complete::tag;
-use nom::character::complete::{line_ending, multispace0};
+use nom::character::complete::multispace0;
 use nom::combinator::{all_consuming, opt, value};
 use nom::sequence::terminated;
 use nom::{error, Err, Parser};
@@ -42,14 +42,13 @@ pub fn basic_ctab_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-        let (remaining, counts) = terminated(counts_input(flags), opt(line_ending)).parse(input)?;
+        let (remaining, counts) = counts_input(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
         let (remaining, atoms) = atom_block(atom_count, flags).parse(remaining)?;
         let (remaining, bonds) = bond_block(bond_count, flags).parse(remaining)?;
         let (remaining, properties) = basic_properties_block(flags).parse(remaining)?;
         let (remaining, _) = end_block().parse(remaining)?;
-
         let molecule = build_molecule(atoms, bonds, properties);
         Ok((remaining, molecule))
     }
@@ -64,7 +63,8 @@ pub fn ctab_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = MoleculeLike, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-        let (remaining, counts) = terminated(counts_input(flags), opt(line_ending)).parse(input)?;
+
+        let (remaining, counts) = counts_input(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
         let (remaining, atoms) = atomlike_block(atom_count, flags).parse(remaining)?;
@@ -94,8 +94,7 @@ fn atom_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, atom) =
-                all_consuming(terminated(atom_input(flags), opt(line_ending))).parse(line)?;
+            let (_, atom) = all_consuming(atom_input(flags)).parse(line)?;
             atoms.push(atom);
             consumed += line.len();
         }
@@ -120,8 +119,7 @@ fn atomlike_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, atom) =
-                all_consuming(terminated(atomlike_input(flags), opt(line_ending))).parse(line)?;
+            let (_, atom) = all_consuming(atomlike_input(flags)).parse(line)?;
             atoms.push(atom);
             consumed += line.len();
         }
@@ -146,8 +144,7 @@ fn bond_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, (atom1, atom2, bond)) =
-                all_consuming(terminated(bond_input(flags), opt(line_ending))).parse(line)?;
+            let (_, (atom1, atom2, bond)) = all_consuming(bond_input(flags)).parse(line)?;
             bonds.push((atom1, atom2, bond));
             consumed += line.len();
         }
@@ -172,8 +169,7 @@ fn bondlike_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, (atom1, atom2, bond)) =
-                all_consuming(terminated(bondlike_input(flags), opt(line_ending))).parse(line)?;
+            let (_, (atom1, atom2, bond)) = all_consuming(bondlike_input(flags)).parse(line)?;
             bonds.push((atom1, atom2, bond));
             consumed += line.len();
         }
@@ -193,10 +189,7 @@ fn legacy_atom_list_block<'a>(
         let mut consumed = 0;
 
         while let Some(line) = lines_iter.next() {
-            if let Ok((_, property)) =
-                all_consuming(terminated(legacy_atom_list_input(flags), opt(line_ending)))
-                    .parse(line)
-            {
+            if let Ok((_, property)) = all_consuming(legacy_atom_list_input(flags)).parse(line) {
                 properties.push(property);
                 consumed += line.len();
             } else {
@@ -231,8 +224,7 @@ fn basic_properties_block<'a>(
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
-                        all_consuming(terminated(atom_alias_input(flags), opt(line_ending)))
-                            .parse(&combined_line)
+                        all_consuming(atom_alias_input(flags)).parse(&combined_line)
                     {
                         properties.push(property);
                         consumed += line_bytes;
@@ -243,10 +235,7 @@ fn basic_properties_block<'a>(
                     break; // Incomplete atom alias
                 }
             } else {
-                if let Ok((_, property)) =
-                    all_consuming(terminated(basic_property_input(flags), opt(line_ending)))
-                        .parse(line)
-                {
+                if let Ok((_, property)) = all_consuming(basic_property_input(flags)).parse(line) {
                     properties.push(property);
                     consumed += line.len();
                 } else {
@@ -265,6 +254,7 @@ fn properties_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
+
         let mut properties = Vec::new();
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -281,8 +271,7 @@ fn properties_block<'a>(
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
-                        all_consuming(terminated(atom_alias_input(flags), opt(line_ending)))
-                            .parse(&combined_line)
+                        all_consuming(atom_alias_input(flags)).parse(&combined_line)
                     {
                         properties.push(property);
                         consumed += line_bytes;
@@ -293,9 +282,7 @@ fn properties_block<'a>(
                     break; // Incomplete atom alias
                 }
             } else {
-                if let Ok((_, property)) =
-                    all_consuming(terminated(property_input(flags), opt(line_ending))).parse(line)
-                {
+                if let Ok((_, property)) = all_consuming(property_input(flags)).parse(line) {
                     properties.push(property);
                     consumed += line.len();
                 } else {
