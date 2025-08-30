@@ -11,7 +11,6 @@ use umol_models_graph::io::mol::parser::header::Header;
 enum TestMode {
     Summary,
     Full,
-    // SGroups, etc. would go here
 }
 
 #[derive(Serialize)]
@@ -121,7 +120,7 @@ fn run_test(path: &Path, mode: TestMode) {
     }
 }
 
-fn run_test_standard(path: &Path, mode: TestMode) {
+fn run_basic_test(path: &Path, mode: TestMode) {
     let path_str = path.to_str().unwrap();
     let category = get_category(path);
     let expected_success = path_str.contains("/valid/") || path_str.contains("data/");
@@ -130,10 +129,14 @@ fn run_test_standard(path: &Path, mode: TestMode) {
 
     let result = parse_mol(&mol_bytes).map(|mol| MolFile { header: Header::new(String::new(), String::new(), String::new()), molecule: mol });
     if expected_success {
+        if let Err(ref e) = result {
+            eprintln!("Parse error for {}: {:?}", path.display(), e);
+        }
         assert!(
             result.is_ok(),
-            "Expected parsing to succeed, but it failed for file: {}",
-            path.display()
+            "Expected parsing to succeed, but it failed for file: {} with error: {:?}",
+            path.display(),
+            result.as_ref().err()
         );
     } else {
         assert!(
@@ -165,13 +168,13 @@ macro_rules! set_snapshot_suffix {
 }
 
 #[rstest]
-fn test_summary_basic_standard(#[files("tests/mol_parsing/data/basic/*.mol")] file_path: PathBuf) {
+fn test_summary_basic(#[files("tests/mol_parsing/data/basic/*.mol")] file_path: PathBuf) {
     set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
-    run_test_standard(&file_path, TestMode::Summary);
+    run_basic_test(&file_path, TestMode::Summary);
 }
 
 #[rstest]
-fn test_summary_basic(#[files("tests/mol_parsing/data/basic/*.mol")] file_path: PathBuf) {
+fn test_summary_basic2(#[files("tests/mol_parsing/data/basic/*.mol")] file_path: PathBuf) {
     set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
     run_test(&file_path, TestMode::Summary);
 }

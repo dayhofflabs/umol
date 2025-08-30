@@ -5,7 +5,7 @@
 
 use bstr::{join, ByteSlice};
 use nom::bytes::complete::tag;
-use nom::character::complete::line_ending;
+use nom::character::complete::{line_ending, multispace0};
 use nom::combinator::{all_consuming, opt, value};
 use nom::sequence::terminated;
 use nom::{error, Err, Parser};
@@ -33,16 +33,16 @@ use super::bond::{Bond, BondLike};
 use super::molecule::{Molecule, MoleculeLike};
 use crate::io::config::ParseFlags;
 
-/// Parse CTAB block (standard parser, optimized for performance, standard molecules only)
+/// Parse CTAB block (basic parser, optimized for performance, basic molecules only)
 ///
-/// Parses from the counts line through M END, returning a MoleculeStandard.
-/// This parser is optimized for standard molecules without query features.
-/// It will fail if the CTAB contains query atoms, query bonds, or other non-standard features.
+/// Parses from the counts line through M END, returning a Molecule.
+/// This parser is optimized for basic molecules without query features.
+/// It will fail if the CTAB contains query atoms, query bonds, or other advanced features.
 pub fn basic_ctab_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-        let (remaining, counts) = terminated(counts_input(flags), line_ending).parse(input)?;
+        let (remaining, counts) = terminated(counts_input(flags), opt(line_ending)).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
         let (remaining, atoms) = atom_block(atom_count, flags).parse(remaining)?;
@@ -64,7 +64,7 @@ pub fn ctab_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = MoleculeLike, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-        let (remaining, counts) = terminated(counts_input(flags), line_ending).parse(input)?;
+        let (remaining, counts) = terminated(counts_input(flags), opt(line_ending)).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
         let (remaining, atoms) = atomlike_block(atom_count, flags).parse(remaining)?;
@@ -94,7 +94,8 @@ fn atom_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, atom) = all_consuming(terminated(atom_input(flags), opt(line_ending))).parse(line)?;
+            let (_, atom) =
+                all_consuming(terminated(atom_input(flags), opt(line_ending))).parse(line)?;
             atoms.push(atom);
             consumed += line.len();
         }
@@ -119,7 +120,8 @@ fn atomlike_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, atom) = all_consuming(terminated(atomlike_input(flags), opt(line_ending))).parse(line)?;
+            let (_, atom) =
+                all_consuming(terminated(atomlike_input(flags), opt(line_ending))).parse(line)?;
             atoms.push(atom);
             consumed += line.len();
         }
@@ -144,7 +146,8 @@ fn bond_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, (atom1, atom2, bond)) = all_consuming(terminated(bond_input(flags), opt(line_ending))).parse(line)?;
+            let (_, (atom1, atom2, bond)) =
+                all_consuming(terminated(bond_input(flags), opt(line_ending))).parse(line)?;
             bonds.push((atom1, atom2, bond));
             consumed += line.len();
         }
@@ -169,7 +172,8 @@ fn bondlike_block<'a>(
                 .next()
                 .ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::Eof)))?;
 
-            let (_, (atom1, atom2, bond)) = all_consuming(terminated(bondlike_input(flags), opt(line_ending))).parse(line)?;
+            let (_, (atom1, atom2, bond)) =
+                all_consuming(terminated(bondlike_input(flags), opt(line_ending))).parse(line)?;
             bonds.push((atom1, atom2, bond));
             consumed += line.len();
         }
@@ -189,7 +193,10 @@ fn legacy_atom_list_block<'a>(
         let mut consumed = 0;
 
         while let Some(line) = lines_iter.next() {
-            if let Ok((_, property)) = all_consuming(terminated(legacy_atom_list_input(flags), opt(line_ending))).parse(line) {
+            if let Ok((_, property)) =
+                all_consuming(terminated(legacy_atom_list_input(flags), opt(line_ending)))
+                    .parse(line)
+            {
                 properties.push(property);
                 consumed += line.len();
             } else {
@@ -224,7 +231,8 @@ fn basic_properties_block<'a>(
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
-                        all_consuming(terminated(atom_alias_input(flags), opt(line_ending))).parse(&combined_line)
+                        all_consuming(terminated(atom_alias_input(flags), opt(line_ending)))
+                            .parse(&combined_line)
                     {
                         properties.push(property);
                         consumed += line_bytes;
@@ -235,7 +243,10 @@ fn basic_properties_block<'a>(
                     break; // Incomplete atom alias
                 }
             } else {
-                if let Ok((_, property)) = all_consuming(terminated(basic_property_input(flags), opt(line_ending))).parse(line) {
+                if let Ok((_, property)) =
+                    all_consuming(terminated(basic_property_input(flags), opt(line_ending)))
+                        .parse(line)
+                {
                     properties.push(property);
                     consumed += line.len();
                 } else {
@@ -270,7 +281,8 @@ fn properties_block<'a>(
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
-                        all_consuming(terminated(atom_alias_input(flags), opt(line_ending))).parse(&combined_line)
+                        all_consuming(terminated(atom_alias_input(flags), opt(line_ending)))
+                            .parse(&combined_line)
                     {
                         properties.push(property);
                         consumed += line_bytes;
@@ -281,7 +293,9 @@ fn properties_block<'a>(
                     break; // Incomplete atom alias
                 }
             } else {
-                if let Ok((_, property)) = all_consuming(terminated(property_input(flags), opt(line_ending))).parse(line) {
+                if let Ok((_, property)) =
+                    all_consuming(terminated(property_input(flags), opt(line_ending))).parse(line)
+                {
                     properties.push(property);
                     consumed += line.len();
                 } else {
@@ -297,7 +311,7 @@ fn properties_block<'a>(
 
 /// Parse end block (M END line)
 fn end_block<'a>() -> impl Parser<&'a [u8], Output = (), Error = error::Error<&'a [u8]>> {
-    value((), opt(terminated(tag("M  END"), opt(line_ending))))
+    value((), opt(terminated(tag("M  END"), multispace0)))
 }
 
 /// Build molecule

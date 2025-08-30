@@ -6,28 +6,25 @@ use nom::error;
 use nom::sequence::terminated;
 use nom::{Err, IResult, Parser};
 
-use crate::io::ctab::bond::{Bond, BondLike, BondType};
 use crate::io::config::ParseFlags;
+use crate::io::ctab::bond::{Bond, BondLike, BondType};
 
 use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_dir_code, convert_bond_topology_code,
-    convert_bond_type_code, convert_bond_type_code_standard,
+    convert_bond_type_code, convert_bondlike_type_code,
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_n};
 
-/// Parse standard bond inputs with 12-21 characters (s. `bond_input` for more details).
+/// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input12(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], (usize, usize, Bond)> {
+fn bond_input12(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let first_atom = fixed_width_int_minus1::<usize>(3, allow_unicode);
     let second_atom = fixed_width_int_minus1::<usize>(3, allow_unicode);
     let bond_type = map_res(
         fixed_width_int::<u8>(3, allow_unicode),
-        convert_bond_type_code_standard,
+        convert_bond_type_code,
     );
     let stereo_dir = map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
         convert_bond_stereo_dir_code(code, false)
@@ -55,19 +52,16 @@ fn bond_input12(
     .parse(input)
 }
 
-/// Parse standard bond inputs with 9 characters (s. `bond_input` for more details).
+/// Parse  bond inputs with 9 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input9(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], (usize, usize, Bond)> {
+fn bond_input9(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     map(
         (
             fixed_width_int_minus1::<usize>(3, allow_unicode),
             fixed_width_int_minus1::<usize>(3, allow_unicode),
             map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
-                convert_bond_type_code_standard(code)
+                convert_bond_type_code(code)
             }),
         ),
         |(first_atom, second_atom, bond_type)| (first_atom, second_atom, Bond::new(bond_type)),
@@ -76,7 +70,7 @@ fn bond_input9(
 }
 
 /// Parse bond input (optimized for performance)
-/// Fails immediately on non-standard bond properties. For parsing all bond types, see bond_like_input.
+/// Fails immediately on query bond properties. For parsing all bond types, see bondlike_input.
 ///
 /// "111222tttsssxxxrrrccc" (21 characters wide)
 ///
@@ -102,11 +96,7 @@ pub fn bond_input<'a>(
             9 => bond_input9,
             _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
-        terminated(
-            move |input| parser(input, flags),
-            space0,
-        )
-        .parse(input)
+        terminated(move |input| parser(input, flags), space0).parse(input)
     }
 }
 
@@ -122,7 +112,7 @@ fn bondlike_input_inner<'a>(
 
         // Bond type
         let (i, bond_type) = map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
-            convert_bond_type_code(code, false)
+            convert_bondlike_type_code(code, false)
         })
         .parse(i)?;
 

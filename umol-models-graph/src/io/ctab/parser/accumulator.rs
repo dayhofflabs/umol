@@ -1,7 +1,7 @@
 //! Accumulator for molecular properties from a CTAB file
 use super::context::Context;
 use super::convert::{
-    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_bond_type_code,
+    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_bondlike_type_code,
     convert_radical_type_code, convert_ring_bond_count_code, convert_substitution_count_code,
     convert_unsaturated_atom_code,
 };
@@ -998,7 +998,7 @@ impl MoleculeProperties {
     fn apply_atomlike_zero_order_bonds(&self, molecule: &mut MoleculeLike) -> Result<()> {
         for (bond_index, props) in &self.bond_properties {
             if let Some(bond) = molecule.bond_mut(*bond_index) {
-                bond.bond_type = convert_bond_type_code(props.order_override.unwrap(), true)?;
+                bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true)?;
             } else {
                 return Err(DataError::InvalidFragment(format!(
                     "Zero-order bond for undefined bond {}",
@@ -1019,7 +1019,7 @@ impl MoleculeProperties {
         let bond = molecule
             .bond_mut(bond_index)
             .ok_or_else(|| DataError::MissingBondIndex(bond_index))?;
-        bond.bond_type = convert_bond_type_code(props.order_override.unwrap(), true)?;
+        bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true)?;
         Ok(())
     }
 

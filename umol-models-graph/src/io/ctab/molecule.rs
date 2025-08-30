@@ -69,7 +69,7 @@ fn format_sum_formula(
     sum_formula
 }
 
-/// Graph-based molecule representation for standard (non-query) molecules only
+/// Graph-based molecule representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Molecule {
     pub graph: StableGraph<Atom, Bond, Undirected, usize>,
@@ -204,7 +204,7 @@ impl Molecule {
     }
 }
 
-/// Graph-based molecule representation with full MOL file semantics (including queries)
+/// Graph-based molecule representation for molecule-like objects
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MoleculeLike {
     pub graph: StableGraph<AtomLike, BondLike, Undirected, usize>,
@@ -213,7 +213,7 @@ pub struct MoleculeLike {
 }
 
 impl MoleculeLike {
-    /// Create empty standard molecule
+    /// Create empty molecule
     pub fn new() -> Self {
         Self {
             graph: StableGraph::<AtomLike, BondLike, Undirected, usize>::default(),

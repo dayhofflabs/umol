@@ -157,7 +157,7 @@ M  END
     let result = basic_ctab_block(flags).parse(ctab_data);
     assert!(
         result.is_err(),
-        "Standard parser should fail on query features"
+        "Basic parser should fail on query features"
     );
 }
 

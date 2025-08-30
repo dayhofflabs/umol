@@ -428,8 +428,7 @@ pub fn basic_property_input<'a>(
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
                             b"M  SMT" => sgroup_subscript_entry(allow_unicode)
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                                .parse(remaining).map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
                             _ => unreachable!(),
                         }
                     }

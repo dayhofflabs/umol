@@ -25,18 +25,18 @@ bitflags! {
         // const RESERVED_6 = 16384;
         // const RESERVED_7 = 32768;
 
-        // Non-standard ergonomic features (bits 16-23)
+        // Ergonomic features (bits 16-23)
         const UNICODE = 65536;            // Unicode whitespace handling
         const STRICT_PADDING = 131072;    // Extra field validation
+        const DEBUG = 262144;             // Debug output during parsing
 
         // Presets
         const MINIMAL = Self::NAMED_ISOTOPES.bits();
         const BASIC = Self::MINIMAL .bits() | Self::SGROUPS.bits() | Self::CLARK_EXTENSIONS.bits();
         const EXTENDED = Self::BASIC.bits() | Self::QUERIES.bits() | Self::RGROUPS.bits() | Self::ELECTRONS.bits() | Self::LEGACY_FEATURES.bits();
-        const FULL = Self::EXTENDED.bits() | Self::ADVANCED_SGROUPS.bits();
-        const ALL = Self::FULL.bits() | Self::EXTENDED_QUERIES.bits();
+        const FULL = Self::EXTENDED.bits() | Self::ADVANCED_SGROUPS.bits() | Self::EXTENDED_QUERIES.bits();
         const STRICT = Self::MINIMAL.bits() | Self::STRICT_PADDING.bits();
-        const LENIENT = Self::ALL.bits() | Self::UNICODE.bits();
+        const LENIENT = Self::FULL.bits() | Self::UNICODE.bits();
     }
 }
 
@@ -68,6 +68,14 @@ impl ParsingConfig {
 
     pub fn full() -> Self {
         Self::with_flags(ParseFlags::FULL)
+    }
+
+    pub fn strict() -> Self {
+        Self::with_flags(ParseFlags::STRICT)
+    }
+
+    pub fn lenient() -> Self {
+        Self::with_flags(ParseFlags::LENIENT)
     }
 }
 

@@ -56,15 +56,15 @@ fn atom_symbol<'a>(
 /// --------------------------------------------------------------------------------
 /// | Symbol      | Type          | Parser* | Notes                                |
 /// --------------------------------------------------------------------------------
-/// | H-Og        | Element       | S, A    |                                      |
-/// | D, T        | Named Isotope | S, A    | Heavy H isotopes as extension        |
+/// | H-Og        | Element       | B, A    |                                      |
+/// | D, T        | Named Isotope | B, A    | Heavy H isotopes as extension        |
 /// | L           | Atom List     | A       | Query molecules                      |
 /// | *,A,Q,X,M   | Query Atom    | A       | Query molecules, rarely in oligomers |
 /// | AH,QH,XH,MH | Query Atom    | A       | Query molecules, CXSMILES extension  |
 /// | LP          | Lone Pair     | A       | Rarely used                          |
 /// | R#          | R Group       | A       | Query molecules                      |
 /// --------------------------------------------------------------------------------
-/// | *Parsers: S: standard, A: all                                                |
+/// | *Parsers: B: basic, A: all                                                   |
 /// --------------------------------------------------------------------------------
 ///
 /// If `allow_unicode` is true, allow unicode whitespace.
@@ -256,7 +256,7 @@ fn atom_input51(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::
     .parse(input)
 }
 
-/// Parse standard atom inputs with 42-48 characters including up to 6 characters of ignored data
+/// Parse atom inputs with 42-48 characters including up to 6 characters of ignored data
 /// (s. `atom_input` for more details). Lacks trailing valence and atom mapping fields
 /// (substituted by defaults).
 ///
@@ -464,8 +464,8 @@ fn atom_input34(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::
     .parse(input)
 }
 
-/// Parse standard atom input (optimized for performance)
-/// Fails immediately on non-standard atom symbols. For parsing all atom types, see atom_like_input.
+/// Parse atom input (optimized for performance)
+/// Fails immediately on atomlike symbols. For parsing all atom types, see atomlike_input.
 ///
 /// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
 ///
@@ -501,7 +501,7 @@ pub fn atom_input<'a>(
 }
 
 /// Parse atom and atom-like input
-/// Allows all atom types. For faster parsing of standard molecules, see atom_input.
+/// Allows all atom types. For faster parsing of basic molecules, see atom_input.
 ///
 /// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
 ///

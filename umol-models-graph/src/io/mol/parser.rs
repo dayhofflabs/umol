@@ -8,8 +8,9 @@ use nom::{error, Parser};
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use serde::{Deserialize, Serialize};
 
+use crate::io::config::ParseFlags;
 use crate::io::ctab::molecule::{Molecule, MoleculeLike};
-use crate::io::ctab::parser::{ctab_block, ctab_moleculelike_block};
+use crate::io::ctab::parser::{basic_ctab_block, ctab_block};
 use crate::io::mol::parser::header::Header;
 
 pub mod header;
@@ -50,9 +51,16 @@ pub(crate) fn footer<'a>() -> impl Parser<&'a [u8], Output = (), Error = error::
 }
 
 /// Parse complete MOL file (header + CTAB block)
-pub(crate) fn mol_file<'a>() -> impl Parser<&'a [u8], Output = MolFile, Error = error::Error<&'a [u8]>> {
+pub(crate) fn mol_file<'a>(
+) -> impl Parser<&'a [u8], Output = MolFile, Error = error::Error<&'a [u8]>> {
     map(
-        terminated((header::header(), ctab_block()), footer()),
+        terminated(
+            (
+                header::header(),
+                basic_ctab_block(ParseFlags::BASIC | ParseFlags::DEBUG),
+            ),
+            footer(),
+        ),
         |(header, molecule)| MolFile::new(header, molecule),
     )
 }
@@ -61,24 +69,27 @@ pub(crate) fn mol_file<'a>() -> impl Parser<&'a [u8], Output = MolFile, Error = 
 pub(crate) fn mol_file_moleculelike<'a>(
 ) -> impl Parser<&'a [u8], Output = MolFileLike, Error = error::Error<&'a [u8]>> {
     map(
-        terminated((header::header(), ctab_moleculelike_block()), footer()),
+        terminated(
+            (header::header(), ctab_block(ParseFlags::LENIENT)),
+            footer(),
+        ),
         |(header, molecule)| MolFileLike::new(header, molecule),
     )
 }
 
-/// Check if molecule contains non-standardquery features
+/// Check if molecule contains advanced features
 ///
 /// Returns true if the molecule contains any features that are not supported
-/// in the standard MOL format, including:
+/// in the basic MOL format, including:
 /// - Query atom symbols (atom lists, R-groups, etc.)
 /// - Query bond types (SingleOrDouble, Any, Zero, etc.)
 /// - Query-specific properties (ring bond count, topology, etc.)
-pub fn has_nonstandard_features(molecule: &MoleculeLike) -> bool {
-    // Check atoms for non-standard features
+pub fn has_advanced_features(molecule: &MoleculeLike) -> bool {
+    // Check atoms for advanced features
     for node_idx in molecule.graph.node_indices() {
         if let Some(atomlike) = molecule.graph.node_weight(node_idx) {
-            // Non-standard atom features
-            if !atomlike.symbol.is_standard()
+            // Advanced atom features
+            if atomlike.symbol.is_atomlike()
                 || atomlike.attachment_point.is_some()
                 || atomlike.attachment_order.is_some()
                 || atomlike.ring_bond_count.is_some()
@@ -91,10 +102,10 @@ pub fn has_nonstandard_features(molecule: &MoleculeLike) -> bool {
         }
     }
 
-    // Non-standard bond features
+    // Advanced bond features
     for edge_ref in molecule.graph.edge_references() {
         if let Some(bond) = molecule.graph.edge_weight(edge_ref.id()) {
-            if !bond.bond_type.is_standard()
+            if bond.bond_type.is_bondlike()
                 || bond.topology.map_or(false, |t| !t.is_default())
                 || bond.reacting_center.map_or(false, |r| !r.is_default())
             {
@@ -103,7 +114,7 @@ pub fn has_nonstandard_features(molecule: &MoleculeLike) -> bool {
         }
     }
 
-    // S-groups (non-standard feature)
+    // S-groups (advanced features)
     if !molecule.sgroups.is_empty() {
         return true;
     }
@@ -113,14 +124,14 @@ pub fn has_nonstandard_features(molecule: &MoleculeLike) -> bool {
 
 /// Parse a MOL string into a Molecule
 ///
-/// This is the main parsing function that handles both standard and query molecules.
+/// This is the main parsing function that handles both basic and query molecules.
 pub fn parse_mol_moleculelike_str(input: &str) -> Result<MoleculeLike> {
     parse_mol_moleculelike(input.as_bytes())
 }
 
-/// Parse a MOL string into a Molecule (optimized, standard molecules only)
+/// Parse a MOL string into a Molecule (optimized, basic molecules only)
 ///
-/// This is the high-performance parsing function for standard molecules.
+/// This is the high-performance parsing function for basic molecules.
 /// It will fail if the MOL file contains query features.
 pub fn parse_mol_str(input: &str) -> Result<Molecule> {
     parse_mol(input.as_bytes())
@@ -128,7 +139,7 @@ pub fn parse_mol_str(input: &str) -> Result<Molecule> {
 
 /// Parse MOL bytes into a Molecule
 ///
-/// This is the primary parsing function that handles both standard and query molecules.
+/// This is the primary parsing function that handles both basic and query molecules.
 pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
     all_consuming(complete(terminated(mol_file_moleculelike(), multispace0)))
         .parse(input)
@@ -138,17 +149,15 @@ pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
         })
 }
 
-/// Parse MOL bytes into a MoleculeStandard (optimized, standard molecules only)
+/// Parse MOL bytes into a Molecule (optimized, basic molecules only)
 ///
-/// This is the high-performance parsing function for standard molecules.
+/// This is the high-performance parsing function for basic molecules.
 /// It will fail if the MOL file contains query features.
 pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
     all_consuming(complete(terminated(mol_file(), multispace0)))
         .parse(input)
         .map(|(_, mol_file)| mol_file.molecule)
-        .map_err(|e| {
-            DataError::InvalidMolFormat(format!("Standard MOL parsing failed: {:?}", e)).into()
-        })
+        .map_err(|e| DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())
 }
 
 #[cfg(test)]

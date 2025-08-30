@@ -285,9 +285,9 @@ mod tests {
         atom.hydrogen_count = Some(3);
         atom.position = Some(nalgebra::Point3::new(1.5, -2.3, 0.8));
 
-        let yaml = serde_yaml::to_string(&atom).expect("Failed to serialize AtomStandard to YAML");
+        let yaml = serde_yaml::to_string(&atom).expect("Failed to serialize Atom to YAML");
         let deserialized: Atom =
-            serde_yaml::from_str(&yaml).expect("Failed to deserialize AtomStandard from YAML");
+            serde_yaml::from_str(&yaml).expect("Failed to deserialize Atom from YAML");
         assert_eq!(atom, deserialized);
     }
 

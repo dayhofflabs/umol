@@ -17,10 +17,10 @@ pub(crate) fn convert_atom_mass_diff_code(code: i8) -> Option<i8> {
     }
 }
 
-/// Convert standard atom symbol and mass difference to element and isotope mass
+/// Convert atom symbol and mass difference to element and isotope mass
 /// 'ss' field: atom symbol, 'dd' field: mass difference
 /// Processes elements and named isotopes.
-/// Returns error for non-standard atom symbols (L, A, Q, *, LP, R#)
+/// Returns error for atomlike symbols (L, A, Q, *, LP, R#)
 pub(crate) fn convert_atom_symbol_mass_diff(
     symbol: AtomSymbol,
     mass_diff: Option<i8>,
@@ -34,7 +34,7 @@ pub(crate) fn convert_atom_symbol_mass_diff(
             (e, isotope_mass)
         }
         AtomSymbol::NamedIsotope(i) => (i.element(), Some(i.mass_number())),
-        _ => unreachable!("atom_symbol_standard() should only return Element or NamedIsotope"),
+        _ => unreachable!("atom_symbol() should only return Element or NamedIsotope"),
     };
     (element, isotope_mass)
 }
@@ -72,13 +72,13 @@ pub(crate) fn convert_atom_isotope_mass_number(
 
 /// Convert atom stereo parity code (not stereo, odd, even, either or unmarked).
 // 'sss' field: 0 = not stereo, 1 = odd, 2 = even, 3 = either or unmarked
-/// nonstandard: if true, include default values (code 0), if false, return None for defaults
+/// use_defaults: if true, include default values (code 0), if false, return None for defaults
 pub(crate) fn convert_atom_stereo_parity_code(
     code: u8,
-    nonstandard: bool,
+    use_defaults: bool,
 ) -> Result<Option<AtomStereoParity>> {
     match code {
-        0 if nonstandard => Ok(Some(AtomStereoParity::default())),
+        0 if use_defaults => Ok(Some(AtomStereoParity::default())),
         0 => Ok(None),
         1 => Ok(Some(AtomStereoParity::Odd)),
         2 => Ok(Some(AtomStereoParity::Even)),
@@ -87,7 +87,8 @@ pub(crate) fn convert_atom_stereo_parity_code(
     }
 }
 
-/// Convert atom hydrogen count code (non-standard: 0 in non-query atoms).
+/// TODO: Consider adding a flag
+/// Convert atom hydrogen count code (extension: 0 in non-query atoms).
 /// 'hhh' field: 0 = non-query atom, 1 = H0, 2 = H1, 3 = H2, 4 = H3, 5 = H4
 pub(crate) fn convert_atom_hydrogen_count_code(code: u8) -> Result<Option<u8>> {
     match code {
@@ -143,15 +144,15 @@ pub(crate) fn convert_atom_exact_change_flag_code(code: u8) -> Result<Option<Ato
     }
 }
 
-/// Convert bond type code (standard molecules only)
+/// Convert bond type code (basic molecules only)
 /// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic)
-pub(crate) fn convert_bond_type_code_standard(code: u8) -> Result<BondType> {
+pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
     match code {
         1 => Ok(BondType::Single),
         2 => Ok(BondType::Double),
         3 => Ok(BondType::Triple),
         4 => Ok(BondType::Aromatic),
-        _ => Err(ParseError::Invalid(format!("Invalid standard bond type code '{}'", code)).into()),
+        _ => Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into()),
     }
 }
 
@@ -159,9 +160,8 @@ pub(crate) fn convert_bond_type_code_standard(code: u8) -> Result<BondType> {
 /// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic, 5=SingleOrDouble,
 /// 6=SingleOrAromatic, 7=DoubleOrAromatic, 8=Any)
 /// zero_ok: true for ZBO property, false for bond block
-pub(crate) fn convert_bond_type_code(code: u8, zero_ok: bool) -> Result<BondType> {
+pub(crate) fn convert_bondlike_type_code(code: u8, zero_ok: bool) -> Result<BondType> {
     match code {
-        0 if zero_ok => Ok(BondType::Zero),
         1 => Ok(BondType::Single),
         2 => Ok(BondType::Double),
         3 => Ok(BondType::Triple),
@@ -170,10 +170,10 @@ pub(crate) fn convert_bond_type_code(code: u8, zero_ok: bool) -> Result<BondType
         6 => Ok(BondType::SingleOrAromatic),
         7 => Ok(BondType::DoubleOrAromatic),
         8 => Ok(BondType::Any),
-        0 => Err(ParseError::Invalid(
-            "Zero-order bonds not allowed in standard bond block".to_string(),
-        )
-        .into()),
+        0 if zero_ok => Ok(BondType::Zero),
+        0 => Err(
+            ParseError::Invalid("Zero-order bonds not allowed in bond block".to_string()).into(),
+        ),
         _ => Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into()),
     }
 }
@@ -182,13 +182,13 @@ pub(crate) fn convert_bond_type_code(code: u8, zero_ok: bool) -> Result<BondType
 /// 'sss' field - can mean stereo for double bonds or direction for single bonds
 /// Stereo: (0=Not stereo, 1=Up, 3=Either, 4=Unknown, 6=Down)
 /// Direction: (1=Up, 6=Down)
-/// nonstandard: if true, include default values (code 0), if false, return None for defaults
+/// use_defaults: if true, include default values (code 0), if false, return None for defaults
 pub(crate) fn convert_bond_stereo_dir_code(
     code: u8,
-    nonstandard: bool,
+    use_defaults: bool,
 ) -> Result<(Option<BondStereo>, Option<BondDir>)> {
     match code {
-        0 if nonstandard => Ok((Some(BondStereo::default()), Some(BondDir::default()))),
+        0 if use_defaults => Ok((Some(BondStereo::default()), Some(BondDir::default()))),
         0 => Ok((None, None)),
         1 => Ok((Some(BondStereo::Cis), Some(BondDir::Wedge))),
         3 | 4 => Ok((Some(BondStereo::Either), Some(BondDir::Either))),
@@ -201,13 +201,13 @@ pub(crate) fn convert_bond_stereo_dir_code(
 
 /// Convert bond topology code
 /// 'rrr' field - bond topology (0=Either, 1=Ring, 2=Chain)
-/// nonstandard: if true, include default values (code 0), if false, return None for defaults
+/// use_defaults: if true, include default values (code 0), if false, return None for defaults
 pub(crate) fn convert_bond_topology_code(
     code: u8,
-    nonstandard: bool,
+    use_defaults: bool,
 ) -> Result<Option<BondTopology>> {
     match code {
-        0 if nonstandard => Ok(Some(BondTopology::Either)),
+        0 if use_defaults => Ok(Some(BondTopology::Either)),
         0 => Ok(None),
         1 => Ok(Some(BondTopology::Ring)),
         2 => Ok(Some(BondTopology::Chain)),
@@ -218,13 +218,13 @@ pub(crate) fn convert_bond_topology_code(
 /// Convert bond reacting center code
 /// 'ccc' field - bond reacting center (0=Not reacting, 1=Reacting, -1=Not a center,
 /// 2=No change, 4=Bond made/broken, 8=Bond order changes)
-/// nonstandard: if true, include default values (code 0), if false, return None for defaults
+/// use_defaults: if true, include default values (code 0), if false, return None for defaults
 pub(crate) fn convert_bond_reacting_center_code(
     code: i8,
-    nonstandard: bool,
+    use_defaults: bool,
 ) -> Result<Option<BondReactingCenter>> {
     if code == 0 {
-        if nonstandard {
+        if use_defaults {
             return Ok(Some(BondReactingCenter::UNMARKED));
         } else {
             return Ok(None);
@@ -447,16 +447,16 @@ mod tests {
     #[case(3, Some(AtomStereoParity::Either), Some(AtomStereoParity::Either))]
     fn test_convert_atom_stereo_parity_code(
         #[case] code: u8,
-        #[case] expected_nonstandard: Option<AtomStereoParity>,
-        #[case] expected_standard: Option<AtomStereoParity>,
+        #[case] expected_default: Option<AtomStereoParity>,
+        #[case] expected_basic: Option<AtomStereoParity>,
     ) {
         assert_eq!(
             convert_atom_stereo_parity_code(code, true).unwrap(),
-            expected_nonstandard
+            expected_default
         );
         assert_eq!(
             convert_atom_stereo_parity_code(code, false).unwrap(),
-            expected_standard
+            expected_basic
         );
     }
 
@@ -572,6 +572,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case(1, BondType::Single)]
+    #[case(2, BondType::Double)]
+    #[case(3, BondType::Triple)]
+    #[case(4, BondType::Aromatic)]
+    fn test_convert_bond_type_code(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(convert_bond_type_code(code).unwrap(), expected);
+    }
+
+    #[rstest]
     #[case(1u8, BondType::Single)]
     #[case(2u8, BondType::Double)]
     #[case(3u8, BondType::Triple)]
@@ -580,16 +589,16 @@ mod tests {
     #[case(6u8, BondType::SingleOrAromatic)]
     #[case(7u8, BondType::DoubleOrAromatic)]
     #[case(8u8, BondType::Any)]
-    fn test_convert_bond_type_code(#[case] code: u8, #[case] expected: BondType) {
-        assert_eq!(convert_bond_type_code(code, false).unwrap(), expected);
+    fn test_convert_bondlike_type_code(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(convert_bondlike_type_code(code, false).unwrap(), expected);
     }
 
     #[rstest]
     #[case(0u8, "zero-order bond")]
     #[case(9u8, "invalid bond type")]
-    fn test_convert_bond_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
+    fn test_convert_bondlike_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
-            convert_bond_type_code(code, false).is_err(),
+            convert_bondlike_type_code(code, false).is_err(),
             "{} should have failed",
             desc
         );
@@ -598,60 +607,51 @@ mod tests {
     #[rstest]
     #[case(0u8, BondType::Zero)]
     #[case(1u8, BondType::Single)]
-    fn test_convert_bond_type_code_zero_ok(#[case] code: u8, #[case] expected: BondType) {
-        assert_eq!(convert_bond_type_code(code, true).unwrap(), expected);
+    fn test_convert_bondlike_type_code_zero_ok(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(convert_bondlike_type_code(code, true).unwrap(), expected);
     }
 
     #[rstest]
     #[case(9u8, "invalid bond type")]
-    fn test_convert_bond_type_code_zero_ok_invalid(#[case] code: u8, #[case] desc: &str) {
+    fn test_convert_bondlike_type_code_zero_ok_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
-            convert_bond_type_code(code, true).is_err(),
+            convert_bondlike_type_code(code, true).is_err(),
             "{} should have failed",
             desc
         );
         assert!(
-            convert_bond_type_code(code, false).is_err(),
+            convert_bondlike_type_code(code, false).is_err(),
             "{} should have failed",
             desc
         );
-    }
-
-    #[rstest]
-    #[case(1, BondType::Single)]
-    #[case(2, BondType::Double)]
-    #[case(3, BondType::Triple)]
-    #[case(4, BondType::Aromatic)]
-    fn test_convert_bond_type_code_standard(#[case] code: u8, #[case] expected: BondType) {
-        assert_eq!(convert_bond_type_code_standard(code).unwrap(), expected);
     }
 
     #[rstest]
     #[case(0)]
     #[case(5)]
     #[case(8)]
-    fn test_convert_bond_type_code_standard_invalid(#[case] code: u8) {
-        assert!(convert_bond_type_code_standard(code).is_err());
+    fn test_convert_bond_type_code_invalid(#[case] code: u8) {
+        assert!(convert_bond_type_code(code).is_err());
     }
 
     #[rstest]
-    #[case(0, (Some(BondStereo::Either), Some(BondDir::Either)), (None, None))] 
+    #[case(0, (Some(BondStereo::Either), Some(BondDir::Either)), (None, None))]
     #[case(1, (Some(BondStereo::Cis), Some(BondDir::Wedge)), (Some(BondStereo::Cis), Some(BondDir::Wedge)))]
     #[case(3, (Some(BondStereo::Either), Some(BondDir::Either)), (Some(BondStereo::Either), Some(BondDir::Either)))]
     #[case(4, (Some(BondStereo::Either), Some(BondDir::Either)), (Some(BondStereo::Either), Some(BondDir::Either)))]
     #[case(6, (Some(BondStereo::Trans), Some(BondDir::Dash)), (Some(BondStereo::Trans), Some(BondDir::Dash)))]
     fn test_convert_bond_stereo_dir_code(
         #[case] code: u8,
-        #[case] expected_nonstandard: (Option<BondStereo>, Option<BondDir>),
-        #[case] expected_standard: (Option<BondStereo>, Option<BondDir>),
+        #[case] expected_default: (Option<BondStereo>, Option<BondDir>),
+        #[case] expected_basic: (Option<BondStereo>, Option<BondDir>),
     ) {
         assert_eq!(
             convert_bond_stereo_dir_code(code, true).unwrap(),
-            expected_nonstandard
+            expected_default
         );
         assert_eq!(
             convert_bond_stereo_dir_code(code, false).unwrap(),
-            expected_standard
+            expected_basic
         );
     }
 
@@ -669,16 +669,16 @@ mod tests {
     #[case(2, Some(BondTopology::Chain), Some(BondTopology::Chain))]
     fn test_convert_bond_topology_code(
         #[case] code: u8,
-        #[case] expected_nonstandard: Option<BondTopology>,
-        #[case] expected_standard: Option<BondTopology>,
+        #[case] expected_default: Option<BondTopology>,
+        #[case] expected_basic: Option<BondTopology>,
     ) {
         assert_eq!(
             convert_bond_topology_code(code, true).unwrap(),
-            expected_nonstandard
+            expected_default
         );
         assert_eq!(
             convert_bond_topology_code(code, false).unwrap(),
-            expected_standard
+            expected_basic
         );
     }
 
@@ -711,10 +711,10 @@ mod tests {
             convert_bond_reacting_center_code(code, true).unwrap(),
             expected
         );
-        let expected_standard = if code == 0 { None } else { expected };
+        let expected_default = if code == 0 { None } else { expected };
         assert_eq!(
             convert_bond_reacting_center_code(code, false).unwrap(),
-            expected_standard
+            expected_default
         );
     }
 

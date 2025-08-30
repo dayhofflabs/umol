@@ -1,10 +1,10 @@
 use super::*;
 use crate::io::ctab::{
     atom::{
-        AtomLike, AtomList, AtomRadical, Atom, AtomSymbol, AttachmentPointType, LinkAtom,
+        Atom, AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom,
         UnsaturatedAtom,
     },
-    bond::{BondLike, Bond, BondType},
+    bond::{Bond, BondLike, BondType},
     molecule::Molecule,
     parser::properties::{
         AtomAliasEntry, AtomAttachmentOrderEntry, AtomHydrogenCountEntry, AtomListEntry,
@@ -30,15 +30,15 @@ use umol::error::{DataError, Error, ValidationError};
 use umol_data::{e, Element, NamedIsotope};
 
 #[fixture]
-fn basic_molecule() -> MoleculeLike {
+fn moleculelike_single_atom() -> MoleculeLike {
     let mut molecule = MoleculeLike::new();
     molecule.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
     molecule
 }
 
 #[fixture]
-fn molecule_with_properties(mut basic_molecule: MoleculeLike) -> MoleculeLike {
-    if let Some(atom) = basic_molecule.atom_mut(0) {
+fn moleculelike_with_properties(mut moleculelike_single_atom: MoleculeLike) -> MoleculeLike {
+    if let Some(atom) = moleculelike_single_atom.atom_mut(0) {
         atom.properties
             .insert("molFileAlias".to_string(), "existing".to_string());
         atom.properties
@@ -50,17 +50,17 @@ fn molecule_with_properties(mut basic_molecule: MoleculeLike) -> MoleculeLike {
         atom.substitution_count = Some(SubstitutionCount::S2);
         atom.unsaturated = Some(UnsaturatedAtom);
     }
-    basic_molecule
+    moleculelike_single_atom
 }
 
 #[fixture]
-fn molecule_with_rgroup(mut basic_molecule: MoleculeLike) -> MoleculeLike {
-    basic_molecule.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(1)));
-    basic_molecule
+fn moleculelike_with_rgroup(mut moleculelike_single_atom: MoleculeLike) -> MoleculeLike {
+    moleculelike_single_atom.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(1)));
+    moleculelike_single_atom
 }
 
 #[fixture]
-fn molecule_with_bond() -> MoleculeLike {
+fn moleculelike_with_bond() -> MoleculeLike {
     let mut molecule = MoleculeLike::new();
     molecule.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
     molecule.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
@@ -69,14 +69,14 @@ fn molecule_with_bond() -> MoleculeLike {
 }
 
 #[fixture]
-fn basic_molecule_standard() -> Molecule {
+fn molecule_single_atom() -> Molecule {
     let mut molecule = Molecule::new();
     molecule.add_atom(Atom::new(e!(C)));
     molecule
 }
 
 #[fixture]
-fn molecule_with_bond_standard() -> Molecule {
+fn molecule_with_bond() -> Molecule {
     let mut molecule = Molecule::new();
     molecule.add_atom(Atom::new(e!(C)));
     molecule.add_atom(Atom::new(e!(C)));
@@ -139,16 +139,17 @@ fn acc_with_copolymer_sgroup() -> MoleculeProperties {
 }
 
 #[rstest]
-fn test_apply_atom_alias_entry(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_alias_entry(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 0,
         alias: "C1".to_string(),
     });
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    let alias = basic_molecule
+    let alias = moleculelike_single_atom
         .atom(0)
         .unwrap()
         .properties
@@ -158,7 +159,7 @@ fn test_apply_atom_alias_entry(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_atom_alias_entry_invalid(mut basic_molecule: MoleculeLike) {
+fn test_atom_alias_entry_invalid(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 5,
@@ -166,7 +167,7 @@ fn test_atom_alias_entry_invalid(mut basic_molecule: MoleculeLike) {
     });
     acc.add_entry(entry).unwrap();
 
-    let result = acc.update_moleculelike(&mut basic_molecule);
+    let result = acc.update_moleculelike(&mut moleculelike_single_atom);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -176,7 +177,7 @@ fn test_atom_alias_entry_invalid(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_atom_alias_entry_conflict(mut molecule_with_properties: MoleculeLike) {
+fn test_atom_alias_entry_conflict(mut moleculelike_with_properties: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 0,
@@ -184,7 +185,7 @@ fn test_atom_alias_entry_conflict(mut molecule_with_properties: MoleculeLike) {
     });
     acc.add_entry(entry).unwrap();
 
-    let result = acc.update_moleculelike(&mut molecule_with_properties);
+    let result = acc.update_moleculelike(&mut moleculelike_with_properties);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -197,16 +198,17 @@ fn test_atom_alias_entry_conflict(mut molecule_with_properties: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_atom_value_entry(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_value_entry(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 0,
         value: "*".to_string(),
     });
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    let value = basic_molecule
+    let value = moleculelike_single_atom
         .atom(0)
         .unwrap()
         .properties
@@ -216,7 +218,7 @@ fn test_apply_atom_value_entry(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_atom_value_entry_invalid(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_value_entry_invalid(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 5,
@@ -224,7 +226,7 @@ fn test_apply_atom_value_entry_invalid(mut basic_molecule: MoleculeLike) {
     });
     acc.add_entry(entry).unwrap();
 
-    let result = acc.update_moleculelike(&mut basic_molecule);
+    let result = acc.update_moleculelike(&mut moleculelike_single_atom);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -234,7 +236,7 @@ fn test_apply_atom_value_entry_invalid(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_atom_value_conflict(mut molecule_with_properties: MoleculeLike) {
+fn test_apply_atom_value_conflict(mut moleculelike_with_properties: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 0,
@@ -242,7 +244,7 @@ fn test_apply_atom_value_conflict(mut molecule_with_properties: MoleculeLike) {
     });
     acc.add_entry(entry).unwrap();
 
-    let result = acc.update_moleculelike(&mut molecule_with_properties);
+    let result = acc.update_moleculelike(&mut moleculelike_with_properties);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -255,23 +257,24 @@ fn test_apply_atom_value_conflict(mut molecule_with_properties: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_charge_entries(mut basic_molecule: MoleculeLike) {
+fn test_apply_charge_entries(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 0,
         charge: -1,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    assert_eq!(basic_molecule.atom(0).unwrap().charge, -1);
+    assert_eq!(moleculelike_single_atom.atom(0).unwrap().charge, -1);
 }
 
 #[rstest]
-fn test_apply_charge_entries_multiple(mut basic_molecule: MoleculeLike) {
+fn test_apply_charge_entries_multiple(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
-    basic_molecule.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
-    basic_molecule.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
+    moleculelike_single_atom.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
+    moleculelike_single_atom.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
 
     let entries = vec![
         ChargeEntry {
@@ -285,22 +288,23 @@ fn test_apply_charge_entries_multiple(mut basic_molecule: MoleculeLike) {
     ];
     acc.add_entry(PropertyEntries::ChargeEntries(entries))
         .unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    assert_eq!(basic_molecule.atom(0).unwrap().charge, -1);
-    assert_eq!(basic_molecule.atom(1).unwrap().charge, 0); // unchanged
-    assert_eq!(basic_molecule.atom(2).unwrap().charge, 1);
+    assert_eq!(moleculelike_single_atom.atom(0).unwrap().charge, -1);
+    assert_eq!(moleculelike_single_atom.atom(1).unwrap().charge, 0); // unchanged
+    assert_eq!(moleculelike_single_atom.atom(2).unwrap().charge, 1);
 }
 
 #[rstest]
-fn test_apply_charge_entries_invalid(mut basic_molecule: MoleculeLike) {
+fn test_apply_charge_entries_invalid(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 5,
         charge: -1,
     }]);
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut basic_molecule);
+    let result = acc.update_moleculelike(&mut moleculelike_single_atom);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -310,16 +314,17 @@ fn test_apply_charge_entries_invalid(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_charge_entries_overwrite(mut molecule_with_properties: MoleculeLike) {
+fn test_apply_charge_entries_overwrite(mut moleculelike_with_properties: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 0,
         charge: -2,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut molecule_with_properties).unwrap();
+    acc.update_moleculelike(&mut moleculelike_with_properties)
+        .unwrap();
 
-    let atom = molecule_with_properties.atom(0).unwrap();
+    let atom = moleculelike_with_properties.atom(0).unwrap();
     assert_eq!(atom.charge, -2);
     assert_eq!(atom.radical, None);
 }
@@ -330,7 +335,7 @@ fn test_apply_charge_entries_overwrite(mut molecule_with_properties: MoleculeLik
 #[case(2, Some(AtomRadical::Doublet))]
 #[case(3, Some(AtomRadical::Triplet))]
 fn test_apply_radical_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     #[case] radical_type: u8,
     #[case] expected: Option<AtomRadical>,
 ) {
@@ -340,8 +345,9 @@ fn test_apply_radical_entries(
         radical_type,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
-    assert_eq!(basic_molecule.atom(0).unwrap().radical, expected);
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
+    assert_eq!(moleculelike_single_atom.atom(0).unwrap().radical, expected);
 }
 
 #[rstest]
@@ -363,43 +369,45 @@ fn test_apply_radical_entries_invalid() {
 }
 
 #[rstest]
-fn test_apply_radical_entries_overwrite(mut molecule_with_properties: MoleculeLike) {
+fn test_apply_radical_entries_overwrite(mut moleculelike_with_properties: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 1,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut molecule_with_properties).unwrap();
+    acc.update_moleculelike(&mut moleculelike_with_properties)
+        .unwrap();
 
-    let atom = molecule_with_properties.atom(0).unwrap();
+    let atom = moleculelike_with_properties.atom(0).unwrap();
     assert_eq!(atom.radical, Some(AtomRadical::Singlet));
     assert_eq!(atom.charge, 0);
 }
 
 #[rstest]
-fn test_apply_isotope_entries(mut basic_molecule: MoleculeLike) {
+fn test_apply_isotope_entries(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 14,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    let atom = basic_molecule.atom(0).unwrap();
+    let atom = moleculelike_single_atom.atom(0).unwrap();
     assert_eq!(atom.isotope_mass, Some(14));
 }
 
 #[rstest]
-fn test_apply_isotope_entries_conflict(mut molecule_with_properties: MoleculeLike) {
+fn test_apply_isotope_entries_conflict(mut moleculelike_with_properties: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 14,
     }]);
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut molecule_with_properties);
+    let result = acc.update_moleculelike(&mut moleculelike_with_properties);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -411,14 +419,14 @@ fn test_apply_isotope_entries_conflict(mut molecule_with_properties: MoleculeLik
 }
 
 #[rstest]
-fn test_apply_isotope_entries_invalid(mut basic_molecule: MoleculeLike) {
+fn test_apply_isotope_entries_invalid(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 40,
     }]);
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut basic_molecule);
+    let result = acc.update_moleculelike(&mut moleculelike_single_atom);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -430,17 +438,19 @@ fn test_apply_isotope_entries_invalid(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_isotope_on_named_isotope(mut basic_molecule: MoleculeLike) {
-    basic_molecule.atom_mut(0).unwrap().symbol = AtomSymbol::NamedIsotope(NamedIsotope::D);
+fn test_apply_isotope_on_named_isotope(mut moleculelike_single_atom: MoleculeLike) {
+    moleculelike_single_atom.atom_mut(0).unwrap().symbol =
+        AtomSymbol::NamedIsotope(NamedIsotope::D);
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 3,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    let atom = basic_molecule.atom(0).unwrap();
+    let atom = moleculelike_single_atom.atom(0).unwrap();
     assert_eq!(atom.isotope_mass, Some(3));
 }
 
@@ -450,7 +460,7 @@ fn test_apply_isotope_on_named_isotope(mut basic_molecule: MoleculeLike) {
 #[case(4, Some(RingBondCount::R4Plus))]
 #[case(-1, Some(RingBondCount::NoRingBonds))]
 fn test_apply_ring_bond_count_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     #[case] code: i8,
     #[case] expected: Option<RingBondCount>,
 ) {
@@ -460,19 +470,23 @@ fn test_apply_ring_bond_count_entries(
         ring_bond_count: code,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
-    assert_eq!(basic_molecule.atom(0).unwrap().ring_bond_count, expected);
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
+    assert_eq!(
+        moleculelike_single_atom.atom(0).unwrap().ring_bond_count,
+        expected
+    );
 }
 
 #[rstest]
-fn test_apply_ring_bond_count_entries_conflict(mut molecule_with_properties: MoleculeLike) {
+fn test_apply_ring_bond_count_entries_conflict(mut moleculelike_with_properties: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
         ring_bond_count: 3,
     }]);
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut molecule_with_properties);
+    let result = acc.update_moleculelike(&mut moleculelike_with_properties);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -502,7 +516,7 @@ fn test_apply_ring_bond_count_entries_invalid(#[case] code: i8) {
 #[case(4, Some(SubstitutionCount::S4))]
 #[case(-1, Some(SubstitutionCount::NoSubstitution))]
 fn test_apply_substitution_count_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     #[case] code: i8,
     #[case] expected: Option<SubstitutionCount>,
 ) {
@@ -512,19 +526,23 @@ fn test_apply_substitution_count_entries(
         substitution_count: code,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
-    assert_eq!(basic_molecule.atom(0).unwrap().substitution_count, expected);
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
+    assert_eq!(
+        moleculelike_single_atom.atom(0).unwrap().substitution_count,
+        expected
+    );
 }
 
 #[rstest]
-fn test_apply_substitution_count_entries_conflict(mut molecule_with_properties: MoleculeLike) {
+fn test_apply_substitution_count_entries_conflict(mut moleculelike_with_properties: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
         substitution_count: 3,
     }]);
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut molecule_with_properties);
+    let result = acc.update_moleculelike(&mut moleculelike_with_properties);
     assert!(result.is_err());
 
     match result.unwrap_err() {
@@ -552,7 +570,7 @@ fn test_apply_substitution_count_entries_invalid(#[case] code: i8) {
 #[case(0, None)]
 #[case(1, Some(UnsaturatedAtom))]
 fn test_apply_unsaturated_atom_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     #[case] code: u8,
     #[case] expected: Option<UnsaturatedAtom>,
 ) {
@@ -562,8 +580,12 @@ fn test_apply_unsaturated_atom_entries(
         unsaturated: code,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
-    assert_eq!(basic_molecule.atom(0).unwrap().unsaturated, expected);
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
+    assert_eq!(
+        moleculelike_single_atom.atom(0).unwrap().unsaturated,
+        expected
+    );
 }
 
 #[rstest]
@@ -579,7 +601,7 @@ fn test_apply_unsaturated_atom_entries_invalid(#[case] code: u8) {
 }
 
 #[rstest]
-fn test_apply_link_atom_entries(mut basic_molecule: MoleculeLike) {
+fn test_apply_link_atom_entries(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::LinkAtomEntries(vec![LinkAtomEntry {
         atom_index: 0,
@@ -588,9 +610,10 @@ fn test_apply_link_atom_entries(mut basic_molecule: MoleculeLike) {
         subs_index2: None,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
     assert_eq!(
-        basic_molecule.atom(0).unwrap().link_atom,
+        moleculelike_single_atom.atom(0).unwrap().link_atom,
         Some(LinkAtom {
             repeat_count: 2,
             subs_index1: 1,
@@ -621,7 +644,7 @@ fn test_apply_link_atom_entries_conflict() {
 }
 
 #[rstest]
-fn test_apply_atom_list_entry(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_list_entry(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
         atom_index: 0,
@@ -629,9 +652,10 @@ fn test_apply_atom_list_entry(mut basic_molecule: MoleculeLike) {
         exclusion: false,
     });
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
     assert_eq!(
-        basic_molecule.atom(0).unwrap().symbol,
+        moleculelike_single_atom.atom(0).unwrap().symbol,
         AtomSymbol::AtomList(AtomList {
             elements: vec![e!(N), e!(O)],
             exclusion: false
@@ -640,9 +664,9 @@ fn test_apply_atom_list_entry(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_atom_list_entry_conflict(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_list_entry_conflict(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
-    basic_molecule.atom_mut(0).unwrap().symbol =
+    moleculelike_single_atom.atom_mut(0).unwrap().symbol =
         AtomSymbol::RGroup(crate::io::ctab::rgroup::RGroup::new(Some(1)));
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
         atom_index: 0,
@@ -650,7 +674,7 @@ fn test_apply_atom_list_entry_conflict(mut basic_molecule: MoleculeLike) {
         exclusion: false,
     });
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut basic_molecule);
+    let result = acc.update_moleculelike(&mut moleculelike_single_atom);
     assert!(result.is_err());
 }
 
@@ -660,7 +684,7 @@ fn test_apply_atom_list_entry_conflict(mut basic_molecule: MoleculeLike) {
 #[case(3, Some(AttachmentPointType::Both))]
 #[case(0, None)]
 fn test_apply_attachment_point_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     #[case] code: u8,
     #[case] expected: Option<AttachmentPointType>,
 ) {
@@ -670,8 +694,12 @@ fn test_apply_attachment_point_entries(
         attachment_type: code,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
-    assert_eq!(basic_molecule.atom(0).unwrap().attachment_point, expected);
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
+    assert_eq!(
+        moleculelike_single_atom.atom(0).unwrap().attachment_point,
+        expected
+    );
 }
 
 #[rstest]
@@ -703,16 +731,17 @@ fn test_apply_attachment_point_entries_invalid() {
 }
 
 #[rstest]
-fn test_apply_atom_attachment_order_entry(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_attachment_order_entry(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry {
         atom_index: 0,
         attachments: vec![(1, 2), (2, 1)],
     });
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
     assert_eq!(
-        basic_molecule
+        moleculelike_single_atom
             .atom(0)
             .unwrap()
             .attachment_order
@@ -723,47 +752,51 @@ fn test_apply_atom_attachment_order_entry(mut basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_atom_attachment_order_entry_conflict(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_attachment_order_entry_conflict(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
-    basic_molecule.atom_mut(0).unwrap().attachment_order = Some(vec![(1, 1)]);
+    moleculelike_single_atom
+        .atom_mut(0)
+        .unwrap()
+        .attachment_order = Some(vec![(1, 1)]);
     let entry = PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry {
         atom_index: 0,
         attachments: vec![(2, 2)],
     });
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut basic_molecule);
+    let result = acc.update_moleculelike(&mut moleculelike_single_atom);
     assert!(result.is_err());
 }
 
 #[rstest]
-fn test_apply_rgroup_label_entries(mut basic_molecule: MoleculeLike) {
+fn test_apply_rgroup_label_entries(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 1,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
     assert_eq!(
-        basic_molecule.atom(0).unwrap().symbol,
+        moleculelike_single_atom.atom(0).unwrap().symbol,
         AtomSymbol::RGroup(RGroup::new(Some(1)))
     );
 }
 
 #[rstest]
-fn test_apply_rgroup_label_entries_conflict(mut molecule_with_rgroup: MoleculeLike) {
+fn test_apply_rgroup_label_entries_conflict(mut moleculelike_with_rgroup: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 2,
     }]);
     acc.add_entry(entry).unwrap();
-    let result = acc.update_moleculelike(&mut molecule_with_rgroup);
+    let result = acc.update_moleculelike(&mut moleculelike_with_rgroup);
     assert!(result.is_err());
 }
 
 #[rstest]
-fn test_apply_rgroup_logic_entry(mut molecule_with_rgroup: MoleculeLike) {
+fn test_apply_rgroup_logic_entry(mut moleculelike_with_rgroup: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLogicEntry(RGroupLogicEntry {
         label: 1,
@@ -772,9 +805,10 @@ fn test_apply_rgroup_logic_entry(mut molecule_with_rgroup: MoleculeLike) {
         occurrence: vec![RGroupOccurrence::Exactly(1)],
     });
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut molecule_with_rgroup).unwrap();
+    acc.update_moleculelike(&mut moleculelike_with_rgroup)
+        .unwrap();
 
-    let atom = molecule_with_rgroup.atom(0).unwrap();
+    let atom = moleculelike_with_rgroup.atom(0).unwrap();
     if let AtomSymbol::RGroup(rgroup) = &atom.symbol {
         assert_eq!(rgroup.dependent_label, Some(2));
         assert!(rgroup.rgroup_or_h);
@@ -786,7 +820,7 @@ fn test_apply_rgroup_logic_entry(mut molecule_with_rgroup: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_rgroup_logic_entry_multiple_occurrences(mut molecule_with_rgroup: MoleculeLike) {
+fn test_apply_rgroup_logic_entry_multiple_occurrences(mut moleculelike_with_rgroup: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLogicEntry(RGroupLogicEntry {
         label: 1,
@@ -798,9 +832,10 @@ fn test_apply_rgroup_logic_entry_multiple_occurrences(mut molecule_with_rgroup: 
         ],
     });
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut molecule_with_rgroup).unwrap();
+    acc.update_moleculelike(&mut moleculelike_with_rgroup)
+        .unwrap();
 
-    let atom = molecule_with_rgroup.atom(0).unwrap();
+    let atom = moleculelike_with_rgroup.atom(0).unwrap();
     if let AtomSymbol::RGroup(rgroup) = &atom.symbol {
         assert_eq!(rgroup.occurrence.len(), 2);
         assert_eq!(rgroup.occurrence[0], RGroupOccurrence::Exactly(1));
@@ -811,17 +846,18 @@ fn test_apply_rgroup_logic_entry_multiple_occurrences(mut molecule_with_rgroup: 
 }
 
 #[rstest]
-fn test_apply_sgroup_type_entries(mut basic_molecule: MoleculeLike) {
+fn test_apply_sgroup_type_entries(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
         sgroup_type: SGroupType::Superatom,
     }]);
     acc.add_entry(entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.group_type, SGroupType::Superatom);
 }
 
@@ -844,7 +880,7 @@ fn test_apply_sgroup_type_entries_conflict() {
 
 #[rstest]
 fn test_apply_sgroup_subtype_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_copolymer_sgroup: MoleculeProperties,
 ) {
     let subtype_entry = PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry {
@@ -853,11 +889,11 @@ fn test_apply_sgroup_subtype_entries(
     }]);
     acc_with_copolymer_sgroup.add_entry(subtype_entry).unwrap();
     acc_with_copolymer_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.group_subtype, Some(SGroupSubtype::Alternating));
 }
 
@@ -874,7 +910,7 @@ fn test_apply_sgroup_subtype_entries_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_label_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let label_entry = PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry {
@@ -883,11 +919,11 @@ fn test_apply_sgroup_label_entries(
     }]);
     acc_with_superatom_sgroup.add_entry(label_entry).unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.label, Some(123));
 }
 
@@ -904,7 +940,7 @@ fn test_apply_sgroup_label_entries_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_connectivity_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let connectivity_entry =
@@ -916,11 +952,11 @@ fn test_apply_sgroup_connectivity_entries(
         .add_entry(connectivity_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.connectivity, Some(SGroupConnectivity::HeadToTail));
 }
 
@@ -938,7 +974,7 @@ fn test_apply_sgroup_connectivity_entries_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_expansion_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let expansion_entry =
@@ -947,11 +983,11 @@ fn test_apply_sgroup_expansion_entries(
         .add_entry(expansion_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert!(sgroup.expansion);
 }
 
@@ -966,7 +1002,7 @@ fn test_apply_sgroup_expansion_entries_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_atom_list_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let atom_list_entry = PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry {
@@ -977,11 +1013,11 @@ fn test_apply_sgroup_atom_list_entry(
         .add_entry(atom_list_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.atom_indices, vec![0, 1]);
 }
 
@@ -998,7 +1034,7 @@ fn test_apply_sgroup_atom_list_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_bond_list_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let bond_list_entry = PropertyEntries::SGroupBondListEntry(SGroupBondListEntry {
@@ -1009,11 +1045,11 @@ fn test_apply_sgroup_bond_list_entry(
         .add_entry(bond_list_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.bond_indices, vec![0, 1]);
 }
 
@@ -1030,7 +1066,7 @@ fn test_apply_sgroup_bond_list_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_parent_atom_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let parent_atom_entry = PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry {
@@ -1041,11 +1077,11 @@ fn test_apply_sgroup_parent_atom_entry(
         .add_entry(parent_atom_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.parent_atom_indices, Some(vec![0, 1]));
 }
 
@@ -1062,7 +1098,7 @@ fn test_apply_sgroup_parent_atom_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_subscript_entry_subscript(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
@@ -1073,33 +1109,31 @@ fn test_apply_sgroup_subscript_entry_subscript(
         .add_entry(subscript_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.subscript, Some("Ph".to_string()));
     assert_eq!(sgroup.multiplier, None);
 }
 
 #[rstest]
 fn test_apply_sgroup_subscript_entry_multiplier(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_multiple_sgroup: MoleculeProperties,
 ) {
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 0,
         data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N),
     });
+    acc_with_multiple_sgroup.add_entry(subscript_entry).unwrap();
     acc_with_multiple_sgroup
-        .add_entry(subscript_entry)
-        .unwrap();
-    acc_with_multiple_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.subscript, None);
     assert_eq!(sgroup.multiplier, Some(SGroupMultiplier::N));
 }
@@ -1117,7 +1151,7 @@ fn test_apply_sgroup_subscript_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_correspondence_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let correspondence_entry =
@@ -1129,11 +1163,11 @@ fn test_apply_sgroup_correspondence_entry(
         .add_entry(correspondence_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.correspondence, Some(vec![0, 1]));
 }
 
@@ -1151,7 +1185,7 @@ fn test_apply_sgroup_correspondence_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_display_info_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let display_info_entry = PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry {
@@ -1162,11 +1196,11 @@ fn test_apply_sgroup_display_info_entry(
         .add_entry(display_info_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(
         sgroup.bracket_coords,
         Some(SGroupBracketCoords {
@@ -1189,7 +1223,7 @@ fn test_apply_sgroup_display_info_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_connecting_bond_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let connecting_bond_entry =
@@ -1202,11 +1236,11 @@ fn test_apply_sgroup_connecting_bond_entry(
         .add_entry(connecting_bond_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(
         sgroup.connecting_bond,
         Some(SGroupConnectingBond {
@@ -1231,13 +1265,15 @@ fn test_apply_sgroup_connecting_bond_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_data_description_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_data_sgroup: MoleculeProperties,
 ) {
-    acc_with_data_sgroup.update_moleculelike(&mut basic_molecule).unwrap();
+    acc_with_data_sgroup
+        .update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     let data = sgroup.data.get("test").unwrap();
     assert_eq!(data.field_type, SGroupDataType::Text);
     assert_eq!(data.field_units, None);
@@ -1263,7 +1299,7 @@ fn test_apply_sgroup_data_description_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_data_display_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let display_entry = PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry {
@@ -1278,11 +1314,11 @@ fn test_apply_sgroup_data_display_entry(
     });
     acc_with_superatom_sgroup.add_entry(display_entry).unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     let display = sgroup.display.as_ref().unwrap();
     assert_eq!(display.coords, (10.0, 20.0));
     assert_eq!(display.display_type, SGroupDataDisplayType::Detached);
@@ -1313,7 +1349,7 @@ fn test_apply_sgroup_data_display_entry_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_data_entry(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_data_sgroup: MoleculeProperties,
 ) {
     let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
@@ -1325,10 +1361,12 @@ fn test_apply_sgroup_data_entry(
     let data_entry =
         PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 });
     acc_with_data_sgroup.add_entry(data_entry).unwrap();
-    acc_with_data_sgroup.update_moleculelike(&mut basic_molecule).unwrap();
+    acc_with_data_sgroup
+        .update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     let data = sgroup.data.get("test").unwrap();
     assert_eq!(data.data_content, Some(vec!["content".to_string()]));
 }
@@ -1358,7 +1396,7 @@ fn test_apply_sgroup_data_entry_no_description() {
 
 #[rstest]
 fn test_apply_sgroup_data_entry_auto_finalization(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_data_sgroup: MoleculeProperties,
 ) {
     let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
@@ -1368,10 +1406,12 @@ fn test_apply_sgroup_data_entry_auto_finalization(
     acc_with_data_sgroup.add_entry(continuation_entry).unwrap();
 
     // Apply without SED - should auto-finalize
-    acc_with_data_sgroup.update_moleculelike(&mut basic_molecule).unwrap();
+    acc_with_data_sgroup
+        .update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     let data = sgroup.data.get("test").unwrap();
     assert_eq!(data.data_content, Some(vec!["incomplete".to_string()]));
 }
@@ -1424,7 +1464,7 @@ fn test_apply_sgroup_data_entry_multi_continuation() {
 
 #[rstest]
 fn test_apply_sgroup_hierarchy_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     // Add a second SGroup as parent
@@ -1444,11 +1484,11 @@ fn test_apply_sgroup_hierarchy_entries(
         .add_entry(hierarchy_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 2);
-    let child_sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 2);
+    let child_sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(child_sgroup.hierarchy_parent, Some(1));
 }
 
@@ -1465,7 +1505,7 @@ fn test_apply_sgroup_hierarchy_entries_no_type() {
 
 #[rstest]
 fn test_apply_sgroup_component_entries(
-    mut basic_molecule: MoleculeLike,
+    mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
 ) {
     let component_entry = PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry {
@@ -1476,11 +1516,11 @@ fn test_apply_sgroup_component_entries(
         .add_entry(component_entry)
         .unwrap();
     acc_with_superatom_sgroup
-        .update_moleculelike(&mut basic_molecule)
+        .update_moleculelike(&mut moleculelike_single_atom)
         .unwrap();
 
-    assert_eq!(basic_molecule.sgroups().count(), 1);
-    let sgroup = basic_molecule.sgroup(0).unwrap();
+    assert_eq!(moleculelike_single_atom.sgroups().count(), 1);
+    let sgroup = moleculelike_single_atom.sgroup(0).unwrap();
     assert_eq!(sgroup.component_number, Some(42));
 }
 
@@ -1496,7 +1536,7 @@ fn test_apply_sgroup_component_entries_no_type() {
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_entries(mut molecule_with_bond: MoleculeLike) {
+fn test_apply_zero_order_bond_entries(mut moleculelike_with_bond: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
 
     let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
@@ -1504,16 +1544,17 @@ fn test_apply_zero_order_bond_entries(mut molecule_with_bond: MoleculeLike) {
         bond_order: 0,
     }]);
     acc.add_entry(zero_order_entry).unwrap();
-    acc.update_moleculelike(&mut molecule_with_bond).unwrap();
+    acc.update_moleculelike(&mut moleculelike_with_bond)
+        .unwrap();
 
-    let bond = molecule_with_bond.bond(0).unwrap();
+    let bond = moleculelike_with_bond.bond(0).unwrap();
     assert_eq!(bond.bond_type, BondType::Zero);
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_entries_invalid(basic_molecule: MoleculeLike) {
+fn test_apply_zero_order_bond_entries_invalid(moleculelike_with_bond: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule;
+    let mut molecule = moleculelike_with_bond;
 
     let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
         bond_index: 5,
@@ -1525,7 +1566,7 @@ fn test_apply_zero_order_bond_entries_invalid(basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_zero_atom_charge_entries(mut basic_molecule: MoleculeLike) {
+fn test_apply_zero_atom_charge_entries(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
 
     let zero_atom_charge_entry =
@@ -1534,16 +1575,17 @@ fn test_apply_zero_atom_charge_entries(mut basic_molecule: MoleculeLike) {
             charge: -1,
         }]);
     acc.add_entry(zero_atom_charge_entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    let atom = basic_molecule.atom(0).unwrap();
+    let atom = moleculelike_single_atom.atom(0).unwrap();
     assert_eq!(atom.charge, -1);
 }
 
 #[rstest]
-fn test_apply_zero_atom_charge_entries_invalid(basic_molecule: MoleculeLike) {
+fn test_apply_zero_atom_charge_entries_invalid(moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule;
+    let mut molecule = moleculelike_single_atom;
 
     let zero_atom_charge_entry =
         PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
@@ -1556,7 +1598,7 @@ fn test_apply_zero_atom_charge_entries_invalid(basic_molecule: MoleculeLike) {
 }
 
 #[rstest]
-fn test_apply_atom_hydrogen_count_entries(mut basic_molecule: MoleculeLike) {
+fn test_apply_atom_hydrogen_count_entries(mut moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
 
     let atom_hydrogen_count_entry =
@@ -1565,16 +1607,17 @@ fn test_apply_atom_hydrogen_count_entries(mut basic_molecule: MoleculeLike) {
             hydrogen_count: 1,
         }]);
     acc.add_entry(atom_hydrogen_count_entry).unwrap();
-    acc.update_moleculelike(&mut basic_molecule).unwrap();
+    acc.update_moleculelike(&mut moleculelike_single_atom)
+        .unwrap();
 
-    let atom = basic_molecule.atom(0).unwrap();
+    let atom = moleculelike_single_atom.atom(0).unwrap();
     assert_eq!(atom.hydrogen_count, Some(1));
 }
 
 #[rstest]
-fn test_apply_atom_hydrogen_count_entries_invalid(basic_molecule: MoleculeLike) {
+fn test_apply_atom_hydrogen_count_entries_invalid(moleculelike_single_atom: MoleculeLike) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule;
+    let mut molecule = moleculelike_single_atom;
 
     let atom_hydrogen_count_entry =
         PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
@@ -1587,7 +1630,7 @@ fn test_apply_atom_hydrogen_count_entries_invalid(basic_molecule: MoleculeLike) 
 }
 
 #[rstest]
-fn test_apply_atom_alias_standard(mut basic_molecule_standard: Molecule) {
+fn test_apply_atom_alias_molecule(mut molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let alias_entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
@@ -1595,9 +1638,9 @@ fn test_apply_atom_alias_standard(mut basic_molecule_standard: Molecule) {
         alias: "CF3".to_string(),
     });
     acc.add_entry(alias_entry).unwrap();
-    acc.update_molecule(&mut basic_molecule_standard).unwrap();
+    acc.update_molecule(&mut molecule_single_atom).unwrap();
 
-    let atom = basic_molecule_standard.atom(0).unwrap();
+    let atom = molecule_single_atom.atom(0).unwrap();
     assert_eq!(
         atom.properties.get("molFileAlias"),
         Some(&"CF3".to_string())
@@ -1605,9 +1648,9 @@ fn test_apply_atom_alias_standard(mut basic_molecule_standard: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_alias_standard_invalid(basic_molecule_standard: Molecule) {
+fn test_apply_atom_alias_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let alias_entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 5,
@@ -1619,7 +1662,7 @@ fn test_apply_atom_alias_standard_invalid(basic_molecule_standard: Molecule) {
 }
 
 #[rstest]
-fn test_apply_atom_value_standard(mut basic_molecule_standard: Molecule) {
+fn test_apply_atom_value_molecule(mut molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let value_entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
@@ -1627,16 +1670,16 @@ fn test_apply_atom_value_standard(mut basic_molecule_standard: Molecule) {
         value: "*".to_string(),
     });
     acc.add_entry(value_entry).unwrap();
-    acc.update_molecule(&mut basic_molecule_standard).unwrap();
+    acc.update_molecule(&mut molecule_single_atom).unwrap();
 
-    let atom = basic_molecule_standard.atom(0).unwrap();
+    let atom = molecule_single_atom.atom(0).unwrap();
     assert_eq!(atom.properties.get("molFileValue"), Some(&"*".to_string()));
 }
 
 #[rstest]
-fn test_apply_atom_value_standard_invalid(basic_molecule_standard: Molecule) {
+fn test_apply_atom_value_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let value_entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 5,
@@ -1648,7 +1691,7 @@ fn test_apply_atom_value_standard_invalid(basic_molecule_standard: Molecule) {
 }
 
 #[rstest]
-fn test_apply_charge_standard(mut basic_molecule_standard: Molecule) {
+fn test_apply_charge_molecule(mut molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
@@ -1656,17 +1699,17 @@ fn test_apply_charge_standard(mut basic_molecule_standard: Molecule) {
         charge: -1,
     }]);
     acc.add_entry(charge_entry).unwrap();
-    acc.update_molecule(&mut basic_molecule_standard).unwrap();
+    acc.update_molecule(&mut molecule_single_atom).unwrap();
 
-    let atom = basic_molecule_standard.atom(0).unwrap();
+    let atom = molecule_single_atom.atom(0).unwrap();
     assert_eq!(atom.charge, -1);
     assert_eq!(atom.radical, None);
 }
 
 #[rstest]
-fn test_apply_charge_standard_invalid(basic_molecule_standard: Molecule) {
+fn test_apply_charge_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 5,
@@ -1678,7 +1721,7 @@ fn test_apply_charge_standard_invalid(basic_molecule_standard: Molecule) {
 }
 
 #[rstest]
-fn test_apply_radical_standard(mut basic_molecule_standard: Molecule) {
+fn test_apply_radical_molecule(mut molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let radical_entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
@@ -1686,17 +1729,17 @@ fn test_apply_radical_standard(mut basic_molecule_standard: Molecule) {
         radical_type: 2, // Doublet
     }]);
     acc.add_entry(radical_entry).unwrap();
-    acc.update_molecule(&mut basic_molecule_standard).unwrap();
+    acc.update_molecule(&mut molecule_single_atom).unwrap();
 
-    let atom = basic_molecule_standard.atom(0).unwrap();
+    let atom = molecule_single_atom.atom(0).unwrap();
     assert_eq!(atom.radical, Some(AtomRadical::Doublet));
     assert_eq!(atom.charge, 0);
 }
 
 #[rstest]
-fn test_apply_radical_standard_invalid(basic_molecule_standard: Molecule) {
+fn test_apply_radical_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let radical_entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 5,
@@ -1708,7 +1751,7 @@ fn test_apply_radical_standard_invalid(basic_molecule_standard: Molecule) {
 }
 
 #[rstest]
-fn test_apply_isotope_standard(mut basic_molecule_standard: Molecule) {
+fn test_apply_isotope_molecule(mut molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let isotope_entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
@@ -1716,16 +1759,16 @@ fn test_apply_isotope_standard(mut basic_molecule_standard: Molecule) {
         mass: 13, // Carbon-13
     }]);
     acc.add_entry(isotope_entry).unwrap();
-    acc.update_molecule(&mut basic_molecule_standard).unwrap();
+    acc.update_molecule(&mut molecule_single_atom).unwrap();
 
-    let atom = basic_molecule_standard.atom(0).unwrap();
+    let atom = molecule_single_atom.atom(0).unwrap();
     assert_eq!(atom.isotope_mass, Some(13));
 }
 
 #[rstest]
-fn test_apply_isotope_standard_invalid(basic_molecule_standard: Molecule) {
+fn test_apply_isotope_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let isotope_entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 5,
@@ -1737,7 +1780,7 @@ fn test_apply_isotope_standard_invalid(basic_molecule_standard: Molecule) {
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_standard(mut molecule_with_bond_standard: Molecule) {
+fn test_apply_zero_order_bond_molecule(mut molecule_with_bond: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
@@ -1745,17 +1788,16 @@ fn test_apply_zero_order_bond_standard(mut molecule_with_bond_standard: Molecule
         bond_order: 0,
     }]);
     acc.add_entry(zero_order_entry).unwrap();
-    acc.update_molecule(&mut molecule_with_bond_standard)
-        .unwrap();
+    acc.update_molecule(&mut molecule_with_bond).unwrap();
 
-    let bond = molecule_with_bond_standard.bond(0).unwrap();
+    let bond = molecule_with_bond.bond(0).unwrap();
     assert_eq!(bond.bond_type, BondType::Zero);
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_standard_invalid(basic_molecule_standard: Molecule) {
+fn test_apply_zero_order_bond_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let zero_order_entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
         bond_index: 5,
@@ -1767,7 +1809,7 @@ fn test_apply_zero_order_bond_standard_invalid(basic_molecule_standard: Molecule
 }
 
 #[rstest]
-fn test_apply_zero_atom_charge_entries_standard(mut basic_molecule_standard: Molecule) {
+fn test_apply_zero_atom_charge_entries_molecule(mut molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let zero_atom_charge_entry =
@@ -1776,16 +1818,16 @@ fn test_apply_zero_atom_charge_entries_standard(mut basic_molecule_standard: Mol
             charge: -1,
         }]);
     acc.add_entry(zero_atom_charge_entry).unwrap();
-    acc.update_molecule(&mut basic_molecule_standard).unwrap();
+    acc.update_molecule(&mut molecule_single_atom).unwrap();
 
-    let atom = basic_molecule_standard.atom(0).unwrap();
+    let atom = molecule_single_atom.atom(0).unwrap();
     assert_eq!(atom.charge, -1);
 }
 
 #[rstest]
-fn test_apply_zero_atom_charge_entries_standard_invalid(basic_molecule_standard: Molecule) {
+fn test_apply_zero_atom_charge_entries_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let zero_atom_charge_entry =
         PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
@@ -1798,7 +1840,7 @@ fn test_apply_zero_atom_charge_entries_standard_invalid(basic_molecule_standard:
 }
 
 #[rstest]
-fn test_apply_atom_hydrogen_count_entries_standard(mut basic_molecule_standard: Molecule) {
+fn test_apply_atom_hydrogen_count_entries_molecule(mut molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
 
     let atom_hydrogen_count_entry =
@@ -1808,18 +1850,16 @@ fn test_apply_atom_hydrogen_count_entries_standard(mut basic_molecule_standard: 
         }]);
 
     acc.add_entry(atom_hydrogen_count_entry).unwrap();
-    acc.update_molecule(&mut basic_molecule_standard).unwrap();
+    acc.update_molecule(&mut molecule_single_atom).unwrap();
 
-    let atom = basic_molecule_standard.atom(0).unwrap();
+    let atom = molecule_single_atom.atom(0).unwrap();
     assert_eq!(atom.hydrogen_count, Some(1));
 }
 
 #[rstest]
-fn test_apply_atom_hydrogen_count_entries_standard_invalid(
-    basic_molecule_standard: Molecule,
-) {
+fn test_apply_atom_hydrogen_count_entries_molecule_invalid(molecule_single_atom: Molecule) {
     let mut acc = MoleculeProperties::new();
-    let mut molecule = basic_molecule_standard;
+    let mut molecule = molecule_single_atom;
 
     let atom_hydrogen_count_entry =
         PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
