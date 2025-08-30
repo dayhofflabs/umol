@@ -8,11 +8,11 @@ use nom::{error, Err, IResult, Parser};
 
 use umol_data::{Element, NamedIsotope};
 
+use crate::io::config::ParseFlags;
 use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol, Point3D};
 use crate::io::ctab::parser::utils::trim_whitespace;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
-use crate::io::config::ParseFlags;
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,
@@ -127,10 +127,7 @@ fn atomlike_symbol<'a>(
 
 /// Parse atom inputs with 52-69 characters (s. `atom_input` for more details).
 /// Includes atom mapping number.
-fn atom_input69(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input69(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
@@ -200,10 +197,7 @@ fn atom_input69(
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input51(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input51(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
@@ -270,10 +264,7 @@ fn atom_input51(
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input42(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input42(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
@@ -334,10 +325,7 @@ fn atom_input42(
 /// If `allow_unicode` is true, allow unicode whitespace.
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 ///
-fn atom_input39(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input39(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
@@ -391,10 +379,7 @@ fn atom_input39(
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input36(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input36(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
@@ -443,10 +428,7 @@ fn atom_input36(
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input34(
-    input: &[u8],
-    flags: ParseFlags,
-) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input34(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let x = fixed_width_float::<f64>(10, 4, allow_unicode);
     let y = fixed_width_float::<f64>(10, 4, allow_unicode);
@@ -514,11 +496,7 @@ pub fn atom_input<'a>(
             34 => atom_input34,
             _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
-        terminated(
-            move |input| parser(input, flags),
-            space0,
-        )
-        .parse(input)
+        terminated(move |input| parser(input, flags), space0).parse(input)
     }
 }
 
@@ -553,10 +531,7 @@ pub fn atom_input<'a>(
 pub fn atomlike_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
-    terminated(
-        atomlike_input_inner(flags),
-        space0,
-    )
+    terminated(atomlike_input_inner(flags), space0)
 }
 
 // Internal parser for atomlike_input

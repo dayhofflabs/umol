@@ -319,7 +319,7 @@ pub fn legacy_atom_list_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
-    all_consuming(map(
+    map(
         (
             fixed_width_int_minus1::<usize>(3, allow_unicode),
             delimited(
@@ -349,13 +349,29 @@ pub fn legacy_atom_list_input<'a>(
                 elements,
             })
         },
-    ))
+    )
+}
+
+/// Wrapper for atom_alias_entry (needed for basic_property_block and property_block)
+pub fn atom_alias_input<'a>(
+    flags: ParseFlags,
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
+    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+    move |input: &'a [u8]| {
+        if input.len() >= 3 && &input[0..3] == b"A  " {
+            atom_alias_entry(allow_unicode)
+                .parse(&input[3..])
+                .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o)))
+        } else {
+            Err(Err::Error(error::Error::new(input, error::ErrorKind::Tag)))
+        }
+    }
 }
 
 /// Parse property line (basic properties only)
 pub fn basic_property_input<'a>(
     flags: ParseFlags,
-) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let allow_sgroups = flags.contains(ParseFlags::SGROUPS);
     let allow_clark_extensions = flags.contains(ParseFlags::CLARK_EXTENSIONS);
@@ -379,7 +395,7 @@ pub fn basic_property_input<'a>(
                 }
                 let (remaining, tag) = take(6u8)(input)?;
                 // General M properties
-                match tag {
+                let (remaining, result) = match tag {
                     b"M  END" => success(PropertyEntries::End).parse(remaining),
                     b"M  CHG" => charge_entries(allow_unicode)
                         .parse(remaining)
@@ -433,7 +449,9 @@ pub fn basic_property_input<'a>(
                         }
                     }
                     _ => Err(Err::Error(error::Error::new(input, error::ErrorKind::Tag))),
-                }
+                }?;
+                let (remaining, _) = space0.parse(remaining)?;
+                Ok((remaining, result))
             }
         }
     }
@@ -442,7 +460,7 @@ pub fn basic_property_input<'a>(
 /// Parse property line
 pub fn property_input<'a>(
     flags: ParseFlags,
-) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> + 'a {
+) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let allow_queries = flags.contains(ParseFlags::QUERIES);
     let allow_rgroups = flags.contains(ParseFlags::RGROUPS);
@@ -469,7 +487,7 @@ pub fn property_input<'a>(
                     return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
                 }
                 let (remaining, tag) = take(6u8)(input)?;
-                match tag {
+                let (remaining, result) = match tag {
                     // General M properties
                     b"M  END" => success(PropertyEntries::End).parse(remaining),
                     b"M  CHG" => charge_entries(allow_unicode)
@@ -613,7 +631,9 @@ pub fn property_input<'a>(
                         }
                     }
                     _ => Err(Err::Error(error::Error::new(input, error::ErrorKind::Tag))),
-                }
+                }?;
+                let (remaining, _) = space0.parse(remaining)?;
+                Ok((remaining, result))
             }
         }
     }
