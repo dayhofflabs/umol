@@ -1048,7 +1048,7 @@ fn sgroup_connectivity_entries<'a>(
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                delimited(tag(" "), sgroup_connectivity(), tag(" ")),
+                preceded(tag(" "), sgroup_connectivity()),
             ),
             |(sgroup_index, connectivity)| SGroupConnectivityEntry {
                 sgroup_index,

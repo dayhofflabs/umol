@@ -9,7 +9,7 @@ use nom::branch::alt;
 use nom::bytes::complete::{tag_no_case, take};
 use nom::character::complete::u32 as nom_u32;
 use nom::combinator::{map, map_parser, map_res, rest, value};
-use nom::{error, Parser};
+use nom::{error, Err, Parser};
 
 /// Parse SGroup type string
 pub fn sgroup_type<'a>(
@@ -48,12 +48,28 @@ pub fn sgroup_subtype<'a>(
 /// Parse SGroup connectivity string
 pub fn sgroup_connectivity<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupConnectivity, Error = error::Error<&'a [u8]>> {
-    map_res(take(2usize), move |s: &[u8]| match s {
-        b"HH" => Ok(SGroupConnectivity::HeadToHead),
-        b"HT" => Ok(SGroupConnectivity::HeadToTail),
-        b"EU" => Ok(SGroupConnectivity::EitherUnknown),
-        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
-    })
+    move |input: &'a [u8]| {
+        fixed_width_partial(
+            3usize,
+            map_res(rest, move |s: &[u8]| {
+                let s = s.trim_ascii();
+                match s {
+                    b"HH" => Ok(SGroupConnectivity::HeadToHead),
+                    b"HT" => Ok(SGroupConnectivity::HeadToTail),
+                    b"EU" => Ok(SGroupConnectivity::EitherUnknown),
+                    _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+                }
+            }),
+            true,
+        )
+        .parse(input)
+        .and_then(|(remaining, opt)| {
+            Ok((
+                remaining,
+                opt.ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::MapRes)))?,
+            ))
+        })
+    }
 }
 
 /// Parse SGroup multiplier string
@@ -207,9 +223,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"HH", SGroupConnectivity::HeadToHead)]
-    #[case(b"HT", SGroupConnectivity::HeadToTail)]
-    #[case(b"EU", SGroupConnectivity::EitherUnknown)]
+    #[case(b"HH ", SGroupConnectivity::HeadToHead)]
+    #[case(b"HT ", SGroupConnectivity::HeadToTail)]
+    #[case(b"EU ", SGroupConnectivity::EitherUnknown)]
+    #[case(b" HH", SGroupConnectivity::HeadToHead)]
     fn test_sgroup_connectivity(#[case] input: &[u8], #[case] expected: SGroupConnectivity) {
         let (remaining, result) = sgroup_connectivity().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
@@ -217,8 +234,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"XY", "unknown connectivity", error::ErrorKind::MapRes)]
-    #[case(b"H", "too short", error::ErrorKind::Eof)]
+    #[case(b"XY ", "unknown connectivity", error::ErrorKind::MapRes)]
     fn test_sgroup_connectivity_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
@@ -268,10 +284,7 @@ mod tests {
     #[case(b"N ", SGroupDataType::Numeric)]
     #[case(b"T ", SGroupDataType::Text)]
     #[case(b"  ", SGroupDataType::Text)]
-    fn test_sgroup_data_type(
-        #[case] input: &[u8],
-        #[case] expected: SGroupDataType,
-    ) {
+    fn test_sgroup_data_type(#[case] input: &[u8], #[case] expected: SGroupDataType) {
         let (remaining, result) = sgroup_data_type().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
@@ -392,9 +405,7 @@ mod tests {
         #[case] input: &[u8],
         #[case] expected: SGroupDataDisplayChars,
     ) {
-        let (remaining, result) = sgroup_data_display_chars()
-            .parse(input)
-            .unwrap();
+        let (remaining, result) = sgroup_data_display_chars().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
     }

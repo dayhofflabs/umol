@@ -864,15 +864,15 @@ fn test_sgroup_label_entries_invalid(
 }
 
 #[rstest]
-#[case(b"  3   1 HT    2 HT    3 HT ", "three entries", vec![
+//       nn8 sss ttt sss ttt sss ttt
+#[case(b"  2   1 HT    2 HT ", "two entries", vec![
     SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail },
     SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::HeadToTail },
-    SGroupConnectivityEntry { sgroup_index: 2, connectivity: SGroupConnectivity::HeadToTail }
 ])]
-#[case(b"  2   1 HT    2 EU ", "two entries", vec![
+#[case(b"  3   1 HT    2 HT    3 HT", "partial last entry", vec![
     SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail },
-    SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::EitherUnknown }
-])]
+    SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::HeadToTail },
+    SGroupConnectivityEntry { sgroup_index: 2, connectivity: SGroupConnectivity::HeadToTail }])]
 fn test_sgroup_connectivity_entries(
     #[case] input: &[u8],
     #[case] desc: &str,

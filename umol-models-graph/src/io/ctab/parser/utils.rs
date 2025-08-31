@@ -13,7 +13,7 @@ use nom::character::complete::{
     alpha1, digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
     u8 as nom_u8, usize as nom_usize,
 };
-use nom::combinator::{complete, map, map_opt, opt, recognize, rest, success, verify};
+use nom::combinator::{map, map_opt, opt, recognize, rest, success, verify};
 use nom::multi::{count as nom_count, separated_list1};
 use nom::sequence::delimited;
 use nom::{error, Err, Parser};
@@ -154,10 +154,10 @@ pub(crate) fn fixed_width_int<'a, T>(
 where
     T: IntParser,
 {
-    complete(map(
+    map(
         fixed_width_opt(width, delimited(space0, T::nom_parser(), space0)),
         |opt| opt.unwrap_or_else(T::zero),
-    ))
+    )
 }
 
 /// Parse a fixed-width field as an integer type, applying range bounds.
@@ -169,13 +169,13 @@ where
     T: IntParser,
     R: Contains<T> + Clone,
 {
-    complete(verify(
+    verify(
         map(
             fixed_width_opt(width, delimited(space0, T::nom_parser(), space0)),
             |opt| opt.unwrap_or_else(T::zero),
         ),
         move |val: &T| range.contains(val),
-    ))
+    )
 }
 
 /// Parse a fixed-width field as optional integer type. If range check fails, return None.
@@ -213,10 +213,10 @@ pub(crate) fn fixed_width_int_partial<'a, T>(
 where
     T: IntParser,
 {
-    complete(map(
+    map(
         fixed_width_partial(width, delimited(space0, T::nom_parser(), space0), true),
         |opt| opt.unwrap_or_else(T::zero),
-    ))
+    )
 }
 
 /// Parse a fixed-width field as float with Fortran semantics (Fw.d).
@@ -227,7 +227,7 @@ pub(crate) fn fixed_width_float<'a, T>(
 where
     T: Float + FastFloat,
 {
-    complete(map(
+    map(
         fixed_width_opt(
             width,
             delimited(
@@ -246,7 +246,7 @@ where
             ),
         ),
         |opt| opt.unwrap_or_else(T::zero),
-    ))
+    )
 }
 
 /// Parse a fixed-width field as element symbol

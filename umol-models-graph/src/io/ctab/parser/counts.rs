@@ -4,7 +4,7 @@ use bstr::ByteSlice;
 use nom::branch::alt;
 use nom::bytes::complete::take;
 use nom::character::complete::space0;
-use nom::combinator::{complete, map, verify};
+use nom::combinator::{map, verify};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Parser};
 
@@ -34,13 +34,6 @@ pub fn counts_input<'a>(
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     terminated(
         move |input: &'a [u8]| {
-            if flags.contains(ParseFlags::DEBUG) {
-                eprintln!(
-                    "DEBUG: counts_input parsing: {:?}",
-                    std::str::from_utf8(input).unwrap_or("<invalid utf8>")
-                );
-                eprintln!("DEBUG: counts_input bytes: {:?}", input);
-            }
             map(
                 (
                     fixed_width_int::<i32>(3),
@@ -52,12 +45,12 @@ pub fn counts_input<'a>(
                         delimited(
                             fixed_width_padding_n(4, 3, strict_padding),
                             fixed_width_int::<i32>(3),
-                            complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
+                            verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some()),
                         ),
                         delimited(
                             take(42usize),
                             fixed_width_int::<i32>(3),
-                            complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
+                            verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some()),
                         ),
                     )),
                 ),
