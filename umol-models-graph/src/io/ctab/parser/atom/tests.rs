@@ -14,7 +14,6 @@ use rstest::*;
 #[case(b"C  ", "C", AtomSymbol::Element(Element::C))]
 #[case(b"Cu ", "Cu", AtomSymbol::Element(Element::Cu))]
 #[case(b"D  ", "D", AtomSymbol::NamedIsotope(NamedIsotope::D))]
-#[case("H\u{00A0}".as_bytes(), "H", AtomSymbol::Element(Element::H))]
 fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
     let result = atom_symbol(ParseFlags::LENIENT).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -28,7 +27,6 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: 
 #[case(b"L  ", "atom list", error::ErrorKind::MapRes)]
 #[case(b"LP ", "lone pair", error::ErrorKind::MapRes)]
 #[case(b"R1 ", "R group", error::ErrorKind::MapRes)]
-#[case("A\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::MapRes)]
 fn test_atom_symbol_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -65,7 +63,6 @@ fn test_atom_symbol_invalid(
 #[case(b"D  ", "D", AtomSymbol::NamedIsotope(NamedIsotope::D))]
 #[case(b"d  ", "d", AtomSymbol::NamedIsotope(NamedIsotope::D))]
 #[case(b"T  ", "T", AtomSymbol::NamedIsotope(NamedIsotope::T))]
-#[case("C\u{00A0}".as_bytes(), "C", AtomSymbol::Element(Element::C))]
 fn test_atomlike_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
     let result = atomlike_symbol(ParseFlags::LENIENT).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -87,7 +84,6 @@ fn test_atomlike_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expect
 #[case(b"L  ", "atom list", error::ErrorKind::MapRes)]
 #[case(b"R1 ", "R group", error::ErrorKind::MapRes)]
 #[case(b"LP ", "lone pair", error::ErrorKind::MapRes)]
-#[case("C\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::MapRes)]
 fn test_atomlike_symbol_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -128,8 +124,6 @@ fn test_atomlike_symbol_invalid(
        Element::C, Some(10), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4           1 0    ", "gaps with spaces and zeros",
        Element::C, Some(10), 1, Some(4), Some(1), 1.2345, 2.3456, 3.4567)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0  0  0  4  0  0  0  0  0  0".as_bytes(), "unicode whitespace",
-       Element::C, Some(10), 1, Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", "named isotope",
        Element::H, Some(2), 1, Some(1), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4  0  0  0  0  0  0", "non-strict padding",
@@ -203,7 +197,6 @@ fn test_atom_input69(
 #[case(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", "non-numeric coordinate", error::ErrorKind::Eof)]
 #[case(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", "non-numeric atom map number", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 L   0  0  0  0  0  0  0  0  0  0  0  0", "atom list", error::ErrorKind::MapRes)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0  0  0  4  0  0  0  0  0  0".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4  0  0  0  0  0  0", "non-strict padding", error::ErrorKind::Verify)]
 fn test_atom_input69_invalid(
     #[case] input: &[u8],
@@ -229,7 +222,6 @@ fn test_atom_input69_invalid(
 #[case(b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4", "mass diff out-of-range low", Element::C, None, 1, Some(4), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4", "mass diff out-of-range high", Element::C, None, 1, Some(4), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4", "charge out-of-range high", Element::C, Some(10), 0, Some(4), 1.2345, 2.3456, 3.4567)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0  0  0  4".as_bytes(), "unicode whitespace", Element::C, Some(10), 1, Some(4), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", "named isotope", Element::H, Some(2), 1, Some(1), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", "non-strict padding", Element::C, Some(10), 1, Some(4), 1.2345, 2.3456, 3.4567)]
 fn test_atom_input51(
@@ -296,7 +288,6 @@ fn test_atom_input51(
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", "non-numeric valence", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", "out-of-range valence", error::ErrorKind::Verify)]
 #[case(b"    1.2345    2.3456    3.4567 L  -2  3  0  0  0  4", "invalid atom symbol", error::ErrorKind::MapRes)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0  0  0  4".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", "non-strict padding", error::ErrorKind::Verify)]
 fn test_atom_input51_invalid(
     #[case] input: &[u8],
@@ -375,7 +366,6 @@ fn test_atom_input51_empty_fields(
 #[rstest]
 #[case(b"    1.2345    2.3456    3.4567 C   0  3  1", "basic valid", Element::C, None, 1, Some(AtomStereoParity::Odd), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C   0  3   0  ", "blank stereo parity", Element::C, None, 1, None, 1.2345, 2.3456, 3.4567)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0".as_bytes(), "unicode whitespace", Element::C, Some(10), 1, None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3  0", "named isotope", Element::H, Some(2), 1, None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0", "non-strict padding", Element::C, Some(10), 1, None, 1.2345, 2.3456, 3.4567)]
 fn test_atom_input42(
@@ -443,7 +433,6 @@ fn test_atom_input42(
 #[case(b"    1.2345    2.3456    3.4567 L   0  3  0", "invalid atom symbol", error::ErrorKind::MapRes)]
 #[case(b"    1.2345    2.3456    3.4567 C   0  3  a", "non-numeric stereo parity", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3     a", "non-numeric data in ignored block", error::ErrorKind::Verify)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0", "non-strict padding", error::ErrorKind::Verify)]
 fn test_atom_input42_invalid(
     #[case] input: &[u8],
@@ -526,7 +515,6 @@ fn test_atom_input42_empty_fields(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  8", "charge out-of-range high", Element::C, Some(10), 0, 1.2345, 2.3456, 3.4567)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3".as_bytes(), "unicode whitespace", Element::C, Some(10), 1, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3", "named isotope", Element::H, Some(2), 1, 1.2345, 2.3456, 3.4567)]
 fn test_atom_input39(
     #[case] input: &[u8],
@@ -591,7 +579,6 @@ fn test_atom_input39(
 #[case(b"    1.234a    2.3456    3.4567 C  -2  3", "non-numeric coordinate", error::ErrorKind::Eof)]
 #[case(b"    1.2345    2.3456    3.4567 C  -a  3", "non-numeric mass diff", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 L  -2  3", "invalid atom symbol", error::ErrorKind::MapRes)]       
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_atom_input39_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -638,7 +625,6 @@ fn test_atom_input39_empty_fields(
 #[rstest]
 #[case(b"    1.2345    2.3456    3.4567 C  -2", "basic valid", Element::C, Some(10), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -4", "mass diff out-of-range low", Element::C, None, 1.2345, 2.3456, 3.4567)]
-#[case("    1.2345    2.3456    3.4567 C\u{00A0}-2".as_bytes(), "unicode whitespace", Element::C, Some(10), 1.2345, 2.3456, 3.4567)]
 fn test_atom_input36(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -699,7 +685,6 @@ fn test_atom_input36(
 #[rstest]
 #[case(b"    1.234a    2.3456    3.4567 C  -2", "non-numeric coordinate", error::ErrorKind::Eof)]
 #[case(b"    1.2345    2.3456    3.4567 L  -2", "invalid atom symbol", error::ErrorKind::MapRes)]
-#[case("    1.2345    2.3456    3.4567 C\u{00A0}-2".as_bytes(), "unicode whitespace", error::ErrorKind::MapRes)]
 fn test_atom_input36_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -737,7 +722,6 @@ fn test_atom_input36_empty_fields(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"    1.2345    2.3456    3.4567 C  ", "basic valid", Element::C, None, 1.2345, 2.3456, 3.4567)]
-#[case("    1.2345    2.3456\u{00A0}  3.4567 C  ".as_bytes(), "unicode whitespace", Element::C, None, 1.2345, 2.3456, 3.4567)]
 fn test_atom_input34(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -798,7 +782,6 @@ fn test_atom_input34(
 #[rstest]
 #[case(b"    1.234a    2.3456    3.4567 C  ", "non-numeric coordinate", error::ErrorKind::Eof)]
 #[case(b"    1.2345    2.3456    3.4567 L  ", "invalid atom symbol", error::ErrorKind::MapRes)]
-#[case("    1.2345    2.3456\u{00A0}  3.4567 C".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_atom_input34_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -894,7 +877,6 @@ fn test_atom_input(
 #[case(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", "len 69, non-numeric coordinate", error::ErrorKind::Eof)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", "len 51, non-numeric valence", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 L   0  3  0", "len 42, invalid atom symbol", error::ErrorKind::MapRes)]       
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3".as_bytes(), "len 39, unicode whitespace", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", "len 51, non-strict padding", error::ErrorKind::Verify)]
 fn test_atom_input_invalid(
     #[case] input: &[u8],
@@ -934,8 +916,6 @@ fn test_atom_input_invalid(
        None, 0, None, Some(AtomStereoParity::Either), None, None, Some(1), Some(AtomInversionRetention::Retained), Some(AtomExactChange::Match), 0.0000, 0.0000, 0.0000)]
 #[case(b"    1.0000    2.0000    3.0000 L   0  0  0  0  0  4", "atom list", AtomSymbol::AtomList(AtomList { elements: vec![], exclusion: false }),
        None, 0, Some(4), Some(AtomStereoParity::Either), None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0  0  0  4  0  0  0  0  0  0".as_bytes(), "unicode whitespace", AtomSymbol::Element(Element::C),
-       Some(10), 1, Some(4), Some(AtomStereoParity::Either), None, None, Some(0), None, None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", "named isotope", AtomSymbol::NamedIsotope(NamedIsotope::D),
        Some(2), 1, Some(1), Some(AtomStereoParity::Either), None, None, Some(0), None, None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0", "non-strict padding", AtomSymbol::Element(Element::C),
@@ -1040,7 +1020,6 @@ fn test_atomlike_input(
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  4", "invalid stereo parity", error::ErrorKind::MapRes)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", "non-numeric hydrogen count", error::ErrorKind::Digit)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", "non-numeric valence", error::ErrorKind::Digit)]
-#[case("    1.2345    2.3456    3.4567 C  -2\u{00A0}3  0  0  0  4  0  0  0  0  0  0".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0", "non-strict padding", error::ErrorKind::Verify)]
 fn test_atomlike_input_invalid(
     #[case] input: &[u8],

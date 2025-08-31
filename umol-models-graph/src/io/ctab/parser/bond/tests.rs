@@ -23,7 +23,6 @@ use rstest::*;
 #[case(b"  2  5  2  0", "len 12 double none", 1, 4, BondType::Double, None, None)]
 #[case(b"  2  4  1  6", "len 12 single dash", 1, 3, BondType::Single, None, Some(BondDir::Dash))]
 #[case(b"  2  5  3   ", "len 12 triple empty fields", 1, 4, BondType::Triple, None, None)]
-#[case("  1  2  1\u{00A0}1  0  0  0".as_bytes(), "unicode whitespace", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
 #[case(b"  1  2  1  1  0  0XXX", "non-strict padding", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
 fn test_bond_input12(
     #[case] input: &[u8],
@@ -71,7 +70,6 @@ fn test_bond_input12(
 #[case(b"  1  2  1 1", "len 12 line too short", error::ErrorKind::Eof)]
 #[case(b"  A  2  1  1  0  0  0", "len 21 non-numeric atom", error::ErrorKind::Digit)]
 #[case(b"  1  2  A  1  0  0  0", "len 21 non-numeric type", error::ErrorKind::Digit)]
-#[case("  1  2  1\u{00A0}1  0  0  0".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 #[case(b"  1  2  1  1  0  0XXX", "non-strict padding", error::ErrorKind::Verify)]
 fn test_bond_input12_invalid(
     #[case] input: &[u8],
@@ -93,7 +91,6 @@ fn test_bond_input12_invalid(
 #[case(b"  2  5  2", "double", 1, 4, BondType::Double)]
 #[case(b"  2  5  3", "triple", 1, 4, BondType::Triple)]
 #[case(b"  2  5  4", "aromatic", 1, 4, BondType::Aromatic)]
-#[case("  1\u{00A0}2  1".as_bytes(), "unicode whitespace", 0, 1, BondType::Single)]
 fn test_bond_input9(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -130,7 +127,6 @@ fn test_bond_input9(
 #[rstest]
 #[case(b"  1  2", "Line too short", error::ErrorKind::MapRes)]
 #[case(b"  1  A  1", "Non-numeric atom 2", error::ErrorKind::Digit)]
-#[case("  1\u{00A0}2  1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_bond_input9_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -248,7 +244,6 @@ fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
        Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
 #[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None,
        Some(BondDir::Either), Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
-#[case("  1  2\u{00A0}1".as_bytes(), "unicode whitespace", 0, 1, BondType::Single, None, None, None, None)]
 #[case(b"  1  2  8  0XXX  1", "non-strict padding", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
 fn test_bondlike_input(
     #[case] input: &[u8],
@@ -307,7 +302,6 @@ fn test_bondlike_input(
 #[case(b"  1  2", "Line too short", error::ErrorKind::MapRes)]
 #[case(b"  1  2  9", "Out of range type", error::ErrorKind::MapRes)]
 #[case(b"  2  5  2  0  0  4  0", "Invalid topology", error::ErrorKind::MapRes)]
-#[case("  1  2\u{00A0}1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 #[case(b"  1  2  8  0XXX  1", "non-strict padding", error::ErrorKind::Verify)]
 fn test_bondlike_input_invalid(
     #[case] input: &[u8],

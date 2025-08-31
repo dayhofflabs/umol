@@ -4,9 +4,9 @@
 //! which is the core molecular structure representation used in MOL, SDF, and other formats.
 
 use bstr::{join, ByteSlice};
-use nom::bytes::complete::tag;
-use nom::character::complete::multispace0;
-use nom::combinator::{all_consuming, opt, value};
+use nom::bytes::complete::{is_not, tag};
+use nom::character::complete::{line_ending, multispace0};
+use nom::combinator::{all_consuming, map_parser, opt, value};
 use nom::sequence::terminated;
 use nom::{error, Err, Parser};
 
@@ -42,7 +42,7 @@ pub fn basic_ctab_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-        let (remaining, counts) = counts_input(flags).parse(input)?;
+        let (remaining, counts) = counts_block(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
         let (remaining, atoms) = atom_block(atom_count, flags).parse(remaining)?;
@@ -63,8 +63,7 @@ pub fn ctab_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = MoleculeLike, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-
-        let (remaining, counts) = counts_input(flags).parse(input)?;
+        let (remaining, counts) = counts_block(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
         let (remaining, atoms) = atomlike_block(atom_count, flags).parse(remaining)?;
@@ -77,6 +76,13 @@ pub fn ctab_block<'a>(
         let molecule = build_moleculelike(atoms, bonds, properties);
         Ok((remaining, molecule))
     }
+}
+
+/// Parse counts block
+fn counts_block<'a>(
+    flags: ParseFlags,
+) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
+    map_parser(terminated(is_not("\r\n"), line_ending), counts_input(flags))
 }
 
 /// Parse atom block (basic atoms only)
@@ -181,7 +187,7 @@ fn bondlike_block<'a>(
 
 // Parse legacy atom list block
 fn legacy_atom_list_block<'a>(
-    flags: ParseFlags,
+    _flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
@@ -189,7 +195,7 @@ fn legacy_atom_list_block<'a>(
         let mut consumed = 0;
 
         while let Some(line) = lines_iter.next() {
-            if let Ok((_, property)) = all_consuming(legacy_atom_list_input(flags)).parse(line) {
+            if let Ok((_, property)) = all_consuming(legacy_atom_list_input()).parse(line) {
                 properties.push(property);
                 consumed += line.len();
             } else {
@@ -224,7 +230,7 @@ fn basic_properties_block<'a>(
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
-                        all_consuming(atom_alias_input(flags)).parse(&combined_line)
+                        all_consuming(atom_alias_input()).parse(&combined_line)
                     {
                         properties.push(property);
                         consumed += line_bytes;
@@ -254,7 +260,6 @@ fn properties_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-
         let mut properties = Vec::new();
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -271,7 +276,7 @@ fn properties_block<'a>(
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
-                        all_consuming(atom_alias_input(flags)).parse(&combined_line)
+                        all_consuming(atom_alias_input()).parse(&combined_line)
                     {
                         properties.push(property);
                         consumed += line_bytes;

@@ -15,14 +15,12 @@ use umol_data::Element;
        PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
 #[case(b"  4 F    4   6   7   8  16", "partial field",
        PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 3, exclusion: false, elements: vec![Element::C, Element::N, Element::O, Element::S] }))]
-#[case("  1 F    3   9\u{00A0} 7   8  ".as_bytes(), "unicode whitespace",
-       PropertyEntries::AtomListEntry(AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::F, Element::N, Element::O] }))]
 fn test_legacy_atom_list_input(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let result = legacy_atom_list_input(ParseFlags::LENIENT).parse(input);
+    let result = legacy_atom_list_input().parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -35,13 +33,12 @@ fn test_legacy_atom_list_input(
 #[case(b"  1 F    6    9  ", "count exceeds 5", error::ErrorKind::Verify)]
 #[case( b"  1 X    1   9  ", "invalid exclusion flag", error::ErrorKind::MapRes)]
 #[case( b"  1 F    1   0  ", "invalid element atomic number", error::ErrorKind::MapOpt)]
-#[case("  1 F    3   9\u{00A0} 7   8  ".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_legacy_atom_list_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = legacy_atom_list_input(ParseFlags::STRICT).parse(input);
+    let result = legacy_atom_list_input().parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -168,7 +165,6 @@ fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc
 #[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
-#[case("A    1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 fn test_property_input(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -188,11 +184,10 @@ fn test_property_input(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"M  CHG  1   1  -1  a", "trailing chars", error::ErrorKind::Eof)]
-#[case(b"M  CHG  2   1  -1", "count does not match item list", error::ErrorKind::Verify)]
+#[case(b"M  CHG  2   1  -1", "count does not match item list", error::ErrorKind::Tag)]
 #[case(b"M  CHG  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"M  CHG  1   0 -10", "atom index is zero", error::ErrorKind::Verify)]
 #[case(b"M  XXX  1   1  -1", "invalid property tag", error::ErrorKind::Tag)]
-#[case("A    1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::MapRes)]
 #[case(b"M  RBC  1   1   2", "RBC query property, requires allow_queries", error::ErrorKind::Tag)]
 #[case(b"M  APO  1   1   1", "APO query property, requires allow_rgroups", error::ErrorKind::Tag)]
 #[case(b"M  STY  1   1 SUP", "STY SGroup property, requires allow_sgroups", error::ErrorKind::Tag)]
@@ -217,13 +212,12 @@ fn test_property_input_invalid(
 #[rstest]
 #[case(b"  1\nCF3", "no space", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
 #[case(b" 15\n  Et", "leading space", AtomAliasEntry { atom_index: 14, alias: "Et".to_string() })]
-#[case("  1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
 fn test_atom_alias_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: AtomAliasEntry,
 ) {
-    let result = all_consuming(atom_alias_entry(true)).parse(input);
+    let result = all_consuming(atom_alias_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -232,13 +226,12 @@ fn test_atom_alias_entry(
 
 #[rstest]
 #[case(b"  0\n  Et", "atom index is zero", error::ErrorKind::Verify)]
-#[case("  1\nCF3\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::MapRes)]
 fn test_atom_alias_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(atom_alias_entry(false)).parse(input);
+    let result = all_consuming(atom_alias_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -252,13 +245,12 @@ fn test_atom_alias_entry_invalid(
 #[rstest]
 #[case(b"  1 *", "asterisk", AtomValueEntry { atom_index: 0, value: "*".to_string() })]
 #[case(b" 15 query", "text", AtomValueEntry { atom_index: 14, value: "query".to_string() })]
-#[case("  1 *\u{00A0}".as_bytes(), "unicode whitespace", AtomValueEntry { atom_index: 0, value: "*".to_string() })]
 fn test_atom_value_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: AtomValueEntry,
 ) {
-    let result = all_consuming(atom_value_entry(true)).parse(input);
+    let result = all_consuming(atom_value_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -267,13 +259,12 @@ fn test_atom_value_entry(
 
 #[rstest]
 #[case(b"  0 *", "atom index is zero", error::ErrorKind::Verify)]
-#[case("  1 *\u{00A0}".as_bytes(), "unicode whitespace", error::ErrorKind::MapRes)]
 fn test_atom_value_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(atom_value_entry(false)).parse(input);
+    let result = all_consuming(atom_value_entry()).parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -294,13 +285,12 @@ fn test_atom_value_entry_invalid(
             ChargeEntry { atom_index: 4, charge: 5 }, ChargeEntry { atom_index: 5, charge: 6 },
             ChargeEntry { atom_index: 6, charge: 7 }, ChargeEntry { atom_index: 7, charge: 8 }])]
 #[case(b"  1  25  15", "max charge", vec![ChargeEntry { atom_index: 24, charge: 15 }])]
-#[case("  1   1\u{00A0}-1".as_bytes(), "unicode whitespace", vec![ChargeEntry { atom_index: 0, charge: -1 }])]
 fn test_charge_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<ChargeEntry>,
 ) {
-    let result = all_consuming(charge_entries(true)).parse(input);
+    let result = all_consuming(charge_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -310,7 +300,7 @@ fn test_charge_entries(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"  1   1  -1  a", "trailing characters", error::ErrorKind::Eof)]
-#[case(b"  2   1  -1", "count exceeds item list length", error::ErrorKind::Verify)]
+#[case(b"  2   1  -1", "count exceeds item list length", error::ErrorKind::Tag)]
 #[case(b"  2   1  -1   4   1   5   6", "item list exceeds count", error::ErrorKind::Eof)]
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"  1   0 -10", "atom index is zero", error::ErrorKind::Verify)]
@@ -319,7 +309,7 @@ fn test_charge_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(charge_entries(false)).parse(input);
+    let result = all_consuming(charge_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -334,13 +324,12 @@ fn test_charge_entries_invalid(
 #[rstest]
 #[case(b"  1   1   2", "single entry", vec![RadicalEntry { atom_index: 0, radical_type: 2 }])]
 #[case(b"  2   1   1   4   3", "two entries", vec![RadicalEntry { atom_index: 0, radical_type: 1 }, RadicalEntry { atom_index: 3, radical_type: 3 }])]
-#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", vec![RadicalEntry { atom_index: 0, radical_type: 2 }])]
 fn test_radical_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<RadicalEntry>,
 ) {
-    let result = all_consuming(radical_entries(true)).parse(input);
+    let result = all_consuming(radical_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -351,7 +340,7 @@ fn test_radical_entries(
 #[rstest]
 #[case(b"  1   1   4", "value out of range", error::ErrorKind::Verify)]
 #[case(b"  1   1  -1", "value is negative", error::ErrorKind::Digit)]
-#[case(b"  2   1   1", "count exceeds item list length", error::ErrorKind::Verify)]
+#[case(b"  2   1   1", "count exceeds item list length", error::ErrorKind::Tag)]
 #[case(b"  2   1   1   4   1   5   1", "item list exceeds count", error::ErrorKind::Eof)]
 #[case(b"  1   1   2 a", "trailing characters", error::ErrorKind::Eof)]
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
@@ -361,7 +350,7 @@ fn test_radical_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(radical_entries(false)).parse(input);
+    let result = all_consuming(radical_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -375,13 +364,12 @@ fn test_radical_entries_invalid(
 #[rstest]
 #[case(b"  1   1  13", "single entry", vec![IsotopeEntry { atom_index: 0, mass: 13 }])]
 #[case(b"  2  12   2  15  14", "two entries", vec![IsotopeEntry { atom_index: 11, mass: 2 }, IsotopeEntry { atom_index: 14, mass: 14 }])]
-#[case("  1   1\u{00A0}13".as_bytes(), "unicode whitespace", vec![IsotopeEntry { atom_index: 0, mass: 13 }])]
 fn test_isotope_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<IsotopeEntry>,
 ) {
-    let result = all_consuming(isotope_entries(true)).parse(input);
+    let result = all_consuming(isotope_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -391,18 +379,17 @@ fn test_isotope_entries(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"  1   1  -1", "value is negative", error::ErrorKind::Digit)]
-#[case(b"  2   1  10", "count exceeds item list length", error::ErrorKind::Verify)]
+#[case(b"  2   1  10", "count exceeds item list length", error::ErrorKind::Tag)]
 #[case(b"  2   1  10   4   1   5   1", "item list exceeds count", error::ErrorKind::Eof)]
 #[case(b"  1   1  12 a", "trailing characters", error::ErrorKind::Eof)]
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"  1   0  12", "atom index is zero", error::ErrorKind::Verify)]
-#[case("  1   1\u{00A0}13".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_isotope_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(isotope_entries(false)).parse(input);
+    let result = all_consuming(isotope_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -418,13 +405,12 @@ fn test_isotope_entries_invalid(
 #[case(b"  2   1  -1   4  -2", "two entries", vec![RingBondCountEntry { atom_index: 0, ring_bond_count: -1 }, RingBondCountEntry { atom_index: 3, ring_bond_count: -2 }])]
 #[case(b"  1   3   0", "zero value", vec![RingBondCountEntry { atom_index: 2, ring_bond_count: 0 }])]
 #[case(b"  1  10   4", "max value", vec![RingBondCountEntry { atom_index: 9, ring_bond_count: 4 }])]
-#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }])]
 fn test_ring_bond_count_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<RingBondCountEntry>,
 ) {
-    let result = all_consuming(ring_bond_count_entries(true)).parse(input);
+    let result = all_consuming(ring_bond_count_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -437,13 +423,12 @@ fn test_ring_bond_count_entries(
 #[case(b"  1   1   2 a", "trailing characters", error::ErrorKind::Eof)]
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"  1   0   2", "atom index is zero", error::ErrorKind::Verify)]
-#[case("  1   1\u{00A0}2 a".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_ring_bond_count_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(ring_bond_count_entries(false)).parse(input);
+    let result = all_consuming(ring_bond_count_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -458,13 +443,12 @@ fn test_ring_bond_count_entries_invalid(
 #[case(b"  1   1   3", "single entry", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }])]
 #[case(b"  2   1  -1   4   6", "two entries", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: -1 }, SubstitutionCountEntry { atom_index: 3, substitution_count: 6 }])]
 #[case(b"  1   5  -2", "negative value", vec![SubstitutionCountEntry { atom_index: 4, substitution_count: -2 }])]
-#[case("  1   1 \u{00A0}3".as_bytes(), "unicode whitespace", vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }])]
 fn test_substitution_count_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<SubstitutionCountEntry>,
 ) {
-    let result = all_consuming(substitution_count_entries(true)).parse(input);
+    let result = all_consuming(substitution_count_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -477,13 +461,12 @@ fn test_substitution_count_entries(
 #[case(b"  1   1   3 a", "trailing characters", error::ErrorKind::Eof)]
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"  1   0   3", "atom index is zero", error::ErrorKind::Verify)]
-#[case("  1   1\u{00A0}3 a".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_substitution_count_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(substitution_count_entries(false)).parse(input);
+    let result = all_consuming(substitution_count_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -498,13 +481,12 @@ fn test_substitution_count_entries_invalid(
 #[case(b"  1   1   1", "single entry", vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }])]
 #[case(b"  2   1   0   3   1", "two entries", vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 0 }, UnsaturatedAtomEntry { atom_index: 2, unsaturated: 1 }])]
 #[case(b"  1  10   0", "zero value", vec![UnsaturatedAtomEntry { atom_index: 9, unsaturated: 0 }])]
-#[case("  1   1 \u{00A0}1".as_bytes(), "unicode whitespace", vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }])]
 fn test_unsaturated_atom_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<UnsaturatedAtomEntry>,
 ) {
-    let result = all_consuming(unsaturated_atom_entries(true)).parse(input);
+    let result = all_consuming(unsaturated_atom_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -517,13 +499,12 @@ fn test_unsaturated_atom_entries(
 #[case(b"  1   1   1 a", "trailing characters", error::ErrorKind::Eof)]
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"  1   0   1", "atom index is zero", error::ErrorKind::Verify)]
-#[case("  1   1\u{00A0}1 a".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_unsaturated_atom_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(unsaturated_atom_entries(false)).parse(input);
+    let result = all_consuming(unsaturated_atom_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -539,14 +520,12 @@ fn test_unsaturated_atom_entries_invalid(
 #[case(b"  2   3   3   1   3   8   4   5   6", "two entries",
        vec![LinkAtomEntry { atom_index: 2, repeat_count: 3, subs_index1: 0, subs_index2: Some(2) },
             LinkAtomEntry { atom_index: 7, repeat_count: 4, subs_index1: 4, subs_index2: Some(5) }])]
-#[case("  1   1 \u{00A0}2   5   7".as_bytes(), "unicode whitespace",
-       vec![LinkAtomEntry { atom_index: 0, repeat_count: 2, subs_index1: 4, subs_index2: Some(6) }])]
 fn test_link_atom_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<LinkAtomEntry>,
 ) {
-    let result = all_consuming(link_atom_entries(true)).parse(input);
+    let result = all_consuming(link_atom_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -560,13 +539,12 @@ fn test_link_atom_entries(
 #[case(b"  1   1   2   5   7 a", "trailing characters", error::ErrorKind::Eof)]
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"  1   0   2   5   7", "atom index is zero", error::ErrorKind::Verify)]
-#[case("  1   1\u{00A0}2   5   7 a".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_link_atom_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(link_atom_entries(false)).parse(input);
+    let result = all_consuming(link_atom_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -586,10 +564,8 @@ fn test_link_atom_entries_invalid(
        AtomListEntry { atom_index: 4, exclusion: true, elements: vec![Element::Cl, Element::Br] })]
 #[case(b"  10  1   H   ", "no exclusion flag",
        AtomListEntry { atom_index: 9, exclusion: false, elements: vec![Element::H] })]
-#[case("   1  3 F C \u{00A0}N   O   ".as_bytes(), "unicode whitespace",
-       AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
 fn test_atom_list_entry(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomListEntry) {
-    let result = all_consuming(atom_list_entry(true)).parse(input);
+    let result = all_consuming(atom_list_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -599,15 +575,14 @@ fn test_atom_list_entry(#[case] input: &[u8], #[case] desc: &str, #[case] expect
 #[rstest]
 #[case(b"   1  0 F C   ", "count is zero", error::ErrorKind::Verify)]
 #[case(b"   1 17 F C   N   ", "count exceeds 16", error::ErrorKind::Verify)]
-#[case(b"   1  1 X C   ", "invalid exclusion flag", error::ErrorKind::MapRes)]
+#[case(b"   1  1 X C   ", "invalid exclusion flag", error::ErrorKind::Tag)]
 #[case(b"   1  1 F XX  ", "invalid element symbol", error::ErrorKind::MapOpt)]
-#[case("   1  3 F C\u{00A0}N   O   ".as_bytes(), "unicode whitespace", error::ErrorKind::Eof)]
 fn test_atom_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(atom_list_entry(false)).parse(input);
+    let result = all_consuming(atom_list_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -623,13 +598,12 @@ fn test_atom_list_entry_invalid(
 #[case(b"  2   1   1   2   3", "two attachment points",
        vec![AttachmentPointEntry { atom_index: 0, attachment_type: 1 },
             AttachmentPointEntry { atom_index: 1, attachment_type: 3 }])]
-#[case("  1   1 \u{00A0}2".as_bytes(), "unicode whitespace", vec![AttachmentPointEntry { atom_index: 0, attachment_type: 2 }])]
 fn test_attachment_point_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<AttachmentPointEntry>,
 ) {
-    let result = all_consuming(attachment_point_entries(true)).parse(input);
+    let result = all_consuming(attachment_point_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -643,13 +617,12 @@ fn test_attachment_point_entries(
 #[case(b"  1   0   1", "atom index is zero", error::ErrorKind::Verify)]
 #[case(b"  3   1   1   2   2   3   3", "count exceeds 2", error::ErrorKind::Verify)]
 #[case(b"  1   1   1 a", "trailing characters", error::ErrorKind::Eof)]
-#[case("  1   1\u{00A0} 1 a".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_attachment_point_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(attachment_point_entries(false)).parse(input);
+    let result = all_consuming(attachment_point_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -662,13 +635,12 @@ fn test_attachment_point_entries_invalid(
 
 #[rstest]
 #[case(b"   4  2  14   1   9   2", "two attachments", AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] })]
-#[case("   4  2  14   1 \u{00A0}9   2".as_bytes(), "unicode whitespace", AtomAttachmentOrderEntry { atom_index: 3, attachments: vec![(13, 1), (8, 2)] })]
 fn test_atom_attachment_order_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: AtomAttachmentOrderEntry,
 ) {
-    let result = all_consuming(atom_attachment_order_entry(true)).parse(input);
+    let result = all_consuming(atom_attachment_order_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -683,13 +655,12 @@ fn test_atom_attachment_order_entry(
 #[case(b"   1   1   1   2", "attachment type is zero", error::ErrorKind::Verify)]
 #[case(b"   1   1   1   3", "attachment type out of range", error::ErrorKind::Verify)]
 #[case(b"   1   1   1   2 a", "trailing characters", error::ErrorKind::Verify)]
-#[case("   1   1\u{00A0} 1   2 a".as_bytes(), "unicode whitespace", error::ErrorKind::Verify)]
 fn test_atom_attachment_order_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(atom_attachment_order_entry(false)).parse(input);
+    let result = all_consuming(atom_attachment_order_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -704,14 +675,12 @@ fn test_atom_attachment_order_entry_invalid(
 #[case(b"  1   1   2", "single entry", vec![RGroupLabelEntry { atom_index: 0, label: 2 }])]
 #[case(b"  2   1   1   2   2", "two entries",
        vec![RGroupLabelEntry { atom_index: 0, label: 1 }, RGroupLabelEntry { atom_index: 1, label: 2 }])]
-#[case("  1   1\u{00A0} 2".as_bytes(), "unicode whitespace",
-       vec![RGroupLabelEntry { atom_index: 0, label: 2 }])]
 fn test_rgroup_label_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<RGroupLabelEntry>,
 ) {
-    let result = all_consuming(rgroup_label_entries(true)).parse(input);
+    let result = all_consuming(rgroup_label_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -723,13 +692,12 @@ fn test_rgroup_label_entries(
 #[case(b"  9   1   2", "count exceeds 8", error::ErrorKind::Verify)]
 #[case(b"  1   0   2", "atom index is zero", error::ErrorKind::Verify)]
 #[case(b"  1   1   2 a", "trailing characters", error::ErrorKind::Eof)]
-#[case("  1   1\u{00A0} 2 a".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_rgroup_label_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(rgroup_label_entries(false)).parse(input);
+    let result = all_consuming(rgroup_label_entries()).parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -751,14 +719,12 @@ fn test_rgroup_label_entries_invalid(
        RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: true, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
 #[case(b"  1   1   2", "no occurrence",
        RGroupLogicEntry { label: 1, dependent_label: Some(2), rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(0)] })]
-#[case("  1   1   0   0\u{00A0}>2".as_bytes(), "unicode whitespace",
-       RGroupLogicEntry { label: 1, dependent_label: None, rgroup_or_h: false, occurrence: vec![RGroupOccurrence::GreaterThan(2)] })]
 fn test_rgroup_logic_entry(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: RGroupLogicEntry,
 ) {
-    let result = all_consuming(rgroup_logic_entry(true)).parse(input);
+    let result = all_consuming(rgroup_logic_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -771,13 +737,12 @@ fn test_rgroup_logic_entry(
 #[case(b"  2   1   0", "count exceeds 1", error::ErrorKind::Verify)]
 #[case(b"  1   0   0", "label is zero", error::ErrorKind::Verify)]
 #[case(b"  1   1   0   2", "rgroup_or_h out of range", error::ErrorKind::Verify)]
-#[case("  1   1   0   0\u{00A0}>2".as_bytes(), "unicode whitespace", error::ErrorKind::Eof)]
 fn test_rgroup_logic_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(rgroup_logic_entry(false)).parse(input);
+    let result = all_consuming(rgroup_logic_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -794,14 +759,12 @@ fn test_rgroup_logic_entry_invalid(
     SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom },
     SGroupTypeEntry { sgroup_index: 1, sgroup_type: SGroupType::Data }
 ])]
-#[case("  1 \u{00A0}1 SUP".as_bytes(), "unicode whitespace",
-       vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }])]
 fn test_sgroup_type_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<SGroupTypeEntry>,
 ) {
-    let result = all_consuming(sgroup_type_entries(true)).parse(input);
+    let result = all_consuming(sgroup_type_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -811,13 +774,12 @@ fn test_sgroup_type_entries(
 #[rstest]
 #[case(b"  1   1 FOO", "invalid sgroup type", error::ErrorKind::MapRes)]
 #[case(b"  1   1 SUP a", "trailing characters", error::ErrorKind::Eof)]
-#[case("  1 \u{00A0}1 SUP".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_sgroup_type_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_type_entries(false)).parse(input);
+    let result = all_consuming(sgroup_type_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -834,14 +796,12 @@ fn test_sgroup_type_entries_invalid(
     SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Random },
     SGroupSubtypeEntry { sgroup_index: 1, sgroup_subtype: SGroupSubtype::Block }
 ])]
-#[case("  1 \u{00A0}1 ALT".as_bytes(), "unicode whitespace",
-       vec![SGroupSubtypeEntry { sgroup_index: 0, sgroup_subtype: SGroupSubtype::Alternating }])]
 fn test_sgroup_subtype_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<SGroupSubtypeEntry>,
 ) {
-    let result = all_consuming(sgroup_subtype_entries(true)).parse(input);
+    let result = all_consuming(sgroup_subtype_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -851,13 +811,12 @@ fn test_sgroup_subtype_entries(
 #[rstest]
 #[case(b"  1   1 FOO", "invalid sgroup subtype", error::ErrorKind::MapRes)]
 #[case(b"  1   1 ALT a", "trailing characters", error::ErrorKind::Eof)]
-#[case("  1 \u{00A0}1 ALT".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_sgroup_subtype_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_subtype_entries(false)).parse(input);
+    let result = all_consuming(sgroup_subtype_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -872,13 +831,12 @@ fn test_sgroup_subtype_entries_invalid(
 #[case(b"  1   1   1", "single entry", vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
 #[case(b"  2   1  14   2  15", "two entries",
        vec![SGroupLabelEntry { sgroup_index: 0, label: 14 }, SGroupLabelEntry { sgroup_index: 1, label: 15 }])]
-#[case("  1 \u{00A0}1   1".as_bytes(), "unicode whitespace", vec![SGroupLabelEntry { sgroup_index: 0, label: 1 }])]
 fn test_sgroup_label_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<SGroupLabelEntry>,
 ) {
-    let result = all_consuming(sgroup_label_entries(true)).parse(input);
+    let result = all_consuming(sgroup_label_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -889,13 +847,12 @@ fn test_sgroup_label_entries(
 #[case(b"  1   1   0", "label out of range", error::ErrorKind::Verify)]
 #[case(b"  1   1 513", "label out of range", error::ErrorKind::Verify)]
 #[case(b"  1   1   1 a", "trailing characters", error::ErrorKind::Eof)]
-#[case("  1 \u{00A0}1   1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_sgroup_label_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_label_entries(false)).parse(input);
+    let result = all_consuming(sgroup_label_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -916,14 +873,12 @@ fn test_sgroup_label_entries_invalid(
     SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail },
     SGroupConnectivityEntry { sgroup_index: 1, connectivity: SGroupConnectivity::EitherUnknown }
 ])]
-#[case("  1\u{00A0} 1 HT ".as_bytes(), "unicode whitespace",
-       vec![SGroupConnectivityEntry { sgroup_index: 0, connectivity: SGroupConnectivity::HeadToTail }])]
 fn test_sgroup_connectivity_entries(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: Vec<SGroupConnectivityEntry>,
 ) {
-    let result = all_consuming(sgroup_connectivity_entries(true)).parse(input);
+    let result = all_consuming(sgroup_connectivity_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -934,13 +889,12 @@ fn test_sgroup_connectivity_entries(
 #[case(b"  0", "count is zero", error::ErrorKind::Verify)]
 #[case(b"  1   1 FOO", "invalid connectivity", error::ErrorKind::MapRes)]
 #[case(b"  1   1 HT a", "trailing characters", error::ErrorKind::Eof)]
-#[case("  1 \u{00A0}1 HT".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_sgroup_connectivity_entries_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_connectivity_entries(false)).parse(input);
+    let result = all_consuming(sgroup_connectivity_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -962,7 +916,7 @@ fn test_sgroup_expansion_entries(
     #[case] desc: &str,
     #[case] expected: Vec<SGroupExpansionEntry>,
 ) {
-    let result = all_consuming(sgroup_expansion_entries(true)).parse(input);
+    let result = all_consuming(sgroup_expansion_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -977,7 +931,7 @@ fn test_sgroup_expansion_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_expansion_entries(false)).parse(input);
+    let result = all_consuming(sgroup_expansion_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -996,7 +950,7 @@ fn test_sgroup_atom_list_entry(
     #[case] desc: &str,
     #[case] expected: SGroupAtomListEntry,
 ) {
-    let result = all_consuming(sgroup_atom_list_entry(true)).parse(input);
+    let result = all_consuming(sgroup_atom_list_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1006,13 +960,12 @@ fn test_sgroup_atom_list_entry(
 #[rstest]
 #[case(b"   1 16   1", "count exceeds 15", error::ErrorKind::Verify)]
 #[case(b"   1  1   1 a", "trailing characters", error::ErrorKind::Eof)]
-#[case("  1 \u{00A0}1   1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
 fn test_sgroup_atom_list_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_atom_list_entry(false)).parse(input);
+    let result = all_consuming(sgroup_atom_list_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1031,7 +984,7 @@ fn test_sgroup_bond_list_entry(
     #[case] desc: &str,
     #[case] expected: SGroupBondListEntry,
 ) {
-    let result = all_consuming(sgroup_bond_list_entry(true)).parse(input);
+    let result = all_consuming(sgroup_bond_list_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1046,7 +999,7 @@ fn test_sgroup_bond_list_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_bond_list_entry(false)).parse(input);
+    let result = all_consuming(sgroup_bond_list_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1064,7 +1017,7 @@ fn test_sgroup_parent_atom_entries(
     #[case] desc: &str,
     #[case] expected: SGroupParentAtomEntry,
 ) {
-    let result = all_consuming(sgroup_parent_atom_entries(true)).parse(input);
+    let result = all_consuming(sgroup_parent_atom_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1083,7 +1036,7 @@ fn test_sgroup_parent_atom_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_parent_atom_entries(false)).parse(input);
+    let result = all_consuming(sgroup_parent_atom_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1103,7 +1056,7 @@ fn test_sgroup_subscript_entry(
     #[case] desc: &str,
     #[case] expected: SGroupSubscriptEntry,
 ) {
-    let result = all_consuming(sgroup_subscript_entry(true)).parse(input);
+    let result = all_consuming(sgroup_subscript_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1117,7 +1070,7 @@ fn test_sgroup_subscript_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_subscript_entry(false)).parse(input);
+    let result = all_consuming(sgroup_subscript_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1135,7 +1088,7 @@ fn test_sgroup_correspondence_entry(
     #[case] desc: &str,
     #[case] expected: SGroupCorrespondenceEntry,
 ) {
-    let result = all_consuming(sgroup_correspondence_entry(true)).parse(input);
+    let result = all_consuming(sgroup_correspondence_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1150,7 +1103,7 @@ fn test_sgroup_correspondence_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_correspondence_entry(false)).parse(input);
+    let result = all_consuming(sgroup_correspondence_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1169,7 +1122,7 @@ fn test_sgroup_display_info_entry(
     #[case] desc: &str,
     #[case] expected: SGroupDisplayInfoEntry,
 ) {
-    let result = all_consuming(sgroup_display_info_entry(true)).parse(input);
+    let result = all_consuming(sgroup_display_info_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1192,7 +1145,7 @@ fn test_sgroup_display_info_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_display_info_entry(false)).parse(input);
+    let result = all_consuming(sgroup_display_info_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1209,7 +1162,7 @@ fn test_sgroup_connecting_bond_entry(
     #[case] input: &[u8],
     #[case] expected: SGroupConnectingBondEntry,
 ) {
-    let (remaining, result) = all_consuming(sgroup_connecting_bond_entry(true))
+    let (remaining, result) = all_consuming(sgroup_connecting_bond_entry())
         .parse(input)
         .unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1237,7 +1190,7 @@ fn test_sgroup_connecting_bond_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_connecting_bond_entry(false)).parse(input);
+    let result = all_consuming(sgroup_connecting_bond_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1260,7 +1213,7 @@ fn test_sgroup_data_description_entry(
     #[case] desc: &str,
     #[case] expected: SGroupDataDescriptionEntry,
 ) {
-    let result = all_consuming(sgroup_data_description_entry(true)).parse(input);
+    let result = all_consuming(sgroup_data_description_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1276,7 +1229,7 @@ fn test_sgroup_data_description_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_data_description_entry(false)).parse(input);
+    let result = all_consuming(sgroup_data_description_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1309,8 +1262,7 @@ fn test_sgroup_data_display_entry(
     #[case] desc: &str,
     #[case] expected: SGroupDataDisplayEntry,
 ) {
-    let result =
-        all_consuming(terminated(sgroup_data_display_entry(true, false), space0)).parse(input);
+    let result = all_consuming(terminated(sgroup_data_display_entry(false), space0)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1328,7 +1280,7 @@ fn test_sgroup_data_display_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_data_display_entry(false, true)).parse(input);
+    let result = all_consuming(sgroup_data_display_entry(true)).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1348,7 +1300,7 @@ fn tests_sgroup_data_continuation_entry(
     #[case] desc: &str,
     #[case] expected: SGroupDataEntry,
 ) {
-    let result = all_consuming(sgroup_data_continuation_entry(true)).parse(input);
+    let result = all_consuming(sgroup_data_continuation_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1362,7 +1314,7 @@ fn test_sgroup_data_continuation_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_data_continuation_entry(false)).parse(input);
+    let result = all_consuming(sgroup_data_continuation_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1382,7 +1334,7 @@ fn tests_sgroup_data_end_entry(
     #[case] desc: &str,
     #[case] expected: SGroupDataEntry,
 ) {
-    let result = all_consuming(sgroup_data_end_entry(true)).parse(input);
+    let result = all_consuming(sgroup_data_end_entry()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1396,7 +1348,7 @@ fn test_sgroup_data_end_entry_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_data_end_entry(false)).parse(input);
+    let result = all_consuming(sgroup_data_end_entry()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1419,7 +1371,7 @@ fn test_sgroup_hierarchy_entries(
     #[case] desc: &str,
     #[case] expected: Vec<SGroupHierarchyEntry>,
 ) {
-    let result = all_consuming(sgroup_hierarchy_entries(true)).parse(input);
+    let result = all_consuming(sgroup_hierarchy_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1437,7 +1389,7 @@ fn test_sgroup_hierarchy_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_hierarchy_entries(false)).parse(input);
+    let result = all_consuming(sgroup_hierarchy_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1458,7 +1410,7 @@ fn test_sgroup_component_entries(
     #[case] desc: &str,
     #[case] expected: Vec<SGroupComponentEntry>,
 ) {
-    let result = all_consuming(sgroup_component_entries(true)).parse(input);
+    let result = all_consuming(sgroup_component_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1474,7 +1426,7 @@ fn test_sgroup_component_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(sgroup_component_entries(false)).parse(input);
+    let result = all_consuming(sgroup_component_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1496,7 +1448,7 @@ fn test_zero_order_bond_entries(
     #[case] desc: &str,
     #[case] expected: Vec<ZeroBondOrderEntry>,
 ) {
-    let result = all_consuming(zero_bond_order_entries(true)).parse(input);
+    let result = all_consuming(zero_bond_order_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1512,7 +1464,7 @@ fn test_zero_bond_order_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(zero_bond_order_entries(false)).parse(input);
+    let result = all_consuming(zero_bond_order_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1534,7 +1486,7 @@ fn test_zero_atom_charge_entries(
     #[case] desc: &str,
     #[case] expected: Vec<ZeroAtomChargeEntry>,
 ) {
-    let result = all_consuming(zero_atom_charge_entries(true)).parse(input);
+    let result = all_consuming(zero_atom_charge_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1550,7 +1502,7 @@ fn test_zero_atom_charge_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(zero_atom_charge_entries(false)).parse(input);
+    let result = all_consuming(zero_atom_charge_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -1572,7 +1524,7 @@ fn test_atom_hydrogen_count_entries(
     #[case] desc: &str,
     #[case] expected: Vec<AtomHydrogenCountEntry>,
 ) {
-    let result = all_consuming(hydrogen_count_entries(true)).parse(input);
+    let result = all_consuming(hydrogen_count_entries()).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -1588,7 +1540,7 @@ fn test_atom_hydrogen_count_entries_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(hydrogen_count_entries(false)).parse(input);
+    let result = all_consuming(hydrogen_count_entries()).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),

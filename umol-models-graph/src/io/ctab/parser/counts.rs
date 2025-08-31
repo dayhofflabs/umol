@@ -2,9 +2,9 @@
 
 use bstr::ByteSlice;
 use nom::branch::alt;
-use nom::bytes::complete::{is_not, take};
-use nom::character::complete::{line_ending, space0};
-use nom::combinator::{complete, map, map_parser, verify};
+use nom::bytes::complete::take;
+use nom::character::complete::space0;
+use nom::combinator::{complete, map, verify};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Parser};
 
@@ -31,53 +31,55 @@ use crate::io::config::ParseFlags;
 pub fn counts_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
-    map_parser(
-        terminated(is_not("\r\n"), line_ending),
-        terminated(counts_input_inner(flags), space0),
-    )
-}
-
-/// Internal parser for counts_input
-fn counts_input_inner<'a>(
-    flags: ParseFlags,
-) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
-    let allow_unicode = flags.contains(ParseFlags::UNICODE);
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
-    map(
-        (
-            fixed_width_int::<i32>(3usize, allow_unicode),
-            fixed_width_int::<i32>(3usize, allow_unicode),
-            fixed_width_int::<i32>(3usize, allow_unicode),
-            preceded(take(3usize), fixed_width_int::<i32>(3usize, allow_unicode)),
-            fixed_width_int::<i32>(3usize, allow_unicode),
-            alt((
-                delimited(
-                    fixed_width_padding_n(4, 3, allow_unicode, strict_padding),
-                    fixed_width_int::<i32>(3usize, allow_unicode),
-                    complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
+    terminated(
+        move |input: &'a [u8]| {
+            if flags.contains(ParseFlags::DEBUG) {
+                eprintln!(
+                    "DEBUG: counts_input parsing: {:?}",
+                    std::str::from_utf8(input).unwrap_or("<invalid utf8>")
+                );
+                eprintln!("DEBUG: counts_input bytes: {:?}", input);
+            }
+            map(
+                (
+                    fixed_width_int::<i32>(3),
+                    fixed_width_int::<i32>(3),
+                    fixed_width_int::<i32>(3),
+                    preceded(take(3usize), fixed_width_int::<i32>(3)),
+                    fixed_width_int::<i32>(3),
+                    alt((
+                        delimited(
+                            fixed_width_padding_n(4, 3, strict_padding),
+                            fixed_width_int::<i32>(3),
+                            complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
+                        ),
+                        delimited(
+                            take(42usize),
+                            fixed_width_int::<i32>(3),
+                            complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
+                        ),
+                    )),
                 ),
-                delimited(
-                    take(42usize),
-                    fixed_width_int::<i32>(3usize, allow_unicode),
-                    complete(verify(take(6usize), |s: &[u8]| s.find(b"V2000").is_some())),
-                ),
-            )),
-        ),
-        |(
-            atom_count,
-            bond_count,
-            atom_list_count,
-            chiral_flag,
-            stext_entry_count,
-            properties_lines,
-        )| Counts {
-            atom_count,
-            bond_count,
-            atom_list_count,
-            chiral_flag,
-            stext_entry_count,
-            properties_lines,
+                |(
+                    atom_count,
+                    bond_count,
+                    atom_list_count,
+                    chiral_flag,
+                    stext_entry_count,
+                    properties_lines,
+                )| Counts {
+                    atom_count,
+                    bond_count,
+                    atom_list_count,
+                    chiral_flag,
+                    stext_entry_count,
+                    properties_lines,
+                },
+            )
+            .parse(input)
         },
+        space0,
     )
 }
 
@@ -105,30 +107,18 @@ mod tests {
     use rstest::*;
 
     #[rstest]
-    #[case(b"  6  5  0  0  1                 3 V2000", "counts", false,
+    #[case(b"  6  5  0  0  1                 3 V2000", "counts",
       Counts {atom_count: 6, bond_count: 5, atom_list_count: 0, chiral_flag: 1, stext_entry_count: 0, properties_lines: 3})]
-    #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000", "zeroes, 999 properties", false,
+    #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000", "zeroes, 999 properties",
       Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 999})]
     //       aaabbblllfffcccsss            mmmvvvvvv
-    #[case("  6  5  0  0  1\u{00A0}               3 V2000".as_bytes(), "counts", true,
-      Counts {atom_count: 6, bond_count: 5, atom_list_count: 0, chiral_flag: 1, stext_entry_count: 0, properties_lines: 3})]
-    #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded", false,
+    #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded",
       Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
     //       aaabbblllfffcccsss                                          mmmvvvvvv
-    #[case(b"  4  4  1  0  0  0                                          999 V2000", "extra spaces", false,
+    #[case(b"  4  4  1  0  0  0                                          999 V2000", "extra spaces",
       Counts {atom_count: 4, bond_count: 4, atom_list_count: 1, chiral_flag: 0, stext_entry_count: 0, properties_lines: 999})]
-    fn test_counts_input(
-        #[case] input: &[u8],
-        #[case] desc: &str,
-        #[case] allow_unicode: bool,
-        #[case] expected: Counts,
-    ) {
-        let flags = if allow_unicode {
-            ParseFlags::UNICODE
-        } else {
-            ParseFlags::empty()
-        };
-        let res = all_consuming(counts_input(flags)).parse(input);
+    fn test_counts_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: Counts) {
+        let res = all_consuming(counts_input(ParseFlags::LENIENT)).parse(input);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(
@@ -145,13 +135,12 @@ mod tests {
     #[case(b"  4  2  0     0  0            ", "too short", error::ErrorKind::Eof)]
     #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", error::ErrorKind::Eof)]
     #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", error::ErrorKind::Digit)]
-    #[case("  6  5  0  0  1\u{00A0}               3 V2000".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
     fn test_counts_input_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let res = counts_input(ParseFlags::empty()).parse(input);
+        let res = counts_input(ParseFlags::STRICT).parse(input);
         assert!(res.is_err(), "{} should have failed", desc);
         assert!(
             matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),

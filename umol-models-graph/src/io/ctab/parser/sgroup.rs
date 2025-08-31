@@ -1,7 +1,6 @@
 //! Auxiliary parsers for SGroup properties.
 
 use crate::io::ctab::parser::utils::fixed_width_partial;
-use crate::io::ctab::parser::utils::trim_whitespace;
 use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
@@ -71,11 +70,10 @@ pub fn sgroup_multiplier<'a>(
 
 // Parse SGroup data type string
 pub fn sgroup_data_type<'a>(
-    allow_unicode: bool,
 ) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = error::Error<&'a [u8]>> {
-    map_res(fixed_width_partial(2usize, rest, true, false), move |s| {
+    map_res(fixed_width_partial(2usize, rest, true), move |s| {
         if let Some(s) = s {
-            let s = trim_whitespace(s, allow_unicode);
+            let s = s.trim_ascii();
             match s {
                 b"T" | b"" => Ok(SGroupDataType::Text),
                 b"F" => Ok(SGroupDataType::Formatted),
@@ -120,10 +118,9 @@ pub fn sgroup_data_display_units<'a>(
 
 // Parse SGroup data display chars string
 pub fn sgroup_data_display_chars<'a>(
-    allow_unicode: bool,
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayChars, Error = error::Error<&'a [u8]>> {
     map_parser(take(3usize), move |s: &'a [u8]| {
-        let s = trim_whitespace(s, allow_unicode);
+        let s = s.trim_ascii();
         alt((
             value(SGroupDataDisplayChars::All, tag_no_case("ALL")),
             map(nom_u32, SGroupDataDisplayChars::Number),
@@ -267,17 +264,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"F ", true, SGroupDataType::Formatted)]
-    #[case(b"N ", true, SGroupDataType::Numeric)]
-    #[case(b"T ", true, SGroupDataType::Text)]
-    #[case(b"  ", false, SGroupDataType::Text)]
-    #[case("\u{00A0}".as_bytes(), true, SGroupDataType::Text)]
+    #[case(b"F ", SGroupDataType::Formatted)]
+    #[case(b"N ", SGroupDataType::Numeric)]
+    #[case(b"T ", SGroupDataType::Text)]
+    #[case(b"  ", SGroupDataType::Text)]
     fn test_sgroup_data_type(
         #[case] input: &[u8],
-        #[case] allow_unicode: bool,
         #[case] expected: SGroupDataType,
     ) {
-        let (remaining, result) = sgroup_data_type(allow_unicode).parse(input).unwrap();
+        let (remaining, result) = sgroup_data_type().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
         assert_eq!(result, expected);
     }
@@ -289,7 +284,7 @@ mod tests {
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let result = sgroup_data_type(true).parse(input);
+        let result = sgroup_data_type().parse(input);
         assert!(result.is_err());
         assert!(
             matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -391,15 +386,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"ALL", true, SGroupDataDisplayChars::All)]
-    #[case(b"  1", false, SGroupDataDisplayChars::Number(1))]
-    #[case("\u{00A0}1".as_bytes(), true, SGroupDataDisplayChars::Number(1))]
+    #[case(b"ALL", SGroupDataDisplayChars::All)]
+    #[case(b"  1", SGroupDataDisplayChars::Number(1))]
     fn test_sgroup_data_display_chars(
         #[case] input: &[u8],
-        #[case] allow_unicode: bool,
         #[case] expected: SGroupDataDisplayChars,
     ) {
-        let (remaining, result) = sgroup_data_display_chars(allow_unicode)
+        let (remaining, result) = sgroup_data_display_chars()
             .parse(input)
             .unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
@@ -408,13 +401,12 @@ mod tests {
 
     #[rstest]
     #[case(b"X", "unknown display chars", error::ErrorKind::Eof)]
-    #[case("\u{00A0}1".as_bytes(), "unicode whitespace", error::ErrorKind::Digit)]
     fn test_sgroup_data_display_chars_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let result = sgroup_data_display_chars(false).parse(input);
+        let result = sgroup_data_display_chars().parse(input);
         assert!(result.is_err());
         assert!(
             matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),

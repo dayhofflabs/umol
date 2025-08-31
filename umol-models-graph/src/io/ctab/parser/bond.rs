@@ -18,19 +18,19 @@ use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_
 /// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
 fn bond_input12(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
-    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
-    let first_atom = fixed_width_int_minus1::<usize>(3, allow_unicode);
-    let second_atom = fixed_width_int_minus1::<usize>(3, allow_unicode);
+    let first_atom = fixed_width_int_minus1::<usize>(3);
+    let second_atom = fixed_width_int_minus1::<usize>(3);
     let bond_type = map_res(
-        fixed_width_int::<u8>(3, allow_unicode),
+        fixed_width_int::<u8>(3),
         convert_bond_type_code,
     );
-    let stereo_dir = map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
+    let stereo_dir = map_res(fixed_width_int::<u8>(3), |code| {
         convert_bond_stereo_dir_code(code, false)
     });
     let n = input.len().saturating_sub(12) / 3;
-    let padding1 = fixed_width_padding_n(n, 3, allow_unicode, strict_padding);
+    let padding1 = fixed_width_padding_n(n, 3, strict_padding);
 
     map(
         (
@@ -54,13 +54,13 @@ fn bond_input12(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize
 
 /// Parse  bond inputs with 9 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input9(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
-    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+fn bond_input9(input: &[u8], _flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
+
     map(
         (
-            fixed_width_int_minus1::<usize>(3, allow_unicode),
-            fixed_width_int_minus1::<usize>(3, allow_unicode),
-            map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
+            fixed_width_int_minus1::<usize>(3),
+            fixed_width_int_minus1::<usize>(3),
+            map_res(fixed_width_int::<u8>(3), |code| {
                 convert_bond_type_code(code)
             }),
         ),
@@ -105,15 +105,15 @@ pub fn bond_input<'a>(
 fn bondlike_input_inner<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, BondLike), Error = error::Error<&'a [u8]>> {
-    let allow_unicode = flags.contains(ParseFlags::UNICODE);
+
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
         // Atom indices
-        let (i, first_atom) = fixed_width_int_minus1::<usize>(3, allow_unicode).parse(input)?;
-        let (i, second_atom) = fixed_width_int_minus1::<usize>(3, allow_unicode).parse(i)?;
+        let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
+        let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
 
         // Bond type
-        let (i, bond_type) = map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
+        let (i, bond_type) = map_res(fixed_width_int::<u8>(3), |code| {
             convert_bondlike_type_code(code, false)
         })
         .parse(i)?;
@@ -121,7 +121,7 @@ fn bondlike_input_inner<'a>(
         // Stereo/dir
         let (i, stereo_dir) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
+            map_res(fixed_width_int::<u8>(3), |code| {
                 convert_bond_stereo_dir_code(code, true)
             }),
         )
@@ -130,21 +130,21 @@ fn bondlike_input_inner<'a>(
         // Ignore xxx field
         let (i, _) = cond(
             i.len() > 0,
-            fixed_width_padding_n((i.len() / 3).min(1), 3, allow_unicode, strict_padding),
+            fixed_width_padding_n((i.len() / 3).min(1), 3, strict_padding),
         )
         .parse(i)?;
 
         // Topology, reacting center
         let (i, topology) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int::<u8>(3, allow_unicode), |code| {
+            map_res(fixed_width_int::<u8>(3), |code| {
                 convert_bond_topology_code(code, true)
             }),
         )
         .parse(i)?;
         let (i, reacting_center) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int::<i8>(3, allow_unicode), |code| {
+            map_res(fixed_width_int::<i8>(3), |code| {
                 convert_bond_reacting_center_code(code, true)
             }),
         )
