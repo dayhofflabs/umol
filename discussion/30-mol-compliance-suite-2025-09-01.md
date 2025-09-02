@@ -34,23 +34,23 @@ Classification based on basic parser success:
 - **Extended**: Files that require the full (moleculelike) parser
   (queries, S-groups, etc.)
 
-| Source     | Total    | Basic    | Extended | Basic %   |
-| ---------- | -------- | -------- | -------- | --------- |
-| cdk        | 219      | 164      | 55       | 74.9%     |
-| chebi      | 16       | 7        | 9        | 43.8%     |
-| chembl     | 2        | 0        | 2        | 0.0%      |
-| chemspider | 10       | 9        | 1        | 90.0%     |
-| indigo     | 448      | 312      | 136      | 69.6%     |
-| jmol       | 112      | 112      | 0        | 100.0%    |
-| ketcher    | 269      | 147      | 122      | 54.6%     |
-| marvin     | 24       | 14       | 10       | 58.3%     |
-| nist       | 9        | 9        | 0        | 100.0%    |
-| openbabel  | 219      | 216      | 3        | 98.6%     |
-| rdkit      | 387      | 297      | 90       | 76.7%     |
-| reaxys     | 1        | 1        | 0        | 100.0%    |
-| rhea       | 11       | 3        | 8        | 27.3%     |
-| scifinder  | 14       | 12       | 2        | 85.7%     |
-| **Total**  | **1741** | **1303** | **438**  | **74.8%** |
+  | Source     | Total    | Molecule | MoleculeLike | Invalid | Valid %   |
+  | ---------- | -------- | -------- | ------------ | ------- | --------- |
+  | cdk        | 219      | 164      | 28           | 27      | 87.7%     |
+  | chebi      | 16       | 7        | 9            | 0       | 100.0%    |
+  | chembl     | 2        | 0        | 0            | 2       | 0.0%      |
+  | chemspider | 10       | 9        | 0            | 1       | 90.0%     |
+  | indigo     | 448      | 312      | 49           | 87      | 80.6%     |
+  | jmol       | 112      | 112      | 0            | 0       | 100.0%    |
+  | ketcher    | 269      | 147      | 52           | 70      | 74.0%     |
+  | marvin     | 24       | 14       | 5            | 5       | 79.2%     |
+  | nist       | 9        | 9        | 0            | 0       | 100.0%    |
+  | openbabel  | 219      | 216      | 1            | 2       | 99.1%     |
+  | rdkit      | 387      | 297      | 67           | 23      | 94.1%     |
+  | reaxys     | 1        | 1        | 0            | 0       | 100.0%    |
+  | rhea       | 11       | 3        | 7            | 1       | 90.9%     |
+  | scifinder  | 14       | 12       | 2            | 0       | 100.0%    |
+  | **Total**  | **1741** | **1303** | **220**      | **218** | **87.5%** |
 
 **Summary:**
 
