@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 6
+bond_count: 5
+sum_formula: C2NO2S-1
+graph6: Esa?

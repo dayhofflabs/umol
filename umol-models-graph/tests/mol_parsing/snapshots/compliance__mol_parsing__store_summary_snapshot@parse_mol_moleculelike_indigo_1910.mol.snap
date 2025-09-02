@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 21
+bond_count: 23
+sum_formula: C19NO
+graph6: ToU@?c?@@?G??KA??O?@??G??G??G??AC??c

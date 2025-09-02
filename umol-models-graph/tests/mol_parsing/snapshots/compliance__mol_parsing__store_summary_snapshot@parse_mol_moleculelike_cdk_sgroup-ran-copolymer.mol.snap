@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 7
+bond_count: 6
+sum_formula: C4Cl
+graph6: FhCOO

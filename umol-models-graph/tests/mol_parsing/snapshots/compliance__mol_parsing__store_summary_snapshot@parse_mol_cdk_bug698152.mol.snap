@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 18
+bond_count: 20
+sum_formula: C13NO3S
+graph6: QhEG?C@?_@?B?A_?_?g?@??_?A?

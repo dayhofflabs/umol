@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 9
+bond_count: 10
+sum_formula: C7NS
+graph6: HhCIGE@

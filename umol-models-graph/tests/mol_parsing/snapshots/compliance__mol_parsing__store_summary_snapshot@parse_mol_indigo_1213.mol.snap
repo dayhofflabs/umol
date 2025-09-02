@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 16
+bond_count: 24
+sum_formula: C10BF4Fe
+graph6: OhfwGKD@GK_??@?@??_?G

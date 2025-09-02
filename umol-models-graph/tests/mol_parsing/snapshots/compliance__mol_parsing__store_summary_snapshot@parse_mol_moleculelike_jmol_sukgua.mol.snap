@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 18
+bond_count: 21
+sum_formula: C12CuN4O
+graph6: QsaAA?PC?_@@A?A??_GG?@?@??G

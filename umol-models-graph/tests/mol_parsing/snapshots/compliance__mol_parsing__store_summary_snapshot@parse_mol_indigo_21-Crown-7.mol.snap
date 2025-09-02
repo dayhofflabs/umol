@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 21
+bond_count: 21
+sum_formula: C14O7
+graph6: ThCGGC@?G?_@?@??_???@_?C?@??@???G??B

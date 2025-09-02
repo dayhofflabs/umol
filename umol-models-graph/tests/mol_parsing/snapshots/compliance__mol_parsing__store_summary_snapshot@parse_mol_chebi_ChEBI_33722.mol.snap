@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 8
+bond_count: 12
+sum_formula: Fe4S4+2
+graph6: "G]OXSK"

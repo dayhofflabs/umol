@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 20
+bond_count: 30
+sum_formula: C20
+graph6: SpCGGD@aQ??@GA??a?GG@??CA?G@GG?IO

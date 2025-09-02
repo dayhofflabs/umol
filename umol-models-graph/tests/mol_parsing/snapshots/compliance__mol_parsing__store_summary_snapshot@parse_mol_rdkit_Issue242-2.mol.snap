@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 23
+bond_count: 26
+sum_formula: C19N3O
+graph6: ViCGGC@AG_?@?A??_?G?@G?c??O??G??C??@???G??G_

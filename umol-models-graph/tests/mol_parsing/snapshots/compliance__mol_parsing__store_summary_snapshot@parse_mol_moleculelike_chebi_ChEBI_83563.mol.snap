@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 2
+bond_count: 1
+sum_formula: H
+graph6: A_

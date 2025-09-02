@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 18
+bond_count: 17
+sum_formula: C15FeNS
+graph6: QsP@@?W@?C?O????_?O?A??K???

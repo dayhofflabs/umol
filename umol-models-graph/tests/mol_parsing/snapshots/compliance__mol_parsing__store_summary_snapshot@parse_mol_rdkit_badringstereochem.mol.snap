@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 17
+bond_count: 18
+sum_formula: C10ClN2O3S
+graph6: PsP@@?OA_O?c?O?O?G??_??C

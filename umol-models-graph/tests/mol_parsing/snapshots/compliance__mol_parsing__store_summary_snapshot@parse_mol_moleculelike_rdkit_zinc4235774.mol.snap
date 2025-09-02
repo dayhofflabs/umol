@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 22
+bond_count: 23
+sum_formula: C18N2O2
+graph6: UhGGGC@?G?_@?P?G?_G?@??C??G??O??C??AO???

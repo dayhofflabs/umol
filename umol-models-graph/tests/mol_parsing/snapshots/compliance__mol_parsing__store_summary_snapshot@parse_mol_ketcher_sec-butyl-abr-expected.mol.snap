@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 10
+bond_count: 9
+sum_formula: C10
+graph6: IhCGGC@?_

@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 12
+bond_count: 24
+sum_formula: H12
+graph6: "KlfB@_HBGK_\\"

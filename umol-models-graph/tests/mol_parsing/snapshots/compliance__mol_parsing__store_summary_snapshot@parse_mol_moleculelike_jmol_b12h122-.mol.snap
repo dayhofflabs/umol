@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 24
+bond_count: 42
+sum_formula: H12B12
+graph6: WpgL?EG?KD?@G_??d?O?@AGG??GCS???C?gI???G?DT???@

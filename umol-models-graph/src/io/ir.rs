@@ -59,10 +59,10 @@ pub struct RawBond {
 }
 
 impl RawMolecule {
-    /// Check if the molecule contains any query features
-    pub fn has_query_features(&self) -> bool {
-        self.atoms.iter().any(|a| a.has_query_features())
-            || self.bonds.iter().any(|b| b.has_query_features())
+    /// Check if the molecule contains any extended features
+    pub fn has_extended_features(&self) -> bool {
+        self.atoms.iter().any(|a| a.has_extended_features())
+            || self.bonds.iter().any(|b| b.has_extended_features())
             || !self.sgroups.is_empty()
     }
 
@@ -73,8 +73,8 @@ impl RawMolecule {
 }
 
 impl RawAtom {
-    /// Check if this atom has any query features
-    pub fn has_query_features(&self) -> bool {
+    /// Check if this atom has any extended features
+    pub fn has_extended_features(&self) -> bool {
         self.query_type.is_some()
             || self.atom_list.is_some()
             || self.attachment_point.is_some()
@@ -85,8 +85,8 @@ impl RawAtom {
 }
 
 impl RawBond {
-    /// Check if this bond has any query features
-    pub fn has_query_features(&self) -> bool {
+    /// Check if this bond has any extended features
+    pub fn has_extended_features(&self) -> bool {
         self.order.is_bondlike()
         // TODO: Add topology and reacting center checks when those types support it
     }

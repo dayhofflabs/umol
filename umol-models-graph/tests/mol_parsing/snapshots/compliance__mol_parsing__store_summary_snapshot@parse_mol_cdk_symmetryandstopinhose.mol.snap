@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 15
+bond_count: 27
+sum_formula: C14Hf
+graph6: N|fKCE@_KCo?_@_@O?O

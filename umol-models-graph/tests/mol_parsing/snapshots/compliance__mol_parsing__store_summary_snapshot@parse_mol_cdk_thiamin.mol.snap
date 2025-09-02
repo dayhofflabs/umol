@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 19
+bond_count: 19
+sum_formula: C12ClN4OS
+graph6: RHCGG_@GG?_@?@??_?G?@??G?CG??G

@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 17
+bond_count: 18
+sum_formula: C13O4
+graph6: Ph_WGO@?g?_@?AC?G?@??O??

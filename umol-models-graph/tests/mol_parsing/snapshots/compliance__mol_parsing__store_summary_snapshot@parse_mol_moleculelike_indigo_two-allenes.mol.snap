@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 14
+bond_count: 12
+sum_formula: C7H2ClF2O2
+graph6: MhIC??@?G?_A?O?O?

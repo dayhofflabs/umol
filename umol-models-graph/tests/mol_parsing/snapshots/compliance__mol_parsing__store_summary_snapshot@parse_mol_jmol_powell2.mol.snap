@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 17
+bond_count: 16
+sum_formula: C5H8Br4
+graph6: PiQ?GGC_??_A?C_???G?A??O

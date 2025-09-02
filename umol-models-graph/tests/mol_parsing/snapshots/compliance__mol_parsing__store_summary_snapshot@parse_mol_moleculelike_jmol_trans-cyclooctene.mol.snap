@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 22
+bond_count: 22
+sum_formula: C8H14
+graph6: UiCO_CA?G@?@?A?A??G?A??O??G??Q??O??@???O

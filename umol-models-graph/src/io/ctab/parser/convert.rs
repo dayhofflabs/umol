@@ -87,14 +87,14 @@ pub(crate) fn convert_atom_stereo_parity_code(
     }
 }
 
-/// TODO: Consider adding a flag
 /// Convert atom hydrogen count code (extension: 0 in non-query atoms).
 /// 'hhh' field: 0 = non-query atom, 1 = H0, 2 = H1, 3 = H2, 4 = H3, 5 = H4
+/// Values > 5 are clamped to H4
 pub(crate) fn convert_atom_hydrogen_count_code(code: u8) -> Result<Option<u8>> {
     match code {
         0 => Ok(None),
         1..=5 => Ok(Some(code - 1)),
-        _ => Err(ParseError::Invalid(format!("Invalid hydrogen count code '{}'", code)).into()),
+        6.. => Ok(Some(4)),
     }
 }
 
@@ -482,13 +482,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(6, "too high")]
-    fn test_convert_atom_hydrogen_count_code_invalid(#[case] code: u8, #[case] desc: &str) {
-        assert!(
-            convert_atom_hydrogen_count_code(code).is_err(),
-            "{} should have failed",
-            desc
-        );
+    #[case(6, Some(4))]
+    #[case(10, Some(4))]
+    #[case(255, Some(4))]
+    fn test_convert_atom_hydrogen_count_code_clamped(#[case] code: u8, #[case] expected: Option<u8>) {
+        assert_eq!(convert_atom_hydrogen_count_code(code).unwrap(), expected);
     }
 
     #[rstest]

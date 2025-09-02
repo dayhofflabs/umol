@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 17
+bond_count: 9
+sum_formula: C9CnFlLvMcNhOgRgTs
+graph6: "P`?G?C??G??@????_???@C??"

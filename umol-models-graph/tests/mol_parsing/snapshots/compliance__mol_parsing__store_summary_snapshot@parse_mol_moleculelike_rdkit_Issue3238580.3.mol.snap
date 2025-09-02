@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 15
+bond_count: 16
+sum_formula: C6H8O
+graph6: NgTH@?O_C?O?K?C??_?

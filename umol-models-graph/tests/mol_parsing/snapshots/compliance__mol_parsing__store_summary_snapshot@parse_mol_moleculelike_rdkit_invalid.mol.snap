@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 12
+bond_count: 13
+sum_formula: C11N
+graph6: KhEGOGB_?C?O

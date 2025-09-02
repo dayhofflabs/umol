@@ -1,10 +1,11 @@
 //! Benchmark for of MOL format parsing
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use nom::Parser;
 use umol_models_graph::io::config::ParseFlags;
 use umol_models_graph::io::ctab::parser::{
-    atom_input, basic_property_input, bond_input, counts_input, legacy_atom_list_input,
+    atom_input, atomlike_input, basic_property_input, bond_input, bondlike_input, counts_input, legacy_atom_list_input,
     property_input,
 };
 
@@ -17,7 +18,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         ];
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| counts_input(ParseFlags::BASIC).parse(std::hint::black_box(input)))
+                b.iter(|| counts_input(ParseFlags::BASIC).parse(black_box(input)))
             });
         }
         group.finish();
@@ -73,7 +74,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| atom_input(ParseFlags::BASIC).parse(std::hint::black_box(input)))
+                b.iter(|| atom_input(ParseFlags::BASIC).parse(black_box(input)))
             });
         }
 
@@ -121,7 +122,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| atom_input(ParseFlags::LENIENT).parse(std::hint::black_box(input)))
+                b.iter(|| atomlike_input(ParseFlags::LENIENT).parse(std::hint::black_box(input)))
             });
         }
 
@@ -141,7 +142,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| bond_input(ParseFlags::BASIC).parse(std::hint::black_box(input)))
+                b.iter(|| bond_input(ParseFlags::BASIC).parse(black_box(input)))
             });
         }
         group.finish();
@@ -162,7 +163,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| bond_input(ParseFlags::LENIENT).parse(std::hint::black_box(input)))
+                b.iter(|| bondlike_input(ParseFlags::LENIENT).parse(black_box(input)))
             });
         }
         group.finish();
@@ -178,7 +179,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| {
-                    legacy_atom_list_input(ParseFlags::LENIENT).parse(std::hint::black_box(input))
+                    legacy_atom_list_input().parse(black_box(input))
                 })
             });
         }
@@ -242,7 +243,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| {
-                    basic_property_input(ParseFlags::BASIC).parse(std::hint::black_box(input))
+                    basic_property_input(ParseFlags::BASIC).parse(black_box(input))
                 })
             });
         }
@@ -323,7 +324,7 @@ fn parsing_benchmarks(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| property_input(ParseFlags::LENIENT).parse(std::hint::black_box(input)))
+                b.iter(|| property_input(ParseFlags::LENIENT).parse(black_box(input)))
             });
         }
         group.finish();

@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 14
+bond_count: 14
+sum_formula: C5HO6P-1
+graph6: MhC?iO??GG_@?AA??

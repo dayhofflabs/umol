@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 19
+bond_count: 19
+sum_formula: C12Cl3O4
+graph6: "RqCO_G@?G?_`?@??_?G?@?_?A??C??"

@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 19
+bond_count: 24
+sum_formula: C12CuS6
+graph6: "RsO`?cOOC?O?_?A@?`?@O?C_?C??CG"

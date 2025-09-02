@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 12
+bond_count: 12
+sum_formula: C6O6
+graph6: "KhEGG`?A@?O?"
