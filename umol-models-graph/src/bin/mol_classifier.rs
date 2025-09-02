@@ -152,6 +152,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let dest_dir = Path::new(data_path).join(category).join(&source_name);
                         let dest_file = dest_dir.join(path.file_name().unwrap());
                         
+                        // Create destination directory if it doesn't exist
+                        if let Err(e) = fs::create_dir_all(&dest_dir) {
+                            eprintln!("Failed to create directory {}: {}", dest_dir.display(), e);
+                            continue;
+                        }
+                        
                         // Create relative path from dest_file to source file  
                         let relative_path = Path::new("../../../data_raw")
                             .join(&source_name)

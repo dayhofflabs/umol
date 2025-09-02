@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 19
+bond_count: 25
+sum_formula: C12N3O4
+graph6: RpOH?CGOA?o??WGC?S?K?CC??C??GG

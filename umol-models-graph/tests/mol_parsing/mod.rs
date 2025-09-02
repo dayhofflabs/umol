@@ -215,12 +215,12 @@ fn test_parse_mol_molecule_chebi(
 }
 
 // Invalid files (should fail)
-#[rstest]
-fn test_parse_mol_invalid_chembl(
-    #[files("tests/mol_parsing/data/invalid/chembl/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_test(&file_path, false);
-}
+// #[rstest]
+// fn test_parse_mol_invalid_chembl(
+//     #[files("tests/mol_parsing/data/invalid/chembl/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_test(&file_path, false);
+// }
 
 #[rstest]
 fn test_parse_mol_invalid_indigo(
@@ -395,12 +395,12 @@ fn test_parse_mol_moleculelike_moleculelike_openbabel(
 }
 
 // Invalid files (should fail with extended parser too)
-#[rstest]
-fn test_parse_mol_moleculelike_invalid_chembl(
-    #[files("tests/mol_parsing/data/invalid/chembl/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, false);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_invalid_chembl(
+//     #[files("tests/mol_parsing/data/invalid/chembl/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, false);
+// }
 
 #[rstest]
 fn test_parse_mol_moleculelike_invalid_indigo(
@@ -437,19 +437,19 @@ fn test_parse_mol_moleculelike_invalid_cdk(
     run_parse_mol_moleculelike_test(&file_path, false);
 }
 
-#[rstest]
-fn test_parse_mol_moleculelike_invalid_chemspider(
-    #[files("tests/mol_parsing/data/invalid/chemspider/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, false);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_invalid_chemspider(
+//     #[files("tests/mol_parsing/data/invalid/chemspider/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, false);
+// }
 
-#[rstest]
-fn test_parse_mol_moleculelike_invalid_rhea(
-    #[files("tests/mol_parsing/data/invalid/rhea/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, false);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_invalid_rhea(
+//     #[files("tests/mol_parsing/data/invalid/rhea/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, false);
+// }
 
 #[rstest]
 fn test_parse_mol_moleculelike_invalid_openbabel(

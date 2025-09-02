@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 20
+bond_count: 17
+sum_formula: C13NOPS3Si
+graph6: Ss_GGCC?_??@?A?A?@?????C??O??_??_

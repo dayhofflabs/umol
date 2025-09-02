@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 17
+bond_count: 16
+sum_formula: C9HN4O3
+graph6: PIGGGGA?_?c?_???_?Q?A??O
