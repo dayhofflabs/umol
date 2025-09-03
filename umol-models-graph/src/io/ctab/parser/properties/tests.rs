@@ -1,5 +1,6 @@
 use super::*;
 use crate::io::config::ParseFlags;
+use crate::io::ctab::sgroup::{SGroupMultiplierOp, SGroupMultiplierTerm};
 use float_cmp::approx_eq;
 use nom::{error, Err};
 use pretty_assertions::assert_eq;
@@ -60,7 +61,8 @@ fn test_legacy_atom_list_input_invalid(
 #[case(b"M  SLB  1   1  19", "SLB SGroup property", PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry { sgroup_index: 0, label: 19 }]))]
 #[case(b"M  SAL   1  1   5", "SAL SGroup property", PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry { sgroup_index: 0, atom_indices: vec![4] }))]
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
-#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) }))]
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0,
+    multiplier: Some(SGroupMultiplier::Single(SGroupMultiplierTerm::Variable('n'))), subscript: Some("n".to_string()) }))]
 #[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
@@ -148,7 +150,8 @@ fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc
 #[case(b"M  SBL   1  1   3", "SBL SGroup property", PropertyEntries::SGroupBondListEntry(SGroupBondListEntry { sgroup_index: 0, bond_indices: vec![2] }))]
 #[case(b"M  SPA   1 12   3   4   5   6   9  10  11  12  13  14  15  16", "SPA SGroup property",
        PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry { sgroup_index: 0, atom_indices: vec![2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15] }))]
-#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) }))]
+#[case(b"M  SMT   1 n", "SMT SGroup property", PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry { sgroup_index: 0,
+       multiplier: Some(SGroupMultiplier::Single(SGroupMultiplierTerm::Variable('n'))), subscript: Some("n".to_string()) }))]
 #[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property", PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry { sgroup_index: 0, bond_indices: vec![9, 8, 3] }))]
 #[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property", PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry { sgroup_index: 2, bracket_coords: vec![4.4700, -3.1700, 4.4700, -5.7500] }))]
 #[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property", PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry { sgroup_index: 0, bond_index: 10, bond_vector: (0.6400, 0.9700) }))]
@@ -226,6 +229,8 @@ fn test_atom_alias_entry(
 
 #[rstest]
 #[case(b"  0\n  Et", "atom index is zero", error::ErrorKind::Verify)]
+#[case(b" 1\n  Et", "too short", error::ErrorKind::Eof)]
+#[case(b"   1\n  Et", "too long", error::ErrorKind::Verify)]
 fn test_atom_alias_entry_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -1048,9 +1053,10 @@ fn test_sgroup_parent_atom_entries_invalid(
 }
 
 #[rstest]
-#[case(b"   1 1", "monomer", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::Count(1)) })]
-#[case(b"   1 n", "n-mer", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Multiplier(SGroupMultiplier::N) })]
-#[case(b"   1 Ph", "Ph subscript", SGroupSubscriptEntry { sgroup_index: 0, data: SGroupSubscriptData::Subscript("Ph".to_string()) })]
+#[case(b"   1 1", "monomer", SGroupSubscriptEntry { sgroup_index: 0, multiplier: Some(SGroupMultiplier::Single(SGroupMultiplierTerm::Integer(1))), subscript: Some("1".to_string()) })]
+#[case(b"   1 n", "n-mer", SGroupSubscriptEntry { sgroup_index: 0, multiplier: Some(SGroupMultiplier::Single(SGroupMultiplierTerm::Variable('n'))), subscript: Some("n".to_string()) })]
+#[case(b"   1 Ph", "Ph subscript", SGroupSubscriptEntry { sgroup_index: 0, multiplier: Some(SGroupMultiplier::Expression
+     { left: SGroupMultiplierTerm::Variable('P'), op: SGroupMultiplierOp::Mul, right: SGroupMultiplierTerm::Variable('h') }), subscript: Some("Ph".to_string()) })]
 fn test_sgroup_subscript_entry(
     #[case] input: &[u8],
     #[case] desc: &str,

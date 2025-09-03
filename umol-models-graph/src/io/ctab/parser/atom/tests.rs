@@ -15,7 +15,7 @@ use rstest::*;
 #[case(b"Cu ", "Cu", AtomSymbol::Element(Element::Cu))]
 #[case(b"D  ", "D", AtomSymbol::NamedIsotope(NamedIsotope::D))]
 fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
-    let result = atom_symbol(ParseFlags::LENIENT).parse(input);
+    let result = atom_symbol(ParseFlags::BASIC).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, symbol) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -27,6 +27,7 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: 
 #[case(b"L  ", "atom list", error::ErrorKind::MapRes)]
 #[case(b"LP ", "lone pair", error::ErrorKind::MapRes)]
 #[case(b"R1 ", "R group", error::ErrorKind::MapRes)]
+#[case(b"Ala", "pseudoatom", error::ErrorKind::MapRes)]
 fn test_atom_symbol_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -63,6 +64,7 @@ fn test_atom_symbol_invalid(
 #[case(b"D  ", "D", AtomSymbol::NamedIsotope(NamedIsotope::D))]
 #[case(b"d  ", "d", AtomSymbol::NamedIsotope(NamedIsotope::D))]
 #[case(b"T  ", "T", AtomSymbol::NamedIsotope(NamedIsotope::T))]
+#[case(b"Ala", "pseudoatom", AtomSymbol::Pseudoatom(String::from("Ala")))]
 fn test_atomlike_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
     let result = atomlike_symbol(ParseFlags::LENIENT).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -84,6 +86,7 @@ fn test_atomlike_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expect
 #[case(b"L  ", "atom list", error::ErrorKind::MapRes)]
 #[case(b"R1 ", "R group", error::ErrorKind::MapRes)]
 #[case(b"LP ", "lone pair", error::ErrorKind::MapRes)]
+#[case(b"Ala", "pseudoatom", error::ErrorKind::MapRes)]
 fn test_atomlike_symbol_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -97,6 +100,28 @@ fn test_atomlike_symbol_invalid(
         desc,
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rstest]
+#[case(b"A  ", "query atom", AtomSymbol::Query(QueryAtom::Heavy))]
+#[case(b"L  ", "atom list", AtomSymbol::AtomList(AtomList { elements: vec![], exclusion: false }))]
+#[case(b"R1 ", "R group", AtomSymbol::RGroup(RGroup::new(Some(1))))]
+#[case(b"LP ", "lone pair", AtomSymbol::LonePair)]
+#[case(b"Ala", "pseudoatom", AtomSymbol::Pseudoatom(String::from("Ala")))]
+fn test_atomlike_symbol_extended(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected: AtomSymbol,
+) {
+    let result = atomlike_symbol(ParseFlags::EXTENDED).parse(input);
+    assert!(result.is_ok(), "{} should have succeeded", desc);
+    let (remaining, symbol) = result.unwrap();
+    assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
+    assert_eq!(
+        symbol, expected,
+        "{} has returned symbol {:?}, expected {:?}",
+        desc, symbol, expected
     );
 }
 
@@ -140,7 +165,7 @@ fn test_atom_input69(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input69(input, ParseFlags::LENIENT);
+    let result = atom_input69(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -320,7 +345,7 @@ fn test_atom_input51_empty_fields(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input51(input, ParseFlags::LENIENT);
+    let result = atom_input51(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -379,7 +404,7 @@ fn test_atom_input42(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input42(input, ParseFlags::LENIENT);
+    let result = atom_input42(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -465,7 +490,7 @@ fn test_atom_input42_empty_fields(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input42(input, ParseFlags::LENIENT);
+    let result = atom_input42(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -526,7 +551,7 @@ fn test_atom_input39(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input39(input, ParseFlags::LENIENT);
+    let result = atom_input39(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     let position = atom.position.unwrap();
@@ -605,7 +630,7 @@ fn test_atom_input39_empty_fields(
     #[case] isotope_mass: Option<u32>,
     #[case] charge: i8,
 ) {
-    let result = atom_input39(input, ParseFlags::LENIENT);
+    let result = atom_input39(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -634,7 +659,7 @@ fn test_atom_input36(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input36(input, ParseFlags::LENIENT);
+    let result = atom_input36(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -708,7 +733,7 @@ fn test_atom_input36_empty_fields(
     #[case] desc: &str,
     #[case] isotope_mass: Option<u32>,
 ) {
-    let result = atom_input36(input, ParseFlags::LENIENT);
+    let result = atom_input36(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -731,7 +756,7 @@ fn test_atom_input34(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input34(input, ParseFlags::LENIENT);
+    let result = atom_input34(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -819,7 +844,7 @@ fn test_atom_input(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input(ParseFlags::LENIENT).parse(input);
+    let result = atom_input(ParseFlags::BASIC).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} should consume all input", desc);
@@ -875,8 +900,10 @@ fn test_atom_input(
 #[rustfmt::skip]
 #[rstest]
 #[case(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", "len 69, non-numeric coordinate", error::ErrorKind::Eof)]
+#[case(b"    0.7145    2.0625    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0", "len 69, atom list", error::ErrorKind::MapRes)]
+#[case(b"    3.0739    0.1550    0.0000 D   1  0  0  0  0  0  0  0  0  0  0  0", "len 69, named isotope", error::ErrorKind::MapRes)]
+#[case(b"   -1.8857    2.4750    0.0000 Psd 0  0  0  0  0  0  0  0  0  0  0  0", "len 69, pseudoatom Psd", error::ErrorKind::MapRes)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", "len 51, non-numeric valence", error::ErrorKind::Digit)]
-#[case(b"    1.2345    2.3456    3.4567 L   0  3  0", "len 42, invalid atom symbol", error::ErrorKind::MapRes)]       
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", "len 51, non-strict padding", error::ErrorKind::Verify)]
 fn test_atom_input_invalid(
     #[case] input: &[u8],
@@ -896,12 +923,40 @@ fn test_atom_input_invalid(
 
 #[rustfmt::skip]
 #[rstest]
+#[case(b"    3.0739    0.1550    0.0000 D   1  0  0  0  0  0  0  0  0  0  0  0", "named isotope", Element::H, Some(2))]
+fn test_atom_input_extended(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] expected_element: Element,
+    #[case] expected_isotope: Option<u32>,
+) {
+    let result = atom_input(ParseFlags::EXTENDED).parse(input);
+    assert!(result.is_ok(), "{} should have succeeded with EXTENDED flags", desc);
+    let (remaining, atom) = result.unwrap();
+    assert!(remaining.is_empty(), "{} should consume all input", desc);
+    
+    assert_eq!(
+        atom.element, expected_element,
+        "{} has returned element {:?}, expected {:?}",
+        desc, atom.element, expected_element
+    );
+    assert_eq!(
+        atom.isotope_mass, expected_isotope,
+        "{} has returned isotope_mass {:?}, expected {:?}",
+        desc, atom.isotope_mass, expected_isotope
+    );
+}
+
+#[rustfmt::skip]
+#[rstest]
 #[case(b"    1.0000    2.0000    3.0000 C  ", "len 34", AtomSymbol::Element(Element::C),
        None, 0, None, None, None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case(b"    1.0000    2.0000    3.0000 C   ", "len 35 padded", AtomSymbol::Element(Element::C),
        None, 0, None, None, None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2", "len 36", AtomSymbol::Element(Element::C),
        Some(10), 0, None, None, None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
+#[case(b"    1.0000    2.0000    3.0000 C  -4", "len36, mass diff out-of-range low", AtomSymbol::Element(Element::C),
+       None, 0, None, None, None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  ", "len 38 padded", AtomSymbol::Element(Element::C),
        Some(10), 0, None, None, None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3", "len 39", AtomSymbol::Element(Element::C),
@@ -917,9 +972,11 @@ fn test_atom_input_invalid(
 #[case(b"    1.0000    2.0000    3.0000 L   0  0  0  0  0  4", "atom list", AtomSymbol::AtomList(AtomList { elements: vec![], exclusion: false }),
        None, 0, Some(4), Some(AtomStereoParity::Either), None, None, None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", "named isotope", AtomSymbol::NamedIsotope(NamedIsotope::D),
-       Some(2), 1, Some(1), Some(AtomStereoParity::Either), None, None, Some(0), None, None, 1.2345, 2.3456, 3.4567)]
+       Some(2), 1, Some(1), Some(AtomStereoParity::Either), None, None, None, None, None, 1.2345, 2.3456, 3.4567)]
+#[case(b"    1.2345    2.3456    3.4567 Ala 0  0  0  0  0  0  0  0  0  0  0  0", "pseudoatom", AtomSymbol::Pseudoatom(String::from("Ala")),
+       None, 0, None, Some(AtomStereoParity::Either), None, None, None, None, None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0", "non-strict padding", AtomSymbol::Element(Element::C),
-       Some(10), 1, Some(4), Some(AtomStereoParity::Either), None, None, Some(0), None, None, 1.2345, 2.3456, 3.4567)]
+       Some(10), 1, Some(4), Some(AtomStereoParity::Either), None, None, None, None, None, 1.2345, 2.3456, 3.4567)]
 fn test_atomlike_input(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -1017,7 +1074,7 @@ fn test_atomlike_input(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.0000    2.0000    3.0000 C  -2  3  4", "invalid stereo parity", error::ErrorKind::MapRes)]
+#[case(b"    1.0000    2.0000    3.0000 C  -2  3  4", "invalid stereo parity", error::ErrorKind::Verify)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", "non-numeric hydrogen count", error::ErrorKind::Digit)]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", "non-numeric valence", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0", "non-strict padding", error::ErrorKind::Verify)]

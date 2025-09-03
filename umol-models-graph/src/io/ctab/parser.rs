@@ -7,18 +7,10 @@ use bstr::{join, ByteSlice};
 use nom::bytes::complete::{is_not, tag};
 use nom::character::complete::{line_ending, multispace0};
 use nom::combinator::{all_consuming, map_parser, opt, value};
+use nom::error::ErrorKind;
 use nom::sequence::terminated;
 use nom::{error, Err, Parser};
-
-mod accumulator;
-mod atom;
-mod bond;
-mod context;
-mod convert;
-mod counts;
-mod properties;
-mod sgroup;
-mod utils;
+use umol::Result;
 
 use self::accumulator::MoleculeProperties;
 pub use self::atom::{atom_input, atomlike_input};
@@ -32,6 +24,16 @@ use super::atom::{Atom, AtomLike};
 use super::bond::{Bond, BondLike};
 use super::molecule::{Molecule, MoleculeLike};
 use crate::io::config::ParseFlags;
+
+mod accumulator;
+mod atom;
+mod bond;
+mod context;
+mod convert;
+mod counts;
+mod properties;
+mod sgroup;
+mod utils;
 
 /// Parse CTAB block (basic parser, optimized for performance, basic molecules only)
 ///
@@ -49,7 +51,8 @@ pub fn basic_ctab_block<'a>(
         let (remaining, bonds) = bond_block(bond_count, flags).parse(remaining)?;
         let (remaining, properties) = basic_properties_block(flags).parse(remaining)?;
         let (remaining, _) = end_block().parse(remaining)?;
-        let molecule = build_molecule(atoms, bonds, properties);
+        let molecule = build_molecule(atoms, bonds, properties)
+            .map_err(|_| Err::Error(error::Error::new(remaining, ErrorKind::MapRes)))?;
         Ok((remaining, molecule))
     }
 }
@@ -71,9 +74,9 @@ pub fn ctab_block<'a>(
         let (remaining, legacy_properties) = legacy_atom_list_block(flags).parse(remaining)?;
         let (remaining, properties) = properties_block(flags).parse(remaining)?;
         let (remaining, _) = end_block().parse(remaining)?;
-
         let properties = properties.into_iter().chain(legacy_properties).collect();
-        let molecule = build_moleculelike(atoms, bonds, properties);
+        let molecule = build_moleculelike(atoms, bonds, properties)
+            .map_err(|_| Err::Error(error::Error::new(remaining, ErrorKind::MapRes)))?;
         Ok((remaining, molecule))
     }
 }
@@ -311,7 +314,7 @@ fn build_molecule(
     atoms: Vec<Atom>,
     bonds: Vec<(usize, usize, Bond)>,
     properties: Vec<PropertyEntries>,
-) -> Molecule {
+) -> Result<Molecule> {
     let mut molecule = Molecule::new();
 
     for atom in atoms {
@@ -324,15 +327,11 @@ fn build_molecule(
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
-        if let Err(e) = acc.add_entry(entry) {
-            eprintln!("Warning: Failed to add property entry: {}", e);
-        }
+        acc.add_entry(entry, ParseFlags::BASIC)?;
     }
-    if let Err(e) = acc.update_molecule(&mut molecule) {
-        eprintln!("Warning: Failed to update molecule: {}", e);
-    }
+    acc.update_molecule(&mut molecule, ParseFlags::BASIC)?;
 
-    molecule
+    Ok(molecule)
 }
 
 /// Build molecule-like structure
@@ -340,7 +339,7 @@ fn build_moleculelike(
     atoms: Vec<AtomLike>,
     bonds: Vec<(usize, usize, BondLike)>,
     properties: Vec<PropertyEntries>,
-) -> MoleculeLike {
+) -> Result<MoleculeLike> {
     let mut molecule = MoleculeLike::new();
 
     for atom in atoms {
@@ -353,16 +352,12 @@ fn build_moleculelike(
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
-        if let Err(e) = acc.add_entry(entry) {
-            eprintln!("Warning: Failed to add property entry: {}", e);
-        }
+        acc.add_entry(entry, ParseFlags::LENIENT)?;
     }
 
-    if let Err(e) = acc.update_moleculelike(&mut molecule) {
-        eprintln!("Warning: Failed to update molecule-like structure: {}", e);
-    }
+    acc.update_moleculelike(&mut molecule, ParseFlags::LENIENT)?;
 
-    molecule
+    Ok(molecule)
 }
 
 #[cfg(test)]

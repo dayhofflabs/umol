@@ -1,6 +1,6 @@
 //! Intermediate representation for molecular structures
 
-use crate::io::config::ParsingConfig;
+use crate::io::config::ParseConfig;
 use crate::io::ctab::bond::{BondStereo, BondTopology, BondReactingCenter};
 use crate::io::ctab::atom::{AtomRadical, AtomStereoParity};
 use crate::io::ctab::sgroup::{SGroupConnectivity, SGroupDataType};
@@ -587,5 +587,5 @@ pub trait ParseTarget: Sized {
     fn allows_variable_substitution() -> bool;
     fn allows_polymer_features() -> bool;
 
-    fn from_parsed_data(parsed: RawMolecule, config: &ParsingConfig) -> Result<Self>;
+    fn from_parsed_data(parsed: RawMolecule, config: &ParseConfig) -> Result<Self>;
 }

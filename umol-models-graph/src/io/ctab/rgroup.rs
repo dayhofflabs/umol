@@ -25,7 +25,6 @@ impl RGroupOccurrence {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RGroup {
     pub label: Option<u32>,
-    pub explicit: bool,
     pub dependent_label: Option<u32>,
     pub rgroup_or_h: bool,
     pub occurrence: Vec<RGroupOccurrence>,
@@ -33,21 +32,11 @@ pub struct RGroup {
 
 impl RGroup {
     pub fn new(label: Option<u32>) -> Self {
-        match label {
-            Some(label) => Self {
-                label: Some(label),
-                explicit: true,
-                dependent_label: None,
-                rgroup_or_h: false,
-                occurrence: vec![RGroupOccurrence::GreaterThan(0)],
-            },
-            None => Self {
-                label: None,
-                explicit: false,
-                dependent_label: None,
-                rgroup_or_h: false,
-                occurrence: vec![RGroupOccurrence::GreaterThan(0)],
-            },
+        Self {
+            label,
+            dependent_label: None,
+            rgroup_or_h: false,
+            occurrence: vec![RGroupOccurrence::GreaterThan(0)],
         }
     }
 
@@ -96,7 +85,7 @@ impl RGroup {
 
 impl Display for RGroup {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.explicit {
+        if self.label.is_some() {
             write!(f, "R{}", self.label.unwrap_or(0))
         } else {
             write!(f, "R#")

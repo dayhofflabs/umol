@@ -1,15 +1,17 @@
 //! Auxiliary parsers for SGroup properties.
 
-use crate::io::ctab::parser::utils::fixed_width_partial;
+use crate::io::ctab::parser::utils::{fixed_width_partial, to_string};
 use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
-    SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
+    SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierOp,
+    SGroupMultiplierTerm, SGroupSubtype, SGroupType,
 };
 use nom::branch::alt;
-use nom::bytes::complete::{tag_no_case, take};
-use nom::character::complete::u32 as nom_u32;
+use nom::bytes::complete::{tag, tag_no_case, take, take_while_m_n};
+use nom::character::complete::{space0, u32 as nom_u32};
 use nom::combinator::{map, map_parser, map_res, rest, value};
-use nom::{error, Err, Parser};
+use nom::sequence::separated_pair;
+use nom::{error, AsChar, Err, Parser};
 
 /// Parse SGroup type string
 pub fn sgroup_type<'a>(
@@ -75,13 +77,69 @@ pub fn sgroup_connectivity<'a>(
 /// Parse SGroup multiplier string
 pub fn sgroup_multiplier<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupMultiplier, Error = error::Error<&'a [u8]>> {
-    map_parser(
-        take(1usize),
-        alt((
-            value(SGroupMultiplier::N, tag_no_case("N")),
-            map(nom_u32, SGroupMultiplier::Count),
-        )),
+    alt((
+        map(
+            separated_pair(
+                sgroup_multiplier_term(),
+                space0,
+                sgroup_multiplier_variable(),
+            ),
+            |(left, right)| SGroupMultiplier::Expression {
+                left,
+                op: SGroupMultiplierOp::Mul,
+                right,
+            },
+        ),
+        map(
+            (
+                sgroup_multiplier_term(),
+                space0,
+                sgroup_multiplier_op(),
+                space0,
+                sgroup_multiplier_term(),
+            ),
+            |(left, _, op, _, right)| SGroupMultiplier::Expression { left, op, right },
+        ),
+        map(sgroup_multiplier_term(), SGroupMultiplier::Single),
+    ))
+}
+
+/// Parse an integer multiplier
+fn sgroup_multiplier_integer<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = error::Error<&'a [u8]>> {
+    map(nom_u32, SGroupMultiplierTerm::Integer)
+}
+
+/// Parse a single-character variable multiplier
+fn sgroup_multiplier_variable<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = error::Error<&'a [u8]>> {
+    map(
+        take_while_m_n(1, 1, |s| AsChar::is_alpha(s)),
+        |s: &[u8]| SGroupMultiplierTerm::Variable(s[0] as char),
     )
+}
+
+/// Parse a single multiplier term (variable or integer)
+fn sgroup_multiplier_term<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = error::Error<&'a [u8]>> {
+    alt((sgroup_multiplier_integer(), sgroup_multiplier_variable()))
+}
+
+/// Parse arithmetic operator
+fn sgroup_multiplier_op<'a>(
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierOp, Error = error::Error<&'a [u8]>> {
+    alt((
+        value(SGroupMultiplierOp::Add, tag("+")),
+        value(SGroupMultiplierOp::Sub, tag("-")),
+        value(SGroupMultiplierOp::Mul, tag("*")),
+        value(SGroupMultiplierOp::Div, tag("/")),
+    ))
+}
+
+/// Parse SGroup subscript string
+pub fn sgroup_subscript<'a>(
+) -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
+    map_res(rest, move |s: &[u8]| to_string(s))
 }
 
 // Parse SGroup data type string
@@ -252,9 +310,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"N", SGroupMultiplier::N)]
-    #[case(b"1", SGroupMultiplier::Count(1))]
-    #[case(b"2", SGroupMultiplier::Count(2))]
+    #[case(b"N", SGroupMultiplier::Single(SGroupMultiplierTerm::Variable('N')))]
+    #[case(b"n", SGroupMultiplier::Single(SGroupMultiplierTerm::Variable('n')))]
+    #[case(b"m", SGroupMultiplier::Single(SGroupMultiplierTerm::Variable('m')))]
+    #[case(b"1", SGroupMultiplier::Single(SGroupMultiplierTerm::Integer(1)))]
+    #[case(b"2", SGroupMultiplier::Single(SGroupMultiplierTerm::Integer(2)))]
+    #[case(b"2n", SGroupMultiplier::Expression {left: SGroupMultiplierTerm::Integer(2), op: SGroupMultiplierOp::Mul, right: SGroupMultiplierTerm::Variable('n')})]
+    #[case(b"n+1", SGroupMultiplier::Expression {left: SGroupMultiplierTerm::Variable('n'), op: SGroupMultiplierOp::Add, right: SGroupMultiplierTerm::Integer(1)})]
+    #[case(b"n*m", SGroupMultiplier::Expression {left: SGroupMultiplierTerm::Variable('n'), op: SGroupMultiplierOp::Mul, right: SGroupMultiplierTerm::Variable('m')})]
+    #[case(b"n m", SGroupMultiplier::Expression {left: SGroupMultiplierTerm::Variable('n'), op: SGroupMultiplierOp::Mul, right: SGroupMultiplierTerm::Variable('m')})]
+    #[case(b"2 m", SGroupMultiplier::Expression {left: SGroupMultiplierTerm::Integer(2), op: SGroupMultiplierOp::Mul, right: SGroupMultiplierTerm::Variable('m')})]
+    #[case(b"X", SGroupMultiplier::Single(SGroupMultiplierTerm::Variable('X')))]
     fn test_sgroup_multiplier(#[case] input: &[u8], #[case] expected: SGroupMultiplier) {
         let (remaining, result) = sgroup_multiplier().parse(input).unwrap();
         assert!(remaining.is_empty(), "remaining should be empty");
@@ -262,7 +328,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown multiplier", error::ErrorKind::Digit)]
+    #[case(b"@", "invalid symbol", error::ErrorKind::TakeWhileMN)]
     fn test_sgroup_multiplier_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,

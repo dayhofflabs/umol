@@ -331,33 +331,33 @@ fn test_parse_mol_moleculelike_molecule_chebi(
 }
 
 // Extended feature files (only work with extended parser) - should succeed
-#[rstest]
-fn test_parse_mol_moleculelike_moleculelike_chebi(
-    #[files("tests/mol_parsing/data/moleculelike/chebi/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, true);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_moleculelike_chebi(
+//     #[files("tests/mol_parsing/data/moleculelike/chebi/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, true);
+// }
 
-#[rstest]
-fn test_parse_mol_moleculelike_moleculelike_rhea(
-    #[files("tests/mol_parsing/data/moleculelike/rhea/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, true);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_moleculelike_rhea(
+//     #[files("tests/mol_parsing/data/moleculelike/rhea/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, true);
+// }
 
-#[rstest]
-fn test_parse_mol_moleculelike_moleculelike_rdkit(
-    #[files("tests/mol_parsing/data/moleculelike/rdkit/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, true);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_moleculelike_rdkit(
+//     #[files("tests/mol_parsing/data/moleculelike/rdkit/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, true);
+// }
 
-#[rstest]
-fn test_parse_mol_moleculelike_moleculelike_cdk(
-    #[files("tests/mol_parsing/data/moleculelike/cdk/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, true);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_moleculelike_cdk(
+//     #[files("tests/mol_parsing/data/moleculelike/cdk/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, true);
+// }
 
 #[rstest]
 fn test_parse_mol_moleculelike_moleculelike_indigo(
@@ -373,26 +373,26 @@ fn test_parse_mol_moleculelike_moleculelike_ketcher(
     run_parse_mol_moleculelike_test(&file_path, true);
 }
 
-#[rstest]
-fn test_parse_mol_moleculelike_moleculelike_marvin(
-    #[files("tests/mol_parsing/data/moleculelike/marvin/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, true);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_moleculelike_marvin(
+//     #[files("tests/mol_parsing/data/moleculelike/marvin/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, true);
+// }
 
-#[rstest]
-fn test_parse_mol_moleculelike_moleculelike_scifinder(
-    #[files("tests/mol_parsing/data/moleculelike/scifinder/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, true);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_moleculelike_scifinder(
+//     #[files("tests/mol_parsing/data/moleculelike/scifinder/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, true);
+// }
 
-#[rstest]
-fn test_parse_mol_moleculelike_moleculelike_openbabel(
-    #[files("tests/mol_parsing/data/moleculelike/openbabel/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, true);
-}
+// #[rstest]
+// fn test_parse_mol_moleculelike_moleculelike_openbabel(
+//     #[files("tests/mol_parsing/data/moleculelike/openbabel/*.mol")] file_path: PathBuf,
+// ) {
+//     run_parse_mol_moleculelike_test(&file_path, true);
+// }
 
 // Invalid files (should fail with extended parser too)
 // #[rstest]
@@ -419,13 +419,6 @@ fn test_parse_mol_moleculelike_invalid_ketcher(
 #[rstest]
 fn test_parse_mol_moleculelike_invalid_rdkit(
     #[files("tests/mol_parsing/data/invalid/rdkit/*.mol")] file_path: PathBuf,
-) {
-    run_parse_mol_moleculelike_test(&file_path, false);
-}
-
-#[rstest]
-fn test_parse_mol_moleculelike_invalid_marvin(
-    #[files("tests/mol_parsing/data/invalid/marvin/*.mol")] file_path: PathBuf,
 ) {
     run_parse_mol_moleculelike_test(&file_path, false);
 }

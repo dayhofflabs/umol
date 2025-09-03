@@ -67,7 +67,7 @@ pub(crate) fn mol_file_moleculelike<'a>(
 
 /// Check if molecule contains advanced features
 ///
-/// Returns -ue if the molecule contains any features that are not supported
+/// Returns true if the molecule contains any features that are not supported
 /// in the basic MOL format, including:
 /// - Query atom symbols (atom lists, R-groups, etc.)
 /// - Query bond types (SingleOrDouble, Any, Zero, etc.)

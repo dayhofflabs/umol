@@ -18,14 +18,12 @@ use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_
 /// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
 fn bond_input12(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
-
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let first_atom = fixed_width_int_minus1::<usize>(3);
     let second_atom = fixed_width_int_minus1::<usize>(3);
-    let bond_type = map_res(
-        fixed_width_int::<u8>(3),
-        convert_bond_type_code,
-    );
+    let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
+        convert_bond_type_code(code)
+    });
     let stereo_dir = map_res(fixed_width_int::<u8>(3), |code| {
         convert_bond_stereo_dir_code(code, false)
     });
@@ -55,14 +53,11 @@ fn bond_input12(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize
 /// Parse  bond inputs with 9 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
 fn bond_input9(input: &[u8], _flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
-
     map(
         (
             fixed_width_int_minus1::<usize>(3),
             fixed_width_int_minus1::<usize>(3),
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_type_code(code)
-            }),
+            map_res(fixed_width_int::<u8>(3), convert_bond_type_code),
         ),
         |(first_atom, second_atom, bond_type)| (first_atom, second_atom, Bond::new(bond_type)),
     )
@@ -105,16 +100,17 @@ pub fn bond_input<'a>(
 fn bondlike_input_inner<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, BondLike), Error = error::Error<&'a [u8]>> {
-
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
         // Atom indices
         let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
         let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
 
-        // Bond type
-        let (i, bond_type) = map_res(fixed_width_int::<u8>(3), |code| {
-            convert_bondlike_type_code(code, false)
+        // Bond type - allow zero-order/high-order bonds and queries based on flags
+        let extended_range = flags.contains(ParseFlags::EXTENDED_RANGE);
+        let allow_queries = flags.contains(ParseFlags::QUERIES);
+        let (i, bond_type) = map_res(fixed_width_int::<u8>(3), move |code| {
+            convert_bondlike_type_code(code, extended_range, allow_queries)
         })
         .parse(i)?;
 

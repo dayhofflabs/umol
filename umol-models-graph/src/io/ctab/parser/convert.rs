@@ -55,12 +55,13 @@ pub(crate) fn convert_atom_charge_code(code: u8) -> (i8, Option<AtomRadical>) {
 pub(crate) fn convert_atom_isotope_mass_number(
     element: Element,
     mass_number: u32,
+    extended_isotopes: bool,
 ) -> Result<Option<u32>> {
     if mass_number == 0 {
         return Ok(None);
     }
-    if Isotope::is_catalogued(element, mass_number) {
-        Ok(Some(mass_number))
+    if extended_isotopes || Isotope::is_catalogued(element, mass_number) {
+        return Ok(Some(mass_number));
     } else {
         Err(DataError::InvalidIsotope(format!(
             "Invalid isotope mass number {} for element {}",
@@ -89,12 +90,16 @@ pub(crate) fn convert_atom_stereo_parity_code(
 
 /// Convert atom hydrogen count code (extension: 0 in non-query atoms).
 /// 'hhh' field: 0 = non-query atom, 1 = H0, 2 = H1, 3 = H2, 4 = H3, 5 = H4
-/// Values > 5 are clamped to H4
-pub(crate) fn convert_atom_hydrogen_count_code(code: u8) -> Result<Option<u8>> {
+/// Extended range: 6 = H5, 7 = H6, ..., 13 = H12
+pub(crate) fn convert_atom_hydrogen_count_code(
+    code: u8,
+    extended_range: bool,
+) -> Result<Option<u8>> {
     match code {
         0 => Ok(None),
         1..=5 => Ok(Some(code - 1)),
-        6.. => Ok(Some(4)),
+        6..=13 if extended_range => Ok(Some(code - 1)),
+        _ => Err(ParseError::Invalid(format!("Invalid hydrogen count code '{}'", code)).into()),
     }
 }
 
@@ -157,24 +162,40 @@ pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
 }
 
 /// Convert bond type code
-/// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic, 5=SingleOrDouble,
-/// 6=SingleOrAromatic, 7=DoubleOrAromatic, 8=Any)
-/// zero_ok: true for ZBO property, false for bond block
-pub(crate) fn convert_bondlike_type_code(code: u8, zero_ok: bool) -> Result<BondType> {
+/// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic,
+/// allow_queries: 5=SingleOrDouble, 6=SingleOrAromatic, 7=DoubleOrAromatic, 8=Any,
+/// extended_range: 9=Quadruple, 10=Quintuple, 11=Sextuple, 0=Zero)
+pub(crate) fn convert_bondlike_type_code(
+    code: u8,
+    extended_range: bool,
+    allow_queries: bool,
+) -> Result<BondType> {
     match code {
         1 => Ok(BondType::Single),
         2 => Ok(BondType::Double),
         3 => Ok(BondType::Triple),
         4 => Ok(BondType::Aromatic),
-        5 => Ok(BondType::SingleOrDouble),
-        6 => Ok(BondType::SingleOrAromatic),
-        7 => Ok(BondType::DoubleOrAromatic),
-        8 => Ok(BondType::Any),
-        0 if zero_ok => Ok(BondType::Zero),
-        0 => Err(
-            ParseError::Invalid("Zero-order bonds not allowed in bond block".to_string()).into(),
-        ),
-        _ => Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into()),
+        _ => {
+            if allow_queries && (5..=8).contains(&code) {
+                match code {
+                    5 => Ok(BondType::SingleOrDouble),
+                    6 => Ok(BondType::SingleOrAromatic),
+                    7 => Ok(BondType::DoubleOrAromatic),
+                    8 => Ok(BondType::Any),
+                    _ => unreachable!(),
+                }
+            } else if extended_range && (code == 0 || (9..=11).contains(&code)) {
+                match code {
+                    0 => Ok(BondType::Zero),
+                    9 => Ok(BondType::Quadruple),
+                    10 => Ok(BondType::Quintuple),
+                    11 => Ok(BondType::Sextuple),
+                    _ => unreachable!(),
+                }
+            } else {
+                Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into())
+            }
+        }
     }
 }
 
@@ -316,8 +337,12 @@ pub(crate) fn convert_ring_bond_count_code(code: i8) -> Result<Option<RingBondCo
 
 // Convert substitution count code (property block)
 // 'vvv' field: substitution count (-2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5,
-// 6 = s6+)
-pub(crate) fn convert_substitution_count_code(code: i8) -> Result<Option<SubstitutionCount>> {
+// 6 = s6+),
+// Extended range: 6-10 = s6-s10
+pub(crate) fn convert_substitution_count_code(
+    code: i8,
+    extended_range: bool,
+) -> Result<Option<SubstitutionCount>> {
     match code {
         -2 => Ok(Some(SubstitutionCount::AsDrawn)),
         -1 => Ok(Some(SubstitutionCount::NoSubstitution)),
@@ -327,12 +352,32 @@ pub(crate) fn convert_substitution_count_code(code: i8) -> Result<Option<Substit
         3 => Ok(Some(SubstitutionCount::S3)),
         4 => Ok(Some(SubstitutionCount::S4)),
         5 => Ok(Some(SubstitutionCount::S5)),
-        6 => Ok(Some(SubstitutionCount::S6Plus)),
-        _ => Err(ValidationError::InvalidComponent(format!(
-            "Invalid substitution count code '{}'",
-            code
-        ))
-        .into()),
+        _ => {
+            if extended_range {
+                match code {
+                    6 => Ok(Some(SubstitutionCount::S6)),
+                    7 => Ok(Some(SubstitutionCount::S7)),
+                    8 => Ok(Some(SubstitutionCount::S8)),
+                    9 => Ok(Some(SubstitutionCount::S9)),
+                    10 => Ok(Some(SubstitutionCount::S10)),
+                    _ => Err(ValidationError::InvalidComponent(format!(
+                        "Invalid substitution count code '{}'",
+                        code
+                    ))
+                    .into()),
+                }
+            } else {
+                if code == 6 {
+                    Ok(Some(SubstitutionCount::S6Plus))
+                } else {
+                    Err(ValidationError::InvalidComponent(format!(
+                        "Invalid substitution count code '{}'",
+                        code
+                    ))
+                    .into())
+                }
+            }
+        }
     }
 }
 
@@ -421,7 +466,22 @@ mod tests {
         #[case] expected: Option<u32>,
     ) {
         assert_eq!(
-            convert_atom_isotope_mass_number(element, mass_number).unwrap(),
+            convert_atom_isotope_mass_number(element, mass_number, false).unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case(Element::C, 0, None)]
+    #[case(Element::C, 12, Some(12))]
+    #[case(Element::C, 40, Some(40))]
+    fn test_convert_atom_isotope_mass_number_extended(
+        #[case] element: Element,
+        #[case] mass_number: u32,
+        #[case] expected: Option<u32>,
+    ) {
+        assert_eq!(
+            convert_atom_isotope_mass_number(element, mass_number, true).unwrap(),
             expected
         );
     }
@@ -434,7 +494,7 @@ mod tests {
         #[case] desc: &str,
     ) {
         assert!(
-            convert_atom_isotope_mass_number(element, mass_number).is_err(),
+            convert_atom_isotope_mass_number(element, mass_number, false).is_err(),
             "{} should have failed",
             desc
         );
@@ -478,15 +538,38 @@ mod tests {
     #[case(4, Some(3))]
     #[case(5, Some(4))]
     fn test_convert_atom_hydrogen_count_code(#[case] code: u8, #[case] expected: Option<u8>) {
-        assert_eq!(convert_atom_hydrogen_count_code(code).unwrap(), expected);
+        assert_eq!(
+            convert_atom_hydrogen_count_code(code, false).unwrap(),
+            expected
+        );
     }
 
     #[rstest]
-    #[case(6, Some(4))]
-    #[case(10, Some(4))]
-    #[case(255, Some(4))]
-    fn test_convert_atom_hydrogen_count_code_clamped(#[case] code: u8, #[case] expected: Option<u8>) {
-        assert_eq!(convert_atom_hydrogen_count_code(code).unwrap(), expected);
+    #[case(6, "extended range")]
+    #[case(14, "out of range")]
+    fn test_convert_atom_hydrogen_count_code_invalid(#[case] code: u8, #[case] desc: &str) {
+        assert!(
+            convert_atom_hydrogen_count_code(code, false).is_err(),
+            "{} should have failed",
+            desc
+        );
+    }
+
+    #[rstest]
+    #[case(6, Some(5))]
+    #[case(7, Some(6))]
+    #[case(8, Some(7))]
+    #[case(9, Some(8))]
+    #[case(10, Some(9))]
+    #[case(13, Some(12))]
+    fn test_convert_atom_hydrogen_count_code_extended(
+        #[case] code: u8,
+        #[case] expected: Option<u8>,
+    ) {
+        assert_eq!(
+            convert_atom_hydrogen_count_code(code, true).unwrap(),
+            expected
+        );
     }
 
     #[rstest]
@@ -579,24 +662,36 @@ mod tests {
     }
 
     #[rstest]
+    #[case(0u8, "zero-order bond")]
+    #[case(5u8, "query bond type")]
+    #[case(9u8, "extended bond type")]
+    fn test_convert_bond_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
+        assert!(
+            convert_bond_type_code(code).is_err(),
+            "{} should have failed",
+            desc
+        );
+    }
+
+    #[rstest]
     #[case(1u8, BondType::Single)]
     #[case(2u8, BondType::Double)]
     #[case(3u8, BondType::Triple)]
     #[case(4u8, BondType::Aromatic)]
-    #[case(5u8, BondType::SingleOrDouble)]
-    #[case(6u8, BondType::SingleOrAromatic)]
-    #[case(7u8, BondType::DoubleOrAromatic)]
-    #[case(8u8, BondType::Any)]
     fn test_convert_bondlike_type_code(#[case] code: u8, #[case] expected: BondType) {
-        assert_eq!(convert_bondlike_type_code(code, false).unwrap(), expected);
+        assert_eq!(
+            convert_bondlike_type_code(code, false, false).unwrap(),
+            expected
+        );
     }
 
     #[rstest]
     #[case(0u8, "zero-order bond")]
-    #[case(9u8, "invalid bond type")]
+    #[case(9u8, "extended bond type")]
+    #[case(12u8, "bond order outside range")]
     fn test_convert_bondlike_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
-            convert_bondlike_type_code(code, false).is_err(),
+            convert_bondlike_type_code(code, false, false).is_err(),
             "{} should have failed",
             desc
         );
@@ -605,31 +700,26 @@ mod tests {
     #[rstest]
     #[case(0u8, BondType::Zero)]
     #[case(1u8, BondType::Single)]
-    fn test_convert_bondlike_type_code_zero_ok(#[case] code: u8, #[case] expected: BondType) {
-        assert_eq!(convert_bondlike_type_code(code, true).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case(9u8, "invalid bond type")]
-    fn test_convert_bondlike_type_code_zero_ok_invalid(#[case] code: u8, #[case] desc: &str) {
-        assert!(
-            convert_bondlike_type_code(code, true).is_err(),
-            "{} should have failed",
-            desc
-        );
-        assert!(
-            convert_bondlike_type_code(code, false).is_err(),
-            "{} should have failed",
-            desc
+    #[case(9u8, BondType::Quadruple)]
+    #[case(10u8, BondType::Quintuple)]
+    #[case(11u8, BondType::Sextuple)]
+    fn test_convert_bondlike_type_code_extended(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(
+            convert_bondlike_type_code(code, true, false).unwrap(),
+            expected
         );
     }
 
     #[rstest]
-    #[case(0)]
-    #[case(5)]
-    #[case(8)]
-    fn test_convert_bond_type_code_invalid(#[case] code: u8) {
-        assert!(convert_bond_type_code(code).is_err());
+    #[case(5u8, BondType::SingleOrDouble)]
+    #[case(6u8, BondType::SingleOrAromatic)]
+    #[case(7u8, BondType::DoubleOrAromatic)]
+    #[case(8u8, BondType::Any)]
+    fn test_convert_bondlike_type_code_queries(#[case] code: u8, #[case] expected: BondType) {
+        assert_eq!(
+            convert_bondlike_type_code(code, false, true).unwrap(),
+            expected
+        );
     }
 
     #[rstest]
@@ -769,13 +859,29 @@ mod tests {
         #[case] code: i8,
         #[case] expected: Option<SubstitutionCount>,
     ) {
-        assert_eq!(convert_substitution_count_code(code).unwrap(), expected);
+        assert_eq!(
+            convert_substitution_count_code(code, false).unwrap(),
+            expected
+        );
     }
 
     #[rstest]
     #[case(7)]
+    #[case(16)]
     fn test_convert_substitution_count_code_invalid(#[case] code: i8) {
-        assert!(convert_substitution_count_code(code).is_err());
+        assert!(convert_substitution_count_code(code, false).is_err());
+    }
+
+    #[rstest]
+    #[case(6, Some(SubstitutionCount::S6))]
+    fn test_convert_substitution_count_code_extended(
+        #[case] code: i8,
+        #[case] expected: Option<SubstitutionCount>,
+    ) {
+        assert_eq!(
+            convert_substitution_count_code(code, true).unwrap(),
+            expected
+        );
     }
 
     #[rstest]

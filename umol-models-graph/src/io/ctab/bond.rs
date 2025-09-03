@@ -55,22 +55,44 @@ pub enum BondType {
     Double,           // MOL code 2
     Triple,           // MOL code 3
     Aromatic,         // MOL code 4
-    SingleOrDouble,   // MOL code 5
-    SingleOrAromatic, // MOL code 6
-    DoubleOrAromatic, // MOL code 7
-    Any,              // MOL code 8
-    Zero,             // zero-order bond, via ZBO property
+    SingleOrDouble,   // MOL code 5 (query)
+    SingleOrAromatic, // MOL code 6 (query)
+    DoubleOrAromatic, // MOL code 7 (query)
+    Any,              // MOL code 8 (query)
+    Zero,             // MOL code 0 (extended range)
+    Quadruple,        // MOL code 9 (extended range)
+    Quintuple,        // MOL code 10 (extended range)
+    Sextuple,         // MOL code 11 (extended range)
 }
 
 impl BondType {
     pub fn is_bondlike(&self) -> bool {
         !matches!(
             self,
-            BondType::Single | BondType::Double | BondType::Triple | BondType::Aromatic
+            BondType::Single
+                | BondType::Double
+                | BondType::Triple
+                | BondType::Aromatic
+                | BondType::Quadruple
+                | BondType::Quintuple
+                | BondType::Sextuple
+                | BondType::Zero
         )
     }
-    pub fn is_kekule(&self) -> bool {
-        matches!(self, BondType::Single | BondType::Double | BondType::Triple)
+    pub fn is_query(&self) -> bool {
+        matches!(
+            self,
+            BondType::SingleOrDouble
+                | BondType::SingleOrAromatic
+                | BondType::DoubleOrAromatic
+                | BondType::Any
+        )
+    }
+    pub fn is_extended_range(&self) -> bool {
+        matches!(
+            self,
+            BondType::Quadruple | BondType::Quintuple | BondType::Sextuple | BondType::Zero
+        )
     }
 }
 

@@ -22,7 +22,7 @@ use super::convert::{
 };
 use super::utils::{
     fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt,
-    fixed_width_padding_n,
+    fixed_width_padding_n, to_string,
 };
 
 /// Parse atom symbol (Element and NamedIsotope only).
@@ -79,6 +79,7 @@ fn atomlike_symbol<'a>(
     let allow_queries = flags.contains(ParseFlags::QUERIES);
     let allow_extended_queries = flags.contains(ParseFlags::EXTENDED_QUERIES);
     let allow_electrons = flags.contains(ParseFlags::ELECTRONS);
+    let allow_pseudoatoms = flags.contains(ParseFlags::PSEUDOATOMS);
     map_res(take(3usize), move |s: &[u8]| {
         let s = s.trim_ascii();
         if let Some(element) = Element::from_symbol_bytes(s) {
@@ -117,31 +118,32 @@ fn atomlike_symbol<'a>(
                 _ => {}
             }
         }
-        Err(error::Error::new(s, error::ErrorKind::MapRes))
+        if allow_pseudoatoms {
+            let s = to_string(s)?;
+            Ok(AtomSymbol::Pseudoatom(s))
+        } else {
+            Err(error::Error::new(s, error::ErrorKind::MapRes))
+        }
     })
 }
 
 /// Parse atom inputs with 52-69 characters (s. `atom_input` for more details).
 /// Includes atom mapping number.
 fn atom_input69(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
     let symbol = atom_symbol(flags);
-    let mass_diff = map(
-        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4),
-        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
-    );
-    let charge_radical = map(
-        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7),
-        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
-    );
-    let stereo_parity = map_res(
-        fixed_width_int_in_range::<u8, _>(3, 0..=3),
-        |code| convert_atom_stereo_parity_code(code, false),
-    );
+    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
+        convert_atom_mass_diff_code(opt.unwrap_or(0))
+    });
+    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
+        convert_atom_charge_code(opt.unwrap_or(0))
+    });
+    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
+        convert_atom_stereo_parity_code(code, false)
+    });
     let padding1 = fixed_width_padding_n(2, 3, strict_padding);
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
@@ -190,25 +192,21 @@ fn atom_input69(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::
 /// If `strict_padding` is true, require strict padding.
 ///
 fn atom_input51(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
     let symbol = atom_symbol(flags);
-    let mass_diff = map(
-        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4),
-        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
-    );
-    let charge_radical = map(
-        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7),
-        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
-    );
+    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
+        convert_atom_mass_diff_code(opt.unwrap_or(0))
+    });
+    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
+        convert_atom_charge_code(opt.unwrap_or(0))
+    });
     let padding1 = fixed_width_padding_n(2, 3, strict_padding);
-    let stereo_parity = map_res(
-        fixed_width_int_in_range::<u8, _>(3, 0..=3),
-        |code| convert_atom_stereo_parity_code(code, false),
-    );
+    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
+        convert_atom_stereo_parity_code(code, false)
+    });
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
@@ -253,24 +251,22 @@ fn atom_input51(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::
 /// If `strict_padding` is true, require strict padding.
 ///
 fn atom_input42(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-
     let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
     let symbol = atom_symbol(flags);
     let mass_diff = map(
-        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4),
-        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+        fixed_width_int_in_range::<i8, _>(2, -3..=4),
+        convert_atom_mass_diff_code,
     );
     let charge_radical = map(
-        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7),
-        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
+        fixed_width_int_in_range::<u8, _>(3, 0..=7),
+        convert_atom_charge_code,
     );
-    let stereo_parity = map_res(
-        fixed_width_int_in_range::<u8, _>(3, 0..=3),
-        |code| convert_atom_stereo_parity_code(code, false),
-    );
+    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
+        convert_atom_stereo_parity_code(code, false)
+    });
     let n = input.len().saturating_sub(42) / 3;
     let padding1 = fixed_width_padding_n(n, 3, strict_padding);
 
@@ -310,19 +306,16 @@ fn atom_input42(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 ///
 fn atom_input39(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
     let symbol = atom_symbol(flags);
-    let mass_diff = map(
-        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4),
-        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
-    );
-    let charge_radical = map(
-        fixed_width_int_in_range_opt::<u8, _>(3, 0..=7),
-        |opt| convert_atom_charge_code(opt.unwrap_or(0)),
-    );
+    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
+        convert_atom_mass_diff_code(opt.unwrap_or(0))
+    });
+    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
+        convert_atom_charge_code(opt.unwrap_or(0))
+    });
 
     map(
         (
@@ -360,15 +353,13 @@ fn atom_input39(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::
 /// If `strict_padding` is true, require strict padding.
 ///
 fn atom_input36(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
     let symbol = atom_symbol(flags);
-    let mass_diff = map(
-        fixed_width_int_in_range_opt::<i8, _>(2, -3..=4),
-        |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
-    );
+    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
+        convert_atom_mass_diff_code(opt.unwrap_or(0))
+    });
 
     map(
         (x, y, z, preceded(tag(" "), symbol), mass_diff),
@@ -399,7 +390,6 @@ fn atom_input36(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::
 /// If `strict_padding` is true, require strict padding.
 ///
 fn atom_input34(input: &[u8], flags: ParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -514,39 +504,47 @@ fn atomlike_input_inner<'a>(
         // Atom symbol
         let (i, atom_symbol) = preceded(tag(" "), atomlike_symbol(flags)).parse(i)?;
 
-        // Mass difference, charge/radical, stereo parity
-        let (i, mass_diff) = map(
-            fixed_width_int(2),
-            convert_atom_mass_diff_code,
-        )
+        // Mass difference
+        let (i, mass_diff) = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
+            convert_atom_mass_diff_code(opt.unwrap_or(0))
+        })
         .parse(i)?;
-        let (i, (charge, radical)) =
-            map(fixed_width_int(3), convert_atom_charge_code).parse(i)?;
+
+        // Charge/radical
+        let (i, (charge, radical)) = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
+            convert_atom_charge_code(opt.unwrap_or(0))
+        })
+        .parse(i)?;
+
+        // Stereo parity
         let (i, stereo_parity) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int(3), |code| {
+            map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
                 convert_atom_stereo_parity_code(code, true)
             }),
         )
         .parse(i)?;
 
-        // Hydrogen count, stereo care, valence
+        // Hydrogen count
+        let extended_range = flags.contains(ParseFlags::EXTENDED_RANGE);
+        let max_hydrogen = if extended_range { 255 } else { 5 };
         let (i, hydrogen_count) = cond(
             i.len() >= 3,
             map_res(
-                fixed_width_int(3),
-                convert_atom_hydrogen_count_code,
+                fixed_width_int_in_range::<u8, _>(3, 0..=max_hydrogen),
+                move |code| convert_atom_hydrogen_count_code(code, extended_range),
             ),
         )
         .parse(i)?;
+
+        // Stereo care
         let (i, stereo_care) = cond(
             i.len() >= 3,
-            map_res(
-                fixed_width_int(3),
-                convert_atom_stereo_care_code,
-            ),
+            map_res(fixed_width_int(3), convert_atom_stereo_care_code),
         )
         .parse(i)?;
+
+        // Valence
         let (i, valence) = cond(
             i.len() >= 3,
             map_res(fixed_width_int(3), convert_atom_valence_code),
@@ -560,23 +558,27 @@ fn atomlike_input_inner<'a>(
         )
         .parse(i)?;
 
-        // Atom mapping number, inversion flag, exact change flag
-        let (i, atom_map_num) =
-            cond(i.len() >= 3, fixed_width_int::<u32>(3)).parse(i)?;
+        // Atom mapping number
+        let (i, atom_map_num) = cond(
+            i.len() >= 3,
+            fixed_width_int_in_range_opt::<u32, _>(3, 1..=999),
+        )
+        .parse(i)?;
+
+        // Inversion flag
         let (i, inversion_flag) = cond(
             i.len() >= 3,
             map_res(
-                fixed_width_int(3),
+                fixed_width_int_in_range::<u8, _>(3, 0..=2),
                 convert_atom_inversion_flag_code,
             ),
         )
         .parse(i)?;
+
+        // Exact change flag
         let (i, exact_change_flag) = cond(
             i.len() >= 3,
-            map_res(
-                fixed_width_int(3),
-                convert_atom_exact_change_flag_code,
-            ),
+            map_res(fixed_width_int(3), convert_atom_exact_change_flag_code),
         )
         .parse(i)?;
 
@@ -600,7 +602,7 @@ fn atomlike_input_inner<'a>(
                 hydrogen_count: hydrogen_count.flatten(),
                 stereo_care: stereo_care.flatten(),
                 valence: valence.flatten(),
-                atom_map_num,
+                atom_map_num: atom_map_num.flatten(),
                 inversion_retention: inversion_flag.flatten(),
                 exact_change: exact_change_flag.flatten(),
                 attachment_point: None,

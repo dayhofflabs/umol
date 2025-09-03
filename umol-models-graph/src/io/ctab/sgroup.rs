@@ -1,7 +1,7 @@
 //! SGroup types for CTab format.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// SGroup type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -39,11 +39,31 @@ pub enum SGroupConnectivity {
     EitherUnknown, // EU
 }
 
-/// SGroup multiplier
+/// SGroup multiplier term (variable or integer)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SGroupMultiplierTerm {
+    Variable(char),
+    Integer(u32),
+}
+
+/// SGroup multiplier arithmetic operator
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SGroupMultiplierOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+/// SGroup multiplier for repeating unit properties
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupMultiplier {
-    Count(u32),
-    N,
+    Single(SGroupMultiplierTerm),
+    Expression {
+        left: SGroupMultiplierTerm,
+        op: SGroupMultiplierOp,
+        right: SGroupMultiplierTerm,
+    },
 }
 
 /// SGroup bracket coordinates
@@ -137,7 +157,7 @@ pub struct SGroup {
     pub hierarchy_parent: Option<usize>,          // SPL: parent SGroup for hierarchies
     pub component_number: Option<u32>,            // SNC: component order number
     pub bracket_style: Option<SGroupBracketStyle>, // SBT: bracket display style
-    pub data: HashMap<String, SGroupData>,        // SDT, SCD, SED: data for DAT SGroups
+    pub data: BTreeMap<String, SGroupData>,        // SDT, SCD, SED: data for DAT SGroups
     pub display: Option<SGroupDataDisplay>,       // SDD: display info for DAT SGroups
 }
 
@@ -161,7 +181,7 @@ impl SGroup {
             hierarchy_parent: None,
             component_number: None,
             bracket_style: None,
-            data: HashMap::new(),
+            data: BTreeMap::new(),
             display: None,
         }
     }

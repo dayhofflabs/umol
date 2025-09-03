@@ -124,6 +124,7 @@ pub enum AtomSymbol {
     Query(QueryAtom),
     LonePair,
     RGroup(RGroup),
+    Pseudoatom(String)
 }
 
 impl AtomSymbol {
@@ -231,6 +232,7 @@ pub enum RingBondCount {
 
 /// Substitution count for SUB property
 /// -2 = as drawn (s*), -1 = no substitution (s0), 0 = off, 1-5 = s1-s5, 6 = s6+
+/// Extended range: 6-10 = s6-s10
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SubstitutionCount {
     AsDrawn,        // s*
@@ -241,6 +243,11 @@ pub enum SubstitutionCount {
     S4,             // 4
     S5,             // 5
     S6Plus,         // 6+
+    S6,             // 6
+    S7,             // 7
+    S8,             // 8
+    S9,             // 9
+    S10,            // 10
 }
 
 /// Unsaturated atom for UNS property

@@ -33,7 +33,7 @@ fn test_bond_input12(
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let result = bond_input12(input, ParseFlags::LENIENT);
+    let result = bond_input12(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -98,7 +98,7 @@ fn test_bond_input9(
     #[case] atom2: usize,
     #[case] bond_type: BondType,
 ) {
-    let result = bond_input9(input, ParseFlags::LENIENT);
+    let result = bond_input9(input, ParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -159,7 +159,7 @@ fn test_bond_input(
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let mut parser = bond_input(ParseFlags::LENIENT);
+    let mut parser = bond_input(ParseFlags::BASIC);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
@@ -193,7 +193,8 @@ fn test_bond_input(
 
 #[rstest]
 #[case(b"  1  2 ", "Line too short", error::ErrorKind::Eof)]
-#[case(b"  1  2  9", "Out of range type", error::ErrorKind::MapRes)]
+#[case(b"  1  2  9", "Bond type above range", error::ErrorKind::MapRes)]
+#[case(b"  1  2  0", "Bond type below range", error::ErrorKind::MapRes)]
 fn test_bond_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -214,7 +215,7 @@ fn test_bond_input_invalid(
 #[rstest]
 #[case(b"  1  2  1 1", "len 11")]
 fn test_bond_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input(ParseFlags::LENIENT);
+    let mut parser = bond_input(ParseFlags::BASIC);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
 }
@@ -223,7 +224,7 @@ fn test_bond_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
 #[case(b"  1  2  1\n", "len 9 padded")]
 #[case(b"  1  3  1  1  ", "len 12 padded")]
 fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input(ParseFlags::LENIENT);
+    let mut parser = bond_input(ParseFlags::BASIC);
     let trimmed_input = input.trim_ascii_end();
     let result = parser.parse(trimmed_input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -234,6 +235,8 @@ fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
 #[rustfmt::skip]
 #[rstest]
 #[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None, None, None)]
+#[case(b"  1  2  0", "len 9, zero bond", 0, 1, BondType::Zero, None, None, None, None)]
+#[case(b"  1  2  9", "len 9, quadruple bond", 0, 1, BondType::Quadruple, None, None, None, None)]
 #[case(b"  1  2  2  3", "len 12 double either", 0, 1, BondType::Double, Some(BondStereo::Either), None, None, None)]
 #[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondType::Single, None, Some(BondDir::Dash), None, None)]
 #[case(b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
@@ -300,9 +303,10 @@ fn test_bondlike_input(
 
 #[rstest]
 #[case(b"  1  2", "Line too short", error::ErrorKind::MapRes)]
-#[case(b"  1  2  9", "Out of range type", error::ErrorKind::MapRes)]
+#[case(b"  1  2  9", "Bond type above range", error::ErrorKind::MapRes)]
+#[case(b"  1  2  0", "Bond type below range", error::ErrorKind::MapRes)]
 #[case(b"  2  5  2  0  0  4  0", "Invalid topology", error::ErrorKind::MapRes)]
-#[case(b"  1  2  8  0XXX  1", "non-strict padding", error::ErrorKind::Verify)]
+#[case(b"  1  2  8  0XXX  1", "non-strict padding", error::ErrorKind::MapRes)]
 fn test_bondlike_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -316,5 +320,38 @@ fn test_bondlike_input_invalid(
         desc,
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rustfmt::skip]
+#[rstest]
+#[case(b"  1  2  0", "len 9, zero bond", 0, 1, BondType::Zero)]
+#[case(b"  1  2  9", "len 9, quadruple bond", 0, 1, BondType::Quadruple)]
+fn test_bond_input_extended(
+    #[case] input: &[u8],
+    #[case] desc: &str,
+    #[case] atom1: usize,
+    #[case] atom2: usize,
+    #[case] bond_type: BondType,
+) {
+    let result = bondlike_input(ParseFlags::EXTENDED).parse(input);
+    assert!(result.is_ok(), "{} should have succeeded", desc);
+    let (remaining, (a1, a2, bond)) = result.unwrap();
+    assert!(remaining.is_empty(), "{} should consume all input", desc);
+    
+    assert_eq!(
+        a1, atom1,
+        "{} has returned atom1 {:?}, expected {:?}",
+        desc, a1, atom1
+    );
+    assert_eq!(
+        a2, atom2,
+        "{} has returned atom2 {:?}, expected {:?}",
+        desc, a2, atom2
+    );
+    assert_eq!(
+        bond.bond_type, bond_type,
+        "{} has returned bond type {:?}, expected {:?}",
+        desc, bond.bond_type, bond_type,
     );
 }

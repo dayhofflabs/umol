@@ -18,7 +18,7 @@ use super::utils::{
 use crate::io::config::ParseFlags;
 use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
-    sgroup_data_display_units, sgroup_data_type, sgroup_multiplier,
+    sgroup_data_display_units, sgroup_data_type, sgroup_multiplier, sgroup_subscript,
 };
 use crate::io::ctab::rgroup::RGroupOccurrence;
 use crate::io::ctab::sgroup::{
@@ -168,15 +168,10 @@ pub struct SGroupParentAtomEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SGroupSubscriptData {
-    Multiplier(SGroupMultiplier),
-    Subscript(String),
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct SGroupSubscriptEntry {
     pub sgroup_index: usize,
-    pub data: SGroupSubscriptData,
+    pub multiplier: Option<SGroupMultiplier>,
+    pub subscript: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1147,18 +1142,28 @@ fn sgroup_subscript_entry<'a>(
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
             preceded(
                 tag(" "),
-                alt((
-                    map(sgroup_multiplier(), SGroupSubscriptData::Multiplier),
-                    map_res(
-                        rest,
-                        move |s: &[u8]| -> Result<SGroupSubscriptData, error::Error<&[u8]>> {
-                            Ok(SGroupSubscriptData::Subscript(to_string(s)?))
-                        },
-                    ),
-                )),
+                map_res(rest, move |s: &[u8]| {
+                    let multiplier = sgroup_multiplier()
+                        .parse(s)
+                        .ok()
+                        .map(|(_, multiplier)| multiplier);
+                    let subscript = sgroup_subscript()
+                        .parse(s)
+                        .ok()
+                        .map(|(_, subscript)| subscript);
+                    if multiplier.is_none() && subscript.is_none() {
+                        Err(error::Error::new(s, error::ErrorKind::MapRes))
+                    } else {
+                        Ok((multiplier, subscript))
+                    }
+                }),
             ),
         ),
-        |(sgroup_index, data)| SGroupSubscriptEntry { sgroup_index, data },
+        |(sgroup_index, (multiplier, subscript))| SGroupSubscriptEntry {
+            sgroup_index,
+            multiplier,
+            subscript,
+        },
     )
 }
 

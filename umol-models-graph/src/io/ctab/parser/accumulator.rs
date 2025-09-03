@@ -1,26 +1,28 @@
 //! Accumulator for molecular properties from a CTAB file
+
+use std::collections::BTreeMap;
+use umol::error::{DataError, ValidationError};
+use umol::Result;
+use umol_data::Element;
+
 use super::context::Context;
 use super::convert::{
     convert_atom_isotope_mass_number, convert_attachment_point_code, convert_bondlike_type_code,
     convert_radical_type_code, convert_ring_bond_count_code, convert_substitution_count_code,
     convert_unsaturated_atom_code,
 };
+use crate::io::config::ParseFlags;
 use crate::io::ctab::atom::{
     AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, RingBondCount,
     SubstitutionCount, UnsaturatedAtom,
 };
-
 use crate::io::ctab::molecule::{Molecule, MoleculeLike};
-use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry, SGroupSubscriptData};
+use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry};
 use crate::io::ctab::rgroup::{RGroup, RGroupOccurrence};
 use crate::io::ctab::sgroup::{
     SGroup, SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData,
     SGroupDataDisplay, SGroupMultiplier, SGroupSubtype, SGroupType,
 };
-use std::collections::HashMap;
-use umol::error::{DataError, ValidationError};
-use umol::Result;
-use umol_data::Element;
 
 // Accumulator for properties of a single atom
 #[derive(Debug, Default)]
@@ -74,7 +76,7 @@ pub struct SGroupProperties {
     pub connecting_bond: Option<SGroupConnectingBond>,
     pub hierarchy_parent: Option<usize>,
     pub component_number: Option<u32>,
-    pub data: HashMap<String, SGroupData>,
+    pub data: BTreeMap<String, SGroupData>,
     pub display: Option<SGroupDataDisplay>,
 }
 
@@ -88,39 +90,41 @@ impl SGroupProperties {
 }
 
 /// Validate compatibility of SGroup type with subscript data type
-fn is_valid_sgroup_subscript(sgroup_type: SGroupType, data: &SGroupSubscriptData) -> bool {
-    match (sgroup_type, data) {
-        // SGroup types that accept multipliers
-        (SGroupType::MultipleGroup, SGroupSubscriptData::Multiplier(_)) => true,
-        (SGroupType::RepeatingUnit, SGroupSubscriptData::Multiplier(_)) => true,
-        // SGroup types that accept subscripts
-        (SGroupType::Superatom, SGroupSubscriptData::Subscript(_)) => true,
-        _ => false,
-    }
+fn sgroup_accepts_subscript(sgroup_type: SGroupType) -> bool {
+    matches!(sgroup_type, SGroupType::Superatom)
+}
+
+/// Validate compatibility of SGroup type with multiplier data type
+fn sgroup_accepts_multiplier(sgroup_type: SGroupType) -> bool {
+    matches!(
+        sgroup_type,
+        SGroupType::MultipleGroup | SGroupType::RepeatingUnit
+    )
 }
 
 /// Accumulator for molecular properties
 #[derive(Debug)]
 pub struct MoleculeProperties {
     context: Context,
-    pub atom_properties: HashMap<usize, AtomProperties>,
-    pub bond_properties: HashMap<usize, BondProperties>,
-    pub rgroup_properties: HashMap<usize, RGroupProperties>,
-    pub sgroup_properties: HashMap<usize, SGroupProperties>,
+    pub atom_properties: BTreeMap<usize, AtomProperties>,
+    pub bond_properties: BTreeMap<usize, BondProperties>,
+    pub rgroup_properties: BTreeMap<usize, RGroupProperties>,
+    pub sgroup_properties: BTreeMap<usize, SGroupProperties>,
 }
 
 impl MoleculeProperties {
     pub fn new() -> Self {
         Self {
             context: Context::new(),
-            atom_properties: HashMap::new(),
-            bond_properties: HashMap::new(),
-            rgroup_properties: HashMap::new(),
-            sgroup_properties: HashMap::new(),
+            atom_properties: BTreeMap::new(),
+            bond_properties: BTreeMap::new(),
+            rgroup_properties: BTreeMap::new(),
+            sgroup_properties: BTreeMap::new(),
         }
     }
 
-    pub fn add_entry(&mut self, entry: PropertyEntries) -> Result<()> {
+    pub fn add_entry(&mut self, entry: PropertyEntries, flags: ParseFlags) -> Result<()> {
+        let extended_range = flags.contains(ParseFlags::EXTENDED_RANGE);
         match entry {
             PropertyEntries::AtomAliasEntry(e) => {
                 let props = self.atom_properties.entry(e.atom_index).or_default();
@@ -158,7 +162,7 @@ impl MoleculeProperties {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     props.substitution_count =
-                        convert_substitution_count_code(entry.substitution_count)?;
+                        convert_substitution_count_code(entry.substitution_count, extended_range)?;
                 }
             }
             PropertyEntries::UnsaturatedAtomEntries(entries) => {
@@ -349,25 +353,39 @@ impl MoleculeProperties {
                             entry.sgroup_index
                         ))
                     })?;
-                if !is_valid_sgroup_subscript(*sgroup_type, &entry.data) {
+
+                if !sgroup_accepts_subscript(*sgroup_type)
+                    && !sgroup_accepts_multiplier(*sgroup_type)
+                {
                     return Err(DataError::InvalidFragment(format!(
-                        "S-group type {:?} does not accept {}",
+                        "S-group subscript and multiplier not allowed for S-group type {:?}",
                         sgroup_type,
-                        match entry.data {
-                            SGroupSubscriptData::Multiplier(_) => "multipliers",
-                            SGroupSubscriptData::Subscript(_) => "subscripts",
-                        }
                     ))
                     .into());
-                }
-
-                match entry.data {
-                    SGroupSubscriptData::Multiplier(mult) => {
-                        props.multiplier = Some(mult);
+                } else if sgroup_accepts_subscript(*sgroup_type) {
+                    if entry.subscript.is_none() {
+                        return Err(DataError::InvalidFragment(format!(
+                            "No subscript found for S-group type {:?}",
+                            sgroup_type,
+                        ))
+                        .into());
                     }
-                    SGroupSubscriptData::Subscript(text) => {
-                        props.subscript = Some(text);
+                    props.subscript = entry.subscript;
+                } else if sgroup_accepts_multiplier(*sgroup_type) {
+                    if entry.multiplier.is_none() {
+                        return Err(DataError::InvalidFragment(format!(
+                            "No multiplier found for S-group type {:?}",
+                            sgroup_type,
+                        ))
+                        .into());
                     }
+                    props.multiplier = entry.multiplier;
+                } else {
+                    return Err(DataError::InvalidFragment(format!(
+                        "S-group type {:?} cannot have a subscript and a multiplier",
+                        sgroup_type,
+                    ))
+                    .into());
                 }
             }
             PropertyEntries::SGroupCorrespondenceEntry(entry) => {
@@ -594,8 +612,44 @@ impl MoleculeProperties {
         Ok(())
     }
 
+    /// Apply all properties to Molecule
+    pub fn update_molecule(&mut self, molecule: &mut Molecule, flags: ParseFlags) -> Result<()> {
+        let extended_isotopes = flags.contains(ParseFlags::EXTENDED_ISOTOPES);
+        for (atom_index, props) in &self.atom_properties {
+            if props.alias.is_some() {
+                self.apply_atom_alias(*atom_index, props, molecule)?;
+            }
+            if props.value.is_some() {
+                self.apply_atom_value(*atom_index, props, molecule)?;
+            }
+            if props.charge.is_some() {
+                self.apply_atom_charge(*atom_index, props, molecule)?;
+            }
+            if props.radical.is_some() {
+                self.apply_atom_radical(*atom_index, props, molecule)?;
+            }
+            if props.isotope_mass.is_some() {
+                self.apply_atom_isotope(*atom_index, props, molecule, extended_isotopes)?;
+            }
+            if props.hydrogen_count.is_some() {
+                self.apply_atom_hydrogen_count(*atom_index, props, molecule)?;
+            }
+        }
+        for (bond_index, props) in &self.bond_properties {
+            if props.order_override.is_some() {
+                self.apply_atom_zero_order_bond(*bond_index, props, molecule)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Apply all properties to MoleculeLike
-    pub fn update_moleculelike(&mut self, molecule: &mut MoleculeLike) -> Result<()> {
+    pub fn update_moleculelike(
+        &mut self,
+        molecule: &mut MoleculeLike,
+        flags: ParseFlags,
+    ) -> Result<()> {
+        let extended_isotopes = flags.contains(ParseFlags::EXTENDED_ISOTOPES);
         for (&atom_index, props) in &self.atom_properties {
             let atom = molecule
                 .atom_mut(atom_index)
@@ -614,7 +668,7 @@ impl MoleculeProperties {
                 self.apply_atomlike_radical(props, atom)?;
             }
             if props.isotope_mass.is_some() {
-                self.apply_atomlike_isotope(props, atom)?;
+                self.apply_atomlike_isotope(props, atom, extended_isotopes)?;
             }
             if props.hydrogen_count.is_some() {
                 self.apply_atomlike_hydrogen_count(props, atom)?;
@@ -650,36 +704,6 @@ impl MoleculeProperties {
         self.validate_sgroup_data()?;
         self.apply_sgroup(molecule)?;
         self.apply_atomlike_zero_order_bonds(molecule)?;
-        Ok(())
-    }
-
-    /// Apply all properties to Molecule
-    pub fn update_molecule(&mut self, molecule: &mut Molecule) -> Result<()> {
-        for (atom_index, props) in &self.atom_properties {
-            if props.alias.is_some() {
-                self.apply_atom_alias(*atom_index, props, molecule)?;
-            }
-            if props.value.is_some() {
-                self.apply_atom_value(*atom_index, props, molecule)?;
-            }
-            if props.charge.is_some() {
-                self.apply_atom_charge(*atom_index, props, molecule)?;
-            }
-            if props.radical.is_some() {
-                self.apply_atom_radical(*atom_index, props, molecule)?;
-            }
-            if props.isotope_mass.is_some() {
-                self.apply_atom_isotope(*atom_index, props, molecule)?;
-            }
-            if props.hydrogen_count.is_some() {
-                self.apply_atom_hydrogen_count(*atom_index, props, molecule)?;
-            }
-        }
-        for (bond_index, props) in &self.bond_properties {
-            if props.order_override.is_some() {
-                self.apply_atom_zero_order_bond(*bond_index, props, molecule)?;
-            }
-        }
         Ok(())
     }
 
@@ -805,7 +829,12 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    fn apply_atomlike_isotope(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
+    fn apply_atomlike_isotope(
+        &self,
+        props: &AtomProperties,
+        atom: &mut AtomLike,
+        extended_isotopes: bool,
+    ) -> Result<()> {
         let element = match &atom.symbol {
             AtomSymbol::Element(element) => Ok::<_, umol::Error>(*element),
             AtomSymbol::NamedIsotope(isotope) => Ok::<_, umol::Error>(isotope.element()),
@@ -815,7 +844,11 @@ impl MoleculeProperties {
             ))
             .into()),
         }?;
-        let mass = convert_atom_isotope_mass_number(element, props.isotope_mass.unwrap())?;
+        let mass = convert_atom_isotope_mass_number(
+            element,
+            props.isotope_mass.unwrap(),
+            extended_isotopes,
+        )?;
         if let Some(existing) = atom.isotope_mass {
             if let Some(mass) = mass {
                 if existing != mass {
@@ -836,11 +869,16 @@ impl MoleculeProperties {
         atom_index: usize,
         props: &AtomProperties,
         molecule: &mut Molecule,
+        extended_isotopes: bool,
     ) -> Result<()> {
         let atom = molecule
             .atom_mut(atom_index)
             .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
-        let mass = convert_atom_isotope_mass_number(atom.element, props.isotope_mass.unwrap())?;
+        let mass = convert_atom_isotope_mass_number(
+            atom.element,
+            props.isotope_mass.unwrap(),
+            extended_isotopes,
+        )?;
         if let Some(existing) = atom.isotope_mass {
             if let Some(mass) = mass {
                 if existing != mass {
@@ -960,14 +998,35 @@ impl MoleculeProperties {
     }
 
     fn apply_rgroup_label(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if !matches!(atom.symbol, AtomSymbol::Element(_)) {
-            return Err(ValidationError::InvalidComponent(format!(
-                "R-group label can only be applied to an element, not {:?}",
-                atom.symbol
-            ))
-            .into());
+        if let Some(new_label) = props.rgroup_label {
+            match &mut atom.symbol {
+                AtomSymbol::Element(_) => {
+                    // Convert element to R-group with the label
+                    atom.symbol = AtomSymbol::RGroup(RGroup::new(Some(new_label)));
+                }
+                AtomSymbol::RGroup(rgroup) => {
+                    // Verify existing label matches or is None
+                    if let Some(existing_label) = rgroup.label {
+                        if existing_label != new_label {
+                            return Err(ValidationError::InvalidComponent(format!(
+                                "R-group label conflict: existing '{}' vs new '{}'",
+                                existing_label, new_label
+                            ))
+                            .into());
+                        }
+                    } else {
+                        rgroup.label = Some(new_label);
+                    }
+                }
+                _ => {
+                    return Err(ValidationError::InvalidComponent(format!(
+                        "R-group label can only be applied to an element or R-group, not {:?}",
+                        atom.symbol
+                    ))
+                    .into());
+                }
+            }
         }
-        atom.symbol = AtomSymbol::RGroup(RGroup::new(props.rgroup_label));
         Ok(())
     }
 
@@ -998,7 +1057,8 @@ impl MoleculeProperties {
     fn apply_atomlike_zero_order_bonds(&self, molecule: &mut MoleculeLike) -> Result<()> {
         for (bond_index, props) in &self.bond_properties {
             if let Some(bond) = molecule.bond_mut(*bond_index) {
-                bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true)?;
+                bond.bond_type =
+                    convert_bondlike_type_code(props.order_override.unwrap(), true, true)?;
             } else {
                 return Err(DataError::InvalidFragment(format!(
                     "Zero-order bond for undefined bond {}",
@@ -1019,7 +1079,7 @@ impl MoleculeProperties {
         let bond = molecule
             .bond_mut(bond_index)
             .ok_or_else(|| DataError::MissingBondIndex(bond_index))?;
-        bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true)?;
+        bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true, true)?;
         Ok(())
     }
 
