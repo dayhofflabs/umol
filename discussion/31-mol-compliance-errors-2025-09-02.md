@@ -55,6 +55,23 @@ Files containing R-group definitions that our parser doesn't support:
 - `ketcher/r1-several-structures.mol` - Contains $RGP blocks
 - `ketcher/structure-r-group-logic.mol` - Contains $RGP blocks
 
+
+- `cdk/rgfile.1.mol` - Non-digit in counts line  
+- `cdk/rgfile.2.mol` - Non-digit in counts line
+- `cdk/rgfile.3.mol` - Non-digit in counts line
+- `cdk/rgfile.4.mol` - Non-digit in counts line
+- `cdk/rgfile.5.mol` - Non-digit in counts line  
+- `cdk/rgfile.6.mol` - Non-digit in counts line
+
+### **🔴 Group 3: EOF Issues (13 files)**
+
+**Incorrect Atom Line Formatting (6 files):**
+- `cdk/rgroupsNumbered.mol` - Atom symbol > 3
+- `indigo/Row2.mol` - XYZ too short
+- `indigo/Row3.mol` - XYZ too short
+- `indigo/recursive1.mol` - $MDL ??
+- `ketcher/three-structures.mol` - XYZ too short
+
 ## FIXED
 
 ### **🔴 Group 2: Out-of-Bounds Values (25+ files)**
@@ -96,31 +113,25 @@ Files containing R-group definitions that our parser doesn't support:
 - `indigo/Chirality.mol` - Missing V2000 tag
 - `rdkit/issue148.mol` - Missing V2000 tag
 - `rdkit/unsanitary2.mol` - Missing V2000 tag
-
-**Truncated Files (6 files):**
-- `cdk/rgroupsNumbered.mol` - Unexpected end of file
-- `indigo/Row2.mol` - Unexpected end of file  
-- `indigo/Row3.mol` - Unexpected end of file
-- `indigo/recursive1.mol` - Unexpected end of file
-- `indigo/test_molv2000_charge.mol` - Unexpected end of file
-- `ketcher/three-structures.mol` - Unexpected end of file
-
+- `indigo/test_molv2000_charge.mol` - Atom symbol < 3
 ---
 
-## **📋 FILE CATALOG WITH PARSING ISSUES
+**RXN Files (3 files):**
+- `cdk/ethylesterification.mol` - RXN file (not MOL)
+- `indigo/empty_apid.mol` - RXN file (not MOL)  
+- `indigo/ket-reaction-arrow.mol` - RXN file (not MOL)
+- `rdkit/rxn2.mol` - Unknown data error (RXN file that partially parses)
 
+### **🔴 Group 5: Line Ending Issues (2 files)**
+- `ketcher/Custom-expected.mol` - **0 bytes** (completely empty)
+- `ketcher/empty-file.mol` - **2 bytes** (just LF characters)
 
+## TODO
 
 ### **🔴 Group 4: Digit Parsing Issues (13 files)**
 
 **Spacing Problems in Counts Line (7 files):**
 - `cdk/hisotopes.mol` - Non-digit in counts line (`"0999 V2000"` - missing space)
-- `cdk/rgfile.1.mol` - Non-digit in counts line  
-- `cdk/rgfile.2.mol` - Non-digit in counts line
-- `cdk/rgfile.3.mol` - Non-digit in counts line
-- `cdk/rgfile.4.mol` - Non-digit in counts line
-- `cdk/rgfile.5.mol` - Non-digit in counts line  
-- `cdk/rgfile.6.mol` - Non-digit in counts line
 
 **Missing Space Before V2000 (4 files):**
 - `indigo/1944-3D_Structure.mol` - Missing space before V2000
@@ -132,20 +143,7 @@ Files containing R-group definitions that our parser doesn't support:
 - `cdk/mdlquery.mol` - Digit parsing error
 - `openbabel/nsc2dmol.mol` - Digit parsing error
 
----
-
-### **🔴 Group 5: Line Ending Issues (2 files)**
-- `ketcher/Custom-expected.mol` - **0 bytes** (completely empty)
-- `ketcher/empty-file.mol` - **2 bytes** (just LF characters)
-
----
-
 ### **🔴 Group 6: Other Issues (10 files)**
-
-**RXN Files (3 files):**
-- `cdk/ethylesterification.mol` - RXN file (not MOL)
-- `indigo/empty_apid.mol` - RXN file (not MOL)  
-- `indigo/ket-reaction-arrow.mol` - RXN file (not MOL)
 
 **Unknown Mapping Errors (5 files):**
 - `ketcher/alias-and-pseudoatoms-expected.mol` - Unknown mapping error
@@ -156,12 +154,5 @@ Files containing R-group definitions that our parser doesn't support:
 
 **Other Data Errors (2 files):**
 - `indigo/Row5.mol` - Unknown data error (ends with `$$$$%` instead of `$$$$`)
-- `rdkit/rxn2.mol` - Unknown data error (RXN file that partially parses)
-
-## **📊 SUMMARY STATISTICS:**
-- **$RGP blocks:** 55 files
-- **$RXN files:** 4 files  
-- **Missing V2000:** 9 files
-- **Empty/tiny files:** 2 files
 
 The analysis shows clear patterns where extended range support could help with bond orders, isotopes, and query atoms.

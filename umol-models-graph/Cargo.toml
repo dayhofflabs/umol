@@ -26,7 +26,6 @@ insta = { version = "1.31", features = ["yaml", "glob"] }
 serde_yaml = "0.9.33"
 serde_json = "1.0"
 tempfile = "3.0"
-walkdir = "2.0"
 
 [[bench]]
 name = "parsing_bench"
