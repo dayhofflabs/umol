@@ -14,6 +14,9 @@ use rstest::*;
 #[case(b"C  ", "C", AtomSymbol::Element(Element::C))]
 #[case(b"Cu ", "Cu", AtomSymbol::Element(Element::Cu))]
 #[case(b"D  ", "D", AtomSymbol::NamedIsotope(NamedIsotope::D))]
+#[case(b"H", "H, one character", AtomSymbol::Element(Element::H))]
+#[case(b"H ", "H, two characters", AtomSymbol::Element(Element::H))]
+#[case(b"Hg", "Hg, two characters", AtomSymbol::Element(Element::Hg))]
 fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
     let result = atom_symbol(ParseFlags::BASIC).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -64,6 +67,9 @@ fn test_atom_symbol_invalid(
 #[case(b"D  ", "D", AtomSymbol::NamedIsotope(NamedIsotope::D))]
 #[case(b"d  ", "d", AtomSymbol::NamedIsotope(NamedIsotope::D))]
 #[case(b"T  ", "T", AtomSymbol::NamedIsotope(NamedIsotope::T))]
+#[case(b"H", "H, one character", AtomSymbol::Element(Element::H))]
+#[case(b"H ", "H, two characters", AtomSymbol::Element(Element::H))]
+#[case(b"Hg", "Hg, two characters", AtomSymbol::Element(Element::Hg))]
 #[case(b"Ala", "pseudoatom", AtomSymbol::Pseudoatom(String::from("Ala")))]
 fn test_atomlike_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
     let result = atomlike_symbol(ParseFlags::LENIENT).parse(input);
@@ -78,8 +84,8 @@ fn test_atomlike_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expect
 }
 
 #[rstest]
-#[case(b"   ", "empty field", error::ErrorKind::MapRes)]
-#[case(b"H", "too short", error::ErrorKind::Eof)]
+#[case(b"", "empty field", error::ErrorKind::Eof)]
+#[case(b"   ", "blank field", error::ErrorKind::Eof)]
 #[case(b"Xx ", "Unknown atom symbol", error::ErrorKind::MapRes)]
 #[case(b"LQ ", "Unknown atom symbol", error::ErrorKind::MapRes)]
 #[case(b"A  ", "query atom", error::ErrorKind::MapRes)]
@@ -905,6 +911,7 @@ fn test_atom_input(
 #[case(b"   -1.8857    2.4750    0.0000 Psd 0  0  0  0  0  0  0  0  0  0  0  0", "len 69, pseudoatom Psd", error::ErrorKind::MapRes)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", "len 51, non-numeric valence", error::ErrorKind::Digit)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", "len 51, non-strict padding", error::ErrorKind::Verify)]
+#[case(b"    0.1   0.0    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0", "len 62, incorrect yz coordinates", error::ErrorKind::Eof)]
 fn test_atom_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,

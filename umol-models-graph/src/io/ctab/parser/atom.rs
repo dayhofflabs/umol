@@ -1,7 +1,7 @@
 //! Atom block parser for CTab files.
 
 use bstr::ByteSlice;
-use nom::bytes::complete::{tag, take};
+use nom::bytes::complete::tag;
 use nom::character::complete::space0;
 use nom::combinator::{cond, map, map_res};
 use nom::sequence::{preceded, terminated};
@@ -11,6 +11,7 @@ use umol_data::{Element, NamedIsotope};
 use crate::io::config::ParseFlags;
 use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol, Point3D};
 
+use crate::io::ctab::parser::utils::fixed_width_partial;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
 
@@ -33,20 +34,31 @@ fn atom_symbol<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
     let allow_named_isotopes = flags.contains(ParseFlags::NAMED_ISOTOPES);
-    map_res(take(3usize), move |s: &[u8]| {
-        let s = s.trim_ascii();
-        if let Some(element) = Element::from_symbol_bytes(s) {
-            Ok(AtomSymbol::Element(element))
-        } else if allow_named_isotopes {
-            if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
-                Ok(AtomSymbol::NamedIsotope(isotope))
-            } else {
-                Err(error::Error::new(s, error::ErrorKind::MapRes))
-            }
-        } else {
-            Err(error::Error::new(s, error::ErrorKind::MapRes))
-        }
-    })
+    move |input: &'a [u8]| {
+        fixed_width_partial(
+            3,
+            move |s: &'a [u8]| {
+                let s = s.trim_ascii();
+                if let Some(element) = Element::from_symbol_bytes(s) {
+                    Ok((&b""[..], AtomSymbol::Element(element)))
+                } else if allow_named_isotopes {
+                    if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
+                        Ok((&b""[..], AtomSymbol::NamedIsotope(isotope)))
+                    } else {
+                        Err(Err::Error(error::Error::new(s, error::ErrorKind::MapRes)))
+                    }
+                } else {
+                    Err(Err::Error(error::Error::new(s, error::ErrorKind::MapRes)))
+                }
+            },
+            true,
+        )
+        .parse(input)
+        .and_then(|(remaining, symbol)| match symbol {
+            Some(symbol) => Ok((remaining, symbol)),
+            None => Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
+        })
+    }
 }
 
 /// Parse atom-like symbol (all atom types allowed in MOL specification).
@@ -74,57 +86,66 @@ fn atom_symbol<'a>(
 fn atomlike_symbol<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    let allow_named_isotopes = flags.contains(ParseFlags::NAMED_ISOTOPES);
-    let allow_rgroups = flags.contains(ParseFlags::RGROUPS);
-    let allow_queries = flags.contains(ParseFlags::QUERIES);
-    let allow_extended_queries = flags.contains(ParseFlags::EXTENDED_QUERIES);
-    let allow_electrons = flags.contains(ParseFlags::ELECTRONS);
-    let allow_pseudoatoms = flags.contains(ParseFlags::PSEUDOATOMS);
-    map_res(take(3usize), move |s: &[u8]| {
-        let s = s.trim_ascii();
-        if let Some(element) = Element::from_symbol_bytes(s) {
-            return Ok(AtomSymbol::Element(element));
-        }
-        if allow_named_isotopes {
-            if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
-                return Ok(AtomSymbol::NamedIsotope(isotope));
-            }
-        }
-        if allow_rgroups {
-            if let Some(rgroup) = RGroup::from_symbol_bytes(s) {
-                return Ok(AtomSymbol::RGroup(rgroup));
-            }
-        }
-        if allow_electrons && s == b"LP" {
-            return Ok(AtomSymbol::LonePair);
-        }
-        if allow_queries {
-            match s {
-                b"A" | b"Q" | b"*" | b"X" | b"M" => {
-                    return QueryAtom::from_symbol_bytes(s)
-                        .map(AtomSymbol::Query)
-                        .ok_or(error::Error::new(s, error::ErrorKind::MapRes))
+    move |input: &'a [u8]| {
+        let allow_named_isotopes = flags.contains(ParseFlags::NAMED_ISOTOPES);
+        let allow_rgroups = flags.contains(ParseFlags::RGROUPS);
+        let allow_queries = flags.contains(ParseFlags::QUERIES);
+        let allow_extended_queries = flags.contains(ParseFlags::EXTENDED_QUERIES);
+        let allow_electrons = flags.contains(ParseFlags::ELECTRONS);
+        let allow_pseudoatoms = flags.contains(ParseFlags::PSEUDOATOMS);
+        fixed_width_partial(
+            3,
+            move |s: &'a [u8]| {
+                let s = s.trim_ascii();
+                if let Some(element) = Element::from_symbol_bytes(s) {
+                    return Ok((&b""[..], AtomSymbol::Element(element)));
                 }
-                b"AH" | b"QH" | b"XH" | b"MH" => {
-                    if allow_extended_queries {
-                        return QueryAtom::from_symbol_bytes(s)
-                            .map(AtomSymbol::Query)
-                            .ok_or(error::Error::new(s, error::ErrorKind::MapRes));
-                    } else {
-                        return Err(error::Error::new(s, error::ErrorKind::MapRes));
+                if allow_named_isotopes {
+                    if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
+                        return Ok((&b""[..], AtomSymbol::NamedIsotope(isotope)));
                     }
                 }
-                b"L" => return Ok(AtomSymbol::AtomList(AtomList::default())),
-                _ => {}
-            }
-        }
-        if allow_pseudoatoms {
-            let s = to_string(s)?;
-            Ok(AtomSymbol::Pseudoatom(s))
-        } else {
-            Err(error::Error::new(s, error::ErrorKind::MapRes))
-        }
-    })
+                if allow_rgroups {
+                    if let Some(rgroup) = RGroup::from_symbol_bytes(s) {
+                        return Ok((&b""[..], AtomSymbol::RGroup(rgroup)));
+                    }
+                }
+                if allow_electrons && s == b"LP" {
+                    return Ok((&b""[..], AtomSymbol::LonePair));
+                }
+                if allow_queries {
+                    match s {
+                        b"A" | b"Q" | b"*" | b"X" | b"M" => {
+                            if let Some(query) = QueryAtom::from_symbol_bytes(s) {
+                                return Ok((&b""[..], AtomSymbol::Query(query)));
+                            }
+                        }
+                        b"AH" | b"QH" | b"XH" | b"MH" => {
+                            if allow_extended_queries {
+                                if let Some(query) = QueryAtom::from_symbol_bytes(s) {
+                                    return Ok((&b""[..], AtomSymbol::Query(query)));
+                                }
+                            }
+                        }
+                        b"L" => return Ok((&b""[..], AtomSymbol::AtomList(AtomList::default()))),
+                        _ => {}
+                    }
+                }
+                if allow_pseudoatoms {
+                    if let Ok(s) = to_string(s) {
+                        return Ok((&b""[..], AtomSymbol::Pseudoatom(s)));
+                    }
+                }
+                return Err(Err::Error(error::Error::new(s, error::ErrorKind::MapRes)));
+            },
+            true,
+        )
+        .parse(input)
+        .and_then(|(remaining, symbol)| match symbol {
+            Some(symbol) => Ok((remaining, symbol)),
+            None => Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
+        })
+    }
 }
 
 /// Parse atom inputs with 52-69 characters (s. `atom_input` for more details).
@@ -440,13 +461,14 @@ pub fn atom_input<'a>(
     move |input: &'a [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         let len = input.len();
+
         let parser = match len {
             67.. => atom_input69,
             49..=66 => atom_input51,
             42..=48 => atom_input42,
             37..=41 => atom_input39,
             35..=36 => atom_input36,
-            34 => atom_input34,
+            32..=34 => atom_input34,
             _ => return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof))),
         };
         terminated(move |input| parser(input, flags), space0).parse(input)

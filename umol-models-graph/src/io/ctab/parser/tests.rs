@@ -137,10 +137,7 @@ fn test_basic_properties_block_missing_newline() {
     );
 
     let (remaining, property_entries) = result.unwrap();
-    assert_eq!(
-        remaining, b"M  END",
-        "Should leave M  END for next parser"
-    );
+    assert_eq!(remaining, b"M  END", "Should leave M  END for next parser");
     assert_eq!(property_entries.len(), 0, "Should have 0 property entries");
 }
 
@@ -269,10 +266,6 @@ fn test_ctab_block_termination(
 #[rstest]
 #[case("atoms_only_newline", header_atoms_only(), vec![atoms()], b"")]
 #[case("atoms_only_no_newline", header_atoms_only(), vec![atoms()], b"")]
-#[case("legacy_list_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list()], b"")]
-#[case("legacy_list_no_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list()], b"")]
-#[case("properties_with_legacy_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list(), properties()], b"")]
-#[case("properties_with_legacy_no_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list(), properties()], b"")]
 fn test_ctab_block_missing_m_end(
     #[case] name: &str,
     #[case] header: &[u8],
@@ -294,6 +287,40 @@ fn test_ctab_block_missing_m_end(
     data.extend_from_slice(ending);
 
     let flags = ParseFlags::LENIENT;
+    let result = ctab_block(flags).parse(&data);
+    assert!(result.is_ok(), "{} case should parse successfully", name);
+
+    let (remaining, molecule) = result.unwrap();
+    assert!(remaining.is_empty(), "All input should be consumed");
+    assert_eq!(molecule.graph.node_count(), 2, "Should have 2 atoms");
+}
+
+#[rstest]
+#[case("legacy_list_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list()], b"")]
+#[case("legacy_list_no_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list()], b"")]
+#[case("properties_with_legacy_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list(), properties()], b"")]
+#[case("properties_with_legacy_no_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list(), properties()], b"")]
+fn test_ctab_block_missing_m_end_legacy(
+    #[case] name: &str,
+    #[case] header: &[u8],
+    #[case] blocks: Vec<&[u8]>,
+    #[case] ending: &[u8],
+) {
+    let mut data = Vec::new();
+    data.extend_from_slice(header);
+
+    for block in blocks {
+        data.extend_from_slice(block);
+    }
+
+    // Remove final newline for "no_newline" cases
+    if name.ends_with("no_newline") && data.ends_with(b"\n") {
+        data.pop();
+    }
+
+    data.extend_from_slice(ending);
+
+    let flags = ParseFlags::LENIENT | ParseFlags::LEGACY_FEATURES;
     let result = ctab_block(flags).parse(&data);
     assert!(result.is_ok(), "{} case should parse successfully", name);
 

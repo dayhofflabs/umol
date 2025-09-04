@@ -86,9 +86,6 @@ Files containing R-group definitions that our parser doesn't support:
 - `indigo/kconv.mol` - **280+ bond order 0**, same element issues
 - `indigo/ketcher.mol` - **280+ bond order 0**, same element issues
 
-
-## **📋 FILE CATALOG WITH PARSING ISSUES
-
 ### **🔴 Group 3: EOF Issues (13 files)**
 
 **Missing V2000 Tag (7 files):**
@@ -109,6 +106,10 @@ Files containing R-group definitions that our parser doesn't support:
 - `ketcher/three-structures.mol` - Unexpected end of file
 
 ---
+
+## **📋 FILE CATALOG WITH PARSING ISSUES
+
+
 
 ### **🔴 Group 4: Digit Parsing Issues (13 files)**
 

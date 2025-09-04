@@ -65,17 +65,46 @@ enum FileClassification {
 fn classify_mol_file(file_path: &Path) -> Result<FileClassification, Box<dyn std::error::Error>> {
     let mol_bytes = fs::read(file_path)?;
     
+    // Reject files that don't look like MOL files (e.g. RXN files)
+    if mol_bytes.starts_with(b"$RXN") {
+        return Ok(FileClassification::Invalid);
+    }
+    
     // Try basic parser first
     match parse_mol(&mol_bytes) {
-        Ok(_) => Ok(FileClassification::Molecule),
+        Ok(_mol) => Ok(FileClassification::Molecule),
         Err(_) => {
             // Try extended parser if basic fails
             match parse_mol_moleculelike(&mol_bytes) {
-                Ok(_) => Ok(FileClassification::MoleculeLike),
+                Ok(_mol) => Ok(FileClassification::MoleculeLike),
                 Err(_) => Ok(FileClassification::Invalid),
             }
         }
     }
+}
+
+fn clean_existing_symlinks(data_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let categories = ["molecule", "moleculelike", "invalid"];
+    
+    for category in categories {
+        let category_path = Path::new(data_path).join(category);
+        if !category_path.exists() {
+            continue;
+        }
+        
+        // Remove all subdirectories (which contain the symlinks)
+        for entry in fs::read_dir(&category_path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                println!("Removing symlinks in {}", path.display());
+                if let Err(e) = fs::remove_dir_all(&path) {
+                    eprintln!("Warning: Failed to remove {}: {}", path.display(), e);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,6 +117,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !Path::new(data_raw_path).exists() {
         eprintln!("Error: {} directory not found", data_raw_path);
         std::process::exit(1);
+    }
+
+    // Clean existing symlinks before sorting
+    if should_sort {
+        println!("Cleaning existing symlinks...");
+        clean_existing_symlinks(data_path)?;
     }
 
     let mut source_stats: HashMap<String, ClassificationStats> = HashMap::new();

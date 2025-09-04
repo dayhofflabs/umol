@@ -35,8 +35,7 @@ bitflags! {
         const MINIMAL = 0;
         const BASIC = Self::MINIMAL .bits() | Self::NAMED_ISOTOPES.bits() | Self::SGROUPS.bits() | Self::CLARK_EXTENSIONS.bits();
         const EXTENDED = (Self::BASIC.bits() | Self::QUERIES.bits() | Self::RGROUPS.bits() | Self::ELECTRONS.bits() |
-                          Self::LEGACY_FEATURES.bits() | Self::PSEUDOATOMS.bits() | Self::EXTENDED_RANGE.bits() |
-                          Self::EXTENDED_ISOTOPES.bits());
+                         Self::PSEUDOATOMS.bits() | Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits());
         const FULL = Self::EXTENDED.bits() | Self::ADVANCED_SGROUPS.bits() | Self::EXTENDED_QUERIES.bits();
         const STRICT = Self::MINIMAL.bits() | Self::STRICT_PADDING.bits();
         const LENIENT = Self::FULL.bits() | Self::UNICODE.bits();

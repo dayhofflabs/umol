@@ -66,12 +66,17 @@ pub fn ctab_block<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = MoleculeLike, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
+        let legacy_features = flags.contains(ParseFlags::LEGACY_FEATURES);
         let (remaining, counts) = counts_block(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
         let (remaining, atoms) = atomlike_block(atom_count, flags).parse(remaining)?;
         let (remaining, bonds) = bondlike_block(bond_count, flags).parse(remaining)?;
-        let (remaining, legacy_properties) = legacy_atom_list_block(flags).parse(remaining)?;
+        let (remaining, legacy_properties) = if legacy_features {
+            legacy_atom_list_block(flags).parse(remaining)?
+        } else {
+            (remaining, Vec::new())
+        };
         let (remaining, properties) = properties_block(flags).parse(remaining)?;
         let (remaining, _) = end_block().parse(remaining)?;
         let properties = properties.into_iter().chain(legacy_properties).collect();
