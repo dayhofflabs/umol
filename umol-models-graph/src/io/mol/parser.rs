@@ -9,6 +9,7 @@ use crate::io::config::ParseFlags;
 use crate::io::ctab::molecule::{Molecule, MoleculeLike};
 use crate::io::ctab::parser::{basic_ctab_block, ctab_block};
 use crate::io::mol::parser::header::Header;
+use crate::io::utils::normalize_whitespace;
 
 pub mod header;
 use umol::error::DataError;
@@ -44,18 +45,20 @@ impl MolFileLike {
 
 /// Parse complete MOL file (header + CTAB block)
 pub(crate) fn mol_file<'a>(
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = MolFile, Error = error::Error<&'a [u8]>> {
     map(
-        (header::header(), basic_ctab_block(ParseFlags::BASIC)),
+        (header::header(), basic_ctab_block(flags)),
         |(header, molecule)| MolFile::new(header, molecule),
     )
 }
 
 /// Parse complete MOL file (header + CTAB block)
 pub(crate) fn mol_file_moleculelike<'a>(
+    flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = MolFileLike, Error = error::Error<&'a [u8]>> {
     map(
-        (header::header(), ctab_block(ParseFlags::LENIENT)),
+        (header::header(), ctab_block(flags)),
         |(header, molecule)| MolFileLike::new(header, molecule),
     )
 }
@@ -125,12 +128,25 @@ pub fn parse_mol_str(input: &str) -> Result<Molecule> {
 /// This is the primary parsing function that handles both basic and query molecules.
 /// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
-    complete(mol_file_moleculelike())
-        .parse(input)
-        .map(|(_, mol_file)| mol_file.molecule)
-        .map_err(|e| {
-            DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
-        })
+    // TODO: add configuration options
+    let flags = ParseFlags::LENIENT;
+    if !flags.contains(ParseFlags::UNICODE) {
+        complete(mol_file_moleculelike(flags))
+            .parse(input)
+            .map(|(_, mol_file)| mol_file.molecule)
+            .map_err(|e| {
+                DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
+            })
+    } else {
+        let normalized = normalize_whitespace(input);
+        let result = complete(mol_file_moleculelike(flags))
+            .parse(&normalized)
+            .map(|(_, mol_file)| mol_file.molecule)
+            .map_err(|e| {
+                DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
+            });
+        result
+    }
 }
 
 /// Parse MOL bytes into a Molecule (optimized, basic molecules only)
@@ -139,7 +155,7 @@ pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
 /// It will fail if the MOL file contains query features.
 /// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
-    complete(mol_file())
+    complete(mol_file(ParseFlags::BASIC))
         .parse(input)
         .map(|(_, mol_file)| mol_file.molecule)
         .map_err(|e| DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())

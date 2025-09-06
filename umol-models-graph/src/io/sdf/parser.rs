@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_until};
 use nom::character::complete::{line_ending, multispace0, not_line_ending};
-use nom::combinator::{all_consuming, complete, eof, map, opt, peek, value};
+use nom::combinator::{all_consuming, complete, eof, map, opt, peek, rest, value};
 use nom::multi::{many1, many_till};
 use nom::sequence::{delimited, terminated};
 use nom::{error, Parser};
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use umol::error::DataError;
 use umol::Result;
 
+use crate::io::config::ParseFlags;
 use crate::io::mol::parser::{mol_file_moleculelike, MolFileLike};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,15 +113,10 @@ fn data_block<'a>(
 fn sdf_compound<'a>() -> impl Parser<&'a [u8], Output = SdfCompound, Error = error::Error<&'a [u8]>>
 {
     move |input: &'a [u8]| {
-        let (remaining, mol_input) = alt((
-            take_until(">"),
-            take_until("$$$$"),
-            // If no data fields, take everything
-            |input: &'a [u8]| Ok((&[][..], input)),
-        ))
-        .parse(input)?;
+        let (remaining, mol_input) =
+            alt((take_until(">"), take_until("$$$$"), rest)).parse(input)?;
 
-        let (_, mol_file) = mol_file_moleculelike()
+        let (_, mol_file) = mol_file_moleculelike(ParseFlags::LENIENT)
             .parse(mol_input)
             .map_err(|_| nom::Err::Error(error::Error::new(input, error::ErrorKind::Verify)))?;
 
