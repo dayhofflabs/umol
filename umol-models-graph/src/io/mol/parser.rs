@@ -42,16 +42,11 @@ impl MolFileLike {
     }
 }
 
-
-
 /// Parse complete MOL file (header + CTAB block)
 pub(crate) fn mol_file<'a>(
 ) -> impl Parser<&'a [u8], Output = MolFile, Error = error::Error<&'a [u8]>> {
     map(
-        (
-            header::header(),
-            basic_ctab_block(ParseFlags::BASIC | ParseFlags::DEBUG),
-        ),
+        (header::header(), basic_ctab_block(ParseFlags::BASIC)),
         |(header, molecule)| MolFile::new(header, molecule),
     )
 }
@@ -60,7 +55,7 @@ pub(crate) fn mol_file<'a>(
 pub(crate) fn mol_file_moleculelike<'a>(
 ) -> impl Parser<&'a [u8], Output = MolFileLike, Error = error::Error<&'a [u8]>> {
     map(
-        (header::header(), ctab_block(ParseFlags::LENIENT | ParseFlags::DEBUG)),
+        (header::header(), ctab_block(ParseFlags::LENIENT)),
         |(header, molecule)| MolFileLike::new(header, molecule),
     )
 }
@@ -81,12 +76,11 @@ pub fn has_advanced_features(molecule: &MoleculeLike) -> bool {
                 || atomlike.attachment_point.is_some()
                 || atomlike.attachment_order.is_some()
                 || atomlike.ring_bond_count.is_some()
-                || atomlike.substitution_count.
-                is_some()
+                || atomlike.substitution_count.is_some()
                 || atomlike.unsaturated.is_some()
                 || atomlike.link_atom.is_some()
             {
-                return true
+                return true;
             }
         }
     }
@@ -129,7 +123,7 @@ pub fn parse_mol_str(input: &str) -> Result<Molecule> {
 /// Parse MOL bytes into a Molecule
 ///
 /// This is the primary parsing function that handles both basic and query molecules.
-/// Stops parsing at M  END and ignores any remaining input (e.g., SDF properties).
+/// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
     complete(mol_file_moleculelike())
         .parse(input)
@@ -143,7 +137,7 @@ pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
 ///
 /// This is the high-performance parsing function for basic molecules.
 /// It will fail if the MOL file contains query features.
-/// Stops parsing at M  END and ignores any remaining input (e.g., SDF properties).
+/// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
     complete(mol_file())
         .parse(input)

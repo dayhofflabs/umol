@@ -141,7 +141,7 @@ fn bondlike_input_inner<'a>(
         let (i, reacting_center) = cond(
             i.len() >= 3,
             map_res(fixed_width_int::<i8>(3), |code| {
-                convert_bond_reacting_center_code(code, true)
+                convert_bond_reacting_center_code(code, true, extended_range)
             }),
         )
         .parse(i)?;

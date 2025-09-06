@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 20
+bond_count: 22
+sum_formula: C13HN2O4
+graph6: ShCGHC@?I@?@?@??_?G?@?@C?A??@??G?

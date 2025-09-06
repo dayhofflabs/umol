@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 12
+bond_count: 10
+sum_formula: CH2O6P2Tc
+graph6: KIP@@?_?G@?C

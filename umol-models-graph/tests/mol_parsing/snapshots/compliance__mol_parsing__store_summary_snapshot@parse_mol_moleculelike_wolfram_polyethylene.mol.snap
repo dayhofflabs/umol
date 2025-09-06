@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 8
+bond_count: 7
+sum_formula: C2H4
+graph6: GkaAA?

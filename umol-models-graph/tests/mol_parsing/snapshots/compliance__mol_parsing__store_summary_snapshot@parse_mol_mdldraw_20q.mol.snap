@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 19
+bond_count: 19
+sum_formula: C13F3NO2
+graph6: RsO___OA?O?_?C?A??_?G??o??_??O

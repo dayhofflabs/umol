@@ -240,9 +240,11 @@ pub(crate) fn convert_bond_topology_code(
 /// 'ccc' field - bond reacting center (0=Not reacting, 1=Reacting, -1=Not a center,
 /// 2=No change, 4=Bond made/broken, 8=Bond order changes)
 /// use_defaults: if true, include default values (code 0), if false, return None for defaults
+/// If extended range, allow 3, 6, 7, 10, 11, 14, 15 (meaning no change)
 pub(crate) fn convert_bond_reacting_center_code(
     code: i8,
     use_defaults: bool,
+    extended_range: bool,
 ) -> Result<Option<BondReactingCenter>> {
     if code == 0 {
         if use_defaults {
@@ -262,7 +264,7 @@ pub(crate) fn convert_bond_reacting_center_code(
 
     // Positive codes can be partially combined:
     //   1 = a center
-    //   2 = no change (cannot be combined with other flags)
+    //   2 = no change (cannot be combined with other flags unless extended range is set)
     //   4 = bond made/broken
     //   8 = bond order changes
     // Allowed combinations:
@@ -275,7 +277,7 @@ pub(crate) fn convert_bond_reacting_center_code(
 
     if code & 2 != 0 {
         // 2 = no change
-        if code != 2 {
+        if code != 2 && !extended_range {
             return Err(ParseError::Invalid(format!(
                 "Invalid reacting center code combination \'{}\'",
                 code
@@ -283,19 +285,19 @@ pub(crate) fn convert_bond_reacting_center_code(
             .into());
         }
         flags |= BondReactingCenter::NO_CHANGE;
-    }
-
-    if code & 1 != 0 {
-        // 1 = a center
-        flags |= BondReactingCenter::CENTER;
-    }
-    if code & 4 != 0 {
-        // 4 = bond made/broken
-        flags |= BondReactingCenter::MADE_BROKEN;
-    }
-    if code & 8 != 0 {
-        // 8 = bond order changes
-        flags |= BondReactingCenter::ORDER_CHANGED;
+    } else {
+        if code & 1 != 0 {
+            // 1 = a center
+            flags |= BondReactingCenter::CENTER;
+        }
+        if code & 4 != 0 {
+            // 4 = bond made/broken
+            flags |= BondReactingCenter::MADE_BROKEN;
+        }
+        if code & 8 != 0 {
+            // 8 = bond order changes
+            flags |= BondReactingCenter::ORDER_CHANGED;
+        }
     }
 
     Ok(Some(flags))
@@ -796,13 +798,26 @@ mod tests {
         #[case] expected: Option<BondReactingCenter>,
     ) {
         assert_eq!(
-            convert_bond_reacting_center_code(code, true).unwrap(),
+            convert_bond_reacting_center_code(code, true, false).unwrap(),
             expected
         );
         let expected_default = if code == 0 { None } else { expected };
         assert_eq!(
-            convert_bond_reacting_center_code(code, false).unwrap(),
+            convert_bond_reacting_center_code(code, false, false).unwrap(),
             expected_default
+        );
+    }
+
+    #[rstest]
+    #[case(3, Some(BondReactingCenter::NO_CHANGE))]
+    #[case(15, Some(BondReactingCenter::NO_CHANGE))]
+    fn test_convert_bond_reacting_center_code_extended(
+        #[case] code: i8,
+        #[case] expected: Option<BondReactingCenter>,
+    ) {
+        assert_eq!(
+            convert_bond_reacting_center_code(code, true, true).unwrap(),
+            expected
         );
     }
 
@@ -811,7 +826,7 @@ mod tests {
     #[case(16)]
     #[case(-2)]
     fn test_convert_bond_reacting_center_code_invalid(#[case] code: i8) {
-        assert!(convert_bond_reacting_center_code(code, true).is_err());
+        assert!(convert_bond_reacting_center_code(code, true, false).is_err());
     }
 
     #[rstest]

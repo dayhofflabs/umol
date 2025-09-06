@@ -249,11 +249,17 @@ fn basic_properties_block<'a>(
                     break; // Incomplete atom alias
                 }
             } else {
-                if let Ok((_, property)) = all_consuming(basic_property_input(flags)).parse(line) {
-                    properties.push(property);
-                    consumed += line.len();
-                } else {
-                    break; // Backtrack
+                match all_consuming(basic_property_input(flags)).parse(line) {
+                    Ok((_, property)) => {
+                        properties.push(property);
+                        consumed += line.len();
+                    }
+                    Err(_) => {
+                        return Err(Err::Error(error::Error::new(
+                            &input[consumed..],
+                            ErrorKind::Tag,
+                        )));
+                    }
                 }
             }
         }

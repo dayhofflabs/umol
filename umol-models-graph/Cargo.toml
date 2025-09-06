@@ -18,6 +18,9 @@ umol-data = { path = "../umol-data" }
 fast-float = "0.2.0"
 indexmap = { version = "2.10.0", features = ["serde"] }
 
+[build-dependencies]
+walkdir = "2.4"
+
 [dev-dependencies]
 rstest = "0.26"
 pretty_assertions = "1.4.0"
@@ -34,3 +37,7 @@ harness = false
 [[bin]]
 name = "mol_classifier"
 path = "src/bin/mol_classifier.rs"
+
+[[bin]]
+name = "test_mol_file"
+path = "src/bin/test_mol_file.rs"

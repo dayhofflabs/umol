@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 8
+bond_count: 14
+sum_formula: C7
+graph6: "G}iKcK"

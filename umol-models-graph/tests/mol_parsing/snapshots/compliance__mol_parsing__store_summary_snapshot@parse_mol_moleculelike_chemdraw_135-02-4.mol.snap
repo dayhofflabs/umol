@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 11
+bond_count: 11
+sum_formula: C8HO2
+graph6: JhEGOCAC??_

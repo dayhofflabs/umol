@@ -1,1 +1,9 @@
-../../../data_raw/nist/13983-20-5-2d.mol
+Deuterium hydride, ID: C13983205
+  NIST    25090116242D 1   1.00000     0.00000      
+Copyright by the U.S. Sec. Commerce on behalf of U.S.A. All rights reserved.
+  2  1  0     0  0              2 V2000
+    0.0000    0.0000    0.0000 H   0  0  0  0  0  0           0  0  0
+    1.0000    0.0000    0.0000 H   1  0  0  0  0  0           0  0  0
+  1  2  1  0     0  0
+M  ISO  1   2   2
+M  END

@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 4
+bond_count: 4
+sum_formula: C4
+graph6: Cl
