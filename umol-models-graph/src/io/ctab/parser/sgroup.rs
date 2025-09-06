@@ -1,17 +1,18 @@
 //! Auxiliary parsers for SGroup properties.
 
-use crate::io::ctab::parser::utils::{fixed_width_partial, to_string};
-use crate::io::ctab::sgroup::{
-    SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
-    SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierOp,
-    SGroupMultiplierTerm, SGroupSubtype, SGroupType,
-};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take, take_while_m_n};
 use nom::character::complete::{space0, u32 as nom_u32};
 use nom::combinator::{map, map_parser, map_res, rest, value};
 use nom::sequence::separated_pair;
 use nom::{error, AsChar, Err, Parser};
+
+use crate::io::ctab::parser::utils::{fixed_width_partial, to_string};
+use crate::io::ctab::sgroup::{
+    SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
+    SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierOp,
+    SGroupMultiplierTerm, SGroupSubtype, SGroupType,
+};
 
 /// Parse SGroup type string
 pub fn sgroup_type<'a>(
@@ -205,10 +206,11 @@ pub fn sgroup_data_display_chars<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use nom::Err;
     use pretty_assertions::assert_eq;
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case(b"SUP", SGroupType::Superatom)]

@@ -1,13 +1,14 @@
+use float_cmp::approx_eq;
+use nom::{error, Err};
+use pretty_assertions::assert_eq;
+use rstest::*;
+
 use super::*;
 use crate::io::config::ParseFlags;
 use crate::io::ctab::atom::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity,
 };
 use crate::io::ctab::query::QueryAtom;
-use float_cmp::approx_eq;
-use nom::{error, Err};
-use pretty_assertions::assert_eq;
-use rstest::*;
 
 #[rstest]
 #[case(b"H  ", "H", AtomSymbol::Element(Element::H))]

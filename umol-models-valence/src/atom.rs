@@ -5,11 +5,14 @@
 //! atom specs. It cannot be created directly, but only through the `AtomBuilder` type,
 //! which ensures correct typing.
 
-use crate::{AtomMatcher, AtomSpec, AtomValidator, DEFAULT_ATOM_MATCHER, DEFAULT_ATOM_VALIDATOR};
-use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
-use umol::{error::DataError, Result};
+
+use serde::{Deserialize, Serialize};
+use umol::error::DataError;
+use umol::Result;
 use umol_data::Element;
+
+use crate::{AtomMatcher, AtomSpec, AtomValidator, DEFAULT_ATOM_MATCHER, DEFAULT_ATOM_VALIDATOR};
 
 /// Valence atom type including strict typing. Cannot be created directly, but only through
 /// the `AtomBuilder` type, which performs validation of the atom properties. Mutations are
@@ -325,9 +328,10 @@ impl From<Element> for AtomBuilder {
 
 #[cfg(test)]
 mod tests {
+    use umol_data::e;
+
     use super::*;
     use crate::{AtomSpec, ALWAYS_ATOM_MATCHER, ALWAYS_ATOM_VALIDATOR};
-    use umol_data::e;
 
     #[test]
     fn test_atom_display() {

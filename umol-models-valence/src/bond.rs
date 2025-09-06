@@ -3,10 +3,13 @@
 //! Valence bond is the edge type of valence graphs and is defined by its bond order and bond donation.
 //! It should be created using the `ValenceBondBuilder`.
 
-use crate::{BondDonation, BondMatcher, BondOrder, BondSpec, DEFAULT_BOND_MATCHER};
-use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
-use umol::{error::DataError, Result};
+
+use serde::{Deserialize, Serialize};
+use umol::error::DataError;
+use umol::Result;
+
+use crate::{BondDonation, BondMatcher, BondOrder, BondSpec, DEFAULT_BOND_MATCHER};
 
 /// Valence bond type including strict typing. Cannot be created directly, but only through
 /// the `BondBuilder` type, which performs validation of the bond properties. Mutations are

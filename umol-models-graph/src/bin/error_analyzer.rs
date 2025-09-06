@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::env;
-use std::fs;
 use std::path::Path;
-use umol_models_graph::io::mol::parser::{parse_mol_moleculelike};
+use std::{env, fs};
+
+use umol_models_graph::io::mol::parser::parse_mol_moleculelike;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,22 +11,26 @@ fn main() {
     } else {
         "tests/mol_parsing/data/invalid"
     };
-    
+
     let mut error_patterns = HashMap::new();
     let mut files_tested = 0;
-    
+
     println!("Analyzing parsing errors in: {}", target_dir);
     println!("========================================");
-    
-    collect_mol_files(Path::new(target_dir), &mut error_patterns, &mut files_tested);
-    
+
+    collect_mol_files(
+        Path::new(target_dir),
+        &mut error_patterns,
+        &mut files_tested,
+    );
+
     println!("\n=== ERROR SUMMARY ===");
     println!("Total files tested: {}", files_tested);
     println!();
-    
+
     let mut sorted_errors: Vec<_> = error_patterns.iter().collect();
     sorted_errors.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
-    
+
     for (error_type, files) in sorted_errors {
         println!("{}: {} files", error_type, files.len());
         for file in files.iter().take(3) {
@@ -39,7 +43,11 @@ fn main() {
     }
 }
 
-fn collect_mol_files(dir: &Path, error_patterns: &mut HashMap<String, Vec<String>>, files_tested: &mut usize) {
+fn collect_mol_files(
+    dir: &Path,
+    error_patterns: &mut HashMap<String, Vec<String>>,
+    files_tested: &mut usize,
+) {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -47,18 +55,24 @@ fn collect_mol_files(dir: &Path, error_patterns: &mut HashMap<String, Vec<String
                 collect_mol_files(&path, error_patterns, files_tested);
             } else if path.extension().map_or(false, |ext| ext == "mol") {
                 *files_tested += 1;
-                
+
                 if let Ok(content) = fs::read(&path) {
                     match parse_mol_moleculelike(&content) {
                         Ok(_) => {
                             // This shouldn't happen for invalid files
                             let error_type = "UNEXPECTED_SUCCESS".to_string();
-                            error_patterns.entry(error_type).or_default().push(path.display().to_string());
+                            error_patterns
+                                .entry(error_type)
+                                .or_default()
+                                .push(path.display().to_string());
                         }
                         Err(e) => {
                             let error_str = format!("{}", e);
                             let error_type = extract_error_pattern(&error_str);
-                            error_patterns.entry(error_type).or_default().push(path.display().to_string());
+                            error_patterns
+                                .entry(error_type)
+                                .or_default()
+                                .push(path.display().to_string());
                         }
                     }
                 }

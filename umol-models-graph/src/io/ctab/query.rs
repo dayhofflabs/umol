@@ -1,7 +1,8 @@
 //! Query objects for CTab format.
 
-use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum QueryAtom {
@@ -59,9 +60,10 @@ impl Display for QueryAtom {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pretty_assertions::assert_eq;
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case(b"*", Some(QueryAtom::Any))]

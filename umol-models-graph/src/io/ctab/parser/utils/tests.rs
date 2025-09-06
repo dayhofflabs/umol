@@ -1,10 +1,11 @@
-use super::*;
 use nom::character::complete::space0;
 use nom::combinator::all_consuming;
 use nom::sequence::delimited;
 use nom::{error, Err};
 use pretty_assertions::assert_eq;
 use rstest::*;
+
+use super::*;
 
 #[rstest]
 #[case(b"", true)]

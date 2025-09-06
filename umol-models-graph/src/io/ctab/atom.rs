@@ -1,11 +1,13 @@
 //! Atom type for CTab format.
 
-use crate::io::ctab::query::QueryAtom;
-use crate::io::ctab::rgroup::RGroup;
+use std::collections::HashMap;
+
 use nalgebra;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use umol_data::{Element, NamedIsotope};
+
+use crate::io::ctab::query::QueryAtom;
+use crate::io::ctab::rgroup::RGroup;
 
 /// Atom
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -124,7 +126,7 @@ pub enum AtomSymbol {
     Query(QueryAtom),
     LonePair,
     RGroup(RGroup),
-    Pseudoatom(String)
+    Pseudoatom(String),
 }
 
 impl AtomSymbol {
@@ -281,8 +283,9 @@ impl Default for AtomList {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use umol_data::Element;
+
+    use super::*;
 
     #[test]
     fn test_atom_serialize() {

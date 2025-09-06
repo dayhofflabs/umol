@@ -20,5 +20,4 @@ pub use model::{AsModel, Model};
 pub use operation::{ConversionOperation, Operation};
 pub use property::{Property, PropertySpec};
 pub use stuff::Stuff;
-
 pub use umol_macros::property;

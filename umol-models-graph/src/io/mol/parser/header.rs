@@ -3,9 +3,8 @@
 use bstr::ByteSlice;
 use nom::character::complete::{line_ending, not_line_ending};
 use nom::combinator::map;
-use nom::error;
 use nom::sequence::terminated;
-use nom::Parser;
+use nom::{error, Parser};
 use serde::{Deserialize, Serialize};
 
 /// MOL file header information (3 lines)
@@ -28,7 +27,8 @@ impl Header {
 }
 
 /// Parse a single line from the MOL header
-pub fn header_input<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
+pub fn header_input<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>>
+{
     map(not_line_ending, |s: &[u8]| s.to_str_lossy().into_owned())
 }
 
@@ -47,9 +47,9 @@ pub fn header<'a>() -> impl Parser<&'a [u8], Output = Header, Error = error::Err
 #[cfg(test)]
 mod tests {
     use nom::combinator::all_consuming;
+    use rstest::*;
 
     use super::*;
-    use rstest::*;
 
     #[rstest]
     #[case(

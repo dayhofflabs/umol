@@ -1,15 +1,16 @@
 //! Molecular representation as valence graph
 
-use crate::{Atom, AtomBuilder, Bond, BondBuilder};
+use std::collections::{HashMap, HashSet};
+use std::fmt::{self, Display};
+
 use indexmap::IndexMap;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::fmt::{self, Display};
 use umol::error::DataError;
 use umol::Result;
+
+use crate::{Atom, AtomBuilder, Bond, BondBuilder};
 
 /// Internal atom and bond indices
 pub type AtomIndex = NodeIndex<usize>;
@@ -338,11 +339,11 @@ impl MoleculeBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::BondOrder;
-    use crate::{AtomBuilder, BondBuilder};
     use umol::Error;
     use umol_data::Element;
+
+    use super::*;
+    use crate::{AtomBuilder, BondBuilder, BondOrder};
 
     #[test]
     fn test_builder_new() {
@@ -610,7 +611,10 @@ mod tests {
             Err(Error::Data(DataError::DuplicateBondIndex(5, 4)))
                 | Err(Error::Data(DataError::DuplicateBondIndex(4, 5)))
         ));
-        assert_eq!(builder.bond_builders.len(), current_bond_count_before_canonical_test); // Should still be 2, as (4,5)/(5,4) batch failed
+        assert_eq!(
+            builder.bond_builders.len(),
+            current_bond_count_before_canonical_test
+        ); // Should still be 2, as (4,5)/(5,4) batch failed
     }
 
     #[test]
@@ -630,9 +634,12 @@ mod tests {
         assert_eq!(molecule.atom_count(), 3);
         assert_eq!(molecule.bond_count(), 2);
 
-        let oxygen = molecule.atoms().find(|a| a.element() == Element::O).unwrap();
+        let oxygen = molecule
+            .atoms()
+            .find(|a| a.element() == Element::O)
+            .unwrap();
         assert_eq!(oxygen.implicit_hydrogens(), 0);
-        assert_eq!(oxygen.valence(), 2); 
+        assert_eq!(oxygen.valence(), 2);
     }
 
     #[test]
@@ -661,7 +668,10 @@ mod tests {
                 assert!(msg.contains("element: C"));
                 assert!(msg.contains("valence: Some(5)")); // AtomBuilder accumulated valence 5
             }
-            Err(e) => panic!("Expected NoAtomSpec error due to invalid valence, got {:?}", e),
+            Err(e) => panic!(
+                "Expected NoAtomSpec error due to invalid valence, got {:?}",
+                e
+            ),
             Ok(_) => panic!("Build succeeded unexpectedly for invalid molecule"),
         }
     }

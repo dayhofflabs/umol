@@ -1,19 +1,18 @@
 //! Bond block parser for CTab files.
 
-use crate::io::config::ParseFlags;
-use crate::io::ctab::bond::{Bond, BondLike, BondType};
 use bstr::ByteSlice;
 use nom::character::complete::space0;
 use nom::combinator::{cond, map, map_res};
-use nom::error;
 use nom::sequence::terminated;
-use nom::{Err, IResult, Parser};
+use nom::{error, Err, IResult, Parser};
 
 use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_dir_code, convert_bond_topology_code,
     convert_bond_type_code, convert_bondlike_type_code,
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_n};
+use crate::io::config::ParseFlags;
+use crate::io::ctab::bond::{Bond, BondLike, BondType};
 
 /// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).

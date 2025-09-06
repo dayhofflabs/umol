@@ -1,0 +1,11 @@
+# Reorder import and extern crate statements alphabetically in groups (a group is separated by a newline).
+reorder_imports = true
+
+# Discard existing import groups, and create three groups for:
+# - Standard library and external crates
+# - Crates in the same directory as the current file
+# - Crates in other directories
+group_imports = "StdExternalCrate"
+
+# Merge imports from the same module into a single use statement
+imports_granularity = "Module"

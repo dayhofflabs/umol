@@ -1,12 +1,13 @@
 //! Electronic configurations of atoms and atomic ions
-use crate::{e, occ};
-use crate::{Element, Occupation, MAX_UNPAIRED_ELECTRONS};
-use map_macro::hash_map;
-use once_cell::sync::Lazy;
 use std::cmp;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::Deref;
+
+use map_macro::hash_map;
+use once_cell::sync::Lazy;
+
+use crate::{e, occ, Element, Occupation, MAX_UNPAIRED_ELECTRONS};
 
 /// Electronic configuration of atom or atomic ion
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -244,7 +245,8 @@ fn get_aufbau_configuration(element: Element) -> Configuration {
         "Closing subshell n must be less than or equal to {}",
         MAX_N_QUANTUM_NUMBER
     );
-    debug_assert!(closing_subshell.1 <= MAX_L_QUANTUM_NUMBER,
+    debug_assert!(
+        closing_subshell.1 <= MAX_L_QUANTUM_NUMBER,
         "Closing subshell l must be less than or equal to {}",
         MAX_L_QUANTUM_NUMBER
     );
@@ -300,9 +302,10 @@ fn get_valence_occupation(
 
 #[cfg(test)]
 mod tests {
+    use rstest::*;
+
     use super::*;
     use crate::{e, occ};
-    use rstest::*;
 
     #[rstest]
     #[case(e!(H), Configuration::new(e!(H), None, occ!(s1)))]

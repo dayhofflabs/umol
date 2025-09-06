@@ -19,9 +19,10 @@
 
 use std::marker::PhantomData;
 
-use crate::half_life::{HalfLife, TimeUnit};
 use bitvec::prelude::*;
 use phf::phf_map;
+
+use crate::half_life::{HalfLife, TimeUnit};
 
 #[rustfmt::skip]
 pub const LIGHT_ISOTOPE_MAP: [BitArray<[u8; 8]>; 20] = [
@@ -2210,7 +2211,7 @@ pub static ISOTOPE_DATA: phf::Map<u32, (f64, Option<HalfLife>)> = phf_map! {
         4653217u32 => (160.943572, Some(HalfLife { value: 77.0, unit: TimeUnit::Seconds })), // 161Lu
         4653218u32 => (161.943283, Some(HalfLife { value: 1.37, unit: TimeUnit::Minutes })), // 162Lu
         4653219u32 => (162.941179, Some(HalfLife { value: 3.97, unit: TimeUnit::Minutes })), // 163Lu
-        4653220u32 => (163.941339, Some(HalfLife { value: 3.14, unit: TimeUnit::Minutes })), // 164Lu 
+        4653220u32 => (163.941339, Some(HalfLife { value: 3.14, unit: TimeUnit::Minutes })), // 164Lu
         4653221u32 => (164.939407, Some(HalfLife { value: 10.74, unit: TimeUnit::Minutes })), // 165Lu
         4653222u32 => (165.939859, Some(HalfLife { value: 2.65, unit: TimeUnit::Minutes })), // 166Lu
         4653223u32 => (166.938243, Some(HalfLife { value: 51.5, unit: TimeUnit::Minutes })), // 167Lu

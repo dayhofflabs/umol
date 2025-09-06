@@ -39,10 +39,11 @@
 //! - `[Fe+2/1<4^4*5v6]` -> Fe, charge=+2, lp=1, donated=4, unpaired=4, mult=5, valence=6
 //! - `[O-/1^1]` -> O, charge=-1, lp=1, unpaired=1, mult=2 (default), valence=0
 
-use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use std::str::FromStr;
+
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use umol::error::DataError;
 use umol::{Error, Result};
 use umol_data::Element;
@@ -440,9 +441,10 @@ macro_rules! a {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::*;
     use umol_data::e;
+
+    use super::*;
 
     #[rstest]
     #[case(e!(H), 0, 0, 0, 0, 1, 2, 0, 1, "[H^v]")] // H radical

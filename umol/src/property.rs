@@ -3,9 +3,11 @@
 //! Properties are calculations that can be performed on models.
 //! PropertySpec allows for type-safe property definitions.
 
-use crate::{Capability, Model, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{Capability, Model, Result};
 
 /// Base trait for all properties
 pub trait Property<M: Model> {
@@ -59,11 +61,12 @@ impl<M: Model, P: Property<M>> PropertySpec<M> for P {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{AsModel, Entity, Model, Stuff};
     use map_macro::hash_set;
     use serde::{Deserialize, Serialize};
     use umol_macros::property;
+
+    use super::*;
+    use crate::{AsModel, Entity, Model, Stuff};
 
     // Test entity
     #[derive(Debug, Clone, Serialize, Deserialize)]

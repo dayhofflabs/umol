@@ -5,7 +5,7 @@
 //! - Conformers
 //! - Resonance structures
 //! - Reactions
-//! 
+//!
 //! Relations are typed associations between entities:
 //! - Transformations
 //! - Generalizations
@@ -46,8 +46,9 @@ pub trait Relation: Serialize + for<'de> Deserialize<'de> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json;
+
+    use super::*;
 
     /// A simple concrete implementation of the Entity trait
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

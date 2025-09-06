@@ -1,13 +1,15 @@
 //! Isotope definitions and data
 
+use std::fmt::{self, Display};
+use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
+use umol::error::DataError;
+use umol::{Error, Result};
+
 use crate::half_life::HalfLife;
 use crate::isotope_data::{ISOTOPE_DATA, LIGHT_ISOTOPE_MAP};
 use crate::Element;
-use serde::{Deserialize, Serialize};
-use std::fmt::{self, Display};
-use std::str::FromStr;
-use umol::error::DataError;
-use umol::{Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd)]
 pub enum NamedIsotope {
@@ -258,11 +260,12 @@ macro_rules! iso {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::half_life::TimeUnit;
     use float_cmp::*;
     use rstest::*;
     use serde_json;
+
+    use super::*;
+    use crate::half_life::TimeUnit;
 
     #[test]
     fn test_named_isotope_from_symbol_bytes() {

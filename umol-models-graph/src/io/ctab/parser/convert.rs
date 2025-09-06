@@ -1,12 +1,13 @@
 //! Convert numerical codes used in MOL files to enums
 
+use umol::error::{DataError, ParseError, Result, ValidationError};
+use umol_data::{Element, Isotope};
+
 use crate::io::ctab::atom::{
     AtomExactChange, AtomInversionRetention, AtomRadical, AtomStereoCare, AtomStereoParity,
     AtomSymbol, AttachmentPointType, RingBondCount, SubstitutionCount, UnsaturatedAtom,
 };
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
-use umol::error::{DataError, ParseError, Result, ValidationError};
-use umol_data::{Element, Isotope};
 
 /// Convert atom mass difference code (atom block)
 /// 'dd' field: mass difference (-3..=4), None if 0 or value outside of this range
@@ -415,9 +416,10 @@ pub(crate) fn convert_attachment_point_code(code: u8) -> Result<Option<Attachmen
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::*;
     use umol_data::NamedIsotope;
+
+    use super::*;
 
     #[rstest]
     #[case(0, None)]

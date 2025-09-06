@@ -6,28 +6,30 @@ edition = "2021"
 [dependencies]
 bitflags = { version = "2.4.0", features = ["serde"] }
 bstr = "1.9"
+fast-float = "0.2.0"
 float-cmp = "0.10"
+indexmap = { version = "2.10.0", features = ["serde"] }
 num-traits = "0.2.19"
 nalgebra = { version = "0.34", features = ["serde-serialize"] }
 nom = { version = "8.0.0" }
 num = "0.4.3"
+once_cell = { version = "1.21"}
 petgraph = { version = "0.8.1", features = ["stable_graph", "serde-1"] }
+regex = "1.10.1"
 serde = { version = "1.0", features = ["derive"] }
 umol = { path = "../umol" }
 umol-data = { path = "../umol-data" }
-fast-float = "0.2.0"
-indexmap = { version = "2.10.0", features = ["serde"] }
 
 [build-dependencies]
 walkdir = "2.4"
 
 [dev-dependencies]
-rstest = "0.26"
-pretty_assertions = "1.4.0"
 criterion = "0.7"
 insta = { version = "1.31", features = ["yaml", "glob"] }
-serde_yaml = "0.9.33"
+pretty_assertions = "1.4.0"
+rstest = "0.26"
 serde_json = "1.0"
+serde_yaml = "0.9.33"
 tempfile = "3.0"
 
 [[bench]]

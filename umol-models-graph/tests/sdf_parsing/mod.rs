@@ -1,9 +1,10 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
 use indexmap::IndexMap;
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use std::fs;
-use std::path::{Path, PathBuf};
 use umol_models_graph::io::sdf::parser::parse_sdf;
 
 #[allow(dead_code)]

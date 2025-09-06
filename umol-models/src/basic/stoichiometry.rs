@@ -2,20 +2,19 @@
 //!
 //! Simple model containing only atom counts
 
-use map_macro::hash_set;
-use nom::character::complete::one_of;
-use nom::character::complete::u32 as nom_u32;
-use nom::combinator::{map_res, opt, recognize};
-use nom::multi::many0;
-use nom::sequence::pair;
-use nom::{error, Parser};
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Add, Mul};
 use std::str::FromStr;
 
+use map_macro::hash_set;
+use nom::character::complete::{one_of, u32 as nom_u32};
+use nom::combinator::{map_res, opt, recognize};
+use nom::multi::many0;
+use nom::sequence::pair;
+use nom::{error, Parser};
+use serde::{Deserialize, Serialize};
 use umol::error::SerializationError;
 use umol::{property, Capability, Error, Model, Property, Result};
 use umol_data::Element;
@@ -229,9 +228,10 @@ impl Property<Stoichiometry> for Mass {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use map_macro::hash_map;
     use umol_data::e;
+
+    use super::*;
 
     #[test]
     fn test_stoichiometry_creation() {

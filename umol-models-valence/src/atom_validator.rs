@@ -1,9 +1,10 @@
 //! Atom validators
 
-use crate::AtomBuilder;
 use once_cell::sync::Lazy;
 use umol::error::DataError;
 use umol::Result;
+
+use crate::AtomBuilder;
 
 /// Validators for `Atom` type. Checks atom properties against element-specific constraints.
 /// The `AtomValidator` type is a collection of validators that are applied to an `AtomBuilder` type.
@@ -111,8 +112,9 @@ pub static ALWAYS_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator:
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use umol_data::{e, Element};
+
+    use super::*;
 
     #[test]
     fn test_atom_validator() {

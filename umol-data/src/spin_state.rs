@@ -2,6 +2,7 @@
 
 use std::fmt::{self, Display};
 use std::str::FromStr;
+
 use umol::error::DataError;
 use umol::{Error, Result};
 
@@ -128,8 +129,9 @@ macro_rules! spin {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case(0, SpinState::Singlet)]

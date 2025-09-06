@@ -1,9 +1,10 @@
-use super::*;
-use crate::io::config::ParseFlags;
-use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use nom::{error, Err, Parser};
 use pretty_assertions::assert_eq;
 use rstest::*;
+
+use super::*;
+use crate::io::config::ParseFlags;
+use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 
 #[rustfmt::skip]
 #[rstest]

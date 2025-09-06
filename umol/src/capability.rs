@@ -6,8 +6,9 @@
 //! - A name
 //! - A version number
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
 
 /// A capability that a model can provide
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -52,8 +53,9 @@ impl fmt::Display for Capability {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json;
+
+    use super::*;
 
     #[test]
     fn test_capability_creation() {

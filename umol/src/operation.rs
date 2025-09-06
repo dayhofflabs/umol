@@ -65,10 +65,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use serde::{Deserialize, Serialize};
+
     use super::*;
     use crate::{Capability, Entity};
-    use serde::{Deserialize, Serialize};
-    use std::collections::HashSet;
 
     // Test models
     #[derive(Debug, Clone, Serialize, Deserialize)]

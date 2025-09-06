@@ -62,11 +62,13 @@ pub trait Process<M: Model> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Capability;
+    use std::collections::HashSet;
+
     use serde::{Deserialize, Serialize};
     use serde_json;
-    use std::collections::HashSet;
+
+    use super::*;
+    use crate::Capability;
 
     /// A simple model that counts C, H, and O atoms
     #[derive(Debug, Clone, Serialize, Deserialize)]

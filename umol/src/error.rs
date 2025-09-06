@@ -1,7 +1,8 @@
 //! Error types and handling.
 
-use crate::Capability;
 use thiserror::Error;
+
+use crate::Capability;
 
 /// umol error types
 #[derive(Debug, Error)]
@@ -273,8 +274,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case(ModelError::NotFound("test".to_string()).into(), "Model not found: test")]

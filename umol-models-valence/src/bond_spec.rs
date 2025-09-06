@@ -25,13 +25,14 @@
 //! - `->` -> single bond with donating atom
 //! - `-<` -> single bond with accepting atom
 
+use std::collections::HashMap;
+use std::fmt::{self, Display};
+use std::str::FromStr;
+
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fmt::{self, Display};
-use std::str::FromStr;
 use umol::error::DataError;
 use umol::{Error, Result};
 
@@ -267,15 +268,21 @@ impl BondSpec {
     }
 
     pub fn increase(self) -> Option<Self> {
-        self.order.increase().map(|order| Self::new(order, self.donation))
+        self.order
+            .increase()
+            .map(|order| Self::new(order, self.donation))
     }
 
     pub fn decrease(self) -> Option<Self> {
-        self.order.decrease().map(|order| Self::new(order, self.donation))
+        self.order
+            .decrease()
+            .map(|order| Self::new(order, self.donation))
     }
 
     pub fn reverse(self) -> Option<Self> {
-        self.donation.reverse().map(|donation| Self::new(self.order, donation))
+        self.donation
+            .reverse()
+            .map(|donation| Self::new(self.order, donation))
     }
 }
 
@@ -350,9 +357,10 @@ macro_rules! b {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::*;
     use serde_json;
+
+    use super::*;
 
     #[rstest]
     #[case(BondOrder::Zero, "none")]

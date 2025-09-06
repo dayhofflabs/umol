@@ -1,8 +1,9 @@
 //! Bond type for CTab format.
 
+use std::collections::HashMap;
+
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Bond
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

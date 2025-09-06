@@ -19,7 +19,6 @@ pub use self::counts::{counts_input, Counts};
 pub use self::properties::{
     atom_alias_input, basic_property_input, legacy_atom_list_input, property_input, PropertyEntries,
 };
-
 use super::atom::{Atom, AtomLike};
 use super::bond::{Bond, BondLike};
 use super::molecule::{Molecule, MoleculeLike};
@@ -369,6 +368,20 @@ fn build_moleculelike(
     acc.update_moleculelike(&mut molecule, ParseFlags::LENIENT)?;
 
     Ok(molecule)
+}
+
+use std::borrow::Cow;
+
+use once_cell::sync::Lazy;
+use regex::bytes::Regex;
+
+/// Regex to match Unicode whitespace characters
+static WHITESPACE_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[\p{White_Space}--[\r\n]]").unwrap());
+
+/// Replace Unicode whitespace characters with ASCII spaces
+fn normalize_whitespace(input: &[u8]) -> Cow<'_, [u8]> {
+    WHITESPACE_REGEX.replace_all(input, &b" "[..])
 }
 
 #[cfg(test)]

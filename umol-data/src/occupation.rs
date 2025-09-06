@@ -1,8 +1,9 @@
 //! Atomic occupations
 
-use regex::Regex;
 use std::fmt::{self, Display};
 use std::str::FromStr;
+
+use regex::Regex;
 use umol::error::DataError;
 use umol::{Error, Result};
 
@@ -153,8 +154,9 @@ macro_rules! occ {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case("s1p1d1f1", Occupation::new(1, 1, 1, 1))]

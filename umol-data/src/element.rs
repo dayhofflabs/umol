@@ -1,8 +1,9 @@
 //! Element definitions and data
 
-use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
 use umol::error::DataError;
 use umol::{Error, Result};
 
@@ -837,10 +838,11 @@ macro_rules! e {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use float_cmp::*;
     use rstest::*;
     use serde_json;
+
+    use super::*;
 
     #[test]
     fn test_element_from_symbol_bytes() {

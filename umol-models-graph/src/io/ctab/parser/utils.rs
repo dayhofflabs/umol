@@ -4,8 +4,6 @@ use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
 
 use bstr::ByteSlice;
-use umol_data::Element;
-
 use fast_float::FastFloat;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
@@ -18,6 +16,7 @@ use nom::multi::{count as nom_count, separated_list1};
 use nom::sequence::delimited;
 use nom::{error, Err, Parser};
 use num::{Float, Integer};
+use umol_data::Element;
 
 use crate::io::ctab::rgroup::RGroupOccurrence;
 
@@ -85,56 +84,6 @@ pub(crate) fn is_all_whitespace_or_zeroes(input: &[u8]) -> bool {
 /// Convert byte slice to string, trimming leading and trailing whitespace
 pub(crate) fn to_string(bytes: &[u8]) -> Result<String, error::Error<&[u8]>> {
     Ok(bytes.trim_ascii().to_str_lossy().into_owned())
-}
-
-/// Replace Unicode whitespace characters with ASCII spaces at the byte level
-/// 
-/// This function scans the input byte array and replaces common Unicode whitespace
-/// characters with ASCII space (0x20) without converting to String.
-/// 
-/// Handles these Unicode whitespace characters:
-/// - U+00A0 (Non-breaking space): [0xC2, 0xA0] -> [0x20]
-/// - U+2000-U+200F (Various spaces): [0xE2, 0x80, 0x80-0x8F] -> [0x20]  
-/// - U+2028 (Line separator): [0xE2, 0x80, 0xA8] -> [0x20]
-/// - U+2029 (Paragraph separator): [0xE2, 0x80, 0xA9] -> [0x20]
-#[allow(dead_code)]
-pub fn replace_unicode_whitespace(input: &[u8]) -> Vec<u8> {
-    let mut result = Vec::with_capacity(input.len());
-    let mut i = 0;
-    
-    while i < input.len() {
-        // Check for UTF-8 Unicode whitespace sequences
-        if i + 1 < input.len() && input[i] == 0xC2 && input[i + 1] == 0xA0 {
-            // U+00A0 (Non-breaking space)
-            result.push(0x20); // ASCII space
-            i += 2;
-        } else if i + 2 < input.len() && input[i] == 0xE2 && input[i + 1] == 0x80 {
-            // Unicode spaces in range U+2000-U+200F and line/paragraph separators
-            let third_byte = input[i + 2];
-            match third_byte {
-                // U+2000-U+200F: Various space characters
-                0x80..=0x8F => {
-                    result.push(0x20); // ASCII space
-                    i += 3;
-                }
-                // U+2028 (Line separator) and U+2029 (Paragraph separator)
-                0xA8 | 0xA9 => {
-                    result.push(0x20); // ASCII space  
-                    i += 3;
-                }
-                _ => {
-                    result.push(input[i]);
-                    i += 1;
-                }
-            }
-        } else {
-            // Regular byte, copy as-is
-            result.push(input[i]);
-            i += 1;
-        }
-    }
-    
-    result
 }
 
 /// Parse a fixed-width field, making it optional.

@@ -1,7 +1,8 @@
 //! Parsing configuration
 
-use bitflags::bitflags;
 use std::fmt;
+
+use bitflags::bitflags;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]

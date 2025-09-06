@@ -100,10 +100,11 @@ pub struct Counts {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use nom::combinator::all_consuming;
     use nom::{error, Err};
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case(b"  6  5  0  0  1                 3 V2000", "counts",

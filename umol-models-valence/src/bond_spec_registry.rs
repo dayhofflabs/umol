@@ -1,9 +1,11 @@
 //! Registry of default bond specs for bond spec matching
 
-use crate::{b, BondOrder, BondSpec};
+use std::collections::HashMap;
+
 use map_macro::hash_map;
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
+
+use crate::{b, BondOrder, BondSpec};
 
 /// Registry of bond specs by bond order
 pub struct BondSpecRegistry;

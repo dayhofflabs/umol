@@ -8,6 +8,7 @@ use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, op
 use nom::multi::{count as nom_count, length_count};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Err, Parser};
+use umol_data::Element;
 
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
@@ -25,7 +26,6 @@ use crate::io::ctab::sgroup::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
 };
-use umol_data::Element;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomAliasEntry {

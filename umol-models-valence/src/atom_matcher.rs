@@ -1,8 +1,9 @@
 //! Atom matchers
 
-use crate::{AtomBuilder, AtomSpec, AtomSpecRegistry};
 use once_cell::sync::Lazy;
 use umol::Result;
+
+use crate::{AtomBuilder, AtomSpec, AtomSpecRegistry};
 
 /// Matchers for atom typing. Default matcher uses the `AtomSpecRegistry` but custom
 /// matchers can be used.
@@ -109,9 +110,10 @@ pub static ALWAYS_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::alway
 
 #[cfg(test)]
 mod tests {
+    use umol_data::{e, Element};
+
     use super::*;
     use crate::a;
-    use umol_data::{e, Element};
 
     #[test]
     fn test_atom_matcher() {

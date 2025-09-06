@@ -1,6 +1,7 @@
 //! Accumulator for molecular properties from a CTAB file
 
 use std::collections::BTreeMap;
+
 use umol::error::{DataError, ValidationError};
 use umol::Result;
 use umol_data::Element;

@@ -1,7 +1,8 @@
 //! SGroup types for CTab format.
 
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
 
 /// SGroup type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -157,7 +158,7 @@ pub struct SGroup {
     pub hierarchy_parent: Option<usize>,          // SPL: parent SGroup for hierarchies
     pub component_number: Option<u32>,            // SNC: component order number
     pub bracket_style: Option<SGroupBracketStyle>, // SBT: bracket display style
-    pub data: BTreeMap<String, SGroupData>,        // SDT, SCD, SED: data for DAT SGroups
+    pub data: BTreeMap<String, SGroupData>,       // SDT, SCD, SED: data for DAT SGroups
     pub display: Option<SGroupDataDisplay>,       // SDD: display info for DAT SGroups
 }
 
@@ -189,8 +190,9 @@ impl SGroup {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pretty_assertions::assert_eq;
+
+    use super::*;
 
     #[test]
     fn test_sgroup_serialize() {

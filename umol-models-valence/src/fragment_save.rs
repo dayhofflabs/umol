@@ -1,16 +1,20 @@
 // Molecular fragments and substructures
 
-use crate::error::Error;
-use crate::graph::{GraphMolecule, AtomIndex};
-use crate::graph::builder::MoleculeBuilder;
-use crate::core::types::{AtomIndex, BondIndex};
 use super::{Atom, Bond, Molecule};
+use crate::core::types::{AtomIndex, BondIndex};
+use crate::error::Error;
+use crate::graph::builder::MoleculeBuilder;
+use crate::graph::{AtomIndex, GraphMolecule};
 
 /// Trait for any structure that can be added to a molecule
 pub trait MolecularEntity {
     /// Add this entity to a molecule builder, potentially using an attachment point
-    fn add_to_builder(&self, builder: MoleculeBuilder, attachment: Option<AtomIndex>) -> Result<MoleculeBuilder, Error>;
-    
+    fn add_to_builder(
+        &self,
+        builder: MoleculeBuilder,
+        attachment: Option<AtomIndex>,
+    ) -> Result<MoleculeBuilder, Error>;
+
     /// Create a standalone molecule from this entity
     fn to_molecule(&self) -> Result<GraphMolecule, Error> {
         let builder = MoleculeBuilder::new();
@@ -22,8 +26,8 @@ pub trait MolecularEntity {
 pub trait Fragment: MolecularEntity {
     /// Get the primary attachment point for this fragment
     fn primary_attachment(&self) -> Option<AtomIndex>;
-    
-    /// Get all available attachment points 
+
+    /// Get all available attachment points
     fn attachment_points(&self) -> Vec<(AtomIndex, String)>;
 }
 
@@ -31,7 +35,7 @@ pub trait Fragment: MolecularEntity {
 pub trait SubstructureQuery {
     /// Check if this query matches a given molecule
     fn matches(&self, molecule: &GraphMolecule) -> bool;
-    
+
     /// Find all matches of this query in a molecule
     fn find_matches(&self, molecule: &GraphMolecule) -> Vec<Vec<AtomIndex>>;
 }
@@ -39,7 +43,7 @@ pub trait SubstructureQuery {
 /// Trait for molecular templates (parameterized structures)
 pub trait MolecularTemplate {
     type Params;
-    
+
     /// Generate a concrete molecular entity from template parameters
     fn instantiate(&self, params: Self::Params) -> Result<Box<dyn MolecularEntity>, Error>;
 }
@@ -55,32 +59,38 @@ impl FragmentRegistry {
             fragments: std::collections::HashMap::new(),
         }
     }
-    
+
     pub fn register(&mut self, name: &str, fragment: Box<dyn Fragment>) {
         self.fragments.insert(name.to_string(), fragment);
     }
-    
+
     pub fn get(&self, name: &str) -> Option<&dyn Fragment> {
         self.fragments.get(name).map(|b| b.as_ref())
     }
-    
+
     pub fn names(&self) -> Vec<String> {
         self.fragments.keys().cloned().collect()
     }
-    
+
     /// Parse a SMILES string into a fragment - placeholder until SMILES parser is implemented
     pub fn from_smiles(&self, _smiles: &str) -> Result<Box<dyn Fragment>, Error> {
         // Placeholder until we implement SMILES parsing
-        Err(Error::InvalidOperation("SMILES parsing not yet implemented".to_string()))
+        Err(Error::InvalidOperation(
+            "SMILES parsing not yet implemented".to_string(),
+        ))
     }
 }
 
 /// Implementation of MolecularEntity for GraphMolecule
 impl MolecularEntity for GraphMolecule {
-    fn add_to_builder(&self, mut builder: MoleculeBuilder, _attachment: Option<AtomIndex>) -> Result<MoleculeBuilder, Error> {
+    fn add_to_builder(
+        &self,
+        mut builder: MoleculeBuilder,
+        _attachment: Option<AtomIndex>,
+    ) -> Result<MoleculeBuilder, Error> {
         // For now, simply create a new molecule - in the future we could support merging
         // with proper atom/bond mapping
-        
+
         // This is just a placeholder implementation
         Ok(builder)
     }

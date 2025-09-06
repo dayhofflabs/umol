@@ -1,7 +1,8 @@
 //! R-group type for CTab format.
 
-use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RGroupOccurrence {
@@ -95,9 +96,10 @@ impl Display for RGroup {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pretty_assertions::assert_eq;
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case(b"R", RGroup::new(None))]

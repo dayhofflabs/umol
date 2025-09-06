@@ -1,11 +1,12 @@
-use super::*;
-use crate::io::config::ParseFlags;
-use crate::io::ctab::sgroup::{SGroupMultiplierOp, SGroupMultiplierTerm};
 use float_cmp::approx_eq;
 use nom::{error, Err};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_data::Element;
+
+use super::*;
+use crate::io::config::ParseFlags;
+use crate::io::ctab::sgroup::{SGroupMultiplierOp, SGroupMultiplierTerm};
 
 #[rstest]
 #[case(b"  1 F    3   9   7   8  ", "exclusion flag false",

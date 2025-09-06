@@ -38,11 +38,13 @@ impl<M: Model, I: Stuff<Model = M>> AsModel<M> for I {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Capability;
+    use std::collections::HashSet;
+
     use serde::{Deserialize, Serialize};
     use serde_json;
-    use std::collections::HashSet;
+
+    use super::*;
+    use crate::Capability;
 
     // Test entity
     #[derive(Debug, Clone, Serialize, Deserialize)]

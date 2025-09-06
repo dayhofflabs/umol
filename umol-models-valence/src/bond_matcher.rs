@@ -1,8 +1,9 @@
 //! Bond matchers
 
-use crate::{BondBuilder, BondDonation, BondSpec, BondSpecRegistry};
 use once_cell::sync::Lazy;
 use umol::Result;
+
+use crate::{BondBuilder, BondDonation, BondSpec, BondSpecRegistry};
 
 pub struct BondMatcher {
     matcher: Box<dyn Fn(&BondBuilder) -> Result<Vec<BondSpec>> + Send + Sync>,
@@ -79,7 +80,8 @@ mod tests {
 
     #[test]
     fn test_bond_matcher_custom() {
-        let matcher = BondMatcher::default().with_matcher(|_| Ok(vec![b!("-"), b!("->"), b!("-<")]));
+        let matcher =
+            BondMatcher::default().with_matcher(|_| Ok(vec![b!("-"), b!("->"), b!("-<")]));
         let bond_builder = BondBuilder::new(BondOrder::Single);
         let matches = matcher.find(&bond_builder).unwrap();
         assert_eq!(matches.len(), 3);

@@ -1,17 +1,19 @@
 //! SDF (Structure Data File) format parsing
 
-use crate::io::mol::parser::{mol_file_moleculelike, MolFileLike};
 use bstr::ByteSlice;
 use indexmap::IndexMap;
+use nom::branch::alt;
 use nom::bytes::complete::{tag, take_until};
 use nom::character::complete::{line_ending, multispace0, not_line_ending};
 use nom::combinator::{all_consuming, complete, eof, map, opt, peek, value};
 use nom::multi::{many1, many_till};
 use nom::sequence::{delimited, terminated};
-use nom::{branch::alt, error, Parser};
+use nom::{error, Parser};
 use serde::{Deserialize, Serialize};
 use umol::error::DataError;
 use umol::Result;
+
+use crate::io::mol::parser::{mol_file_moleculelike, MolFileLike};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SdfFile {

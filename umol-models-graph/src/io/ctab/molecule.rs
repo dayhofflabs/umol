@@ -1,16 +1,17 @@
 //! Molecule and molecule-like type for CTab format.
 
-use crate::io::ctab::atom::{Atom, AtomLike, AtomSymbol};
-use crate::io::ctab::bond::{Bond, BondLike};
-use crate::io::ctab::sgroup::SGroup;
-use umol_data::{e, Element};
+use std::collections::{BTreeMap, HashMap};
 
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::graph6::get_graph6_representation;
 use petgraph::stable_graph::StableGraph;
 use petgraph::Undirected;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use umol_data::{e, Element};
+
+use crate::io::ctab::atom::{Atom, AtomLike, AtomSymbol};
+use crate::io::ctab::bond::{Bond, BondLike};
+use crate::io::ctab::sgroup::SGroup;
 
 /// Type aliases for the node and edge indices
 pub type AtomIndex = NodeIndex<usize>;
@@ -416,9 +417,10 @@ mod tests {
 
     #[test]
     fn test_moleculelike_sum_formula() {
+        use umol_data::{e, Element};
+
         use crate::io::ctab::atom::AtomSymbol;
         use crate::io::ctab::bond::BondType;
-        use umol_data::{e, Element};
 
         let mut molecule = MoleculeLike::new();
         molecule.add_atom(AtomLike::new(AtomSymbol::Element(e!(O))));
@@ -431,9 +433,10 @@ mod tests {
 
     #[test]
     fn test_moleculelike_sum_formula_glycine() {
+        use umol_data::{e, Element};
+
         use crate::io::ctab::atom::AtomSymbol;
         use crate::io::ctab::bond::BondType;
-        use umol_data::{e, Element};
 
         // Glycine: NH2-CH2-COOH (C2H5NO2)
         let mut molecule = MoleculeLike::new();
@@ -465,6 +468,7 @@ mod tests {
     #[test]
     fn test_format_sum_formula() {
         use std::collections::BTreeMap;
+
         use umol_data::{e, Element};
 
         // Empty molecule
@@ -537,9 +541,10 @@ mod tests {
 
     #[test]
     fn test_moleculelike_graph6() {
+        use umol_data::{e, Element};
+
         use crate::io::ctab::atom::AtomSymbol;
         use crate::io::ctab::bond::BondType;
-        use umol_data::{e, Element};
 
         let mut molecule = MoleculeLike::new();
         molecule.add_atom(AtomLike::new(AtomSymbol::Element(e!(O))));

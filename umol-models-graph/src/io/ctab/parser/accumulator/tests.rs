@@ -1,33 +1,32 @@
-use super::*;
-use crate::io::ctab::{
-    atom::{
-        Atom, AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom,
-        UnsaturatedAtom,
-    },
-    bond::{Bond, BondLike, BondType},
-    molecule::Molecule,
-    parser::properties::{
-        AtomAliasEntry, AtomAttachmentOrderEntry, AtomHydrogenCountEntry, AtomListEntry,
-        AtomValueEntry, AttachmentPointEntry, ChargeEntry, IsotopeEntry, LinkAtomEntry,
-        PropertyEntries, RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry,
-        SGroupAtomListEntry, SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry,
-        SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDataDescriptionEntry,
-        SGroupDataDisplayEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
-        SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
-        SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
-        ZeroAtomChargeEntry, ZeroBondOrderEntry,
-    },
-    rgroup::{RGroup, RGroupOccurrence},
-    sgroup::{
-        SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupDataDisplayChars,
-        SGroupDataDisplayPlacement, SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType,
-        SGroupMultiplierTerm, SGroupSubtype, SGroupType,
-    },
-};
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol::error::{DataError, Error, ValidationError};
 use umol_data::{e, Element, NamedIsotope};
+
+use super::*;
+use crate::io::ctab::atom::{
+    Atom, AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom,
+    UnsaturatedAtom,
+};
+use crate::io::ctab::bond::{Bond, BondLike, BondType};
+use crate::io::ctab::molecule::Molecule;
+use crate::io::ctab::parser::properties::{
+    AtomAliasEntry, AtomAttachmentOrderEntry, AtomHydrogenCountEntry, AtomListEntry,
+    AtomValueEntry, AttachmentPointEntry, ChargeEntry, IsotopeEntry, LinkAtomEntry,
+    PropertyEntries, RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry,
+    SGroupAtomListEntry, SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry,
+    SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDataDescriptionEntry,
+    SGroupDataDisplayEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
+    SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
+    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+    ZeroAtomChargeEntry, ZeroBondOrderEntry,
+};
+use crate::io::ctab::rgroup::{RGroup, RGroupOccurrence};
+use crate::io::ctab::sgroup::{
+    SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupDataDisplayChars,
+    SGroupDataDisplayPlacement, SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType,
+    SGroupMultiplierTerm, SGroupSubtype, SGroupType,
+};
 
 #[fixture]
 fn moleculelike_single_atom() -> MoleculeLike {

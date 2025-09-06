@@ -4,9 +4,11 @@
 //! - Model trait for representing molecular systems
 //! - Basic model operations and validations
 
-use crate::{Capability, Property, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
+
+use crate::{Capability, Property, Result};
 
 /// A trait for molecular models
 pub trait Model: Serialize + for<'de> Deserialize<'de> {
@@ -46,8 +48,9 @@ pub trait AsModel<M: Model> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json;
+
+    use super::*;
 
     /// A simple model that just counts atoms
     #[derive(Debug, Clone, Serialize, Deserialize)]

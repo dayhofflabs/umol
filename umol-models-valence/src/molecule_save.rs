@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::core::types::{AtomIndex, BondIndex};
-use crate::core::Model;
 use super::atom::Atom;
 use super::bond::Bond;
+use crate::core::types::{AtomIndex, BondIndex};
+use crate::core::Model;
 use crate::error::Error;
 
 /// A molecule represented as a graph of atoms and bonds
@@ -51,9 +51,8 @@ impl Model for Molecule {
         self.atom_bonds(index)
             .iter()
             .filter_map(|&bond_idx| {
-                self.bond_atoms(bond_idx).map(|(a, b)| {
-                    if a == index { b } else { a }
-                })
+                self.bond_atoms(bond_idx)
+                    .map(|(a, b)| if a == index { b } else { a })
             })
             .collect()
     }
@@ -101,13 +100,22 @@ impl Molecule {
 
 impl fmt::Display for Molecule {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Molecule with {} atoms and {} bonds:", self.num_atoms(), self.num_bonds())?;
+        writeln!(
+            f,
+            "Molecule with {} atoms and {} bonds:",
+            self.num_atoms(),
+            self.num_bonds()
+        )?;
         for (i, atom) in self.atoms.iter().enumerate() {
             writeln!(f, "  Atom {}: {}", i, atom)?;
         }
         for (i, bond) in self.bonds.iter().enumerate() {
             if let Some((a, b)) = self.bond_atoms.get(&BondIndex(i)) {
-                writeln!(f, "  Bond {}: {} between atoms {} and {}", i, bond, a.0, b.0)?;
+                writeln!(
+                    f,
+                    "  Bond {}: {} between atoms {} and {}",
+                    i, bond, a.0, b.0
+                )?;
             }
         }
         Ok(())
@@ -142,7 +150,7 @@ mod tests {
         let c2 = mol.add_atom(Atom::new(Element::C));
         let bond = Bond::single();
         let bond_index = mol.add_bond(c1, c2, bond);
-        
+
         assert_eq!(mol.num_bonds(), 1);
         assert_eq!(mol.bond(bond_index), Some(&Bond::single()));
         assert_eq!(mol.bond_atoms(bond_index), Some((c1, c2)));
@@ -158,7 +166,7 @@ mod tests {
         let c1 = mol.add_atom(Atom::new(Element::C));
         let invalid_index = AtomIndex(1);
         let bond = Bond::single();
-        
+
         assert!(mol.add_bond(c1, invalid_index, bond).is_err());
     }
 }

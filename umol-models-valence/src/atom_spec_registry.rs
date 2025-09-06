@@ -1,9 +1,11 @@
 //! Registry of default atom specs to be used for atom spec matching
 
-use crate::{AtomSpec, a};
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
+
+use once_cell::sync::Lazy;
 use umol_data::{e, Element};
+
+use crate::{a, AtomSpec};
 
 /// Registry of default atom specs to be used for atom spec matching
 pub struct AtomSpecRegistry;
@@ -116,8 +118,9 @@ static ATOM_SPEC_DATA: Lazy<HashMap<Element, HashMap<i8, Vec<AtomSpec>>>> = Lazy
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use umol_data::e;
+
+    use super::*;
 
     #[test]
     fn test_atom_spec_registry_by_element_and_charge() {

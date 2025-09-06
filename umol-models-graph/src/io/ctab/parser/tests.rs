@@ -1,10 +1,11 @@
 //! Tests for CTAB block parsing
 
+use rstest::{fixture, rstest};
+use umol_data::Element;
+
 use super::*;
 use crate::io::ctab::atom::AtomSymbol;
 use crate::io::ctab::bond::BondType;
-use rstest::{fixture, rstest};
-use umol_data::Element;
 
 #[fixture]
 fn header_atoms_only() -> &'static [u8] {
