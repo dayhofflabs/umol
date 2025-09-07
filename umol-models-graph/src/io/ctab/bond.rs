@@ -100,62 +100,47 @@ impl BondType {
 /// Bond properties specified in the bond block
 
 /// Double bond stereochemistry
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondStereo {
-    Cis,    // MOL code 1
-    Trans,  // MOL code 6
+    Cis,   // MOL code 1
+    Trans, // MOL code 6
+    #[default]
     Either, // MOL code 3
-}
-
-impl Default for BondStereo {
-    fn default() -> Self {
-        BondStereo::Either
-    }
 }
 
 impl BondStereo {
     pub fn is_default(&self) -> bool {
-        matches!(self, BondStereo::Either)
+        matches!(self, s if *s == Default::default())
     }
 }
 
 /// Single bond wedging specified in MOL V2000 files.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondDir {
     Wedge,  // MOL code 1 (Up / Begin Wedge)
     Dash,   // MOL code 6 (Down / Begin Dash)
+    #[default]
     Either, // MOL code 4 (Either)
-}
-
-impl Default for BondDir {
-    fn default() -> Self {
-        BondDir::Either
-    }
 }
 
 impl BondDir {
     pub fn is_default(&self) -> bool {
-        matches!(self, BondDir::Either)
+        matches!(self, d if *d == Default::default())
     }
 }
 
 /// Bond topology (chain, ring, either), if specified.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondTopology {
     Chain,  // MOL code 2
     Ring,   // MOL code 1
+    #[default]
     Either, // MOL code 0 (default/unspecified)
-}
-
-impl Default for BondTopology {
-    fn default() -> Self {
-        BondTopology::Either
-    }
 }
 
 impl BondTopology {
     pub fn is_default(&self) -> bool {
-        matches!(self, BondTopology::Either)
+        matches!(self, t if *t == Default::default())
     }
 }
 

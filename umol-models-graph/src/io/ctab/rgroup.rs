@@ -8,8 +8,14 @@ use serde::{Deserialize, Serialize};
 pub enum RGroupOccurrence {
     Exactly(u8),
     Range(u8, u8),   // Inclusive
-    GreaterThan(u8), // Default is > 0
+    GreaterThan(u8),
     FewerThan(u8),
+}
+
+impl Default for RGroupOccurrence {
+    fn default() -> Self {
+        RGroupOccurrence::GreaterThan(0)
+    }
 }
 
 impl RGroupOccurrence {

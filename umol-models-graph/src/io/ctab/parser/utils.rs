@@ -236,6 +236,10 @@ where
                         recognize((opt(tag(&b"-"[..])), digit1, tag(&b"."[..]), digit0)),
                         |s| fast_float::parse::<T, _>(s).unwrap(),
                     ),
+                    map(
+                        recognize((opt(tag(&b"-"[..])), digit0, tag(&b"."[..]), digit1)),
+                        |s| fast_float::parse::<T, _>(s).unwrap(),
+                    ),                    
                     map(recognize((opt(tag(&b"-"[..])), digit1)), move |s| {
                         fast_float::parse::<T, _>(s).unwrap()
                             / T::from(10.0).unwrap().powi(precision as i32)

@@ -1,9 +1,25 @@
 use std::path::Path;
 use std::{env, fs};
 
+use lalrpop;
 use walkdir::WalkDir;
 
 fn main() {
+    generate_smiles_parser();
+    generate_compliance_tests();
+}
+
+fn generate_smiles_parser() {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    
+    lalrpop::Configuration::new()
+        .set_in_dir("src/io/smiles/parser")
+        .set_out_dir(&out_dir)
+        .process()
+        .unwrap();
+}
+
+fn generate_compliance_tests() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("generated_tests.rs");
 

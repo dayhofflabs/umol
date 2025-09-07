@@ -366,6 +366,7 @@ fn test_fixed_width_int_partial_invalid(
 #[case(b"    -1.234", -1.234)]
 #[case(b"1.0       ", 1.0)]
 #[case(b"1.        ", 1.0)]
+#[case(b" .1       ", 0.1)]
 #[case(b"1.23456   ", 1.23456)]
 #[case(b"   1234567", 123.4567)]
 #[case(b"  -1234567", -123.4567)]

@@ -1,0 +1,18 @@
+use std::str::FromStr;
+use umol_data::Element;
+
+grammar;
+
+
+pub Molecule: Element = {
+    "C" => Element::C,
+    "O" => Element::O,
+    "N" => Element::N,
+    "F" => Element::F,
+    "Cl" => Element::Cl,
+    "Br" => Element::Br,
+    "I" => Element::I,
+    "S" => Element::S,
+    "P" => Element::P,
+    "B" => Element::B,
+};

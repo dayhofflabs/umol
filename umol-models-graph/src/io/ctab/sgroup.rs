@@ -82,17 +82,19 @@ pub struct SGroupConnectingBond {
 }
 
 /// SGroup bracket style
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SGroupBracketStyle {
+    #[default]
     Default, // 0 = default brackets
     Curved,  // 1 = curved (parenthetic) brackets
 }
 
 /// SGroup data type
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SGroupDataType {
     Formatted,
     Numeric,
+    #[default]
     Text,
 }
 

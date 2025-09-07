@@ -141,22 +141,17 @@ pub type Point3D = nalgebra::Point3<f64>;
 /// Atom properties specified in the atom block
 
 /// Tetrahedral chirality specified in MOL files.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomStereoParity {
     Odd,    // sss = 1, RDKit `CHI_TETRAHEDRAL_CW` (Clockwise / R)
     Even,   // sss = 2, RDKit `CHI_TETRAHEDRAL_CCW` (Counter-Clockwise / S)
+    #[default]
     Either, // sss = 3, RDKit `CHI_UNSPECIFIED`
-}
-
-impl Default for AtomStereoParity {
-    fn default() -> Self {
-        AtomStereoParity::Either
-    }
 }
 
 impl AtomStereoParity {
     pub fn is_default(&self) -> bool {
-        matches!(self, AtomStereoParity::Either)
+        matches!(self, p if *p == Default::default())
     }
 }
 
@@ -266,19 +261,10 @@ pub struct LinkAtom {
 }
 
 /// Atom list
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AtomList {
     pub elements: Vec<Element>,
     pub exclusion: bool,
-}
-
-impl Default for AtomList {
-    fn default() -> Self {
-        Self {
-            elements: vec![],
-            exclusion: false,
-        }
-    }
 }
 
 #[cfg(test)]
