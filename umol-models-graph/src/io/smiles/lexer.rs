@@ -1,9 +1,26 @@
 //! Lexer for SMILES tokens
 
-use logos::Logos;
+use std::fmt;
+use std::num::ParseIntError;
 
-#[derive(Logos, Debug, PartialEq)]
-enum Token {
+use logos::{Logos, SpannedIter};
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub enum LexicalError {
+    #[default]
+    InvalidToken,
+    InvalidNumber(ParseIntError),
+}
+
+impl From<ParseIntError> for LexicalError {
+    fn from(error: ParseIntError) -> Self {
+        LexicalError::InvalidNumber(error)
+    }
+}
+
+#[derive(Logos, Debug, Clone, PartialEq)]
+#[logos(error = LexicalError)]
+pub enum Token {
     // Atoms
     #[token("Ac")]
     Ac,
@@ -270,12 +287,12 @@ enum Token {
     #[token("]")]
     CloseBracket,
     #[token("(")]
-    OpenParenthesis,
+    OpenParen,
     #[token(")")]
-    CloseParenthesis,
+    CloseParen,
 
     // Numbers
-    #[regex(r"[0-9]+", |lex| lex.slice().parse::<u32>().map_err(|_| ()))]
+    #[regex(r"[0-9]+", |lex| lex.slice().parse::<u32>())]
     Number(u32),
 
     // Chirality flags
@@ -322,13 +339,50 @@ enum Token {
 
     // Terminator
     #[regex("[ \t\n\r]")]
-    Terminator,
+    Stop,
+
+    // Error
+    Error,
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+// Lexer iterator type
+pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
+
+pub struct Lexer<'input> {
+    token_stream: SpannedIter<'input, Token>,
+}
+
+impl<'input> Lexer<'input> {
+    pub fn new(input: &'input str) -> Self {
+        Self {
+            token_stream: Token::lexer(input).spanned(),
+        }
+    }
+}
+
+impl<'input> Iterator for Lexer<'input> {
+    type Item = Spanned<Token, usize, LexicalError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.token_stream.next().map(|(tok, span)| match tok {
+            Ok(token) => Ok((span.start, token, span.end)),
+            Err(_) => Ok((span.start, Token::Error, span.end)),
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use pretty_assertions::assert_eq;
     use rstest::*;
+
+    use super::*;
 
     #[rstest]
     #[case("C", vec![Token::C])]
@@ -341,12 +395,55 @@ mod tests {
     #[case("C:C", vec![Token::C, Token::Colon, Token::C])]
     #[case("C=C", vec![Token::C, Token::Equal, Token::C])]
     #[case("C#C", vec![Token::C, Token::Hash, Token::C])]
-    fn test_lexer(#[case] input: &str, #[case] expected: Vec<Token>) {
+    fn test_token(#[case] input: &str, #[case] expected: Vec<Token>) {
         let tokens = Token::lexer(input)
             .map(|t| t.ok())
             .collect::<Option<Vec<Token>>>();
         assert!(tokens.is_some(), "{} should have succeeded", input);
         let tokens = tokens.unwrap();
         assert_eq!(tokens, expected);
+    }
+
+    #[rstest]
+    #[case("X", 1)]
+    #[case("f", 1)]
+    #[case(">>", 2)]
+    #[case(",", 1)]
+    #[case("99999999999999999999", 1)]
+    fn test_token_invalid(#[case] input: &str, #[case] expected_count: usize) {
+        let tokens = Token::lexer(input);
+        let errors = tokens.map(|t| t.unwrap_err()).collect::<Vec<_>>();
+        assert_eq!(errors.len(), expected_count);
+    }
+
+    #[rstest]
+    #[case("C", vec![(0, Token::C, 1)])]
+    #[case("c", vec![(0, Token::AromC, 1)])]
+    #[case("CC", vec![(0, Token::C, 1), (1, Token::C, 2)])]
+    #[case("C.C", vec![(0, Token::C, 1), (1, Token::Dot, 2), (2, Token::C, 3)])]
+    #[case("C/C", vec![(0, Token::C, 1), (1, Token::Slash, 2), (2, Token::C, 3)])]
+    #[case("C\\C", vec![(0, Token::C, 1), (1, Token::Backslash, 2), (2, Token::C, 3)])]
+    #[case("C%C", vec![(0, Token::C, 1), (1, Token::Percent, 2), (2, Token::C, 3)])]
+    #[case("C:C", vec![(0, Token::C, 1), (1, Token::Colon, 2), (2, Token::C, 3)])]
+    #[case("C=C", vec![(0, Token::C, 1), (1, Token::Equal, 2), (2, Token::C, 3)])]
+    #[case("C#C", vec![(0, Token::C, 1), (1, Token::Hash, 2), (2, Token::C, 3)])]
+    fn test_lexer(#[case] input: &str, #[case] expected: Vec<(usize, Token, usize)>) {
+        let lexer = Lexer::new(input);
+        let tokens = lexer.map(|t| t.ok()).collect::<Option<Vec<_>>>();
+        assert!(tokens.is_some(), "{} should have succeeded", input);
+        let tokens = tokens.unwrap();
+        assert_eq!(tokens, expected);
+    }
+
+    #[rstest]
+    #[case("X", vec![(0, Token::Error, 1)])]
+    #[case("f", vec![(0, Token::Error, 1)])]
+    #[case(">>", vec![(0, Token::Error, 1), (1, Token::Error, 2)])]
+    #[case(",", vec![(0, Token::Error, 1)])]
+    #[case("99999999999999999999", vec![(0, Token::Error, 20)])]
+    fn test_lexer_invalid(#[case] input: &str, #[case] expected: Vec<(usize, Token, usize)>) {
+        let lexer = Lexer::new(input);
+        let errors = lexer.map(|t| t.unwrap()).collect::<Vec<_>>();
+        assert_eq!(errors, expected);
     }
 }
