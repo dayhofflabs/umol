@@ -10,11 +10,18 @@ fn main() {
 }
 
 fn generate_smiles_parser() {
-    let out_dir = env::var("OUT_DIR").unwrap();
-    
+    let in_dir = "src/io/smiles/parser";
+    for entry in fs::read_dir(in_dir).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension().unwrap() == "lalrpop" {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
     lalrpop::Configuration::new()
-        .set_in_dir("src/io/smiles/parser")
-        .set_out_dir(&out_dir)
+        .log_debug()
+        .emit_report(true)
+        .set_in_dir(in_dir)
         .process()
         .unwrap();
 }

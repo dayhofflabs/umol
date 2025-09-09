@@ -292,8 +292,8 @@ pub enum Token {
     CloseParen,
 
     // Numbers
-    #[regex(r"[0-9]+", |lex| lex.slice().parse::<u32>())]
-    Number(u32),
+    #[regex(r"[0-9]+", |lex| lex.slice().parse::<i32>())]
+    Number(i32),
 
     // Chirality flags
     #[token("@")]
