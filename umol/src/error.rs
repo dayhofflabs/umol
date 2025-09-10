@@ -240,6 +240,9 @@ pub enum DataError {
     #[error("Invalid fragment: {0}")]
     InvalidFragment(String),
 
+    #[error("Invalid ring: {0}")]
+    InvalidRing(String),
+
     #[error("Invalid feature: {0}")]
     InvalidFeature(String),
 

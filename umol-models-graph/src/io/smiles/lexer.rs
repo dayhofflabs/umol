@@ -292,8 +292,14 @@ pub enum Token {
     CloseParen,
 
     // Numbers
-    #[regex(r"[0-9]+", |lex| lex.slice().parse::<i32>())]
-    Number(i32),
+    #[regex(r"[0-9]", |lex| lex.slice().parse::<u32>())]
+    Digit1(u32),
+    #[regex(r"[1-9][0-9]", |lex| lex.slice().parse::<u32>())]
+    Digit2(u32),
+    #[regex(r"[1-9][0-9][0-9]", |lex| lex.slice().parse::<u32>())]
+    Digit3(u32),
+    #[regex(r"%[1-9][0-9]", |lex| lex.slice().parse::<u32>())]
+    Percent(u32),
 
     // Chirality flags
     #[token("@")]
@@ -332,8 +338,6 @@ pub enum Token {
     Slash,
     #[token("\\")]
     Backslash,
-    #[token("%")]
-    Percent,
     #[token(".")]
     Dot,
 
@@ -391,7 +395,6 @@ mod tests {
     #[case("C.C", vec![Token::C, Token::Dot, Token::C])]
     #[case("C/C", vec![Token::C, Token::Slash, Token::C])]
     #[case("C\\C", vec![Token::C, Token::Backslash, Token::C])]
-    #[case("C%C", vec![Token::C, Token::Percent, Token::C])]
     #[case("C:C", vec![Token::C, Token::Colon, Token::C])]
     #[case("C=C", vec![Token::C, Token::Equal, Token::C])]
     #[case("C#C", vec![Token::C, Token::Hash, Token::C])]
@@ -409,7 +412,6 @@ mod tests {
     #[case("f", 1)]
     #[case(">>", 2)]
     #[case(",", 1)]
-    #[case("99999999999999999999", 1)]
     fn test_token_invalid(#[case] input: &str, #[case] expected_count: usize) {
         let tokens = Token::lexer(input);
         let errors = tokens.map(|t| t.unwrap_err()).collect::<Vec<_>>();
@@ -423,7 +425,6 @@ mod tests {
     #[case("C.C", vec![(0, Token::C, 1), (1, Token::Dot, 2), (2, Token::C, 3)])]
     #[case("C/C", vec![(0, Token::C, 1), (1, Token::Slash, 2), (2, Token::C, 3)])]
     #[case("C\\C", vec![(0, Token::C, 1), (1, Token::Backslash, 2), (2, Token::C, 3)])]
-    #[case("C%C", vec![(0, Token::C, 1), (1, Token::Percent, 2), (2, Token::C, 3)])]
     #[case("C:C", vec![(0, Token::C, 1), (1, Token::Colon, 2), (2, Token::C, 3)])]
     #[case("C=C", vec![(0, Token::C, 1), (1, Token::Equal, 2), (2, Token::C, 3)])]
     #[case("C#C", vec![(0, Token::C, 1), (1, Token::Hash, 2), (2, Token::C, 3)])]
@@ -440,7 +441,6 @@ mod tests {
     #[case("f", vec![(0, Token::Error, 1)])]
     #[case(">>", vec![(0, Token::Error, 1), (1, Token::Error, 2)])]
     #[case(",", vec![(0, Token::Error, 1)])]
-    #[case("99999999999999999999", vec![(0, Token::Error, 20)])]
     fn test_lexer_invalid(#[case] input: &str, #[case] expected: Vec<(usize, Token, usize)>) {
         let lexer = Lexer::new(input);
         let errors = lexer.map(|t| t.unwrap()).collect::<Vec<_>>();

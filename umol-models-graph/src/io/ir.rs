@@ -56,6 +56,7 @@ pub struct Variable {}
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Atom {
     // Core atomic properties (common to all formats)
+    pub index: Option<u32>,
     pub symbol: AtomSymbol,
     pub position: Option<Point3D>,
     pub charge: Option<i32>,
@@ -87,6 +88,7 @@ impl Atom {
         Self {
             symbol: AtomSymbol::Element(element),
             aromatic: Some(false),
+            repr: Some(element.to_string()),
             ..Default::default()
         }
     }
@@ -96,6 +98,7 @@ impl Atom {
         Self {
             symbol: AtomSymbol::Element(element),
             aromatic: Some(true),
+            repr: Some(element.to_string().to_lowercase()),
             ..Default::default()
         }
     }
@@ -104,12 +107,14 @@ impl Atom {
 /// Bond IR
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Bond {
-    pub atom_indices: (usize, usize),
-
     // Core properties
+    pub index: Option<u32>,
+    pub start_atom: Option<u32>,
+    pub end_atom: Option<u32>,
+    pub ring: Option<u32>,
     pub symbol: BondSymbol,
     pub stereo: Option<BondStereo>,
-    pub direction: Option<BondDirection>,
+    pub direction: Option<BondDir>,
 
     // Query properties
     pub topology: Option<BondTopology>,
@@ -120,8 +125,36 @@ pub struct Bond {
     pub repr: Option<String>,
 }
 
+impl Bond {
+    pub fn from_order(order: BondOrder) -> Self {
+        Self {
+            symbol: BondSymbol::Bond(order),
+            repr: Some(order.symbol().to_string()),
+            ..Default::default()
+        }
+    }
+
+    pub fn up() -> Self {
+        Self {
+            symbol: BondSymbol::Bond(BondOrder::Single),
+            direction: Some(BondDir::Up),
+            repr: Some("/".to_string()),
+            ..Default::default()
+        }
+    }
+
+    pub fn down() -> Self {
+        Self {
+            symbol: BondSymbol::Bond(BondOrder::Single),
+            direction: Some(BondDir::Down),
+            repr: Some("\\".to_string()),
+            ..Default::default()
+        }
+    }
+}
+
 /// Extended query atom types (superset of MOL + SMARTS)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum QueryAtom {
     Any,           // * = any atom
     Heavy,         // A = all except H
@@ -132,10 +165,12 @@ pub enum QueryAtom {
     HeteroatomOrH, // QH = Q or H (CXSMILES extension)
     HalogenOrH,    // XH = X or H (CXSMILES extension)
     MetalOrH,      // MH = M or H (CXSMILES extension)
+    #[default]
+    Unknown,
 }
 
 /// Unified bond representation (concrete + queries)
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum BondSymbol {
     Bond(BondOrder),
     Query(QueryBond),
@@ -143,52 +178,80 @@ pub enum BondSymbol {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum BondOrder {
     Single,
     Double,
     Triple,
+    Quadruple,
     Aromatic,
+    #[default]
+    Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl BondOrder {
+    pub fn symbol(&self) -> &str {
+        match self {
+            BondOrder::Single => "-",
+            BondOrder::Double => "=",
+            BondOrder::Triple => "#",
+            BondOrder::Quadruple => "$",
+            BondOrder::Aromatic => ":",
+            BondOrder::Unknown => "?",
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum QueryBond {
     SingleOrDouble,
     SingleOrAromatic,
     DoubleOrAromatic,
     Any,
+    #[default]
+    Unknown,
 }
 
 /// Bond direction/wedging information
-#[derive(Debug, Clone, PartialEq)]
-pub enum BondDirection {
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub enum BondDir {
     Up,
     Down,
     Either,
+    #[default]
+    Unknown,
 }
 
 /// Chirality
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum Chirality {
     Clockwise,
     CounterClockwise,
     Tetrahedral {
-        index: u32,
+        arr: u32,
     },
     Allenal {
-        index: u32,
+        arr: u32,
     },
     SquarePlanar {
-        index: u32,
+        arr: u32,
     },
     TrigonalBipyramidal {
-        index: u32,
+        arr: u32,
     },
     Octahedral {
-        index: u32,
+        arr: u32,
     },
     #[default]
     Unknown,
+}
+
+/// Ring closure
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct RingBond {
+    pub index: Option<u32>,
+    pub bond: Option<Bond>,
+    pub ring: Option<u32>,
 }
 
 /// Fragment

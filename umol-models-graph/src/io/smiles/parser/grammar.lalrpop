@@ -1,13 +1,272 @@
 use std::str::FromStr;
 
+use lalrpop_util::{ErrorRecovery, ParseError};
 use umol_data::Element;
 
-use crate::io::ir::{Atom, Bond, Molecule, Chirality, SourceFormat};
+use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
-use lalrpop_util::{ErrorRecovery, ParseError};
+use crate::io::smiles::state::{ParseState, Bond as SBond};
 
-grammar<'err, 'input>(errors: &'err mut Vec<ErrorRecovery<usize,Token, LexicalError>>);
+grammar<'err, 'input>(errors: &'err mut Vec<ErrorRecovery<usize,Token, LexicalError>>, state: &mut ParseState);
 
+// Atom nonterminals
+pub Atom: Atom = {
+    BracketAtom,
+    AliphaticOrganicSymbol,
+    AromaticOrganicSymbol,
+}
+
+pub BracketAtom: Atom = {
+    "[" <isotope:Isotope?> <symbol:Symbol> <chirality:Chirality?> <hcount:HCount?> <charge:Charge?> <class:Class?> "]" => {
+        let mut atom = symbol;
+        atom.isotope = isotope;
+        atom.chirality = chirality;
+        atom.hydrogen_count = hcount;
+        atom.charge = charge;
+        atom.class = class;
+        if let Some(ch) = chirality {
+            // Register an open stereocenter for the atom being created next.
+            // We defer neighbor count validation (expected_neighbors = 0).
+            let _ = state.open_stereocenter(state.next_atom, Some(ch), 0);
+        }
+        atom
+    },
+}
+
+pub Symbol: Atom = {
+    AliphaticSymbol,
+    AromaticSymbol,
+    UnknownSymbol,
+}
+
+pub AliphaticSymbol: Atom = {
+    "Ac" => Atom::from_aliphatic_atom(Element::Ac),
+    "Ag" => Atom::from_aliphatic_atom(Element::Ag),
+    "Al" => Atom::from_aliphatic_atom(Element::Al),
+    "Am" => Atom::from_aliphatic_atom(Element::Am),
+    "Ar" => Atom::from_aliphatic_atom(Element::Ar),
+    "As" => Atom::from_aliphatic_atom(Element::As),
+    "At" => Atom::from_aliphatic_atom(Element::At),
+    "Au" => Atom::from_aliphatic_atom(Element::Au),
+    "B" => Atom::from_aliphatic_atom(Element::B),
+    "Ba" => Atom::from_aliphatic_atom(Element::Ba),
+    "Be" => Atom::from_aliphatic_atom(Element::Be),
+    "Bh" => Atom::from_aliphatic_atom(Element::Bh),
+    "Bi" => Atom::from_aliphatic_atom(Element::Bi),
+    "Bk" => Atom::from_aliphatic_atom(Element::Bk),
+    "Br" => Atom::from_aliphatic_atom(Element::Br),
+    "C" => Atom::from_aliphatic_atom(Element::C),
+    "Ca" => Atom::from_aliphatic_atom(Element::Ca),
+    "Cd" => Atom::from_aliphatic_atom(Element::Cd),
+    "Ce" => Atom::from_aliphatic_atom(Element::Ce),
+    "Cf" => Atom::from_aliphatic_atom(Element::Cf),
+    "Cl" => Atom::from_aliphatic_atom(Element::Cl),
+    "Cm" => Atom::from_aliphatic_atom(Element::Cm),
+    "Cn" => Atom::from_aliphatic_atom(Element::Cn),
+    "Co" => Atom::from_aliphatic_atom(Element::Co),
+    "Cr" => Atom::from_aliphatic_atom(Element::Cr),
+    "Cs" => Atom::from_aliphatic_atom(Element::Cs),
+    "Cu" => Atom::from_aliphatic_atom(Element::Cu),
+    "Db" => Atom::from_aliphatic_atom(Element::Db),
+    "Ds" => Atom::from_aliphatic_atom(Element::Ds),
+    "Dy" => Atom::from_aliphatic_atom(Element::Dy),
+    "Er" => Atom::from_aliphatic_atom(Element::Er),
+    "Es" => Atom::from_aliphatic_atom(Element::Es),
+    "Eu" => Atom::from_aliphatic_atom(Element::Eu),
+    "F" => Atom::from_aliphatic_atom(Element::F),
+    "Fe" => Atom::from_aliphatic_atom(Element::Fe),
+    "Fl" => Atom::from_aliphatic_atom(Element::Fl),
+    "Fm" => Atom::from_aliphatic_atom(Element::Fm),
+    "Fr" => Atom::from_aliphatic_atom(Element::Fr),
+    "Ga" => Atom::from_aliphatic_atom(Element::Ga),
+    "Gd" => Atom::from_aliphatic_atom(Element::Gd),
+    "Ge" => Atom::from_aliphatic_atom(Element::Ge),
+    "H" => Atom::from_aliphatic_atom(Element::H),
+    "He" => Atom::from_aliphatic_atom(Element::He),
+    "Hf" => Atom::from_aliphatic_atom(Element::Hf),
+    "Hg" => Atom::from_aliphatic_atom(Element::Hg),
+    "Ho" => Atom::from_aliphatic_atom(Element::Ho),
+    "Hs" => Atom::from_aliphatic_atom(Element::Hs),
+    "I" => Atom::from_aliphatic_atom(Element::I),
+    "In" => Atom::from_aliphatic_atom(Element::In),
+    "Ir" => Atom::from_aliphatic_atom(Element::Ir),
+    "K" => Atom::from_aliphatic_atom(Element::K),
+    "Kr" => Atom::from_aliphatic_atom(Element::Kr),
+    "La" => Atom::from_aliphatic_atom(Element::La),
+    "Li" => Atom::from_aliphatic_atom(Element::Li),
+    "Lr" => Atom::from_aliphatic_atom(Element::Lr),
+    "Lu" => Atom::from_aliphatic_atom(Element::Lu),
+    "Lv" => Atom::from_aliphatic_atom(Element::Lv),
+    "Mc" => Atom::from_aliphatic_atom(Element::Mc),
+    "Md" => Atom::from_aliphatic_atom(Element::Md),
+    "Mg" => Atom::from_aliphatic_atom(Element::Mg),
+    "Mn" => Atom::from_aliphatic_atom(Element::Mn),
+    "Mo" => Atom::from_aliphatic_atom(Element::Mo),
+    "Mt" => Atom::from_aliphatic_atom(Element::Mt),
+    "N" => Atom::from_aliphatic_atom(Element::N),
+    "Na" => Atom::from_aliphatic_atom(Element::Na),
+    "Nb" => Atom::from_aliphatic_atom(Element::Nb),
+    "Nd" => Atom::from_aliphatic_atom(Element::Nd),
+    "Ne" => Atom::from_aliphatic_atom(Element::Ne),
+    "Nh" => Atom::from_aliphatic_atom(Element::Nh),
+    "Ni" => Atom::from_aliphatic_atom(Element::Ni),
+    "No" => Atom::from_aliphatic_atom(Element::No),
+    "Np" => Atom::from_aliphatic_atom(Element::Np),
+    "O" => Atom::from_aliphatic_atom(Element::O),
+    "Og" => Atom::from_aliphatic_atom(Element::Og),
+    "Os" => Atom::from_aliphatic_atom(Element::Os),
+    "P" => Atom::from_aliphatic_atom(Element::P),
+    "Pa" => Atom::from_aliphatic_atom(Element::Pa),
+    "Pb" => Atom::from_aliphatic_atom(Element::Pb),
+    "Pd" => Atom::from_aliphatic_atom(Element::Pd),
+    "Pm" => Atom::from_aliphatic_atom(Element::Pm),
+    "Po" => Atom::from_aliphatic_atom(Element::Po),
+    "Pr" => Atom::from_aliphatic_atom(Element::Pr),
+    "Pt" => Atom::from_aliphatic_atom(Element::Pt),
+    "Pu" => Atom::from_aliphatic_atom(Element::Pu),
+    "Ra" => Atom::from_aliphatic_atom(Element::Ra),
+    "Rb" => Atom::from_aliphatic_atom(Element::Rb),
+    "Re" => Atom::from_aliphatic_atom(Element::Re),
+    "Rf" => Atom::from_aliphatic_atom(Element::Rf),
+    "Rg" => Atom::from_aliphatic_atom(Element::Rg),
+    "Rh" => Atom::from_aliphatic_atom(Element::Rh),
+    "Rn" => Atom::from_aliphatic_atom(Element::Rn),
+    "Ru" => Atom::from_aliphatic_atom(Element::Ru),
+    "S" => Atom::from_aliphatic_atom(Element::S),
+    "Sb" => Atom::from_aliphatic_atom(Element::Sb),
+    "Sc" => Atom::from_aliphatic_atom(Element::Sc),
+    "Se" => Atom::from_aliphatic_atom(Element::Se),
+    "Sg" => Atom::from_aliphatic_atom(Element::Sg),
+    "Si" => Atom::from_aliphatic_atom(Element::Si),
+    "Sm" => Atom::from_aliphatic_atom(Element::Sm),
+    "Sn" => Atom::from_aliphatic_atom(Element::Sn),
+    "Sr" => Atom::from_aliphatic_atom(Element::Sr),
+    "Ta" => Atom::from_aliphatic_atom(Element::Ta),
+    "Tb" => Atom::from_aliphatic_atom(Element::Tb),
+    "Tc" => Atom::from_aliphatic_atom(Element::Tc),
+    "Te" => Atom::from_aliphatic_atom(Element::Te),
+    "Th" => Atom::from_aliphatic_atom(Element::Th),
+    "Ti" => Atom::from_aliphatic_atom(Element::Ti),
+    "Tl" => Atom::from_aliphatic_atom(Element::Tl),
+    "Tm" => Atom::from_aliphatic_atom(Element::Tm),
+    "Ts" => Atom::from_aliphatic_atom(Element::Ts),
+    "U" => Atom::from_aliphatic_atom(Element::U),
+    "V" => Atom::from_aliphatic_atom(Element::V),
+    "W" => Atom::from_aliphatic_atom(Element::W),
+    "Xe" => Atom::from_aliphatic_atom(Element::Xe),
+    "Y" => Atom::from_aliphatic_atom(Element::Y),
+    "Yb" => Atom::from_aliphatic_atom(Element::Yb),
+    "Zn" => Atom::from_aliphatic_atom(Element::Zn),
+    "Zr" => Atom::from_aliphatic_atom(Element::Zr),
+}
+
+pub AromaticSymbol: Atom = {
+    "b" => Atom::from_aromatic_atom(Element::B),
+    "c" => Atom::from_aromatic_atom(Element::C),
+    "n" => Atom::from_aromatic_atom(Element::N),
+    "o" => Atom::from_aromatic_atom(Element::O),
+    "p" => Atom::from_aromatic_atom(Element::P),
+    "s" => Atom::from_aromatic_atom(Element::S),
+    "se" => Atom::from_aromatic_atom(Element::Se),
+    "as" => Atom::from_aromatic_atom(Element::As),
+}
+
+pub UnknownSymbol: Atom = {
+    "*" => Atom::default(),
+}
+
+pub AliphaticOrganicSymbol: Atom = {
+    "B" => Atom::from_aliphatic_atom(Element::B),
+    "C" => Atom::from_aliphatic_atom(Element::C),
+    "N" => Atom::from_aliphatic_atom(Element::N),
+    "O" => Atom::from_aliphatic_atom(Element::O),
+    "S" => Atom::from_aliphatic_atom(Element::S),
+    "P" => Atom::from_aliphatic_atom(Element::P),
+    "F" => Atom::from_aliphatic_atom(Element::F),
+    "Cl" => Atom::from_aliphatic_atom(Element::Cl),
+    "Br" => Atom::from_aliphatic_atom(Element::Br),
+    "I" => Atom::from_aliphatic_atom(Element::I),
+}
+
+pub AromaticOrganicSymbol: Atom = {
+    "b" => Atom::from_aromatic_atom(Element::B),
+    "c" => Atom::from_aromatic_atom(Element::C),
+    "n" => Atom::from_aromatic_atom(Element::N),
+    "o" => Atom::from_aromatic_atom(Element::O),
+    "s" => Atom::from_aromatic_atom(Element::S),
+    "p" => Atom::from_aromatic_atom(Element::P),
+}
+
+pub Isotope: u32 = {
+    <mass:"digit1"> => mass,
+    <mass:"digit2"> => mass,
+    <mass:"digit3"> => mass,
+}
+
+pub Chirality: Chirality = {
+    "@" => Chirality::Clockwise,
+    "@@" => Chirality::CounterClockwise,
+    "@TH" <arr:"digit1"> => Chirality::Tetrahedral { arr},
+    "@AL" <arr:"digit1"> => Chirality::Allenal { arr},
+    "@SP" <arr:"digit1"> => Chirality::SquarePlanar { arr},
+    "@TB" <arr:"digit1"> => Chirality::TrigonalBipyramidal { arr},
+    "@TB" <arr:"digit2"> => Chirality::TrigonalBipyramidal { arr},
+    "@OH" <arr:"digit1"> => Chirality::Octahedral { arr},
+    "@OH" <arr:"digit2"> => Chirality::Octahedral { arr},
+}
+
+pub HCount: u32 = {
+    "H" => 1u32,
+    "H" <count:"digit1"> => count,
+}
+
+pub Charge: i32 = {
+    "+" => 1i32,
+    "-" => -1i32,
+    "++" => 2i32,
+    "--" => -2i32,
+    "+" <count:"digit1"> => count as i32,
+    "-" <count:"digit1"> => -(count as i32),
+}
+
+pub Class: u32 = {
+    ":" <index:"digit1"> => index,
+    ":" <index:"digit2"> => index,
+    ":" <index:"digit3"> => index,
+}
+
+// Bond nonterminals
+pub RingBond: Bond = {
+    <bond:Bond?> <ring:RingIndex> => { let mut ring_bond = bond.unwrap_or(Bond::from_order(BondOrder::Single));
+                                       ring_bond.ring = Some(ring);
+                                       if state.rings.contains_key(&ring) {
+                                           let _ = state.close_ring(ring);
+                                       } else {
+                                           let order = match ring_bond.symbol { BondSymbol::Bond(o) => o, _ => BondOrder::Single };
+                                           let dir: Option<BondDir> = ring_bond.direction;
+                                           let _ = state.open_ring(ring, Some(SBond { order, dir }));
+                                       }
+                                       ring_bond },
+}
+
+pub Bond: Bond = {
+    "-" => Bond::from_order(BondOrder::Single), 
+    "=" => Bond::from_order(BondOrder::Double),
+    "#" => Bond::from_order(BondOrder::Triple),
+    "$" => Bond::from_order(BondOrder::Quadruple),
+    ":" => Bond::from_order(BondOrder::Aromatic),
+    "/" => Bond::up(),
+    "\\" => Bond::down(),
+}
+
+
+// Helper nonterminals
+pub RingIndex: u32 = {
+    <"digit1">,
+    <"percent">,
+}
+
+/// Lexer configuration and token definitions
 extern {
     type Location = usize;
     type Error = LexicalError;
@@ -148,7 +407,10 @@ extern {
         "(" => Token::OpenParen,
         ")" => Token::CloseParen,
 
-        "number" => Token::Number(<i32>),
+        "digit1" => Token::Digit1(<u32>),
+        "digit2" => Token::Digit2(<u32>),
+        "digit3" => Token::Digit3(<u32>),
+        "percent" => Token::Percent(<u32>),
 
         "@" => Token::Clockwise,
         "@@" => Token::CounterClockwise,
@@ -168,228 +430,10 @@ extern {
         ":" => Token::Colon,
         "/" => Token::Slash,
         "\\" => Token::Backslash,
-        "%" => Token::Percent,
         "." => Token::Dot,
 
         "stop" => Token::Stop,
 
         "error" => Token::Error,
     }
-}
-
-// pub Smiles: Molecule = {
-//     "stop" => Molecule::default(),
-//     <Molecule> "stop"
-// }
-
-// pub Molecule: Molecule = {
-//     "C" => Molecule::default(),
-// }
-
-pub BracketAtom: Atom = {
-    "[" <isotope:Isotope?> <symbol:Symbol> <chirality:Chirality?> <hcount:HCount?> <charge:Charge?> <class:Class?> "]" => {
-        let mut atom = symbol;
-        atom.isotope = isotope;
-        atom.chirality = chirality;
-        atom.hydrogen_count = hcount;
-        atom.charge = charge;
-        atom.class = class;
-        atom
-    },
-}
-
-pub AliphaticOrganicSymbol: Atom = {
-    "B" => Atom::from_aliphatic_atom(Element::B),
-    "C" => Atom::from_aliphatic_atom(Element::C),
-    "N" => Atom::from_aliphatic_atom(Element::N),
-    "O" => Atom::from_aliphatic_atom(Element::O),
-    "S" => Atom::from_aliphatic_atom(Element::S),
-    "P" => Atom::from_aliphatic_atom(Element::P),
-    "F" => Atom::from_aliphatic_atom(Element::F),
-    "Cl" => Atom::from_aliphatic_atom(Element::Cl),
-    "Br" => Atom::from_aliphatic_atom(Element::Br),
-    "I" => Atom::from_aliphatic_atom(Element::I),
-}
-
-pub AromaticOrganicSymbol: Atom = {
-    "b" => Atom::from_aromatic_atom(Element::B),
-    "c" => Atom::from_aromatic_atom(Element::C),
-    "n" => Atom::from_aromatic_atom(Element::N),
-    "o" => Atom::from_aromatic_atom(Element::O),
-    "s" => Atom::from_aromatic_atom(Element::S),
-    "p" => Atom::from_aromatic_atom(Element::P),
-}
-
-pub AliphaticSymbol: Atom = {
-    "Ac" => Atom::from_aliphatic_atom(Element::Ac),
-    "Ag" => Atom::from_aliphatic_atom(Element::Ag),
-    "Al" => Atom::from_aliphatic_atom(Element::Al),
-    "Am" => Atom::from_aliphatic_atom(Element::Am),
-    "Ar" => Atom::from_aliphatic_atom(Element::Ar),
-    "As" => Atom::from_aliphatic_atom(Element::As),
-    "At" => Atom::from_aliphatic_atom(Element::At),
-    "Au" => Atom::from_aliphatic_atom(Element::Au),
-    "B" => Atom::from_aliphatic_atom(Element::B),
-    "Ba" => Atom::from_aliphatic_atom(Element::Ba),
-    "Be" => Atom::from_aliphatic_atom(Element::Be),
-    "Bh" => Atom::from_aliphatic_atom(Element::Bh),
-    "Bi" => Atom::from_aliphatic_atom(Element::Bi),
-    "Bk" => Atom::from_aliphatic_atom(Element::Bk),
-    "Br" => Atom::from_aliphatic_atom(Element::Br),
-    "C" => Atom::from_aliphatic_atom(Element::C),
-    "Ca" => Atom::from_aliphatic_atom(Element::Ca),
-    "Cd" => Atom::from_aliphatic_atom(Element::Cd),
-    "Ce" => Atom::from_aliphatic_atom(Element::Ce),
-    "Cf" => Atom::from_aliphatic_atom(Element::Cf),
-    "Cl" => Atom::from_aliphatic_atom(Element::Cl),
-    "Cm" => Atom::from_aliphatic_atom(Element::Cm),
-    "Cn" => Atom::from_aliphatic_atom(Element::Cn),
-    "Co" => Atom::from_aliphatic_atom(Element::Co),
-    "Cr" => Atom::from_aliphatic_atom(Element::Cr),
-    "Cs" => Atom::from_aliphatic_atom(Element::Cs),
-    "Cu" => Atom::from_aliphatic_atom(Element::Cu),
-    "Db" => Atom::from_aliphatic_atom(Element::Db),
-    "Ds" => Atom::from_aliphatic_atom(Element::Ds),
-    "Dy" => Atom::from_aliphatic_atom(Element::Dy),
-    "Er" => Atom::from_aliphatic_atom(Element::Er),
-    "Es" => Atom::from_aliphatic_atom(Element::Es),
-    "Eu" => Atom::from_aliphatic_atom(Element::Eu),
-    "F" => Atom::from_aliphatic_atom(Element::F),
-    "Fe" => Atom::from_aliphatic_atom(Element::Fe),
-    "Fl" => Atom::from_aliphatic_atom(Element::Fl),
-    "Fm" => Atom::from_aliphatic_atom(Element::Fm),
-    "Fr" => Atom::from_aliphatic_atom(Element::Fr),
-    "Ga" => Atom::from_aliphatic_atom(Element::Ga),
-    "Gd" => Atom::from_aliphatic_atom(Element::Gd),
-    "Ge" => Atom::from_aliphatic_atom(Element::Ge),
-    "H" => Atom::from_aliphatic_atom(Element::H),
-    "He" => Atom::from_aliphatic_atom(Element::He),
-    "Hf" => Atom::from_aliphatic_atom(Element::Hf),
-    "Hg" => Atom::from_aliphatic_atom(Element::Hg),
-    "Ho" => Atom::from_aliphatic_atom(Element::Ho),
-    "Hs" => Atom::from_aliphatic_atom(Element::Hs),
-    "I" => Atom::from_aliphatic_atom(Element::I),
-    "In" => Atom::from_aliphatic_atom(Element::In),
-    "Ir" => Atom::from_aliphatic_atom(Element::Ir),
-    "K" => Atom::from_aliphatic_atom(Element::K),
-    "Kr" => Atom::from_aliphatic_atom(Element::Kr),
-    "La" => Atom::from_aliphatic_atom(Element::La),
-    "Li" => Atom::from_aliphatic_atom(Element::Li),
-    "Lr" => Atom::from_aliphatic_atom(Element::Lr),
-    "Lu" => Atom::from_aliphatic_atom(Element::Lu),
-    "Lv" => Atom::from_aliphatic_atom(Element::Lv),
-    "Mc" => Atom::from_aliphatic_atom(Element::Mc),
-    "Md" => Atom::from_aliphatic_atom(Element::Md),
-    "Mg" => Atom::from_aliphatic_atom(Element::Mg),
-    "Mn" => Atom::from_aliphatic_atom(Element::Mn),
-    "Mo" => Atom::from_aliphatic_atom(Element::Mo),
-    "Mt" => Atom::from_aliphatic_atom(Element::Mt),
-    "N" => Atom::from_aliphatic_atom(Element::N),
-    "Na" => Atom::from_aliphatic_atom(Element::Na),
-    "Nb" => Atom::from_aliphatic_atom(Element::Nb),
-    "Nd" => Atom::from_aliphatic_atom(Element::Nd),
-    "Ne" => Atom::from_aliphatic_atom(Element::Ne),
-    "Nh" => Atom::from_aliphatic_atom(Element::Nh),
-    "Ni" => Atom::from_aliphatic_atom(Element::Ni),
-    "No" => Atom::from_aliphatic_atom(Element::No),
-    "Np" => Atom::from_aliphatic_atom(Element::Np),
-    "O" => Atom::from_aliphatic_atom(Element::O),
-    "Og" => Atom::from_aliphatic_atom(Element::Og),
-    "Os" => Atom::from_aliphatic_atom(Element::Os),
-    "P" => Atom::from_aliphatic_atom(Element::P),
-    "Pa" => Atom::from_aliphatic_atom(Element::Pa),
-    "Pb" => Atom::from_aliphatic_atom(Element::Pb),
-    "Pd" => Atom::from_aliphatic_atom(Element::Pd),
-    "Pm" => Atom::from_aliphatic_atom(Element::Pm),
-    "Po" => Atom::from_aliphatic_atom(Element::Po),
-    "Pr" => Atom::from_aliphatic_atom(Element::Pr),
-    "Pt" => Atom::from_aliphatic_atom(Element::Pt),
-    "Pu" => Atom::from_aliphatic_atom(Element::Pu),
-    "Ra" => Atom::from_aliphatic_atom(Element::Ra),
-    "Rb" => Atom::from_aliphatic_atom(Element::Rb),
-    "Re" => Atom::from_aliphatic_atom(Element::Re),
-    "Rf" => Atom::from_aliphatic_atom(Element::Rf),
-    "Rg" => Atom::from_aliphatic_atom(Element::Rg),
-    "Rh" => Atom::from_aliphatic_atom(Element::Rh),
-    "Rn" => Atom::from_aliphatic_atom(Element::Rn),
-    "Ru" => Atom::from_aliphatic_atom(Element::Ru),
-    "S" => Atom::from_aliphatic_atom(Element::S),
-    "Sb" => Atom::from_aliphatic_atom(Element::Sb),
-    "Sc" => Atom::from_aliphatic_atom(Element::Sc),
-    "Se" => Atom::from_aliphatic_atom(Element::Se),
-    "Sg" => Atom::from_aliphatic_atom(Element::Sg),
-    "Si" => Atom::from_aliphatic_atom(Element::Si),
-    "Sm" => Atom::from_aliphatic_atom(Element::Sm),
-    "Sn" => Atom::from_aliphatic_atom(Element::Sn),
-    "Sr" => Atom::from_aliphatic_atom(Element::Sr),
-    "Ta" => Atom::from_aliphatic_atom(Element::Ta),
-    "Tb" => Atom::from_aliphatic_atom(Element::Tb),
-    "Tc" => Atom::from_aliphatic_atom(Element::Tc),
-    "Te" => Atom::from_aliphatic_atom(Element::Te),
-    "Th" => Atom::from_aliphatic_atom(Element::Th),
-    "Ti" => Atom::from_aliphatic_atom(Element::Ti),
-    "Tl" => Atom::from_aliphatic_atom(Element::Tl),
-    "Tm" => Atom::from_aliphatic_atom(Element::Tm),
-    "Ts" => Atom::from_aliphatic_atom(Element::Ts),
-    "U" => Atom::from_aliphatic_atom(Element::U),
-    "V" => Atom::from_aliphatic_atom(Element::V),
-    "W" => Atom::from_aliphatic_atom(Element::W),
-    "Xe" => Atom::from_aliphatic_atom(Element::Xe),
-    "Y" => Atom::from_aliphatic_atom(Element::Y),
-    "Yb" => Atom::from_aliphatic_atom(Element::Yb),
-    "Zn" => Atom::from_aliphatic_atom(Element::Zn),
-    "Zr" => Atom::from_aliphatic_atom(Element::Zr),
-}
-
-pub AromaticSymbol: Atom = {
-    "b" => Atom::from_aromatic_atom(Element::B),
-    "c" => Atom::from_aromatic_atom(Element::C),
-    "n" => Atom::from_aromatic_atom(Element::N),
-    "o" => Atom::from_aromatic_atom(Element::O),
-    "p" => Atom::from_aromatic_atom(Element::P),
-    "s" => Atom::from_aromatic_atom(Element::S),
-    "se" => Atom::from_aromatic_atom(Element::Se),
-    "as" => Atom::from_aromatic_atom(Element::As),
-}
-
-pub UnknownSymbol: Atom = {
-    "*" => Atom::default(),
-}
-
-pub Symbol: Atom = {
-    AliphaticSymbol,
-    AromaticSymbol,
-    UnknownSymbol,
-}
-
-pub Isotope: u32 = {
-    <mass:"number"> => mass as u32,
-}
-
-pub Chirality: Chirality = {
-    "@" => Chirality::Clockwise,
-    "@@" => Chirality::CounterClockwise,
-    "@TH" <index:"number"> => Chirality::Tetrahedral { index: index as u32 },
-    "@AL" <index:"number"> => Chirality::Allenal { index: index as u32 },
-    "@SP" <index:"number"> => Chirality::SquarePlanar { index: index as u32 },
-    "@TB" <index:"number"> => Chirality::TrigonalBipyramidal { index: index as u32 },
-    "@OH" <index:"number"> => Chirality::Octahedral { index: index as u32 },
-}
-
-pub HCount: u32 = {
-    "H" => 1u32,
-    "H" <count:"number"> => count as u32,
-}
-
-pub Charge: i32 = {
-    "+" => 1i32,
-    "-" => -1i32,
-    "++" => 2i32,
-    "--" => -2i32,
-    "+" <count:"number"> => count,
-    "-" <count:"number"> => -count,
-}
-
-pub Class: u32 = {
-    ":" <index:"number"> => index as u32,
 }
