@@ -7,15 +7,20 @@ use crate::io::smiles::state::{ParseState, Bond as SBond};
 
 grammar(state: &mut ParseState);
 
-// A linear chain: Atom (Bond Atom)*, optionally terminated by Stop
-pub Chain: () = {
-    <Atom> =>? Ok(()),
-    <Chain> <Next> =>? { state.finalize_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+// Tree: branched chain
+pub Tree: () = {
+    <Chain> =>? Ok(()),
 }
 
-pub Next: () = {
-    <Atom> =>? Ok(()),
-    <Bond> <Atom> =>? Ok(()),
+// Chain: Node (Bond? Node)* via right recursion
+pub Chain: () = {
+    <Node> =>? Ok(()),
+    <Chain> <Link> =>? { state.finalize_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+}
+
+pub Link: () = {
+    <Node> =>? Ok(()),
+    <Bond> <Node> =>? Ok(()),
 }
 
 // Atom nonterminals
@@ -24,6 +29,31 @@ pub Atom: Atom = {
                                       let new_idx = state.bump_atom_index();
                                       if let Some(_rb) = state.connect_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { }
                                       state.current_atom = new_idx; Ok(atom) },
+}
+
+// Node: Atom with zero or more sibling branches (right recursion)
+pub Node: () = {
+    <Atom> =>? Ok(()),
+    <Node> <Branch> =>? Ok(()),
+}
+
+// Branch forms: (Chain), (Bond Chain), (. Chain)
+pub Branch: () = {
+    <OpenBranchNone> <Chain> ")" =>? { state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    <OpenBranchWithBond> <Chain> ")" =>? { state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    <OpenBranchDot> <Chain> ")" =>? { state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+}
+
+pub OpenBranchNone: () = {
+    "(" =>? { state.open_branch(None).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+}
+
+pub OpenBranchWithBond: () = {
+    "(" <order:BondOrder> =>? { state.open_branch(Some(SBond { order, dir: None })).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+}
+
+pub OpenBranchDot: () = {
+    "(" "." =>? { state.open_branch(None).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.separate_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
 }
 
 pub AliphaticOrganicSymbol: Atom = {

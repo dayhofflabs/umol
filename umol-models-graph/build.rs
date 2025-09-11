@@ -11,6 +11,8 @@ fn main() {
 
 fn generate_smiles_parser() {
     let in_dir = "src/io/smiles/parser";
+    // Rebuild if any file in the parser directory changes (including new files)
+    println!("cargo:rerun-if-changed={}", in_dir);
     for entry in fs::read_dir(in_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
