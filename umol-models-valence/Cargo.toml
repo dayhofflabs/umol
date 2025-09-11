@@ -1,6 +1,10 @@
 [package]
 name = "umol-models-valence"
 version = "0.1.0"
+authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rappoport/umol"
+keywords = ["chemistry", "cheminformatics", "molecular parsing"]
 edition = "2021"
 
 [dependencies]

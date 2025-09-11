@@ -1,7 +1,11 @@
 [package]
 name = "umol-models"
 version = "0.1.0"
+authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rappoport/umol"
+keywords = ["chemistry", "cheminformatics", "molecular parsing"]
 
 [dependencies]
 umol = { path = "../umol" }
