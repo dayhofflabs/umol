@@ -1,34 +1,29 @@
 use umol_data::Element;
 
 use lalrpop_util::ParseError;
-use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality};
+use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
 use crate::io::smiles::state::{ParseState, Bond as SBond};
 
 grammar(state: &mut ParseState);
 
-// A linear chain parser with side effects; IR is built inside ParseState
+// A linear chain: Atom (Bond Atom)*, optionally terminated by Stop
 pub Chain: () = {
-    <AtomBond> <Tail> =>? { state.finalize_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    <Atom> =>? Ok(()),
+    <Chain> <Next> =>? { state.finalize_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
 }
 
-pub Tail: () = {
-    <Link> <Tail> =>? Ok(()),
-    =>? Ok(()),
-}
-
-pub Link: () = {
-    <AtomBond> =>? Ok(()),
-    <Bond> <AtomBond> =>? Ok(()),
+pub Next: () = {
+    <Atom> =>? Ok(()),
+    <Bond> <Atom> =>? Ok(()),
 }
 
 // Atom nonterminals
-pub AtomBond: () = {
+pub Atom: Atom = {
     <a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom as u32);
                                       let new_idx = state.bump_atom_index();
-                                      if let Some(rb) = state.connect_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { state.push_bond_from_resolved(rb); }
-                                      state.push_atom(atom);
-                                      state.current_atom = new_idx; Ok(()) },
+                                      if let Some(_rb) = state.connect_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { }
+                                      state.current_atom = new_idx; Ok(atom) },
 }
 
 pub AliphaticOrganicSymbol: Atom = {

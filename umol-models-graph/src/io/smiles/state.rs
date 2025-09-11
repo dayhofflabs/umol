@@ -7,7 +7,7 @@ use slog::Logger;
 use umol::error::DataError;
 use umol::Result;
 
-use crate::io::ir::{BondDir, BondOrder, Chirality};
+use crate::io::ir::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, Chirality, Molecule as IRMolecule, SourceFormat};
 
 /// Default depth of branching in SMILES.
 /// Can be exceeded (incurs extra memory allocation) if needed.
@@ -41,6 +41,11 @@ pub struct ParseState {
 
     // Deferred parse error (chain mode)
     pub error: Option<String>,
+
+    // IR building (parser mode)
+    pub cur_atoms: Vec<IRAtom>,
+    pub cur_bonds: Vec<IRBond>,
+    pub molecules: Vec<IRMolecule>,
 }
 
 impl ParseState {
@@ -271,6 +276,33 @@ impl ParseState {
             return Err(DataError::InvalidBondSpec("Trailing bond symbol".to_string()).into());
         }
         Ok(())
+    }
+
+    pub fn push_atom(&mut self, atom: IRAtom) {
+        self.cur_atoms.push(atom);
+    }
+
+    pub fn push_bond_from_resolved(&mut self, rb: ResolvedBond) {
+        let mut bond = IRBond::from_order(rb.bond.order);
+        bond.start_atom = Some(rb.start_atom as u32);
+        bond.end_atom = Some(rb.end_atom as u32);
+        bond.direction = rb.bond.dir;
+        self.cur_bonds.push(bond);
+    }
+
+    pub fn finalize_current_molecule(&mut self) {
+        if self.cur_atoms.is_empty() {
+            return;
+        }
+        let mut mol = IRMolecule::default();
+        mol.source_format = SourceFormat::SMILES;
+        mol.atoms = std::mem::take(&mut self.cur_atoms);
+        mol.bonds = std::mem::take(&mut self.cur_bonds);
+        self.molecules.push(mol);
+    }
+
+    pub fn take_molecules(&mut self) -> Vec<IRMolecule> {
+        std::mem::take(&mut self.molecules)
     }
 }
 
