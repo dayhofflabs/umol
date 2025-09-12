@@ -725,3 +725,23 @@ fn test_octahedral_basic(#[case] input: &str, #[case] valid: bool) {
     let ch = mols[0].atoms[0].chirality;
     if valid { assert!(matches!(ch, Some(Chirality::Octahedral { .. }))); } else { assert_eq!(ch, Some(Chirality::Unknown)); }
 }
+
+// Allene (@AL) axial stereochemistry validation (structural viability only)
+#[rstest]
+// Valid: central allene carbon with two cumulated doubles; each terminal has a substituent
+#[case("[C@AL1](=C([H]))=C([H])F", true)]
+// Invalid: center does not have two double bonds
+#[case("[C@AL1](=C)C([H])F", false)]
+// Invalid: one terminal has no substituent beyond center
+#[case("[C@AL1](=C)=C", false)]
+fn test_allene_basic(#[case] input: &str, #[case] valid: bool) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let ch = mols[0].atoms[0].chirality;
+    if valid { assert!(matches!(ch, Some(Chirality::Allenal { .. }))); } else { assert_eq!(ch, Some(Chirality::Unknown)); }
+}

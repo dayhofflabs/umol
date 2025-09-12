@@ -467,10 +467,12 @@ impl ParseState {
         mol.bonds = std::mem::take(&mut self.buf_bonds);
         // Late-pass stereo resolution (E/Z from slash markers)
         self.resolve_double_bond_stereo(&mut mol);
-        // Late-pass atom-centered tetrahedral (@/@@)
+        // Late-pass atom-centered tetrahedral (@/@@/@TH)
         self.resolve_tetrahedral_stereo(&mut mol);
         // Late-pass non-tetrahedral atom-centered (@SP/@TB/@OH)
         self.resolve_nontetrahedral_stereo(&mut mol);
+        // Late-pass axial allene (@AL)
+        self.resolve_allene_stereo(&mut mol);
         if let Some(log) = &self.log {
             slog::debug!(log, "finish_molecule";
                 "atoms" => mol.atoms.len() as i64,
@@ -731,6 +733,61 @@ impl ParseState {
                 "oh_candidates" => cand_oh as i64, "oh_resolved" => ok_oh as i64, "oh_downgraded" => bad_oh as i64,
             );
         }
+    }
+
+    fn resolve_allene_stereo(&mut self, mol: &mut IRMolecule) {
+        if mol.atoms.is_empty() { return; }
+        // Build neighbor lists (atom -> [(neighbor_atom, bond_index)]) and degree counts
+        let n = mol.atoms.len();
+        let mut nbrs: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
+        let mut deg: Vec<usize> = vec![0; n];
+        let hcount: Vec<usize> = mol.atoms.iter().map(|a| a.hydrogen_count.unwrap_or(0) as usize).collect();
+        for (bi, b) in mol.bonds.iter().enumerate() {
+            let (Some(a), Some(c)) = (b.start_atom, b.end_atom) else { continue; };
+            let (a, c) = (a as usize, c as usize);
+            if a < n && c < n {
+                nbrs[a].push((c, bi));
+                nbrs[c].push((a, bi));
+                deg[a] += 1; deg[c] += 1;
+            }
+        }
+        let mut cand = 0usize; let mut ok = 0usize; let mut bad = 0usize;
+        for (idx, atom) in mol.atoms.iter_mut().enumerate() {
+            let Some(Chirality::Allenal { .. }) = atom.chirality else { continue; };
+            cand += 1;
+            // Identify axis: exactly two incident double bonds at center
+            let mut axis_terms: SmallVec<[(usize, usize); 2]> = SmallVec::new();
+            for &(nei, bi) in &nbrs[idx] {
+                if matches!(Self::bond_order(&mol.bonds[bi]), Some(BondOrder::Double)) {
+                    axis_terms.push((nei, bi));
+                }
+            }
+            if axis_terms.len() != 2 {
+                if let Some(log) = &self.log { slog::debug!(log, "stereo_al_invalid_center"; "atom" => idx as i64, "double_bonds" => axis_terms.len() as i64, "deg" => deg[idx] as i64); }
+                atom.chirality = Some(Chirality::Unknown);
+                bad += 1;
+                continue;
+            }
+            // Each terminal must have at least one substituent beyond the center (explicit bond or bracket H)
+            let mut terminals_ok = true;
+            for &(t, _b) in &axis_terms {
+                let implicit_h = hcount[t];
+                let explicit_excl_center = deg[t].saturating_sub(1);
+                if explicit_excl_center == 0 && implicit_h == 0 {
+                    if let Some(log) = &self.log { slog::debug!(log, "stereo_al_invalid_terminal"; "center" => idx as i64, "terminal" => t as i64, "explicit_excl_center" => explicit_excl_center as i64, "hydrogen_count" => implicit_h as i64); }
+                    terminals_ok = false;
+                    break;
+                }
+            }
+            if terminals_ok {
+                if let Some(log) = &self.log { slog::debug!(log, "stereo_al_ok"; "atom" => idx as i64); }
+                ok += 1;
+            } else {
+                atom.chirality = Some(Chirality::Unknown);
+                bad += 1;
+            }
+        }
+        if let Some(log) = &self.log { slog::debug!(log, "stereo_al_end"; "candidates" => cand as i64, "resolved" => ok as i64, "downgraded" => bad as i64); }
     }
 }
 
