@@ -5,7 +5,8 @@ use umol::logging::setup_logger;
 use umol::with_logger;
 use umol_data::Element;
 
-use crate::io::ir::{Atom, BondOrder, Chirality};
+use crate::io::ctab::bond::BondStereo;
+use crate::io::ir::{Atom, BondOrder, BondSymbol, Chirality};
 use crate::io::smiles::lexer::Lexer;
 use crate::io::smiles::parser::{branched, unbranched};
 use crate::io::smiles::state::{BondInfo, ParseState};
@@ -103,6 +104,34 @@ fn test_unbranched_bond_dirs(
     let got: Vec<Option<crate::io::ir::BondDir>> =
         mols[0].bonds.iter().map(|b| b.direction).collect();
     assert_eq!(got, dirs);
+}
+
+#[rstest]
+#[case("F/C=C/F", Some(BondStereo::Trans))]
+#[case("F/C=C\\F", Some(BondStereo::Cis))]
+#[case("F\\C=C\\F", Some(BondStereo::Trans))]
+#[case("F\\C=C/F", Some(BondStereo::Cis))]
+#[case("FC=C/F", Some(BondStereo::Either))]
+#[case("F/C=CF", Some(BondStereo::Either))]
+#[case("FC=CF", None)]
+fn test_unbranched_ez(
+    mut parse_state: ParseState,
+    #[case] input: &str,
+    #[case] expected: Option<BondStereo>,
+) {
+    let lexer = Lexer::new(input);
+    let parser = unbranched::ChainParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    parse_state.finish_molecule();
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let dbl = mols[0]
+        .bonds
+        .iter()
+        .find(|b| matches!(b.symbol, BondSymbol::Bond(BondOrder::Double)))
+        .and_then(|b| b.stereo);
+    assert_eq!(dbl, expected);
 }
 
 #[rstest]
@@ -251,6 +280,50 @@ fn test_branched_components(#[case] input: &str, #[case] expected: Vec<(usize, u
 }
 
 #[rstest]
+#[case("[C@](F)(Cl)Br", Chirality::Clockwise)]
+#[case("[C@@](F)(Cl)Br", Chirality::CounterClockwise)]
+#[case("[C@H](F)Cl", Chirality::Clockwise)]
+#[case("[C@@H](F)Cl", Chirality::CounterClockwise)]
+fn test_branched_tetra_chirality(#[case] input: &str, #[case] expected: Chirality) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    // The first atom is the chiral carbon in these cases
+    assert_eq!(mols[0].atoms[0].chirality, Some(expected));
+}
+
+#[rstest]
+#[case("[C@]([H])(F)Cl", Chirality::Clockwise)]
+#[case("[C@@]([H])(F)Cl", Chirality::CounterClockwise)]
+fn test_branched_tetra_chirality_explicit_h(#[case] input: &str, #[case] expected: Chirality) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].atoms[0].chirality, Some(expected));
+}
+
+#[test]
+fn test_branched_tetra_chirality_insufficient_neighbors() {
+    let mut parse_state = ParseState::default();
+    let input = "[C@](F)Cl"; // only two explicit neighbors and no bracket H
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded syntactically", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].atoms[0].chirality, Some(Chirality::Unknown));
+}
+
+#[rstest]
 #[case("=C", "leading bond")]
 #[case("C=", "trailing bond")]
 #[case("C==C", "consecutive bonds")]
@@ -384,4 +457,151 @@ fn test_aromatic_organic_symbol(#[case] input: &str, #[case] expected: Atom) {
     let parser = branched::AromaticOrganicSymbolParser::new();
     let result = parser.parse(&mut state, lexer).unwrap();
     assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case("[C:1]C", 2, 1)]
+#[case("C[C:12]", 2, 1)]
+fn test_unbranched_bracket_class(
+    mut parse_state: ParseState,
+    #[case] input: &str,
+    #[case] atoms: usize,
+    #[case] bonds: usize,
+) {
+    let lexer = Lexer::new(input);
+    let parser = unbranched::ChainParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    parse_state.finish_molecule();
+    let mols = parse_state.drain_molecules();
+    let total_atoms: usize = mols.iter().map(|m| m.atoms.len()).sum();
+    let total_bonds: usize = mols.iter().map(|m| m.bonds.len()).sum();
+    assert_eq!(total_atoms, atoms);
+    assert_eq!(total_bonds, bonds);
+}
+
+#[rstest]
+#[case("F/C=C/F", Some(BondStereo::Trans))]
+#[case("F/C=C\\F", Some(BondStereo::Cis))]
+#[case("F\\C=C\\F", Some(BondStereo::Trans))]
+#[case("F\\C=C/F", Some(BondStereo::Cis))]
+fn test_branched_ez(
+    #[case] input: &str,
+    #[case] expected: Option<BondStereo>,
+) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let dbl = mols[0]
+        .bonds
+        .iter()
+        .find(|b| matches!(b.symbol, BondSymbol::Bond(BondOrder::Double)))
+        .and_then(|b| b.stereo);
+    assert_eq!(dbl, expected);
+}
+
+#[rstest]
+#[case("C%0C", "invalid percent ring index")] // lexer should reject
+#[case("C%09C", "invalid percent ring index leading zero")] // lexer should reject
+fn test_unbranched_ring_invalid(
+    mut parse_state: ParseState,
+    #[case] input: &str,
+    #[case] _desc: &str,
+) {
+    let lexer = Lexer::new(input);
+    let parser = unbranched::ChainParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_err());
+}
+
+#[rstest]
+#[case("C1C(C)CC1", 5, 5)]
+#[case("C1CC(C)C1", 5, 5)]
+fn test_branched_rings_valid(#[case] input: &str, #[case] atoms: usize, #[case] bonds: usize) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].atoms.len(), atoms);
+    assert_eq!(mols[0].bonds.len(), bonds);
+}
+
+#[rstest]
+#[case("[13C]1CC1", 3, 3)]
+#[case("C1[C-]C1", 3, 3)]
+fn test_pairwise_bracket_with_rings_one_molecule(
+    #[case] input: &str,
+    #[case] atoms: usize,
+    #[case] bonds: usize,
+) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].atoms.len(), atoms);
+    assert_eq!(mols[0].bonds.len(), bonds);
+}
+
+#[test]
+fn test_pairwise_components_bracket() {
+    let mut parse_state = ParseState::default();
+    let input = "[NH4+].C[O-]";
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 2);
+    assert_eq!(mols[0].atoms.len(), 1);
+    assert_eq!(mols[0].bonds.len(), 0);
+    assert_eq!(mols[1].atoms.len(), 2);
+    assert_eq!(mols[1].bonds.len(), 1);
+}
+
+#[rstest]
+#[case("[F-]/C=C\\[NH3+]", Some(BondStereo::Cis))]
+#[case("F/C=C1CC\\1", Some(BondStereo::Either))]
+#[case("F\\C=C1CC/1", Some(BondStereo::Either))]
+fn test_pairwise_bracket_and_ez_and_rings(
+    #[case] input: &str,
+    #[case] expected: Option<BondStereo>,
+) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let dbl = mols[0]
+        .bonds
+        .iter()
+        .find(|b| matches!(b.symbol, BondSymbol::Bond(BondOrder::Double)))
+        .and_then(|b| b.stereo);
+    assert_eq!(dbl, expected);
+}
+
+#[test]
+fn test_branched_multi_tetra_centers() {
+    let mut parse_state = ParseState::default();
+    let input = "[C@H](F)C[C@@H](Cl)Br";
+    let lexer = Lexer::new(input);
+    let parser = branched::TreeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    // Expect both marked
+    assert_eq!(mols[0].atoms[0].chirality, Some(Chirality::Clockwise));
+    assert_eq!(mols[0].atoms[3].chirality, Some(Chirality::CounterClockwise));
 }

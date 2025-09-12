@@ -7,7 +7,8 @@ use slog::Logger;
 use umol::error::DataError;
 use umol::Result;
 
-use crate::io::ir::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, Chirality, Molecule as IRMolecule, SourceFormat};
+use crate::io::ctab::bond::BondStereo;
+use crate::io::ir::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, BondSymbol, Chirality, Molecule as IRMolecule, SourceFormat};
 
 /// Default depth of branching in SMILES.
 /// Can be exceeded (incurs extra memory allocation) if needed.
@@ -407,6 +408,10 @@ impl ParseState {
         mol.source_format = SourceFormat::SMILES;
         mol.atoms = std::mem::take(&mut self.buf_atoms);
         mol.bonds = std::mem::take(&mut self.buf_bonds);
+        // Late-pass stereo resolution (E/Z from slash markers)
+        self.resolve_double_bond_stereo(&mut mol);
+        // Late-pass atom-centered tetrahedral (@/@@)
+        self.resolve_tetrahedral_stereo(&mut mol);
         if let Some(log) = &self.log {
             slog::debug!(log, "finish_molecule";
                 "atoms" => mol.atoms.len() as i64,
@@ -420,6 +425,174 @@ impl ParseState {
         let out = std::mem::take(&mut self.molecules);
         if let Some(log) = &self.log { slog::debug!(log, "drain_molecules"; "count" => out.len() as i64); }
         out
+    }
+}
+
+impl ParseState {
+    fn bond_order(b: &IRBond) -> Option<BondOrder> {
+        match b.symbol {
+            BondSymbol::Bond(o) => Some(o),
+            _ => None,
+        }
+    }
+
+    fn norm_dir_toward(atom: usize, b: &IRBond) -> Option<BondDir> {
+        let dir = b.direction?;
+        let sa = b.start_atom? as usize;
+        let ea = b.end_atom? as usize;
+        if sa == atom {
+            match dir {
+                BondDir::Up => Some(BondDir::Up),
+                BondDir::Down => Some(BondDir::Down),
+                BondDir::Either | BondDir::Unknown => None,
+            }
+        } else if ea == atom {
+            match dir {
+                BondDir::Up => Some(BondDir::Down),
+                BondDir::Down => Some(BondDir::Up),
+                BondDir::Either | BondDir::Unknown => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    fn resolve_double_bond_stereo(&mut self, mol: &mut IRMolecule) {
+        if mol.bonds.is_empty() { return; }
+        // Build adjacency: atom -> incident bond indices
+        let mut adj: Vec<Vec<usize>> = vec![Vec::new(); mol.atoms.len()];
+        for (bi, b) in mol.bonds.iter().enumerate() {
+            let (Some(sa), Some(ea)) = (b.start_atom, b.end_atom) else { continue; };
+            let sa = sa as usize; let ea = ea as usize;
+            if sa < adj.len() { adj[sa].push(bi); }
+            if ea < adj.len() { adj[ea].push(bi); }
+        }
+
+        for i in 0..mol.bonds.len() {
+            // Work only on simple double bonds
+            let Some(BondOrder::Double) = Self::bond_order(&mol.bonds[i]) else { continue; };
+            let (Some(a), Some(b)) = (mol.bonds[i].start_atom, mol.bonds[i].end_atom) else { continue; };
+            let a = a as usize; let b = b as usize;
+
+            // Collect one directed single bond with slash on each side
+            let mut side_a: Vec<BondDir> = Vec::new();
+            let mut side_b: Vec<BondDir> = Vec::new();
+
+            // Scan neighbors of a
+            for &bj in &adj[a] {
+                if bj == i { continue; }
+                let bj_ref = &mol.bonds[bj];
+                match Self::bond_order(bj_ref) {
+                    Some(BondOrder::Single) => {
+                        if let Some(d) = Self::norm_dir_toward(a, bj_ref) {
+                            side_a.push(d);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Scan neighbors of b
+            for &bj in &adj[b] {
+                if bj == i { continue; }
+                let bj_ref = &mol.bonds[bj];
+                match Self::bond_order(bj_ref) {
+                    Some(BondOrder::Single) => {
+                        if let Some(d) = Self::norm_dir_toward(b, bj_ref) {
+                            side_b.push(d);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Determine stereo
+            let stereo = match (side_a.len(), side_b.len()) {
+                (1, 1) => {
+                    let da = side_a[0];
+                    let db = side_b[0];
+                    if da == db { Some(BondStereo::Cis) } else { Some(BondStereo::Trans) }
+                }
+                (0, 0) => None,
+                _ => Some(BondStereo::Either),
+            };
+
+            if let Some(s) = stereo {
+                if let Some(log) = &self.log {
+                    slog::debug!(log, "resolve_ez";
+                        "bond" => i as i64,
+                        "a" => a as i64,
+                        "b" => b as i64,
+                        "stereo" => format!("{:?}", s),
+                        "side_a_marks" => side_a.len() as i64,
+                        "side_b_marks" => side_b.len() as i64,
+                    );
+                }
+                mol.bonds[i].stereo = Some(s);
+            }
+        }
+    }
+
+    fn resolve_tetrahedral_stereo(&mut self, mol: &mut IRMolecule) {
+        if mol.atoms.is_empty() { return; }
+        // Build adjacency once for potential later use (parity computation if needed)
+        let candidates = mol
+            .atoms
+            .iter()
+            .filter(|a| matches!(a.chirality, Some(Chirality::Clockwise) | Some(Chirality::CounterClockwise)))
+            .count();
+        if let Some(log) = &self.log {
+            slog::debug!(log, "stereo_tetra_begin"; "candidates" => candidates as i64);
+        }
+
+        let mut deg: Vec<usize> = vec![0; mol.atoms.len()];
+        for b in &mol.bonds {
+            if let (Some(a), Some(c)) = (b.start_atom, b.end_atom) {
+                let (a, c) = (a as usize, c as usize);
+                if a < deg.len() { deg[a] += 1; }
+                if c < deg.len() { deg[c] += 1; }
+            }
+        }
+        let mut ok_count: usize = 0;
+        let mut downgraded_count: usize = 0;
+        for (idx, atom) in mol.atoms.iter_mut().enumerate() {
+            match atom.chirality {
+                Some(Chirality::Clockwise) | Some(Chirality::CounterClockwise) => {
+                    // Minimal validation: require at least three explicit neighbors
+                    // or two neighbors plus one implicit H specified in bracket.
+                    let explicit = deg[idx];
+                    let has_h = atom.hydrogen_count.unwrap_or(0) > 0;
+                    if explicit < 3 && !(explicit == 2 && has_h) {
+                        // Insufficient geometry information; leave as Unknown
+                        if let Some(log) = &self.log {
+                            slog::debug!(log, "stereo_tetra_invalid";
+                                "atom" => idx as i64,
+                                "explicit_neighbors" => explicit as i64,
+                                "hydrogen_count" => atom.hydrogen_count.unwrap_or(0) as i64,
+                            );
+                        }
+                        atom.chirality = Some(Chirality::Unknown);
+                        downgraded_count += 1;
+                    } else if let Some(log) = &self.log {
+                        slog::debug!(log, "stereo_tetra_ok";
+                            "atom" => idx as i64,
+                            "chirality" => format!("{:?}", atom.chirality),
+                            "explicit_neighbors" => explicit as i64,
+                            "hydrogen_count" => atom.hydrogen_count.unwrap_or(0) as i64,
+                        );
+                        ok_count += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(log) = &self.log {
+            slog::debug!(log, "stereo_tetra_end";
+                "candidates" => candidates as i64,
+                "resolved" => ok_count as i64,
+                "downgraded" => downgraded_count as i64,
+            );
+        }
     }
 }
 
