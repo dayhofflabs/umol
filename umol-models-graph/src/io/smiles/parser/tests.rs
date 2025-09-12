@@ -745,3 +745,33 @@ fn test_allene_basic(#[case] input: &str, #[case] valid: bool) {
     let ch = mols[0].atoms[0].chirality;
     if valid { assert!(matches!(ch, Some(Chirality::Allenal { .. }))); } else { assert_eq!(ch, Some(Chirality::Unknown)); }
 }
+
+#[rstest]
+// Alias: @ -> @AL1 when two incident double bonds present
+#[case("[C@](=C([H]))=C([H])F", Some(1u32))]
+// Alias: @@ -> @AL2 when two incident double bonds present
+#[case("[C@@](=C([H]))=C([H])F", Some(2u32))]
+// No alias: @ w/o allene axis (should stay tetra or downgrade per tetra rules)
+#[case("[C@H](F)(Cl)Br", None)]
+fn test_allene_alias_from_at(#[case] input: &str, #[case] expect_arr: Option<u32>) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let ch = &mols[0].atoms[0].chirality;
+    match expect_arr {
+        Some(arr) => {
+            match ch {
+                Some(Chirality::Allenal { arr: a }) => assert_eq!(*a, arr),
+                _ => panic!("expected Allenal alias"),
+            }
+        }
+        None => {
+            // should not be Allenal
+            assert!(!matches!(ch, Some(Chirality::Allenal { .. })));
+        }
+    }
+}

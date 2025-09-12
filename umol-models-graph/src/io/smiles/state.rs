@@ -467,6 +467,8 @@ impl ParseState {
         mol.bonds = std::mem::take(&mut self.buf_bonds);
         // Late-pass stereo resolution (E/Z from slash markers)
         self.resolve_double_bond_stereo(&mut mol);
+        // Alias @/@@ to @AL1/@AL2 when an allene axis is present
+        self.alias_allene_from_at(&mut mol);
         // Late-pass atom-centered tetrahedral (@/@@/@TH)
         self.resolve_tetrahedral_stereo(&mut mol);
         // Late-pass non-tetrahedral atom-centered (@SP/@TB/@OH)
@@ -732,6 +734,36 @@ impl ParseState {
                 "tb_candidates" => cand_tb as i64, "tb_resolved" => ok_tb as i64, "tb_downgraded" => bad_tb as i64,
                 "oh_candidates" => cand_oh as i64, "oh_resolved" => ok_oh as i64, "oh_downgraded" => bad_oh as i64,
             );
+        }
+    }
+
+    fn alias_allene_from_at(&mut self, mol: &mut IRMolecule) {
+        if mol.atoms.is_empty() { return; }
+        // Count incident double bonds per atom
+        let n = mol.atoms.len();
+        let mut dbl_incident: Vec<usize> = vec![0; n];
+        for b in &mol.bonds {
+            if let (Some(a), Some(c)) = (b.start_atom, b.end_atom) {
+                if matches!(Self::bond_order(b), Some(BondOrder::Double)) {
+                    let (a, c) = (a as usize, c as usize);
+                    if a < n { dbl_incident[a] += 1; }
+                    if c < n { dbl_incident[c] += 1; }
+                }
+            }
+        }
+        // Rewrite @/@@ to @AL1/@AL2 if the center has exactly two incident double bonds
+        for i in 0..n {
+            match mol.atoms[i].chirality {
+                Some(Chirality::Clockwise) if dbl_incident[i] == 2 => {
+                    mol.atoms[i].chirality = Some(Chirality::Allenal { arr: 1 });
+                    if let Some(log) = &self.log { slog::debug!(log, "stereo_al_alias"; "atom" => i as i64, "from" => "@", "to" => "@AL1"); }
+                }
+                Some(Chirality::CounterClockwise) if dbl_incident[i] == 2 => {
+                    mol.atoms[i].chirality = Some(Chirality::Allenal { arr: 2 });
+                    if let Some(log) = &self.log { slog::debug!(log, "stereo_al_alias"; "atom" => i as i64, "from" => "@@", "to" => "@AL2"); }
+                }
+                _ => {}
+            }
         }
     }
 
