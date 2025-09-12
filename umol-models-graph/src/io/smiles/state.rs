@@ -59,7 +59,6 @@ pub struct ParseState {
 
 impl ParseState {
     pub fn open_ring(&mut self, ring_index: u32, bond: Option<BondSpec>) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "open_ring"; "ring" => ring_index); }
         if self.rings.contains_key(&ring_index) {
             return Err(DataError::InvalidRing(format!(
                 "Ring index {} already exists",
@@ -67,43 +66,97 @@ impl ParseState {
             ))
             .into());
         }
+        let start_atom = self.last_atom_idx;
         self.rings.insert(
             ring_index,
             RingState {
-                start_atom: self.last_atom_idx,
+                start_atom,
                 pending_bond: bond,
             },
         );
+        if let Some(log) = &self.log {
+            let (ord, dir) = match &self.rings.get(&ring_index).unwrap().pending_bond {
+                Some(b) => (format!("{:?}", b.order), format!("{:?}", b.dir)),
+                None => ("<implicit>".to_string(), "None".to_string()),
+            };
+            slog::debug!(log, "ring_opened";
+                "ring" => ring_index as i64,
+                "start_atom" => start_atom as i64,
+                "pending_order" => ord,
+                "pending_dir" => dir,
+            );
+        }
         Ok(())
     }
 
     pub fn close_ring(&mut self, ring_index: u32) -> Result<(usize, Option<BondSpec>)> {
-        if let Some(log) = &self.log { slog::debug!(log, "close_ring"; "ring" => ring_index); }
-        self.rings
+        let removed = self.rings
             .remove(&ring_index)
-            .map(|state| (state.start_atom, state.pending_bond))
-            .ok_or(
+            .map(|state| (state.start_atom, state.pending_bond));
+        match removed {
+            Some((start_atom, pending)) => {
+                if let Some(log) = &self.log {
+                    let (ord, dir) = match &pending {
+                        Some(b) => (format!("{:?}", b.order), format!("{:?}", b.dir)),
+                        None => ("<implicit>".to_string(), "None".to_string()),
+                    };
+                    slog::debug!(log, "ring_closed";
+                        "ring" => ring_index as i64,
+                        "start_atom" => start_atom as i64,
+                        "end_atom" => self.last_atom_idx as i64,
+                        "pending_order" => ord,
+                        "pending_dir" => dir,
+                    );
+                }
+                Ok((start_atom, pending))
+            }
+            None => Err(
                 DataError::InvalidRing(format!("Ring index {} does not exist", ring_index)).into(),
-            )
+            ),
+        }
     }
 
     pub fn open_branch(&mut self, bond: Option<BondSpec>) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "open_branch"); }
-        self.branches.push(BranchState {
-            parent_atom: self.last_atom_idx,
-            return_bond: self.staged_bond.clone(),
-        });
-        self.staged_bond = bond;
+        let parent_atom = self.last_atom_idx;
+        let return_bond = self.staged_bond.clone();
+        self.branches.push(BranchState { parent_atom, return_bond });
+        self.staged_bond = bond.clone();
+        if let Some(log) = &self.log {
+            let rb = match &self.branches.last().unwrap().return_bond {
+                Some(b) => format!("{:?}/{:?}", b.order, b.dir),
+                None => "None".to_string(),
+            };
+            let nb = match &bond {
+                Some(b) => format!("{:?}/{:?}", b.order, b.dir),
+                None => "None".to_string(),
+            };
+            slog::debug!(log, "branch_opened";
+                "parent_atom" => parent_atom as i64,
+                "stack_depth" => self.branches.len() as i64,
+                "return_bond" => rb,
+                "branch_bond" => nb,
+            );
+        }
         Ok(())
     }
 
     pub fn close_branch(&mut self) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "close_branch"); }
         let state = self.branches.pop().ok_or_else(|| {
             DataError::InvalidFeature("Unmatched ')' with no open branch".to_string())
         })?;
         self.last_atom_idx = state.parent_atom;
         self.staged_bond = state.return_bond;
+        if let Some(log) = &self.log {
+            let sb = match &self.staged_bond {
+                Some(b) => format!("{:?}/{:?}", b.order, b.dir),
+                None => "None".to_string(),
+            };
+            slog::debug!(log, "branch_closed";
+                "restored_parent_atom" => self.last_atom_idx as i64,
+                "stack_depth" => self.branches.len() as i64,
+                "restored_bond" => sb,
+            );
+        }
         Ok(())
     }
 
@@ -113,7 +166,13 @@ impl ParseState {
         chirality: Option<Chirality>,
         expected_neighbors: u8,
     ) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "open_stereocenter"; "atom" => atom as i64); }
+        if let Some(log) = &self.log {
+            slog::debug!(log, "stereo_open";
+                "atom" => atom as i64,
+                "chirality" => format!("{:?}", chirality),
+                "expected_neighbors" => expected_neighbors as i64,
+            );
+        }
         if self.stereocenters.contains_key(&atom) {
             return Err(DataError::InvalidFeature(format!(
                 "Stereocenter at atom {} already open",
@@ -133,7 +192,7 @@ impl ParseState {
     }
 
     pub fn stereo_add(&mut self, atom: usize, neighbor: usize) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "add_substituent"; "atom" => atom as i64, "neighbor" => neighbor as i64); }
+        if let Some(log) = &self.log { slog::debug!(log, "stereo_add_neighbor"; "atom" => atom as i64, "neighbor" => neighbor as i64); }
         let sc = self.stereocenters.get_mut(&atom).ok_or_else(|| {
             DataError::InvalidFeature(format!(
                 "No open stereocenter at atom {} to add substituent",
@@ -159,7 +218,7 @@ impl ParseState {
     }
 
     pub fn stereo_close(&mut self, atom: usize) -> Result<StereoState> {
-        if let Some(log) = &self.log { slog::debug!(log, "close_stereocenter"; "atom" => atom as i64); }
+        if let Some(log) = &self.log { slog::debug!(log, "stereo_close"; "atom" => atom as i64); }
         let sc = self.stereocenters.remove(&atom).ok_or_else(|| {
             DataError::InvalidFeature(format!(
                 "Stereocenter at atom {} was not open",
@@ -179,21 +238,20 @@ impl ParseState {
     }
 
     pub fn split_component(&mut self) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "split_component"); }
+        if let Some(log) = &self.log { slog::debug!(log, "component_split_by_dot"; "atom_at_split" => self.last_atom_idx as i64); }
         self.staged_bond = None;
         Ok(())
     }
 
     /// Begin parsing a nested component (used for '.' inside branches)
     pub fn enter_comp(&mut self) {
-        if let Some(log) = &self.log { slog::debug!(log, "enter_comp"); }
+        if let Some(log) = &self.log { slog::debug!(log, "enter_component_context"; "depth_before" => self.comp_stack.len() as i64, "atoms" => self.buf_atoms.len() as i64, "bonds" => self.buf_bonds.len() as i64); }
         let saved = (std::mem::take(&mut self.buf_atoms), std::mem::take(&mut self.buf_bonds));
         self.comp_stack.push(saved);
     }
 
     /// Finalize the current component into a molecule and restore the previous context
     pub fn exit_comp(&mut self) {
-        if let Some(log) = &self.log { slog::debug!(log, "exit_comp"); }
         // finalize the subcomponent we're in now
         self.finish_molecule();
         if let Some(m) = self.molecules.pop() {
@@ -203,10 +261,11 @@ impl ParseState {
             self.buf_atoms = atoms;
             self.buf_bonds = bonds;
         }
+        if let Some(log) = &self.log { slog::debug!(log, "exit_component_context"; "depth_after" => self.comp_stack.len() as i64, "pending_molecules" => self.pending_molecules.len() as i64); }
     }
 
     pub fn stage_bond_dir(&mut self, dir: BondDir) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "stage_bond_dir"); }
+        if let Some(log) = &self.log { slog::debug!(log, "stage_bond_dir"; "new_dir" => format!("{:?}", dir)); }
         match &mut self.staged_bond {
             Some(b) => match b.dir {
                 None => b.dir = Some(dir),
@@ -226,7 +285,7 @@ impl ParseState {
     }
 
     pub fn stage_bond_order(&mut self, order: BondOrder) -> Result<()> {
-        if let Some(log) = &self.log { slog::debug!(log, "stage_bond_order"; "order" => format!("{:?}", order)); }
+        if let Some(log) = &self.log { slog::debug!(log, "stage_bond_order"; "order" => format!("{:?}", order), "has_staged" => self.staged_bond.is_some()); }
         if self.last_atom_idx == 0 && self.next_atom_idx == 0 {
             // Defer error reporting in chain mode; record first error
             if self.first_err.is_none() { self.first_err = Some("Bond cannot start a chain".to_string()); }
@@ -241,16 +300,16 @@ impl ParseState {
     }
 
     pub fn bump_bond_idx(&mut self) -> usize {
-        if let Some(log) = &self.log { slog::debug!(log, "bump_bond_idx"; "before" => self.next_bond_idx as i64); }
         let idx = self.next_bond_idx;
         self.next_bond_idx += 1;
+        if let Some(log) = &self.log { slog::debug!(log, "alloc_bond_index"; "allocated" => idx as i64, "next" => self.next_bond_idx as i64); }
         idx
     }
 
     pub fn bump_atom_idx(&mut self) -> usize {
-        if let Some(log) = &self.log { slog::debug!(log, "bump_atom_idx"; "before" => self.next_atom_idx as i64); }
         let idx = self.next_atom_idx;
         self.next_atom_idx += 1;
+        if let Some(log) = &self.log { slog::debug!(log, "alloc_atom_index"; "allocated" => idx as i64, "next" => self.next_atom_idx as i64, "link_from" => self.last_atom_idx as i64); }
         idx
     }
 
@@ -275,7 +334,6 @@ impl ParseState {
     }
 
     pub fn link_to(&mut self, new_atom: usize) -> Result<Option<ResolvedBond>> {
-        if let Some(log) = &self.log { slog::debug!(log, "link_to"; "from" => self.last_atom_idx as i64, "to" => new_atom as i64); }
         if new_atom == 0 { return Ok(None); }
         let start_atom = self.last_atom_idx;
         // Resolve bond to use (explicit staged or implicit single)
@@ -285,6 +343,15 @@ impl ParseState {
             .unwrap_or(BondSpec { order: BondOrder::Single, dir: None });
         // Reserve bond index
         let bond_index = self.bump_bond_idx();
+        if let Some(log) = &self.log {
+            slog::debug!(log, "create_bond";
+                "start_atom" => start_atom as i64,
+                "end_atom" => new_atom as i64,
+                "order" => format!("{:?}", bond.order),
+                "dir" => format!("{:?}", bond.dir),
+                "bond_index" => bond_index as i64,
+            );
+        }
         // Stereo neighbor tracking (best-effort; ignore errors here)
         if self.stereocenters.contains_key(&start_atom) {
             let _ = self.stereo_add(start_atom, new_atom);
@@ -298,19 +365,33 @@ impl ParseState {
 
     pub fn finish_chain(&mut self) -> Result<()> {
         if let Some(ref msg) = self.first_err {
+            if let Some(log) = &self.log { slog::debug!(log, "finish_chain_error"; "error" => msg.clone()); }
             return Err(DataError::InvalidBondSpec(msg.clone()).into());
         }
         if self.staged_bond.is_some() {
+            if let Some(log) = &self.log { slog::debug!(log, "finish_chain_error"; "error" => "Trailing bond symbol"); }
             return Err(DataError::InvalidBondSpec("Trailing bond symbol".to_string()).into());
         }
+        if let Some(log) = &self.log { slog::debug!(log, "finish_chain_ok"; "atoms" => self.next_atom_idx as i64, "bonds" => self.next_bond_idx as i64); }
         Ok(())
     }
 
     pub fn push_atom(&mut self, atom: IRAtom) {
+        let idx = atom.index.unwrap_or_default();
+        if let Some(log) = &self.log { slog::debug!(log, "push_atom"; "atom_index" => idx as i64); }
         self.buf_atoms.push(atom);
     }
 
     pub fn push_resolved_bond(&mut self, rb: ResolvedBond) {
+        if let Some(log) = &self.log {
+            slog::debug!(log, "push_bond";
+                "start_atom" => rb.start_atom as i64,
+                "end_atom" => rb.end_atom as i64,
+                "order" => format!("{:?}", rb.bond.order),
+                "dir" => format!("{:?}", rb.bond.dir),
+                "bond_index" => rb.bond_index as i64,
+            );
+        }
         let mut bond = IRBond::from_order(rb.bond.order);
         bond.start_atom = Some(rb.start_atom as u32);
         bond.end_atom = Some(rb.end_atom as u32);
@@ -326,11 +407,19 @@ impl ParseState {
         mol.source_format = SourceFormat::SMILES;
         mol.atoms = std::mem::take(&mut self.buf_atoms);
         mol.bonds = std::mem::take(&mut self.buf_bonds);
+        if let Some(log) = &self.log {
+            slog::debug!(log, "finish_molecule";
+                "atoms" => mol.atoms.len() as i64,
+                "bonds" => mol.bonds.len() as i64,
+            );
+        }
         self.molecules.push(mol);
     }
 
     pub fn drain_molecules(&mut self) -> Vec<IRMolecule> {
-        std::mem::take(&mut self.molecules)
+        let out = std::mem::take(&mut self.molecules);
+        if let Some(log) = &self.log { slog::debug!(log, "drain_molecules"; "count" => out.len() as i64); }
+        out
     }
 }
 
