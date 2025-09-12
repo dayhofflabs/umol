@@ -1,19 +1,68 @@
-use std::str::FromStr;
-
-use lalrpop_util::{ErrorRecovery, ParseError};
 use umol_data::Element;
 
-use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
+use lalrpop_util::ParseError;
+use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality};
 use crate::io::smiles::lexer::{LexicalError, Token};
 use crate::io::smiles::state::{ParseState, BondSpec as SBond};
 
-grammar<'err, 'input>(errors: &'err mut Vec<ErrorRecovery<usize,Token, LexicalError>>, state: &mut ParseState);
+grammar(state: &mut ParseState);
+
+// A linear chain parser with side effects; IR is built inside ParseState
+pub Chain: () = {
+<AtomBond> <Tail> =>? { state.finish_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.finish_molecule(); Ok(()) },
+}
+
+pub Tail: () = {
+    <Link> <Tail> =>? Ok(()),
+    <DotSep> <AtomStart> <Tail> =>? Ok(()),
+    =>? Ok(()),
+}
+
+pub Link: () = {
+    <AtomBond> =>? Ok(()),
+    <Bond> <AtomBond> =>? Ok(()),
+}
+
+pub DotSep: () = {
+    "." =>? { state.split_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.finish_molecule(); Ok(()) },
+}
+
+// First atom of a new component: do not link to previous component
+pub AtomStart: () = {
+<a:Atom> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      let new_idx = state.bump_atom_idx();
+                                      state.push_atom(atom);
+                                      state.last_atom_idx = new_idx; Ok(()) },
+}
 
 // Atom nonterminals
+pub AtomBond: () = {
+<a:Atom> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      let new_idx = state.bump_atom_idx();
+                                      if let Some(rb) = state.link_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { state.push_resolved_bond(rb); }
+                                      state.push_atom(atom);
+                                      state.last_atom_idx = new_idx; Ok(()) },
+}
+
+pub AliphaticOrganicSymbol: Atom = {
+    "B" => Atom::from_aliphatic_atom(Element::B),
+    "C" => Atom::from_aliphatic_atom(Element::C),
+    "N" => Atom::from_aliphatic_atom(Element::N),
+    "O" => Atom::from_aliphatic_atom(Element::O),
+    "S" => Atom::from_aliphatic_atom(Element::S),
+    "P" => Atom::from_aliphatic_atom(Element::P),
+    "F" => Atom::from_aliphatic_atom(Element::F),
+    "Cl" => Atom::from_aliphatic_atom(Element::Cl),
+    "Br" => Atom::from_aliphatic_atom(Element::Br),
+    "I" => Atom::from_aliphatic_atom(Element::I),
+}
+
+// Allow bracket/aromatic/unknown symbols as Atom in chain
 pub Atom: Atom = {
     BracketAtom,
     AliphaticOrganicSymbol,
     AromaticOrganicSymbol,
+    UnknownSymbol,
 }
 
 pub BracketAtom: Atom = {
@@ -25,9 +74,7 @@ pub BracketAtom: Atom = {
         atom.charge = charge;
         atom.class = class;
         if let Some(ch) = chirality {
-            // Register an open stereocenter for the atom being created next.
-            // We defer neighbor count validation (expected_neighbors = 0).
-let _ = state.stereo_open(state.next_atom_idx, Some(ch), 0);
+            let _ = state.stereo_open(state.next_atom_idx, Some(ch), 0);
         }
         atom
     },
@@ -175,19 +222,6 @@ pub UnknownSymbol: Atom = {
     "*" => Atom::default(),
 }
 
-pub AliphaticOrganicSymbol: Atom = {
-    "B" => Atom::from_aliphatic_atom(Element::B),
-    "C" => Atom::from_aliphatic_atom(Element::C),
-    "N" => Atom::from_aliphatic_atom(Element::N),
-    "O" => Atom::from_aliphatic_atom(Element::O),
-    "S" => Atom::from_aliphatic_atom(Element::S),
-    "P" => Atom::from_aliphatic_atom(Element::P),
-    "F" => Atom::from_aliphatic_atom(Element::F),
-    "Cl" => Atom::from_aliphatic_atom(Element::Cl),
-    "Br" => Atom::from_aliphatic_atom(Element::Br),
-    "I" => Atom::from_aliphatic_atom(Element::I),
-}
-
 pub AromaticOrganicSymbol: Atom = {
     "b" => Atom::from_aromatic_atom(Element::B),
     "c" => Atom::from_aromatic_atom(Element::C),
@@ -236,37 +270,22 @@ pub Class: u32 = {
 }
 
 // Bond nonterminals
-pub RingBond: Bond = {
-    <bond:Bond?> <ring:RingIndex> => { let mut ring_bond = bond.unwrap_or(Bond::from_order(BondOrder::Single));
-                                       ring_bond.ring = Some(ring);
-                                       if state.rings.contains_key(&ring) {
-                                           let _ = state.close_ring(ring);
-                                       } else {
-                                           let order = match ring_bond.symbol { BondSymbol::Bond(o) => o, _ => BondOrder::Single };
-                                           let dir: Option<BondDir> = ring_bond.direction;
-                                           let _ = state.open_ring(ring, Some(SBond { order, dir }));
-                                       }
-                                       ring_bond },
-}
-
 pub Bond: Bond = {
-    "-" => Bond::from_order(BondOrder::Single), 
-    "=" => Bond::from_order(BondOrder::Double),
-    "#" => Bond::from_order(BondOrder::Triple),
-    "$" => Bond::from_order(BondOrder::Quadruple),
-    ":" => Bond::from_order(BondOrder::Aromatic),
-    "/" => Bond::up(),
-    "\\" => Bond::down(),
+<order:BondOrder> =>? { state.stage_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
+"/" =>? { state.stage_bond_dir(BondDir::Up).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::up()) },
+"\\" =>? { state.stage_bond_dir(BondDir::Down).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::down()) },
 }
 
+pub BondOrder: BondOrder = {
+    "-" => BondOrder::Single,
+    "=" => BondOrder::Double,
+    "#" => BondOrder::Triple,
+    "$" => BondOrder::Quadruple,
+}
 
 // Helper nonterminals
-pub RingIndex: u32 = {
-    <"digit1">,
-    <"percent">,
-}
 
-/// Lexer configuration and token definitions
+// Lexer configuration and token definitions
 extern {
     type Location = usize;
     type Error = LexicalError;

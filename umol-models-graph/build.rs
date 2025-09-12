@@ -16,13 +16,13 @@ fn generate_smiles_parser() {
     for entry in fs::read_dir(in_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
-        if path.extension().unwrap() == "lalrpop" {
+        if path.extension().map_or(false, |e| e == "lalrpop") {
             println!("cargo:rerun-if-changed={}", path.display());
         }
     }
     lalrpop::Configuration::new()
         .log_debug()
-        .emit_report(true)
+        // Disable report emission to avoid IO issues on renamed files/paths
         .set_in_dir(in_dir)
         .process()
         .unwrap();

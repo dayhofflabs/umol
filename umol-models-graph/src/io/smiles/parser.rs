@@ -2,39 +2,18 @@
 
 use lalrpop_util::lalrpop_mod;
 
-// SMILES grammar parser
+// SMILES unbranched grammar parser
 lalrpop_mod!(
     #[allow(unused_imports)]
     #[rustfmt::skip]
-    pub grammar
+    pub unbranched
 );
 
-// SMILES chain grammar acceptor
+// SMILES branched grammar parser
 lalrpop_mod!(
     #[allow(unused_imports)]
     #[rustfmt::skip]
-    pub chain_accept
-);
-
-// SMILES tree grammar acceptor
-lalrpop_mod!(
-    #[allow(unused_imports)]
-    #[rustfmt::skip]
-    pub tree_accept
-);
-
-// SMILES chain grammar parser
-lalrpop_mod!(
-    #[allow(unused_imports)]
-    #[rustfmt::skip]
-    pub chain
-);
-
-// SMILES tree grammar parser
-lalrpop_mod!(
-    #[allow(unused_imports)]
-    #[rustfmt::skip]
-    pub tree
+    pub branched
 );
 
 #[cfg(test)]
