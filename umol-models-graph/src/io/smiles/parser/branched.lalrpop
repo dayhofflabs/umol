@@ -325,7 +325,8 @@ pub Isotope: u32 = { <mass:Number> => mass }
 pub Chirality: Chirality = {
     "@" => Chirality::Clockwise,
     "@@" => Chirality::CounterClockwise,
-    "@TH" <arr:Digit> => Chirality::Tetrahedral { arr},
+    // @THn: accept 1/2 as aliases of @/@@; other digits keep Tetrahedral{arr}
+    "@TH" <arr:Digit> => match arr { 1 => Chirality::Clockwise, 2 => Chirality::CounterClockwise, n => Chirality::Tetrahedral { arr: n } },
     "@AL" <arr:Digit> => Chirality::Allenal { arr},
     "@SP" <arr:Digit> => Chirality::SquarePlanar { arr},
     "@TB" <arr:Number> => Chirality::TrigonalBipyramidal { arr},

@@ -350,6 +350,8 @@ fn test_branched_components(#[case] input: &str, #[case] expected: Vec<(usize, u
 #[rstest]
 #[case("[C@H](F)(Cl)Br", Chirality::Clockwise)]
 #[case("[C@@H](F)(Cl)Br", Chirality::CounterClockwise)]
+#[case("[C@TH1H](F)(Cl)Br", Chirality::Clockwise)]
+#[case("[C@TH2H](F)(Cl)Br", Chirality::CounterClockwise)]
 fn test_branched_tetra_chirality(#[case] input: &str, #[case] expected: Chirality) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
@@ -365,6 +367,8 @@ fn test_branched_tetra_chirality(#[case] input: &str, #[case] expected: Chiralit
 #[rstest]
 #[case("[C@]([H])(F)(Cl)Br", Chirality::Clockwise)]
 #[case("[C@@]([H])(F)(Cl)Br", Chirality::CounterClockwise)]
+#[case("[C@TH1]([H])(F)(Cl)Br", Chirality::Clockwise)]
+#[case("[C@TH2]([H])(F)(Cl)Br", Chirality::CounterClockwise)]
 fn test_branched_tetra_chirality_explicit_h(#[case] input: &str, #[case] expected: Chirality) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
@@ -670,4 +674,54 @@ fn test_branched_multi_tetra_centers() {
     // Expect both marked
     assert_eq!(mols[0].atoms[1].chirality, Some(Chirality::Clockwise));
     assert_eq!(mols[0].atoms[4].chirality, Some(Chirality::CounterClockwise));
+}
+
+// Non-tetrahedral chirality: SP/TB/OH
+
+#[rstest]
+#[case("[Pt@SP1](Cl)(Br)(I)F", true)]
+#[case("[Pt@SP1](Cl)(Br)F", false)]
+#[case("[Pt@SP1](Cl)(Br)(I)(F)N", false)]
+fn test_square_planar_basic(#[case] input: &str, #[case] valid: bool) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let ch = mols[0].atoms[0].chirality;
+    if valid { assert!(matches!(ch, Some(Chirality::SquarePlanar { .. }))); } else { assert_eq!(ch, Some(Chirality::Unknown)); }
+}
+
+#[rstest]
+#[case("[P@TB1](F)(Cl)(Br)(I)N", true)]
+#[case("[P@TB1](F)(Cl)(Br)(I)", false)]
+#[case("[P@TB1](F)(Cl)(Br)(I)(N)O", false)]
+fn test_trigonal_bipyramidal_basic(#[case] input: &str, #[case] valid: bool) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let ch = mols[0].atoms[0].chirality;
+    if valid { assert!(matches!(ch, Some(Chirality::TrigonalBipyramidal { .. }))); } else { assert_eq!(ch, Some(Chirality::Unknown)); }
+}
+
+#[rstest]
+#[case("[S@OH1](F)(Cl)(Br)(I)(N)(O)", true)]
+#[case("[S@OH1](F)(Cl)(Br)(I)N", false)]
+#[case("[S@OH1](F)(Cl)(Br)(I)NOF", false)]
+fn test_octahedral_basic(#[case] input: &str, #[case] valid: bool) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = branched::MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let ch = mols[0].atoms[0].chirality;
+    if valid { assert!(matches!(ch, Some(Chirality::Octahedral { .. }))); } else { assert_eq!(ch, Some(Chirality::Unknown)); }
 }

@@ -469,6 +469,8 @@ impl ParseState {
         self.resolve_double_bond_stereo(&mut mol);
         // Late-pass atom-centered tetrahedral (@/@@)
         self.resolve_tetrahedral_stereo(&mut mol);
+        // Late-pass non-tetrahedral atom-centered (@SP/@TB/@OH)
+        self.resolve_nontetrahedral_stereo(&mut mol);
         if let Some(log) = &self.log {
             slog::debug!(log, "finish_molecule";
                 "atoms" => mol.atoms.len() as i64,
@@ -660,6 +662,73 @@ impl ParseState {
                 "candidates" => candidates as i64,
                 "resolved" => ok_count as i64,
                 "downgraded" => downgraded_count as i64,
+            );
+        }
+    }
+
+    fn resolve_nontetrahedral_stereo(&mut self, mol: &mut IRMolecule) {
+        if mol.atoms.is_empty() { return; }
+        // Build degree
+        let mut deg: Vec<usize> = vec![0; mol.atoms.len()];
+        for b in &mol.bonds {
+            if let (Some(a), Some(c)) = (b.start_atom, b.end_atom) {
+                let (a, c) = (a as usize, c as usize);
+                if a < deg.len() { deg[a] += 1; }
+                if c < deg.len() { deg[c] += 1; }
+            }
+        }
+        let mut cand_sp = 0usize; let mut ok_sp = 0usize; let mut bad_sp = 0usize;
+        let mut cand_tb = 0usize; let mut ok_tb = 0usize; let mut bad_tb = 0usize;
+        let mut cand_oh = 0usize; let mut ok_oh = 0usize; let mut bad_oh = 0usize;
+        for (idx, atom) in mol.atoms.iter_mut().enumerate() {
+            match atom.chirality {
+                Some(Chirality::SquarePlanar { .. }) => {
+                    cand_sp += 1;
+                    let explicit = deg[idx];
+                    let implicit_h = atom.hydrogen_count.unwrap_or(0) as usize;
+                    if implicit_h != 0 || explicit != 4 {
+                        if let Some(log) = &self.log { slog::debug!(log, "stereo_sp_invalid"; "atom" => idx as i64, "explicit_neighbors" => explicit as i64, "hydrogen_count" => implicit_h as i64); }
+                        atom.chirality = Some(Chirality::Unknown);
+                        bad_sp += 1;
+                    } else {
+                        if let Some(log) = &self.log { slog::debug!(log, "stereo_sp_ok"; "atom" => idx as i64, "explicit_neighbors" => explicit as i64); }
+                        ok_sp += 1;
+                    }
+                }
+                Some(Chirality::TrigonalBipyramidal { .. }) => {
+                    cand_tb += 1;
+                    let explicit = deg[idx];
+                    let implicit_h = atom.hydrogen_count.unwrap_or(0) as usize;
+                    if implicit_h != 0 || explicit != 5 {
+                        if let Some(log) = &self.log { slog::debug!(log, "stereo_tb_invalid"; "atom" => idx as i64, "explicit_neighbors" => explicit as i64, "hydrogen_count" => implicit_h as i64); }
+                        atom.chirality = Some(Chirality::Unknown);
+                        bad_tb += 1;
+                    } else {
+                        if let Some(log) = &self.log { slog::debug!(log, "stereo_tb_ok"; "atom" => idx as i64, "explicit_neighbors" => explicit as i64); }
+                        ok_tb += 1;
+                    }
+                }
+                Some(Chirality::Octahedral { .. }) => {
+                    cand_oh += 1;
+                    let explicit = deg[idx];
+                    let implicit_h = atom.hydrogen_count.unwrap_or(0) as usize;
+                    if implicit_h != 0 || explicit != 6 {
+                        if let Some(log) = &self.log { slog::debug!(log, "stereo_oh_invalid"; "atom" => idx as i64, "explicit_neighbors" => explicit as i64, "hydrogen_count" => implicit_h as i64); }
+                        atom.chirality = Some(Chirality::Unknown);
+                        bad_oh += 1;
+                    } else {
+                        if let Some(log) = &self.log { slog::debug!(log, "stereo_oh_ok"; "atom" => idx as i64, "explicit_neighbors" => explicit as i64); }
+                        ok_oh += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(log) = &self.log {
+            slog::debug!(log, "stereo_nontetra_end";
+                "sp_candidates" => cand_sp as i64, "sp_resolved" => ok_sp as i64, "sp_downgraded" => bad_sp as i64,
+                "tb_candidates" => cand_tb as i64, "tb_resolved" => ok_tb as i64, "tb_downgraded" => bad_tb as i64,
+                "oh_candidates" => cand_oh as i64, "oh_resolved" => ok_oh as i64, "oh_downgraded" => bad_oh as i64,
             );
         }
     }
