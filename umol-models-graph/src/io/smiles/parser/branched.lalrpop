@@ -7,8 +7,8 @@ use crate::io::smiles::state::{ParseState, BondInfo, ResolvedBond};
 
 grammar(state: &mut ParseState);
 
-// Tree: one or more components separated by '.'
-pub Tree: () = {
+// Molecule: one or more components separated by '.'
+pub Molecule: () = {
     <Component> <TailComponents> =>? Ok(()) ,
 }
 
@@ -63,6 +63,9 @@ pub ChainTail: () = {
 pub AtomBond: () = {
 <a:Atom> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
                                       let new_idx = state.bump_atom_idx();
+                                      // hint aromaticity of the next atom for implicit bond defaults
+                                      let is_arom = atom.aromatic.unwrap_or(false);
+                                      state.next_atom_is_aromatic = Some(is_arom);
                                       if let Some(rb) = state.link_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { state.push_resolved_bond(rb); }
                                       state.push_atom(atom);
                                       state.last_atom_idx = new_idx; Ok(()) },
@@ -347,6 +350,7 @@ pub Bond: Bond = {
 <order:BondOrder> =>? { state.stage_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
 "/" =>? { state.stage_bond_dir(BondDir::Up).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::up()) },
 "\\" =>? { state.stage_bond_dir(BondDir::Down).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::down()) },
+":" =>? { state.stage_bond_order(BondOrder::Aromatic).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(BondOrder::Aromatic)) },
 }
 
 pub BondOrder: BondOrder = {
@@ -362,11 +366,14 @@ pub BondOrder: BondOrder = {
 
 pub Ring: () = {
     <spec:RingSpec?> <ring:RingIndex> =>? {
+        let spec_is_some = spec.is_some();
         let bond_info = spec.unwrap_or(BondInfo { order: BondOrder::Single, dir: None });
         if state.rings.contains_key(&ring) {
             let (start_atom, pending) = state.close_ring(ring).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
+            let pending_is_some = pending.is_some();
             let use_spec = pending.unwrap_or(bond_info);
-            let rb = ResolvedBond { start_atom, end_atom: state.last_atom_idx, bond_index: state.bump_bond_idx(), bond: use_spec };
+            let explicit = pending_is_some || spec_is_some;
+            let rb = ResolvedBond { start_atom, end_atom: state.last_atom_idx, bond_index: state.bump_bond_idx(), bond: use_spec, explicit };
             state.push_resolved_bond(rb);
         } else {
             let _ = state.open_ring(ring, Some(bond_info)).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
@@ -379,6 +386,7 @@ pub RingSpec: BondInfo = {
     <order:BondOrder> => BondInfo { order, dir: None },
     "/" => BondInfo { order: BondOrder::Single, dir: Some(BondDir::Up) },
     "\\" => BondInfo { order: BondOrder::Single, dir: Some(BondDir::Down) },
+    ":" => BondInfo { order: BondOrder::Aromatic, dir: None },
 }
 
 pub RingIndex: u32 = { <Digit>, <"percent"> }

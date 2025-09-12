@@ -39,6 +39,8 @@ pub struct ParseState {
 
     // Bond context
     pub staged_bond: Option<BondInfo>,
+    /// Whether the next atom to be linked (by index) is aromatic, set by grammar before link_to
+    pub next_atom_is_aromatic: Option<bool>,
 
     // Logger
     pub log: Option<Logger>,
@@ -337,11 +339,37 @@ impl ParseState {
     pub fn link_to(&mut self, new_atom: usize) -> Result<Option<ResolvedBond>> {
         if new_atom == 0 { return Ok(None); }
         let start_atom = self.last_atom_idx;
-        // Resolve bond to use (explicit staged or implicit single)
-        let bond = self
-            .staged_bond
-            .take()
-            .unwrap_or(BondInfo { order: BondOrder::Single, dir: None });
+        // Resolve bond to use (explicit staged or implicit, possibly aromatic by default)
+        let was_explicit: bool;
+        let bond: BondInfo;
+        match self.staged_bond.take() {
+            Some(b) => { was_explicit = true; bond = b; },
+            None => {
+                was_explicit = false;
+                // Default single, but upgrade to aromatic if both endpoints are aromatic
+                let start_arom = self.buf_atoms.get(start_atom).and_then(|a| a.aromatic).unwrap_or(false);
+                let end_arom = self.next_atom_is_aromatic.unwrap_or(false);
+                if start_arom && end_arom {
+                    bond = BondInfo { order: BondOrder::Aromatic, dir: None };
+                    if let Some(log) = &self.log {
+                        slog::debug!(log, "arom_bond_defaulted";
+                            "start_atom" => start_atom as i64,
+                            "end_atom" => new_atom as i64,
+                        );
+                    }
+                } else {
+                    bond = BondInfo { order: BondOrder::Single, dir: None };
+                    if let Some(log) = &self.log {
+                        slog::debug!(log, "arom_bond_skipped";
+                            "start_aromatic" => start_arom,
+                            "end_aromatic" => end_arom,
+                        );
+                    }
+                }
+            }
+        }
+        // Clear hint
+        self.next_atom_is_aromatic = None;
         // Reserve bond index
         let bond_index = self.bump_bond_idx();
         if let Some(log) = &self.log {
@@ -352,6 +380,12 @@ impl ParseState {
                 "dir" => format!("{:?}", bond.dir),
                 "bond_index" => bond_index as i64,
             );
+            if was_explicit && matches!(bond.order, BondOrder::Aromatic) {
+                slog::debug!(log, "arom_bond_explicit_colon";
+                    "start_atom" => start_atom as i64,
+                    "end_atom" => new_atom as i64,
+                );
+            }
         }
         // Stereo neighbor tracking (best-effort; ignore errors here)
         if self.stereocenters.contains_key(&start_atom) {
@@ -361,7 +395,7 @@ impl ParseState {
             let _ = self.stereo_add(new_atom, start_atom);
         }
         // Trailing bond guard note remains
-        Ok(Some(ResolvedBond { start_atom, end_atom: new_atom, bond_index, bond }))
+        Ok(Some(ResolvedBond { start_atom, end_atom: new_atom, bond_index, bond, explicit: was_explicit }))
     }
 
     pub fn finish_chain(&mut self) -> Result<()> {
@@ -393,7 +427,30 @@ impl ParseState {
                 "bond_index" => rb.bond_index as i64,
             );
         }
-        let mut bond = IRBond::from_order(rb.bond.order);
+        // Possibly upgrade implicit bonds to aromatic if both endpoints are aromatic
+        let mut order = rb.bond.order;
+        if !rb.explicit && matches!(order, BondOrder::Single) {
+            let start_arom = self.buf_atoms.get(rb.start_atom).and_then(|a| a.aromatic).unwrap_or(false);
+            let end_arom = self.buf_atoms.get(rb.end_atom).and_then(|a| a.aromatic).unwrap_or(false);
+            if start_arom && end_arom {
+                order = BondOrder::Aromatic;
+                if let Some(log) = &self.log {
+                    slog::debug!(log, "arom_ring_bond_defaulted";
+                        "start_atom" => rb.start_atom as i64,
+                        "end_atom" => rb.end_atom as i64,
+                    );
+                }
+            }
+        }
+        if rb.explicit && matches!(order, BondOrder::Aromatic) {
+            if let Some(log) = &self.log {
+                slog::debug!(log, "arom_bond_explicit_colon_commit";
+                    "start_atom" => rb.start_atom as i64,
+                    "end_atom" => rb.end_atom as i64,
+                );
+            }
+        }
+        let mut bond = IRBond::from_order(order);
         bond.start_atom = Some(rb.start_atom as u32);
         bond.end_atom = Some(rb.end_atom as u32);
         bond.direction = rb.bond.dir;
@@ -558,29 +615,41 @@ impl ParseState {
         for (idx, atom) in mol.atoms.iter_mut().enumerate() {
             match atom.chirality {
                 Some(Chirality::Clockwise) | Some(Chirality::CounterClockwise) => {
-                    // Minimal validation: require at least three explicit neighbors
-                    // or two neighbors plus one implicit H specified in bracket.
+                    // Require exactly 4 neighbors (explicit + bracket H)
                     let explicit = deg[idx];
-                    let has_h = atom.hydrogen_count.unwrap_or(0) > 0;
-                    if explicit < 3 && !(explicit == 2 && has_h) {
+                    let implicit_h = atom.hydrogen_count.unwrap_or(0) as usize;
+                    if implicit_h > 1 { // more than one implicit H not supported for tetra
                         // Insufficient geometry information; leave as Unknown
                         if let Some(log) = &self.log {
                             slog::debug!(log, "stereo_tetra_invalid";
                                 "atom" => idx as i64,
                                 "explicit_neighbors" => explicit as i64,
-                                "hydrogen_count" => atom.hydrogen_count.unwrap_or(0) as i64,
+                                "hydrogen_count" => implicit_h as i64,
                             );
                         }
                         atom.chirality = Some(Chirality::Unknown);
                         downgraded_count += 1;
-                    } else if let Some(log) = &self.log {
-                        slog::debug!(log, "stereo_tetra_ok";
-                            "atom" => idx as i64,
-                            "chirality" => format!("{:?}", atom.chirality),
-                            "explicit_neighbors" => explicit as i64,
-                            "hydrogen_count" => atom.hydrogen_count.unwrap_or(0) as i64,
-                        );
-                        ok_count += 1;
+                    } else {
+                        let total = explicit + implicit_h;
+                        if total != 4 {
+                            if let Some(log) = &self.log {
+                                slog::debug!(log, "stereo_tetra_invalid";
+                                    "atom" => idx as i64,
+                                    "explicit_neighbors" => explicit as i64,
+                                    "hydrogen_count" => implicit_h as i64,
+                                );
+                            }
+                            atom.chirality = Some(Chirality::Unknown);
+                            downgraded_count += 1;
+                        } else if let Some(log) = &self.log {
+                            slog::debug!(log, "stereo_tetra_ok";
+                                "atom" => idx as i64,
+                                "chirality" => format!("{:?}", atom.chirality),
+                                "explicit_neighbors" => explicit as i64,
+                                "hydrogen_count" => implicit_h as i64,
+                            );
+                            ok_count += 1;
+                        }
                     }
                 }
                 _ => {}
@@ -602,6 +671,7 @@ pub struct ResolvedBond {
     pub end_atom: usize,
     pub bond_index: usize,
     pub bond: BondInfo,
+    pub explicit: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
