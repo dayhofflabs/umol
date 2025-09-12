@@ -8,7 +8,7 @@ use umol_data::Element;
 use crate::io::ir::{Atom, BondOrder, Chirality};
 use crate::io::smiles::lexer::Lexer;
 use crate::io::smiles::parser::{branched, unbranched};
-use crate::io::smiles::state::{BondSpec, ParseState};
+use crate::io::smiles::state::{BondInfo, ParseState};
 
 #[fixture]
 fn parse_state() -> ParseState {
@@ -43,7 +43,7 @@ fn test_unbranched_bond(mut parse_state: ParseState, #[case] input: &str) {
     assert!(result.is_ok(), "{} should have succeeded", input);
     assert_eq!(
         parse_state.staged_bond,
-        Some(BondSpec {
+        Some(BondInfo {
             order: BondOrder::Double,
             dir: None
         })

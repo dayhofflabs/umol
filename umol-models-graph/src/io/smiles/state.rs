@@ -37,7 +37,7 @@ pub struct ParseState {
     pub stereocenters: HashMap<usize, StereoState>,
 
     // Bond context
-    pub staged_bond: Option<BondSpec>,
+    pub staged_bond: Option<BondInfo>,
 
     // Logger
     pub log: Option<Logger>,
@@ -58,7 +58,7 @@ pub struct ParseState {
 }
 
 impl ParseState {
-    pub fn open_ring(&mut self, ring_index: u32, bond: Option<BondSpec>) -> Result<()> {
+    pub fn open_ring(&mut self, ring_index: u32, bond: Option<BondInfo>) -> Result<()> {
         if self.rings.contains_key(&ring_index) {
             return Err(DataError::InvalidRing(format!(
                 "Ring index {} already exists",
@@ -89,7 +89,7 @@ impl ParseState {
         Ok(())
     }
 
-    pub fn close_ring(&mut self, ring_index: u32) -> Result<(usize, Option<BondSpec>)> {
+    pub fn close_ring(&mut self, ring_index: u32) -> Result<(usize, Option<BondInfo>)> {
         let removed = self.rings
             .remove(&ring_index)
             .map(|state| (state.start_atom, state.pending_bond));
@@ -116,7 +116,7 @@ impl ParseState {
         }
     }
 
-    pub fn open_branch(&mut self, bond: Option<BondSpec>) -> Result<()> {
+    pub fn open_branch(&mut self, bond: Option<BondInfo>) -> Result<()> {
         let parent_atom = self.last_atom_idx;
         let return_bond = self.staged_bond.clone();
         self.branches.push(BranchState { parent_atom, return_bond });
@@ -271,14 +271,14 @@ impl ParseState {
                 None => b.dir = Some(dir),
                 Some(existing) if existing == dir => {},
                 Some(_) => {
-                    return Err(DataError::InvalidBondSpec(
+                    return Err(DataError::InvalidBond(
                         "Conflicting bond directions on the same bond".to_string(),
                     )
                     .into())
                 }
             },
             None => {
-                self.staged_bond = Some(BondSpec { order: BondOrder::Single, dir: Some(dir) });
+                self.staged_bond = Some(BondInfo { order: BondOrder::Single, dir: Some(dir) });
             }
         }
         Ok(())
@@ -289,13 +289,13 @@ impl ParseState {
         if self.last_atom_idx == 0 && self.next_atom_idx == 0 {
             // Defer error reporting in chain mode; record first error
             if self.first_err.is_none() { self.first_err = Some("Bond cannot start a chain".to_string()); }
-            return Err(DataError::InvalidBondSpec("Bond cannot start a chain".to_string()).into());
+            return Err(DataError::InvalidBond("Bond cannot start a chain".to_string()).into());
         }
         if self.staged_bond.is_some() {
             if self.first_err.is_none() { self.first_err = Some("Consecutive bond symbols are not allowed".to_string()); }
-            return Err(DataError::InvalidBondSpec("Consecutive bond symbols are not allowed".to_string()).into());
+            return Err(DataError::InvalidBond("Consecutive bond symbols are not allowed".to_string()).into());
         }
-        self.staged_bond = Some(BondSpec { order, dir: None });
+        self.staged_bond = Some(BondInfo { order, dir: None });
         Ok(())
     }
 
@@ -340,7 +340,7 @@ impl ParseState {
         let bond = self
             .staged_bond
             .take()
-            .unwrap_or(BondSpec { order: BondOrder::Single, dir: None });
+            .unwrap_or(BondInfo { order: BondOrder::Single, dir: None });
         // Reserve bond index
         let bond_index = self.bump_bond_idx();
         if let Some(log) = &self.log {
@@ -366,11 +366,11 @@ impl ParseState {
     pub fn finish_chain(&mut self) -> Result<()> {
         if let Some(ref msg) = self.first_err {
             if let Some(log) = &self.log { slog::debug!(log, "finish_chain_error"; "error" => msg.clone()); }
-            return Err(DataError::InvalidBondSpec(msg.clone()).into());
+            return Err(DataError::InvalidBond(msg.clone()).into());
         }
         if self.staged_bond.is_some() {
             if let Some(log) = &self.log { slog::debug!(log, "finish_chain_error"; "error" => "Trailing bond symbol"); }
-            return Err(DataError::InvalidBondSpec("Trailing bond symbol".to_string()).into());
+            return Err(DataError::InvalidBond("Trailing bond symbol".to_string()).into());
         }
         if let Some(log) = &self.log { slog::debug!(log, "finish_chain_ok"; "atoms" => self.next_atom_idx as i64, "bonds" => self.next_bond_idx as i64); }
         Ok(())
@@ -428,19 +428,19 @@ pub struct ResolvedBond {
     pub start_atom: usize,
     pub end_atom: usize,
     pub bond_index: usize,
-    pub bond: BondSpec,
+    pub bond: BondInfo,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RingState {
     pub start_atom: usize,
-    pub pending_bond: Option<BondSpec>,
+    pub pending_bond: Option<BondInfo>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BranchState {
     pub parent_atom: usize,
-    pub return_bond: Option<BondSpec>,
+    pub return_bond: Option<BondInfo>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -451,7 +451,7 @@ pub struct StereoState {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct BondSpec {
+pub struct BondInfo {
     pub order: BondOrder,
     pub dir: Option<BondDir>,
 }
