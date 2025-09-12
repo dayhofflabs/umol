@@ -37,6 +37,17 @@ pub struct Molecule {
     pub source_format: SourceFormat,
 }
 
+impl std::fmt::Display for Molecule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Molecule (atoms: {}, bonds: {})",
+            self.atoms.len(),
+            self.bonds.len()
+        )
+    }
+}
+
 /// Unified atom representation
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum AtomSymbol {

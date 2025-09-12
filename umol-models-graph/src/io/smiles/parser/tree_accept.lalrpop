@@ -3,7 +3,7 @@ use umol_data::Element;
 use lalrpop_util::ParseError;
 use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
-use crate::io::smiles::state::{ParseState, Bond as SBond};
+use crate::io::smiles::state::{ParseState, BondSpec as SBond};
 
 grammar(state: &mut ParseState);
 
@@ -15,7 +15,7 @@ pub Tree: () = {
 // Chain: Node (Bond? Node)* via right recursion
 pub Chain: () = {
     <Node> =>? Ok(()),
-    <Chain> <Link> =>? { state.finalize_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+<Chain> <Link> =>? { state.finish_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
 }
 
 pub Link: () = {
@@ -25,10 +25,10 @@ pub Link: () = {
 
 // Atom nonterminals
 pub Atom: Atom = {
-    <a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom as u32);
-                                      let new_idx = state.bump_atom_index();
-                                      if let Some(_rb) = state.connect_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { }
-                                      state.current_atom = new_idx; Ok(atom) },
+<a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      let new_idx = state.bump_atom_idx();
+                                      if let Some(_rb) = state.link_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { }
+                                      state.last_atom_idx = new_idx; Ok(atom) },
 }
 
 // Node: Atom with zero or more sibling branches (right recursion)
@@ -53,7 +53,7 @@ pub OpenBranchWithBond: () = {
 }
 
 pub OpenBranchDot: () = {
-    "(" "." =>? { state.open_branch(None).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.separate_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+"(" "." =>? { state.open_branch(None).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.split_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
 }
 
 pub AliphaticOrganicSymbol: Atom = {
@@ -71,7 +71,7 @@ pub AliphaticOrganicSymbol: Atom = {
 
 // Bond nonterminals
 pub Bond: Bond = {
-    <order:BondOrder> =>? { state.set_pending_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
+<order:BondOrder> =>? { state.stage_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
 }
 
 pub BondOrder: BondOrder = {

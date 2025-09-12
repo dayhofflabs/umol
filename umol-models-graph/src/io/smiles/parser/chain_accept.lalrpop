@@ -3,14 +3,14 @@ use umol_data::Element;
 use lalrpop_util::ParseError;
 use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
-use crate::io::smiles::state::{ParseState, Bond as SBond};
+use crate::io::smiles::state::{ParseState, BondSpec as SBond};
 
 grammar(state: &mut ParseState);
 
 // A linear chain: Atom (Bond Atom)*, optionally terminated by Stop
 pub Chain: () = {
-    <Atom> =>? Ok(()),
-    <Chain> <Next> =>? { state.finalize_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+<Atom> =>? Ok(()),
+    <Chain> <Next> =>? { state.finish_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
 }
 
 pub Next: () = {
@@ -20,10 +20,10 @@ pub Next: () = {
 
 // Atom nonterminals
 pub Atom: Atom = {
-    <a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom as u32);
-                                      let new_idx = state.bump_atom_index();
-                                      if let Some(_rb) = state.connect_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { }
-                                      state.current_atom = new_idx; Ok(atom) },
+<a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      let new_idx = state.bump_atom_idx();
+                                      if let Some(_rb) = state.link_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { }
+                                      state.last_atom_idx = new_idx; Ok(atom) },
 }
 
 pub AliphaticOrganicSymbol: Atom = {
@@ -41,7 +41,7 @@ pub AliphaticOrganicSymbol: Atom = {
 
 // Bond nonterminals
 pub Bond: Bond = {
-    <order:BondOrder> =>? { state.set_pending_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
+<order:BondOrder> =>? { state.stage_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
 }
 
 pub BondOrder: BondOrder = {

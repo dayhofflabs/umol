@@ -5,7 +5,7 @@ use umol_data::Element;
 
 use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
-use crate::io::smiles::state::{ParseState, Bond as SBond};
+use crate::io::smiles::state::{ParseState, BondSpec as SBond};
 
 grammar<'err, 'input>(errors: &'err mut Vec<ErrorRecovery<usize,Token, LexicalError>>, state: &mut ParseState);
 
@@ -27,7 +27,7 @@ pub BracketAtom: Atom = {
         if let Some(ch) = chirality {
             // Register an open stereocenter for the atom being created next.
             // We defer neighbor count validation (expected_neighbors = 0).
-            let _ = state.open_stereocenter(state.next_atom, Some(ch), 0);
+let _ = state.stereo_open(state.next_atom_idx, Some(ch), 0);
         }
         atom
     },

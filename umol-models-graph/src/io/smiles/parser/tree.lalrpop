@@ -3,19 +3,41 @@ use umol_data::Element;
 use lalrpop_util::ParseError;
 use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
-use crate::io::smiles::state::{ParseState, Bond as SBond};
+use crate::io::smiles::state::{ParseState, BondSpec as SBond};
 
 grammar(state: &mut ParseState);
 
-// Tree: branched chain
+// Tree: one or more components separated by '.'
 pub Tree: () = {
-    <Chain> =>? Ok(()),
+    <Component> <TailComponents> =>? Ok(()) ,
 }
 
-// Chain: Node (Bond? Node)* via right recursion
+// Component: a branched chain that finalizes into a molecule
+pub Component: () = {
+<StartChain> =>? { state.finish_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.finish_molecule();
+                     // append any nested molecules finalized within branches
+                     let mut pending = std::mem::take(&mut state.pending_molecules);
+                     state.molecules.append(&mut pending);
+                     Ok(()) },
+}
+
+// StartChain ensures the first atom of a component does not connect to a previous component
+pub StartChain: () = {
+    <StartNode> <StartChainTail> =>? Ok(()),
+}
+
+pub DotSep: () = {
+    "." =>? { state.split_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+}
+
+pub TailComponents: () = {
+    <DotSep> <Component> <TailComponents> =>? Ok(()),
+    =>? Ok(()),
+}
+
+// Chain: used inside branches or after the first atom of a component
 pub Chain: () = {
-    <Node> =>? Ok(()),
-    <Chain> <Link> =>? { state.finalize_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    <Node> <ChainTail> =>? Ok(()),
 }
 
 pub Link: () = {
@@ -23,25 +45,56 @@ pub Link: () = {
     <Bond> <Node> =>? Ok(()),
 }
 
-// Atom nonterminals
-pub Atom: Atom = {
-    <a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom as u32);
-                                      let new_idx = state.bump_atom_index();
-                                      if let Some(_rb) = state.connect_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { }
-                                      state.current_atom = new_idx; Ok(atom) },
+pub StartChainTail: () = {
+    =>? Ok(()),
+    <StartChainTail> <Link> =>? Ok(()),
 }
 
-// Node: Atom with zero or more sibling branches (right recursion)
+pub ChainTail: () = {
+    <Link> <ChainTail> =>? Ok(()),
+    =>? Ok(()),
+}
+
+// Branch-local components separated by '.' within parentheses
+// BranchLocal component tail reused by OpenBranchDot, defined once above
+
+// Atom + connect/push side effects for linked atoms
+pub AtomBond: () = {
+<a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      let new_idx = state.bump_atom_idx();
+                                      if let Some(rb) = state.link_to(new_idx).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })? { state.push_resolved_bond(rb); }
+                                      state.push_atom(atom);
+                                      state.last_atom_idx = new_idx; Ok(()) },
+}
+
+// AtomStart: first atom of a component, do not connect to previous component
+pub AtomStart: () = {
+<a:AliphaticOrganicSymbol> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      let new_idx = state.bump_atom_idx();
+                                      // No link_to here; top-level component start
+                                      state.push_atom(atom);
+                                      state.last_atom_idx = new_idx; Ok(()) },
+}
+
+// StartNode: first atom in a component, then zero or more branches
+pub StartNode: () = {
+    <AtomStart> =>? Ok(()),
+    <StartNode> <Branch> =>? Ok(()),
+}
+
+// Node: Atom with zero or more sibling branches
 pub Node: () = {
-    <Atom> =>? Ok(()),
+    <AtomBond> =>? Ok(()),
     <Node> <Branch> =>? Ok(()),
 }
 
-// Branch forms: (Chain), (Bond Chain), (. Chain)
+// Branch forms per OpenSMILES: (Chain), (Bond Chain), (. Chain)
 pub Branch: () = {
     <OpenBranchNone> <Chain> ")" =>? { state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
     <OpenBranchWithBond> <Chain> ")" =>? { state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
-    <OpenBranchDot> <Chain> ")" =>? { state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    <OpenBranchNone> <Chain> <BranchDotTail> ")" =>? { state.exit_comp(); state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    <OpenBranchWithBond> <Chain> <BranchDotTail> ")" =>? { state.exit_comp(); state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    <OpenBranchDot> <StartChain> <BranchCompsTail> ")" =>? { state.exit_comp(); state.close_branch().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
 }
 
 pub OpenBranchNone: () = {
@@ -52,8 +105,26 @@ pub OpenBranchWithBond: () = {
     "(" <order:BondOrder> =>? { state.open_branch(Some(SBond { order, dir: None })).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
 }
 
+// (. StartChain ('.' StartChain)*) inside branch; enter a nested component context
 pub OpenBranchDot: () = {
-    "(" "." =>? { state.open_branch(None).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.separate_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+    "(" "." =>? { state.open_branch(None).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.enter_comp(); state.split_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+}
+
+pub BranchDotSep: () = {
+    "." =>? { state.enter_comp(); state.split_component().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(()) },
+}
+
+pub BranchComps: () = {
+    <Chain> <BranchCompsTail> =>? Ok(()),
+}
+
+pub BranchCompsTail: () = {
+    <DotSep> <StartChain> <BranchCompsTail> =>? Ok(()),
+    =>? Ok(()),
+}
+
+pub BranchDotTail: () = {
+    <BranchDotSep> <StartChain> <BranchCompsTail> =>? Ok(()),
 }
 
 pub AliphaticOrganicSymbol: Atom = {
@@ -71,7 +142,7 @@ pub AliphaticOrganicSymbol: Atom = {
 
 // Bond nonterminals
 pub Bond: Bond = {
-    <order:BondOrder> =>? { state.set_pending_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
+<order:BondOrder> =>? { state.stage_bond_order(order).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; Ok(Bond::from_order(order)) },
 }
 
 pub BondOrder: BondOrder = {
