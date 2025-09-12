@@ -55,6 +55,7 @@ pub enum AtomSymbol {
     NamedIsotope(NamedIsotope),
     Query(QueryAtom),
     Variable(Variable),
+    Pseudoatom(String),
     #[default]
     Unknown,
 }

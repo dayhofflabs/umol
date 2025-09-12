@@ -3,7 +3,7 @@ use umol_data::Element;
 use lalrpop_util::ParseError;
 use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality};
 use crate::io::smiles::lexer::{LexicalError, Token};
-use crate::io::smiles::state::{ParseState, BondSpec as SBond};
+use crate::io::smiles::state::{ParseState, BondSpec as SBond, ResolvedBond};
 
 grammar(state: &mut ParseState);
 
@@ -19,6 +19,7 @@ pub Tail: () = {
 }
 
 pub Link: () = {
+    <Ring> =>? Ok(()),
     <AtomBond> =>? Ok(()),
     <Bond> <AtomBond> =>? Ok(()),
 }
@@ -232,42 +233,31 @@ pub AromaticOrganicSymbol: Atom = {
 }
 
 pub Isotope: u32 = {
-    <mass:"digit1"> => mass,
-    <mass:"digit2"> => mass,
-    <mass:"digit3"> => mass,
+    <mass:Number> => mass,
 }
 
 pub Chirality: Chirality = {
     "@" => Chirality::Clockwise,
     "@@" => Chirality::CounterClockwise,
-    "@TH" <arr:"digit1"> => Chirality::Tetrahedral { arr},
-    "@AL" <arr:"digit1"> => Chirality::Allenal { arr},
-    "@SP" <arr:"digit1"> => Chirality::SquarePlanar { arr},
-    "@TB" <arr:"digit1"> => Chirality::TrigonalBipyramidal { arr},
-    "@TB" <arr:"digit2"> => Chirality::TrigonalBipyramidal { arr},
-    "@OH" <arr:"digit1"> => Chirality::Octahedral { arr},
-    "@OH" <arr:"digit2"> => Chirality::Octahedral { arr},
+    "@TH" <arr:Digit> => Chirality::Tetrahedral { arr},
+    "@AL" <arr:Digit> => Chirality::Allenal { arr},
+    "@SP" <arr:Digit> => Chirality::SquarePlanar { arr},
+    "@TB" <arr:Number> => Chirality::TrigonalBipyramidal { arr},
+    "@OH" <arr:Number> => Chirality::Octahedral { arr},
 }
 
-pub HCount: u32 = {
-    "H" => 1u32,
-    "H" <count:"digit1"> => count,
-}
+pub HCount: u32 = { "H" => 1u32, "H" <count:Digit> => count }
 
 pub Charge: i32 = {
     "+" => 1i32,
     "-" => -1i32,
     "++" => 2i32,
     "--" => -2i32,
-    "+" <count:"digit1"> => count as i32,
-    "-" <count:"digit1"> => -(count as i32),
+    "+" <count:Digit> => count as i32,
+    "-" <count:Digit> => -(count as i32),
 }
 
-pub Class: u32 = {
-    ":" <index:"digit1"> => index,
-    ":" <index:"digit2"> => index,
-    ":" <index:"digit3"> => index,
-}
+pub Class: u32 = { ":" <index:Number> => index }
 
 // Bond nonterminals
 pub Bond: Bond = {
@@ -284,6 +274,35 @@ pub BondOrder: BondOrder = {
 }
 
 // Helper nonterminals
+
+// ring sequences are represented by repeated Link::<Ring>
+
+pub Ring: () = {
+    <spec:RingSpec?> <ring:RingIndex> =>? {
+        let bond_spec = spec.unwrap_or(SBond { order: BondOrder::Single, dir: None });
+        if state.rings.contains_key(&ring) {
+            let (start_atom, pending) = state.close_ring(ring).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
+            let use_spec = pending.unwrap_or(bond_spec);
+            let rb = ResolvedBond { start_atom, end_atom: state.last_atom_idx, bond_index: state.bump_bond_idx(), bond: use_spec };
+            state.push_resolved_bond(rb);
+        } else {
+            let _ = state.open_ring(ring, Some(bond_spec)).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
+        }
+        Ok(())
+    },
+}
+
+pub RingSpec: SBond = {
+    <order:BondOrder> => SBond { order, dir: None },
+    "/" => SBond { order: BondOrder::Single, dir: Some(BondDir::Up) },
+    "\\" => SBond { order: BondOrder::Single, dir: Some(BondDir::Down) },
+}
+
+pub RingIndex: u32 = { <Digit>, <"percent"> }
+
+// Number helpers
+pub Digit: u32 = { <"digit"> }
+pub Number: u32 = { <ds:Digit+> => ds.into_iter().fold(0u32, |n, d| n * 10 + d) }
 
 // Lexer configuration and token definitions
 extern {
@@ -426,9 +445,7 @@ extern {
         "(" => Token::OpenParen,
         ")" => Token::CloseParen,
 
-        "digit1" => Token::Digit1(<u32>),
-        "digit2" => Token::Digit2(<u32>),
-        "digit3" => Token::Digit3(<u32>),
+        "digit" => Token::Digit(<u32>),
         "percent" => Token::Percent(<u32>),
 
         "@" => Token::Clockwise,
