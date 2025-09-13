@@ -9,15 +9,20 @@ grammar(state: &mut ParseState);
 
 // Molecule: one or more components separated by '.'
 pub Molecule: () = {
-    <Component> <TailComponents> =>? Ok(()) ,
+    <Terminator> =>? Ok(()),
+    <Component> <TailComponents> <Terminator> =>? { if !state.rings.is_empty() { return Err(ParseError::User { error: LexicalError::InvalidToken }); } Ok(()) },
 }
 
 // Component: a branched chain that finalizes into a molecule
 pub Component: () = {
-<StartChain> =>? { state.finish_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?; state.finish_molecule();
-                     // append any nested molecules finalized within branches
-                     let mut pending = std::mem::take(&mut state.pending_molecules);
-                     state.molecules.append(&mut pending);
+<StartChain> =>? { state.finish_chain().map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
+                     // Defer finalization when any rings are still open (to allow cross-component ring merges)
+                     if state.rings.is_empty() {
+                         state.finish_molecule();
+                         // append any nested molecules finalized within branches
+                         let mut pending = std::mem::take(&mut state.pending_molecules);
+                         state.molecules.append(&mut pending);
+                     }
                      Ok(()) },
 }
 
@@ -335,13 +340,15 @@ pub Chirality: Chirality = {
 
 pub HCount: u32 = { "H" => 1u32, "H" <count:Digit> => count }
 
+pub TwoDigits: u32 = { <d:Digit> => d, <d1:Digit> <d2:Digit> => d1 * 10 + d2 }
+
 pub Charge: i32 = {
     "+" => 1i32,
     "-" => -1i32,
-    "++" => 2i32,
-    "--" => -2i32,
-    "+" <count:Digit> => count as i32,
-    "-" <count:Digit> => -(count as i32),
+    "++" => 2i32, // deprecated
+    "--" => -2i32, // deprecated
+    "+" <count:TwoDigits> => count as i32,
+    "-" <count:TwoDigits> => -(count as i32),
 }
 
 pub Class: u32 = { ":" <index:Number> => index }
@@ -361,20 +368,33 @@ pub BondOrder: BondOrder = {
     "$" => BondOrder::Quadruple,
 }
 
-// Helper nonterminals
-
-// ring sequences are represented by repeated Link::<Ring>
-
+// Ring nonterminals
 pub Ring: () = {
     <spec:RingSpec?> <ring:RingIndex> =>? {
         if state.rings.contains_key(&ring) {
-            let spec_is_some = spec.is_some();
-            let bond_info = spec.unwrap_or(BondInfo { order: BondOrder::Single, dir: None });
             let (start_atom, pending) = state.close_ring(ring).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
+            // Disallow self-loops and two-member rings by checking existing bond between start and end
+            let end_atom = state.last_atom_idx;
+            if state.bond_exists_between(start_atom, end_atom) {
+                return Err(ParseError::User { error: LexicalError::InvalidToken });
+            }
+            // Conflict: both sides specify a direction and they differ
+            if let (Some(p), Some(s)) = (pending.as_ref(), spec.as_ref()) {
+                if let (Some(pd), Some(sd)) = (p.dir, s.dir) {
+                    if pd != sd { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
+                }
+            }
+            // Closing-side spec takes precedence if present; otherwise opening-side
+            let spec_is_some = spec.is_some();
             let pending_is_some = pending.is_some();
-            let use_spec = pending.unwrap_or(bond_info);
+            let chosen = match (spec, pending) {
+                (Some(s), Some(_p)) => s,
+                (Some(s), None) => s,
+                (None, Some(p)) => p,
+                (None, None) => BondInfo { order: BondOrder::Single, dir: None },
+            };
             let explicit = pending_is_some || spec_is_some;
-            let rb = ResolvedBond { start_atom, end_atom: state.last_atom_idx, bond_index: state.bump_bond_idx(), bond: use_spec, explicit };
+            let rb = ResolvedBond { start_atom, end_atom, bond_index: state.bump_bond_idx(), bond: chosen, explicit };
             state.push_resolved_bond(rb);
         } else {
             // Store spec only if provided; leave None to allow close-side spec to apply
@@ -396,6 +416,12 @@ pub RingIndex: u32 = { <Digit>, <"percent"> }
 // Number helpers
 pub Digit: u32 = { <"digit"> }
 pub Number: u32 = { <ds:Digit+> => ds.into_iter().fold(0u32, |n, d| n * 10 + d) }
+
+// Terminator: zero or more whitespace or end-of-input
+pub Terminator: () = {
+    =>? Ok(()),
+    <"stop"> <Terminator> =>? Ok(())
+}
 
 // Lexer configuration and token definitions
 extern {

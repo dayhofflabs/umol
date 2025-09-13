@@ -1,9 +1,7 @@
 //! Intermediate representation for molecular structures
 
+use serde::{Deserialize, Serialize};
 use umol_data::{Element, NamedIsotope};
-
-use crate::io::ctab::atom::AtomRadical;
-use crate::io::ctab::bond::{BondReactingCenter, BondStereo, BondTopology};
 
 /// Input molecular format
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +114,30 @@ impl Atom {
     }
 }
 
+/// Extended query atom types (superset of MOL + SMARTS)
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub enum QueryAtom {
+    Any,           // * = any atom
+    Heavy,         // A = all except H
+    Heteroatom,    // Q = any heteroatom (all except H, C)
+    Halogen,       // X = F, Cl, Br, I
+    Metal,         // M = any metal
+    HeavyOrH,      // AH = any atom (CXSMILES extension)
+    HeteroatomOrH, // QH = Q or H (CXSMILES extension)
+    HalogenOrH,    // XH = X or H (CXSMILES extension)
+    MetalOrH,      // MH = M or H (CXSMILES extension)
+    #[default]
+    Unknown,
+}
+
+/// Radical type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AtomRadical {
+    Singlet,
+    Doublet,
+    Triplet,
+}
+
 /// Bond IR
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Bond {
@@ -127,10 +149,6 @@ pub struct Bond {
     pub symbol: BondSymbol,
     pub stereo: Option<BondStereo>,
     pub direction: Option<BondDir>,
-
-    // Query properties
-    pub topology: Option<BondTopology>,
-    pub reacting_center: Option<BondReactingCenter>,
 
     // Metadata
     pub source_format: SourceFormat,
@@ -163,22 +181,6 @@ impl Bond {
             ..Default::default()
         }
     }
-}
-
-/// Extended query atom types (superset of MOL + SMARTS)
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub enum QueryAtom {
-    Any,           // * = any atom
-    Heavy,         // A = all except H
-    Heteroatom,    // Q = any heteroatom (all except H, C)
-    Halogen,       // X = F, Cl, Br, I
-    Metal,         // M = any metal
-    HeavyOrH,      // AH = any atom (CXSMILES extension)
-    HeteroatomOrH, // QH = Q or H (CXSMILES extension)
-    HalogenOrH,    // XH = X or H (CXSMILES extension)
-    MetalOrH,      // MH = M or H (CXSMILES extension)
-    #[default]
-    Unknown,
 }
 
 /// Unified bond representation (concrete + queries)
@@ -232,6 +234,15 @@ pub enum BondDir {
     Either,
     #[default]
     Unknown,
+}
+
+/// Double-bond stereochemistry (E/Z) annotation in IR
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BondStereo {
+    Cis,
+    Trans,
+    #[default]
+    Either,
 }
 
 /// Chirality

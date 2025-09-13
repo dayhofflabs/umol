@@ -7,8 +7,7 @@ use slog::Logger;
 use umol::error::DataError;
 use umol::Result;
 
-use crate::io::ctab::bond::BondStereo;
-use crate::io::ir::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, BondSymbol, Chirality, Molecule as IRMolecule, SourceFormat};
+use crate::io::ir::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, BondStereo, BondSymbol, Chirality, Molecule as IRMolecule, SourceFormat};
 
 /// Default depth of branching in SMILES.
 /// Can be exceeded (incurs extra memory allocation) if needed.
@@ -61,6 +60,15 @@ pub struct ParseState {
 }
 
 impl ParseState {
+    pub fn bond_exists_between(&self, a: usize, b: usize) -> bool {
+        if a == b { return true; }
+        self.buf_bonds.iter().any(|bond| {
+            match (bond.start_atom.map(|x| x as usize), bond.end_atom.map(|x| x as usize)) {
+                (Some(sa), Some(ea)) => (sa == a && ea == b) || (sa == b && ea == a),
+                _ => false,
+            }
+        })
+    }
     pub fn open_ring(&mut self, ring_index: u32, bond: Option<BondInfo>) -> Result<()> {
         if self.rings.contains_key(&ring_index) {
             return Err(DataError::InvalidRing(format!(
