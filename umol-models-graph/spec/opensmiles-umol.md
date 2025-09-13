@@ -22,14 +22,13 @@ Input is ASCII and case-sensitive. Tokens are recognized using a maximal‑munch
 | DIGIT | 0–9 | |
 | NONZERO_DIGIT | 1–9 | |
 | NUMBER | DIGIT+ | Base‑10, unsigned |
-| TwoDigits | DIGIT or DIGIT DIGIT | Values 0–99 |
 | PERCENT_RING | '%' NONZERO_DIGIT DIGIT | Values 10–99 only |
 | DOT | '.' | Component separator |
-| BOND | '-' '=' '#' '$' ':' '/' '\' | Bond symbols |
+| BOND | '-' '=' '#' '$' ':' '/' '\\' | Bond symbols |
 | BRACKET_OPEN | '[' | |
 | BRACKET_CLOSE | ']' | |
 | CHIRALITY | '@' '@@' '@TH' DIGIT '@AL' DIGIT '@SP' DIGIT '@TB' NUMBER '@OH' NUMBER | Ranges defined below |
-| CHARGE | '+' '-' '++' '--' '+' TwoDigits '-' TwoDigits | +/− optionally with up to two digits; '++'/'--' equal ±2 |
+| CHARGE | '+' '-' '++' '--' '+' DIGIT [DIGIT]? '-' DIGIT [DIGIT]? | +/− optionally with one or two digits; '++'/'--' equal ±2 |
 | WHITESPACE | SPACE TAB LINEFEED CARRIAGE_RETURN | Trailing only |
 | END_OF_STRING | (end sentinel) | Not a character |
 
@@ -39,8 +38,9 @@ Input is ASCII and case-sensitive. Tokens are recognized using a maximal‑munch
 DIGIT ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 NONZERO_DIGIT ::= '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 NUMBER ::= DIGIT+
-TwoDigits ::= DIGIT | DIGIT DIGIT
 PERCENT_RING ::= '%' NONZERO_DIGIT DIGIT
+
+two_digits ::= DIGIT | DIGIT DIGIT
 
 atom ::= bracket_atom | aliphatic_organic | aromatic_organic | '*'
 
@@ -59,7 +59,7 @@ chiral ::= '@' | '@@' | '@TH' DIGIT | '@AL' DIGIT | '@SP' DIGIT | '@TB' NUMBER |
 
 hcount ::= 'H' | 'H' DIGIT
 
-charge ::= '+' | '-' | '++' | '--' | '+' TwoDigits | '-' TwoDigits
+charge ::= '+' | '-' | '++' | '--' | '+' two_digits | '-' two_digits
 
 class ::= ':' NUMBER
 

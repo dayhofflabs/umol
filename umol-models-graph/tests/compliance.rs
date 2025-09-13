@@ -2,3 +2,4 @@
 
 pub mod mol_parsing;
 pub mod sdf_parsing;
+pub mod opensmiles_lexing;

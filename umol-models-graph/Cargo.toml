@@ -32,10 +32,10 @@ walkdir = "2.4"
 criterion = "0.7"
 insta = { version = "1.31", features = ["yaml", "glob"] }
 pretty_assertions = "1.4.0"
+proptest = "1.7.0"
 rstest = "0.26"
 serde_json = "1.0"
 serde_yaml = "0.9.33"
-tempfile = "3.0"
 
 [[bench]]
 name = "parsing_bench"
