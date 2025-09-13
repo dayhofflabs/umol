@@ -67,3 +67,70 @@
   - Aromaticity policy: “accept as-is first, perceive later” to keep the parser deterministic and fast.
 
 If you want, I can draft the minimal additions needed for bracket atoms next (lexer tokens, a single `BracketAtom` nonterminal, and `ParseState` entry points), along with 3-5 focused tests per feature to keep the steps tight.
+
+## 4) Update 2025-09-12
+
+Here’s the OpenSMILES feature matrix and current status (source: OpenSMILES spec) [opensmiles.org](http://opensmiles.org/opensmiles.html).
+
+Atoms and symbols
+- Aliphatic organic subset (B,C,N,O,P,S,F,Cl,Br,I): Implemented
+- Aromatic organic subset (b,c,n,o,p,s; se, as): Implemented (input-honoring only)
+- Full bracket atoms: Implemented
+  - Isotope [Number]: Implemented
+  - Chirality (@, @@, @THn, @ALn, @SPn, @TBn, @OHn): Implemented (see Stereo below)
+  - H-count (H, Hn): Implemented
+  - Charge (+, -, ++, --, +n, -n): Implemented
+  - Class (:Number): Implemented (parsed only)
+  - Unknown atom (*): Implemented
+- Radicals via lowercase non-aromatic (spec section 6.4): Not implemented
+
+Bonds
+- Orders: -, =, #, $: Implemented
+- Aromatic bond “:”: Implemented; also default to aromatic when both endpoints are aromatic and bond is implicit
+- Directional markers “/”, “\” (for E/Z): Implemented (resolution pass)
+- Implicit single adjacency between atoms: Implemented
+
+Branching and components
+- Branching with parentheses (optional leading bond): Implemented
+- Disconnected components with “.” (top-level and inside branches): Implemented
+
+Rings
+- Single-digit ring indices (0–9): Implemented
+- Two-digit “%nn” (10–99 only): Implemented (lexer enforces two digits)
+- Ring-spec with optional prior bond symbol (order/dir/“:”): Implemented
+- Same-component rule (no ring closure across ‘.’): Needs explicit enforcement (ring table is not cleared on dot)
+
+Aromaticity
+- Honor input aromatic atoms (lowercase) and explicit “:” bonds: Implemented
+- Perception/kekulization and aromatic valence checks: Not implemented (deferred to IR-level semantics)
+
+Stereochemistry
+- Double-bond E/Z from slash markers: Implemented (late-pass over IR bonds)
+- Atom-based double-bond stereo using @/@@ on vinylic atoms (shown in spec examples): Not implemented (we use slash-based E/Z)
+- Tetrahedral (@, @@, @THn): Implemented
+  - @TH1/@TH2 → alias to @/@@: Implemented
+  - Validation: requires exactly 4 substituents (explicit + bracket H, at most one implicit H): Implemented
+  - TH arrangement index (n) semantics beyond viability: Not interpreted (kept as-is)
+- Allene/axial (@ALn): Implemented
+  - Alias @ → @AL1 and @@ → @AL2 when center has exactly two incident double bonds: Implemented
+  - Viability check (axis present; each terminal has substituent or bracket H): Implemented
+  - Longer odd-length cumulenes beyond simple allene: Not implemented
+  - AL arrangement index semantics beyond viability: Not interpreted
+- Square planar / trigonal bipyramidal / octahedral (@SPn/@TBn/@OHn): Implemented (syntax + viability only)
+  - Validation: exact neighbor counts (4/5/6 respectively), no implicit H allowed: Implemented
+  - Arrangement index semantics (positional patterns): Not interpreted
+
+Syntax and error policy
+- Invalid bracket forms, trailing bond, consecutive bond symbols, unclosed/unknown ring index, invalid %0/%09: Implemented (tests in place)
+- Ring closure across components: Needs explicit invalidation on dot (not tested/blocked yet)
+- Canonicalization/normalization: Not implemented (out of scope for parser)
+
+Out of scope per spec
+- Reaction SMILES: Not part of the spec (N/A)
+- Relative/unknown stereo (@?): Not in spec (N/A)
+- Twisted SMILES (conformational extension): Not implemented (extension)
+
+If you want, I can:
+- Enforce “no ring across ‘.’” by clearing/validating ring state on component boundaries.
+- Add optional atom-based double-bond @/@@ handling (vinylic) to match the spec examples, alongside the existing slash-based E/Z.
+- Track arrangement indexes for SP/TB/OH/AL (store and optionally validate positional patterns later).

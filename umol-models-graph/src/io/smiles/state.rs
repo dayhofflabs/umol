@@ -272,10 +272,9 @@ impl ParseState {
         match &mut self.staged_bond {
             Some(b) => match b.dir {
                 None => b.dir = Some(dir),
-                Some(existing) if existing == dir => {},
                 Some(_) => {
                     return Err(DataError::InvalidBond(
-                        "Conflicting bond directions on the same bond".to_string(),
+                        "Consecutive bond direction markers are not allowed".to_string(),
                     )
                     .into())
                 }

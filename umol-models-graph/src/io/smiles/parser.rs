@@ -2,18 +2,10 @@
 
 use lalrpop_util::lalrpop_mod;
 
-// SMILES unbranched grammar parser
 lalrpop_mod!(
     #[allow(unused_imports)]
     #[rustfmt::skip]
-    pub unbranched
-);
-
-// SMILES branched grammar parser
-lalrpop_mod!(
-    #[allow(unused_imports)]
-    #[rustfmt::skip]
-    pub branched
+    pub grammar
 );
 
 #[cfg(test)]
