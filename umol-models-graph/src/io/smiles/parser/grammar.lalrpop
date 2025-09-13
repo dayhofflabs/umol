@@ -367,9 +367,9 @@ pub BondOrder: BondOrder = {
 
 pub Ring: () = {
     <spec:RingSpec?> <ring:RingIndex> =>? {
-        let spec_is_some = spec.is_some();
-        let bond_info = spec.unwrap_or(BondInfo { order: BondOrder::Single, dir: None });
         if state.rings.contains_key(&ring) {
+            let spec_is_some = spec.is_some();
+            let bond_info = spec.unwrap_or(BondInfo { order: BondOrder::Single, dir: None });
             let (start_atom, pending) = state.close_ring(ring).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
             let pending_is_some = pending.is_some();
             let use_spec = pending.unwrap_or(bond_info);
@@ -377,7 +377,8 @@ pub Ring: () = {
             let rb = ResolvedBond { start_atom, end_atom: state.last_atom_idx, bond_index: state.bump_bond_idx(), bond: use_spec, explicit };
             state.push_resolved_bond(rb);
         } else {
-            let _ = state.open_ring(ring, Some(bond_info)).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
+            // Store spec only if provided; leave None to allow close-side spec to apply
+            let _ = state.open_ring(ring, spec).map_err(|_| ParseError::User { error: LexicalError::InvalidToken })?;
         }
         Ok(())
     },

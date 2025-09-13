@@ -332,12 +332,13 @@ fn test_aromatic_organic_symbol(#[case] input: &str, #[case] expected: Atom) {
     assert_eq!(result, expected);
 }
 
+// MoleculeParser tests — single-feature (valid)
 #[rstest]
 #[case("C1CC1", 3, 3)]
 #[case("C12CCC1C2", 5, 6)]
 #[case("C%12CC%12", 3, 3)]
 #[case("C$C", 2, 1)]
-fn test_linear_rings_and_special_bonds(
+fn test_molecule_rings_and_special_bonds_valid(
     mut parse_state: ParseState,
     #[case] input: &str,
     #[case] atoms: usize,
@@ -358,10 +359,45 @@ fn test_linear_rings_and_special_bonds(
 }
 
 #[rstest]
+#[case("C/1CC1", 1, 0)]
+#[case("C1CC\\1", 0, 1)]
+#[case("c:1cccc1", 0, 0)]
+fn test_molecule_ring_spec_valid_linear(
+    #[case] input: &str,
+    #[case] up_cnt: usize,
+    #[case] down_cnt: usize,
+) {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new(input);
+    let parser = MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    let dirs: Vec<_> = mols[0]
+        .bonds
+        .iter()
+        .filter_map(|b| b.direction)
+        .collect();
+    let got_up = dirs.iter().filter(|d| **d == crate::io::ir::BondDir::Up).count();
+    let got_down = dirs.iter().filter(|d| **d == crate::io::ir::BondDir::Down).count();
+    if input != "c:1cccc1" {
+        assert_eq!(got_up, up_cnt);
+        assert_eq!(got_down, down_cnt);
+    } else {
+        // At least one aromatic bond present (colon ring spec)
+        assert!(mols[0]
+            .bonds
+            .iter()
+            .any(|b| b.symbol == BondSymbol::Bond(BondOrder::Aromatic)));
+    }
+}
+
+#[rstest]
 #[case("C/C", vec![Some(crate::io::ir::BondDir::Up)])]
 #[case("C\\C", vec![Some(crate::io::ir::BondDir::Down)])]
 #[case("C/C\\C", vec![Some(crate::io::ir::BondDir::Up), Some(crate::io::ir::BondDir::Down)])]
-fn test_bond_dirs_linear(#[case] input: &str, #[case] dirs: Vec<Option<crate::io::ir::BondDir>>) {
+fn test_molecule_bond_dirs_valid_linear(#[case] input: &str, #[case] dirs: Vec<Option<crate::io::ir::BondDir>>) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -382,7 +418,7 @@ fn test_bond_dirs_linear(#[case] input: &str, #[case] dirs: Vec<Option<crate::io
 #[case("FC=C/F", Some(BondStereo::Either))]
 #[case("F/C=CF", Some(BondStereo::Either))]
 #[case("FC=CF", None)]
-fn test_branched_ez_linear(#[case] input: &str, #[case] expected: Option<BondStereo>) {
+fn test_molecule_ez_valid_linear(#[case] input: &str, #[case] expected: Option<BondStereo>) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -403,7 +439,7 @@ fn test_branched_ez_linear(#[case] input: &str, #[case] expected: Option<BondSte
 #[case("cc", 2, 1, Some(BondOrder::Aromatic))]
 #[case("c:c", 2, 1, Some(BondOrder::Aromatic))]
 #[case("cC", 2, 1, Some(BondOrder::Single))]
-fn test_aromatic_core_linear(
+fn test_molecule_aromatic_core_valid(
     mut parse_state: ParseState,
     #[case] input: &str,
     #[case] atoms: usize,
@@ -424,7 +460,7 @@ fn test_aromatic_core_linear(
 }
 
 #[test]
-fn test_aromatic_ring_linear() {
+fn test_molecule_aromatic_ring_valid() {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new("c1ccccc1");
     let parser = MoleculeParser::new();
@@ -443,7 +479,7 @@ fn test_aromatic_ring_linear() {
 
 #[rstest]
 #[case("c1ccc(cc1)N", 7)]
-fn test_branched_aromatic_mixed(#[case] input: &str, #[case] bonds: usize) {
+fn test_molecule_aromatic_mixed_valid(#[case] input: &str, #[case] bonds: usize) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -461,7 +497,7 @@ fn test_branched_aromatic_mixed(#[case] input: &str, #[case] bonds: usize) {
 
 #[rstest]
 #[case("C:C")] // explicit colon between aliphatic atoms
-fn test_aromatic_invalid_linear(#[case] input: &str) {
+fn test_molecule_aromatic_explicit_colon_valid(#[case] input: &str) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -481,7 +517,7 @@ fn test_aromatic_invalid_linear(#[case] input: &str) {
 #[case("[13C]C", 2, 1)]
 #[case("C[O-]", 2, 1)]
 #[case("[NH4+]", 1, 0)]
-fn test_bracket_atoms_linear(
+fn test_molecule_bracket_atoms_valid_linear(
     mut parse_state: ParseState,
     #[case] input: &str,
     #[case] atoms: usize,
@@ -510,7 +546,8 @@ fn test_bracket_atoms_linear(
 #[case("C]", "unexpected close bracket")]
 #[case("[C+", "unclosed bracket with charge")]
 #[case("[13]", "missing symbol after isotope")]
-fn test_linear_invalid(mut parse_state: ParseState, #[case] input: &str, #[case] desc: &str) {
+// MoleculeParser tests — single-feature (invalid)
+fn test_molecule_linear_invalid(mut parse_state: ParseState, #[case] input: &str, #[case] desc: &str) {
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
     let result = parser.parse(&mut parse_state, lexer);
@@ -528,7 +565,8 @@ fn test_linear_invalid(mut parse_state: ParseState, #[case] input: &str, #[case]
 #[case("CC(C)(C)CC", 6, 5)]
 #[case("CC(C(C)C)C", 6, 5)]
 #[case("CC(CC)C", 5, 4)]
-fn test_branched(
+// MoleculeParser tests — core branching cases (valid)
+fn test_molecule_branched_valid(
     mut parse_state: ParseState,
     #[case] input: &str,
     #[case] atoms: usize,
@@ -548,11 +586,54 @@ fn test_branched(
     assert_eq!(mols[0].bonds.len(), bonds);
 }
 
+#[test]
+fn test_molecule_branch_dot_components_valid() {
+    // OpenBranchDot: C(.C)C -> two molecules: main CC and isolated C
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new("C(.C)C");
+    let parser = MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 2);
+    let sizes: Vec<(usize, usize)> = mols.iter().map(|m| (m.atoms.len(), m.bonds.len())).collect();
+    assert!(sizes.contains(&(2, 1)));
+    assert!(sizes.contains(&(1, 0)));
+}
+
+#[test]
+fn test_molecule_branch_dot_tail_components_valid() {
+    // BranchDotTail: C(C.C)C -> main 3 atoms/2 bonds + isolated C
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new("C(C.C)C");
+    let parser = MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 2);
+    let sizes: Vec<(usize, usize)> = mols.iter().map(|m| (m.atoms.len(), m.bonds.len())).collect();
+    assert!(sizes.contains(&(3, 2)));
+    assert!(sizes.contains(&(1, 0)));
+}
+
+#[test]
+fn test_molecule_unknown_symbol_valid() {
+    let mut parse_state = ParseState::default();
+    let lexer = Lexer::new("C*C");
+    let parser = MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok());
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].atoms.len(), 3);
+    assert_eq!(mols[0].bonds.len(), 2);
+}
+
 #[rstest]
 #[case("C/C", vec![Some(crate::io::ir::BondDir::Up)])]
 #[case("C\\C", vec![Some(crate::io::ir::BondDir::Down)])]
 #[case("C(/C)C", vec![Some(crate::io::ir::BondDir::Up), None])]
-fn test_branched_bond_dirs(#[case] input: &str, #[case] dirs: Vec<Option<crate::io::ir::BondDir>>) {
+fn test_molecule_bond_dirs_valid_branched(#[case] input: &str, #[case] dirs: Vec<Option<crate::io::ir::BondDir>>) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -570,7 +651,7 @@ fn test_branched_bond_dirs(#[case] input: &str, #[case] dirs: Vec<Option<crate::
 #[case("C[O-]", 2, 1)]
 #[case("[NH4+]", 1, 0)]
 #[case("[C@H](F)(Cl)Br", 4, 3)]
-fn test_branched_bracket_atoms(#[case] input: &str, #[case] atoms: usize, #[case] bonds: usize) {
+fn test_molecule_bracket_atoms_valid_branched(#[case] input: &str, #[case] atoms: usize, #[case] bonds: usize) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -586,7 +667,7 @@ fn test_branched_bracket_atoms(#[case] input: &str, #[case] atoms: usize, #[case
 #[case("C.CC", vec![(1, 0), (2, 1)])]
 #[case("CC(CC.CC)C", vec![(5, 4), (2, 1)])]
 #[case("CC(CC)C.CC", vec![(5, 4), (2, 1)])]
-fn test_branched_components(#[case] input: &str, #[case] expected: Vec<(usize, usize)>) {
+fn test_molecule_components_valid_branched(#[case] input: &str, #[case] expected: Vec<(usize, usize)>) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -607,7 +688,7 @@ fn test_branched_components(#[case] input: &str, #[case] expected: Vec<(usize, u
 #[case("[C@@H](F)(Cl)Br", Chirality::CounterClockwise)]
 #[case("[C@TH1H](F)(Cl)Br", Chirality::Clockwise)]
 #[case("[C@TH2H](F)(Cl)Br", Chirality::CounterClockwise)]
-fn test_branched_tetra_chirality(#[case] input: &str, #[case] expected: Chirality) {
+fn test_molecule_tetra_chirality_valid(#[case] input: &str, #[case] expected: Chirality) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -624,7 +705,7 @@ fn test_branched_tetra_chirality(#[case] input: &str, #[case] expected: Chiralit
 #[case("[C@@]([H])(F)(Cl)Br", Chirality::CounterClockwise)]
 #[case("[C@TH1]([H])(F)(Cl)Br", Chirality::Clockwise)]
 #[case("[C@TH2]([H])(F)(Cl)Br", Chirality::CounterClockwise)]
-fn test_branched_tetra_chirality_explicit_h(#[case] input: &str, #[case] expected: Chirality) {
+fn test_molecule_tetra_chirality_explicit_h_valid(#[case] input: &str, #[case] expected: Chirality) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -636,7 +717,8 @@ fn test_branched_tetra_chirality_explicit_h(#[case] input: &str, #[case] expecte
 }
 
 #[test]
-fn test_branched_tetra_chirality_insufficient_neighbors() {
+// MoleculeParser tests — single-feature tetrahedral edge case
+fn test_molecule_tetra_chirality_insufficient_neighbors_edge() {
     let mut parse_state = ParseState::default();
     let input = "[C@](F)(Cl)C"; // three explicit neighbors and no bracket H
     let lexer = Lexer::new(input);
@@ -668,7 +750,8 @@ fn test_branched_tetra_chirality_insufficient_neighbors() {
 #[case("C]", "unexpected close bracket")]
 #[case("[C+", "unclosed bracket with charge")]
 #[case("[13]", "missing symbol after isotope")]
-fn test_branched_invalid(mut parse_state: ParseState, #[case] input: &str, #[case] desc: &str) {
+// MoleculeParser tests — whole-molecule invalids
+fn test_molecule_branched_invalid(mut parse_state: ParseState, #[case] input: &str, #[case] desc: &str) {
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
     let result = parser.parse(&mut parse_state, lexer);
@@ -678,7 +761,7 @@ fn test_branched_invalid(mut parse_state: ParseState, #[case] input: &str, #[cas
 #[rstest]
 #[case("[C:1]C", 2, 1)]
 #[case("C[C:12]", 2, 1)]
-fn test_bracket_class_linear(
+fn test_molecule_bracket_class_valid_linear(
     mut parse_state: ParseState,
     #[case] input: &str,
     #[case] atoms: usize,
@@ -701,7 +784,7 @@ fn test_bracket_class_linear(
 #[case("F/C=C\\F", Some(BondStereo::Cis))]
 #[case("F\\C=C\\F", Some(BondStereo::Trans))]
 #[case("F\\C=C/F", Some(BondStereo::Cis))]
-fn test_branched_ez(#[case] input: &str, #[case] expected: Option<BondStereo>) {
+fn test_molecule_ez_valid_branched(#[case] input: &str, #[case] expected: Option<BondStereo>) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -720,7 +803,7 @@ fn test_branched_ez(#[case] input: &str, #[case] expected: Option<BondStereo>) {
 #[rstest]
 #[case("C%0C", "invalid percent ring index")] // lexer should reject
 #[case("C%09C", "invalid percent ring index leading zero")] // lexer should reject
-fn test_ring_invalid_linear(
+fn test_molecule_ring_invalid_linear(
     mut parse_state: ParseState,
     #[case] input: &str,
     #[case] desc: &str,
@@ -734,7 +817,7 @@ fn test_ring_invalid_linear(
 #[rstest]
 #[case("C1C(C)CC1", 5, 5)]
 #[case("C1CC(C)C1", 5, 5)]
-fn test_branched_rings_valid(#[case] input: &str, #[case] atoms: usize, #[case] bonds: usize) {
+fn test_molecule_rings_valid_branched(#[case] input: &str, #[case] atoms: usize, #[case] bonds: usize) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -749,7 +832,8 @@ fn test_branched_rings_valid(#[case] input: &str, #[case] atoms: usize, #[case] 
 #[rstest]
 #[case("[13C]1CC1", 3, 3)]
 #[case("C1[C-]C1", 3, 3)]
-fn test_pairwise_bracket_with_rings_one_molecule(
+// MoleculeParser tests — two-feature combinations (valid)
+fn test_molecule_pair_bracket_with_rings_one_molecule_valid(
     #[case] input: &str,
     #[case] atoms: usize,
     #[case] bonds: usize,
@@ -765,8 +849,22 @@ fn test_pairwise_bracket_with_rings_one_molecule(
     assert_eq!(mols[0].bonds.len(), bonds);
 }
 
+#[rstest]
+fn test_molecule_components_ring_merge(mut parse_state: ParseState) {
+    // C1.C12.C2 should form a single 3-atom chain equivalent to CCC
+    let input = "C1.C12.C2";
+    let lexer = Lexer::new(input);
+    let parser = MoleculeParser::new();
+    let result = parser.parse(&mut parse_state, lexer);
+    assert!(result.is_ok(), "{} should have succeeded", input);
+    let mols = parse_state.drain_molecules();
+    assert_eq!(mols.len(), 1);
+    assert_eq!(mols[0].atoms.len(), 3);
+    assert_eq!(mols[0].bonds.len(), 2);
+}
+
 #[test]
-fn test_pairwise_components_bracket() {
+fn test_molecule_pair_components_and_bracket_valid() {
     let mut parse_state = ParseState::default();
     let input = "[NH4+].C[O-]";
     let lexer = Lexer::new(input);
@@ -785,7 +883,7 @@ fn test_pairwise_components_bracket() {
 #[case("[F-]/C=C\\[NH3+]", Some(BondStereo::Cis))]
 #[case("F/C=C1CC\\1", Some(BondStereo::Either))]
 #[case("F\\C=C1CC/1", Some(BondStereo::Either))]
-fn test_pairwise_bracket_and_ez_and_rings(
+fn test_molecule_pair_bracket_ez_rings_valid(
     #[case] input: &str,
     #[case] expected: Option<BondStereo>,
 ) {
@@ -805,7 +903,8 @@ fn test_pairwise_bracket_and_ez_and_rings(
 }
 
 #[test]
-fn test_branched_multi_tetra_centers() {
+// MoleculeParser tests — special edge cases
+fn test_molecule_tetra_multi_centers_edge() {
     let mut parse_state = ParseState::default();
     let input = "Cl[C@H](F)C[C@@H](Cl)Br";
     let lexer = Lexer::new(input);
@@ -828,7 +927,7 @@ fn test_branched_multi_tetra_centers() {
 #[case("[Pt@SP1](Cl)(Br)(I)F", true)]
 #[case("[Pt@SP1](Cl)(Br)F", false)]
 #[case("[Pt@SP1](Cl)(Br)(I)(F)N", false)]
-fn test_square_planar_basic(#[case] input: &str, #[case] valid: bool) {
+fn test_molecule_square_planar_edge(#[case] input: &str, #[case] valid: bool) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -848,7 +947,7 @@ fn test_square_planar_basic(#[case] input: &str, #[case] valid: bool) {
 #[case("[P@TB1](F)(Cl)(Br)(I)N", true)]
 #[case("[P@TB1](F)(Cl)(Br)(I)", false)]
 #[case("[P@TB1](F)(Cl)(Br)(I)(N)O", false)]
-fn test_trigonal_bipyramidal_basic(#[case] input: &str, #[case] valid: bool) {
+fn test_molecule_trigonal_bipyramidal_edge(#[case] input: &str, #[case] valid: bool) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -868,7 +967,7 @@ fn test_trigonal_bipyramidal_basic(#[case] input: &str, #[case] valid: bool) {
 #[case("[S@OH1](F)(Cl)(Br)(I)(N)(O)", true)]
 #[case("[S@OH1](F)(Cl)(Br)(I)N", false)]
 #[case("[S@OH1](F)(Cl)(Br)(I)NOF", false)]
-fn test_octahedral_basic(#[case] input: &str, #[case] valid: bool) {
+fn test_molecule_octahedral_edge(#[case] input: &str, #[case] valid: bool) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -892,7 +991,7 @@ fn test_octahedral_basic(#[case] input: &str, #[case] valid: bool) {
 #[case("[C@AL1](=C)C([H])F", false)]
 // Invalid: one terminal has no substituent beyond center
 #[case("[C@AL1](=C)=C", false)]
-fn test_allene_basic(#[case] input: &str, #[case] valid: bool) {
+fn test_molecule_allene_edge(#[case] input: &str, #[case] valid: bool) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -915,7 +1014,7 @@ fn test_allene_basic(#[case] input: &str, #[case] valid: bool) {
 #[case("[C@@](=C([H]))=C([H])F", Some(2u32))]
 // No alias: @ w/o allene axis (should stay tetra or downgrade per tetra rules)
 #[case("[C@H](F)(Cl)Br", None)]
-fn test_allene_alias_from_at(#[case] input: &str, #[case] expect_arr: Option<u32>) {
+fn test_molecule_allene_alias_edge(#[case] input: &str, #[case] expect_arr: Option<u32>) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -937,7 +1036,7 @@ fn test_allene_alias_from_at(#[case] input: &str, #[case] expect_arr: Option<u32
 }
 
 #[test]
-fn test_reject_overlapping_ez_markers() {
+fn test_molecule_ez_overlapping_markers_invalid() {
     let mut parse_state = ParseState::default();
     let input = "C/C=C//C=C/C";
     let lexer = Lexer::new(input);

@@ -539,6 +539,8 @@ impl ParseState {
             // Collect one directed single bond with slash on each side
             let mut side_a: Vec<BondDir> = Vec::new();
             let mut side_b: Vec<BondDir> = Vec::new();
+            let mut a_single_count: usize = 0;
+            let mut b_single_count: usize = 0;
 
             // Scan neighbors of a
             for &bj in &adj[a] {
@@ -546,6 +548,7 @@ impl ParseState {
                 let bj_ref = &mol.bonds[bj];
                 match Self::bond_order(bj_ref) {
                     Some(BondOrder::Single) => {
+                        a_single_count += 1;
                         if let Some(d) = Self::norm_dir_toward(a, bj_ref) {
                             side_a.push(d);
                         }
@@ -560,6 +563,7 @@ impl ParseState {
                 let bj_ref = &mol.bonds[bj];
                 match Self::bond_order(bj_ref) {
                     Some(BondOrder::Single) => {
+                        b_single_count += 1;
                         if let Some(d) = Self::norm_dir_toward(b, bj_ref) {
                             side_b.push(d);
                         }
@@ -571,9 +575,15 @@ impl ParseState {
             // Determine stereo
             let stereo = match (side_a.len(), side_b.len()) {
                 (1, 1) => {
-                    let da = side_a[0];
-                    let db = side_b[0];
-                    if da == db { Some(BondStereo::Cis) } else { Some(BondStereo::Trans) }
+                    // If either side has multiple single substituents but only one is marked,
+                    // the configuration is ambiguous per OpenSMILES → Either.
+                    if a_single_count > 1 || b_single_count > 1 {
+                        Some(BondStereo::Either)
+                    } else {
+                        let da = side_a[0];
+                        let db = side_b[0];
+                        if da == db { Some(BondStereo::Cis) } else { Some(BondStereo::Trans) }
+                    }
                 }
                 (0, 0) => None,
                 _ => Some(BondStereo::Either),
