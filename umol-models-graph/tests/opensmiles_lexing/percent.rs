@@ -28,9 +28,10 @@ fn percent_zero_invalid_tokenized() {
 }
 
 #[rstest]
-fn percent_followed_by_space_splits_tokens(toks: impl Fn(&str) -> Vec<Token>) {
+fn percent_followed_by_space_splits_tokens() {
     // "%1 2" -> Error, Digit(1), Stop, Digit(2)
     let mut it = Token::lexer("%1 2");
     assert!(it.next().unwrap().is_err());
-    assert_eq!(toks("%1 2"), vec![Token::Digit(1), Token::Stop, Token::Digit(2)]);
+    let rest = it.map(|t| t.ok()).collect::<Option<Vec<_>>>().unwrap();
+    assert_eq!(rest, vec![Token::Digit(1), Token::Stop, Token::Digit(2)]);
 }

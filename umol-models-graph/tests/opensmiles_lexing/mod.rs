@@ -8,3 +8,4 @@ pub mod brackets;
 pub mod charges;
 pub mod chirality;
 pub mod punctuation;
+pub mod property;

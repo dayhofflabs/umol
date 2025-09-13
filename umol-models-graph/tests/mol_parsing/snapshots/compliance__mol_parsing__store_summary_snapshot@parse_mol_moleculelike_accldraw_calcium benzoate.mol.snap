@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 19
-bond_count: 18
-sum_formula: C14CaO4
-graph6: RY_Y?CA??????B?@?@??B?@???G??O
