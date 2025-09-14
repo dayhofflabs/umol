@@ -32,6 +32,31 @@ fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
 }
 
 #[rstest]
+#[case("[HH]", &["BRKT_H_ON_H"])]
+#[case("[HH1]", &["BRKT_H_ON_H"])]
+#[case("[C:-1]", &["NUM_CLASS_NEGATIVE"])]
+#[case("%", &["LEX_BAD_PERCENT_FORM"])]
+#[case("%1x", &["LEX_INVALID_TOKEN"])]
+#[case(".", &["SYN_LEADING_DOT"])]
+#[case("C.", &["SYN_TRAILING_DOT"])]
+#[case("C..C", &["SYN_MULTIPLE_DOTS"])]
+#[case("X", &["LEX_INVALID_TOKEN"])]
+fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
+    let r = lint_smiles(input);
+    let mut got = codes(&r);
+    got.sort();
+    let mut exp = expected_any.to_vec();
+    let mut expv: Vec<&str> = exp.drain(..).collect();
+    expv.sort();
+    assert!(
+        got.iter().any(|c| expv.contains(c)),
+        "codes {:?} do not include any of {:?}",
+        got,
+        expv
+    );
+}
+
+#[rstest]
 #[case("C1C", &["RING_UNCLOSED"])]
 #[case("C11", &["RING_SELF_LOOP"])]
 fn test_ring_errors(#[case] input: &str, #[case] expected_any: &[&str]) {

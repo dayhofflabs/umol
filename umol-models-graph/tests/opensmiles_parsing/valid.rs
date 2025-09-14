@@ -28,6 +28,30 @@ fn maybe_bond(rng: &mut fastrand::Rng) -> Option<&'static str> {
     }
 }
 
+#[rstest]
+fn valid_acceptance_set() {
+    // c1ccccc1-c2ccccc2 (aliphatic single bond between aromatic rings)
+    if let Err(e) = parse_and_assert_invariants("c1ccccc1-c2ccccc2") { panic!("{}", e); }
+
+    // [*] fields: charge, chirality, H count, class
+    for s in ["[*-]", "[*@H:0]", "[*H2]", "[*+:1]"] {
+        if let Err(e) = parse_and_assert_invariants(s) { panic!("{}", e); }
+    }
+
+    // [H+] valid; [H][H] valid; bridging H examples
+    for s in ["[H+]", "[H][H]", "[BH2]1[H][BH2][H]1"] {
+        if let Err(e) = parse_and_assert_invariants(s) { panic!("{}", e); }
+    }
+
+    // Named and numeric isotopes
+    for s in ["[2H]", "[3H]", "[13C]"] {
+        if let Err(e) = parse_and_assert_invariants(s) { panic!("{}", e); }
+    }
+
+    // [H][CH3] valid
+    if let Err(e) = parse_and_assert_invariants("[H][CH3]") { panic!("{}", e); }
+}
+
 fn maybe_branch_tokens(rng: &mut fastrand::Rng, depth: usize) -> Option<Vec<String>> {
     if depth == 0 || rng.u8(..10) < 7 {
         return None;
@@ -116,6 +140,33 @@ fn valid_aromatic_ring_minimal() {
     // R25: basic aromatic ring with lowercase tokens should be accepted
     if let Err(e) = parse_and_assert_invariants("c1ccc1") {
         panic!("{}", e);
+    }
+}
+
+#[rstest]
+fn valid_specific_cases() {
+    // H0 allowed in brackets
+    // Using literal strings to avoid temporary String lifetimes
+    if let Err(e) = parse_and_assert_invariants("[CH0]") { panic!("{}", e); }
+    if let Err(e) = parse_and_assert_invariants("[NH0]") { panic!("{}", e); }
+    // ring index 0 valid
+    for s in ["C0CCCCC0"] {
+        if let Err(e) = parse_and_assert_invariants(s) { panic!("{}", e); }
+    }
+    // Percent ring indices close with matching %NN occurrences
+    if let Err(e) = parse_and_assert_invariants("C%12CCCC%12") { panic!("{}", e); }
+    // C1CCC%01 valid (1 == %01)
+    for s in ["C1CCC%01"] {
+        if let Err(e) = parse_and_assert_invariants(s) { panic!("{}", e); }
+    }
+    // Multiple ring closures per atom (various forms)
+    for s in [
+        "C1CC12CC2",
+        "C1CC1%10CC%10",
+        "C%10CC%101CC1",
+        "C%10CC%10%11CC%11",
+    ] {
+        if let Err(e) = parse_and_assert_invariants(s) { panic!("{}", e); }
     }
 }
 
