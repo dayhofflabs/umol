@@ -34,8 +34,6 @@
 - Assert parse success and simple invariants (no open rings, bond count ≥ chain length-1, no self-loops).
 - Negative generator (mutations of valid strings): single, targeted breaks per sample:
   - delete a ring closer; duplicate ring index to force self-loop; `12` cycle; conflicting `/` vs `\\` on ring closure; trailing bond; inter-token whitespace insertion; bracket field reorder/duplication; chirality out-of-range; `%0`/`%01`; negative class; `H10`.
-- Keep each mutation tied to a normative rule so every MUST-reject is covered.
-
 - Start with a deterministic suite (dozens to low hundreds). Add a small property-based set after it’s stable.
 
 4) Semantic constraints verification
@@ -105,6 +103,9 @@ Initial code set (indicative)
 - NUM: NUM_OVERFLOW, NUM_CLASS_NEGATIVE, NUM_HCOUNT_BAD, NUM_CHIRAL_OUT_OF_RANGE
 - BRKT: BRKT_ORDER, BRKT_DUP_FIELD, BRKT_HCOUNT_TWO_DIGITS, BRKT_EMPTY_CLASS
 - STEREO: STEREO_DOUBLE_CONFLICT, STEREO_DOUBLE_INSUFFICIENT
+
+Parsing tests:
+- Relate mutations producing invalid strings tied to a normative rule so every MUST-reject is covered.
 
 Placement and format
 - Spec: `umol-models-graph/spec/errors.md` (normative registry).

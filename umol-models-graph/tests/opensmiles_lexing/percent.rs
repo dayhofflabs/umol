@@ -14,24 +14,24 @@ fn percent_two_digits_valid(toks: impl Fn(&str) -> Vec<Token>) {
 }
 
 #[rstest]
-fn percent_leading_zero_invalid_tokenized() {
-    // Logos will treat "%01" as Error then Digit(1); accept that contract for lexing-level tests
-    let mut it = Token::lexer("%01");
-    assert!(it.next().unwrap().is_err());
+fn percent_leading_zero_tokenized() {
+    // Now accepted as Percent(1)
+    let got = Token::lexer("%01").map(|t| t.ok()).collect::<Option<Vec<_>>>().unwrap();
+    assert_eq!(got, vec![Token::Percent(1)]);
 }
 
 #[rstest]
-fn percent_zero_invalid_tokenized() {
-    // "%0" is not matched by Percent rule; first '%' is Error
-    let mut it = Token::lexer("%0");
-    assert!(it.next().unwrap().is_err());
+fn percent_zero_tokenized() {
+    let got = Token::lexer("%00").map(|t| t.ok()).collect::<Option<Vec<_>>>().unwrap();
+    assert_eq!(got, vec![Token::Percent(0)]);
 }
 
 #[rstest]
 fn percent_followed_by_space_splits_tokens() {
-    // "%1 2" -> Error, Digit(1), Stop, Digit(2)
+    // "%1 2" -> Error('%'), Digit(1), Stop, Digit(2)
     let mut it = Token::lexer("%1 2");
-    assert!(it.next().unwrap().is_err());
+    let first = it.next().unwrap();
+    assert!(first.is_err());
     let rest = it.map(|t| t.ok()).collect::<Option<Vec<_>>>().unwrap();
     assert_eq!(rest, vec![Token::Digit(1), Token::Stop, Token::Digit(2)]);
 }

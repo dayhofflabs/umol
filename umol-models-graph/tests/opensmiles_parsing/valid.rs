@@ -87,6 +87,39 @@ fn gen_molecule(rng: &mut fastrand::Rng, depth: usize, width: usize) -> String {
 }
 
 #[rstest]
+fn valid_unknown_atom_forms() {
+    for s in ["*", "C*C", "*.*", "[*]", "[*H]", "[*H2]", "[*-]", "[*+:1]"] {
+        if let Err(e) = parse_and_assert_invariants(s) {
+            panic!("{}", e);
+        }
+    }
+}
+
+#[rstest]
+fn valid_star_in_aromatic_contexts() {
+    for s in [
+        // star in aromatic ring (semantic aromaticity not enforced here)
+        "c1*cccc1",
+        // star adjacent to aromatic atoms with explicit ':' bonds
+        "c:*:c",
+        // bracketed star with fields inside aromatic ring
+        "c1[*H+:2]cccc1",
+    ] {
+        if let Err(e) = parse_and_assert_invariants(s) {
+            panic!("{}", e);
+        }
+    }
+}
+
+#[rstest]
+fn valid_aromatic_ring_minimal() {
+    // R25: basic aromatic ring with lowercase tokens should be accepted
+    if let Err(e) = parse_and_assert_invariants("c1ccc1") {
+        panic!("{}", e);
+    }
+}
+
+#[rstest]
 fn valid_generated_accepts_and_invariants(mut rng: fastrand::Rng) {
     for _ in 0..5000 {
         let s = gen_molecule(&mut rng, 2, 1);

@@ -14,9 +14,9 @@ use crate::io::smiles::parser::grammar::{
 use crate::io::smiles::state::{BondInfo, ParseState};
 
 #[rstest]
-#[case("C", Atom::from_aliphatic_atom(Element::C))]
-#[case("c", Atom::from_aromatic_atom(Element::C))]
-#[case("[C]", Atom::from_aliphatic_atom(Element::C))]
+#[case("C", { let mut a = Atom::from_aliphatic_atom(Element::C); a.implicit_h = true; a })]
+#[case("c", { let mut a = Atom::from_aromatic_atom(Element::C); a.implicit_h = true; a })]
+#[case("[C]", { let mut a = Atom::from_aliphatic_atom(Element::C); a.class = Some(0); a.implicit_h = true; a })]
 fn test_atom(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();
@@ -26,19 +26,23 @@ fn test_atom(#[case] input: &str, #[case] expected: Atom) {
 }
 
 #[rstest]
-#[case("[C]", Atom::from_aliphatic_atom(Element::C))]
-#[case("[c]", Atom::from_aromatic_atom(Element::C))]
-#[case("[13C]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.isotope = Some(13); atom})]
-#[case("[C@]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.chirality = Some(Chirality::Clockwise); atom})]
-#[case("[CH]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.hydrogen_count = Some(1); atom})]
-#[case("[C+]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(1); atom})]
-#[case("[C-]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(-1); atom})]
-#[case("[C++]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(2); atom})]
-#[case("[C--]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(-2); atom})]
-#[case("[C:1]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.class = Some(1); atom})]
-#[case("[13C@H+:1]", {let mut atom = Atom::from_aliphatic_atom(Element::C); atom.isotope = Some(13);
+#[case("[C]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[c]", { let mut atom = Atom::from_aromatic_atom(Element::C); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[*]", { let mut atom = Atom::default(); atom.class = Some(0); atom.implicit_h = false; atom })]
+#[case("[*H2+:1]", { let mut atom = Atom::default(); atom.hydrogen_count = Some(2); atom.charge = Some(1); atom.class = Some(1); atom.implicit_h = false; atom })]
+#[case("[C+:1H]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(1); atom.class = Some(1); atom.hydrogen_count = Some(1); atom.implicit_h = false; atom })]
+#[case("[C@H+]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.chirality = Some(Chirality::Clockwise); atom.hydrogen_count = Some(1); atom.charge = Some(1); atom.class = Some(0); atom.implicit_h = false; atom })]
+#[case("[13C]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.isotope = Some(13); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[C@]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.chirality = Some(Chirality::Clockwise); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[CH]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.hydrogen_count = Some(1); atom.class = Some(0); atom.implicit_h = false; atom })]
+#[case("[C+]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(1); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[C-]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(-1); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[C++]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(2); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[C--]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.charge = Some(-2); atom.class = Some(0); atom.implicit_h = true; atom })]
+#[case("[C:1]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.class = Some(1); atom.implicit_h = true; atom })]
+#[case("[13C@H+:1]", { let mut atom = Atom::from_aliphatic_atom(Element::C); atom.isotope = Some(13);
        atom.chirality = Some(Chirality::Clockwise); atom.hydrogen_count = Some(1); atom.charge = Some(1);
-       atom.class = Some(1); atom})]
+       atom.class = Some(1); atom.implicit_h = false; atom })]
 fn test_bracket_atom(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();
@@ -48,9 +52,9 @@ fn test_bracket_atom(#[case] input: &str, #[case] expected: Atom) {
 }
 
 #[rstest]
-#[case("C", Atom::from_aliphatic_atom(Element::C))]
-#[case("c", Atom::from_aromatic_atom(Element::C))]
-#[case("*", Atom::default())]
+#[case("C", { let mut a = Atom::from_aliphatic_atom(Element::C); a.implicit_h = true; a })]
+#[case("c", { let mut a = Atom::from_aromatic_atom(Element::C); a.implicit_h = true; a })]
+#[case("*", { let mut a = Atom::default(); a.implicit_h = false; a })]
 fn test_symbol(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();
@@ -60,8 +64,8 @@ fn test_symbol(#[case] input: &str, #[case] expected: Atom) {
 }
 
 #[rstest]
-#[case("Ac", Atom::from_aliphatic_atom(Element::Ac))]
-#[case("Ag", Atom::from_aliphatic_atom(Element::Ag))]
+#[case("Ac", { let mut a = Atom::from_aliphatic_atom(Element::Ac); a.implicit_h = true; a })]
+#[case("Ag", { let mut a = Atom::from_aliphatic_atom(Element::Ag); a.implicit_h = true; a })]
 fn test_aliphatic_symbol(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();
@@ -71,8 +75,8 @@ fn test_aliphatic_symbol(#[case] input: &str, #[case] expected: Atom) {
 }
 
 #[rstest]
-#[case("p", Atom::from_aromatic_atom(Element::P))]
-#[case("se", Atom::from_aromatic_atom(Element::Se))]
+#[case("p", { let mut a = Atom::from_aromatic_atom(Element::P); a.implicit_h = true; a })]
+#[case("se", { let mut a = Atom::from_aromatic_atom(Element::Se); a.implicit_h = true; a })]
 fn test_aromatic_symbol(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();
@@ -82,7 +86,7 @@ fn test_aromatic_symbol(#[case] input: &str, #[case] expected: Atom) {
 }
 
 #[rstest]
-#[case("*", Atom::default())]
+#[case("*", { let mut a = Atom::default(); a.implicit_h = false; a })]
 fn test_unknown_symbol(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();
@@ -92,8 +96,8 @@ fn test_unknown_symbol(#[case] input: &str, #[case] expected: Atom) {
 }
 
 #[rstest]
-#[case("C", Atom::from_aliphatic_atom(Element::C))]
-#[case("B", Atom::from_aliphatic_atom(Element::B))]
+#[case("C", { let mut a = Atom::from_aliphatic_atom(Element::C); a.implicit_h = true; a })]
+#[case("B", { let mut a = Atom::from_aliphatic_atom(Element::B); a.implicit_h = true; a })]
 fn test_aliphatic_organic_symbol(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();
@@ -103,8 +107,8 @@ fn test_aliphatic_organic_symbol(#[case] input: &str, #[case] expected: Atom) {
 }
 
 #[rstest]
-#[case("n", Atom::from_aromatic_atom(Element::N))]
-#[case("o", Atom::from_aromatic_atom(Element::O))]
+#[case("n", { let mut a = Atom::from_aromatic_atom(Element::N); a.implicit_h = true; a })]
+#[case("o", { let mut a = Atom::from_aromatic_atom(Element::O); a.implicit_h = true; a })]
 fn test_aromatic_organic_symbol(#[case] input: &str, #[case] expected: Atom) {
     let lexer = Lexer::new(input);
     let mut state = ParseState::default();

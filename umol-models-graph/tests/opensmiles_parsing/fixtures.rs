@@ -28,13 +28,6 @@ pub fn parse_state() -> ParseState {
     ParseState::default()
 }
 
-pub fn accepts(input: &str) -> bool {
-    let mut state = ParseState::default();
-    let lexer = Lexer::new(input);
-    let parser = MoleculeParser::new();
-    parser.parse(&mut state, lexer).is_ok()
-}
-
 pub fn parse_and_assert_invariants(input: &str) -> Result<(), String> {
     let mut state = ParseState::default();
     let lexer = Lexer::new(input);

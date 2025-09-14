@@ -295,8 +295,8 @@ pub enum Token {
     // Single decimal digit 0-9
     #[regex(r"[0-9]", |lex| lex.slice().parse::<u32>())]
     Digit(u32),
-    // Percent-prefixed two-digit ring index (%10..%99)
-    #[regex(r"%[1-9][0-9]", |lex| lex.slice()[1..].parse::<u32>())]
+    // Percent-prefixed two-digit ring index
+    #[regex(r"%[0-9][0-9]", |lex| lex.slice()[1..].parse::<u32>())]
     Percent(u32),
 
     // Chirality flags

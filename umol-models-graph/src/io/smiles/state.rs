@@ -632,6 +632,7 @@ impl ParseState {
         }
     }
 
+
     fn resolve_tetrahedral_stereo(&mut self, mol: &mut IRMolecule) {
         if mol.atoms.is_empty() { return; }
         // Build adjacency once for potential later use (parity computation if needed)

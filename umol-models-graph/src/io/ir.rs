@@ -73,6 +73,8 @@ pub struct Atom {
     pub isotope: Option<u32>,
     pub radical: Option<AtomRadical>,
     pub hydrogen_count: Option<u32>,
+    /// True when the hydrogen count is implicit (to be resolved in semantic pass)
+    pub implicit_h: bool,
 
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,

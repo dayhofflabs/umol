@@ -8,5 +8,7 @@ lalrpop_mod!(
     pub grammar
 );
 
+pub mod utils;
+
 #[cfg(test)]
 mod tests;

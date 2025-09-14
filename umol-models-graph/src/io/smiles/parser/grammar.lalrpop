@@ -1,9 +1,12 @@
-use umol_data::Element;
+//! OpenSMILES parser grammar.
 
 use lalrpop_util::ParseError;
-use crate::io::ir::{Atom, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
+use umol_data::Element;
+
+use crate::io::ir::{Atom, AtomSymbol, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
 use crate::io::smiles::state::{ParseState, BondInfo, ResolvedBond};
+use super::utils::BracketField;
 
 grammar(state: &mut ParseState);
 
@@ -67,6 +70,13 @@ pub ChainTail: () = {
 // Atom + connect/push side effects for linked atoms
 pub AtomBond: () = {
 <a:Atom> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      // Set implicit H for non-bracket atoms or bracket atoms without explicit H
+                                      if atom.hydrogen_count.is_none() {
+                                          match atom.symbol {
+                                              AtomSymbol::Unknown => { atom.implicit_h = false; }
+                                              _ => { atom.implicit_h = true; }
+                                          }
+                                      }
                                       let new_idx = state.bump_atom_idx();
                                       // hint aromaticity of the next atom for implicit bond defaults
                                       let is_arom = atom.aromatic.unwrap_or(false);
@@ -79,6 +89,13 @@ pub AtomBond: () = {
 // AtomStart: first atom of a component, do not connect to previous component
 pub AtomStart: () = {
 <a:Atom> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
+                                      // Set implicit H for initial atom as above
+                                      if atom.hydrogen_count.is_none() {
+                                          match atom.symbol {
+                                              AtomSymbol::Unknown => { atom.implicit_h = false; }
+                                              _ => { atom.implicit_h = true; }
+                                          }
+                                      }
                                       let new_idx = state.bump_atom_idx();
                                       // No link_to here; top-level component start
                                       state.push_atom(atom);
@@ -147,27 +164,69 @@ pub Atom: Atom = {
 }
 
 pub BracketAtom: Atom = {
-    "[" <isotope:Isotope?> <symbol:Symbol> <chirality:Chirality?> <hcount:HCount?> <charge:Charge?> <class:Class?> "]" => {
+    "[" <isotope:Isotope?> <symbol:Symbol> <fields:BracketField*> "]" =>? {
         let mut atom = symbol;
+        let mut chirality: Option<Chirality> = None;
+        let mut hcount: Option<u32> = None;
+        let mut charge: Option<i32> = None;
+        let mut class: Option<u32> = None;
+        for f in fields {
+            match f {
+                BracketField::Chiral(c) => {
+                    if chirality.is_some() { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
+                    chirality = Some(c);
+                }
+                BracketField::H(h) => {
+                    if hcount.is_some() { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
+                    hcount = Some(h);
+                }
+                BracketField::Q(q) => {
+                    if charge.is_some() { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
+                    charge = Some(q);
+                }
+                BracketField::Class(k) => {
+                    if class.is_some() { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
+                    class = Some(k);
+                }
+            }
+        }
+        // R4: Reject [H ... Hn] — a hydrogen element in brackets must not carry an H-count
+        if let AtomSymbol::Element(Element::H) = atom.symbol {
+            if hcount.is_some() {
+                return Err(ParseError::User { error: LexicalError::InvalidToken });
+            }
+        }
         atom.isotope = isotope;
         atom.chirality = chirality;
         atom.hydrogen_count = hcount;
         atom.charge = charge;
-        atom.class = class;
-        if let Some(ch) = chirality {
+        atom.class = Some(class.unwrap_or(0));
+        // Mark implicit hydrogen when HCount not specified (R11), excluding '*'
+        match atom.symbol {
+            AtomSymbol::Unknown => { atom.implicit_h = false; }
+            _ => { atom.implicit_h = atom.hydrogen_count.is_none(); }
+        }
+        if let Some(ch) = atom.chirality {
             let _ = state.stereo_open(state.next_atom_idx, Some(ch), 0);
         }
-        atom
+        Ok(atom)
     },
 }
 
+pub BracketField: BracketField = {
+    <c:Chirality> => BracketField::Chiral(c),
+    <h:HCount> => BracketField::H(h),
+    <q:Charge> => BracketField::Q(q),
+    <k:Class> => BracketField::Class(k),
+}
+
 pub Symbol: Atom = {
-    AliphaticSymbol,
-    AromaticSymbol,
+    <a:AliphaticSymbol> => { let mut atom = a; atom.implicit_h = true; atom },
+    <a:AromaticSymbol> => { let mut atom = a; atom.implicit_h = true; atom },
     UnknownSymbol,
 }
 
-pub AliphaticSymbol: Atom = {
+AliphaticSymbolRaw: Atom = {
     "Ac" => Atom::from_aliphatic_atom(Element::Ac),
     "Ag" => Atom::from_aliphatic_atom(Element::Ag),
     "Al" => Atom::from_aliphatic_atom(Element::Al),
@@ -288,7 +347,9 @@ pub AliphaticSymbol: Atom = {
     "Zr" => Atom::from_aliphatic_atom(Element::Zr),
 }
 
-pub AromaticSymbol: Atom = {
+pub AliphaticSymbol: Atom = { <a:AliphaticSymbolRaw> => { let mut atom = a; atom.implicit_h = true; atom } }
+
+AromaticSymbolRaw: Atom = {
     "b" => Atom::from_aromatic_atom(Element::B),
     "c" => Atom::from_aromatic_atom(Element::C),
     "n" => Atom::from_aromatic_atom(Element::N),
@@ -299,11 +360,13 @@ pub AromaticSymbol: Atom = {
     "as" => Atom::from_aromatic_atom(Element::As),
 }
 
+pub AromaticSymbol: Atom = { <a:AromaticSymbolRaw> => { let mut atom = a; atom.implicit_h = true; atom } }
+
 pub UnknownSymbol: Atom = {
     "*" => Atom::default(),
 }
 
-pub AliphaticOrganicSymbol: Atom = {
+AliphaticOrganicSymbolRaw: Atom = {
     "B" => Atom::from_aliphatic_atom(Element::B),
     "C" => Atom::from_aliphatic_atom(Element::C),
     "N" => Atom::from_aliphatic_atom(Element::N),
@@ -316,7 +379,9 @@ pub AliphaticOrganicSymbol: Atom = {
     "I" => Atom::from_aliphatic_atom(Element::I),
 }
 
-pub AromaticOrganicSymbol: Atom = {
+pub AliphaticOrganicSymbol: Atom = { <a:AliphaticOrganicSymbolRaw> => { let mut atom = a; atom.implicit_h = true; atom } }
+
+AromaticOrganicSymbolRaw: Atom = {
     "b" => Atom::from_aromatic_atom(Element::B),
     "c" => Atom::from_aromatic_atom(Element::C),
     "n" => Atom::from_aromatic_atom(Element::N),
@@ -324,6 +389,8 @@ pub AromaticOrganicSymbol: Atom = {
     "s" => Atom::from_aromatic_atom(Element::S),
     "p" => Atom::from_aromatic_atom(Element::P),
 }
+
+pub AromaticOrganicSymbol: Atom = { <a:AromaticOrganicSymbolRaw> => { let mut atom = a; atom.implicit_h = true; atom } }
 
 pub Isotope: u32 = { <mass:Number> => mass }
 
@@ -380,6 +447,8 @@ pub Ring: () = {
             }
             // Conflict: both sides specify a direction and they differ
             if let (Some(p), Some(s)) = (pending.as_ref(), spec.as_ref()) {
+                // order must match if both specified (R17)
+                if p.order != s.order { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
                 if let (Some(pd), Some(sd)) = (p.dir, s.dir) {
                     if pd != sd { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
                 }
@@ -423,7 +492,7 @@ pub Terminator: () = {
     <"stop"> <Terminator> =>? Ok(())
 }
 
-// Lexer configuration and token definitions
+// Lexer configuration and token definitions, bracket fields
 extern {
     type Location = usize;
     type Error = LexicalError;
@@ -591,4 +660,6 @@ extern {
 
         "error" => Token::Error,
     }
+
+
 }
