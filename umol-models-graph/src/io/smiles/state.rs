@@ -472,6 +472,25 @@ impl ParseState {
         mol.source_format = SourceFormat::SMILES;
         mol.atoms = std::mem::take(&mut self.buf_atoms);
         mol.bonds = std::mem::take(&mut self.buf_bonds);
+
+        // Remap global atom indices to local [0..atoms.len()) within this molecule
+        if !mol.atoms.is_empty() {
+            use std::collections::HashMap;
+            let mut map: HashMap<u32, u32> = HashMap::with_capacity(mol.atoms.len());
+            for (i, a) in mol.atoms.iter_mut().enumerate() {
+                let gi = a.index.unwrap_or(i as u32);
+                map.insert(gi, i as u32);
+                a.index = Some(i as u32);
+            }
+            for b in mol.bonds.iter_mut() {
+                if let (Some(sa), Some(ea)) = (b.start_atom, b.end_atom) {
+                    if let (Some(&la), Some(&lb)) = (map.get(&sa), map.get(&ea)) {
+                        b.start_atom = Some(la);
+                        b.end_atom = Some(lb);
+                    }
+                }
+            }
+        }
         // Late-pass stereo resolution (E/Z from slash markers)
         self.resolve_double_bond_stereo(&mut mol);
         // Alias @/@@ to @AL1/@AL2 when an allene axis is present
