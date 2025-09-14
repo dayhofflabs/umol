@@ -1,3 +1,5 @@
+//! Parsing tests for OpenSMILES (UMOL)
+
 mod fixtures;
-mod valid;
 mod invalid;
+mod valid;

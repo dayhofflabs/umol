@@ -1,3 +1,5 @@
+//! Invalid tests for OpenSMILES (UMOL)
+
 use rstest::rstest;
 use umol_models_graph::io::smiles::lexer::Lexer;
 use umol_models_graph::io::smiles::parser::grammar::MoleculeParser;
