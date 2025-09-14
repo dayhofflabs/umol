@@ -8,6 +8,7 @@ Onn = "Onn"
 noo = "noo"
 FO = "FO"
 LOD = "LOD"
+UNCATALOGUED = "UNCATALOGUED"
 # Element symbols
 H = "H"
 He = "He"

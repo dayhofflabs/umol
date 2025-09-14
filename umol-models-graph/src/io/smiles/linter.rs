@@ -7,8 +7,9 @@ use super::lexer::{Lexer, Token};
 use super::parser::grammar::MoleculeParser;
 use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Span};
 use crate::io::smiles::state::ParseState;
+use umol_data::{isotope::Isotope as KnownIsotope, Element};
 
-// Initial lexer-only lint to demonstrate diagnostics flow.
+// Initial linter for lexical/syntactic errors.
 pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     let mut report = DiagnosticsReport::new();
 
@@ -60,6 +61,9 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     lint_intertoken_whitespace(input, &mut report);
     lint_trailing_bond(input, &mut report);
     lint_dot_before_ring(input, &mut report);
+    lint_dot_positions(input, &mut report);
+    lint_style_bonds(input, &mut report);
+    lint_ring_style(input, &mut report);
 
     // Style warnings from Standard Form (string-based heuristics)
     lint_style_percent_single_digit(input, &mut report);
@@ -147,7 +151,7 @@ fn lint_style_percent_single_digit(input: &str, report: &mut DiagnosticsReport) 
     while i + 2 < bytes.len() {
         if bytes[i] == b'%' && bytes[i + 1] == b'0' && (b'1'..=b'9').contains(&bytes[i + 2]) {
             report.push(Diagnostic::warning(
-                Code("STYLE_SINGLE_DIGIT_RING"),
+                Code("STYLE_UNNECESSARY_PERCENT_RING_INDEX"),
                 Category::Style,
                 Span::new(i, i + 3),
                 "Prefer single-digit ring number for 1..9",
@@ -167,10 +171,95 @@ fn lint_brackets(input: &str, report: &mut DiagnosticsReport) {
             if let Some(close) = find_closing_bracket(bytes, i + 1) {
                 // Slice inside brackets
                 let inner = &input[i + 1..close];
-                // STYLE_BARE_ORGANIC: [C],[N],... with nothing else
+                // Parse inner fields (best-effort microparser)
+                let parsed = parse_bracket_inner(inner);
+                // Hydrogen element must not carry H-count
+                if matches!(parsed.element, Some(Element::H)) && parsed.hcount.is_some() {
+                    report.push(Diagnostic::error(
+                        Code("BRKT_H_ON_H"),
+                        Category::Brkt,
+                        Span::new(i, close + 1),
+                        "Hydrogen element must not have an H-count",
+                    ));
+                }
+                // H-count two digits already handled; extra: H-count exceeds element's max implicit H
+                if let (Some(elem), Some(h)) = (parsed.element, parsed.hcount) {
+                    if h as u8 > elem.max_implicit_hydrogens() {
+                        report.push(Diagnostic::warning(
+                            Code("NUM_HCOUNT_EXCEEDS_MAX_IMPLICIT"),
+                            Category::Num,
+                            Span::new(i, close + 1),
+                            "H-count exceeds element's max implicit hydrogens",
+                        ));
+                    }
+                }
+                // Class upper bound (max 4 digits)
+                if let Some(class) = parsed.class {
+                    if class > 9999 {
+                        report.push(Diagnostic::error(
+                            Code("NUM_CLASS_TOO_LARGE"),
+                            Category::Num,
+                            Span::new(i, close + 1),
+                            "Atom class must be <= 9999",
+                        ));
+                    }
+                }
+                // Charge absolute limit
+                if let Some(q) = parsed.charge {
+                    if q.unsigned_abs() > 15 {
+                        report.push(Diagnostic::error(
+                            Code("NUM_CHARGE_OUT_OF_RANGE"),
+                            Category::Num,
+                            Span::new(i, close + 1),
+                            "Absolute charge must be <= 15",
+                        ));
+                    }
+                    if let Some(elem) = parsed.element {
+                        let (min_q, max_q) = elem.charge_bounds();
+                        if q < min_q as i32 || q > max_q as i32 {
+                            report.push(Diagnostic::warning(
+                                Code("NUM_CHARGE_OUTSIDE_ELEMENT_RANGE"),
+                                Category::Num,
+                                Span::new(i, close + 1),
+                                "Charge outside element-supported bounds",
+                            ));
+                        }
+                        if q > 0 && (q as u8) > elem.valence_electrons() {
+                            report.push(Diagnostic::warning(
+                                Code("NUM_CHARGE_EXCEEDS_VALENCE_ELECTRONS"),
+                                Category::Num,
+                                Span::new(i, close + 1),
+                                "Positive charge exceeds valence electrons",
+                            ));
+                        }
+                    }
+                }
+                // Isotope numeric limits and catalog
+                if let Some(isotope) = parsed.isotope {
+                    if isotope > 999 {
+                        report.push(Diagnostic::error(
+                            Code("NUM_ISOTOPE_TOO_LARGE"),
+                            Category::Num,
+                            Span::new(i, close + 1),
+                            "Isotope mass number must be <= 999",
+                        ));
+                    } else if isotope > 0 {
+                        if let Some(elem) = parsed.element {
+                            if !KnownIsotope::is_catalogued(elem, isotope) {
+                                report.push(Diagnostic::warning(
+                                    Code("NUM_ISOTOPE_UNCATALOGUED"),
+                                    Category::Num,
+                                    Span::new(i, close + 1),
+                                    "Isotope is not catalogued",
+                                ));
+                            }
+                        }
+                    }
+                }
+                // STYLE_BRACKET_ORGANIC: [C],[N],... with nothing else
                 if is_bare_organic(inner) {
                     report.push(Diagnostic::warning(
-                        Code("STYLE_BARE_ORGANIC"),
+                        Code("STYLE_BRACKET_ORGANIC"),
                         Category::Style,
                         Span::new(i, close + 1),
                         "Prefer bare organic atom over bracketed form",
@@ -456,4 +545,195 @@ fn find_class_issues(inner: &str) -> Option<(usize, usize, bool)> {
         i += 1;
     }
     None
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+struct BracketParsed {
+    element: Option<Element>,
+    isotope: Option<u32>,
+    hcount: Option<u32>,
+    charge: Option<i32>,
+    class: Option<u32>,
+}
+
+fn parse_bracket_inner(inner: &str) -> BracketParsed {
+    let bytes = inner.as_bytes();
+    let mut idx = 0usize;
+    let mut parsed = BracketParsed::default();
+    // Isotope (digits)
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    if idx > 0 {
+        if let Some(v) = atoi::atoi::<u32>(&bytes[..idx]) { parsed.isotope = Some(v); }
+    }
+    // Symbol
+    if idx < bytes.len() {
+        if bytes[idx] == b'*' {
+            idx += 1; // unknown element
+        } else if bytes[idx].is_ascii_alphabetic() {
+            let mut len = 1usize;
+            if idx + 1 < bytes.len() && bytes[idx + 1].is_ascii_lowercase() {
+                len = 2;
+            }
+            let sym = &inner[idx..idx + len];
+            if let Some(el) = Element::from_symbol(sym) { parsed.element = Some(el); }
+            idx += len;
+        }
+    }
+    // Scan rest for fields
+    let rest = &inner[idx..];
+    // H-count: find standalone 'H' optionally followed by one digit
+    if let Some(pos) = rest.find('H') {
+        let hb = rest.as_bytes();
+        let hpos = pos;
+        let mut hval: u32 = 1;
+        if hpos + 1 < hb.len() && hb[hpos + 1].is_ascii_digit() {
+            hval = (hb[hpos + 1] - b'0') as u32;
+            if hpos + 2 < hb.len() && hb[hpos + 2].is_ascii_digit() {
+                // two digits handled elsewhere as error
+            }
+        }
+        parsed.hcount = Some(hval);
+    }
+    // Class: ':' digits
+    if let Some(cpos) = rest.find(':') {
+        let s = &rest[cpos + 1..];
+        let mut len = 0usize;
+        for &b in s.as_bytes() { if b.is_ascii_digit() { len += 1; } else { break; } }
+        if len > 0 { if let Some(v) = atoi::atoi::<u32>(s[..len].as_bytes()) { parsed.class = Some(v); } }
+    }
+    // Charge: handle '++','--','+','-','+d','-d','+dd','-dd'
+    if let Some(pos) = rest.find('+') {
+        let s = &rest[pos..];
+        if s.starts_with("++") { parsed.charge = Some(2); }
+        else {
+            let mut val = 1i32;
+            let digits = &s[1..];
+            if let Some(d) = atoi::atoi::<u32>(digits.as_bytes()) { val = d as i32; }
+            parsed.charge = Some(val);
+        }
+    } else if let Some(pos) = rest.find('-') {
+        let s = &rest[pos..];
+        if s.starts_with("--") { parsed.charge = Some(-2); }
+        else {
+            let mut val = -1i32;
+            let digits = &s[1..];
+            if let Some(d) = atoi::atoi::<u32>(digits.as_bytes()) { val = -(d as i32); }
+            parsed.charge = Some(val);
+        }
+    }
+    parsed
+}
+
+fn lint_style_bonds(input: &str, report: &mut DiagnosticsReport) {
+    let bytes = input.as_bytes();
+    for i in 0..bytes.len() {
+        if bytes[i] == b':' {
+            // Check neighbors roughly for aromatic atoms
+            let prev = input[..i].as_bytes().iter().rfind(|&&b| b != b' ' && b != b'\t' && b != b'\n' && b != b'\r').copied();
+            let next = input[i + 1..].as_bytes().iter().find(|&&b| b != b' ' && b != b'\t' && b != b'\n' && b != b'\r').copied();
+            let is_arom = |b: u8| matches!(b, b'b'|b'c'|b'n'|b'o'|b'p'|b's');
+            if prev.map(is_arom).unwrap_or(false) && next.map(is_arom).unwrap_or(false) {
+                report.push(Diagnostic::warning(
+                    Code("STYLE_EXPLICIT_AROMATIC_BOND"),
+                    Category::Style,
+                    Span::new(i, i + 1),
+                    "Avoid explicit ':' between aromatic atoms",
+                ));
+            }
+        } else if bytes[i] == b'-' {
+            // Warn on explicit single bond unless between aromatic atoms
+            let prev = input[..i].as_bytes().iter().rfind(|&&b| !b.is_ascii_whitespace()).copied();
+            let next = input[i + 1..].as_bytes().iter().find(|&&b| !b.is_ascii_whitespace()).copied();
+            let is_arom = |b: u8| matches!(b, b'b'|b'c'|b'n'|b'o'|b'p'|b's');
+            if !(prev.map(is_arom).unwrap_or(false) && next.map(is_arom).unwrap_or(false)) {
+                report.push(Diagnostic::warning(
+                    Code("STYLE_EXPLICIT_SINGLE_BOND"),
+                    Category::Style,
+                    Span::new(i, i + 1),
+                    "Avoid explicit '-' when default applies",
+                ));
+            }
+        }
+    }
+}
+
+fn lint_ring_style(input: &str, report: &mut DiagnosticsReport) {
+    // Ignore digits inside brackets to avoid isotope/class confusion
+    let mut i = 0usize;
+    let bytes = input.as_bytes();
+    let mut used: Vec<u32> = Vec::new();
+    let mut counts: indexmap::IndexMap<u32, u32> = indexmap::IndexMap::new();
+    while i < bytes.len() {
+        match bytes[i] {
+            b'[' => {
+                // skip to closing ']'
+                let mut j = i + 1;
+                while j < bytes.len() && bytes[j] != b']' { j += 1; }
+                i = j + 1;
+                continue;
+            }
+            b'%' => {
+                if i + 2 < bytes.len() && bytes[i + 1].is_ascii_digit() && bytes[i + 2].is_ascii_digit() {
+                    let val = (bytes[i + 1] - b'0') as u32 * 10 + (bytes[i + 2] - b'0') as u32;
+                    used.push(val);
+                    *counts.entry(val).or_insert(0) += 1;
+                    i += 3;
+                    continue;
+                }
+            }
+            b'0'..=b'9' => {
+                let val = (bytes[i] - b'0') as u32;
+                used.push(val);
+                *counts.entry(val).or_insert(0) += 1;
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    if !used.is_empty() {
+        let mut set = used.clone();
+        set.sort_unstable();
+        set.dedup();
+        let first = set[0];
+        if first != 1 { report.push(Diagnostic::warning(Code("STYLE_FIRST_RING_NOT_ONE"), Category::Style, Span::new(0, 0), "Prefer starting ring numbering at 1")); }
+        if set.len() >= 2 {
+            let mut prev = set[0];
+            for &v in &set[1..] {
+                if v > prev + 1 { report.push(Diagnostic::warning(Code("STYLE_NONCONSECUTIVE_RING_NUMBERING"), Category::Style, Span::new(0, 0), "Prefer consecutive ring numbering")); break; }
+                prev = v;
+            }
+        }
+        for (_k, c) in counts.iter() {
+            if *c > 2 { report.push(Diagnostic::warning(Code("STYLE_REUSED_RING_INDICES"), Category::Style, Span::new(0, 0), "Avoid reusing the same ring number")); break; }
+        }
+    }
+}
+
+fn lint_dot_positions(input: &str, report: &mut DiagnosticsReport) {
+    let bytes = input.as_bytes();
+    // leading dot
+    let mut i = 0usize;
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() { i += 1; }
+    if i < bytes.len() && bytes[i] == b'.' {
+        report.push(Diagnostic::error(Code("SYN_LEADING_DOT"), Category::Syn, Span::new(i, i + 1), "Leading dot"));
+    }
+    // trailing dot
+    let mut j = bytes.len();
+    while j > 0 && bytes[j - 1].is_ascii_whitespace() { j -= 1; }
+    if j > 0 && bytes[j - 1] == b'.' {
+        report.push(Diagnostic::error(Code("SYN_TRAILING_DOT"), Category::Syn, Span::new(j - 1, j), "Trailing dot"));
+    }
+    // multiple dots '..'
+    let mut k = 0usize;
+    while k + 1 < bytes.len() {
+        if bytes[k] == b'.' && bytes[k + 1] == b'.' {
+            report.push(Diagnostic::error(Code("SYN_MULTIPLE_DOTS"), Category::Syn, Span::new(k, k + 2), "Multiple dots"));
+            break;
+        }
+        k += 1;
+    }
 }

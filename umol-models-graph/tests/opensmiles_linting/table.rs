@@ -14,8 +14,8 @@ fn codes(report: &DiagnosticsReport) -> Vec<&'static str> {
 #[case("C.1", &["SYN_DOT_BEFORE_RING"])]
 #[case("[CH1]", &["STYLE_HCOUNT_ONE_SIMPLE"])]
 #[case("[C+1]", &["STYLE_CHARGE_SIGN_SIMPLE"])]
-#[case("[C]", &["STYLE_BARE_ORGANIC"])]
-#[case("C%01", &["STYLE_SINGLE_DIGIT_RING"])]
+#[case("[C]", &["STYLE_BRACKET_ORGANIC"])]
+#[case("C%01", &["STYLE_UNNECESSARY_PERCENT_RING_INDEX"])]
 fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
     let r = lint_smiles(input);
     let mut got = codes(&r);

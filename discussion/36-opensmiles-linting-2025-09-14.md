@@ -38,10 +38,10 @@ Notes:
 - STYLE_BRKT_ORDER: Suggest “[chirality][H][charge][class]” ordering when brackets are used.
 - STYLE_CHARGE_SIGN_SIMPLE: Prefer “[X+]” over “[X+1]” and “[X-]” over “[X-1]”.
 - STYLE_HCOUNT_ONE_SIMPLE: Prefer “H” over “H1” in bracket H-count.
-- STYLE_BARE_ORGANIC: Prefer bare atom for organic subset when equivalent to bracketed form.
-- STYLE_SINGLE_DIGIT_RING: Prefer single-digit ring numbers for 1..9 instead of “%01..%09”.
-- STYLE_AVOID_AROMATIC_BOND_SYMBOL: Avoid explicit “:” when aromatic default applies.
-- STYLE_NO_REUSE_RING_DIGITS: Discourage reusing the same ring digit within a connected component.
+- STYLE_BRACKET_ORGANIC: Prefer bare atom for organic subset when equivalent to bracketed form.
+- STYLE_UNNECESSARY_PERCENT_RING_INDEX: Prefer single-digit ring numbers for 1..9 instead of “%01..%09”.
+- STYLE_EXPLICIT_AROMATIC_BOND: Avoid explicit “:” when aromatic default applies.
+- STYLE_REUSED_RING_INDICES: Discourage reusing the same ring digit within a connected component.
 
 Deferrals for later (require deeper semantics): avoid ring closures on multiple bonds, pick main chain, aromatic preference normalization.
 
@@ -91,3 +91,63 @@ If this looks good, I’ll proceed to draft `spec/errors.md` with the initial re
 
 - Added a diagnostics TODO list and set “Create diagnostics registry spec” in progress. 
 - Proposed a focused plan: taxonomy, initial error/warn codes, mapping points in `lexer.rs`, `grammar.lalrpop`, `state.rs`, a `lint_smiles` API, and table tests.
+
+### Additional tasks
+
+I am going over the list of rules in @35-opensmiles-missing-specs-2025-09-13.md . Please verify that each of these requirements has an associated error / warning and list them. Implement the TODOs included below. By "verify" I mean adding a test for this behavior, if it's not already available, and verifying that it passes. For each of the error / warning behaviors, make sure that there is at least one test emitting them. Ignore the points that are not listed below. Make a complete list of todos and execute them systematically. For implementations that require significant effort or design decisions, add to todo list and defer implementation. No need to provide intermediate reports until this list is completed.
+1. Invalid atom symbol - error
+4. Hydrogen has a hydrogen count - error
+5. Hydrogen count > 9 or < 0 - error  TODO: verify that H0 is valid
+H count exceed max number of implicit hydrogens - warning (see @element.rs , ELEMENT_DATA)
+6. Charge < -15 or > +15 - error. TODO: consider if the limits make sense
+charge > valence electrons - warning, charge outside of [min_charge, max_charge] range - warning (see @element.rs ELEMENT_DATA).
+7, 9. Isotope mass number < 0 or > 999 - error. TODO: consider if the upper limit makes sense.
+not a stable / metastable isotope - warning (see @isotope.rs , is_catalogued() function can be used).
+8. Isotope 0 is valid  TODO: consider if we should make it invalid. How can it be usefully interpreted?
+10. Invalid atom symbol (not organic subset or *) outside of brackets - error
+12, 13. TODO: verify that [*] can have charge, chirality, H count, class.
+15. Atom class < 0  - error
+16. TODO: verify that class 0 is valid
+17. Inconsistent bond symbols - error
+18. Unclosed ring - error
+19. Repeated ring indices - warning
+20. TODO: verify that ring index 0 is valid
+21. Invalid percent forms: %[^0-9] or %[0-9][^0-9] - error. TODO: verify that %123 is valid but parsed as "%12" + "3".
+22. TODO: verify that ring closure C1CCC%01 is valid.
+23. TODO: verify that multiple ring closures per atom are allowed, C1CC12CC2 as well as C1CC1%10CC%10, C%10CC%101CC1, C%10CC%10%11CC%11 .
+24. (i) Self-bond - error, example: C11C 
+(ii) Multiple bonds between atoms (chain + ring) - error, example: C1C1C
+(iii) Multiple bonds between atoms (rings) - error, example: C12CCCCC12 
+25. TODO: verify that c1ccc1 is valid
+26. ":" in aromatic rings - warning
+27. TODO: verify that c1ccccc1-c2ccccc2 is valid
+28. (i) TODO: verify that [H+] is valid
+(ii) TODO: verify that [H][H] is valid
+(iii) TODO: verify that bridging H atoms are valid: [BH2]1[H][BH2][H]1
+(iv) TODO: verify that [2H] and [3H] is valid
+29. TODO: verify that [H][CH3] is valid
+30. Dot before ring closure - error, example:  C.1CCCCC.1. TODO: consider if this rules makes a lot of sense.
+32. TODO: verify that  C1.C1 is valid and equivalent to CC. 
+(i) Leading dot - error, (ii) trailing dot - error, (iii) multiple dots - error
+41. String too long TODO: consider if that is a reasonable limitation?
+42. Class < 0 or > 9999 - error . TODO: consider if the upper limit makes sense?
+43. TODO: verify that molecule with 100 rings can be parsed. Sorry ... :-)
+44. TODO: verify that molecule with 100 nested branches can be parsed.
+45. TODO: verify that atom can have 10 bonds.
+46. TODO: verify that SMILES with 100 disconnected atoms can be parsed.
+50. Bunch of warnings here
+(i) Unnecessary bracket notation: [CH4] == C - warning. Brackets necessary if charge /= 0, atom class /= 0, chirality is given TODO: requires valence model, add to list but defer implementation.
+(ii) Unnecessary charge index "+1" == "+", "-1" == "-" - warning
+(iii) Unnecessary H count H1 = H - warning
+(iv) Incorrect property ordering in brackets - warning
+(v) Unnecessary explicit hydrogens [H][CH3] == C, [H][CH2+] == [CH3+] - warning
+(vi) Explicit single bond "-" - warning (except between aromatic rings). Explicit aromatic bond ":" - warning
+(va) Reuse of ring indices - c1ccccc1C1CCCC1 == c1ccccc1C2CCCC2 - warning
+(via) Non-consecutive ring numbering C1CCC1CCC3CCC3 = C1CCC1CCC2CCC2 - warning,
+First ring number not 1  C0CCCC0 == C1CCCC1  - warning.
+(vii) Unnecessary ring closure on multiple bond C1CCC=1 == C1C=CC1 - perhaps warning. TODO: consider if this is too much effort to check
+(viii) Multiple ring closures on the same atom (except for spiro atoms) - perhaps warning. TODO: consider if this is worth the effort. How hard is it to identify spiro atoms?
+(ix) %0[0-9] ring index C%01CC%01 = C1CC1 - warning
+(xiii) Unnecessary dot C1.C1C - perhaps warning. TODO: consider if this is worth the effort.
+(xv) Unnecessary chiral markers - perhaps warning. TODO: add to todo list but defer.
+ 
