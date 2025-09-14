@@ -117,9 +117,9 @@ The '*' token denotes an unknown atom without element assignment and does not im
 
 Numeric literals are base‑10 and unsigned. Implementations must reject any numeric literal that overflows their supported domain. In UMOL, numeric fields are interpreted as unsigned 32‑bit values; values outside the range 0 to 4,294,967,295 are rejected. Ring index ranges are further constrained to 0–9 for single‑digit and 00–99 for percent forms (exactly two digits). The hydrogen count after 'H' is a single digit in 0–9.
 
-### Error Policy
+### Error Policy and Diagnostics
 
-Any violation of the grammar or a semantic constraint results in rejection. This specification does not require specific diagnostics; generic errors are acceptable.
+Any violation of the grammar or a semantic constraint results in rejection. Implementations SHOULD provide structured diagnostics with a stable code, severity, category, span, and message. The canonical diagnostics registry is maintained in `spec/opensmiles-errors.md`.
 
 ### Conformance Criteria
 

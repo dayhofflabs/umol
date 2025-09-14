@@ -8,6 +8,7 @@ use umol::error::DataError;
 use umol::Result;
 
 use crate::io::ir::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, BondStereo, BondSymbol, Chirality, Molecule as IRMolecule, SourceFormat};
+use crate::diagnostics::{Category, Code, Diagnostic, Span};
 
 /// Default depth of branching in SMILES.
 /// Can be exceeded (incurs extra memory allocation) if needed.
@@ -57,9 +58,17 @@ pub struct ParseState {
 
     // Component stack to support '.' inside branches
     pub comp_stack: SmallVec<[(Vec<IRAtom>, Vec<IRBond>); DEFAULT_COMPONENT_DEPTH]>,
+
+    // Collected diagnostics (optional; used by linting flows)
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl ParseState {
+    pub fn push_diag_error(&mut self, code: &'static str, category: Category, message: &'static str, start: usize, end: usize, details: Option<String>) {
+        let mut d = Diagnostic::error(Code(code), category, Span::new(start, end), message);
+        if let Some(det) = details { d = d.with_details(det); }
+        self.diagnostics.push(d);
+    }
     pub fn bond_exists_between(&self, a: usize, b: usize) -> bool {
         if a == b { return true; }
         self.buf_bonds.iter().any(|bond| {

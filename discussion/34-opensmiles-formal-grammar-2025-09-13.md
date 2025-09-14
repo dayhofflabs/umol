@@ -79,7 +79,7 @@ What to define
 - Diagnostic schema (machine-usable):
   - code (string, stable), category, message (short), span {start,end}, primary token, expected/got, details (e.g., ring_index, atom_index), help (single short suggestion).
 - Normative registry:
-  - Put the canonical list in spec/errors.md (or a “Diagnostics” section in the spec) with: Code, Title, Condition (normative), Message template, Parameters, Example (valid/invalid), Help.
+  - Put the canonical list in spec/opensmiles-errors.md (or a “Diagnostics” section in the spec) with: Code, Title, Condition (normative), Message template, Parameters, Example (valid/invalid), Help.
 - Parser/lexer integration:
   - Replace ad hoc errors with structured diagnostics. Map every reject site to a specific code and fill parameters.
   - Keep a default “internal” code for unforeseen failures; avoid leaking it in user-visible paths.
@@ -108,7 +108,7 @@ Parsing tests:
 - Relate mutations producing invalid strings tied to a normative rule so every MUST-reject is covered.
 
 Placement and format
-- Spec: `umol-models-graph/spec/errors.md` (normative registry).
+- Spec: `umol-models-graph/spec/opensmiles-errors.md` (normative registry).
 - Implementation: `umol-models-graph/src/diagnostics.rs` (Diagnostic struct, codes enum with stable string repr), plus mappings in `lexer.rs`, `state.rs`, and parser actions.
 
 Output formats
