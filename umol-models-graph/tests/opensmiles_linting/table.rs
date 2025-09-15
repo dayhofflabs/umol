@@ -17,18 +17,16 @@ fn codes(report: &DiagnosticsReport) -> Vec<&'static str> {
 #[case("[C]", &["STYLE_BRACKET_ORGANIC"])]
 #[case("C%01", &["STYLE_UNNECESSARY_PERCENT_RING_INDEX"])]
 fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
+    println!("input: {:?}", input);
     let r = lint_smiles(input);
     let mut got = codes(&r);
     got.sort();
     let mut exp = expected.to_vec();
     let mut expv: Vec<&str> = exp.drain(..).collect();
     expv.sort();
-    assert!(
-        got.iter().any(|c| expv.contains(c)),
-        "codes {:?} do not include any of {:?}",
-        got,
-        expv
-    );
+    println!("got: {:?}", got);
+    println!("expv: {:?}", expv);
+    assert!(expv.iter().all(|e| got.contains(e)), "codes {:?} do not include all of {:?}", got, expv);
 }
 
 #[rstest]
@@ -42,18 +40,16 @@ fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
 #[case("C..C", &["SYN_MULTIPLE_DOTS"])]
 #[case("X", &["LEX_INVALID_TOKEN"])]
 fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
+    println!("input: {:?}", input);
     let r = lint_smiles(input);
     let mut got = codes(&r);
     got.sort();
     let mut exp = expected_any.to_vec();
     let mut expv: Vec<&str> = exp.drain(..).collect();
     expv.sort();
-    assert!(
-        got.iter().any(|c| expv.contains(c)),
-        "codes {:?} do not include any of {:?}",
-        got,
-        expv
-    );
+    println!("got: {:?}", got);
+    println!("expv: {:?}", expv);
+    assert!(expv.iter().all(|e| got.contains(e)), "codes {:?} do not include all of {:?}", got, expv);
 }
 
 #[rstest]

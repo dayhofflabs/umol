@@ -89,7 +89,7 @@ Lowercase aromatic atom tokens designate aromatic atoms. The '*' token may appea
 
 ### Implicit Hydrogens
 
-Inside a bracket atom, 'H' without a digit sets the hydrogen count to one; 'H' followed by a single digit sets the count to that value. A bracket atom whose element is hydrogen ('H') MUST NOT include an 'H' count field; such forms are invalid (e.g., '[HH]', '[HH1]'). Outside brackets, the parser does not infer hydrogen counts from valence; an unspecified hydrogen count is treated as zero. Stereochemical validations may consult the bracket hydrogen count when checking neighbor totals.
+Bracket atoms do not have implicit hydrogens. If an 'H' field is omitted inside brackets, the hydrogen count defaults to zero ('H0'). 'H' without a digit sets the hydrogen count to one; 'H' followed by a single digit sets the count to that value (0–9). A bracket atom whose element is hydrogen ('H') MUST NOT include an 'H' count field; such forms are invalid (e.g., '[HH]', '[HH1]'). Outside brackets, the parser does not infer hydrogen counts from valence; an unspecified hydrogen count is treated as zero. Stereochemical validations may consult the bracket hydrogen count when checking neighbor totals.
 
 ### Double‑Bond Stereochemistry
 

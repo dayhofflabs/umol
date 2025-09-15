@@ -52,6 +52,14 @@ fn valid_acceptance_set() {
     if let Err(e) = parse_and_assert_invariants("[H][CH3]") { panic!("{}", e); }
 }
 
+#[rstest]
+fn bracket_default_h0_and_no_implicit() {
+    // Bracket atoms default H0 and do not set implicit_h; ensure parsing succeeds
+    for s in ["[C]", "[N]", "[c]", "[*]"] {
+        if let Err(e) = parse_and_assert_invariants(s) { panic!("{}", e); }
+    }
+}
+
 fn maybe_branch_tokens(rng: &mut fastrand::Rng, depth: usize) -> Option<Vec<String>> {
     if depth == 0 || rng.u8(..10) < 7 {
         return None;

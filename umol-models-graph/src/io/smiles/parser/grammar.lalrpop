@@ -80,13 +80,6 @@ pub ChainTail: () = {
 // Atom + connect/push side effects for linked atoms
 pub AtomBond: () = {
 <a:Atom> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
-                                      // Set implicit H for non-bracket atoms or bracket atoms without explicit H
-                                      if atom.hydrogen_count.is_none() {
-                                          match atom.symbol {
-                                              AtomSymbol::Unknown => { atom.implicit_h = false; }
-                                              _ => { atom.implicit_h = true; }
-                                          }
-                                      }
                                       let new_idx = state.bump_atom_idx();
                                       // hint aromaticity of the next atom for implicit bond defaults
                                       let is_arom = atom.aromatic.unwrap_or(false);
@@ -99,13 +92,6 @@ pub AtomBond: () = {
 // AtomStart: first atom of a component, do not connect to previous component
 pub AtomStart: () = {
 <a:Atom> =>? { let mut atom = a; atom.index = Some(state.next_atom_idx as u32);
-                                      // Set implicit H for initial atom as above
-                                      if atom.hydrogen_count.is_none() {
-                                          match atom.symbol {
-                                              AtomSymbol::Unknown => { atom.implicit_h = false; }
-                                              _ => { atom.implicit_h = true; }
-                                          }
-                                      }
                                       let new_idx = state.bump_atom_idx();
                                       // No link_to here; top-level component start
                                       state.push_atom(atom);
@@ -208,14 +194,11 @@ pub BracketAtom: Atom = {
         }
         atom.isotope = isotope;
         atom.chirality = chirality;
-        atom.hydrogen_count = hcount;
+        // Bracket atoms do not have implicit H; default H0 when omitted
+        atom.hydrogen_count = Some(hcount.unwrap_or(0));
         atom.charge = charge;
         atom.class = Some(class.unwrap_or(0));
-        // Mark implicit hydrogen when HCount not specified (R11), excluding '*'
-        match atom.symbol {
-            AtomSymbol::Unknown => { atom.implicit_h = false; }
-            _ => { atom.implicit_h = atom.hydrogen_count.is_none(); }
-        }
+        atom.implicit_h = false;
         if let Some(ch) = atom.chirality {
             let _ = state.stereo_open(state.next_atom_idx, Some(ch), 0);
         }
@@ -231,8 +214,8 @@ pub BracketField: BracketField = {
 }
 
 pub Symbol: Atom = {
-    <a:AliphaticSymbol> => { let mut atom = a; atom.implicit_h = true; atom },
-    <a:AromaticSymbol> => { let mut atom = a; atom.implicit_h = true; atom },
+    <a:AliphaticSymbol> => { let mut atom = a; atom.implicit_h = false; atom },
+    <a:AromaticSymbol> => { let mut atom = a; atom.implicit_h = false; atom },
     UnknownSymbol,
 }
 
@@ -357,7 +340,7 @@ AliphaticSymbolRaw: Atom = {
     "Zr" => Atom::from_aliphatic_atom(Element::Zr),
 }
 
-pub AliphaticSymbol: Atom = { <a:AliphaticSymbolRaw> => { let mut atom = a; atom.implicit_h = true; atom } }
+pub AliphaticSymbol: Atom = { <a:AliphaticSymbolRaw> => { let mut atom = a; atom.implicit_h = false; atom } }
 
 AromaticSymbolRaw: Atom = {
     "b" => Atom::from_aromatic_atom(Element::B),
@@ -370,7 +353,7 @@ AromaticSymbolRaw: Atom = {
     "as" => Atom::from_aromatic_atom(Element::As),
 }
 
-pub AromaticSymbol: Atom = { <a:AromaticSymbolRaw> => { let mut atom = a; atom.implicit_h = true; atom } }
+pub AromaticSymbol: Atom = { <a:AromaticSymbolRaw> => { let mut atom = a; atom.implicit_h = false; atom } }
 
 pub UnknownSymbol: Atom = {
     "*" => Atom::default(),
