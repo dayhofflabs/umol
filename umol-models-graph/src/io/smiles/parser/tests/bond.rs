@@ -1,6 +1,7 @@
 use rstest::*;
 
 use super::fixtures::parse_state;
+use crate::io::ir::BondDir;
 use crate::io::smiles::lexer::Lexer;
 use crate::io::smiles::parser::grammar::MoleculeParser;
 use crate::io::smiles::state::ParseState;
@@ -22,10 +23,10 @@ fn test_bond(mut parse_state: ParseState, #[case] input: &str, #[case] bond_coun
 }
 
 #[rstest]
-#[case("C/C", vec![Some(crate::io::ir::BondDir::Up)])]
-#[case("C\\C", vec![Some(crate::io::ir::BondDir::Down)])]
-#[case("C/C\\C", vec![Some(crate::io::ir::BondDir::Up), Some(crate::io::ir::BondDir::Down)])]
-fn test_bond_dirs(#[case] input: &str, #[case] dirs: Vec<Option<crate::io::ir::BondDir>>) {
+#[case("C/C", vec![Some(BondDir::Up)])]
+#[case("C\\C", vec![Some(BondDir::Down)])]
+#[case("C/C\\C", vec![Some(BondDir::Up), Some(BondDir::Down)])]
+fn test_bond_dirs(#[case] input: &str, #[case] dirs: Vec<Option<BondDir>>) {
     let mut parse_state = ParseState::default();
     let lexer = Lexer::new(input);
     let parser = MoleculeParser::new();
@@ -33,8 +34,7 @@ fn test_bond_dirs(#[case] input: &str, #[case] dirs: Vec<Option<crate::io::ir::B
     assert!(result.is_ok(), "{} should have succeeded", input);
     let mols = parse_state.drain_molecules();
     assert_eq!(mols.len(), 1);
-    let got: Vec<Option<crate::io::ir::BondDir>> =
-        mols[0].bonds.iter().map(|b| b.direction).collect();
+    let got: Vec<Option<BondDir>> = mols[0].bonds.iter().map(|b| b.direction).collect();
     assert_eq!(got, dirs);
 }
 

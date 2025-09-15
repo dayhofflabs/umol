@@ -1,9 +1,10 @@
 //! Style rules for SMILES linting.
 
 use super::{Phase, Rule, RuleMeta};
-use crate::diagnostics::{Category, Severity};
+use crate::diagnostics::{Category, DiagnosticsReport, Severity};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
-use crate::io::smiles::linter::{style as sh, LintContext};
+use crate::io::smiles::linter::style::{lint_style_bonds, lint_style_percent_single_digit};
+use crate::io::smiles::linter::LintContext;
 
 pub struct StylePercentSingleDigitRule;
 static META_PCT: RuleMeta = RuleMeta {
@@ -19,8 +20,8 @@ impl Rule for StylePercentSingleDigitRule {
         Phase::RingStyle
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = crate::diagnostics::DiagnosticsReport::new();
-        sh::lint_style_percent_single_digit(ctx.input, &mut tmp);
+        let mut tmp = DiagnosticsReport::new();
+        lint_style_percent_single_digit(ctx.input, &mut tmp);
         for d in tmp.diagnostics {
             emit.candidate(DiagnosticCandidate {
                 code: d.code,
@@ -49,8 +50,8 @@ impl Rule for BondStyleRule {
         Phase::RingStyle
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = crate::diagnostics::DiagnosticsReport::new();
-        sh::lint_style_bonds(ctx.input, &mut tmp);
+        let mut tmp = DiagnosticsReport::new();
+        lint_style_bonds(ctx.input, &mut tmp);
         for d in tmp.diagnostics {
             emit.candidate(DiagnosticCandidate {
                 code: d.code,

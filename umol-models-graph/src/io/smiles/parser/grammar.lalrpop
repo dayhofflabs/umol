@@ -4,6 +4,7 @@ use lalrpop_util::ParseError;
 use umol_data::Element;
 
 use super::utils::BracketField;
+use crate::diagnostics::Category;
 use crate::io::ir::{Atom, AtomSymbol, Bond, BondDir, BondOrder, BondSymbol, Chirality, Molecule, SourceFormat};
 use crate::io::smiles::lexer::{LexicalError, Token};
 use crate::io::smiles::state::{ParseState, BondInfo, ResolvedBond};
@@ -18,7 +19,7 @@ pub Molecule: () = {
             // Emit diagnostics for each unclosed ring at end-of-input
             let keys: Vec<u32> = state.rings.keys().cloned().collect();
             for k in keys {
-                state.push_diag_error("RING_UNCLOSED", crate::diagnostics::Category::Ring, "Unclosed ring index", 0, 0, Some(format!("ring={}", k)));
+                state.push_diag_error("RING_UNCLOSED", Category::Ring, "Unclosed ring index", 0, 0, Some(format!("ring={}", k)));
             }
             return Err(ParseError::User { error: LexicalError::InvalidToken });
         }
@@ -405,8 +406,8 @@ pub TwoDigits: u32 = { <d:Digit> => d, <d1:Digit> <d2:Digit> => d1 * 10 + d2 }
 pub Charge: i32 = {
     "+" => 1i32,
     "-" => -1i32,
-    "++" => 2i32, // deprecated
-    "--" => -2i32, // deprecated
+    "++" => 2i32,
+    "--" => -2i32,
     "+" <count:TwoDigits> => count as i32,
     "-" <count:TwoDigits> => -(count as i32),
 }
@@ -436,7 +437,7 @@ pub Ring: () = {
             // Disallow self-loops and two-member rings by checking existing bond between start and end
             let end_atom = state.last_atom_idx;
             if state.bond_exists_between(start_atom, end_atom) {
-                let cat = crate::diagnostics::Category::Ring;
+                let cat = Category::Ring;
                 if start_atom == end_atom {
                     state.push_diag_error("RING_SELF_LOOP", cat, "Ring closure creates a self-loop", 0, 0, Some(format!("ring={}", ring)));
                 } else {
@@ -450,7 +451,7 @@ pub Ring: () = {
                 if p.order != s.order { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
                 if let (Some(pd), Some(sd)) = (p.dir, s.dir) {
                     if pd != sd {
-                        state.push_diag_error("RING_CONFLICT_DIR", crate::diagnostics::Category::Ring, "Conflicting ring bond directions", 0, 0, Some(format!("ring={}", ring)));
+                        state.push_diag_error("RING_CONFLICT_DIR", Category::Ring, "Conflicting ring bond directions", 0, 0, Some(format!("ring={}", ring)));
                         return Err(ParseError::User { error: LexicalError::InvalidToken });
                     }
                 }

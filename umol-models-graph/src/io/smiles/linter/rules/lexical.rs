@@ -3,7 +3,8 @@
 use logos::Logos;
 
 use super::{Phase, Rule, RuleMeta};
-use crate::diagnostics::{Category, Severity, Span};
+use crate::diagnostics::{Category, Code, DiagnosticsReport, Severity, Span};
+use crate::io::smiles::lexer::Token;
 use crate::io::smiles::linter::bracket::{
     lint_dot_before_ring, lint_dot_positions, lint_intertoken_whitespace, lint_trailing_bond,
 };
@@ -24,13 +25,13 @@ impl Rule for LexErrorsRule {
         Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let logos_lexer = crate::io::smiles::lexer::Token::lexer(ctx.input);
+        let logos_lexer = Token::lexer(ctx.input);
         for (res, span) in logos_lexer.spanned() {
             if res.is_err() {
                 let slice = &ctx.input[span.start..span.end];
                 if slice == "%" {
                     emit.candidate(DiagnosticCandidate {
-                        code: crate::diagnostics::Code("LEX_BAD_PERCENT_FORM"),
+                        code: Code("LEX_BAD_PERCENT_FORM"),
                         category: Category::Lex,
                         severity: Severity::Error,
                         span: Span::new(span.start, span.end),
@@ -39,7 +40,7 @@ impl Rule for LexErrorsRule {
                     });
                 } else {
                     emit.candidate(DiagnosticCandidate {
-                        code: crate::diagnostics::Code("LEX_INVALID_TOKEN"),
+                        code: Code("LEX_INVALID_TOKEN"),
                         category: Category::Lex,
                         severity: Severity::Error,
                         span: Span::new(span.start, span.end),
@@ -67,7 +68,7 @@ impl Rule for WhitespaceRule {
         Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = crate::diagnostics::DiagnosticsReport::new();
+        let mut tmp = DiagnosticsReport::new();
         lint_intertoken_whitespace(ctx.input, &mut tmp);
         for d in tmp.diagnostics {
             emit.candidate(DiagnosticCandidate {
@@ -97,7 +98,7 @@ impl Rule for TrailingBondRule {
         Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = crate::diagnostics::DiagnosticsReport::new();
+        let mut tmp = DiagnosticsReport::new();
         lint_trailing_bond(ctx.input, &mut tmp);
         for d in tmp.diagnostics {
             emit.candidate(DiagnosticCandidate {
@@ -127,7 +128,7 @@ impl Rule for DotRules {
         Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = crate::diagnostics::DiagnosticsReport::new();
+        let mut tmp = DiagnosticsReport::new();
         lint_dot_before_ring(ctx.input, &mut tmp);
         lint_dot_positions(ctx.input, &mut tmp);
         for d in tmp.diagnostics {

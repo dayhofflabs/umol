@@ -1,9 +1,10 @@
 //! Ring style rules for SMILES linting.
 
 use super::{Phase, Rule, RuleMeta};
-use crate::diagnostics::{Category, Severity};
+use crate::diagnostics::{Category, DiagnosticsReport, Severity};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
-use crate::io::smiles::linter::{style as sh, LintContext};
+use crate::io::smiles::linter::style::lint_ring_style;
+use crate::io::smiles::linter::LintContext;
 
 pub struct RingStyleRule;
 static META_RING_STYLE: RuleMeta = RuleMeta {
@@ -19,8 +20,8 @@ impl Rule for RingStyleRule {
         Phase::RingStyle
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = crate::diagnostics::DiagnosticsReport::new();
-        sh::lint_ring_style(ctx.input, &mut tmp);
+        let mut tmp = DiagnosticsReport::new();
+        lint_ring_style(ctx.input, &mut tmp);
         for d in tmp.diagnostics {
             emit.candidate(DiagnosticCandidate {
                 code: d.code,

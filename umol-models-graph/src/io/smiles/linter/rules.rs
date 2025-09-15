@@ -1,5 +1,7 @@
 //! Rules for SMILES linting
 
+use super::context::LintContext;
+use super::emitter::Emitter;
 use crate::diagnostics::{Category, Severity};
 
 pub mod lexical;
@@ -20,7 +22,7 @@ pub struct RuleMeta { pub id: &'static str, pub category: Category, pub default_
 pub trait Rule: Sync + Send {
     fn meta(&self) -> &'static RuleMeta;
     fn phase(&self) -> Phase;
-    fn check(&self, ctx: &super::context::LintContext, emit: &mut super::emitter::Emitter);
+    fn check(&self, ctx: &LintContext, emit: &mut Emitter);
 }
 
 

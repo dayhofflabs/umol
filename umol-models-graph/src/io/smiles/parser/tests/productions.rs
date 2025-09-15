@@ -304,8 +304,8 @@ fn test_bond_invalid(mut parse_state: ParseState, #[case] input: &str, #[case] d
 #[case("-", BondInfo { order: BondOrder::Single, dir: None })]
 #[case("=", BondInfo { order: BondOrder::Double, dir: None })]
 #[case(":", BondInfo { order: BondOrder::Aromatic, dir: None })]
-#[case("/", BondInfo { order: BondOrder::Single, dir: Some(crate::io::ir::BondDir::Up) })]
-#[case("\\", BondInfo { order: BondOrder::Single, dir: Some(crate::io::ir::BondDir::Down) })]
+#[case("/", BondInfo { order: BondOrder::Single, dir: Some(BondDir::Up) })]
+#[case("\\", BondInfo { order: BondOrder::Single, dir: Some(BondDir::Down) })]
 fn test_ringspec(#[case] input: &str, #[case] expected: BondInfo) {
     let mut state = ParseState::default();
     let lexer = Lexer::new(input);

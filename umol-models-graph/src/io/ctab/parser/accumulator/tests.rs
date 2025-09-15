@@ -1070,7 +1070,7 @@ fn test_apply_atom_list_entry_conflict(
 ) {
     let mut acc = MoleculeProperties::new();
     moleculelike_single_atom.atom_mut(0).unwrap().symbol =
-        AtomSymbol::RGroup(crate::io::ctab::rgroup::RGroup::new(Some(1)));
+        AtomSymbol::RGroup(RGroup::new(Some(1)));
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
         atom_index: 0,
         elements: vec![e!(N), e!(O)],
