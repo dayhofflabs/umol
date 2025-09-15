@@ -138,7 +138,7 @@ impl AtomSymbol {
 /// 3D coordinate type
 pub type Point3D = nalgebra::Point3<f64>;
 
-/// Atom properties specified in the atom block
+// Atom properties specified in the atom block
 
 /// Tetrahedral chirality specified in MOL files.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -192,7 +192,7 @@ impl AtomExactChange {
     }
 }
 
-/// Atom properties specified in the properties block
+// Atom properties specified in the properties block
 
 /// Radical type for RAD property
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

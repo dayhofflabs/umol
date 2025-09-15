@@ -62,7 +62,7 @@ pub(crate) fn convert_atom_isotope_mass_number(
         return Ok(None);
     }
     if extended_isotopes || Isotope::is_catalogued(element, mass_number) {
-        return Ok(Some(mass_number));
+        Ok(Some(mass_number))
     } else {
         Err(DataError::InvalidIsotope(format!(
             "Invalid isotope mass number {} for element {}",
@@ -369,16 +369,14 @@ pub(crate) fn convert_substitution_count_code(
                     ))
                     .into()),
                 }
+            } else if code == 6 {
+                Ok(Some(SubstitutionCount::S6Plus))
             } else {
-                if code == 6 {
-                    Ok(Some(SubstitutionCount::S6Plus))
-                } else {
-                    Err(ValidationError::InvalidComponent(format!(
-                        "Invalid substitution count code '{}'",
-                        code
-                    ))
-                    .into())
-                }
+                Err(ValidationError::InvalidComponent(format!(
+                    "Invalid substitution count code '{}'",
+                    code
+                ))
+                .into())
             }
         }
     }

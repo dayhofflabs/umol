@@ -188,8 +188,8 @@ pub fn lint_dot_before_ring(input: &str, report: &mut DiagnosticsReport) {
     let bytes = input.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
-        if bytes[i] == b'.' {
-            if i + 1 < bytes.len() {
+        if bytes[i] == b'.'
+            && i + 1 < bytes.len() {
                 if bytes[i + 1].is_ascii_digit() {
                     report.push(Diagnostic::error(
                         Code("SYN_DOT_BEFORE_RING"),
@@ -213,7 +213,6 @@ pub fn lint_dot_before_ring(input: &str, report: &mut DiagnosticsReport) {
                     ));
                 }
             }
-        }
         i += 1;
     }
 }
@@ -461,12 +460,12 @@ pub fn parse_bracket_inner(inner: &str) -> BracketParsed {
             }),
             map(preceded(tag("@AL"), one_of("12")), |c: char| {
                 BracketField::Chiral(Chirality::Allenal {
-                    arr: c.to_digit(10).unwrap() as u32,
+                    arr: c.to_digit(10).unwrap(),
                 })
             }),
             map(preceded(tag("@SP"), one_of("123")), |c: char| {
                 BracketField::Chiral(Chirality::SquarePlanar {
-                    arr: c.to_digit(10).unwrap() as u32,
+                    arr: c.to_digit(10).unwrap(),
                 })
             }),
             map(preceded(tag("@TB"), digit1), |d: &str| {
@@ -533,7 +532,7 @@ pub fn parse_bracket_inner(inner: &str) -> BracketParsed {
                 element_symbol(),
                 fold_many0::<&str, Error<&str>, _, _, _, SmallVec<[BracketField; 4]>>(
                     field_tail(),
-                    || SmallVec::<[BracketField; 4]>::new(),
+                    SmallVec::<[BracketField; 4]>::new,
                     |mut acc, f| {
                         acc.push(f);
                         acc

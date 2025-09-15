@@ -97,7 +97,7 @@ impl BondType {
     }
 }
 
-/// Bond properties specified in the bond block
+// Bond properties specified in the bond block
 
 /// Double bond stereochemistry
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

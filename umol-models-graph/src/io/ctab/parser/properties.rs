@@ -928,7 +928,7 @@ fn rgroup_label_entries<'a>(
 /// hhh: REstH property of rrr (0 (default)=off, 1=on): RGroup or H atom
 /// ooo...: Range of RGroup occurrence required: n=exactly n, n-m=from n through m (inclusive),
 /// >n=greater n, <n=fewer than n, blank (default): > 0.
-/// Any non-contradictory combination of the preceding values is allowed, separated by commas.
+/// > Any non-contradictory combination of the preceding values is allowed, separated by commas.
 fn rgroup_logic_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = RGroupLogicEntry, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
@@ -952,11 +952,11 @@ fn rgroup_logic_entry<'a>(
                 i.len() >= 4,
                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
             ),
-            |r| r.map_or(false, |r| r != 0),
+            |r| r.is_some_and(|r| r != 0),
         )
         .parse(i)?;
 
-        let (i, occurrence) = map(cond(i.len() > 0, rgroup_occurrences()), |o| {
+        let (i, occurrence) = map(cond(!i.is_empty(), rgroup_occurrences()), |o| {
             o.unwrap_or(vec![RGroupOccurrence::GreaterThan(0)])
         })
         .parse(i)?;

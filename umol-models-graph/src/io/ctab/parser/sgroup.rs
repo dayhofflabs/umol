@@ -115,7 +115,7 @@ fn sgroup_multiplier_integer<'a>(
 fn sgroup_multiplier_variable<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = error::Error<&'a [u8]>> {
     map(
-        take_while_m_n(1, 1, |s| AsChar::is_alpha(s)),
+        take_while_m_n(1, 1, AsChar::is_alpha),
         |s: &[u8]| SGroupMultiplierTerm::Variable(s[0] as char),
     )
 }

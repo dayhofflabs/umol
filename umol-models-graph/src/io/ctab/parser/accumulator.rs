@@ -150,7 +150,7 @@ impl MoleculeProperties {
             PropertyEntries::IsotopeEntries(entries) => {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
-                    props.isotope_mass = Some(entry.mass as u32);
+                    props.isotope_mass = Some(entry.mass);
                 }
             }
             PropertyEntries::RingBondCountEntries(entries) => {
@@ -654,7 +654,7 @@ impl MoleculeProperties {
         for (&atom_index, props) in &self.atom_properties {
             let atom = molecule
                 .atom_mut(atom_index)
-                .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+                .ok_or(DataError::MissingAtomIndex(atom_index))?;
 
             if props.alias.is_some() {
                 self.apply_atomlike_alias(props, atom)?;
@@ -733,7 +733,7 @@ impl MoleculeProperties {
         let alias = props.alias.as_ref().unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(DataError::MissingAtomIndex(atom_index))?;
         if let Some(existing_alias) = atom.properties.get("molFileAlias") {
             if existing_alias != alias {
                 return Err(ValidationError::InvalidComponent(format!(
@@ -773,7 +773,7 @@ impl MoleculeProperties {
         let value = props.value.as_ref().unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(DataError::MissingAtomIndex(atom_index))?;
         if let Some(existing_value) = atom.properties.get("molFileValue") {
             if existing_value != value {
                 return Err(ValidationError::InvalidComponent(format!(
@@ -804,7 +804,7 @@ impl MoleculeProperties {
         let charge = props.charge.unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(DataError::MissingAtomIndex(atom_index))?;
         atom.charge = charge;
         atom.radical = None;
         Ok(())
@@ -824,7 +824,7 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(DataError::MissingAtomIndex(atom_index))?;
         atom.radical = props.radical;
         atom.charge = 0;
         Ok(())
@@ -874,7 +874,7 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(DataError::MissingAtomIndex(atom_index))?;
         let mass = convert_atom_isotope_mass_number(
             atom.element,
             props.isotope_mass.unwrap(),
@@ -914,7 +914,7 @@ impl MoleculeProperties {
         let hydrogen_count = props.hydrogen_count.unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or_else(|| DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(DataError::MissingAtomIndex(atom_index))?;
         atom.hydrogen_count = Some(hydrogen_count);
         Ok(())
     }
@@ -1079,7 +1079,7 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let bond = molecule
             .bond_mut(bond_index)
-            .ok_or_else(|| DataError::MissingBondIndex(bond_index))?;
+            .ok_or(DataError::MissingBondIndex(bond_index))?;
         bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true, true)?;
         Ok(())
     }

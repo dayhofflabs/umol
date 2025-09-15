@@ -124,7 +124,7 @@ fn bondlike_input_inner<'a>(
 
         // Ignore xxx field
         let (i, _) = cond(
-            i.len() > 0,
+            !i.is_empty(),
             fixed_width_padding_n((i.len() / 3).min(1), 3, strict_padding),
         )
         .parse(i)?;

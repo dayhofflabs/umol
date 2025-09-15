@@ -92,8 +92,8 @@ pub fn has_advanced_features(molecule: &MoleculeLike) -> bool {
     for edge_ref in molecule.graph.edge_references() {
         if let Some(bond) = molecule.graph.edge_weight(edge_ref.id()) {
             if bond.bond_type.is_bondlike()
-                || bond.topology.map_or(false, |t| !t.is_default())
-                || bond.reacting_center.map_or(false, |r| !r.is_default())
+                || bond.topology.is_some_and(|t| !t.is_default())
+                || bond.reacting_center.is_some_and(|r| !r.is_default())
             {
                 return true;
             }

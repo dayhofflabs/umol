@@ -59,7 +59,7 @@ impl<'a> Emitter<'a> {
                 category: c.category,
                 severity: c.severity,
                 span: c.span,
-                message: c.message.into(),
+                message: c.message,
                 details: None,
             });
         }

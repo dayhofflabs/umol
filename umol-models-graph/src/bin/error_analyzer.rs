@@ -53,7 +53,7 @@ fn collect_mol_files(
             let path = entry.path();
             if path.is_dir() {
                 collect_mol_files(&path, error_patterns, files_tested);
-            } else if path.extension().map_or(false, |ext| ext == "mol") {
+            } else if path.extension().is_some_and(|ext| ext == "mol") {
                 *files_tested += 1;
 
                 if let Ok(content) = fs::read(&path) {

@@ -20,7 +20,7 @@ impl BondMatcher {
             let candidates = BondSpecRegistry::by_order(order);
             let matches = candidates
                 .iter()
-                .filter(|spec| builder.donation().map_or(true, |d| d == spec.donation()))
+                .filter(|spec| builder.donation().is_none_or(|d| d == spec.donation()))
                 .cloned()
                 .collect::<Vec<BondSpec>>();
 

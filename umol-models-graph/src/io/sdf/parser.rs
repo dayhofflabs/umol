@@ -129,7 +129,7 @@ fn sdf_compound<'a>() -> impl Parser<&'a [u8], Output = SdfCompound, Error = err
 
 /// Parse complete SDF file (multiple compounds)
 fn sdf_file<'a>() -> impl Parser<&'a [u8], Output = SdfFile, Error = error::Error<&'a [u8]>> {
-    map(many1(sdf_compound()), |compounds| SdfFile::new(compounds))
+    map(many1(sdf_compound()), SdfFile::new)
 }
 
 /// Public API function to parse SDF files

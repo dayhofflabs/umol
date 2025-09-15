@@ -31,7 +31,7 @@ impl Molecule {
         self.data.node_weights()
     }
 
-    pub fn atom<'graph>(&'graph self, index: AtomIndex) -> Option<&'graph Atom> {
+    pub fn atom(&self, index: AtomIndex) -> Option<&Atom> {
         self.data.node_weight(index)
     }
 
@@ -43,15 +43,15 @@ impl Molecule {
         self.data.edge_weights()
     }
 
-    pub fn bond<'graph>(&'graph self, index: BondIndex) -> Option<&'graph Bond> {
+    pub fn bond(&self, index: BondIndex) -> Option<&Bond> {
         self.data.edge_weight(index)
     }
 
     // TODO: Review naming
-    pub fn bond_atoms<'graph>(
-        &'graph self,
+    pub fn bond_atoms(
+        &self,
         index: BondIndex,
-    ) -> Option<(&'graph Atom, &'graph Atom)> {
+    ) -> Option<(&Atom, &Atom)> {
         self.data.edge_endpoints(index).map(|(a, b)| {
             (
                 self.data.node_weight(a).unwrap(),
@@ -61,8 +61,8 @@ impl Molecule {
     }
 
     // TODO: Review naming
-    pub fn bond_atom_indices<'graph>(
-        &'graph self,
+    pub fn bond_atom_indices(
+        &self,
         index: BondIndex,
     ) -> Option<(AtomIndex, AtomIndex)> {
         self.data.edge_endpoints(index)
@@ -130,6 +130,12 @@ impl Display for Molecule {
 pub struct MoleculeBuilder {
     atom_builders: HashMap<usize, AtomBuilder>,
     bond_builders: HashMap<(usize, usize), BondBuilder>,
+}
+
+impl Default for MoleculeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MoleculeBuilder {

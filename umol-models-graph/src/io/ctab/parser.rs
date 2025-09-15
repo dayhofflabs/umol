@@ -198,10 +198,10 @@ fn legacy_atom_list_block<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
-        let mut lines_iter = input.lines_with_terminator();
+        let lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
 
-        while let Some(line) = lines_iter.next() {
+        for line in lines_iter {
             if let Ok((_, property)) = all_consuming(legacy_atom_list_input()).parse(line) {
                 properties.push(property);
                 consumed += line.len();
@@ -233,7 +233,7 @@ fn basic_properties_block<'a>(
             // Handle atom alias (two-line property)
             if line.starts_with(b"A  ") {
                 if let Some(next_line) = lines_iter.next() {
-                    let combined_line = join(b"\n", &[line, next_line]);
+                    let combined_line = join(b"\n", [line, next_line]);
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
@@ -285,7 +285,7 @@ fn properties_block<'a>(
             // Handle atom alias (two-line property)
             if line.starts_with(b"A  ") {
                 if let Some(next_line) = lines_iter.next() {
-                    let combined_line = join(b"\n", &[line, next_line]);
+                    let combined_line = join(b"\n", [line, next_line]);
                     let line_bytes = line.len() + next_line.len();
 
                     if let Ok((_, property)) =
@@ -299,13 +299,11 @@ fn properties_block<'a>(
                 } else {
                     break; // Incomplete atom alias
                 }
+            } else if let Ok((_, property)) = all_consuming(property_input(flags)).parse(line) {
+                properties.push(property);
+                consumed += line.len();
             } else {
-                if let Ok((_, property)) = all_consuming(property_input(flags)).parse(line) {
-                    properties.push(property);
-                    consumed += line.len();
-                } else {
-                    break; // Backtrack
-                }
+                break; // Backtrack
             }
         }
 

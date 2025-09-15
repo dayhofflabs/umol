@@ -25,6 +25,12 @@ pub struct Stoichiometry {
     counts: HashMap<Element, u32>,
 }
 
+impl Default for Stoichiometry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Stoichiometry {
     /// Create a new empty stoichiometry
     pub fn new() -> Self {

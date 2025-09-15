@@ -143,7 +143,7 @@ fn main() {
                 if file_entry
                     .path()
                     .extension()
-                    .map_or(false, |ext| ext == "mol")
+                    .is_some_and(|ext| ext == "mol")
                 {
                     if let Some(analysis) = analyze_file(&file_entry.path()) {
                         analyses.push(analysis);

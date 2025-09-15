@@ -22,7 +22,7 @@ fn element_symbol_key(element: Element) -> [u8; 2] {
     let symbol = element.symbol();
     let bytes = symbol.as_bytes();
     [
-        bytes.get(0).copied().unwrap_or(0),
+        bytes.first().copied().unwrap_or(0),
         bytes.get(1).copied().unwrap_or(0),
     ]
 }
@@ -43,14 +43,14 @@ fn format_sum_formula(
     if c_count > 1 {
         sum_formula.push_str(&format!("C{}", c_count));
     } else if c_count == 1 {
-        sum_formula.push_str("C");
+        sum_formula.push('C');
     }
 
     // Hydrogen second
     if h_count > 1 {
         sum_formula.push_str(&format!("H{}", h_count));
     } else if h_count == 1 {
-        sum_formula.push_str("H");
+        sum_formula.push('H');
     }
 
     // Other elements alphabetically by symbol (BTreeMap with [u8; 2] keys maintains order)
@@ -76,6 +76,12 @@ pub struct Molecule {
     pub graph: StableGraph<Atom, Bond, Undirected, usize>,
     pub sgroups: BTreeMap<usize, SGroup>,
     pub properties: HashMap<String, String>,
+}
+
+impl Default for Molecule {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Molecule {
@@ -211,6 +217,12 @@ pub struct MoleculeLike {
     pub graph: StableGraph<AtomLike, BondLike, Undirected, usize>,
     pub sgroups: BTreeMap<usize, SGroup>,
     pub properties: HashMap<String, String>,
+}
+
+impl Default for MoleculeLike {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MoleculeLike {

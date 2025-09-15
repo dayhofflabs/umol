@@ -1,12 +1,11 @@
 use std::path::Path;
 use std::{env, fs};
 
-use lalrpop;
 use walkdir::WalkDir;
 
 fn main() {
     generate_smiles_parser();
-    generate_compliance_tests();
+    generate_conformance_tests();
 }
 
 fn generate_smiles_parser() {
@@ -16,7 +15,7 @@ fn generate_smiles_parser() {
     for entry in fs::read_dir(in_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
-        if path.extension().map_or(false, |e| e == "lalrpop") {
+        if path.extension().is_some_and(|e| e == "lalrpop") {
             println!("cargo:rerun-if-changed={}", path.display());
         }
     }
@@ -28,7 +27,7 @@ fn generate_smiles_parser() {
         .unwrap();
 }
 
-fn generate_compliance_tests() {
+fn generate_conformance_tests() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("generated_tests.rs");
 
@@ -45,24 +44,23 @@ fn generate_compliance_tests() {
         let category_path = format!("{}/{}", data_path, category);
 
         if let Ok(entries) = fs::read_dir(&category_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let source_name = entry.file_name().to_string_lossy().to_string();
-                    let source_path = format!("{}/{}", category_path, source_name);
+            for entry in entries.flatten() {
+                let source_name = entry.file_name().to_string_lossy().to_string();
+                let source_path = format!("{}/{}", category_path, source_name);
 
-                    // Check if this source/category combo has .mol files
-                    let has_files = WalkDir::new(&source_path).into_iter().any(|e| {
-                        e.map(|entry| entry.path().extension().map_or(false, |ext| ext == "mol"))
-                            .unwrap_or(false)
-                    });
+                // Check if this source/category combo has .mol files
+                let has_files = WalkDir::new(&source_path).into_iter().any(|e| {
+                    e.map(|entry| entry.path().extension().is_some_and(|ext| ext == "mol"))
+                        .unwrap_or(false)
+                });
 
-                    if has_files {
-                        let source_ident = source_name.replace('-', "_");
+                if has_files {
+                    let source_ident = source_name.replace('-', "_");
 
-                        // Generate tests for parse_mol
-                        let mol_should_succeed = category == "molecule";
-                        generated_code.push_str(&format!(
-                            r#"#[rstest]
+                    // Generate tests for parse_mol
+                    let mol_should_succeed = category == "molecule";
+                    generated_code.push_str(&format!(
+                        r#"#[rstest]
 fn test_parse_mol_{}_{source_ident}(
     #[files("{source_path}/*.mol")] file_path: PathBuf,
 ) {{
@@ -70,15 +68,15 @@ fn test_parse_mol_{}_{source_ident}(
 }}
 
 "#,
-                            category,
-                            source_path = source_path,
-                            mol_should_succeed = mol_should_succeed
-                        ));
+                        category,
+                        source_path = source_path,
+                        mol_should_succeed = mol_should_succeed
+                    ));
 
-                        // Generate tests for parse_mol_moleculelike
-                        let moleculelike_should_succeed = category != "invalid";
-                        generated_code.push_str(&format!(
-                            r#"#[rstest]
+                    // Generate tests for parse_mol_moleculelike
+                    let moleculelike_should_succeed = category != "invalid";
+                    generated_code.push_str(&format!(
+                        r#"#[rstest]
 fn test_parse_mol_moleculelike_{}_{source_ident}(
     #[files("{source_path}/*.mol")] file_path: PathBuf,
 ) {{
@@ -86,11 +84,10 @@ fn test_parse_mol_moleculelike_{}_{source_ident}(
 }}
 
 "#,
-                            category,
-                            source_path = source_path,
-                            moleculelike_should_succeed = moleculelike_should_succeed
-                        ));
-                    }
+                        category,
+                        source_path = source_path,
+                        moleculelike_should_succeed = moleculelike_should_succeed
+                    ));
                 }
             }
         }

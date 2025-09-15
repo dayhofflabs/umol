@@ -11,6 +11,12 @@ pub struct RuleRegistry {
     rules_by_phase: HashMap<Phase, Vec<&'static dyn Rule>>,
 }
 
+impl Default for RuleRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RuleRegistry {
     pub fn new() -> Self {
         Self {

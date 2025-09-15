@@ -134,7 +134,7 @@ fn atomlike_symbol<'a>(
                         return Ok((&b""[..], AtomSymbol::Pseudoatom(s)));
                     }
                 }
-                return Err(Err::Error(error::Error::new(s, error::ErrorKind::MapRes)));
+                Err(Err::Error(error::Error::new(s, error::ErrorKind::MapRes)))
             },
             true,
         )
@@ -499,8 +499,6 @@ pub fn atom_input<'a>(
 /// | nnn   | inversion          | 0..=2        | Reaction                                  |
 /// | eee   | exact change       | 0, 1         | Reaction                                  |
 /// -----------------------------------------------------------------------------------------
-///
-
 pub fn atomlike_input<'a>(
     flags: ParseFlags,
 ) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
@@ -573,7 +571,7 @@ fn atomlike_input_inner<'a>(
 
         // Ignored fields
         let (i, _) = cond(
-            i.len() > 0,
+            !i.is_empty(),
             fixed_width_padding_n((i.len() / 3).min(3), 3, strict_padding),
         )
         .parse(i)?;

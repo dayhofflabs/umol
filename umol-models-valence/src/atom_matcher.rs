@@ -34,26 +34,26 @@ impl AtomMatcher {
             let matches = candidates
                 .iter() // Iterate over the collected Vec<&AtomSpec>
                 .filter(|spec| {
-                    builder.charge().map_or(true, |c| c == spec.charge())
+                    builder.charge().is_none_or(|c| c == spec.charge())
                         && builder
                             .lone_pairs()
-                            .map_or(true, |lp| lp == spec.lone_pairs())
+                            .is_none_or(|lp| lp == spec.lone_pairs())
                         && builder
                             .donated_pairs()
-                            .map_or(true, |dp| dp == spec.donated_pairs())
+                            .is_none_or(|dp| dp == spec.donated_pairs())
                         && builder
                             .accepted_pairs()
-                            .map_or(true, |ap| ap == spec.accepted_pairs())
+                            .is_none_or(|ap| ap == spec.accepted_pairs())
                         && builder
                             .unpaired_electrons()
-                            .map_or(true, |u| u == spec.unpaired_electrons())
+                            .is_none_or(|u| u == spec.unpaired_electrons())
                         && builder
                             .multiplicity()
-                            .map_or(true, |m| m == spec.multiplicity())
+                            .is_none_or(|m| m == spec.multiplicity())
                         && builder
                             .implicit_hydrogens()
-                            .map_or(true, |h| h == spec.implicit_hydrogens())
-                        && builder.valence().map_or(true, |v| v == spec.valence())
+                            .is_none_or(|h| h == spec.implicit_hydrogens())
+                        && builder.valence().is_none_or(|v| v == spec.valence())
                 })
                 .cloned() // Clone the matching &AtomSpec to AtomSpec
                 .collect::<Vec<AtomSpec>>();

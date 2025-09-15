@@ -582,14 +582,11 @@ impl ParseState {
             for &bj in &adj[a] {
                 if bj == i { continue; }
                 let bj_ref = &mol.bonds[bj];
-                match Self::bond_order(bj_ref) {
-                    Some(BondOrder::Single) => {
-                        a_single_count += 1;
-                        if let Some(d) = Self::norm_dir_toward(a, bj_ref) {
-                            side_a.push(d);
-                        }
+                if let Some(BondOrder::Single) = Self::bond_order(bj_ref) {
+                    a_single_count += 1;
+                    if let Some(d) = Self::norm_dir_toward(a, bj_ref) {
+                        side_a.push(d);
                     }
-                    _ => {}
                 }
             }
 
@@ -597,14 +594,11 @@ impl ParseState {
             for &bj in &adj[b] {
                 if bj == i { continue; }
                 let bj_ref = &mol.bonds[bj];
-                match Self::bond_order(bj_ref) {
-                    Some(BondOrder::Single) => {
-                        b_single_count += 1;
-                        if let Some(d) = Self::norm_dir_toward(b, bj_ref) {
-                            side_b.push(d);
-                        }
+                if let Some(BondOrder::Single) = Self::bond_order(bj_ref) {
+                    b_single_count += 1;
+                    if let Some(d) = Self::norm_dir_toward(b, bj_ref) {
+                        side_b.push(d);
                     }
-                    _ => {}
                 }
             }
 

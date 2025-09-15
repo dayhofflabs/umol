@@ -81,7 +81,7 @@ impl AtomSpec {
             "Multiplicity must be between 1 and unpaired electrons + 1"
         );
         debug_assert!(
-            (unpaired_electrons + 1 - multiplicity) % 2 == 0,
+            (unpaired_electrons + 1 - multiplicity).is_multiple_of(2),
             "Multiplicity must be even"
         );
         debug_assert!(
