@@ -3,7 +3,7 @@
 use super::{Phase, Rule, RuleMeta};
 use crate::diagnostics::{Category, DiagnosticsReport, Severity};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
-use crate::io::smiles::linter::style::lint_ring_style;
+use crate::io::smiles::linter::utils::lint_ring_style;
 use crate::io::smiles::linter::LintContext;
 
 pub struct RingStyleRule;

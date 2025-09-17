@@ -12,6 +12,7 @@ float-cmp = "0.10.0"
 indexmap = { version = "2.11.1", features = ["serde"] }
 lalrpop-util = { version = "0.22.2", features = ["lexer"] }
 logos = "0.15.1"
+memchr = "2.7.4"
 nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
 nom = { version = "8.0.0" }
 num = "0.4.3"

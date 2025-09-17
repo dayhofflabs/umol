@@ -1,12 +1,16 @@
 //! Bracket rules for SMILES linting.
 
-use umol_data::isotope::Isotope as KnownIsotope;
+use umol_data::isotope::Isotope;
 use umol_data::Element;
 
 use super::{Phase, Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
-use crate::io::smiles::linter::{bracket as bh, LintContext};
+use crate::io::smiles::linter::utils::{
+    bracket_order_misordered, find_charge_plus_minus_one, find_closing_bracket, find_h_two_digits,
+    find_subslice, inner_contains_h1, invalid_class_index, is_bare_organic, parse_bracket,
+};
+use crate::io::smiles::linter::LintContext;
 
 pub struct BracketRule;
 static META_BRKT: RuleMeta = RuleMeta {
@@ -26,9 +30,9 @@ impl Rule for BracketRule {
         let mut i = 0usize;
         while i < bytes.len() {
             if bytes[i] == b'[' {
-                if let Some(close) = bh::find_closing_bracket(bytes, i + 1) {
+                if let Some(close) = find_closing_bracket(bytes, i + 1) {
                     let inner = &ctx.input[i + 1..close];
-                    let parsed = bh::parse_bracket_inner(inner);
+                    let parsed = parse_bracket(inner);
                     let scope = Scope::Bracket {
                         start: i,
                         end: close + 1,
@@ -119,7 +123,7 @@ impl Rule for BracketRule {
                             had_error = true;
                         } else if isotope > 0 {
                             if let Some(elem) = parsed.element {
-                                if !KnownIsotope::is_catalogued(elem, isotope) {
+                                if !Isotope::is_catalogued(elem, isotope) {
                                     emit.candidate(DiagnosticCandidate {
                                         code: Code("NUM_ISOTOPE_UNCATALOGUED"),
                                         category: Category::Num,
@@ -132,7 +136,7 @@ impl Rule for BracketRule {
                             }
                         }
                     }
-                    if !had_error && bh::is_bare_organic(inner) {
+                    if !had_error && is_bare_organic(inner) {
                         emit.candidate(DiagnosticCandidate {
                             code: Code("STYLE_BRACKET_ORGANIC"),
                             category: Category::Style,
@@ -142,8 +146,8 @@ impl Rule for BracketRule {
                             scope,
                         });
                     }
-                    if !had_error && bh::inner_contains_h1(inner) {
-                        if let Some((h_start, h_end)) = bh::find_subslice(inner, "H1") {
+                    if !had_error && inner_contains_h1(inner) {
+                        if let Some((h_start, h_end)) = find_subslice(inner, "H1") {
                             emit.candidate(DiagnosticCandidate {
                                 code: Code("STYLE_HCOUNT_ONE_SIMPLE"),
                                 category: Category::Style,
@@ -165,7 +169,7 @@ impl Rule for BracketRule {
                     }
                     // STYLE_CHARGE_SIGN_SIMPLE: prefer [+]/[-] over [+1]/[-1]
                     if !had_error {
-                        if let Some((c_start, c_end)) = bh::find_charge_plus_minus_one(inner) {
+                        if let Some((c_start, c_end)) = find_charge_plus_minus_one(inner) {
                             emit.candidate(DiagnosticCandidate {
                                 code: Code("STYLE_CHARGE_SIGN_SIMPLE"),
                                 category: Category::Style,
@@ -176,7 +180,7 @@ impl Rule for BracketRule {
                             });
                         }
                     }
-                    if let Some((h2s, h2e)) = bh::find_h_two_digits(inner) {
+                    if let Some((h2s, h2e)) = find_h_two_digits(inner) {
                         emit.candidate(DiagnosticCandidate {
                             code: Code("BRKT_HCOUNT_TWO_DIGITS"),
                             category: Category::Brkt,
@@ -187,7 +191,7 @@ impl Rule for BracketRule {
                         });
                         had_error = true;
                     }
-                    if let Some((cs, ce, neg)) = bh::find_class_issues(inner) {
+                    if let Some((cs, ce, neg)) = invalid_class_index(inner) {
                         if neg {
                             emit.candidate(DiagnosticCandidate {
                                 code: Code("NUM_CLASS_NEGATIVE"),
@@ -209,7 +213,7 @@ impl Rule for BracketRule {
                         }
                         had_error = true;
                     }
-                    if !had_error && bh::bracket_order_misordered(inner) {
+                    if !had_error && bracket_order_misordered(inner) {
                         emit.candidate(DiagnosticCandidate {
                             code: Code("STYLE_BRKT_ORDER"),
                             category: Category::Style,

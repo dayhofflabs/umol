@@ -5,7 +5,7 @@ use logos::Logos;
 use super::{Phase, Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, DiagnosticsReport, Severity, Span};
 use crate::io::smiles::lexer::Token;
-use crate::io::smiles::linter::bracket::{
+use crate::io::smiles::linter::utils::{
     lint_dot_before_ring, lint_dot_positions, lint_intertoken_whitespace, lint_trailing_bond,
 };
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};

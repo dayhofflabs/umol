@@ -2,8 +2,7 @@
 
 use lalrpop_util::ParseError;
 
-mod bracket;
-mod style;
+mod utils;
 mod context;
 mod emitter;
 mod registry;

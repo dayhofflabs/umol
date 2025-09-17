@@ -19,12 +19,24 @@ fn generate_smiles_parser() {
             println!("cargo:rerun-if-changed={}", path.display());
         }
     }
+    sanitize_env_for_lalrpop();
     lalrpop::Configuration::new()
         .log_debug()
         // Disable report emission to avoid IO issues on renamed files/paths
         .set_in_dir(in_dir)
         .process()
         .unwrap();
+}
+
+// Remove any non-UTF8 environment variables for the duration of this build script
+// LALRPOP has a dependency on env, which iterates over env as UTF-8
+fn sanitize_env_for_lalrpop() {
+    let vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = env::vars_os().collect();
+    for (k, v) in vars {
+        if k.clone().into_string().is_err() || v.clone().into_string().is_err() {
+            env::remove_var(&k);
+        }
+    }
 }
 
 fn generate_conformance_tests() {

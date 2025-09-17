@@ -1,5 +1,7 @@
 //! OpenSMILES parser grammar.
 
+use std::mem;
+
 use lalrpop_util::ParseError;
 use umol_data::Element;
 
@@ -34,7 +36,7 @@ pub Component: () = {
                      if state.rings.is_empty() {
                          state.finish_molecule();
                          // append any nested molecules finalized within branches
-                         let mut pending = std::mem::take(&mut state.pending_molecules);
+                         let mut pending = mem::take(&mut state.pending_molecules);
                          state.molecules.append(&mut pending);
                      }
                      Ok(()) },
@@ -173,11 +175,11 @@ pub BracketAtom: Atom = {
                     if chirality.is_some() { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
                     chirality = Some(c);
                 }
-                BracketField::H(h) => {
+                BracketField::HydrogenCount(h) => {
                     if hcount.is_some() { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
                     hcount = Some(h);
                 }
-                BracketField::Q(q) => {
+                BracketField::Charge(q) => {
                     if charge.is_some() { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
                     charge = Some(q);
                 }
@@ -209,8 +211,8 @@ pub BracketAtom: Atom = {
 
 pub BracketField: BracketField = {
     <c:Chirality> => BracketField::Chiral(c),
-    <h:HCount> => BracketField::H(h),
-    <q:Charge> => BracketField::Q(q),
+    <h:HCount> => BracketField::HydrogenCount(h),
+    <q:Charge> => BracketField::Charge(q),
     <k:Class> => BracketField::Class(k),
 }
 
