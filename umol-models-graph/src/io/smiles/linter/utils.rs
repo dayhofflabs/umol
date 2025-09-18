@@ -4,19 +4,11 @@ use bstr::ByteSlice;
 use indexmap::IndexMap;
 use memchr::{memchr, memchr2_iter, memchr_iter};
 use regex::Regex;
-use umol_data::Element;
 
 use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Span};
-use crate::io::smiles::parser::utils::{parse_bracket as parse_bracket_parser, BracketField};
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct BracketFields {
-    pub element: Option<Element>,
-    pub isotope: Option<u32>,
-    pub hcount: Option<u32>,
-    pub charge: Option<i32>,
-    pub class: Option<u32>,
-}
+use crate::io::smiles::parser::utils::{
+    parse_bracket as parse_bracket_parser, BracketField, BracketFields,
+};
 
 /// Returns the index of the first ']' at or after `idx`.
 pub fn find_closing_bracket(bytes: &[u8], idx: usize) -> Option<usize> {
