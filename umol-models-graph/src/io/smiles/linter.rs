@@ -2,11 +2,11 @@
 
 use lalrpop_util::ParseError;
 
-mod utils;
 mod context;
 mod emitter;
 mod registry;
 mod rules;
+mod utils;
 pub use context::LintContext;
 pub use emitter::{DiagnosticCandidate, Emitter, Scope};
 pub use registry::{LintEngine, RuleRegistry};

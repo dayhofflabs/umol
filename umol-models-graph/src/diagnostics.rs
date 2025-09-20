@@ -1,4 +1,4 @@
-//! Diagnostics types for SMILES linting (errors and warnings).
+//! Diagnostics types for graph-based models
 
 use std::fmt;
 

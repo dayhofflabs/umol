@@ -7,8 +7,8 @@ use super::{Phase, Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
 use crate::io::smiles::linter::utils::{
-    bracket_order_misordered, find_charge_plus_minus_one, find_closing_bracket, find_h_two_digits,
-    find_subslice, inner_contains_h1, invalid_class_index, is_bare_organic, parse_bracket,
+    bracket_order_misordered, contains_h1, find_charge_plus_minus_one, find_closing_bracket,
+    find_h_two_digits, find_subslice, invalid_class_index, is_bare_organic, parse_bracket,
 };
 use crate::io::smiles::linter::LintContext;
 
@@ -146,7 +146,7 @@ impl Rule for BracketRule {
                             scope,
                         });
                     }
-                    if !had_error && inner_contains_h1(inner) {
+                    if !had_error && contains_h1(inner) {
                         if let Some((h_start, h_end)) = find_subslice(inner, "H1") {
                             emit.candidate(DiagnosticCandidate {
                                 code: Code("STYLE_HCOUNT_ONE_SIMPLE"),

@@ -28,5 +28,5 @@ criterion = "0.7.0"
 bench = false
 
 [[bench]]
-name = "data_bench"
+name = "elements"
 harness = false

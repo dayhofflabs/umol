@@ -1,4 +1,4 @@
-//! Benchmark for of MOL format parsing
+//! Benchmarks for MOL (CTAB) parsing
 
 use std::hint::black_box;
 
@@ -10,7 +10,7 @@ use umol_models_graph::io::ctab::parser::{
     legacy_atom_list_input, property_input,
 };
 
-fn parsing_benchmarks(c: &mut Criterion) {
+fn mol_parsing(c: &mut Criterion) {
     {
         let mut group = c.benchmark_group("mol_parsing/counts");
         let test_cases = [
@@ -328,5 +328,5 @@ fn parsing_benchmarks(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, parsing_benchmarks);
+criterion_group!(benches, mol_parsing);
 criterion_main!(benches);

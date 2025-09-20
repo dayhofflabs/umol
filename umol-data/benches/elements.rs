@@ -3,7 +3,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_data::{e, Element, Isotope};
 
-fn data_benchmarks(c: &mut Criterion) {
+fn elements(c: &mut Criterion) {
     {
         let mut group = c.benchmark_group("element/parse_symbol");
         for symbol in &vec!["C".to_string(), "Cu".to_string(), "Zn".to_string()] {
@@ -99,5 +99,5 @@ fn data_benchmarks(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, data_benchmarks);
+criterion_group!(benches, elements);
 criterion_main!(benches);

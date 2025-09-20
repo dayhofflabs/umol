@@ -61,5 +61,17 @@ name = "file_catalog"
 bench = false
 
 [[bench]]
-name = "parsing_bench"
+name = "mol_parsing"
+harness = false
+
+[[bench]]
+name = "smiles_linting"
+harness = false
+
+[[bench]]
+name = "smiles_parsing"
+harness = false
+
+[[bench]]
+name = "smiles_lexing"
 harness = false

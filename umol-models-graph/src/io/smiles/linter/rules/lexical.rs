@@ -3,13 +3,11 @@
 use logos::Logos;
 
 use super::{Phase, Rule, RuleMeta};
-use crate::diagnostics::{Category, Code, DiagnosticsReport, Severity, Span};
+use crate::diagnostics::{Category, Code, Severity, Span};
 use crate::io::smiles::lexer::Token;
-use crate::io::smiles::linter::utils::{
-    lint_dot_before_ring, lint_dot_positions, lint_intertoken_whitespace, lint_trailing_bond,
-};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
 use crate::io::smiles::linter::LintContext;
+use crate::io::smiles::segment::Segment;
 
 pub struct LexErrorsRule;
 static META_LEX: RuleMeta = RuleMeta {
@@ -68,17 +66,26 @@ impl Rule for WhitespaceRule {
         Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = DiagnosticsReport::new();
-        lint_intertoken_whitespace(ctx.input, &mut tmp);
-        for d in tmp.diagnostics {
-            emit.candidate(DiagnosticCandidate {
-                code: d.code,
-                category: d.category,
-                severity: d.severity,
-                span: d.span,
-                message: Box::<str>::leak(d.message.into()),
-                scope: Scope::Global,
-            });
+        let segs = ctx.segments();
+        if let Some(last_non_ws) = segs
+            .iter()
+            .rposition(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
+        {
+            for (i, seg) in segs.iter().enumerate() {
+                if i > last_non_ws {
+                    break;
+                }
+                if let Segment::WhitespaceBlock { span } = seg {
+                    emit.candidate(DiagnosticCandidate {
+                        code: Code("LEX_INTERTOKEN_WHITESPACE"),
+                        category: Category::Lex,
+                        severity: Severity::Error,
+                        span: *span,
+                        message: "Inter-token whitespace is not allowed",
+                        scope: Scope::Global,
+                    });
+                }
+            }
         }
     }
 }
@@ -98,15 +105,21 @@ impl Rule for TrailingBondRule {
         Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = DiagnosticsReport::new();
-        lint_trailing_bond(ctx.input, &mut tmp);
-        for d in tmp.diagnostics {
+        let mut last_bond_span = None;
+        for seg in ctx.segments().iter() {
+            match seg {
+                Segment::WhitespaceBlock { .. } => {}
+                Segment::Bond { span, .. } => last_bond_span = Some(*span),
+                _ => last_bond_span = None,
+            }
+        }
+        if let Some(span) = last_bond_span {
             emit.candidate(DiagnosticCandidate {
-                code: d.code,
-                category: d.category,
-                severity: d.severity,
-                span: d.span,
-                message: Box::<str>::leak(d.message.into()),
+                code: Code("SYN_TRAILING_BOND"),
+                category: Category::Syn,
+                severity: Severity::Error,
+                span,
+                message: "Trailing bond symbol",
                 scope: Scope::Global,
             });
         }
@@ -128,18 +141,74 @@ impl Rule for DotRules {
         Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut tmp = DiagnosticsReport::new();
-        lint_dot_before_ring(ctx.input, &mut tmp);
-        lint_dot_positions(ctx.input, &mut tmp);
-        for d in tmp.diagnostics {
-            emit.candidate(DiagnosticCandidate {
-                code: d.code,
-                category: d.category,
-                severity: d.severity,
-                span: d.span,
-                message: Box::<str>::leak(d.message.into()),
-                scope: Scope::Global,
-            });
+        // Dot before ring
+        let mut last_dot: Option<Span> = None;
+        for seg in ctx.segments().iter() {
+            match seg {
+                Segment::WhitespaceBlock { .. } => {}
+                Segment::ComponentSeparator { span } => last_dot = Some(*span),
+                Segment::RingClosure { span, .. } => {
+                    if let Some(dot) = last_dot.take() {
+                        if dot.end == span.start {
+                            emit.candidate(DiagnosticCandidate {
+                                code: Code("SYN_DOT_BEFORE_RING"),
+                                category: Category::Syn,
+                                severity: Severity::Error,
+                                span: Span::new(dot.start, span.end),
+                                message: "Dot before ring index is invalid",
+                                scope: Scope::Global,
+                            });
+                        }
+                    }
+                }
+                _ => last_dot = None,
+            }
+        }
+        // Dot positions: leading, trailing, multiple
+        let segs = ctx.segments();
+        if let Some(i) = segs
+            .iter()
+            .position(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
+        {
+            if let Segment::ComponentSeparator { span } = segs[i] {
+                emit.candidate(DiagnosticCandidate {
+                    code: Code("SYN_LEADING_DOT"),
+                    category: Category::Syn,
+                    severity: Severity::Error,
+                    span,
+                    message: "Leading dot",
+                    scope: Scope::Global,
+                });
+            }
+        }
+        if let Some(i) = segs
+            .iter()
+            .rposition(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
+        {
+            if let Segment::ComponentSeparator { span } = segs[i] {
+                emit.candidate(DiagnosticCandidate {
+                    code: Code("SYN_TRAILING_DOT"),
+                    category: Category::Syn,
+                    severity: Severity::Error,
+                    span,
+                    message: "Trailing dot",
+                    scope: Scope::Global,
+                });
+            }
+        }
+        for w in segs.windows(2) {
+            if let [Segment::ComponentSeparator { span: s1 }, Segment::ComponentSeparator { span: s2 }] = w
+            {
+                emit.candidate(DiagnosticCandidate {
+                    code: Code("SYN_MULTIPLE_DOTS"),
+                    category: Category::Syn,
+                    severity: Severity::Error,
+                    span: Span::new(s1.start, s2.end),
+                    message: "Multiple dots",
+                    scope: Scope::Global,
+                });
+                break;
+            }
         }
     }
 }
