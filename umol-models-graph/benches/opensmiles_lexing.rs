@@ -2,9 +2,9 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_models_graph::io::smiles::lexer::Lexer;
-use umol_models_graph::io::smiles::segment::Segments;
+use umol_models_graph::io::smiles::iterators::Segments;
 
-fn smiles_lexing(c: &mut Criterion) {
+fn opensmiles_lexing(c: &mut Criterion) {
     let inputs = [
         ("short", "C1=CC=CC=C1"),
         ("with_brackets", "C[CH3]C(=O)N"),
@@ -16,7 +16,7 @@ fn smiles_lexing(c: &mut Criterion) {
     ];
 
     // Logos lexing only
-    let mut group_lex = c.benchmark_group("smiles_lexing/lexer_iter");
+    let mut group_lex = c.benchmark_group("opensmiles_lexing/lexer_iter");
     for (name, s) in inputs.iter() {
         group_lex.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
@@ -30,7 +30,7 @@ fn smiles_lexing(c: &mut Criterion) {
     group_lex.finish();
 
     // Segmentation (lexer + grouping) for comparison
-    let mut group_seg = c.benchmark_group("smiles_lexing/segments");
+    let mut group_seg = c.benchmark_group("opensmiles_lexing/segments");
     for (name, s) in inputs.iter() {
         group_seg.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
@@ -43,7 +43,7 @@ fn smiles_lexing(c: &mut Criterion) {
     group_seg.finish();
 }
 
-criterion_group!(benches, smiles_lexing);
+criterion_group!(benches, opensmiles_lexing);
 criterion_main!(benches);
 
 

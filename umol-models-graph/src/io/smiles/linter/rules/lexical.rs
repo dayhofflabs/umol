@@ -2,12 +2,12 @@
 
 use logos::Logos;
 
-use super::{Phase, Rule, RuleMeta};
+use super::{Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
+use crate::io::smiles::iterators::Segment;
 use crate::io::smiles::lexer::Token;
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
 use crate::io::smiles::linter::LintContext;
-use crate::io::smiles::segment::Segment;
 
 pub struct LexErrorsRule;
 static META_LEX: RuleMeta = RuleMeta {
@@ -15,12 +15,10 @@ static META_LEX: RuleMeta = RuleMeta {
     category: Category::Lex,
     default_severity: Severity::Error,
 };
+
 impl Rule for LexErrorsRule {
     fn meta(&self) -> &'static RuleMeta {
         &META_LEX
-    }
-    fn phase(&self) -> Phase {
-        Phase::Lex
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
         let logos_lexer = Token::lexer(ctx.input);
@@ -62,9 +60,6 @@ impl Rule for WhitespaceRule {
     fn meta(&self) -> &'static RuleMeta {
         &META_WS
     }
-    fn phase(&self) -> Phase {
-        Phase::Lex
-    }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
         let segs = ctx.segments();
         if let Some(last_non_ws) = segs
@@ -101,9 +96,6 @@ impl Rule for TrailingBondRule {
     fn meta(&self) -> &'static RuleMeta {
         &META_TB
     }
-    fn phase(&self) -> Phase {
-        Phase::Lex
-    }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
         let mut last_bond_span = None;
         for seg in ctx.segments().iter() {
@@ -115,8 +107,8 @@ impl Rule for TrailingBondRule {
         }
         if let Some(span) = last_bond_span {
             emit.candidate(DiagnosticCandidate {
-                code: Code("SYN_TRAILING_BOND"),
-                category: Category::Syn,
+                code: Code("LEX_TRAILING_BOND"),
+                category: Category::Lex,
                 severity: Severity::Error,
                 span,
                 message: "Trailing bond symbol",
@@ -137,9 +129,6 @@ impl Rule for DotRules {
     fn meta(&self) -> &'static RuleMeta {
         &META_DOT
     }
-    fn phase(&self) -> Phase {
-        Phase::Lex
-    }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
         // Dot before ring
         let mut last_dot: Option<Span> = None;
@@ -151,8 +140,8 @@ impl Rule for DotRules {
                     if let Some(dot) = last_dot.take() {
                         if dot.end == span.start {
                             emit.candidate(DiagnosticCandidate {
-                                code: Code("SYN_DOT_BEFORE_RING"),
-                                category: Category::Syn,
+                                code: Code("LEX_DOT_BEFORE_RING"),
+                                category: Category::Lex,
                                 severity: Severity::Error,
                                 span: Span::new(dot.start, span.end),
                                 message: "Dot before ring index is invalid",
@@ -172,8 +161,8 @@ impl Rule for DotRules {
         {
             if let Segment::ComponentSeparator { span } = segs[i] {
                 emit.candidate(DiagnosticCandidate {
-                    code: Code("SYN_LEADING_DOT"),
-                    category: Category::Syn,
+                    code: Code("LEX_LEADING_DOT"),
+                    category: Category::Lex,
                     severity: Severity::Error,
                     span,
                     message: "Leading dot",
@@ -187,8 +176,8 @@ impl Rule for DotRules {
         {
             if let Segment::ComponentSeparator { span } = segs[i] {
                 emit.candidate(DiagnosticCandidate {
-                    code: Code("SYN_TRAILING_DOT"),
-                    category: Category::Syn,
+                    code: Code("LEX_TRAILING_DOT"),
+                    category: Category::Lex,
                     severity: Severity::Error,
                     span,
                     message: "Trailing dot",
@@ -197,11 +186,12 @@ impl Rule for DotRules {
             }
         }
         for w in segs.windows(2) {
-            if let [Segment::ComponentSeparator { span: s1 }, Segment::ComponentSeparator { span: s2 }] = w
+            if let [Segment::ComponentSeparator { span: s1 }, Segment::ComponentSeparator { span: s2 }] =
+                w
             {
                 emit.candidate(DiagnosticCandidate {
-                    code: Code("SYN_MULTIPLE_DOTS"),
-                    category: Category::Syn,
+                    code: Code("LEX_MULTIPLE_DOTS"),
+                    category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(s1.start, s2.end),
                     message: "Multiple dots",

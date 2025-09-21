@@ -65,13 +65,13 @@ name = "mol_parsing"
 harness = false
 
 [[bench]]
-name = "smiles_linting"
+name = "opensmiles_linting"
 harness = false
 
 [[bench]]
-name = "smiles_parsing"
+name = "opensmiles_parsing"
 harness = false
 
 [[bench]]
-name = "smiles_lexing"
+name = "opensmiles_lexing"
 harness = false

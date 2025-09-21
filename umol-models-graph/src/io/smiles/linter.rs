@@ -10,7 +10,7 @@ mod utils;
 pub use context::LintContext;
 pub use emitter::{DiagnosticCandidate, Emitter, Scope};
 pub use registry::{LintEngine, RuleRegistry};
-pub use rules::{Phase, Rule};
+pub use rules::Rule;
 
 use super::lexer::Lexer;
 use super::parser::grammar::MoleculeParser;
@@ -28,8 +28,10 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     registry.register(&rules::TRAILING_BOND_RULE);
     registry.register(&rules::DOT_RULES);
     registry.register(&rules::STYLE_PCT_RULE);
+    registry.register(&rules::BRANCH_RULE);
     registry.register(&rules::BOND_STYLE_RULE);
     registry.register(&rules::RING_STYLE_RULE);
+    registry.register(&rules::RING_ERRORS_RULE);
     registry.register(&rules::BRACKET_RULE);
     let engine = LintEngine::new(registry);
     engine.run(&ctx, &mut report);

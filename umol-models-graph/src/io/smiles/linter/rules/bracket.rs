@@ -3,7 +3,7 @@
 use umol_data::isotope::Isotope;
 use umol_data::Element;
 
-use super::{Phase, Rule, RuleMeta};
+use super::{Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
 use crate::io::smiles::linter::utils::{
@@ -11,21 +11,35 @@ use crate::io::smiles::linter::utils::{
     find_h_two_digits, find_subslice, invalid_class_index, is_bare_organic, parse_bracket,
 };
 use crate::io::smiles::linter::LintContext;
+use crate::io::smiles::iterators::Segment;
 
 pub struct BracketRule;
+
 static META_BRKT: RuleMeta = RuleMeta {
     id: "BRKT_RULE",
-    category: Category::Brkt,
+    category: Category::Bracket,
     default_severity: Severity::Error,
 };
+
 impl Rule for BracketRule {
     fn meta(&self) -> &'static RuleMeta {
         &META_BRKT
     }
-    fn phase(&self) -> Phase {
-        Phase::Bracket
-    }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
+        // Emit for stray closing ']' outside brackets
+        for seg in ctx.segments().iter() {
+            if let Segment::BracketClose { span } = seg {
+                emit.candidate(DiagnosticCandidate {
+                    code: Code("BRKT_UNEXPECTED_CLOSE"),
+                    category: Category::Bracket,
+                    severity: Severity::Error,
+                    span: *span,
+                    message: "Unmatched ']' outside of bracket atom",
+                    scope: Scope::Global,
+                });
+            }
+        }
+
         let bytes = ctx.input.as_bytes();
         let mut i = 0usize;
         while i < bytes.len() {
@@ -41,7 +55,7 @@ impl Rule for BracketRule {
                     if matches!(parsed.element, Some(Element::H)) && parsed.hcount.is_some() {
                         emit.candidate(DiagnosticCandidate {
                             code: Code("BRKT_H_ON_H"),
-                            category: Category::Brkt,
+                            category: Category::Bracket,
                             severity: Severity::Error,
                             span: Span::new(i, close + 1),
                             message: "Hydrogen element must not have an H-count",
@@ -138,7 +152,7 @@ impl Rule for BracketRule {
                     }
                     if !had_error && is_bare_organic(inner) {
                         emit.candidate(DiagnosticCandidate {
-                            code: Code("STYLE_BRACKET_ORGANIC"),
+                            code: Code("STYLE_BRKT_ORGANIC"),
                             category: Category::Style,
                             severity: Severity::Warning,
                             span: Span::new(i, close + 1),
@@ -183,7 +197,7 @@ impl Rule for BracketRule {
                     if let Some((h2s, h2e)) = find_h_two_digits(inner) {
                         emit.candidate(DiagnosticCandidate {
                             code: Code("BRKT_HCOUNT_TWO_DIGITS"),
-                            category: Category::Brkt,
+                            category: Category::Bracket,
                             severity: Severity::Error,
                             span: Span::new(i + 1 + h2s, i + 1 + h2e),
                             message: "Hydrogen count must be a single digit",
@@ -204,7 +218,7 @@ impl Rule for BracketRule {
                         } else {
                             emit.candidate(DiagnosticCandidate {
                                 code: Code("BRKT_EMPTY_CLASS"),
-                                category: Category::Brkt,
+                                category: Category::Bracket,
                                 severity: Severity::Error,
                                 span: Span::new(i + 1 + cs, i + 1 + ce),
                                 message: "Class field ':' must be followed by digits",
@@ -224,6 +238,22 @@ impl Rule for BracketRule {
                         });
                     }
                     i = close + 1;
+                    continue;
+                } else {
+                    // Unclosed bracket atom: emit BRKT_UNCLOSED covering from '[' to end
+                    emit.candidate(DiagnosticCandidate {
+                        code: Code("BRKT_UNCLOSED"),
+                        category: Category::Bracket,
+                        severity: Severity::Error,
+                        span: Span::new(i, ctx.input.len()),
+                        message: "Unclosed bracket atom",
+                        scope: Scope::Bracket {
+                            start: i,
+                            end: ctx.input.len(),
+                        },
+                    });
+                    // Advance past '[' to avoid infinite loop
+                    i += 1;
                     continue;
                 }
             }

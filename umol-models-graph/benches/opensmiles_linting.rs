@@ -3,7 +3,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_models_graph::io::smiles::linter::lint_smiles;
 
-fn smiles_linting(c: &mut Criterion) {
+fn opensmiles_linting(c: &mut Criterion) {
     let inputs = [
         ("short", "C1=CC=CC=C1"),
         ("with_ws", " C - C . 1 [CH3] C ( = O ) N "),
@@ -14,7 +14,7 @@ fn smiles_linting(c: &mut Criterion) {
         ),
     ];
 
-    let mut group = c.benchmark_group("smiles_linting");
+    let mut group = c.benchmark_group("opensmiles_linting");
     for (name, s) in inputs.iter() {
         group.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
@@ -25,7 +25,7 @@ fn smiles_linting(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, smiles_linting);
+criterion_group!(benches, opensmiles_linting);
 criterion_main!(benches);
 
 

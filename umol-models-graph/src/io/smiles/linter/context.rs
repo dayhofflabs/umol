@@ -3,7 +3,7 @@
 use std::cell::{Ref, RefCell};
 
 use crate::io::smiles::lexer::Lexer;
-use crate::io::smiles::segment::{Segment, Segments};
+use crate::io::smiles::iterators::{Segment, Segments};
 
 pub struct LintContext<'a> {
     pub input: &'a str,
@@ -26,6 +26,6 @@ impl<'a> LintContext<'a> {
             let v = Segments::new(self.input).collect::<Vec<_>>();
             *self.segments.borrow_mut() = Some(v);
         }
-        Ref::map(self.segments.borrow(), |opt| opt.as_ref().unwrap())
+        Ref::map(self.segments.borrow(), |opt: &Option<Vec<Segment<'a>>>| opt.as_ref().unwrap())
     }
 }

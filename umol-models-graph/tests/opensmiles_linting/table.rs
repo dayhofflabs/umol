@@ -10,11 +10,12 @@ fn codes(report: &DiagnosticsReport) -> Vec<&'static str> {
 
 #[rstest]
 #[case("C%0", &["LEX_BAD_PERCENT_FORM"])]
-#[case("C-", &["SYN_TRAILING_BOND"])]
-#[case("C.1", &["SYN_DOT_BEFORE_RING"])]
+#[case("C-", &["LEX_TRAILING_BOND"])]
+#[case("C.1", &["LEX_DOT_BEFORE_RING"])]
+#[case("[C", &["BRKT_UNCLOSED"])]
 #[case("[CH1]", &["STYLE_HCOUNT_ONE_SIMPLE"])]
 #[case("[C+1]", &["STYLE_CHARGE_SIGN_SIMPLE"])]
-#[case("[C]", &["STYLE_BRACKET_ORGANIC"])]
+#[case("[C]", &["STYLE_BRKT_ORGANIC"])]
 #[case("C%01", &["STYLE_UNNECESSARY_PERCENT_RING_INDEX"])]
 fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
     println!("input: {:?}", input);
@@ -35,10 +36,15 @@ fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
 #[case("[C:-1]", &["NUM_CLASS_NEGATIVE"])]
 #[case("%", &["LEX_BAD_PERCENT_FORM"])]
 #[case("%1x", &["LEX_INVALID_TOKEN"])]
-#[case(".", &["SYN_LEADING_DOT"])]
-#[case("C.", &["SYN_TRAILING_DOT"])]
-#[case("C..C", &["SYN_MULTIPLE_DOTS"])]
+#[case("]", &["BRKT_UNEXPECTED_CLOSE"])]
+#[case(".", &["LEX_LEADING_DOT"])]
+#[case("C.", &["LEX_TRAILING_DOT"])]
+#[case("C..C", &["LEX_MULTIPLE_DOTS"])]
 #[case("X", &["LEX_INVALID_TOKEN"])]
+#[case("C)", &["BRCH_UNEXPECTED_CLOSE"])]
+#[case("(C", &["BRCH_UNCLOSED"])]
+#[case("C()", &["BRCH_EMPTY_BRANCH"])]
+#[case("C(-)", &["BRCH_DANGLING_BOND", "BRCH_EMPTY_BRANCH"])]
 fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
     println!("input: {:?}", input);
     let r = lint_smiles(input);
@@ -55,6 +61,7 @@ fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
 #[rstest]
 #[case("C1C", &["RING_UNCLOSED"])]
 #[case("C11", &["RING_SELF_LOOP"])]
+#[case("C/1CC\\1", &["RING_CONFLICT_DIR"])]
 fn test_ring_errors(#[case] input: &str, #[case] expected_any: &[&str]) {
     let r = lint_smiles_parse(input);
     let mut got = codes(&r);
