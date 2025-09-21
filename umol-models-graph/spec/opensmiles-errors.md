@@ -21,6 +21,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 
 - BRKT_UNCLOSED (BRKT, Error): bracket atom not properly closed
 - BRKT_UNEXPECTED_CLOSE (BRKT, Error): ']' outside of a bracket atom
+- BRKT_FIELD_OUTSIDE (BRKT, Error): bracket-only field (e.g., @, +, ++) outside of a bracket atom
 - BRKT_DUP_FIELD (BRKT, Error): duplicate bracket field of the same kind
 - BRKT_HCOUNT_TWO_DIGITS (BRKT, Error): H-count with two or more digits
 - BRKT_EMPTY_CLASS (BRKT, Error): class field without a numeric value

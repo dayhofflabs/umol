@@ -19,6 +19,10 @@ pub enum BondKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Segment<'a> {
+    // TODO: Review naming MalformedBracket -> UnclosedBracket/SoleBracketOpen,
+    // TODO: BracketClose -> SoleBracketClose, FreeBracketField -> UnenclosedBracketField,
+    // TODO: Verify the use of Invalid, the semantics are not clear. ] or @ outside brackets
+    // TODO: have separate segments
     /// Organic/aromatic atom or `*` outside brackets.
     AtomSimple { span: Span, raw: &'a str },
     /// Bracket atom (well-formed): `[ ... ]` including the brackets.
@@ -34,7 +38,7 @@ pub enum Segment<'a> {
     /// Ring closure outside brackets: digit or percent-two-digit.
     RingClosure { span: Span, index: u32 },
     /// Component separator `.` outside brackets.
-    ComponentSeparator { span: Span },
+    NewComponent { span: Span },
     /// One or more whitespace characters.
     WhitespaceBlock { span: Span },
     /// Lexical error token from the lexer.
@@ -43,7 +47,7 @@ pub enum Segment<'a> {
     FreeBracketField { span: Span },
     /// Closing ']' that appears outside of a bracket atom.
     BracketClose { span: Span },
-    /// Syntactically invalid token in this context (e.g., ']' or '@' outside brackets).
+    /// Syntactically invalid token in this context
     Invalid { span: Span },
 }
 
@@ -105,7 +109,7 @@ impl<'input> Iterator for Segments<'input> {
             Token::CloseParen => Some(Segment::BranchClose { span: Span::new(l, r) }),
             Token::Digit(v) => Some(Segment::RingClosure { span: Span::new(l, r), index: v }),
             Token::Percent(v) => Some(Segment::RingClosure { span: Span::new(l, r), index: v }),
-            Token::Dot => Some(Segment::ComponentSeparator { span: Span::new(l, r) }),
+            Token::Dot => Some(Segment::NewComponent { span: Span::new(l, r) }),
             Token::Minus => Some(Segment::Bond { span: Span::new(l, r), kind: BondKind::Single }),
             Token::Equal => Some(Segment::Bond { span: Span::new(l, r), kind: BondKind::Double }),
             Token::Hash => Some(Segment::Bond { span: Span::new(l, r), kind: BondKind::Triple }),
@@ -131,7 +135,7 @@ impl<'input> Iterator for Segments<'input> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BranchEventKind { Open, Close, ComponentSep }
+pub enum BranchEventKind { Open, Close, NewComponent }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BranchEvent { pub kind: BranchEventKind, pub span: Span, pub depth_after: usize }
@@ -147,7 +151,7 @@ impl<'a> Iterator for Branches<'a> {
             let ev = match self.segs[self.idx] {
                 Segment::BranchOpen { span } => { self.depth = self.depth.saturating_add(1); Some(BranchEvent { kind: BranchEventKind::Open, span, depth_after: self.depth }) }
                 Segment::BranchClose { span } => { let depth_now = self.depth; self.depth = self.depth.saturating_sub(1); Some(BranchEvent { kind: BranchEventKind::Close, span, depth_after: depth_now.saturating_sub(0) }) }
-                Segment::ComponentSeparator { span } => { if self.depth > 0 { Some(BranchEvent { kind: BranchEventKind::ComponentSep, span, depth_after: self.depth }) } else { None } }
+                Segment::NewComponent { span } => { if self.depth > 0 { Some(BranchEvent { kind: BranchEventKind::NewComponent, span, depth_after: self.depth }) } else { None } }
                 _ => None,
             };
             self.idx += 1;

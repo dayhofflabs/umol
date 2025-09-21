@@ -1,6 +1,6 @@
 ---
 description: Stylistic rules
-globs:
+globs: *.rs
 alwaysApply: true
 ---
 ## Give concise and factual answers

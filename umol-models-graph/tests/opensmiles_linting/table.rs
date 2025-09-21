@@ -37,6 +37,8 @@ fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
 #[case("%", &["LEX_BAD_PERCENT_FORM"])]
 #[case("%1x", &["LEX_INVALID_TOKEN"])]
 #[case("]", &["BRKT_UNEXPECTED_CLOSE"])]
+#[case("@", &["BRKT_FIELD_OUTSIDE"])]
+#[case("+", &["BRKT_FIELD_OUTSIDE"])]
 #[case(".", &["LEX_LEADING_DOT"])]
 #[case("C.", &["LEX_TRAILING_DOT"])]
 #[case("C..C", &["LEX_MULTIPLE_DOTS"])]
@@ -45,6 +47,8 @@ fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
 #[case("(C", &["BRCH_UNCLOSED"])]
 #[case("C()", &["BRCH_EMPTY_BRANCH"])]
 #[case("C(-)", &["BRCH_DANGLING_BOND", "BRCH_EMPTY_BRANCH"])]
+#[case("C(C.C", &["BRCH_UNCLOSED"])]
+#[case("C(())", &["BRCH_EMPTY_BRANCH"])]
 fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
     println!("input: {:?}", input);
     let r = lint_smiles(input);
@@ -62,6 +66,7 @@ fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
 #[case("C1C", &["RING_UNCLOSED"])]
 #[case("C11", &["RING_SELF_LOOP"])]
 #[case("C/1CC\\1", &["RING_CONFLICT_DIR"])]
+#[case("C1.C", &["RING_UNCLOSED"])]
 fn test_ring_errors(#[case] input: &str, #[case] expected_any: &[&str]) {
     let r = lint_smiles_parse(input);
     let mut got = codes(&r);

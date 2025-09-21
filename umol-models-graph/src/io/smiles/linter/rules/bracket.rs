@@ -26,17 +26,30 @@ impl Rule for BracketRule {
         &META_BRKT
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        // Emit for stray closing ']' outside brackets
+        // Emit for stray closing ']' and bracket-only fields outside brackets
         for seg in ctx.segments().iter() {
-            if let Segment::BracketClose { span } = seg {
-                emit.candidate(DiagnosticCandidate {
-                    code: Code("BRKT_UNEXPECTED_CLOSE"),
-                    category: Category::Bracket,
-                    severity: Severity::Error,
-                    span: *span,
-                    message: "Unmatched ']' outside of bracket atom",
-                    scope: Scope::Global,
-                });
+            match seg {
+                Segment::BracketClose { span } => {
+                    emit.candidate(DiagnosticCandidate {
+                        code: Code("BRKT_UNEXPECTED_CLOSE"),
+                        category: Category::Bracket,
+                        severity: Severity::Error,
+                        span: *span,
+                        message: "Unmatched ']' outside of bracket atom",
+                        scope: Scope::Global,
+                    });
+                }
+                Segment::FreeBracketField { span } => {
+                    emit.candidate(DiagnosticCandidate {
+                        code: Code("BRKT_FIELD_OUTSIDE"),
+                        category: Category::Bracket,
+                        severity: Severity::Error,
+                        span: *span,
+                        message: "Bracket-only field appears outside a bracket atom",
+                        scope: Scope::Global,
+                    });
+                }
+                _ => {}
             }
         }
 

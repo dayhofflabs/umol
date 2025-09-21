@@ -21,7 +21,7 @@ pub Molecule: () = {
             // Emit diagnostics for each unclosed ring at end-of-input
             let keys: Vec<u32> = state.rings.keys().cloned().collect();
             for k in keys {
-                state.push_diag_error("RING_UNCLOSED", Category::Ring, "Unclosed ring index", 0, 0, Some(format!("ring={}", k)));
+                // Pre-parse lints handle RING_UNCLOSED; avoid duplicate parser diagnostic.
             }
             return Err(ParseError::User { error: LexicalError::InvalidToken });
         }
@@ -453,7 +453,7 @@ pub Ring: () = {
                 if p.order != s.order { return Err(ParseError::User { error: LexicalError::InvalidToken }); }
                 if let (Some(pd), Some(sd)) = (p.dir, s.dir) {
                     if pd != sd {
-                        state.push_diag_error("RING_CONFLICT_DIR", Category::Ring, "Conflicting ring bond directions", 0, 0, Some(format!("ring={}", ring)));
+                        // Pre-parse lints handle RING_CONFLICT_DIR; avoid duplicate parser diagnostic.
                         return Err(ParseError::User { error: LexicalError::InvalidToken });
                     }
                 }

@@ -135,7 +135,7 @@ impl Rule for DotRules {
         for seg in ctx.segments().iter() {
             match seg {
                 Segment::WhitespaceBlock { .. } => {}
-                Segment::ComponentSeparator { span } => last_dot = Some(*span),
+                Segment::NewComponent { span } => last_dot = Some(*span),
                 Segment::RingClosure { span, .. } => {
                     if let Some(dot) = last_dot.take() {
                         if dot.end == span.start {
@@ -159,7 +159,7 @@ impl Rule for DotRules {
             .iter()
             .position(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
         {
-            if let Segment::ComponentSeparator { span } = segs[i] {
+            if let Segment::NewComponent { span } = segs[i] {
                 emit.candidate(DiagnosticCandidate {
                     code: Code("LEX_LEADING_DOT"),
                     category: Category::Lex,
@@ -174,7 +174,7 @@ impl Rule for DotRules {
             .iter()
             .rposition(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
         {
-            if let Segment::ComponentSeparator { span } = segs[i] {
+            if let Segment::NewComponent { span } = segs[i] {
                 emit.candidate(DiagnosticCandidate {
                     code: Code("LEX_TRAILING_DOT"),
                     category: Category::Lex,
@@ -186,7 +186,7 @@ impl Rule for DotRules {
             }
         }
         for w in segs.windows(2) {
-            if let [Segment::ComponentSeparator { span: s1 }, Segment::ComponentSeparator { span: s2 }] =
+            if let [Segment::NewComponent { span: s1 }, Segment::NewComponent { span: s2 }] =
                 w
             {
                 emit.candidate(DiagnosticCandidate {

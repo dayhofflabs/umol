@@ -114,7 +114,7 @@ impl Rule for RingErrorsRule {
         for seg in segs.iter() {
             match seg {
                 Segment::WhitespaceBlock { .. } => {}
-                Segment::ComponentSeparator { .. } => {
+                Segment::NewComponent { .. } => {
                     flush_component(emit, &mut unmatched);
                     prev_non_ws_is_dir = None;
                 }

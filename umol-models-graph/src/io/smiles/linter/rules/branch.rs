@@ -4,7 +4,7 @@ use super::{Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
 use crate::io::smiles::linter::LintContext;
-use crate::io::smiles::iterators::Segment;
+use crate::io::smiles::iterators::{BranchEventKind, Branches, Segment};
 
 pub struct BranchRule;
 static META_BRANCH: RuleMeta = RuleMeta {
@@ -22,50 +22,33 @@ impl Rule for BranchRule {
         let mut saw_stack: Vec<bool> = Vec::new();
         let mut open_stack: Vec<Span> = Vec::new();
 
-        let mark_content = |saw_stack: &mut Vec<bool>| {
-            if let Some(top) = saw_stack.last_mut() { *top = true; }
-        };
-
-        let next_non_ws = |segs: &Vec<Segment>, mut i: usize| -> Option<(usize, Span)> {
-            while i < segs.len() {
-                match &segs[i] {
-                    Segment::WhitespaceBlock { .. } => i += 1,
-                    Segment::BranchClose { span }
-                    | Segment::ComponentSeparator { span } => return Some((i, *span)),
-                    _ => return None,
-                }
-            }
-            None
-        };
-
-        let mut i = 0usize;
-        while i < segs.len() {
-            match segs[i] {
-                Segment::WhitespaceBlock { .. } => {}
-                Segment::BranchOpen { span } => {
+        // First pass: structure events using Branches
+        for ev in Branches::new(&segs).into_iter() {
+            match ev.kind {
+                BranchEventKind::Open => {
                     depth += 1;
                     saw_stack.push(false);
-                    open_stack.push(span);
+                    open_stack.push(ev.span);
                 }
-                Segment::BranchClose { span } => {
+                BranchEventKind::Close => {
                     if depth == 0 {
                         emit.candidate(DiagnosticCandidate {
                             code: Code("BRCH_UNEXPECTED_CLOSE"),
                             category: Category::Branch,
                             severity: Severity::Error,
-                            span,
+                            span: ev.span,
                             message: "Unmatched ')' with no open branch",
                             scope: Scope::Global,
                         });
                     } else {
                         let saw = saw_stack.pop().unwrap_or(false);
-                        let _open = open_stack.pop().unwrap_or(span);
+                        let _open = open_stack.pop().unwrap_or(ev.span);
                         if !saw {
                             emit.candidate(DiagnosticCandidate {
                                 code: Code("BRCH_EMPTY_BRANCH"),
                                 category: Category::Branch,
                                 severity: Severity::Error,
-                                span,
+                                span: ev.span,
                                 message: "Empty branch",
                                 scope: Scope::Global,
                             });
@@ -73,54 +56,61 @@ impl Rule for BranchRule {
                         depth -= 1;
                     }
                 }
-                Segment::ComponentSeparator { span } => {
-                    if depth > 0 {
-                        // Empty component since last sep/open
-                        if !saw_stack.last().copied().unwrap_or(true) {
-                            emit.candidate(DiagnosticCandidate {
-                                code: Code("BRCH_EMPTY_BRANCH"),
-                                category: Category::Branch,
-                                severity: Severity::Error,
-                                span,
-                                message: "Empty branch",
-                                scope: Scope::Global,
-                            });
-                        }
-                        // Branch cannot cross components
+                BranchEventKind::NewComponent => {
+                    // Empty component since last sep/open
+                    if !saw_stack.last().copied().unwrap_or(true) {
                         emit.candidate(DiagnosticCandidate {
-                            code: Code("BRCH_UNCLOSED"),
+                            code: Code("BRCH_EMPTY_BRANCH"),
                             category: Category::Branch,
                             severity: Severity::Error,
-                            span,
-                            message: "Open branch not closed before component separator",
+                            span: ev.span,
+                            message: "Empty branch",
                             scope: Scope::Global,
                         });
-                        // Reset component-local flag
-                        if let Some(top) = saw_stack.last_mut() { *top = false; }
                     }
+                    // Branch cannot cross components
+                    emit.candidate(DiagnosticCandidate {
+                        code: Code("BRCH_UNCLOSED"),
+                        category: Category::Branch,
+                        severity: Severity::Error,
+                        span: ev.span,
+                        message: "Open branch not closed before component separator",
+                        scope: Scope::Global,
+                    });
+                    // Reset component-local flag
+                    if let Some(top) = saw_stack.last_mut() { *top = false; }
                 }
+            }
+        }
+
+        // Second pass: detect dangling bonds inside branches with minimal scanning
+        let segs_len = segs.len();
+        let mut i = 0usize;
+        while i < segs_len {
+            match segs[i] {
                 Segment::Bond { span, .. } => {
-                    if depth > 0 {
-                        if let Some((j, nspan)) = next_non_ws(&segs, i + 1) {
-                            match segs[j] {
-                                Segment::BranchClose { .. } | Segment::ComponentSeparator { .. } => {
-                                    emit.candidate(DiagnosticCandidate {
-                                        code: Code("BRCH_DANGLING_BOND"),
-                                        category: Category::Branch,
-                                        severity: Severity::Error,
-                                        span: Span::new(span.start, nspan.end),
-                                        message: "Dangling bond inside branch",
-                                        scope: Scope::Global,
-                                    });
-                                }
-                                _ => {}
+                    // Find next non-whitespace significant terminator within branch scope
+                    let mut j = i + 1;
+                    while j < segs_len {
+                        match segs[j] {
+                            Segment::WhitespaceBlock { .. } => { j += 1; }
+                            Segment::BranchClose { span: nsp } | Segment::NewComponent { span: nsp } => {
+                                emit.candidate(DiagnosticCandidate {
+                                    code: Code("BRCH_DANGLING_BOND"),
+                                    category: Category::Branch,
+                                    severity: Severity::Error,
+                                    span: Span::new(span.start, nsp.end),
+                                    message: "Dangling bond inside branch",
+                                    scope: Scope::Global,
+                                });
+                                break;
                             }
+                            _ => { break; }
                         }
                     }
                 }
                 Segment::AtomSimple { .. } | Segment::AtomBracket { .. } | Segment::RingClosure { .. } => {
-                    // Content inside current subcomponent
-                    if depth > 0 { mark_content(&mut saw_stack); }
+                    if let Some(top) = saw_stack.last_mut() { *top = true; }
                 }
                 _ => {}
             }
@@ -129,7 +119,6 @@ impl Rule for BranchRule {
 
         // EOF: any remaining open branches
         if depth > 0 {
-            // Use the earliest unclosed open to the end
             if let Some(open) = open_stack.first().copied() {
                 emit.candidate(DiagnosticCandidate {
                     code: Code("BRCH_UNCLOSED"),
