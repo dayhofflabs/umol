@@ -13,6 +13,8 @@ pub enum SourceFormat {
     UNKNOWN,
 }
 
+pub mod builder;
+
 /// Molecule IR
 ///
 /// Preserves all information from parsing without chemical interpretation.
@@ -145,8 +147,8 @@ pub enum AtomRadical {
 pub struct Bond {
     // Core properties
     pub index: Option<u32>,
-    pub start_atom: Option<u32>,
-    pub end_atom: Option<u32>,
+    pub start_atom: Option<u32>, // TODO: builder will set directly; keep Option for compatibility now
+    pub end_atom: Option<u32>,   // TODO: builder will set directly; keep Option for compatibility now
     pub ring: Option<u32>,
     pub symbol: BondSymbol,
     pub stereo: Option<BondStereo>,

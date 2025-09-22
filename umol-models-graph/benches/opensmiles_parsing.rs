@@ -10,14 +10,23 @@ use umol_models_graph::io::smiles::parser::grammar::MoleculeParser;
 // (removed duplicate ParseState import)
 
 fn opensmiles_parsing(c: &mut Criterion) {
+    // Chain-only corpus, bare atoms (organic-only mix omitting bare H)
+    const MIX7: &str = "CNOFPSI"; // simple deterministic mix
+    const CHAIN_MIX_20: &str = "CNOFPSICNOFPSICNOFPS"; // 7+7+6 = 20 atoms
+    const CHAIN_MIX_50: &str = "CNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSIC"; // 7*7 + 1 = 50
+    const CHAIN_MIX_100: &str = "CNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICN"; // 7*14 + 2 = 100
+
     let inputs = [
-        ("short", "C1=CC=CC=C1"),
-        ("with_brackets", "C[CH3]C(=O)N"),
-        ("rings", "c1ccccc1.c1ccncc1"),
-        (
-            "long",
-            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-        ),
+        ("chain_empty", ""),
+        ("chain_c_1", "C"),
+        ("chain_c_5", "CCCCC"),
+        ("chain_c_10", "CCCCCCCCCC"),
+        ("chain_c_50", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
+        ("chain_c_100", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
+        ("chain_c_1000", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
+        ("chain_mix_20", CHAIN_MIX_20),
+        ("chain_mix_50", CHAIN_MIX_50),
+        ("chain_mix_100", CHAIN_MIX_100),
     ];
 
     // Lex-only baseline
@@ -48,39 +57,6 @@ fn opensmiles_parsing(c: &mut Criterion) {
         });
     }
     group_parse.finish();
-
-    // Lint + parse (lint_smiles_parse)
-    let mut group_full = c.benchmark_group("opensmiles_parsing/lint_plus_parse");
-    for (name, s) in inputs.iter() {
-        group_full.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let _ = lint_smiles_parse(black_box(input));
-            })
-        });
-    }
-    group_full.finish();
-
-    // Lint + parser fast mode (no IR)
-    let mut group_fast = c.benchmark_group("opensmiles_parsing/lint_plus_parse_fast");
-    for (name, s) in inputs.iter() {
-        group_fast.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let _ = lint_smiles_parse_fast(black_box(input));
-            })
-        });
-    }
-    group_fast.finish();
-
-    // Linter only
-    let mut group_lint = c.benchmark_group("opensmiles_parsing/lint_only");
-    for (name, s) in inputs.iter() {
-        group_lint.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let _ = lint_smiles(black_box(input));
-            })
-        });
-    }
-    group_lint.finish();
 
     // Parser minimal (no IR, no diags, increment counter in every action)
     let mut group_min = c.benchmark_group("opensmiles_parsing/parse_minimal");

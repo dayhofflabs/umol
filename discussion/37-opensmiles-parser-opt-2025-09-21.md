@@ -59,3 +59,62 @@ Implications:
   - LALRPOP baseline (driver + actions) already ~33× lex; that’s your hard floor on this stack.
   - IR/state doubles that for parse_only on short inputs.
   - Hitting 2–4× lex with LALRPOP is not realistic; a tight hand-rolled FSM (smallvec ring store, compact branch stack, no HashMap in hot paths, inlined defaults) is the viable path if the 2–4× target is firm.
+
+## FSM parser plan
+
+### Goals
+- Single-pass streaming FSM over the existing lexer, targeting ≤ 2–4× lex latency.
+- Minimal hot-path work: small branch stack, small ring store, pre-reserved atom/bond buffers.
+- Defer semantics/stereo to optional post-passes.
+
+### Milestones (M0→M6)
+- M0: Chain-only, bare atoms, implicit single bonds. Bench vs lex-only.
+- M1: Add branches ( and ).
+- M2: Add explicit bonds (- = # : / \\) with staged bond state.
+- M3: Add rings (digits/%), smallvec ring store, conflict/self/two-member checks.
+- M4: Components (.).
+- M5: Brackets: implement a tight bracket scanner for [ ... ].
+- M6: Optional semantics (aromatic defaults, stereo post-passes).
+
+### Broader benchmark (to add)
+- Corpus:
+  - Short typical: aromatic ring, one branch, one ring index.
+  - With brackets: several bracket atoms, charges, hydrogens.
+  - Rings-heavy: multiple closures including %xx.
+  - Long linear chain (no branches) and long branched chain.
+  - Edge cases: empty branches, dangling bonds, unclosed rings (still valid to parse until error).
+- Metrics:
+  - ns per atom, ns per token, total µs per string.
+  - Compare lex_only vs FSM_M0..M5.
+  - Include a long-run non-Criterion profile runner for flamegraphs.
+
+### Lexer plan (bytestrings)
+- Keep Logos for now but operate on &[u8] and ASCII-only paths per spec.
+- Avoid String conversions; ensure tokens carry byte spans.
+- Later, consider a lightweight bespoke scanner for the hot tokens.
+
+### Notes
+- After adding the benchmark corpus and adjusting the lexer interface to bytes, proceed with M0→M1 and re-measure.
+
+## IR shape and manipulation notes
+
+- Primary IR remains flat arrays: `atoms[]`, `bonds[]` with local indices; best for parser hot path and MOL unification.
+- Do not embed parser-transient state (branch/ring stacks) into IR.
+- For manipulation, layer views over arrays:
+  - Adjacency/degree built lazily (CSR-like) and cached until invalidated.
+  - Stereo/ring annotations as optional side arrays, populated by semantic passes.
+- Lazy conversion: parse fills Atom/Bond fields; derived structures are optional and on-demand.
+- Alignment: list-based IR suits both SMILES and MOL; graph conveniences should be layered, not baked in.
+
+## Corpus (M0) adjustments
+
+- Tiered to milestones. For M0 (chain-only, bare atoms):
+  - Baseline: empty molecule.
+  - Chain lengths: 1, 5, 10, 50, 100, 1000.
+  - Two sets:
+    - Same element: repeated `C`.
+    - Organic-only mix (CHNOPSFClBrI) with target frequencies; omit bare `H` for M0.
+  - Defer “all elements 1–118” to M5 (requires brackets).
+
+
+
