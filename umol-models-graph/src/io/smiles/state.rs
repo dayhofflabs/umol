@@ -10,6 +10,15 @@ use umol::Result;
 use crate::io::ir::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, BondStereo, BondSymbol, Chirality, Molecule as IRMolecule, SourceFormat};
 use crate::diagnostics::{Category, Code, Diagnostic, Span};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ParserMode {
+    #[default]
+    Full,
+    LintFast,
+    /// Minimal-action mode for benchmarking grammar overhead
+    Minimal,
+}
+
 /// Default depth of branching in SMILES.
 /// Can be exceeded (incurs extra memory allocation) if needed.
 const DEFAULT_BRANCH_DEPTH: usize = 4;
@@ -17,12 +26,16 @@ const DEFAULT_BRANCH_DEPTH: usize = 4;
 /// Default nesting depth for component stacks (dot-separated fragments inside branches).
 const DEFAULT_COMPONENT_DEPTH: usize = 4;
 
+/// Default number of active ring indices tracked (lint-fast mode small store).
+const DEFAULT_RING_SLOTS: usize = 8;
+
 /// Default number of neighbors in a stereocenter.
 /// Can be exceeded (incurs extra memory allocation) if needed.
 const DEFAULT_NEIGHBOR_COUNT: usize = 4;
 
 #[derive(Clone, Debug, Default)]
 pub struct ParseState {
+    pub mode: ParserMode,
     // Lexer tracking
     pub byte_pos: usize,
     pub tok_pos: usize,
@@ -34,6 +47,8 @@ pub struct ParseState {
 
     // Structure tracking
     pub rings: HashMap<u32, RingState>,
+    // Small ring store for lint-fast mode (linear search/remove)
+    pub rings_small: SmallVec<[(u32, RingState); DEFAULT_RING_SLOTS]>,
     pub branches: SmallVec<[BranchState; DEFAULT_BRANCH_DEPTH]>,
     pub stereocenters: HashMap<usize, StereoState>,
 
@@ -61,9 +76,25 @@ pub struct ParseState {
 
     // Collected diagnostics (optional; used by linting flows)
     pub diagnostics: Vec<Diagnostic>,
+
+    // Minimal-mode action counter (prevents DCE in benches)
+    pub action_count: u64,
 }
 
 impl ParseState {
+    pub fn with_mode(mode: ParserMode) -> Self {
+        let mut s = Self::default();
+        s.mode = mode;
+        // Force logging off in lint-fast and minimal modes
+        if matches!(mode, ParserMode::LintFast | ParserMode::Minimal) { s.log = None; }
+        s
+    }
+    #[inline(always)]
+    fn tick(&mut self) {
+        if matches!(self.mode, ParserMode::Minimal) {
+            self.action_count = self.action_count.wrapping_add(1);
+        }
+    }
     pub fn push_diag_error(&mut self, code: &'static str, category: Category, message: &'static str, start: usize, end: usize, details: Option<String>) {
         let mut d = Diagnostic::error(Code(code), category, Span::new(start, end), message);
         if let Some(det) = details { d = d.with_details(det); }
@@ -79,21 +110,23 @@ impl ParseState {
         })
     }
     pub fn open_ring(&mut self, ring_index: u32, bond: Option<BondInfo>) -> Result<()> {
-        if self.rings.contains_key(&ring_index) {
-            return Err(DataError::InvalidRing(format!(
-                "Ring index {} already exists",
-                ring_index
-            ))
-            .into());
-        }
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         let start_atom = self.last_atom_idx;
-        self.rings.insert(
-            ring_index,
-            RingState {
-                start_atom,
-                pending_bond: bond,
-            },
-        );
+        if matches!(self.mode, ParserMode::LintFast | ParserMode::Minimal) {
+            if self.rings_small.iter().any(|(k, _)| *k == ring_index) {
+                return Err(DataError::InvalidRing(format!("Ring index {} already exists", ring_index)).into());
+            }
+            self.rings_small.push((ring_index, RingState { start_atom, pending_bond: bond }));
+        } else {
+            if self.rings.contains_key(&ring_index) {
+                return Err(DataError::InvalidRing(format!("Ring index {} already exists", ring_index)).into());
+            }
+            self.rings.insert(
+                ring_index,
+                RingState { start_atom, pending_bond: bond },
+            );
+        }
         if let Some(log) = &self.log {
             let (ord, dir) = match &self.rings.get(&ring_index).unwrap().pending_bond {
                 Some(b) => (format!("{:?}", b.order), format!("{:?}", b.dir)),
@@ -110,9 +143,22 @@ impl ParseState {
     }
 
     pub fn close_ring(&mut self, ring_index: u32) -> Result<(usize, Option<BondInfo>)> {
-        let removed = self.rings
-            .remove(&ring_index)
-            .map(|state| (state.start_atom, state.pending_bond));
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) {
+            return Ok((self.last_atom_idx, None));
+        }
+        let removed = if matches!(self.mode, ParserMode::LintFast | ParserMode::Minimal) {
+            if let Some(pos) = self.rings_small.iter().position(|(k, _)| *k == ring_index) {
+                let (_k, state) = self.rings_small.swap_remove(pos);
+                Some((state.start_atom, state.pending_bond))
+            } else {
+                None
+            }
+        } else {
+            self.rings
+                .remove(&ring_index)
+                .map(|state| (state.start_atom, state.pending_bond))
+        };
         match removed {
             Some((start_atom, pending)) => {
                 if let Some(log) = &self.log {
@@ -137,6 +183,8 @@ impl ParseState {
     }
 
     pub fn open_branch(&mut self, bond: Option<BondInfo>) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         let parent_atom = self.last_atom_idx;
         let return_bond = self.staged_bond.clone();
         self.branches.push(BranchState { parent_atom, return_bond });
@@ -161,6 +209,8 @@ impl ParseState {
     }
 
     pub fn close_branch(&mut self) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         let state = self.branches.pop().ok_or_else(|| {
             DataError::InvalidFeature("Unmatched ')' with no open branch".to_string())
         })?;
@@ -186,6 +236,8 @@ impl ParseState {
         chirality: Option<Chirality>,
         expected_neighbors: u8,
     ) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         if let Some(log) = &self.log {
             slog::debug!(log, "stereo_open";
                 "atom" => atom as i64,
@@ -212,6 +264,8 @@ impl ParseState {
     }
 
     pub fn stereo_add(&mut self, atom: usize, neighbor: usize) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         if let Some(log) = &self.log { slog::debug!(log, "stereo_add_neighbor"; "atom" => atom as i64, "neighbor" => neighbor as i64); }
         let sc = self.stereocenters.get_mut(&atom).ok_or_else(|| {
             DataError::InvalidFeature(format!(
@@ -238,6 +292,8 @@ impl ParseState {
     }
 
     pub fn stereo_close(&mut self, atom: usize) -> Result<StereoState> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(StereoState::default()); }
         if let Some(log) = &self.log { slog::debug!(log, "stereo_close"; "atom" => atom as i64); }
         let sc = self.stereocenters.remove(&atom).ok_or_else(|| {
             DataError::InvalidFeature(format!(
@@ -258,6 +314,8 @@ impl ParseState {
     }
 
     pub fn split_component(&mut self) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         if let Some(log) = &self.log { slog::debug!(log, "component_split_by_dot"; "atom_at_split" => self.last_atom_idx as i64); }
         self.staged_bond = None;
         Ok(())
@@ -265,6 +323,8 @@ impl ParseState {
 
     /// Begin parsing a nested component (used for '.' inside branches)
     pub fn enter_comp(&mut self) {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return; }
         if let Some(log) = &self.log { slog::debug!(log, "enter_component_context"; "depth_before" => self.comp_stack.len() as i64, "atoms" => self.buf_atoms.len() as i64, "bonds" => self.buf_bonds.len() as i64); }
         let saved = (std::mem::take(&mut self.buf_atoms), std::mem::take(&mut self.buf_bonds));
         self.comp_stack.push(saved);
@@ -272,6 +332,8 @@ impl ParseState {
 
     /// Finalize the current component into a molecule and restore the previous context
     pub fn exit_comp(&mut self) {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return; }
         // finalize the subcomponent we're in now
         self.finish_molecule();
         if let Some(m) = self.molecules.pop() {
@@ -285,6 +347,8 @@ impl ParseState {
     }
 
     pub fn stage_bond_dir(&mut self, dir: BondDir) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         if let Some(log) = &self.log { slog::debug!(log, "stage_bond_dir"; "new_dir" => format!("{:?}", dir)); }
         match &mut self.staged_bond {
             Some(b) => match b.dir {
@@ -304,6 +368,8 @@ impl ParseState {
     }
 
     pub fn stage_bond_order(&mut self, order: BondOrder) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         if let Some(log) = &self.log { slog::debug!(log, "stage_bond_order"; "order" => format!("{:?}", order), "has_staged" => self.staged_bond.is_some()); }
         if self.last_atom_idx == 0 && self.next_atom_idx == 0 {
             // Defer error reporting in chain mode; record first error
@@ -319,6 +385,7 @@ impl ParseState {
     }
 
     pub fn bump_bond_idx(&mut self) -> usize {
+        self.tick();
         let idx = self.next_bond_idx;
         self.next_bond_idx += 1;
         if let Some(log) = &self.log { slog::debug!(log, "alloc_bond_index"; "allocated" => idx as i64, "next" => self.next_bond_idx as i64); }
@@ -326,6 +393,7 @@ impl ParseState {
     }
 
     pub fn bump_atom_idx(&mut self) -> usize {
+        self.tick();
         let idx = self.next_atom_idx;
         self.next_atom_idx += 1;
         if let Some(log) = &self.log { slog::debug!(log, "alloc_atom_index"; "allocated" => idx as i64, "next" => self.next_atom_idx as i64, "link_from" => self.last_atom_idx as i64); }
@@ -333,6 +401,8 @@ impl ParseState {
     }
 
     pub fn stereo_expect(&mut self, atom: usize, n: u8) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         let sc = self.stereocenters.get_mut(&atom).ok_or_else(|| {
             DataError::InvalidFeature(format!(
                 "No open stereocenter at atom {} to set expectation",
@@ -353,6 +423,8 @@ impl ParseState {
     }
 
     pub fn link_to(&mut self, new_atom: usize) -> Result<Option<ResolvedBond>> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(None); }
         if new_atom == 0 { return Ok(None); }
         let start_atom = self.last_atom_idx;
         // Resolve bond to use (explicit staged or implicit, possibly aromatic by default)
@@ -415,6 +487,8 @@ impl ParseState {
     }
 
     pub fn finish_chain(&mut self) -> Result<()> {
+        self.tick();
+        if matches!(self.mode, ParserMode::Minimal) { return Ok(()); }
         if let Some(ref msg) = self.first_err {
             if let Some(log) = &self.log { slog::debug!(log, "finish_chain_error"; "error" => msg.clone()); }
             return Err(DataError::InvalidBond(msg.clone()).into());
@@ -428,12 +502,16 @@ impl ParseState {
     }
 
     pub fn push_atom(&mut self, atom: IRAtom) {
+        self.tick();
+        if matches!(self.mode, ParserMode::LintFast | ParserMode::Minimal) { return; }
         let idx = atom.index.unwrap_or_default();
         if let Some(log) = &self.log { slog::debug!(log, "push_atom"; "atom_index" => idx as i64); }
         self.buf_atoms.push(atom);
     }
 
     pub fn push_resolved_bond(&mut self, rb: ResolvedBond) {
+        self.tick();
+        if matches!(self.mode, ParserMode::LintFast | ParserMode::Minimal) { return; }
         if let Some(log) = &self.log {
             slog::debug!(log, "push_bond";
                 "start_atom" => rb.start_atom as i64,
@@ -474,6 +552,8 @@ impl ParseState {
     }
 
     pub fn finish_molecule(&mut self) {
+        self.tick();
+        if matches!(self.mode, ParserMode::LintFast | ParserMode::Minimal) { return; }
         if self.buf_atoms.is_empty() {
             return;
         }
@@ -500,16 +580,18 @@ impl ParseState {
                 }
             }
         }
-        // Late-pass stereo resolution (E/Z from slash markers)
-        self.resolve_double_bond_stereo(&mut mol);
-        // Alias @/@@ to @AL1/@AL2 when an allene axis is present
-        self.alias_allene_from_at(&mut mol);
-        // Late-pass atom-centered tetrahedral (@/@@/@TH)
-        self.resolve_tetrahedral_stereo(&mut mol);
-        // Late-pass non-tetrahedral atom-centered (@SP/@TB/@OH)
-        self.resolve_nontetrahedral_stereo(&mut mol);
-        // Late-pass axial allene (@AL)
-        self.resolve_allene_stereo(&mut mol);
+        if matches!(self.mode, ParserMode::Full) {
+            // Late-pass stereo resolution (E/Z from slash markers)
+            self.resolve_double_bond_stereo(&mut mol);
+            // Alias @/@@ to @AL1/@AL2 when an allene axis is present
+            self.alias_allene_from_at(&mut mol);
+            // Late-pass atom-centered tetrahedral (@/@@/@TH)
+            self.resolve_tetrahedral_stereo(&mut mol);
+            // Late-pass non-tetrahedral atom-centered (@SP/@TB/@OH)
+            self.resolve_nontetrahedral_stereo(&mut mol);
+            // Late-pass axial allene (@AL)
+            self.resolve_allene_stereo(&mut mol);
+        }
         if let Some(log) = &self.log {
             slog::debug!(log, "finish_molecule";
                 "atoms" => mol.atoms.len() as i64,

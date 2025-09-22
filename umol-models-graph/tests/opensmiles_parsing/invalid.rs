@@ -27,7 +27,7 @@ fn enumerated_invalid() -> Vec<&'static str> {
         "C C", "C \t C", "C\nC",
         // brackets errors
         "[CH3", "[CH3-+]", "[C@H", "[C-:0:1]",
-        // R4: hydrogen element must not carry H-count in brackets
+        // hydrogen element must not carry H-count in brackets
         "[HH]", "[HH1]",
         // bracket numeric constraints
         "[C:-1]",       // negative class

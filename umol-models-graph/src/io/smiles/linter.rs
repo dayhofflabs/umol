@@ -15,7 +15,7 @@ pub use rules::Rule;
 use super::lexer::Lexer;
 use super::parser::grammar::MoleculeParser;
 use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
-use crate::io::smiles::state::ParseState;
+use crate::io::smiles::state::{ParseState, ParserMode};
 
 // Initial linter for lexical/syntactic errors.
 pub fn lint_smiles(input: &str) -> DiagnosticsReport {
@@ -125,5 +125,17 @@ pub fn lint_smiles_parse(input: &str) -> DiagnosticsReport {
         };
         if allow { report.push(d); }
     }
+    report
+}
+
+// Experimental: parse in lint-fast mode (no IR, no late passes) and return diagnostics.
+#[allow(dead_code)]
+pub fn lint_smiles_parse_fast(input: &str) -> DiagnosticsReport {
+    let mut report = lint_smiles(input);
+    let mut state = ParseState::with_mode(ParserMode::LintFast);
+    let parser = MoleculeParser::new();
+    let lexer = Lexer::new(input);
+    let _ = parser.parse(&mut state, lexer);
+    for d in state.diagnostics.into_iter() { report.push(d); }
     report
 }

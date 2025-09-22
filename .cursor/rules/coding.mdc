@@ -19,7 +19,7 @@ alwaysApply: true
 - Take existing high-quality crates into account for solving a problem.
   Those are preferable to a homespun solution.
 
-## Concise summary (for quick reference)
+## Project targets
 - Prefer speed over generality; simple, direct implementations first.
 - Keep functions short and cohesive; minimal comments, clear code.
 - No premature abstraction or future-proofing; YAGNI.
