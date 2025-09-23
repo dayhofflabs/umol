@@ -2,7 +2,7 @@ use rstest::*;
 
 use super::fixtures::parse_state;
 use crate::io::ir::{BondOrder, BondStereo, BondSymbol};
-use crate::io::smiles::lexer::Lexer;
+use crate::io::smiles::lexer_old::Lexer;
 use crate::io::smiles::parser::grammar::MoleculeParser;
 use crate::io::smiles::state::ParseState;
 #[rstest]

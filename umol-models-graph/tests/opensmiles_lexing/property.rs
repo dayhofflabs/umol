@@ -69,7 +69,7 @@ fn input_strategy() -> impl Strategy<Value = String> {
 }
 
 fn collect_spanned(input: &str) -> Vec<(usize, Token, usize)> {
-    Lexer::new(input)
+    Lexer::new(input.as_bytes())
         .map(|t| t.ok())
         .collect::<Option<Vec<_>>>()
         .expect("Lexer wrapper yields Ok with Token::Error for bad chars")

@@ -1,7 +1,7 @@
 //! Invalid tests for OpenSMILES (UMOL)
 
 use rstest::rstest;
-use umol_models_graph::io::smiles::lexer::Lexer;
+use umol_models_graph::io::smiles::lexer_old::Lexer;
 use umol_models_graph::io::smiles::parser::grammar::MoleculeParser;
 use umol_models_graph::io::smiles::state::ParseState;
 
@@ -87,4 +87,13 @@ fn invalid_mutations_reject() {
 #[test]
 fn invalid_chirality_out_of_range_ignored() {
     assert!(rejects("[C@TH9]"));
+}
+
+#[test]
+pub fn invalid_inputs() {
+    let input = "C,,C";
+    let lexer = Lexer::new(input);
+    let mut n = 0;
+    for t in lexer { let _ = t; n += 1; }
+    assert!(n > 0);
 }

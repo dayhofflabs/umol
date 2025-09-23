@@ -2,7 +2,7 @@
 
 use std::cell::{Ref, RefCell};
 
-use crate::io::smiles::lexer::Lexer;
+use crate::io::smiles::lexer_old::Lexer;
 use crate::io::smiles::iterators::{Segment, Segments};
 
 pub struct LintContext<'a> {

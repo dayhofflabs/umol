@@ -4,6 +4,7 @@ use std::fmt;
 use std::num::ParseIntError;
 
 use logos::{Logos, SpannedIter};
+use atoi::atoi;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub enum LexicalError {
@@ -293,10 +294,10 @@ pub enum Token {
 
     // Numbers
     // Single decimal digit 0-9
-    #[regex(r"[0-9]", |lex| lex.slice().parse::<u32>())]
+    #[regex(r"[0-9]", |lex| atoi::<u32>(lex.slice().as_bytes()))]
     Digit(u32),
     // Percent-prefixed two-digit ring index
-    #[regex(r"%[0-9][0-9]", |lex| lex.slice()[1..].parse::<u32>())]
+    #[regex(r"%[0-9][0-9]", |lex| atoi::<u32>(&lex.slice().as_bytes()[1..]))]
     Percent(u32),
 
     // Chirality flags
@@ -356,16 +357,17 @@ impl fmt::Display for Token {
 // Lexer iterator type
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
-pub struct Lexer<'input> {
-    token_stream: SpannedIter<'input, Token>,
-}
+pub struct Lexer<'input> { token_stream: SpannedIter<'input, Token> }
 
 impl<'input> Lexer<'input> {
-    pub fn new(input: &'input str) -> Self {
-        Self {
-            token_stream: Token::lexer(input).spanned(),
-        }
+    /// Construct a lexer from ASCII bytes (preferred fast path).
+    pub fn new(input: &'input [u8]) -> Self {
+        // Safety: SMILES are ASCII per spec
+        let s = unsafe { std::str::from_utf8_unchecked(input) };
+        Self { token_stream: Token::lexer(s).spanned() }
     }
+    /// Back-compat: construct from &str by delegating to bytes.
+    pub fn from_str(input: &'input str) -> Self { Self::new(input.as_bytes()) }
 }
 
 impl<'input> Iterator for Lexer<'input> {
@@ -427,7 +429,7 @@ mod tests {
     #[case("C=C", vec![(0, Token::C, 1), (1, Token::Equal, 2), (2, Token::C, 3)])]
     #[case("C#C", vec![(0, Token::C, 1), (1, Token::Hash, 2), (2, Token::C, 3)])]
     fn test_lexer(#[case] input: &str, #[case] expected: Vec<(usize, Token, usize)>) {
-        let lexer = Lexer::new(input);
+        let lexer = Lexer::new(input.as_bytes());
         let tokens = lexer.map(|t| t.ok()).collect::<Option<Vec<_>>>();
         assert!(tokens.is_some(), "{} should have succeeded", input);
         let tokens = tokens.unwrap();
@@ -440,7 +442,7 @@ mod tests {
     #[case(">>", vec![(0, Token::Error, 1), (1, Token::Error, 2)])]
     #[case(",", vec![(0, Token::Error, 1)])]
     fn test_lexer_invalid(#[case] input: &str, #[case] expected: Vec<(usize, Token, usize)>) {
-        let lexer = Lexer::new(input);
+        let lexer = Lexer::new(input.as_bytes());
         let errors = lexer.map(|t| t.unwrap()).collect::<Vec<_>>();
         assert_eq!(errors, expected);
     }

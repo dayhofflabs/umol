@@ -2,31 +2,38 @@
 
 use std::hint::black_box;
 
+use bstr::{ByteSlice, ByteVec};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use rand::prelude::*;
+use rand::seq::SliceRandom;
+use rand_chacha::ChaCha12Rng;
 use umol_models_graph::io::smiles::lexer::Lexer;
-use umol_models_graph::io::smiles::linter::{lint_smiles, lint_smiles_parse, lint_smiles_parse_fast};
-use umol_models_graph::io::smiles::state::{ParseState, ParserMode};
+use umol_models_graph::io::smiles::lexer_old as legacy_lex;
 use umol_models_graph::io::smiles::parser::grammar::MoleculeParser;
-// (removed duplicate ParseState import)
+use umol_models_graph::io::smiles::state::{ParseState, ParserMode};
 
 fn opensmiles_parsing(c: &mut Criterion) {
     // Chain-only corpus, bare atoms (organic-only mix omitting bare H)
-    const MIX7: &str = "CNOFPSI"; // simple deterministic mix
-    const CHAIN_MIX_20: &str = "CNOFPSICNOFPSICNOFPS"; // 7+7+6 = 20 atoms
-    const CHAIN_MIX_50: &str = "CNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSIC"; // 7*7 + 1 = 50
-    const CHAIN_MIX_100: &str = "CNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICN"; // 7*14 + 2 = 100
+
+    let mut rng = ChaCha12Rng::seed_from_u64(20250922);
+    let mut mix_20 = Vec::from_slice(b"CNOFPSICNOFPSICNOFPS");
+    mix_20.shuffle(&mut rng);
+    let mut mix_50 = Vec::from_slice(b"CNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSIC");
+    mix_50.shuffle(&mut rng);
+    let mut mix_100 = Vec::from_slice(b"CNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICNOFPSICN");
+    mix_100.shuffle(&mut rng);
 
     let inputs = [
-        ("chain_empty", ""),
-        ("chain_c_1", "C"),
-        ("chain_c_5", "CCCCC"),
-        ("chain_c_10", "CCCCCCCCCC"),
-        ("chain_c_50", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
-        ("chain_c_100", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
-        ("chain_c_1000", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"),
-        ("chain_mix_20", CHAIN_MIX_20),
-        ("chain_mix_50", CHAIN_MIX_50),
-        ("chain_mix_100", CHAIN_MIX_100),
+        ("chain_empty", &b""[..]),
+        ("chain_c_1", &b"C"[..]),
+        ("chain_c_5", &b"CCCCC"[..]),
+        ("chain_c_10", &b"CCCCCCCCCC"[..]),
+        ("chain_c_50", &b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"[..]),
+        ("chain_c_100", &b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"[..]),
+        ("chain_c_1000", &b"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"[..]),
+        ("chain_mix_20", &mix_20[..]),
+        ("chain_mix_50", &mix_50[..]),
+        ("chain_mix_100", &mix_100[..]),
     ];
 
     // Lex-only baseline
@@ -36,7 +43,10 @@ fn opensmiles_parsing(c: &mut Criterion) {
             b.iter(|| {
                 let input = black_box(input);
                 let mut n = 0usize;
-                for tok in Lexer::new(input) { let _ = tok; n += 1; }
+                for tok in Lexer::new(input.as_bytes()) {
+                    let _ = tok;
+                    n += 1;
+                }
                 std::hint::black_box(n);
             })
         });
@@ -51,7 +61,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
                 let input = black_box(input);
                 let mut state = ParseState::default();
                 let parser = MoleculeParser::new();
-                let lexer = Lexer::new(input);
+                let lexer = Lexer::new(input.as_bytes());
                 let _ = parser.parse(&mut state, lexer);
             })
         });
@@ -66,7 +76,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
                 let input = black_box(input);
                 let mut state = ParseState::with_mode(ParserMode::Minimal);
                 let parser = MoleculeParser::new();
-                let lexer = Lexer::new(input);
+                let lexer = Lexer::new(input.as_bytes());
                 let _ = parser.parse(&mut state, lexer);
                 std::hint::black_box(state.action_count);
             })

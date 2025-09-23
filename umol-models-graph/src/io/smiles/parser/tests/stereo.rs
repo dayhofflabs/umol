@@ -1,6 +1,6 @@
 use rstest::*;
 
-use crate::io::smiles::lexer::Lexer;
+use crate::io::smiles::lexer_old::Lexer;
 use crate::io::ir::Chirality;
 use crate::io::smiles::parser::grammar::MoleculeParser;
 use crate::io::smiles::state::ParseState;

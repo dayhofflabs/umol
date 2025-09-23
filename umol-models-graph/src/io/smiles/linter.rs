@@ -12,7 +12,7 @@ pub use emitter::{DiagnosticCandidate, Emitter, Scope};
 pub use registry::{LintEngine, RuleRegistry};
 pub use rules::Rule;
 
-use super::lexer::Lexer;
+use super::lexer_old::Lexer;
 use super::parser::grammar::MoleculeParser;
 use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use crate::io::smiles::state::{ParseState, ParserMode};

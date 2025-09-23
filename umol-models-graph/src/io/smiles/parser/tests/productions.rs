@@ -4,7 +4,7 @@ use umol_data::Element;
 
 use super::fixtures::parse_state;
 use crate::io::ir::{Atom, BondDir, BondOrder, Chirality};
-use crate::io::smiles::lexer::Lexer;
+use crate::io::smiles::lexer_old::Lexer;
 use crate::io::smiles::parser::grammar::{
     AliphaticOrganicSymbolParser, AliphaticSymbolParser, AromaticOrganicSymbolParser,
     AromaticSymbolParser, AtomBondParser, AtomParser, BondOrderParser, BondParser,
