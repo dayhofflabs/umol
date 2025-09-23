@@ -1,6 +1,6 @@
 //! MoleculeBuilder: fast, remap-free IR construction for parsers.
 
-use super::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, Molecule as IRMolecule, SourceFormat};
+use super::{Atom as IRAtom, Bond as IRBond, BondDir, BondOrder, BondSymbol, Molecule as IRMolecule, SourceFormat};
 use umol_data::Element;
 
 pub struct AtomData {
@@ -56,6 +56,28 @@ impl MoleculeBuilder {
         bond.start_atom = Some(start);
         bond.end_atom = Some(end);
         bond.direction = b.dir;
+        bond.source_format = SourceFormat::SMILES;
+        self.bonds.push(bond);
+    }
+
+    // Fast-path constructors for hot parser loops
+    pub fn on_atom_fast(&mut self, element: Element, implicit_h: bool, aromatic: bool) -> u32 {
+        let idx = self.atoms.len() as u32;
+        let mut atom = IRAtom::default();
+        atom.index = Some(idx);
+        atom.symbol = super::AtomSymbol::Element(element);
+        atom.implicit_h = implicit_h;
+        atom.aromatic = Some(aromatic);
+        atom.source_format = SourceFormat::SMILES;
+        self.atoms.push(atom);
+        idx
+    }
+
+    pub fn on_bond_single_fast(&mut self, start: u32, end: u32) {
+        let mut bond = IRBond::default();
+        bond.start_atom = Some(start);
+        bond.end_atom = Some(end);
+        bond.symbol = BondSymbol::Bond(BondOrder::Single);
         bond.source_format = SourceFormat::SMILES;
         self.bonds.push(bond);
     }

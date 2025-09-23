@@ -8,6 +8,7 @@ use rand::prelude::*;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
 use umol_models_graph::io::smiles::lexer::Lexer;
+use umol_models_graph::io::smiles::parse_smiles_m0;
 use umol_models_graph::io::smiles::lexer_old as legacy_lex;
 use umol_models_graph::io::smiles::parser::grammar::MoleculeParser;
 use umol_models_graph::io::smiles::state::{ParseState, ParserMode};
@@ -83,6 +84,18 @@ fn opensmiles_parsing(c: &mut Criterion) {
         });
     }
     group_min.finish();
+
+    // FSM M0 chain-only
+    let mut group_m0 = c.benchmark_group("opensmiles_parsing/parse_m0_chain");
+    for (name, s) in inputs.iter() {
+        group_m0.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let _ = parse_smiles_m0(input);
+            })
+        });
+    }
+    group_m0.finish();
 }
 
 criterion_group!(benches, opensmiles_parsing);

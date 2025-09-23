@@ -116,5 +116,56 @@ Implications:
     - Organic-only mix (CHNOPSFClBrI) with target frequencies; omit bare `H` for M0.
   - Defer “all elements 1–118” to M5 (requires brackets).
 
+### M0 development plan (no Logos)
+
+- Scope
+  - Chain-only, bare organic atoms: B, C, N, O, P, S, F, I, and two-letter halogens Cl, Br
+  - Implicit single bonds; single component; ASCII-only; no whitespace handling
+  - Any other byte triggers “unsupported at M0” with position
+
+- API
+  - `parse_smiles_m0(input: &[u8]) -> Result<Molecule, M0Error>`
+  - `M0Error { kind: UnsupportedToken, pos: usize }` (minimal set for M0)
+  - Builds IR via `io::ir::builder::MoleculeBuilder` directly (no remap)
+
+- FSM design (hot path)
+  - Single pass over bytes with index `i`; track `last_atom_idx: Option<u32>`
+  - Recognize atoms quickly:
+    - 1-byte: B,C,N,O,P,S,F,I
+    - 2-byte: Cl, Br (1-byte lookahead)
+  - On atom:
+    - If `last_atom_idx.is_some()`: `on_bond(last, curr, Single)`
+    - Always `on_atom(element)` → set `last_atom_idx = Some(curr_idx)`
+  - On any other byte: return error with `pos = i`
+  - At end: `finish()` molecule
+
+- Diagnostics
+  - Only unsupported-token errors at a byte offset for out-of-scope features
+  - Empty input returns empty molecule OK
+
+- Benchmarks
+  - Add `parse_m0_chain` group to `opensmiles_parsing.rs` mirroring chain corpora (1,5,10,50,100,1000)
+  - Compare against `lex_only` and `parse_minimal`
+  - Target: 2.5–5× lex on chain corpora
+
+- Tests
+  - Valid: `C`, `CC`, long chains, `CClC`, `CBrC`
+  - Unsupported: `(`, `)`, `[`, `]`, digits/% rings, bond symbols `-=:#/\\`, `@`, `.`, lowercase, whitespace
+  - Assert atom/bond counts and implicit single bonds
+
+- Integration
+  - New module: `io/smiles/fsm_m0.rs`; export via `io::smiles::fsm_m0` and re-export `parse_smiles_m0`
+  - Keep legacy parser/linter on `lexer_old` during transition; remove after M2 parity
+
+#### Tasks (M0)
+
+1) Create `io/smiles/fsm_m0.rs` with byte FSM and `parse_smiles_m0(&[u8])`
+2) Wire `MoleculeBuilder` calls: `on_atom`, `on_bond`, `finish`
+3) Export module in `io/smiles.rs` and re-export the function
+4) Add Criterion group `parse_m0_chain` to `benches/opensmiles_parsing.rs`
+5) Add tests under `tests/opensmiles_parsing/` for valid chains and unsupported inputs
+6) Benchmark vs `lex_only` and `parse_minimal`; record results in this doc
+7) Decide go/no-go for M1 based on hitting ≤5× lex on chains
+
 
 

@@ -84,7 +84,6 @@ pub struct Atom {
 
     // Metadata
     pub source_format: SourceFormat,
-    pub repr: Option<String>,
 }
 
 impl Atom {
@@ -92,7 +91,6 @@ impl Atom {
     pub fn from_element(element: Element) -> Self {
         Self {
             symbol: AtomSymbol::Element(element),
-            repr: Some(element.to_string()),
             ..Default::default()
         }
     }
@@ -102,7 +100,6 @@ impl Atom {
         Self {
             symbol: AtomSymbol::Element(element),
             aromatic: Some(false),
-            repr: Some(element.to_string()),
             ..Default::default()
         }
     }
@@ -112,7 +109,6 @@ impl Atom {
         Self {
             symbol: AtomSymbol::Element(element),
             aromatic: Some(true),
-            repr: Some(element.to_string().to_lowercase()),
             ..Default::default()
         }
     }
@@ -156,14 +152,12 @@ pub struct Bond {
 
     // Metadata
     pub source_format: SourceFormat,
-    pub repr: Option<String>,
 }
 
 impl Bond {
     pub fn from_order(order: BondOrder) -> Self {
         Self {
             symbol: BondSymbol::Bond(order),
-            repr: Some(order.symbol().to_string()),
             ..Default::default()
         }
     }
@@ -172,7 +166,6 @@ impl Bond {
         Self {
             symbol: BondSymbol::Bond(BondOrder::Single),
             direction: Some(BondDir::Up),
-            repr: Some("/".to_string()),
             ..Default::default()
         }
     }
@@ -181,7 +174,6 @@ impl Bond {
         Self {
             symbol: BondSymbol::Bond(BondOrder::Single),
             direction: Some(BondDir::Down),
-            repr: Some("\\".to_string()),
             ..Default::default()
         }
     }
