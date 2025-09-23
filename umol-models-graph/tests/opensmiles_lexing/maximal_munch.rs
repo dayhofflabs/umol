@@ -48,7 +48,7 @@ fn bond_runs_are_longest_tokens(
 #[rstest]
 fn percent_vs_digits_is_single_token() {
     // %12 must be one token
-    let tokens = Token::lexer("%12")
+    let tokens = Token::lexer(b"%12")
         .map(|t| t.ok())
         .collect::<Option<Vec<_>>>();
     assert_eq!(tokens, Some(vec![Token::Percent(12)]));

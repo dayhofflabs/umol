@@ -21,7 +21,7 @@ impl Rule for LexErrorsRule {
         &META_LEX
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let logos_lexer = Token::lexer(ctx.input);
+        let logos_lexer = Token::lexer(ctx.input.as_bytes());
         for (res, span) in logos_lexer.spanned() {
             if res.is_err() {
                 let slice = &ctx.input[span.start..span.end];

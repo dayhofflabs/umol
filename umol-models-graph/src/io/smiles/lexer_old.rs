@@ -10,7 +10,7 @@ pub struct Lexer<'input> { token_stream: SpannedIter<'input, Token> }
 
 impl<'input> Lexer<'input> {
     pub fn new(input: &'input str) -> Self {
-        Self { token_stream: Token::lexer(input).spanned() }
+        Self { token_stream: Token::lexer(input.as_bytes()).spanned() }
     }
 }
 
