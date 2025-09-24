@@ -31,6 +31,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - BRCH_UNCLOSED (BRANCH, Error): open '(' not closed before component/end
 - BRCH_DANGLING_BOND (BRANCH, Error): bond before ')' or component end
 - BRCH_EMPTY_BRANCH (BRANCH, Error): empty branch (e.g., '()')
+- BRCH_MULTIPLE_NESTING (BRANCH, Error): multiple nested branch levels enclosing the same structure
 
 - RING_UNCLOSED (RING, Error): ring index opened but not closed by end of component/molecule
 - RING_CONFLICT_DIR (RING, Error): conflicting up/down directions on the same ring closure
@@ -59,6 +60,7 @@ Emitted by parser/state during ring processing; codes may appear in `lint_smiles
 - STYLE_BRKT_ORDER (STYLE, Warning): prefer [chirality][H][charge][class] ordering in bracket atoms
 - STYLE_CHARGE_SIGN_SIMPLE (STYLE, Warning): prefer [+]/[-] over [+1]/[-1]
 - STYLE_HCOUNT_ONE_SIMPLE (STYLE, Warning): prefer H over H1 in bracket H-count
+- STYLE_UNNECESSARY_BRANCH (STYLE, Warning): avoid branch definitions surrounding an entire component.
 - STYLE_BRKT_ORGANIC (STYLE, Warning): prefer bare organic subset atom over equivalent bracketed form
 - STYLE_UNNECESSARY_PERCENT_RING_INDEX (STYLE, Warning): prefer single‑digit ring numbers for 1..9 instead of %01..%09
 - STYLE_EXPLICIT_AROMATIC_BOND (STYLE, Warning): avoid explicit ':' when aromatic default applies

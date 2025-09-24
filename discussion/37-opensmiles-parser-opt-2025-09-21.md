@@ -159,13 +159,19 @@ Implications:
 
 #### Tasks (M0)
 
-1) Create `io/smiles/fsm_m0.rs` with byte FSM and `parse_smiles_m0(&[u8])`
-2) Wire `MoleculeBuilder` calls: `on_atom`, `on_bond`, `finish`
-3) Export module in `io/smiles.rs` and re-export the function
-4) Add Criterion group `parse_m0_chain` to `benches/opensmiles_parsing.rs`
-5) Add tests under `tests/opensmiles_parsing/` for valid chains and unsupported inputs
-6) Benchmark vs `lex_only` and `parse_minimal`; record results in this doc
-7) Decide go/no-go for M1 based on hitting ≤5× lex on chains
+1. Create `io/smiles/fsm_m0.rs` with byte FSM and `parse_smiles_m0(&[u8])`
+2. Wire `MoleculeBuilder` calls: `on_atom`, `on_bond`, `finish`
+3. Export module in `io/smiles.rs` and re-export the function
+4. Add Criterion group `parse_m0_chain` to `benches/opensmiles_parsing.rs`
+5. Add tests under `tests/opensmiles_parsing/` for valid chains and unsupported inputs
+6. Benchmark vs `lex_only` and `parse_minimal`; record results in this doc
+7. Decide go/no-go for M1 based on hitting ≤5× lex on chains
 
+#### Tasks (M1)
 
+1. Extend FSM to handle '(' and ')' with a small branch stack.
+2. Connect branch bonds via MoleculeBuilder (push/pop attach points).
+3. Add tests for single and nested branches; keep rings unsupported.
+4. Add benches for branch inputs; compare vs current baseline.
+5. Gate to M2 if ≤5× lex on branch cases.
 

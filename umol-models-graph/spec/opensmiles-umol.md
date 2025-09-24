@@ -79,6 +79,8 @@ ws ::= ( ' ' | '\t' | '\n' | '\r' )*
 
 ### Semantic Constraints
 
+Branches are defined by paired parentheses '(...)'. The opening parenthesis must appear at the beginning of the input or after an atom (bare or bracketed). An atom may be followed by more than one branch definition. Each branch must contain at least one atom; empty branches '()' or multiple nesting of the same set of atoms '((...))' are not allowed. All parentheses must be paired; any input with unclosed parentheses must be rejected. Only an open branch can be closed; if a closing parenthesis occurs in an inptu before any opening parentheses or after all m opening and m closing parentheses (m >= 1), that input must be rejected.
+
 A ring index is either a single digit in the range 0–9 or a percent form in the range 00–99. Percent forms are exactly two digits; leading zeros are permitted. Ring indices compare by numeric value (leading zeros ignored), e.g., '1' matches '%01' and '0' matches '%00'. '%0' (percent with a single digit) is invalid. Open rings may be closed across component separators; at the end of input, any unclosed ring causes the input to be rejected. A ring closure must not create a self-loop or a two‑member cycle.
 
 When both sides of a ring closure specify a bond direction and they differ, the input is rejected. When directions do not conflict, the closing-side specification takes precedence; otherwise the opening-side specification applies. Consecutive bond tokens without an intervening atom or ring index are invalid, and a trailing bond token at end‑of‑input is invalid.

@@ -14,6 +14,11 @@ alwaysApply: true
 - **NEVER** change the design based on your internal deliberations
 - Ignore backward compatibility in this project
 
+## Do not reduce or redefine scope 
+- **DO NOT** create placeholder code just to cover a task. All coding tasks imply real coding,
+  not placeholder code.
+- **DO NOT** mark code tasks as completed based on placeholder code.
+
 ## Use modern Rust (edition 2021) and leverage the ecosystem
 - Use <module>.rs for file names instead of <module>/mod.rs
 - Take existing high-quality crates into account for solving a problem.
