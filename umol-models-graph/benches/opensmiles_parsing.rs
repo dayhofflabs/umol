@@ -2,14 +2,11 @@
 
 use std::hint::black_box;
 
-use bstr::{ByteSlice, ByteVec};
+use bstr::ByteVec;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
-use umol_models_graph::io::smiles::lexer::Lexer;
-use umol_models_graph::io::smiles::parser::grammar::MoleculeParser;
-use umol_models_graph::io::smiles::state::{ParseState, ParserMode};
 use umol_models_graph::io::smiles::{parse_smiles_m0, parse_smiles_m1};
 
 fn opensmiles_parsing(c: &mut Criterion) {
@@ -125,7 +122,8 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_m0_chain.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let _ = parse_smiles_m0(input);
+                let result = parse_smiles_m0(input);
+                assert!(result.is_ok());
             })
         });
     }
@@ -137,7 +135,8 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_m1_chain.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let _ = parse_smiles_m1(input);
+                let result = parse_smiles_m1(input);
+                assert!(result.is_ok());
             })
         });
     }
@@ -149,7 +148,8 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_m1_tree.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let _ = parse_smiles_m1(input);
+                let result = parse_smiles_m1(input);
+                assert!(result.is_ok());
             })
         });
     }
