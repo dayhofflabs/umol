@@ -113,7 +113,7 @@ mod tests {
     #[case::branch(b"CC(C)C", M0Error::UnsupportedToken { pos: 2 })]
     #[case::ring(b"C1CC1", M0Error::UnsupportedToken { pos: 1 })]
     #[case::component(b"CC.CC", M0Error::UnsupportedToken { pos: 2 })]
-    fn m0_chain_invalid(#[case] input: &[u8], #[case] expected: M0Error) {
+    fn m0_invalid(#[case] input: &[u8], #[case] expected: M0Error) {
         let res = parse_smiles_m0(input);
         assert!(res.is_err(), "{:?} should have failed", input);
         let err = res.unwrap_err();

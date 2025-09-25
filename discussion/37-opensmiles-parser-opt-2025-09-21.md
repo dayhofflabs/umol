@@ -165,7 +165,7 @@ Implications:
 4. Add Criterion group `parse_m0_chain` to `benches/opensmiles_parsing.rs`
 5. Add tests under `tests/opensmiles_parsing/` for valid chains and unsupported inputs
 6. Benchmark vs `lex_only` and `parse_minimal`; record results in this doc
-7. Decide go/no-go for M1 based on hitting ≤5× lex on chains
+7. Decide go/no-go for M1 (trees) based on hitting ≤5× lex on chains
 
 #### Tasks (M1)
 
@@ -173,5 +173,25 @@ Implications:
 2. Connect branch bonds via MoleculeBuilder (push/pop attach points).
 3. Add tests for single and nested branches; keep rings unsupported.
 4. Add benches for branch inputs; compare vs current baseline.
-5. Gate to M2 if ≤5× lex on branch cases.
+5. Gate to M2 (bonds) if ≤5× lex on branch cases.
 
+#### Tasks (M2)
+
+1. Extend FSM with bond token handling ( - = # $ : / \ ).
+2. Add rstest unit tests for bonds and errors (trailing/consecutive).
+3. Add benches for M2 bonds vs M1 on chains/branches.
+4. Update spec and errors: bond semantics, trailing-bond error.
+5. Integrate style lints for explicit single and aromatic ':'.
+6. Decide go/no-go for M3 (rings) based on ≤5× lex with bonds.
+
+#### Tasks (M2 old)
+
+1. Create io/smiles/fsm_m2.rs with rings and parse_smiles_m2(&[u8]).
+2. Handle ring tokens: single-digit and %DD, optional preceding bond.
+3. Track ring opens by index; on reuse, close between current and stored atom; respect bond-precedence rules.
+4. Validate and error on self-loop, two-member rings, conflicting directions; include positions.
+5. Support rings inside branches/groups; allow cross-branch closures.
+6. On EOI/component, error for any unclosed rings and reset state.
+7. Add rstest unit tests (valid/invalid) including %00..%99, mixed bonds, direction markers.
+8. Export, add benches for ring inputs, compare with M1.
+9. Decide go/no-go for M3 based on ≤5× lex on rings.

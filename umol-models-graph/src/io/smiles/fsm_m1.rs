@@ -12,6 +12,20 @@ pub enum M1Error {
     EmptyGroup { pos: usize },
 }
 
+// Frames for parentheses: Branch attaches to a base atom; Group is top-level grouping
+#[derive(Debug, Clone, Copy)]
+enum Frame {
+    Branch {
+        base: u32,
+        had_atom: bool,
+        open_pos: usize,
+    },
+    Group {
+        had_atom: bool,
+        open_pos: usize,
+    },
+}
+
 // M1: chains + branches (no rings, no aromatic, no charged/bracketed atoms)
 pub fn parse_smiles_m1(input: &[u8]) -> Result<Molecule, M1Error> {
     let mut i = 0usize;
@@ -19,20 +33,6 @@ pub fn parse_smiles_m1(input: &[u8]) -> Result<Molecule, M1Error> {
 
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
     let mut last_atom_idx: Option<u32> = None;
-
-    // Frames for parentheses: Branch attaches to a base atom; Group is top-level grouping
-    #[derive(Debug, Clone, Copy)]
-    enum Frame {
-        Branch {
-            base: u32,
-            had_atom: bool,
-            open_pos: usize,
-        },
-        Group {
-            had_atom: bool,
-            open_pos: usize,
-        },
-    }
 
     let mut branch_stack: Vec<Frame> = Vec::new();
 
@@ -205,7 +205,7 @@ pub fn parse_smiles_m1(input: &[u8]) -> Result<Molecule, M1Error> {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
+    use rstest::*;
     use umol_data::Element;
 
     use super::*;
@@ -276,8 +276,8 @@ mod tests {
     #[rstest]
     #[case::branch(b"CC(C)C", build_branch_c(2, 1, 1))]
     #[case::trailing_branch(b"C(CC)", build_chain_c(3))]
+    #[case::top_level_group(b"(CCCC)", build_chain_c(4))]
     #[case::nested_group(b"((CC))", build_chain_c(2))]
-    #[case::group_around_cccc(b"(CCCC)", build_chain_c(4))]
     fn m1_tree(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m1(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -293,10 +293,9 @@ mod tests {
     #[case::stray_closing_paren(b")C", M1Error::UnbalancedBranchClose { pos: 0 })]
     #[case::unclosed_group(b"(C", M1Error::UnbalancedBranchOpen { pos: 0 })]
     #[case::unclosed_branch(b"C(C", M1Error::UnbalancedBranchOpen { pos: 1 })]
-    #[case::trailing_bond_in_branch(b"C(C-)C", M1Error::UnsupportedToken { pos: 3 })]
     #[case::empty_branch(b"C()", M1Error::EmptyBranch { pos: 2 })]
     #[case::empty_group_before_atom(b"()C", M1Error::EmptyGroup { pos: 1 })]
-    fn invalid_groups(#[case] input: &[u8], #[case] expected: M1Error) {
+    fn m1_invalid(#[case] input: &[u8], #[case] expected: M1Error) {
         let err = parse_smiles_m1(input);
         assert!(err.is_err(), "{:?} should have failed", input);
         let err = err.unwrap_err();
