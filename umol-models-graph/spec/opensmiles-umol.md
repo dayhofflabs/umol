@@ -83,11 +83,11 @@ ws ::= ( ' ' | '\t' | '\n' | '\r' )*
 Parentheses have two roles:
 
 - Branch: '(' following an atom opens a branch attached to that atom; ')' closes the branch and restores the attach point. A branch MUST contain at least one atom; empty branches '()' are invalid. An atom may be followed by more than one branch definition.
-- Group: '(' at top level (i.e., when no branch attach point is pending) is grouping only and does not create or remove bonds. Grouping parentheses may nest and may appear wherever a chain may appear. Redundant grouping such as '(CC)' or '((CC))' is valid and connectivity‑preserving; implementations MAY warn as a style issue.
+- Group: '(' at top level (i.e., when no branch attach point is pending) is grouping only and does not create or remove bonds. Grouping parentheses may nest and may appear wherever a chain may appear. Redundant grouping such as '(CC)' or '((CC))' is valid and connectivity‑preserving; implementations MAY warn as a style issue. An empty top‑level group '()' is accepted and denotes the empty molecule component.
 
-All parentheses MUST be paired. A ')' without a matching '(' is invalid. At end of input, any unclosed '(' is invalid. Grouping does not alter dot/component semantics; for example, '(CC.CC)' is equivalent to 'CC.CC'. The empty top‑level group '()' is invalid; the empty molecule is represented only by the empty input.
+All parentheses MUST be paired. A ')' without a matching '(' is invalid. At end of input, any unclosed '(' is invalid. Grouping does not alter dot/component semantics; for example, '(CC.CC)' is equivalent to 'CC.CC'. The empty molecule may be represented by the empty input or by an empty top‑level group '()'.
 
-In branches, an initial connector (bond or dot) after '(' is permitted and applies to the first edge in the branch. In groups, the first token after '(' MUST be an atom or another group; a leading connector (bond or dot) inside a group is invalid.
+In branches, an initial connector (bond or dot) after '(' is permitted and applies to the first edge in the branch. In groups, the first token after '(' MUST be an atom or another group; a leading connector (bond or dot) inside a group is invalid. A connector (bond) at the very start of input or immediately following a top‑level group is invalid as there is no attach point; these cases are reported as leading‑bond errors.
 
 Ring closures and branches may appear in any order after an atom and may interleave arbitrarily; the grammar `node ::= atom ( ringbond | branch )*` permits both orders and mixtures.
 

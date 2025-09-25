@@ -30,6 +30,8 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     registry.register(&rules::STYLE_PCT_RULE);
     registry.register(&rules::BRANCH_RULE);
     registry.register(&rules::BOND_STYLE_RULE);
+    registry.register(&rules::GROUP_PARENS_RULE);
+    registry.register(&rules::MIXED_AFTER_RULE);
     registry.register(&rules::RING_STYLE_RULE);
     registry.register(&rules::RING_ERRORS_RULE);
     registry.register(&rules::BRACKET_RULE);

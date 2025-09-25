@@ -18,6 +18,9 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - LEX_LEADING_DOT (LEX, Error): dot at start of input or component
 - LEX_TRAILING_DOT (LEX, Error): dot at end of input or component
 - LEX_MULTIPLE_DOTS (LEX, Error): consecutive dots without an intervening component
+- LEX_LEADING_BOND (LEX, Error): bond token appears with no preceding atom (start of input or after a top-level group)
+- LEX_CONSECUTIVE_BONDS (LEX, Error): consecutive bond tokens without an intervening atom or ring index
+- LEX_TRAILING_BOND (LEX, Error): bond token found at end of input or component
 
 - BRKT_UNCLOSED (BRKT, Error): bracket atom not properly closed
 - BRKT_UNEXPECTED_CLOSE (BRKT, Error): ']' outside of a bracket atom

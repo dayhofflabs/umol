@@ -12,7 +12,7 @@ pub enum M2Error {
     EmptyGroup { pos: usize },
     TrailingBond { pos: usize },
     ConsecutiveBond { pos: usize },
-    BondWithoutAtom { pos: usize },
+    LeadingBond { pos: usize },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -106,7 +106,7 @@ pub fn parse_smiles_m2(input: &[u8]) -> Result<Molecule, M2Error> {
                 return Err(M2Error::ConsecutiveBond { pos: i });
             }
             if last_atom_idx.is_none() {
-                return Err(M2Error::BondWithoutAtom { pos: i });
+                return Err(M2Error::LeadingBond { pos: i });
             }
             let (order, dir) = map_bond(b0);
             pending_bond = Some((order, dir, i));
@@ -415,15 +415,47 @@ mod tests {
     #[rstest]
     #[case::ring(b"C1CC1", M2Error::UnsupportedToken { pos: 1 })]
     #[case::component(b"CC.CC", M2Error::UnsupportedToken { pos: 2 })]
-    #[case::stray_closing_paren(b")C", M2Error::UnbalancedBranchClose { pos: 0 })]
+    #[case::unbalanced_closing_paren_1(b")C", M2Error::UnbalancedBranchClose { pos: 0 })]
+    #[case::unbalanced_closing_paren_2(b"C)C", M2Error::UnbalancedBranchClose { pos: 1 })]
     #[case::unclosed_group(b"(C", M2Error::UnbalancedBranchOpen { pos: 0 })]
     #[case::unclosed_branch(b"C(C", M2Error::UnbalancedBranchOpen { pos: 1 })]
     #[case::empty_branch(b"C()", M2Error::EmptyBranch { pos: 2 })]
     #[case::empty_group_before_atom(b"()C", M2Error::EmptyGroup { pos: 1 })]
-    #[case::trailing_bond(b"C-", M2Error::TrailingBond { pos: 1 })]
-    #[case::consecutive_bonds(b"C--C", M2Error::ConsecutiveBond { pos: 2 })]
-    #[case::bond_without_atom(b"-C", M2Error::BondWithoutAtom { pos: 0 })]
-    #[case::trailing_bond_in_branch(b"C(C-)C", M2Error::TrailingBond { pos: 3 })]
+    #[case::trailing_bond_1(b"C-", M2Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_2(b"C=", M2Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_3(b"C#", M2Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_4(b"C$", M2Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_1(b"C/", M2Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_2(b"C\\", M2Error::TrailingBond { pos: 1 })]
+    #[case::trailing_aromatic_bond(b"C:", M2Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond(b"C(C-)C", M2Error::TrailingBond { pos: 3 })]
+    #[case::trailing_stereo_bond(b"CC(C/)CC", M2Error::TrailingBond { pos: 4 })]
+    #[case::group_trailing_bond(b"(C-)", M2Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_stereo_bond(b"(C/)", M2Error::TrailingBond { pos: 2 })]
+    #[case::bond_after_group(b"(C)-", M2Error::TrailingBond { pos: 3 })]
+    #[case::consecutive_bonds_1(b"C--C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_2(b"C-=C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_3(b"C-#C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_4(b"C-$C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_5(b"C-:C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_sterebonds_1(b"C//C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_sterebonds_2(b"C\\\\C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_sterebond_1(b"C-/C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_sterebond_2(b"C=\\C", M2Error::ConsecutiveBond { pos: 2 })]
+    #[case::leading_bond_1(b"-C", M2Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_2(b"=C", M2Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_3(b"#C", M2Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_4(b"$C", M2Error::LeadingBond { pos: 0 })]
+    #[case::leading_aromatic_bond(b":C", M2Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_1(b"/C", M2Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_2(b"\\C", M2Error::LeadingBond { pos: 0 })]
+    #[case::group_leading_bond_1(b"(-C)C", M2Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_2(b"(=C)C", M2Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_3(b"(#C)C", M2Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_4(b"($C)C", M2Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_1(b"(/C)C", M2Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_2(b"(\\C)C", M2Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_aromatic_bond(b"(:C)C", M2Error::LeadingBond { pos: 1 })]
     fn m2_invalid(#[case] input: &[u8], #[case] expected: M2Error) {
         let err = parse_smiles_m2(input);
         assert!(err.is_err(), "{:?} should have failed", input);
