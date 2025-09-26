@@ -10,6 +10,7 @@ pub enum M1Error {
     UnbalancedBranchClose { pos: usize },
     EmptyBranch { pos: usize },
     EmptyGroup { pos: usize },
+    TopLevelGroupTrailing { pos: usize },
 }
 
 // Frames for parentheses: Branch attaches to a base atom; Group is top-level grouping
@@ -73,6 +74,12 @@ pub fn parse_smiles_m1(input: &[u8]) -> Result<Molecule, M1Error> {
                         // Permit top-level empty group only when it is the entire input ("()")
                         if i + 1 != n {
                             return Err(M1Error::EmptyGroup { pos: i });
+                        }
+                    } else {
+                        // Disallow anything following a non-empty TOP-LEVEL group only
+                        // i.e., when we just closed the outermost group (stack now empty)
+                        if branch_stack.is_empty() && i + 1 != n {
+                            return Err(M1Error::TopLevelGroupTrailing { pos: i });
                         }
                     }
                     // Do not change last_atom_idx for groups
@@ -206,66 +213,15 @@ pub fn parse_smiles_m1(input: &[u8]) -> Result<Molecule, M1Error> {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_data::Element;
 
     use super::*;
-    use crate::io::ir::builder::MoleculeBuilder;
-
-    fn build_chain_c(n: usize) -> Molecule {
-        let mut b = MoleculeBuilder::with_capacity(n, n.saturating_sub(1));
-        let mut last: Option<u32> = None;
-        for _ in 0..n {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            if let Some(s) = last {
-                b.on_bond_single_fast(s, curr);
-            }
-            last = Some(curr);
-        }
-        let mut mols = b.finish();
-        mols.pop().unwrap_or_default()
-    }
-
-    fn build_branch_c(n_initial: usize, n_branch1: usize, n_branch2: usize) -> Molecule {
-        let total_atoms = n_initial + n_branch1 + n_branch2;
-        let mut b = MoleculeBuilder::with_capacity(total_atoms, total_atoms.saturating_sub(1));
-        if n_initial == 0 {
-            return Molecule::default();
-        }
-
-        // Trunk up to and including the branching point
-        let mut last: Option<u32> = None;
-        for _ in 0..n_initial {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            if let Some(prev) = last {
-                b.on_bond_single_fast(prev, curr);
-            }
-            last = Some(curr);
-        }
-        let base = last.expect("at least one initial atom required");
-
-        // Branch 1 from base
-        let mut prev = base;
-        for _ in 0..n_branch1 {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            b.on_bond_single_fast(prev, curr);
-            prev = curr;
-        }
-
-        // Branch 2 from base
-        let mut prev2 = base;
-        for _ in 0..n_branch2 {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            b.on_bond_single_fast(prev2, curr);
-            prev2 = curr;
-        }
-
-        let mut mols = b.finish();
-        mols.pop().unwrap_or_default()
-    }
+    use crate::io::smiles::test_support::build_from_graph;
 
     #[rstest]
-    #[case::empty_group(b"()", Molecule::default())]
-    #[case::chain(b"CCC", build_chain_c(3))]
+    #[case::empty(b"", Molecule::default())]
+    #[case::chain_c_1(b"C", build_from_graph("C |"))]
+    #[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
+    #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C Cl O Br N | 0-1 1-2 2-3 3-4"))]
     fn m1_chain(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m1(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -274,10 +230,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::branch(b"CC(C)C", build_branch_c(2, 1, 1))]
-    #[case::trailing_branch(b"C(CC)", build_chain_c(3))]
-    #[case::top_level_group(b"(CCCC)", build_chain_c(4))]
-    #[case::nested_group(b"((CC))", build_chain_c(2))]
+    #[case::empty_group(b"()", Molecule::default())]
+    #[case::group_c_1(b"(C)", build_from_graph("C |"))]
+    #[case::group_c_4(b"(CCCC)", build_from_graph("C C C C | 0-1 1-2 2-3"))]
+    #[case::group_nested(b"((CC))", build_from_graph("C C | 0-1"))]
+    #[case::branch_c_111(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
+    #[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::trailing_branch(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
+    #[case::group_branched_c_3(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
     fn m1_tree(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m1(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -286,6 +246,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case::aromatic(b"c", M1Error::UnsupportedToken { pos: 0 })]
     #[case::bond_order(b"C-C", M1Error::UnsupportedToken { pos: 1 })]
     #[case::bracket(b"[C]", M1Error::UnsupportedToken { pos: 0 })]
     #[case::ring(b"C1CC1", M1Error::UnsupportedToken { pos: 1 })]
@@ -295,6 +256,8 @@ mod tests {
     #[case::unclosed_branch(b"C(C", M1Error::UnbalancedBranchOpen { pos: 1 })]
     #[case::empty_branch(b"C()", M1Error::EmptyBranch { pos: 2 })]
     #[case::empty_group_before_atom(b"()C", M1Error::EmptyGroup { pos: 1 })]
+    #[case::two_top_level_groups(b"(C)(C)", M1Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_before_atom(b"(C)C", M1Error::TopLevelGroupTrailing { pos: 2 })]
     fn m1_invalid(#[case] input: &[u8], #[case] expected: M1Error) {
         let err = parse_smiles_m1(input);
         assert!(err.is_err(), "{:?} should have failed", input);

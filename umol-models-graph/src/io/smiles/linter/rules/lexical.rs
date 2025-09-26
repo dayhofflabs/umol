@@ -4,7 +4,7 @@ use logos::Logos;
 
 use super::{Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
-use crate::io::smiles::iterators::Segment;
+use crate::io::smiles::iterators::{BondKind, Segment};
 use crate::io::smiles::lexer::Token;
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
 use crate::io::smiles::linter::LintContext;
@@ -203,3 +203,73 @@ impl Rule for DotRules {
     }
 }
 pub static DOT_RULES: DotRules = DotRules;
+
+pub struct InconsistentAromaticityRule;
+static META_AROM: RuleMeta = RuleMeta {
+    id: "LEX_AROM_CONSISTENCY",
+    category: Category::Lex,
+    default_severity: Severity::Warning,
+};
+
+fn is_aromatic_simple(raw: &str) -> bool {
+    matches!(raw, "b" | "c" | "n" | "o" | "p" | "s" | "se" | "as")
+}
+
+fn is_aromatic_bracket(inner: &str) -> bool {
+    // Very lightweight check: skip leading digits, then look at the element symbol start(s)
+    let bytes = inner.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() && bytes[i].is_ascii_digit() { i += 1; }
+    if i >= bytes.len() { return false; }
+    // Two-letter aromatic: se, as
+    if i + 1 < bytes.len() {
+        let two = &inner[i..i + 2].to_ascii_lowercase();
+        if two == "se" || two == "as" { return true; }
+    }
+    // Single-letter aromatic: b,c,n,o,p,s
+    let ch = bytes[i] as char;
+    matches!(ch, 'b' | 'c' | 'n' | 'o' | 'p' | 's')
+}
+
+impl Rule for InconsistentAromaticityRule {
+    fn meta(&self) -> &'static RuleMeta { &META_AROM }
+    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
+        let segs = ctx.segments();
+        for i in 0..segs.len() {
+            let (span, kind) = match segs[i] {
+                Segment::Bond { span, kind } => (span, kind),
+                _ => continue,
+            };
+            // Only consider explicit non-aromatic vs aromatic bonds
+            let is_non_aromatic_bond = matches!(kind, BondKind::Single | BondKind::Double | BondKind::Triple | BondKind::Quadruple);
+            let is_aromatic_bond = matches!(kind, BondKind::Aromatic);
+            if !(is_non_aromatic_bond || is_aromatic_bond) { continue; }
+
+            let left = (0..i).rfind(|&j| !matches!(segs[j], Segment::WhitespaceBlock { .. }));
+            let right = ((i + 1)..segs.len()).find(|&j| !matches!(segs[j], Segment::WhitespaceBlock { .. }));
+            let (Some(li), Some(ri)) = (left, right) else { continue };
+            let left_arom = match &segs[li] {
+                Segment::AtomSimple { raw, .. } => is_aromatic_simple(raw),
+                Segment::AtomBracket { inner, .. } => is_aromatic_bracket(inner),
+                _ => false,
+            };
+            let right_arom = match &segs[ri] {
+                Segment::AtomSimple { raw, .. } => is_aromatic_simple(raw),
+                Segment::AtomBracket { inner, .. } => is_aromatic_bracket(inner),
+                _ => false,
+            };
+
+            if (is_non_aromatic_bond && left_arom && right_arom) || (is_aromatic_bond && !(left_arom && right_arom)) {
+                emit.candidate(DiagnosticCandidate {
+                    code: Code("LEX_INCONSISTENT_AROMATICITY"),
+                    category: Category::Lex,
+                    severity: Severity::Error,
+                    span,
+                    message: "Inconsistent aromaticity on bond",
+                    scope: Scope::Global,
+                });
+            }
+        }
+    }
+}
+pub static AROM_INCONSISTENT_RULE: InconsistentAromaticityRule = InconsistentAromaticityRule;

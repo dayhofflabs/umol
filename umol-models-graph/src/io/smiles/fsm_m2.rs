@@ -10,6 +10,7 @@ pub enum M2Error {
     UnbalancedBranchClose { pos: usize },
     EmptyBranch { pos: usize },
     EmptyGroup { pos: usize },
+    TopLevelGroupTrailing { pos: usize },
     TrailingBond { pos: usize },
     ConsecutiveBond { pos: usize },
     LeadingBond { pos: usize },
@@ -92,6 +93,11 @@ pub fn parse_smiles_m2(input: &[u8]) -> Result<Molecule, M2Error> {
                     if !had_atom {
                         if i + 1 != n {
                             return Err(M2Error::EmptyGroup { pos: i });
+                        }
+                    } else {
+                        // Disallow anything following a non-empty TOP-LEVEL group
+                        if pstack.is_empty() && i + 1 != n {
+                            return Err(M2Error::TopLevelGroupTrailing { pos: i });
                         }
                     }
                 }
@@ -254,118 +260,13 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::io::ir::builder::MoleculeBuilder;
-
-    fn build_chain_c(n: usize) -> Molecule {
-        let mut b = MoleculeBuilder::with_capacity(n, n.saturating_sub(1));
-        let mut last: Option<u32> = None;
-        for _ in 0..n {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            if let Some(s) = last {
-                b.on_bond_single_fast(s, curr);
-            }
-            last = Some(curr);
-        }
-        let mut mols = b.finish();
-        mols.pop().unwrap_or_default()
-    }
-
-    fn build_branch_c(n_initial: usize, n_branch1: usize, n_branch2: usize) -> Molecule {
-        let total_atoms = n_initial + n_branch1 + n_branch2;
-        let mut b = MoleculeBuilder::with_capacity(total_atoms, total_atoms.saturating_sub(1));
-        if n_initial == 0 {
-            return Molecule::default();
-        }
-
-        let mut last: Option<u32> = None;
-        for _ in 0..n_initial {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            if let Some(prev) = last {
-                b.on_bond_single_fast(prev, curr);
-            }
-            last = Some(curr);
-        }
-        let base = last.expect("at least one initial atom required");
-
-        let mut prev = base;
-        for _ in 0..n_branch1 {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            b.on_bond_single_fast(prev, curr);
-            prev = curr;
-        }
-
-        let mut prev2 = base;
-        for _ in 0..n_branch2 {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            b.on_bond_single_fast(prev2, curr);
-            prev2 = curr;
-        }
-
-        let mut mols = b.finish();
-        mols.pop().unwrap_or_default()
-    }
-
-    fn build_bonds_c(n: usize, orders: &[BondOrder], dirs: &[Option<BondDir>]) -> Molecule {
-        assert_eq!(orders.len(), n.saturating_sub(1));
-        assert_eq!(dirs.len(), n.saturating_sub(1));
-
-        let mut b = MoleculeBuilder::with_capacity(n, n.saturating_sub(1));
-        let mut last: Option<u32> = None;
-        for i in 0..n {
-            let curr = b.on_atom_fast(Element::C, true, false);
-            if let Some(s) = last {
-                b.on_bond(
-                    s,
-                    curr,
-                    BondData {
-                        order: orders[i - 1],
-                        dir: dirs[i - 1],
-                    },
-                );
-            }
-            last = Some(curr);
-        }
-        let mut mols = b.finish();
-        mols.pop().unwrap_or_default()
-    }
-
-    fn build_stereo_double_bond(dir1: BondDir, dir2: BondDir) -> Molecule {
-        let mut b = MoleculeBuilder::with_capacity(4, 3);
-        let idx1 = b.on_atom_fast(Element::C, true, false);
-        let idx2 = b.on_atom_fast(Element::C, true, false);
-        let idx3 = b.on_atom_fast(Element::C, true, false);
-        let idx4 = b.on_atom_fast(Element::C, true, false);
-        b.on_bond(
-            idx1,
-            idx2,
-            BondData {
-                order: BondOrder::Single,
-                dir: Some(dir1),
-            },
-        );
-        b.on_bond(
-            idx2,
-            idx3,
-            BondData {
-                order: BondOrder::Double,
-                dir: None,
-            },
-        );
-        b.on_bond(
-            idx3,
-            idx4,
-            BondData {
-                order: BondOrder::Single,
-                dir: Some(dir2),
-            },
-        );
-        let mut mols = b.finish();
-        mols.pop().unwrap_or_default()
-    }
+    use crate::io::smiles::test_support::build_from_graph;
 
     #[rstest]
-    #[case::empty_group(b"()", Molecule::default())]
-    #[case::chain(b"CCC", build_chain_c(3))]
+    #[case::empty(b"", Molecule::default())]
+    #[case::chain_c_1(b"C", build_from_graph("C |"))]
+    #[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
+    #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C Cl O Br N | 0-1 1-2 2-3 3-4"))]
     fn m2_chain(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m2(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -374,10 +275,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::branch(b"CC(C)C", build_branch_c(2, 1, 1))]
-    #[case::trailing_branch(b"C(CC)", build_chain_c(3))]
-    #[case::top_level_group(b"(CCCC)", build_chain_c(4))]
-    #[case::nested_group(b"((CC))", build_chain_c(2))]
+    #[case::empty_group(b"()", Molecule::default())]
+    #[case::group_c_1(b"(C)", build_from_graph("C |"))]
+    #[case::group_c_4(b"(CCCC)", build_from_graph("C C C C | 0-1 1-2 2-3"))]
+    #[case::group_nested(b"((CC))", build_from_graph("C C | 0-1"))]
+    #[case::branch_c_111(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
+    #[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::trailing_branch(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
+    #[case::group_branched_c_3(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
     fn m2_tree(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m2(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -387,24 +292,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single_bond(b"C-C", build_bonds_c(2, &[BondOrder::Single], &[None]))]
-    #[case::double_bond(b"C=C", build_bonds_c(2, &[BondOrder::Double], &[None]))]
-    #[case::triple_bond(b"C#C", build_bonds_c(2, &[BondOrder::Triple], &[None]))]
-    #[case::quadruple_bond(b"C$C", build_bonds_c(2, &[BondOrder::Quadruple], &[None]))]
-    #[case::aromatic_bond(b"C:C", build_bonds_c(2, &[BondOrder::Aromatic], &[None]))]
-    #[case::up_bond(b"C/C", build_bonds_c(2, &[BondOrder::Single], &[Some(BondDir::Up)]))]
-    #[case::down_bond(b"C\\C", build_bonds_c(2, &[BondOrder::Single], &[Some(BondDir::Down)]))]
-    #[case::branch_leading_bond(b"CC(-C)C", build_branch_c(2, 1, 1))]
-    #[case::branch_internal_bond(b"CC(C-C)C", build_branch_c(2, 2, 1))]
-    #[case::branch_followed_by_bond(b"CC(C)-C", build_branch_c(2, 1, 1))]
-    #[case::branch_cis_double_bond(b"CC(C)-C", build_branch_c(2, 1, 1))]
-    #[case::branch_trans_double_bond_1(b"C/C=C/C", build_stereo_double_bond(BondDir::Up, BondDir::Up))]
-    #[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_stereo_double_bond(BondDir::Down, BondDir::Down))]
-    #[case::branch_cis_double_bond_1(b"C\\C=C/C", build_stereo_double_bond(BondDir::Down, BondDir::Up))]
-    #[case::branch_cis_double_bond_2(b"C/C=C\\C", build_stereo_double_bond(BondDir::Up, BondDir::Down))]
-    #[case::cumulated_bonds(b"C=C=C", build_bonds_c(3, &[BondOrder::Double, BondOrder::Double], &[None, None]))]
-    #[case::conjugated_bonds(b"C=CC=C", build_bonds_c(4, &[BondOrder::Double, BondOrder::Single, BondOrder::Double],
-                             &[None, None, None]))]
+    #[case::single_bond(b"C-C", build_from_graph("C C | 0-1:-"))]
+    #[case::double_bond(b"C=C", build_from_graph("C C | 0-1:="))]
+    #[case::triple_bond(b"C#C", build_from_graph("C C | 0-1:#"))]
+    #[case::quadruple_bond(b"C$C", build_from_graph("C C | 0-1:$"))]
+    #[case::aromatic_bond(b"C:C", build_from_graph("C C | 0-1::"))]
+    #[case::up_bond(b"C/C", build_from_graph("C C | 0-1:/"))]
+    #[case::down_bond(b"C\\C", build_from_graph("C C | 0-1:\\"))]
+    #[case::branch_leading_bond(b"CC(-C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::branch_internal_bond(b"CC(C-C)C", build_from_graph("C C C C C | 0-1 1-2 2-3 1-4"))]
+    #[case::branch_followed_by_bond(b"CC(C)-C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::branch_trans_double_bond_1(b"C/C=C/C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:/"))]
+    #[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:\\"))]
+    #[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:/"))]
+    #[case::branch_cis_double_bond_2(b"C/C=C\\C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:\\"))]
+    #[case::cumulated_bonds(b"C=C=C", build_from_graph("C C C | 0-1:= 1-2:="))]
+    #[case::conjugated_bonds(b"C=CC=C", build_from_graph("C C C C | 0-1:= 1-2:- 2-3:="))]
     fn m2_bonds(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m2(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -413,6 +316,7 @@ mod tests {
     }
 
     #[rstest]
+    #[case::aromatic(b"c", M2Error::UnsupportedToken { pos: 0 })]
     #[case::ring(b"C1CC1", M2Error::UnsupportedToken { pos: 1 })]
     #[case::component(b"CC.CC", M2Error::UnsupportedToken { pos: 2 })]
     #[case::unbalanced_closing_paren_1(b")C", M2Error::UnbalancedBranchClose { pos: 0 })]
@@ -421,6 +325,8 @@ mod tests {
     #[case::unclosed_branch(b"C(C", M2Error::UnbalancedBranchOpen { pos: 1 })]
     #[case::empty_branch(b"C()", M2Error::EmptyBranch { pos: 2 })]
     #[case::empty_group_before_atom(b"()C", M2Error::EmptyGroup { pos: 1 })]
+    #[case::two_top_level_groups(b"(C)(C)", M2Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_before_atom(b"(C)C", M2Error::TopLevelGroupTrailing { pos: 2 })]
     #[case::trailing_bond_1(b"C-", M2Error::TrailingBond { pos: 1 })]
     #[case::trailing_bond_2(b"C=", M2Error::TrailingBond { pos: 1 })]
     #[case::trailing_bond_3(b"C#", M2Error::TrailingBond { pos: 1 })]
@@ -432,7 +338,7 @@ mod tests {
     #[case::trailing_stereo_bond(b"CC(C/)CC", M2Error::TrailingBond { pos: 4 })]
     #[case::group_trailing_bond(b"(C-)", M2Error::TrailingBond { pos: 2 })]
     #[case::group_trailing_stereo_bond(b"(C/)", M2Error::TrailingBond { pos: 2 })]
-    #[case::bond_after_group(b"(C)-", M2Error::TrailingBond { pos: 3 })]
+    #[case::bond_after_group(b"(C)-", M2Error::TopLevelGroupTrailing { pos: 2 })]
     #[case::consecutive_bonds_1(b"C--C", M2Error::ConsecutiveBond { pos: 2 })]
     #[case::consecutive_bonds_2(b"C-=C", M2Error::ConsecutiveBond { pos: 2 })]
     #[case::consecutive_bonds_3(b"C-#C", M2Error::ConsecutiveBond { pos: 2 })]

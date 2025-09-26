@@ -12,7 +12,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 #### Errors
 
 - LEX_INVALID_TOKEN (LEX, Error): input slice cannot be tokenized per lexical rules
-- LEX_BAD_PERCENT_FORM (LEX, Error): percent form not followed by two digits
+- LEX_RING_INDEX_INVALID (LEX, Error): percent ring form invalid (must be exactly two digits)
 - LEX_TRAILING_BOND (LEX, Error): bond symbol found at end of input or before terminator
 - LEX_DOT_BEFORE_RING (LEX, Error): dot placed before a ring index
 - LEX_LEADING_DOT (LEX, Error): dot at start of input or component
@@ -21,6 +21,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - LEX_LEADING_BOND (LEX, Error): bond token appears with no preceding atom (start of input or after a top-level group)
 - LEX_CONSECUTIVE_BONDS (LEX, Error): consecutive bond tokens without an intervening atom or ring index
 - LEX_TRAILING_BOND (LEX, Error): bond token found at end of input or component
+- LEX_LEADING_RING (LEX, Error): ring index appears with no preceding atom (start of input or after a top-level group)
 
 - BRKT_UNCLOSED (BRKT, Error): bracket atom not properly closed
 - BRKT_UNEXPECTED_CLOSE (BRKT, Error): ']' outside of a bracket atom
@@ -37,11 +38,9 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - GRP_LEADING_CONNECTOR (BRANCH, Error): group begins with a connector (bond or dot); groups must start with an atom or '('
 
 - RING_UNCLOSED (RING, Error): ring index opened but not closed by end of component/molecule
-- RING_CONFLICT_DIR (RING, Error): conflicting up/down directions on the same ring closure
+- RING_DIR_CONFLICT (RING, Error): conflicting up/down directions on the same ring closure
 - RING_SELF_LOOP (RING, Error): ring closure creates a self-loop
 - RING_TWO_MEMBER (RING, Error): ring closure creates a two‑member ring
-
-- SYN_UNEXPECTED_TOKEN (SYN, Error): parser encountered a token not valid in the current production
 
 Emitted by parser/state during ring processing; codes may appear in `lint_smiles_parse` reports even when lexing succeeds.
 
@@ -73,8 +72,12 @@ Emitted by parser/state during ring processing; codes may appear in `lint_smiles
 - STYLE_EXPLICIT_SINGLE_BOND (STYLE, Warning): avoid explicit '-' when default applies
 - STYLE_UNNECESSARY_EXPLICIT_H (STYLE, Warning): avoid explicit hydrogen when implicit is preferred
 - STYLE_FIRST_RING_NOT_ONE (STYLE, Warning): prefer starting ring numbering at 1
-- STYLE_NONCONSECUTIVE_RING_NUMBERING (STYLE, Warning): prefer consecutive ring numbers where possible
+- STYLE_NONCONSECUTIVE_RING_NUMBERING (STYLE, Warning): avoid non-consecutive ring numbers in the parsing sequence
+- STYLE_UNNCECSSARY_STEREO_DESCRIPTOR (STYLE, Warning): avoid stereo descriptors (bonds or chiral centers) at non-stereogenic elements
+- STYLE_AROMATICITY_WITHOUT_RING (STYLE, Warning): avoid using aromatic atom symbols (bare or bracketed) and aromatic bonds outside of rings
+- STYLE_MIXED_AROMATICITY (STYLE, Warning): avoid mixing aromatic and non-aromatic atoms and/or bonds in the same ring
 - NUM_HCOUNT_EXCEEDS_MAX_IMPLICIT (NUM, Warning): H-count exceeds element's max implicit hydrogens
 - NUM_CHARGE_OUTSIDE_ELEMENT_RANGE (NUM, Warning): charge outside element-supported bounds
 - NUM_CHARGE_EXCEEDS_VALENCE_ELECTRONS (NUM, Warning): charge exceeds valence electron count
 - NUM_ISOTOPE_UNCATALOGUED (NUM, Warning): isotope is not catalogued (unstable or too short-lived)
+- STYLE_INCONSISTENT_AROMATICITY (AROM, Warning): Non-aromatic bonds (single, double, triple, quadruple) between aromatic atoms or aromatic bonds between non-aromatic atoms

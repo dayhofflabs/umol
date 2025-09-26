@@ -237,3 +237,130 @@ impl Rule for MixedAfterAtomStyleRule {
     }
 }
 pub static MIXED_AFTER_RULE: MixedAfterAtomStyleRule = MixedAfterAtomStyleRule;
+
+pub struct RingNumberingStyleRule;
+
+static META_RING_NUM: RuleMeta = RuleMeta {
+    id: "STYLE_RING_NUM",
+    category: Category::Style,
+    default_severity: Severity::Warning,
+};
+
+impl Rule for RingNumberingStyleRule {
+    fn meta(&self) -> &'static RuleMeta { &META_RING_NUM }
+    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
+        let segs = ctx.segments();
+        // STYLE_FIRST_RING_NOT_ONE / STYLE_NONCONSECUTIVE_RING_NUMBERING / STYLE_REUSED_RING_INDICES
+        // Track first-seen order of ring indices per component
+        let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        let mut order: Vec<u32> = Vec::new();
+        for i in 0..segs.len() {
+            match segs[i] {
+                Segment::RingClosure { span: _, index } => {
+                    if !seen.contains(&index) {
+                        seen.insert(index);
+                        order.push(index);
+                    }
+                }
+                Segment::NewComponent { .. } => {
+                    // Flush order-based lints for the component
+                    if !order.is_empty() {
+                        // First ring not one (only warn if 1 is used anywhere but not first)
+                        if order[0] != 1 && order.iter().any(|&v| v == 1) {
+                            emit.candidate(DiagnosticCandidate {
+                                code: crate::diagnostics::Code("STYLE_FIRST_RING_NOT_ONE"),
+                                category: Category::Style,
+                                severity: Severity::Warning,
+                                span: crate::diagnostics::Span::new(0, 0),
+                                message: "Prefer starting ring numbering at 1",
+                                scope: Scope::Global,
+                            });
+                        }
+                        // Non-consecutive numbering (consider numeric value, 0 allowed)
+                        let mut prev = order[0];
+                        for &v in &order[1..] {
+                            if v != prev && v != prev + 1 {
+                                emit.candidate(DiagnosticCandidate {
+                                    code: crate::diagnostics::Code("STYLE_NONCONSECUTIVE_RING_NUMBERING"),
+                                    category: Category::Style,
+                                    severity: Severity::Warning,
+                                    span: crate::diagnostics::Span::new(0, 0),
+                                    message: "Avoid non-consecutive ring numbers in the parsing sequence",
+                                    scope: Scope::Global,
+                                });
+                                break;
+                            }
+                            prev = v;
+                        }
+                    }
+                    seen.clear();
+                    order.clear();
+                }
+                _ => {}
+            }
+        }
+        // Flush at end of input
+        if !order.is_empty() {
+            if order[0] != 1 && order.iter().any(|&v| v == 1) {
+                emit.candidate(DiagnosticCandidate {
+                    code: crate::diagnostics::Code("STYLE_FIRST_RING_NOT_ONE"),
+                    category: Category::Style,
+                    severity: Severity::Warning,
+                    span: crate::diagnostics::Span::new(0, 0),
+                    message: "Prefer starting ring numbering at 1",
+                    scope: Scope::Global,
+                });
+            }
+            let mut prev = order[0];
+            for &v in &order[1..] {
+                if v != prev && v != prev + 1 {
+                    emit.candidate(DiagnosticCandidate {
+                        code: crate::diagnostics::Code("STYLE_NONCONSECUTIVE_RING_NUMBERING"),
+                        category: Category::Style,
+                        severity: Severity::Warning,
+                        span: crate::diagnostics::Span::new(0, 0),
+                        message: "Avoid non-consecutive ring numbers in the parsing sequence",
+                        scope: Scope::Global,
+                    });
+                    break;
+                }
+                prev = v;
+            }
+        }
+        // STYLE_REUSED_RING_INDICES
+        // Flag if the same index appears more than twice in a component (open+close is typical once, but we count appearances)
+        let mut counts: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+        for i in 0..segs.len() {
+            match segs[i] {
+                Segment::RingClosure { index, .. } => {
+                    *counts.entry(index).or_default() += 1;
+                }
+                Segment::NewComponent { .. } => {
+                    if counts.values().any(|&v| v > 2) {
+                        emit.candidate(DiagnosticCandidate {
+                            code: crate::diagnostics::Code("STYLE_REUSED_RING_INDICES"),
+                            category: Category::Style,
+                            severity: Severity::Warning,
+                            span: crate::diagnostics::Span::new(0, 0),
+                            message: "Avoid reusing the same ring digit within a component",
+                            scope: Scope::Global,
+                        });
+                    }
+                    counts.clear();
+                }
+                _ => {}
+            }
+        }
+        if counts.values().any(|&v| v > 2) {
+            emit.candidate(DiagnosticCandidate {
+                code: crate::diagnostics::Code("STYLE_REUSED_RING_INDICES"),
+                category: Category::Style,
+                severity: Severity::Warning,
+                span: crate::diagnostics::Span::new(0, 0),
+                message: "Avoid reusing the same ring digit within a component",
+                scope: Scope::Global,
+            });
+        }
+    }
+}
+pub static RING_NUMBERING_RULE: RingNumberingStyleRule = RingNumberingStyleRule;

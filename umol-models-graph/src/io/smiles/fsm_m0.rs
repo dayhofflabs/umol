@@ -92,21 +92,22 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::io::smiles::test_support::build_from_graph;
 
     #[rstest]
-    #[case::empty(b"", (0, 0))]
-    #[case::c_chain_1_atom(b"C", (1, 0))]
-    #[case::c_chain_5_atoms(b"CCCCC", (5, 4))]
-    #[case::mixed_chain_5_atoms(b"CClCBrC", (5, 4))]
-    fn m0_chain(#[case] input: &[u8], #[case] (exp_atoms, exp_bonds): (usize, usize)) {
+    #[case::empty(b"", Molecule::default())]
+    #[case::chain_c_1(b"C", build_from_graph("C |"))]
+    #[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
+    #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C Cl O Br N | 0-1 1-2 2-3 3-4"))]
+    fn m0_chain(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m0(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
-        assert_eq!(mol.atoms.len(), exp_atoms);
-        assert_eq!(mol.bonds.len(), exp_bonds);
+        assert_eq!(mol, expected);
     }
 
     #[rstest]
+    #[case::aromatic(b"c", M0Error::UnsupportedToken { pos: 0 })]
     #[case::bond_order(b"C-C", M0Error::UnsupportedToken { pos: 1 })]
     #[case::bracket(b"[C]", M0Error::UnsupportedToken { pos: 0 })]
     #[case::group(b"(C)", M0Error::UnsupportedToken { pos: 0 })]

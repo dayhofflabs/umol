@@ -116,7 +116,19 @@ Implications:
     - Organic-only mix (CHNOPSFClBrI) with target frequencies; omit bare `H` for M0.
   - Defer “all elements 1–118” to M5 (requires brackets).
 
-### M0 development plan (no Logos)
+## FSM parser implementation
+
+### Milestones (M0→M6)
+- M0: Chain-only, bare atoms, implicit single bonds. Bench vs lex-only.
+- M1: Add branches ( and ).
+- M2: Add explicit bonds (- = # : / \\) with staged bond state.
+- M3: Add rings (digits/%), smallvec ring store, conflict/self/two-member checks.
+- M4: Components (.).
+- M5: Brackets: implement a tight bracket scanner for [ ... ].
+- M6: Optional semantics (aromatic defaults, stereo post-passes).
+
+
+### M0 Plan
 
 - Scope
   - Chain-only, bare organic atoms: B, C, N, O, P, S, F, I, and two-letter halogens Cl, Br
@@ -157,7 +169,7 @@ Implications:
   - New module: `io/smiles/fsm_m0.rs`; export via `io::smiles::fsm_m0` and re-export `parse_smiles_m0`
   - Keep legacy parser/linter on `lexer_old` during transition; remove after M2 parity
 
-#### Tasks (M0)
+### M0 Tasks
 
 1. Create `io/smiles/fsm_m0.rs` with byte FSM and `parse_smiles_m0(&[u8])`
 2. Wire `MoleculeBuilder` calls: `on_atom`, `on_bond`, `finish`
@@ -167,7 +179,7 @@ Implications:
 6. Benchmark vs `lex_only` and `parse_minimal`; record results in this doc
 7. Decide go/no-go for M1 (trees) based on hitting ≤5× lex on chains
 
-#### Tasks (M1)
+### M1 Tasks
 
 1. Extend FSM to handle '(' and ')' with a small branch stack.
 2. Connect branch bonds via MoleculeBuilder (push/pop attach points).
@@ -175,7 +187,7 @@ Implications:
 4. Add benches for branch inputs; compare vs current baseline.
 5. Gate to M2 (bonds) if ≤5× lex on branch cases.
 
-#### Tasks (M2)
+### M2 Tasks
 
 1. Extend FSM with bond token handling ( - = # $ : / \ ).
 2. Add rstest unit tests for bonds and errors (trailing/consecutive).
@@ -184,14 +196,124 @@ Implications:
 5. Integrate style lints for explicit single and aromatic ':'.
 6. Decide go/no-go for M3 (rings) based on ≤5× lex with bonds.
 
-#### Tasks (M2 old)
+### M3 Plan
 
-1. Create io/smiles/fsm_m2.rs with rings and parse_smiles_m2(&[u8]).
-2. Handle ring tokens: single-digit and %DD, optional preceding bond.
-3. Track ring opens by index; on reuse, close between current and stored atom; respect bond-precedence rules.
-4. Validate and error on self-loop, two-member rings, conflicting directions; include positions.
-5. Support rings inside branches/groups; allow cross-branch closures.
-6. On EOI/component, error for any unclosed rings and reset state.
-7. Add rstest unit tests (valid/invalid) including %00..%99, mixed bonds, direction markers.
-8. Export, add benches for ring inputs, compare with M1.
-9. Decide go/no-go for M3 based on ≤5× lex on rings.
+- Scope and goals
+  - Add ring tokens and semantics on top of M2 (bonds), keeping M3 a strict superset of M2/M1.
+  - Support single- and multi-digit ring indices, ring bonds, rings within branches/groups, fused and spiro junctions.
+  - Emit precise, positionful errors for ring issues.
+
+- Grammar additions (OpenSMILES-aligned)
+  - Ring index tokens:
+    - DIGIT ring indices: 1–9 following an atom.
+    - Multi-digit ring indices: `%DD` (two digits). Decide on `%DDD` (100–999) support; default to two digits only unless needed.
+  - Optional preceding bond symbol on either side of a ring index: `- = # $ : / \`
+  - Multiple ring indices allowed on the same atom (e.g., fused `...12`).
+  - Rings are allowed inside branches/groups.
+
+- Error taxonomy (new M3 errors; keep all M2 errors unchanged)
+  - SYN_RING_UNCLOSED { pos_open }: ring index seen once and not matched by EOI.
+  - SYN_RING_SELF_LOOP { pos }: ring closure would connect an atom to itself.
+  - SYN_RING_TWO_MEMBER { pos }: ring closure would connect immediately adjacent atoms to form a 2-member ring.
+  - SYN_RING_BOND_CONFLICT { pos, open_pos }: both sides specified explicit bond types that disagree.
+  - SYN_RING_DIR_CONFLICT { pos, open_pos }: directional bond markers across a ring that are inconsistent or lack a double-bond context.
+  - LEX_RING_INDEX_INVALID { pos }: malformed ring token (`%` not followed by two digits, leading zeros rules if any).
+  - Optional (decide): SYN_LEADING_RING { pos } if a ring token appears with no current atom.
+
+- Implementation steps
+  - M3-1: Create `io/smiles/fsm_m3.rs`; export in `io/smiles.rs` alongside M2.
+    - Acceptance: module compiles; function signature mirrors M2 parse entry point; gated behind feature/tests only at first.
+  - M3-2: Ring token lexing in FSM
+    - Recognize DIGIT ring indices and `%DD`.
+    - Capture optional preceding bond token and its position.
+    - Acceptance: unit tests for tokenization-only surfaces pass (invalid `%`, out-of-place tokens).
+  - M3-3: Ring open/close state table
+    - Data: `Vec<Option<OpenRing>>` mapping ring index → open entry.
+    - `OpenRing` fields: `atom_id`, `bond_opt`, `pos_open`, `dir_opt`, `aromatic_opt`.
+    - Acceptance: opening stores entry; closing retrieves and clears entry.
+  - M3-4: Close logic and bond precedence
+    - Combine bond types: if both explicit and equal → use it; if both explicit and different → conflict error; if one explicit → use it; if none → infer default (aliphatic single; aromatic `:` when both atoms aromatic).
+    - Directionality across ring: require consistent `/` or `\` on both sides only when part of an E/Z-capable double bond; otherwise error.
+    - Acceptance: targeted unit tests for precedence and directionality pass.
+  - M3-5: Structural validations
+    - Self-loop detection: closing to same `atom_id` → error.
+    - Two-member ring detection: closing to the immediately previous atom in the traversal → error.
+    - Acceptance: unit tests covering `C1C1`, `C1CC1` negative/positive cases.
+  - M3-6: Branch/group interaction
+    - Ring indices can appear before, inside, or after branches/groups.
+    - Ensure branch frames don’t interfere with ring table; `pos` of ring tokens is correct inside groups.
+    - Acceptance: tests like `C1(C)CCC1`, `C1C(=O)NC1` pass.
+  - M3-7: Unclosed rings at EOI (and component boundaries if/when supported)
+    - On parse end, emit `SYN_RING_UNCLOSED` for any still-open ring entries.
+    - Acceptance: tests for single unmatched ring and multiple unmatched rings (report last unmatched by spec policy) pass.
+  - M3-8: Keep M3 as a superset of M2
+    - Reuse M2’s atom/bond/branch error paths unchanged; add ring handling orthogonally.
+    - Acceptance: run full M2 test suite against M3; zero regressions.
+  - M3-9: Valid rings tests (rstest tables)
+    - Aliphatic: `C1CCCCC1`, `C1CCC2CCC1CC2` (fused), `C1CCC2(CC1)CCC2` (spiro), multiple indices on one atom (`...12`).
+    - Aromatic: `c1ccccc1`, `c1ccc2ccccc2c1`, and combinations with explicit `:` vs implicit aromatic bonding.
+    - With bonds: `C1=CC=CC=C1`, `C1/C=C/C=C/C/1`.
+    - With branches: `C1(C)CCC1`, `C1=CC(C)=CC=C1`.
+    - `%DD`: `C%12CCCCC%12`.
+    - Acceptance: expected IR matches builders; aromatic/default bond inference matches spec.
+  - M3-10: Invalid rings tests
+    - Unclosed: `C1CCC`.
+    - Self-loop: `C1C1` where closure hits the same atom.
+    - Two-member: adjacency closure creating a 2-cycle.
+    - Bond conflict: `C=1...C#1`.
+    - Direction conflict: `/` vs `\` on opposite sides or without a double-bond context.
+    - Bad `%` forms: `C%1`, `C%1a`, `C%001` (if disallowed).
+    - Acceptance: precise `pos` (and `open_pos` where applicable) and correct error variants.
+  - M3-11: Builders for test expectations
+    - Ensure `build_ring_c` and `build_two_rings_c` produce the same DFS order as the parser for aliphatic and aromatic cases, including fused and spiro junctions.
+    - Acceptance: no IR ordering mismatches in snapshot tests.
+  - M3-12: Benchmarks in `benches/opensmiles_parsing.rs`
+    - Add groups: simple cycles (C6/C12), fused polycycles, spiro, multi-ring with bonds and branches, aromatic sets.
+    - Compare M3 vs M2 on inputs without rings to catch regressions.
+    - Acceptance: performance within ≤5× lex-with-bonds baseline; record timings.
+  - M3-13: Spec and error registry
+    - `spec/opensmiles-umol.md`: ring tokens, precedence, defaults, aromatic interplay, branch interactions, unclosed ring policy.
+    - `spec/opensmiles-errors.md`: add ring error codes listed above with stable identifiers.
+    - Acceptance: docs updated and consistent with tests.
+  - M3-14: Linter (optional after core lands)
+    - Style: conflicting dual explicit bond on same ring index (warn), normalizing ring index width policy (if desired), heuristics for redundant dual ring indices when a branch would be clearer.
+    - Acceptance: compile and basic snapshots; no parser coupling.
+
+- Out-of-scope for M3 (unless requested)
+  - Extended ring index ranges beyond `%DD`.
+  - SMARTS ring semantics and aromatic model changes.
+  - Kekulization or aromaticity perception beyond what’s needed for bond defaulting at closure.
+
+- Risks and mitigations
+  - Aromatic defaulting: keep rules minimal—only default `:` when both atoms are aromatic and neither side specified a bond.
+  - Directional bond validation: restrict to double-bond contexts to avoid false positives; add narrow tests first.
+  - DFS ordering mismatches: lean on existing builders and snapshot diffs early.
+
+- Revisions
+  - Keep only %DD and lex %DDD as [%DD][D], which is consistent with the OpenSMILES spec. If we want indices > 100, we'll need to use another method. One possibility is %%DDD, %%%DDDD (n % symbols capture n + 1 following digits), another would be to introduce an optional stop symbol. For now, we should just note the current behavior and move on.
+  - For the errors:
+  RING_UNCLOSED, RING_SELF_LOOP, RING_TWO_MEMBER, RING_CONFLICT_DIR already exist in the RING category. Let's keep them
+  Rename RING_CONFLICT_DIR  (exists) -> RING_DIR_CONFLICT, SYN_RING_BOND_CONFLICT -> RING_BOND_CONFLICT
+  Rename LEX_BAD_PERCENT_FORM (exist) -> LEX_RING_INDEX_INVALID
+  Add SYN_LEADING_RING -> LEX_LEADING_RING
+  Leading zeros are allowed in percents, use STYLE_UNNECESSARY_PERCENT_RING_INDEX, STYLE_REUSED_RING_INDICES, STYLE_FIRST_RING_NOT_ONE, STYLE_NONCONSECUTIVE_RING_NUMBERING style lints.
+  Not also that ring index 0 (also %00) is allowed.
+  We'll need to review the categories and naming scheme a bit later. This should suffice for now.
+  - We should try to remove hashing from the ring table, either using a Vec (probably easiest) or an HashMap with identity hash from SwissTable (hashbrown).
+
+### M3 Tasks
+
+1. Add module `io/smiles/fsm_m3.rs` and export the parser entrypoint.
+2. Implement ring lexing: single digits 0–9 and `%DD`; tokenize `%DDD` as `%DD` + `D`.
+3. Emit `LEX_RING_INDEX_INVALID` for bad `%` forms and `LEX_LEADING_RING` for ring tokens without a current atom.
+4. Capture optional preceding bond/dir and precise positions for ring tokens.
+5. Implement ring table as `Vec<Option<OpenRing>>` for indices 0..99 (including 0).
+6. Record ring open state: `atom_id`, `bond_opt`, `dir_opt`, `pos_open`.
+7. Close rings with bond precedence; default aromatic bond only if both atoms aromatic and no explicit bond.
+8. Validate directional markers across ring closures; emit `RING_DIR_CONFLICT` on mismatch.
+9. Detect self-loop and two-member rings; emit `RING_SELF_LOOP` and `RING_TWO_MEMBER`.
+10. Emit `RING_UNCLOSED` at end-of-input for unmatched indices (using `pos_open`).
+11. Ensure M3 is a strict superset of M2; run the full M2 test suite against M3.
+12. Add valid ring tests: aliphatic/aromatic cycles, fused, spiro, with bonds/branches, `%00` and `%DD`.
+13. Add invalid ring tests: unclosed, self-loop, two-member, bond/dir conflicts, bad `%` forms, leading ring.
+14. Update specs: ring tokens, `%DDD` note, index 0 allowed, precedence/dir rules and interactions with groups/branches.

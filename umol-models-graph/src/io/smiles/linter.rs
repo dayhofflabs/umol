@@ -33,8 +33,10 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     registry.register(&rules::GROUP_PARENS_RULE);
     registry.register(&rules::MIXED_AFTER_RULE);
     registry.register(&rules::RING_STYLE_RULE);
+    registry.register(&rules::RING_NUMBERING_RULE);
     registry.register(&rules::RING_ERRORS_RULE);
     registry.register(&rules::BRACKET_RULE);
+    registry.register(&rules::AROM_INCONSISTENT_RULE);
     let engine = LintEngine::new(registry);
     engine.run(&ctx, &mut report);
     report

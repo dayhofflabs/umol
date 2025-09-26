@@ -12,9 +12,9 @@ pub mod style;
 
 pub use bracket::BRACKET_RULE;
 pub use branch::BRANCH_RULE;
-pub use lexical::{DOT_RULES, LEX_ERRORS_RULE, TRAILING_BOND_RULE, WS_RULE};
+pub use lexical::{DOT_RULES, LEX_ERRORS_RULE, TRAILING_BOND_RULE, WS_RULE, AROM_INCONSISTENT_RULE};
 pub use ring::{RING_ERRORS_RULE, RING_STYLE_RULE};
-pub use style::{BOND_STYLE_RULE, GROUP_PARENS_RULE, MIXED_AFTER_RULE, STYLE_PCT_RULE};
+pub use style::{BOND_STYLE_RULE, GROUP_PARENS_RULE, MIXED_AFTER_RULE, STYLE_PCT_RULE, RING_NUMBERING_RULE};
 
 pub struct RuleMeta {
     pub id: &'static str,
