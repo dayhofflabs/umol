@@ -97,6 +97,8 @@ impl Rule for RingErrorsRule {
         let mut unmatched: HashMap<u32, Span> = HashMap::new();
         let mut dirs: HashMap<u32, HashSet<BondKind>> = HashMap::new();
         let mut prev_non_ws_is_dir: Option<BondKind> = None;
+        // Track any explicit non-single order specified immediately before the ring index
+        let mut prev_non_ws_order: Option<BondKind> = None;
 
         let flush_component = |emit: &mut Emitter, unmatched: &mut HashMap<u32, Span>| {
             for (_idx, span) in unmatched.drain() {
@@ -123,10 +125,21 @@ impl Rule for RingErrorsRule {
                         BondKind::Up | BondKind::Down => Some(*kind),
                         _ => None,
                     };
+                    prev_non_ws_order = match kind {
+                        BondKind::Single => None,
+                        BondKind::Double | BondKind::Triple | BondKind::Quadruple | BondKind::Aromatic => Some(*kind),
+                        _ => prev_non_ws_order,
+                    };
                 }
                 Segment::RingClosure { index, span } => {
                     if unmatched.remove(index).is_none() {
                         unmatched.insert(*index, *span);
+                        // Record any order on the opening side
+                        if let Some(order) = prev_non_ws_order.take() {
+                            let set = dirs.entry(*index).or_default();
+                            // abuse dirs map to carry order kinds as well (no conflict with Up/Down checks below)
+                            set.insert(order);
+                        }
                     }
                     if let Some(dir) = prev_non_ws_is_dir {
                         let set = dirs.entry(*index).or_default();
@@ -142,10 +155,37 @@ impl Rule for RingErrorsRule {
                             });
                         }
                     }
+                    // Order conflict: if open had explicit non-single order and now we see a different one
+                    if let Some(close_order) = prev_non_ws_order.take() {
+                        let set = dirs.entry(*index).or_default();
+                        // Check if an explicit non-single order already recorded differs from this one
+                        let has_diff_order = set.iter().any(|k| match (k, close_order) {
+                            (BondKind::Double, BondKind::Double)
+                            | (BondKind::Triple, BondKind::Triple)
+                            | (BondKind::Quadruple, BondKind::Quadruple)
+                            | (BondKind::Aromatic, BondKind::Aromatic) => false,
+                            (BondKind::Up | BondKind::Down | BondKind::Single, _) => false,
+                            _ => true,
+                        });
+                        if has_diff_order {
+                            emit.candidate(DiagnosticCandidate {
+                                code: Code("RING_BOND_ORDER_CONFLICT"),
+                                category: Category::Ring,
+                                severity: Severity::Error,
+                                span: *span,
+                                message: "Ring endpoints specify conflicting bond orders",
+                                scope: Scope::Global,
+                            });
+                        } else {
+                            set.insert(close_order);
+                        }
+                    }
                     prev_non_ws_is_dir = None;
+                    prev_non_ws_order = None;
                 }
                 _ => {
                     prev_non_ws_is_dir = None;
+                    prev_non_ws_order = None;
                 }
             }
         }

@@ -8,7 +8,7 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use umol_models_graph::io::smiles::{
-    parse_smiles_m0, parse_smiles_m1, parse_smiles_m2, parse_smiles_m3,
+    parse_smiles_m0, parse_smiles_m1, parse_smiles_m2, parse_smiles_m3, parse_smiles_m4,
 };
 
 fn opensmiles_parsing(c: &mut Criterion) {
@@ -313,6 +313,30 @@ fn opensmiles_parsing(c: &mut Criterion) {
         });
     }
     group_m3_stereo.finish();
+
+    // M4: components
+    let component_inputs = [
+        ("two", &b"CC.CC"[..]),
+        ("three", &b"C.C.C"[..]),
+        ("grouped", &b"C(C).C(C)"[..]),
+        ("rings_across_digit", &b"C1.CC1"[..]),
+        ("rings_across_pct", &b"C%12.CC%12"[..]),
+        ("stereo_up", &b"C/1.CC/1"[..]),
+        ("stereo_down", &b"C\\1.CC\\1"[..]),
+        ("stereo_up_pct", &b"C/%12.CC/%12"[..]),
+        ("stereo_down_pct", &b"C\\%12.CC\\%12"[..]),
+    ];
+    let mut group_m4_components = c.benchmark_group("opensmiles_parsing/parse_m4_components");
+    for (name, s) in component_inputs.iter() {
+        group_m4_components.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m4(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m4_components.finish();
 }
 
 criterion_group!(benches, opensmiles_parsing);

@@ -2,14 +2,14 @@
 
 use proptest::prelude::*;
 use proptest::sample::select;
-use umol_models_graph::io::smiles::parse_smiles_m3;
+use umol_models_graph::io::smiles::{parse_smiles_m3, parse_smiles_m4};
 use umol_models_graph::io::smiles::M3Error;
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".
 fn smilesish() -> impl Strategy<Value = Vec<u8>> {
-    // Common SMILES characters: letters, digits, bonds, ring, parens, brackets, slash/backslash, percent
-    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-=#$:/\\()%[]";
+    // Common SMILES characters: letters, digits, bonds, ring, parens, brackets, slash/backslash, percent, dot
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-=#$:/\\().%[]";
     proptest::collection::vec(select(ALPHABET.to_vec()), 0..256)
 }
 
@@ -68,6 +68,31 @@ proptest! {
                 prop_assert!(sa != ea, "self-loop bond unexpectedly present");
             }
         }
+    }
+}
+
+proptest! {
+    // M4 must be a strict superset of M3: for inputs without '.', results match
+    #[test]
+    fn m4_matches_m3_without_dot(input in smilesish()) {
+        prop_assume!(!input.contains(&b'.'));
+        let r3 = parse_smiles_m3(&input);
+        let r4 = parse_smiles_m4(&input);
+        match (r3, r4) {
+            (Ok(a), Ok(b)) => prop_assert_eq!(a, b),
+            (Err(e1), Err(e2)) => prop_assert_eq!(format!("{:?}", e1), format!("{:?}", e2)),
+            (l, r) => panic!("M3/M4 diverged for {:?}: {:?} vs {:?}", input, l, r),
+        }
+    }
+}
+
+proptest! {
+    // Crash-only: M4 should never panic on arbitrary ASCII (with dots) up to length 256
+    #[test]
+    fn m4_never_panics_on_ascii(input in smilesish()) {
+        let _ = std::panic::catch_unwind(|| {
+            let _ = parse_smiles_m4(&input);
+        }).expect("parse_smiles_m4 panicked");
     }
 }
 

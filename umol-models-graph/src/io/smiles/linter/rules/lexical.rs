@@ -27,11 +27,11 @@ impl Rule for LexErrorsRule {
                 let slice = &ctx.input[span.start..span.end];
                 if slice == "%" {
                     emit.candidate(DiagnosticCandidate {
-                        code: Code("LEX_BAD_PERCENT_FORM"),
+                        code: Code("LEX_RING_INDEX_INVALID"),
                         category: Category::Lex,
                         severity: Severity::Error,
                         span: Span::new(span.start, span.end),
-                        message: "'%' not followed by two digits",
+                        message: "Percent ring index must be exactly two digits",
                         scope: Scope::Global,
                     });
                 } else {
