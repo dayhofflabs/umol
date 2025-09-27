@@ -349,3 +349,20 @@ If that sounds good, I’ll set up cargo-fuzz with:
 - Target: parse_smiles_m3(bytes) with size cap, no panics allowed.
 - Seeds: ring-heavy, stereo, percent, bracket samples from tests.
 - Dictionary: core bond/direction/ring tokens.
+
+### M4 Tasks
+
+1. Create `fsm_m4.rs` with `parse_smiles_m4` as a strict superset of M3.
+2. Implement '.' as component separator; reset adjacency while preserving open rings.
+3. Allow ring closures across components (indices can open in one component and close in another).
+4. Run full M3 test suite against `parse_smiles_m4`.
+5. Add valid component tests: simple `CC.CC`, branched `C(C).C(C)`, mixed aromatic/aliphatic, multiple dots.
+6. Add invalid tests: leading dot `.C`, trailing dot `C.`, consecutive dots `C..C`, dot before ring `C.%12` and `C.1` (invalid), direction/bond immediately after dot `C.-C` (invalid).
+7. Add ring-across-components tests: `C1.CC1`, `C%12.CC%12`, stereo `C/1.CC/1`, mixed open/close orders where allowed by M3 rules.
+8. Add ring stereo across components tests for up/down consistency.
+9. Linter: map dot-related diagnostics (e.g., `LEX_DOT_BEFORE_RING`, `LEX_CONSECUTIVE_DOTS`, `LEX_LEADING_DOT`, `LEX_TRAILING_DOT`) and ensure pass-through.
+10. Update `opensmiles-errors.md` with component diagnostics definitions and spans.
+11. Update `opensmiles-umol.md` with M4 semantics: component separation, ring persistence across components, constraints.
+12. Add Criterion benches targeting component-heavy inputs.
+13. Proptest: extend ASCII alphabet to include '.', ensure no panics.
+14. Fuzz: add '.' to dictionary and seed corpus.
