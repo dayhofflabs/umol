@@ -97,6 +97,13 @@ A ring index is either a single digit in the range 0–9 or a percent form in th
 
 When both sides of a ring closure specify a bond direction and they differ, the input is rejected. When directions do not conflict, the closing-side specification takes precedence; otherwise the opening-side specification applies. Consecutive bond tokens without an intervening atom or ring index are invalid, and a trailing bond token at end‑of‑input is invalid.
 
+Ring bond order semantics:
+
+- If both endpoints of a ring closure specify a bond order and they differ, the input is rejected (RING_BOND_ORDER_CONFLICT).
+- If exactly one endpoint specifies a non‑single order, the input is valid; the specified order applies to the ring bond. If both endpoints specify orders, they MUST be the same or the input is rejected (RING_BOND_ORDER_CONFLICT).
+- A ring bond with a non‑single order must not carry a direction marker; such combinations are rejected (RING_BOND_ORDER_CONFLICT).
+- Error position convention: report at the closing ring index token (for single‑digit rings, the digit; for percent rings, the '%').
+
 ### Aromaticity
 
 Lowercase aromatic atom tokens designate aromatic atoms. The '*' token may appear adjacent to or within aromatic systems; its presence does not by itself imply aromaticity. An explicit ':' always produces an aromatic bond without altering atom aromaticity. When a bond is implicit and both adjacent atoms are aromatic, the bond order defaults to aromatic; otherwise the implicit default is single. This defaulting applies during chain growth and ring closure.

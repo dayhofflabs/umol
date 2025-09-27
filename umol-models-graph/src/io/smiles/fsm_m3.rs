@@ -16,7 +16,8 @@ pub enum M3Error {
     LeadingBond { pos: usize },
     RingIndexInvalid { pos: usize },
     LeadingRing { pos: usize },
-    RingDirConflict { pos: usize, open_pos: usize },
+    RingBondDirConflict { pos: usize, open_pos: usize },
+    RingBondOrderConflict { pos: usize, open_pos: usize },
     RingSelfLoop { pos: usize },
     RingTwoMember { pos: usize },
     RingUnclosed { open_pos: usize },
@@ -183,7 +184,27 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                     }
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(M3Error::RingDirConflict {
+                            return Err(M3Error::RingBondDirConflict {
+                                pos: i,
+                                open_pos: open.open_pos,
+                            });
+                        }
+                    }
+                    // Bond order conflict handling for ring closure
+                    // If both sides specified an order and they differ -> conflict
+                    if let (Some(o1), Some(o2)) = (open.order, order_opt) {
+                        if o1 != o2 {
+                            return Err(M3Error::RingBondOrderConflict {
+                                pos: i,
+                                open_pos: open.open_pos,
+                            });
+                        }
+                    }
+                    // Direction in combination with non-single order on the ring bond is unsupported
+                    if open.dir.is_some() || dir_opt.is_some() {
+                        let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
+                        if ord != BondOrder::Single {
+                            return Err(M3Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -255,7 +276,27 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                     }
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(M3Error::RingDirConflict {
+                            return Err(M3Error::RingBondDirConflict {
+                                pos: i,
+                                open_pos: open.open_pos,
+                            });
+                        }
+                    }
+                    // Bond order conflict handling for ring closure (%NN form)
+                    // If both sides specified an order and they differ -> conflict
+                    if let (Some(o1), Some(o2)) = (open.order, order_opt) {
+                        if o1 != o2 {
+                            return Err(M3Error::RingBondOrderConflict {
+                                pos: i,
+                                open_pos: open.open_pos,
+                            });
+                        }
+                    }
+                    // Direction in combination with non-single order on the ring bond is unsupported
+                    if open.dir.is_some() || dir_opt.is_some() {
+                        let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
+                        if ord != BondOrder::Single {
+                            return Err(M3Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -317,18 +358,8 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                     if let Some((order, dir, _pos)) = pending_bond.take() {
                         builder.on_bond(last, curr, BondData { order, dir });
                     } else {
-                        if last_aromatic {
-                            builder.on_bond(
-                                last,
-                                curr,
-                                BondData {
-                                    order: BondOrder::Aromatic,
-                                    dir: None,
-                                },
-                            );
-                        } else {
-                            builder.on_bond_single_fast(last, curr);
-                        }
+                        // Implicit bond to non-aromatic atom is single regardless of last_aromatic
+                        builder.on_bond_single_fast(last, curr);
                     }
                 }
                 last_atom_idx = Some(curr);
@@ -349,18 +380,8 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                 if let Some((order, dir, _pos)) = pending_bond.take() {
                     builder.on_bond(last, curr, BondData { order, dir });
                 } else {
-                    if last_aromatic {
-                        builder.on_bond(
-                            last,
-                            curr,
-                            BondData {
-                                order: BondOrder::Aromatic,
-                                dir: None,
-                            },
-                        );
-                    } else {
-                        builder.on_bond_single_fast(last, curr);
-                    }
+                    // Implicit bond to non-aromatic atom is single regardless of last_aromatic
+                    builder.on_bond_single_fast(last, curr);
                 }
                 prev_atom_idx = Some(last);
             }
@@ -383,18 +404,8 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                     if let Some((order, dir, _pos)) = pending_bond.take() {
                         builder.on_bond(last, curr, BondData { order, dir });
                     } else {
-                        if last_aromatic {
-                            builder.on_bond(
-                                last,
-                                curr,
-                                BondData {
-                                    order: BondOrder::Aromatic,
-                                    dir: None,
-                                },
-                            );
-                        } else {
-                            builder.on_bond_single_fast(last, curr);
-                        }
+                        // Implicit bond to non-aromatic atom is single regardless of last_aromatic
+                        builder.on_bond_single_fast(last, curr);
                     }
                 }
                 last_atom_idx = Some(curr);
@@ -415,18 +426,8 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                 if let Some((order, dir, _pos)) = pending_bond.take() {
                     builder.on_bond(last, curr, BondData { order, dir });
                 } else {
-                    if last_aromatic {
-                        builder.on_bond(
-                            last,
-                            curr,
-                            BondData {
-                                order: BondOrder::Aromatic,
-                                dir: None,
-                            },
-                        );
-                    } else {
-                        builder.on_bond_single_fast(last, curr);
-                    }
+                    // Implicit bond to non-aromatic atom is single regardless of last_aromatic
+                    builder.on_bond_single_fast(last, curr);
                 }
                 prev_atom_idx = Some(last);
             }
@@ -459,18 +460,8 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                 if let Some((order, dir, _pos)) = pending_bond.take() {
                     builder.on_bond(last, curr, BondData { order, dir });
                 } else {
-                    if last_aromatic {
-                        builder.on_bond(
-                            last,
-                            curr,
-                            BondData {
-                                order: BondOrder::Aromatic,
-                                dir: None,
-                            },
-                        );
-                    } else {
-                        builder.on_bond_single_fast(last, curr);
-                    }
+                    // Implicit bond to non-aromatic atom is single regardless of last_aromatic
+                    builder.on_bond_single_fast(last, curr);
                 }
                 prev_atom_idx = Some(last);
             }
@@ -573,14 +564,12 @@ mod tests {
     use super::*;
     use crate::io::smiles::test_support::build_from_graph;
 
+    #[rustfmt::skip]
     #[rstest]
     #[case::empty(b"", Molecule::default())]
     #[case::chain_c_1(b"C", build_from_graph("C |"))]
     #[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
-    #[case::aromatic_c_6(
-        b"cccccc",
-        build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5:")
-    )]
+    #[case::aromatic_c_6(b"cccccc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5:"))]
     #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C Cl O Br N | 0-1 1-2 2-3 3-4"))]
     fn m3_chain(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m3(input);
@@ -589,6 +578,7 @@ mod tests {
         assert_eq!(mol, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
     #[case::empty_group(b"()", Molecule::default())]
     #[case::group_c_1(b"(C)", build_from_graph("C |"))]
@@ -597,10 +587,7 @@ mod tests {
     #[case::group_nested(b"((CC))", build_from_graph("C C | 0-1"))]
     #[case::branch_c_111(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
     #[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
-    #[case::branch_c_222_aromatic(
-        b"cc(cc)cc",
-        build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4: 4-5:")
-    )]
+    #[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4: 4-5:"))]
     #[case::trailing_branch(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
     fn m3_tree(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m3(input);
@@ -617,19 +604,27 @@ mod tests {
     #[case::ring_index_0(b"C0CC0", build_from_graph("C C C | 0-1 1-2 0-2"))]
     #[case::ring_index_percent(b"C%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2"))]
     #[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
+    #[case::two_rings_bonded_0_aromatic(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
+    #[case::two_rings_bonded_0_aromatic_1(b"c1cc1C2CC2", build_from_graph("C* C* C* C C C | 0-1: 1-2: 0-2: 2-3 3-4 4-5 3-5"))]
     #[case::two_rings_index_reused(b"C1CC1C1CC1", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
     #[case::two_rings_bonded_2(b"C1CC1CCC2CC2", build_from_graph("C C C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 5-6 6-7 5-7"))]
-    #[case::two_rings_bonded_0_aromatic(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
     #[case::two_rings_spiro(b"C1CC12CC2", build_from_graph("C C C C C | 0-1 1-2 0-2 2-3 3-4 2-4"))]
+    #[case::two_rings_fused(b"C12CC1C2", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 0-3"))]
+    #[case::two_rings_bridged(b"C12CC(C2)C1", build_from_graph("C C C C C | 0-1 1-2 2-3 0-3 2-4 0-4"))]
+    #[case::two_rings_fused_aromatic(b"c12ccccc1cccc2", build_from_graph("C* C* C* C* C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5: 5-6: 6-7: 7-8: 8-9: 0-9:"))]
+    #[case::three_rings_fused(b"C12C3C1C32", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 1-3 0-3"))]
     #[case::ring_group(b"(C1CC1)", build_from_graph("C C C | 0-1 1-2 0-2"))]
-    #[case::substituted_ring_c_3_1(b"C1(C)CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
-    #[case::substituted_ring_c_3_1(b"C(C)1CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
-    #[case::substituted_ring_c_3_2(b"C1C(C)C1", build_from_graph("C C C C | 0-1 1-2 1-3 0-3"))]
-    #[case::substituted_ring_c_3_3(b"C1CC(C)1", build_from_graph("C C C C | 0-1 1-2 2-3 0-2"))]
-    #[case::substituted_ring_c_3_aromatic(b"c1c(c)c1", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3: 0-3:"))]
-    #[case::cc1cc1(b"CC1CC1", build_from_graph("C C C C | 0-1 1-2 2-3 1-3"))]
-    #[case::c1cc1c(b"C1CC1C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
-    #[case::nested_ring_branch(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
+    #[case::ring_branch_1(b"CC(C1)(C1)", build_from_graph("C C C C | 0-1 1-2 1-3 2-3"))]
+    #[case::ring_branch_2(b"C(C1)CC1", build_from_graph("C C C C | 0-1 0-2 2-3 1-3 "))]
+    #[case::substituted_ring_1(b"CC1CC1", build_from_graph("C C C C | 0-1 1-2 2-3 1-3"))]
+    #[case::substituted_ring_2(b"C1(C)CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
+    #[case::substituted_ring_3(b"C(C)1CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
+    #[case::substituted_ring_4(b"C1C(C)C1", build_from_graph("C C C C | 0-1 1-2 1-3 0-3"))]
+    #[case::substituted_ring_5(b"C1CC(C)1", build_from_graph("C C C C | 0-1 1-2 2-3 0-2"))]
+    #[case::substituted_ring_6(b"C1CC1C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
+    #[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
+    #[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3: 0-3:"))]
+    #[case::substituted_ring_branch_1(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
     fn m3_ring(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m3(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -653,9 +648,16 @@ mod tests {
     #[case::aromatic_bond_aromatic(b"c:c", build_from_graph("C* C* | 0-1::"))]
     #[case::up_bond_aromatic(b"c/c", build_from_graph("C* C* | 0-1:/"))]
     #[case::down_bond_aromatic(b"c\\c", build_from_graph("C* C* | 0-1:\\"))]
+    #[case::cumulated_bonds(b"C=C=C", build_from_graph("C C C | 0-1:= 1-2:="))]
+    #[case::conjugated_bonds(b"C=CC=C", build_from_graph("C C C C | 0-1:= 1-2:- 2-3:="))]
+    #[case::cumulated_bonds_aromatic(b"c=c=c", build_from_graph("C* C* C* | 0-1:= 1-2:="))]
+    #[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C* C* C* C* | 0-1:= 1-2:- 2-3:="))]
     #[case::branch_leading_bond(b"CC(-C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::branch_leading_double_bond(b"CC(=C)C", build_from_graph("C C C C | 0-1 1-2:= 1-3"))]
     #[case::branch_internal_bond(b"CC(C-C)C", build_from_graph("C C C C C | 0-1 1-2 2-3 1-4"))]
+    #[case::branch_internal_double_bond(b"CC(C=C)C", build_from_graph("C C C C C | 0-1 1-2 2-3:= 1-4"))]
     #[case::branch_followed_by_bond(b"CC(C)-C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::branch_followed_by_double_bond(b"CC(C)=C", build_from_graph("C C C C | 0-1 1-2 1-3:="))]
     #[case::branch_leading_bond_aromatic(b"cc(:c)c", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3:"))]
     #[case::branch_internal_bond_aromatic(b"cc(c:c)c", build_from_graph("C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4:"))]
     #[case::branch_followed_by_bond_aromatic(b"cc(c):c", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3:"))]
@@ -663,10 +665,25 @@ mod tests {
     #[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:\\"))]
     #[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:/"))]
     #[case::branch_cis_double_bond_2(b"C/C=C\\C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:\\"))]
-    #[case::cumulated_bonds(b"C=C=C", build_from_graph("C C C | 0-1:= 1-2:="))]
-    #[case::conjugated_bonds(b"C=CC=C", build_from_graph("C C C C | 0-1:= 1-2:- 2-3:="))]
-    #[case::cumulated_bonds_aromatic(b"c=c=c", build_from_graph("C* C* C* | 0-1:= 1-2:="))]
-    #[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C* C* C* C* | 0-1:= 1-2:- 2-3:="))]
+    #[case::ring_single_bond(b"C-1-C-C-1", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_double_bond_1(b"C1-C=C1", build_from_graph("C C C | 0-1 1-2:= 0-2"))]
+    #[case::ring_double_bond_2(b"C1-CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_3(b"C=1-CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_4(b"C=1-C-C=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_unilateral_close(b"C1CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_unilateral_open(b"C=1CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_triple_bond(b"C1-C-C#1", build_from_graph("C C C | 0-1 1-2 0-2:#"))]
+    #[case::ring_quadruple_bond(b"C1-C-C$1", build_from_graph("C C C | 0-1 1-2 0-2:$"))]
+    #[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C* C* C* | 0-1: 1-2: 0-2:"))]
+    #[case::ring_up_bond_1(b"C1CC/1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_up_bond_2(b"C/1CC1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_up_bond_3(b"C/1CC/1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_down_bond(b"C1CC\\1", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
+    #[case::ring_down_bond_both(b"C\\1CC\\1", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
+    #[case::ring_up_bond_percent_open(b"C/%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_up_bond_percent_close(b"C%12CC/%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_down_bond_percent_both(b"C\\%12CC\\%12", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
+    #[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
     fn m3_bonds(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m3(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -679,10 +696,20 @@ mod tests {
     #[case::bad_percent_short(b"C%1", M3Error::RingIndexInvalid { pos: 1 })]
     #[case::bad_percent_char(b"C%1a", M3Error::RingIndexInvalid { pos: 1 })]
     #[case::bad_percent_eoi(b"C%", M3Error::RingIndexInvalid { pos: 1 })]
-    #[case::self_loop(b"C11", M3Error::RingSelfLoop { pos: 2 })]
-    #[case::two_member(b"C1C1", M3Error::RingTwoMember { pos: 3 })]
-    #[case::dir_conflict(b"C/1CC\\1", M3Error::RingDirConflict { pos: 6, open_pos: 2 })]
-    #[case::unclosed(b"C1CC", M3Error::RingUnclosed { open_pos: 1 })]
+    #[case::ring_self_loop(b"C11", M3Error::RingSelfLoop { pos: 2 })]
+    #[case::ring_two_member(b"C1C1", M3Error::RingTwoMember { pos: 3 })]
+    #[case::ring_bond_order_conflict_3(b"C=1CC#1", M3Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_4(b"C/1CC=1", M3Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_5(b"C\\1CC=1", M3Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_6(b"C=1CC/1", M3Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_7(b"C=1CC\\1", M3Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_8(b"C=%10CC#%10", M3Error::RingBondOrderConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_1(b"C/1CC\\1", M3Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_2(b"C\\1CC/1", M3Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", M3Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", M3Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_unclosed_1(b"C1CC", M3Error::RingUnclosed { open_pos: 1 })]
+    #[case::ring_unclosed_2(b"C1CC1C1", M3Error::RingUnclosed { open_pos: 6 })]
     #[case::component(b"CC.CC", M3Error::UnsupportedToken { pos: 2 })]
     #[case::unbalanced_closing_paren_1(b")C", M3Error::UnbalancedBranchClose { pos: 0 })]
     #[case::unbalanced_closing_paren_2(b"C)C", M3Error::UnbalancedBranchClose { pos: 1 })]
@@ -703,22 +730,26 @@ mod tests {
     #[case::trailing_stereo_bond_1(b"C/", M3Error::TrailingBond { pos: 1 })]
     #[case::trailing_stereo_bond_2(b"C\\", M3Error::TrailingBond { pos: 1 })]
     #[case::trailing_aromatic_bond(b"C:", M3Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond(b"C(C-)C", M3Error::TrailingBond { pos: 3 })]
-    #[case::trailing_stereo_bond(b"CC(C/)CC", M3Error::TrailingBond { pos: 4 })]
-    #[case::group_trailing_bond(b"(C-)", M3Error::TrailingBond { pos: 2 })]
+    #[case::branch_trailing_bond_1(b"C(C-)C", M3Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_bond_2(b"C(C=)C", M3Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_stereo_bond(b"CC(C/)CC", M3Error::TrailingBond { pos: 4 })]
+    #[case::group_trailing_bond_1(b"(C-)", M3Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_bond_2(b"(C=)", M3Error::TrailingBond { pos: 2 })]
     #[case::group_trailing_stereo_bond(b"(C/)", M3Error::TrailingBond { pos: 2 })]
-    #[case::bond_after_group(b"(C)-", M3Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::bond_after_group_1(b"(C)-", M3Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::bond_after_group_2(b"(C)=", M3Error::TopLevelGroupTrailing { pos: 2 })]
     #[case::group_after_group_1(b"(C)(C)", M3Error::TopLevelGroupTrailing { pos: 2 })]
     #[case::group_after_group_2(b"(c)(c)", M3Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::ring_after_group(b"(C1CCC)1", M3Error::TopLevelGroupTrailing { pos : 6})]
     #[case::consecutive_bonds_1(b"C--C", M3Error::ConsecutiveBond { pos: 2 })]
     #[case::consecutive_bonds_2(b"C-=C", M3Error::ConsecutiveBond { pos: 2 })]
     #[case::consecutive_bonds_3(b"C-#C", M3Error::ConsecutiveBond { pos: 2 })]
     #[case::consecutive_bonds_4(b"C-$C", M3Error::ConsecutiveBond { pos: 2 })]
     #[case::consecutive_bonds_5(b"C-:C", M3Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_sterebonds_1(b"C//C", M3Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_sterebonds_2(b"C\\\\C", M3Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bond_and_sterebond_1(b"C-/C", M3Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bond_and_sterebond_2(b"C=\\C", M3Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_1(b"C//C", M3Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_2(b"C\\\\C", M3Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_1(b"C-/C", M3Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_2(b"C=\\C", M3Error::ConsecutiveBond { pos: 2 })]
     #[case::leading_bond_1(b"-C", M3Error::LeadingBond { pos: 0 })]
     #[case::leading_bond_2(b"=C", M3Error::LeadingBond { pos: 0 })]
     #[case::leading_bond_3(b"#C", M3Error::LeadingBond { pos: 0 })]

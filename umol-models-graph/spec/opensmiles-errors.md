@@ -38,7 +38,8 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - GRP_LEADING_CONNECTOR (BRANCH, Error): group begins with a connector (bond or dot); groups must start with an atom or '('
 
 - RING_UNCLOSED (RING, Error): ring index opened but not closed by end of component/molecule
-- RING_DIR_CONFLICT (RING, Error): conflicting up/down directions on the same ring closure
+- RING_BOND_DIR_CONFLICT (RING, Error): conflicting up/down bond directions on the same ring closure
+- RING_BOND_ORDER_CONFLICT (RING, Error): explicit bond orders on the two endpoints of a ring closure differ
 - RING_SELF_LOOP (RING, Error): ring closure creates a self-loop
 - RING_TWO_MEMBER (RING, Error): ring closure creates a two‑member ring
 
