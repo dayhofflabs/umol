@@ -7,7 +7,9 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
-use umol_models_graph::io::smiles::{parse_smiles_m0, parse_smiles_m1, parse_smiles_m2, parse_smiles_m3};
+use umol_models_graph::io::smiles::{
+    parse_smiles_m0, parse_smiles_m1, parse_smiles_m2, parse_smiles_m3,
+};
 
 fn opensmiles_parsing(c: &mut Criterion) {
     // Mixed elements chain (organic-only mix omitting bare H)
@@ -106,6 +108,35 @@ fn opensmiles_parsing(c: &mut Criterion) {
         ("c_10_9", &b"(C=C=C=C=C=C=C=C=C=C)"[..]),
         ("c_50", &b"C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)"[..]),
         ("c_100", &b"C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)C(=C)"[..]),
+    ];
+
+    // Ring corpus, simple cycles
+    let ring_cycles_inputs = [
+        ("c3", &b"C1CC1"[..]),
+        ("c4", &b"C1CCC1"[..]),
+        ("c5", &b"C1CCCC1"[..]),
+        ("c6", &b"C1CCCCC1"[..]),
+        ("c8", &b"C1CCCCCCC1"[..]),
+        ("pct12", &b"C%12CCCC%12"[..]),
+    ];
+
+    // Ring corpus, fused and spiro examples
+    let ring_fused_spiro_inputs = [
+        ("fused_1", &b"C1CC2CCCCC2CC1"[..]),
+        ("fused_2", &b"C1CCC2CCCC2CC1"[..]),
+        ("spiro_1", &b"C1CCC2(CC1)CCC2"[..]),
+        ("spiro_2", &b"C1CC2(C1)CC2C"[..]),
+    ];
+
+    // Ring corpus, directed closures and percent indices
+    let ring_stereo_inputs = [
+        ("dir_up_open", &b"C/1CC1"[..]),
+        ("dir_up_close", &b"C1CC/1"[..]),
+        ("dir_up_both", &b"C/1CC/1"[..]),
+        ("dir_down_both", &b"C\\1CC\\1"[..]),
+        ("pct_dir_up_open", &b"C/%12CC%12"[..]),
+        ("pct_dir_up_close", &b"C%12CC/%12"[..]),
+        ("pct_dir_down_both", &b"C\\%12CC\\%12"[..]),
     ];
 
     // // Lex-only baseline
@@ -247,15 +278,6 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_m2_tree_bonds.finish();
 
-    // FSM M3 rings: simple cycles
-    let ring_cycles_inputs = [
-        ("c3", &b"C1CC1"[..]),
-        ("c4", &b"C1CCC1"[..]),
-        ("c5", &b"C1CCCC1"[..]),
-        ("c6", &b"C1CCCCC1"[..]),
-        ("c8", &b"C1CCCCCCC1"[..]),
-        ("pct12", &b"C%12CCCC%12"[..]),
-    ];
     let mut group_m3_cycles = c.benchmark_group("opensmiles_parsing/parse_m3_cycles");
     for (name, s) in ring_cycles_inputs.iter() {
         group_m3_cycles.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -268,13 +290,6 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_m3_cycles.finish();
 
-    // FSM M3 rings: fused and spiro examples
-    let ring_fused_spiro_inputs = [
-        ("fused_1", &b"C1CC2CCCCC2CC1"[..]),
-        ("fused_2", &b"C1CCC2CCCC2CC1"[..]),
-        ("spiro_1", &b"C1CCC2(CC1)CCC2"[..]),
-        ("spiro_2", &b"C1CC2(C1)CC2C"[..]),
-    ];
     let mut group_m3_fused = c.benchmark_group("opensmiles_parsing/parse_m3_fused_spiro");
     for (name, s) in ring_fused_spiro_inputs.iter() {
         group_m3_fused.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -286,6 +301,18 @@ fn opensmiles_parsing(c: &mut Criterion) {
         });
     }
     group_m3_fused.finish();
+
+    let mut group_m3_stereo = c.benchmark_group("opensmiles_parsing/parse_m3_ring_stereo");
+    for (name, s) in ring_stereo_inputs.iter() {
+        group_m3_stereo.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m3(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m3_stereo.finish();
 }
 
 criterion_group!(benches, opensmiles_parsing);

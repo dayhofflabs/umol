@@ -9,7 +9,7 @@ fn codes(report: &DiagnosticsReport) -> Vec<&'static str> {
 }
 
 #[rstest]
-#[case("C%0", &["LEX_BAD_PERCENT_FORM"])]
+#[case("C%0", &["LEX_RING_INDEX_INVALID"])]
 #[case("C-", &["LEX_TRAILING_BOND"])]
 #[case("C.1", &["LEX_DOT_BEFORE_RING"])]
 #[case("[C", &["BRKT_UNCLOSED"])]
@@ -34,7 +34,7 @@ fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
 #[case("[HH]", &["BRKT_H_ON_H"])]
 #[case("[HH1]", &["BRKT_H_ON_H"])]
 #[case("[C:-1]", &["NUM_CLASS_NEGATIVE"])]
-#[case("%", &["LEX_BAD_PERCENT_FORM"])]
+#[case("%", &["LEX_RING_INDEX_INVALID"])]
 #[case("%1x", &["LEX_INVALID_TOKEN"])]
 #[case("]", &["BRKT_UNEXPECTED_CLOSE"])]
 #[case("@", &["BRKT_FIELD_OUTSIDE"])]
@@ -65,7 +65,8 @@ fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
 #[rstest]
 #[case("C1C", &["RING_UNCLOSED"])]
 #[case("C11", &["RING_SELF_LOOP"])]
-#[case("C/1CC\\1", &["RING_CONFLICT_DIR"])]
+#[case("C/1CC\\1", &["RING_BOND_DIR_CONFLICT"])]
+#[case("C=1CC#1", &["RING_BOND_ORDER_CONFLICT"])]
 #[case("C1.C", &["RING_UNCLOSED"])]
 fn test_ring_errors(#[case] input: &str, #[case] expected_any: &[&str]) {
     let r = lint_smiles_parse(input);

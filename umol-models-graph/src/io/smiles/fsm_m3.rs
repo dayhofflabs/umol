@@ -73,7 +73,7 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
     let mut last_aromatic: bool = false;
 
     let mut pstack: Vec<Frame> = Vec::new();
-    let mut ring_table: Vec<Option<OpenRing>> = vec![None; 100]; // indices 0..99
+    let mut ring_table: [Option<OpenRing>; 100] = [None; 100]; // indices 0..99
     let mut just_closed_group: bool = false;
 
     while i < n {
@@ -158,15 +158,12 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                 return Err(M3Error::LeadingRing { pos: i });
             }
             let idx: usize = (b0 - b'0') as usize;
-            if idx >= ring_table.len() {
-                // Should not happen, but guard
-                return Err(M3Error::RingIndexInvalid { pos: i });
-            }
             let bond = pending_bond.take();
             let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
-            match ring_table[idx] {
+            let entry = &mut ring_table[idx];
+            match entry.take() {
                 None => {
-                    ring_table[idx] = Some(OpenRing {
+                    *entry = Some(OpenRing {
                         atom_id: last_atom_idx.unwrap(),
                         order: order_opt,
                         dir: dir_opt,
@@ -237,7 +234,6 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                             },
                         );
                     }
-                    ring_table[idx] = None;
                 }
             }
             i += 1;
@@ -251,14 +247,12 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                 return Err(M3Error::LeadingRing { pos: i });
             }
             let idx: usize = ((input[i + 1] - b'0') as usize) * 10 + (input[i + 2] - b'0') as usize;
-            if idx >= ring_table.len() {
-                return Err(M3Error::RingIndexInvalid { pos: i });
-            }
             let bond = pending_bond.take();
             let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
-            match ring_table[idx] {
+            let entry = &mut ring_table[idx];
+            match entry.take() {
                 None => {
-                    ring_table[idx] = Some(OpenRing {
+                    *entry = Some(OpenRing {
                         atom_id: last_atom_idx.unwrap(),
                         order: order_opt,
                         dir: dir_opt,
@@ -329,7 +323,6 @@ pub fn parse_smiles_m3(input: &[u8]) -> Result<Molecule, M3Error> {
                             },
                         );
                     }
-                    ring_table[idx] = None;
                 }
             }
             i += 3; // %DD consumed; %DDD will naturally see D next
@@ -603,6 +596,10 @@ mod tests {
     #[case::ring_aromatic_c_6(b"c1ccccc1", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5:"))]
     #[case::ring_index_0(b"C0CC0", build_from_graph("C C C | 0-1 1-2 0-2"))]
     #[case::ring_index_percent(b"C%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_numeric_equiv_1(b"C1CC%01", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_numeric_equiv_0(b"C0CC%00", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_numeric_equiv_9(b"C9CC%09", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_max_percent(b"C%99CC%99", build_from_graph("C C C | 0-1 1-2 0-2"))]
     #[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
     #[case::two_rings_bonded_0_aromatic(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
     #[case::two_rings_bonded_0_aromatic_1(b"c1cc1C2CC2", build_from_graph("C* C* C* C C C | 0-1: 1-2: 0-2: 2-3 3-4 4-5 3-5"))]
@@ -696,6 +693,7 @@ mod tests {
     #[case::bad_percent_short(b"C%1", M3Error::RingIndexInvalid { pos: 1 })]
     #[case::bad_percent_char(b"C%1a", M3Error::RingIndexInvalid { pos: 1 })]
     #[case::bad_percent_eoi(b"C%", M3Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_zero(b"C%0", M3Error::RingIndexInvalid { pos: 1 })]
     #[case::ring_self_loop(b"C11", M3Error::RingSelfLoop { pos: 2 })]
     #[case::ring_two_member(b"C1C1", M3Error::RingTwoMember { pos: 3 })]
     #[case::ring_bond_order_conflict_3(b"C=1CC#1", M3Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]

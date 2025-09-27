@@ -123,7 +123,7 @@ Implications:
 - M1: Add branches ( and ).
 - M2: Add explicit bonds (- = # : / \\) with staged bond state.
 - M3: Add rings (digits/%), smallvec ring store, conflict/self/two-member checks.
-- M4: Components (.).
+  - M4: Components (.).
 - M5: Brackets: implement a tight bracket scanner for [ ... ].
 - M6: Optional semantics (aromatic defaults, stereo post-passes).
 
@@ -317,3 +317,35 @@ Implications:
 12. Add valid ring tests: aliphatic/aromatic cycles, fused, spiro, with bonds/branches, `%00` and `%DD`.
 13. Add invalid ring tests: unclosed, self-loop, two-member, bond/dir conflicts, bad `%` forms, leading ring.
 14. Update specs: ring tokens, `%DDD` note, index 0 allowed, precedence/dir rules and interactions with groups/branches.
+15. Add ring index edge tests (C1CC%01, C0CC%00, %99, invalid %0).
+16. Map new M3 errors to diagnostics in the linter.
+17. Add proptest fuzzing for random bytes/prefixes.
+18. Optional micro-optimizations in ring closure.
+
+### Fuzzing 
+
+- 1) Timing
+  - Do a minimal, crash-only fuzz pass now; defer deep fuzz until after M4/M5 stabilize. Cost now is low and can catch panics early; comprehensive fuzzing is more valuable once the grammar surface grows.
+
+- 2) Grammar-generated fuzzers
+  - Auto-generating from EBNF is nontrivial in Rust; there’s no turnkey “derive-fuzzer-from-EBNF.” You’d end up writing a generator (proptest strategies or an AST builder) from the grammar anyway. That’s effort-heavy and risks drift from the real parser semantics. I don’t recommend it now.
+
+- 3) Without grammar: how to generate and get coverage
+  - Use coverage-guided fuzz (cargo-fuzz/libFuzzer) on byte inputs to shake out panics, seeded with our existing SMILES corpus; add a small dictionary of tokens ('(', ')', '=', '#', '/', '\\', '%', digits, 'Cl', 'Br', 'c', 'n', etc.) to guide mutations.
+  - Complement with a light token-stream proptest generator (handful of combinators for nodes, branches, ring closures) to exercise invariants deterministically. This avoids building a full grammar but still hits structured shapes.
+  - Track coverage (llvm-cov or cargo-fuzz’s built-in stats), and iterate seeds from failing examples and tricky tests (rings, directions, percent indices, brackets) to push coverage up.
+
+- 4) Library choice
+  - Keep proptest for property tests (deterministic, CI-friendly).
+  - Add cargo-fuzz (libFuzzer) for crash/UB hunting and coverage-guided exploration. No need to switch away from proptest; use both.
+
+- 5) Effort estimate
+  - Minimal setup (cargo-fuzz target that calls parse_smiles_m3 on byte slices, + token dictionary, + seed corpus from tests): ~1–2 hours.
+  - Adding 2–3 simple proptest strategies for token streams and basic invariants (no panic; result or specific error): ~1–2 hours.
+  - Full grammar-driven generator: 1–2 days. Not worth it before M4/M5.
+  - So we can stay under half a day for a useful baseline and revisit after M4/M5.
+
+If that sounds good, I’ll set up cargo-fuzz with:
+- Target: parse_smiles_m3(bytes) with size cap, no panics allowed.
+- Seeds: ring-heavy, stereo, percent, bracket samples from tests.
+- Dictionary: core bond/direction/ring tokens.

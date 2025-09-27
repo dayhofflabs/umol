@@ -133,11 +133,11 @@ impl Rule for RingErrorsRule {
                         set.insert(dir);
                         if set.contains(&BondKind::Up) && set.contains(&BondKind::Down) {
                             emit.candidate(DiagnosticCandidate {
-                                code: Code("RING_CONFLICT_DIR"),
+                                code: Code("RING_BOND_DIR_CONFLICT"),
                                 category: Category::Ring,
                                 severity: Severity::Error,
                                 span: *span,
-                                message: "Conflicting '/' and '\\' directions for ring index",
+                                message: "Conflicting '/' and '\\' bond directions for ring index",
                                 scope: Scope::Global,
                             });
                         }

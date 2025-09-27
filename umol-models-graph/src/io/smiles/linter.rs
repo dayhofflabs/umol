@@ -123,7 +123,7 @@ pub fn lint_smiles_parse(input: &str) -> DiagnosticsReport {
         let c = d.code.0;
         let allow = match d.category {
             Category::Stereo | Category::Internal => true,
-            Category::Ring => matches!(c, "RING_SELF_LOOP" | "RING_TWO_MEMBER"),
+            Category::Ring => matches!(c, "RING_SELF_LOOP" | "RING_TWO_MEMBER" | "RING_BOND_DIR_CONFLICT" | "RING_BOND_ORDER_CONFLICT"),
             // Drop Lex/Bracket/Branch/Style/Num from parser in favor of lint-only
             Category::Lex | Category::Bracket | Category::Branch | Category::Style | Category::Num | Category::Syn => false,
         };
