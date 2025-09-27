@@ -3,7 +3,29 @@ use umol_data::Element;
 use crate::io::ir::builder::{BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Molecule};
 
-use super::fsm_m3::M3Error;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum M4Error {
+    UnsupportedToken { pos: usize },
+    UnbalancedBranchOpen { pos: usize },
+    UnbalancedBranchClose { pos: usize },
+    EmptyBranch { pos: usize },
+    EmptyGroup { pos: usize },
+    TopLevelGroupTrailing { pos: usize },
+    TrailingBond { pos: usize },
+    ConsecutiveBond { pos: usize },
+    LeadingBond { pos: usize },
+    RingIndexInvalid { pos: usize },
+    LeadingRing { pos: usize },
+    RingBondDirConflict { pos: usize, open_pos: usize },
+    RingBondOrderConflict { pos: usize, open_pos: usize },
+    RingSelfLoop { pos: usize },
+    RingTwoMember { pos: usize },
+    RingUnclosed { open_pos: usize },
+    // M4 component-specific
+    LeadingDot { pos: usize },
+    TrailingDot { pos: usize },
+    ConsecutiveDot { pos: usize },
+}
 
 fn is_digit(b: u8) -> bool {
     (b'0'..=b'9').contains(&b)
@@ -46,7 +68,7 @@ fn map_bond(b: u8) -> (BondOrder, Option<BondDir>) {
 
 // M4: components ('.') as a strict superset of M3
 // Streaming FSM (copied from M3) with an added '.' branch that resets adjacency.
-pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
+pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
     let mut i = 0usize;
     let n = input.len();
 
@@ -69,7 +91,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
         // Parentheses
         if b0 == b'(' {
             if let Some((_, _, pos)) = pending_bond {
-                return Err(M3Error::TrailingBond { pos });
+                return Err(M4Error::TrailingBond { pos });
             }
             if just_closed_group {
                 // Starting a new top-level group after closing a non-empty group:
@@ -99,15 +121,15 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
         }
         if b0 == b')' {
             if let Some((_, _, pos)) = pending_bond {
-                return Err(M3Error::TrailingBond { pos });
+                return Err(M4Error::TrailingBond { pos });
             }
             let Some(frame) = pstack.pop() else {
-                return Err(M3Error::UnbalancedBranchClose { pos: i });
+                return Err(M4Error::UnbalancedBranchClose { pos: i });
             };
             match frame {
                 Frame::Branch { base, had_atom, .. } => {
                     if !had_atom {
-                        return Err(M3Error::EmptyBranch { pos: i });
+                        return Err(M4Error::EmptyBranch { pos: i });
                     }
                     last_atom_idx = Some(base);
                     prev_atom_idx = None;
@@ -115,7 +137,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                 Frame::Group { had_atom, .. } => {
                     if !had_atom {
                         if i + 1 != n {
-                            return Err(M3Error::EmptyGroup { pos: i });
+                            return Err(M4Error::EmptyGroup { pos: i });
                         }
                         // For empty top-level group at end-of-input keep no adjacency
                         last_atom_idx = None;
@@ -126,7 +148,11 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                         just_closed_group = true;
                         // If this was the OUTERMOST group and there are trailing tokens, error
                         if pstack.is_empty() && i + 1 != n {
-                            return Err(M3Error::TopLevelGroupTrailing { pos: i });
+                            // Allow a connector (dot) to follow a top-level group in M4
+                            let next = input[i + 1];
+                            if next != b'.' {
+                                return Err(M4Error::TopLevelGroupTrailing { pos: i });
+                            }
                         }
                     }
                     // If group had atoms, leave last_atom_idx as-is to allow adjacency
@@ -139,12 +165,12 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
         // Component separator '.' resets adjacency but preserves ring_table and state
         if b0 == b'.' {
             if let Some((_, _, pos)) = pending_bond {
-                return Err(M3Error::TrailingBond { pos });
+                return Err(M4Error::TrailingBond { pos });
             }
             // Invalid dot forms: leading, trailing, or consecutive dots
-            if i == 0 || i + 1 == n || input[i + 1] == b'.' {
-                return Err(M3Error::UnsupportedToken { pos: i });
-            }
+            if i == 0 { return Err(M4Error::LeadingDot { pos: i }); }
+            if i + 1 == n { return Err(M4Error::TrailingDot { pos: i }); }
+            if input[i + 1] == b'.' { return Err(M4Error::ConsecutiveDot { pos: i }); }
             last_atom_idx = None;
             prev_atom_idx = None;
             last_aromatic = false;
@@ -155,7 +181,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
         // Ring tokens: single digit 0..9 and %DD
         if is_digit(b0) {
             if last_atom_idx.is_none() {
-                return Err(M3Error::LeadingRing { pos: i });
+                return Err(M4Error::LeadingRing { pos: i });
             }
             let idx: usize = (b0 - b'0') as usize;
             let bond = pending_bond.take();
@@ -174,14 +200,14 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                 Some(open) => {
                     let b = last_atom_idx.unwrap();
                     if open.atom_id == b {
-                        return Err(M3Error::RingSelfLoop { pos: i });
+                        return Err(M4Error::RingSelfLoop { pos: i });
                     }
                     if prev_atom_idx == Some(open.atom_id) {
-                        return Err(M3Error::RingTwoMember { pos: i });
+                        return Err(M4Error::RingTwoMember { pos: i });
                     }
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(M3Error::RingBondDirConflict {
+                            return Err(M4Error::RingBondDirConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -190,7 +216,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                     // If both sides specified an order and they differ -> conflict
                     if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                         if o1 != o2 {
-                            return Err(M3Error::RingBondOrderConflict {
+                            return Err(M4Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -200,7 +226,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                     if open.dir.is_some() || dir_opt.is_some() {
                         let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                         if ord != BondOrder::Single {
-                            return Err(M3Error::RingBondOrderConflict {
+                            return Err(M4Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -240,10 +266,10 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
         }
         if b0 == b'%' {
             if i + 2 >= n || !is_digit(input[i + 1]) || !is_digit(input[i + 2]) {
-                return Err(M3Error::RingIndexInvalid { pos: i });
+                return Err(M4Error::RingIndexInvalid { pos: i });
             }
             if last_atom_idx.is_none() {
-                return Err(M3Error::LeadingRing { pos: i });
+                return Err(M4Error::LeadingRing { pos: i });
             }
             let idx: usize = ((input[i + 1] - b'0') as usize) * 10 + (input[i + 2] - b'0') as usize;
             let bond = pending_bond.take();
@@ -262,14 +288,14 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                 Some(open) => {
                     let b = last_atom_idx.unwrap();
                     if open.atom_id == b {
-                        return Err(M3Error::RingSelfLoop { pos: i });
+                        return Err(M4Error::RingSelfLoop { pos: i });
                     }
                     if prev_atom_idx == Some(open.atom_id) {
-                        return Err(M3Error::RingTwoMember { pos: i });
+                        return Err(M4Error::RingTwoMember { pos: i });
                     }
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(M3Error::RingBondDirConflict {
+                            return Err(M4Error::RingBondDirConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -277,7 +303,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                     }
                     if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                         if o1 != o2 {
-                            return Err(M3Error::RingBondOrderConflict {
+                            return Err(M4Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -286,7 +312,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
                     if open.dir.is_some() || dir_opt.is_some() {
                         let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                         if ord != BondOrder::Single {
-                            return Err(M3Error::RingBondOrderConflict {
+                            return Err(M4Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -328,10 +354,10 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
         // Bond tokens
         if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') {
             if pending_bond.is_some() {
-                return Err(M3Error::ConsecutiveBond { pos: i });
+                return Err(M4Error::ConsecutiveBond { pos: i });
             }
             if last_atom_idx.is_none() {
-                return Err(M3Error::LeadingBond { pos: i });
+                return Err(M4Error::LeadingBond { pos: i });
             }
             let (order, dir) = map_bond(b0);
             pending_bond = Some((order, dir, i));
@@ -510,19 +536,19 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
             continue;
         }
 
-        return Err(M3Error::UnsupportedToken { pos: i });
+        return Err(M4Error::UnsupportedToken { pos: i });
     }
 
     if pending_bond.is_some() {
         let (_, _, pos) = pending_bond.unwrap();
-        return Err(M3Error::TrailingBond { pos });
+        return Err(M4Error::TrailingBond { pos });
     }
 
     if !pstack.is_empty() {
         let pos = match pstack.last().unwrap() {
             Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
         };
-        return Err(M3Error::UnbalancedBranchOpen { pos });
+        return Err(M4Error::UnbalancedBranchOpen { pos });
     }
 
     // Unclosed rings: report the unmatched with the latest pos_open
@@ -538,7 +564,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M3Error> {
         }
     }
     if let Some(pos_open) = last_open {
-        return Err(M3Error::RingUnclosed { open_pos: pos_open });
+        return Err(M4Error::RingUnclosed { open_pos: pos_open });
     }
 
     let mut mols = builder.finish();
@@ -558,6 +584,13 @@ mod tests {
     #[case::two_components(b"CC.CC", build_from_graph("C C C C | 0-1 2-3"))]
     #[case::ring_across_dot_digit(b"C1.CC1", build_from_graph("C C C | 1-2 0-2"))]
     #[case::ring_across_dot_percent(b"C%12.CC%12", build_from_graph("C C C | 1-2 0-2"))]
+    #[case::branch_local_components(b"C(C.C)", build_from_graph("C C C | 0-1"))]
+    #[case::groups_and_dots(b"(CC).(CC)", build_from_graph("C C C C | 0-1 2-3"))]
+    #[case::group_components_and_atom(b"(C.C).C", build_from_graph("C C C |"))]
+    #[case::dots_around_groups_1(b"C.(C).C", build_from_graph("C C C |"))]
+    #[case::dots_around_groups_2(b"C.C.(C)", build_from_graph("C C C |"))]
+    #[case::rings_across_multiple_dots_digit(b"C1.C.CC1", build_from_graph("C C C C | 2-3 0-3"))]
+    #[case::rings_across_multiple_dots_percent(b"C%12.C.CC%12", build_from_graph("C C C C | 2-3 0-3"))]
     fn m4_components_valid(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m4(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -592,14 +625,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ring_order_conflict_digit(b"C=1.CC#1", M3Error::RingBondOrderConflict { pos: 7, open_pos: 2 })]
-    #[case::ring_order_conflict_percent(b"C=%12.CC#%12", M3Error::RingBondOrderConflict { pos: 9, open_pos: 2 })]
-    #[case::ring_dir_conflict_digit(b"C/1.CC\\1", M3Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
-    #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", M3Error::RingBondDirConflict { pos: 9, open_pos: 2 })]
-    fn m4_rings_components_invalid(#[case] input: &[u8], #[case] expected: M3Error) {
+    #[case::ring_order_conflict_digit(b"C=1.CC#1", M4Error::RingBondOrderConflict { pos: 7, open_pos: 2 })]
+    #[case::ring_order_conflict_percent(b"C=%12.CC#%12", M4Error::RingBondOrderConflict { pos: 9, open_pos: 2 })]
+    #[case::ring_dir_conflict_digit(b"C/1.CC\\1", M4Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
+    #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", M4Error::RingBondDirConflict { pos: 9, open_pos: 2 })]
+    fn m4_rings_components_invalid(#[case] input: &[u8], #[case] expected: M4Error) {
         let err = parse_smiles_m4(input);
         assert!(err.is_err(), "{:?} should have failed", input);
         let err = err.unwrap_err();
         assert_eq!(err, expected);
     }
+
+  
 }

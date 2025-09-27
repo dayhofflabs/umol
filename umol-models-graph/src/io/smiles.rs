@@ -24,3 +24,4 @@ pub use fsm_m2::M2Error;
 pub use fsm_m3::parse_smiles_m3;
 pub use fsm_m3::M3Error;
 pub use fsm_m4::parse_smiles_m4;
+pub use fsm_m4::M4Error;
