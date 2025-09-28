@@ -83,20 +83,12 @@ fn element_symbol<'a>() -> impl Parser<&'a str, Output = Option<Element>, Error 
         // Try two-letter element first (e.g., Cl, Br). If not a valid element, backtrack.
         map_res(
             take_while_m_n(2, 2, |c: char| c.is_ascii_alphabetic()),
-            |s: &str| {
-                Element::from_symbol(s)
-                    .ok_or("Invalid element symbol")
-                    .map(Some)
-            },
+            |s: &str| Element::from_symbol(s).ok_or("Invalid element symbol").map(Some),
         ),
         // Then try one-letter element (e.g., C, N, O)
         map_res(
             take_while_m_n(1, 1, |c: char| c.is_ascii_alphabetic()),
-            |s: &str| {
-                Element::from_symbol(s)
-                    .ok_or("Invalid element symbol")
-                    .map(Some)
-            },
+            |s: &str| Element::from_symbol(s).ok_or("Invalid element symbol").map(Some),
         ),
         // Or wildcard '*'
         value(None, tag("*")),

@@ -1,10 +1,11 @@
 use umol_data::Element;
 
-use crate::io::ir::builder::{BondData, MoleculeBuilder};
+use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Molecule};
+use crate::io::smiles::parser::utils::{parse_bracket, BracketField};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum M4Error {
+pub enum M5Error {
     UnsupportedToken { pos: usize },
     UnbalancedBranchOpen { pos: usize },
     UnbalancedBranchClose { pos: usize },
@@ -21,10 +22,11 @@ pub enum M4Error {
     RingSelfLoop { pos: usize },
     RingTwoMember { pos: usize },
     RingUnclosed { open_pos: usize },
-    // M4 component-specific
     LeadingDot { pos: usize },
     TrailingDot { pos: usize },
     ConsecutiveDot { pos: usize },
+    UnclosedBracket { pos: usize },
+    InvalidBracket { pos: usize },
 }
 
 fn is_digit(b: u8) -> bool {
@@ -66,7 +68,7 @@ fn map_bond(b: u8) -> (BondOrder, Option<BondDir>) {
     }
 }
 
-pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
+pub fn parse_smiles_m5(input: &[u8]) -> Result<Molecule, M5Error> {
     let mut i = 0usize;
     let n = input.len();
 
@@ -89,7 +91,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
         // Parentheses
         if b0 == b'(' {
             if let Some((_, _, pos)) = pending_bond {
-                return Err(M4Error::TrailingBond { pos });
+                return Err(M5Error::TrailingBond { pos });
             }
             if just_closed_group {
                 // Starting a new top-level group after closing a non-empty group:
@@ -119,31 +121,33 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
         }
         if b0 == b')' {
             if let Some((_, _, pos)) = pending_bond {
-                return Err(M4Error::TrailingBond { pos });
+                return Err(M5Error::TrailingBond { pos });
             }
             let Some(frame) = pstack.pop() else {
-                return Err(M4Error::UnbalancedBranchClose { pos: i });
+                return Err(M5Error::UnbalancedBranchClose { pos: i });
             };
             match frame {
                 Frame::Branch { base, had_atom, .. } => {
                     if !had_atom {
-                        return Err(M4Error::EmptyBranch { pos: i });
+                        return Err(M5Error::EmptyBranch { pos: i });
                     }
                     last_atom_idx = Some(base);
                     prev_atom_idx = None;
                 }
-                Frame::Group { had_atom, open_pos, .. } => {
+                Frame::Group {
+                    had_atom, open_pos, ..
+                } => {
                     if !had_atom {
                         if i + 1 != n {
-                            return Err(M4Error::EmptyGroup { pos: i });
+                            return Err(M5Error::EmptyGroup { pos: i });
                         }
                         // End-of-input: if group ends with a dot, treat as leading dot in component
                         if i > 0 && input[i - 1] == b'.' {
-                            return Err(M4Error::LeadingDot { pos: i });
+                            return Err(M5Error::LeadingDot { pos: i });
                         }
                         // Allow exactly "()" at EOI (group starting at 0). Otherwise, error.
                         if open_pos != 0 {
-                            return Err(M4Error::EmptyGroup { pos: i });
+                            return Err(M5Error::EmptyGroup { pos: i });
                         }
                         // For exactly "()" keep no adjacency
                         last_atom_idx = None;
@@ -154,10 +158,10 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                         just_closed_group = true;
                         // If this was the OUTERMOST group and there are trailing tokens, error
                         if pstack.is_empty() && i + 1 != n {
-                            // Allow a connector (dot) to follow a top-level group in M4
+                            // Allow a connector (dot) to follow a top-level group in M4/M5
                             let next = input[i + 1];
                             if next != b'.' {
-                                return Err(M4Error::TopLevelGroupTrailing { pos: i });
+                                return Err(M5Error::TopLevelGroupTrailing { pos: i });
                             }
                         }
                     }
@@ -171,17 +175,17 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
         // Component separator '.' resets adjacency but preserves ring_table and state
         if b0 == b'.' {
             if let Some((_, _, pos)) = pending_bond {
-                return Err(M4Error::TrailingBond { pos });
+                return Err(M5Error::TrailingBond { pos });
             }
             // Invalid dot forms: leading, trailing, or consecutive dots
             if i == 0 {
-                return Err(M4Error::LeadingDot { pos: i });
+                return Err(M5Error::LeadingDot { pos: i });
             }
             if i + 1 == n {
-                return Err(M4Error::TrailingDot { pos: i });
+                return Err(M5Error::TrailingDot { pos: i });
             }
             if input[i + 1] == b'.' {
-                return Err(M4Error::ConsecutiveDot { pos: i });
+                return Err(M5Error::ConsecutiveDot { pos: i });
             }
             last_atom_idx = None;
             prev_atom_idx = None;
@@ -193,7 +197,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
         // Ring tokens: single digit 0..9 and %DD
         if is_digit(b0) {
             if last_atom_idx.is_none() {
-                return Err(M4Error::LeadingRing { pos: i });
+                return Err(M5Error::LeadingRing { pos: i });
             }
             let idx: usize = (b0 - b'0') as usize;
             let bond = pending_bond.take();
@@ -212,14 +216,14 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                 Some(open) => {
                     let b = last_atom_idx.unwrap();
                     if open.atom_id == b {
-                        return Err(M4Error::RingSelfLoop { pos: i });
+                        return Err(M5Error::RingSelfLoop { pos: i });
                     }
                     if prev_atom_idx == Some(open.atom_id) {
-                        return Err(M4Error::RingTwoMember { pos: i });
+                        return Err(M5Error::RingTwoMember { pos: i });
                     }
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(M4Error::RingBondDirConflict {
+                            return Err(M5Error::RingBondDirConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -228,7 +232,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                     // If both sides specified an order and they differ -> conflict
                     if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                         if o1 != o2 {
-                            return Err(M4Error::RingBondOrderConflict {
+                            return Err(M5Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -238,7 +242,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                     if open.dir.is_some() || dir_opt.is_some() {
                         let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                         if ord != BondOrder::Single {
-                            return Err(M4Error::RingBondOrderConflict {
+                            return Err(M5Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -278,10 +282,10 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
         }
         if b0 == b'%' {
             if i + 2 >= n || !is_digit(input[i + 1]) || !is_digit(input[i + 2]) {
-                return Err(M4Error::RingIndexInvalid { pos: i });
+                return Err(M5Error::RingIndexInvalid { pos: i });
             }
             if last_atom_idx.is_none() {
-                return Err(M4Error::LeadingRing { pos: i });
+                return Err(M5Error::LeadingRing { pos: i });
             }
             let idx: usize = ((input[i + 1] - b'0') as usize) * 10 + (input[i + 2] - b'0') as usize;
             let bond = pending_bond.take();
@@ -300,14 +304,14 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                 Some(open) => {
                     let b = last_atom_idx.unwrap();
                     if open.atom_id == b {
-                        return Err(M4Error::RingSelfLoop { pos: i });
+                        return Err(M5Error::RingSelfLoop { pos: i });
                     }
                     if prev_atom_idx == Some(open.atom_id) {
-                        return Err(M4Error::RingTwoMember { pos: i });
+                        return Err(M5Error::RingTwoMember { pos: i });
                     }
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(M4Error::RingBondDirConflict {
+                            return Err(M5Error::RingBondDirConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -315,7 +319,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                     }
                     if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                         if o1 != o2 {
-                            return Err(M4Error::RingBondOrderConflict {
+                            return Err(M5Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -324,7 +328,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                     if open.dir.is_some() || dir_opt.is_some() {
                         let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                         if ord != BondOrder::Single {
-                            return Err(M4Error::RingBondOrderConflict {
+                            return Err(M5Error::RingBondOrderConflict {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -359,21 +363,112 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                     }
                 }
             }
-            i += 3; // %DD consumed; %DDD will naturally see D next
+            i += 3; // %DD consumed
             continue;
         }
 
         // Bond tokens
         if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') {
             if pending_bond.is_some() {
-                return Err(M4Error::ConsecutiveBond { pos: i });
+                return Err(M5Error::ConsecutiveBond { pos: i });
             }
             if last_atom_idx.is_none() {
-                return Err(M4Error::LeadingBond { pos: i });
+                return Err(M5Error::LeadingBond { pos: i });
             }
             let (order, dir) = map_bond(b0);
             pending_bond = Some((order, dir, i));
             i += 1;
+            continue;
+        }
+
+        // Bracket atom: [ ... ]
+        if b0 == b'[' {
+            // find closing bracket
+            let start = i + 1;
+            let mut j = start;
+            while j < n && input[j] != b']' {
+                j += 1;
+            }
+            if j >= n {
+                return Err(M5Error::UnclosedBracket { pos: i });
+            }
+            let inner = unsafe { std::str::from_utf8_unchecked(&input[start..j]) };
+            let (elem_opt, iso_opt, fields) = parse_bracket(inner);
+            // Accept wildcard '*' possibly after an isotope prefix (e.g., "13*")
+            let iso_prefix_len = inner
+                .as_bytes()
+                .iter()
+                .take_while(|c| c.is_ascii_digit())
+                .count();
+            let wildcard_ok = inner.as_bytes().get(iso_prefix_len) == Some(&b'*');
+            if elem_opt.is_none() && !wildcard_ok {
+                // parse failed or invalid element symbol
+                return Err(M5Error::InvalidBracket { pos: i });
+            }
+
+            // Determine element/aromatic from inner text first char case if element present
+            let (element, aromatic) = match elem_opt {
+                Some(e) => {
+                    // If the first char is lowercase, treat as aromatic element
+                    let first = inner.as_bytes().first().copied().unwrap_or_default();
+                    let arom = first.is_ascii_lowercase();
+                    (e, arom)
+                }
+                None => (Element::C, false), // '*' handled as None; default element placeholder
+            };
+
+            let mut atom = AtomData {
+                element,
+                isotope: iso_opt,
+                charge: None,
+                hydrogen_count: None,
+                class: None,
+                aromatic,
+                implicit_h: false,
+                chirality: None,
+                unknown_symbol: elem_opt.is_none(),
+            };
+            for f in fields {
+                match f {
+                    BracketField::Chiral(ch) => atom.chirality = Some(ch),
+                    BracketField::HydrogenCount(h) => {
+                        atom.hydrogen_count = Some((h as u8).min(u8::MAX))
+                    }
+                    BracketField::Charge(q) => atom.charge = Some(q),
+                    BracketField::Class(c) => atom.class = Some(c),
+                }
+            }
+
+            let curr = builder.on_atom(atom);
+            if let Some(last) = last_atom_idx {
+                if let Some((order, dir, _pos)) = pending_bond.take() {
+                    builder.on_bond(last, curr, BondData { order, dir });
+                } else {
+                    if last_aromatic && aromatic {
+                        builder.on_bond(
+                            last,
+                            curr,
+                            BondData {
+                                order: BondOrder::Aromatic,
+                                dir: None,
+                            },
+                        );
+                    } else {
+                        builder.on_bond_single_fast(last, curr);
+                    }
+                }
+                prev_atom_idx = Some(last);
+            }
+            last_atom_idx = Some(curr);
+            last_aromatic = aromatic;
+            if let Some(top) = pstack.last_mut() {
+                match top {
+                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
+                        *had_atom = true
+                    }
+                }
+            }
+            i = j + 1;
             continue;
         }
 
@@ -385,7 +480,6 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                     if let Some((order, dir, _pos)) = pending_bond.take() {
                         builder.on_bond(last, curr, BondData { order, dir });
                     } else {
-                        // Implicit bond to non-aromatic atom is single regardless of last_aromatic
                         builder.on_bond_single_fast(last, curr);
                     }
                 }
@@ -407,7 +501,6 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                 if let Some((order, dir, _pos)) = pending_bond.take() {
                     builder.on_bond(last, curr, BondData { order, dir });
                 } else {
-                    // Implicit bond to non-aromatic atom is single regardless of last_aromatic
                     builder.on_bond_single_fast(last, curr);
                 }
                 prev_atom_idx = Some(last);
@@ -431,7 +524,6 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                     if let Some((order, dir, _pos)) = pending_bond.take() {
                         builder.on_bond(last, curr, BondData { order, dir });
                     } else {
-                        // Implicit bond to non-aromatic atom is single regardless of last_aromatic
                         builder.on_bond_single_fast(last, curr);
                     }
                 }
@@ -453,7 +545,6 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                 if let Some((order, dir, _pos)) = pending_bond.take() {
                     builder.on_bond(last, curr, BondData { order, dir });
                 } else {
-                    // Implicit bond to non-aromatic atom is single regardless of last_aromatic
                     builder.on_bond_single_fast(last, curr);
                 }
                 prev_atom_idx = Some(last);
@@ -487,7 +578,6 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                 if let Some((order, dir, _pos)) = pending_bond.take() {
                     builder.on_bond(last, curr, BondData { order, dir });
                 } else {
-                    // Implicit bond to non-aromatic atom is single regardless of last_aromatic
                     builder.on_bond_single_fast(last, curr);
                 }
                 prev_atom_idx = Some(last);
@@ -548,19 +638,19 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
             continue;
         }
 
-        return Err(M4Error::UnsupportedToken { pos: i });
+        return Err(M5Error::UnsupportedToken { pos: i });
     }
 
     if pending_bond.is_some() {
         let (_, _, pos) = pending_bond.unwrap();
-        return Err(M4Error::TrailingBond { pos });
+        return Err(M5Error::TrailingBond { pos });
     }
 
     if !pstack.is_empty() {
         let pos = match pstack.last().unwrap() {
             Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
         };
-        return Err(M4Error::UnbalancedBranchOpen { pos });
+        return Err(M5Error::UnbalancedBranchOpen { pos });
     }
 
     // Unclosed rings: report the unmatched with the latest pos_open
@@ -576,7 +666,7 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
         }
     }
     if let Some(pos_open) = last_open {
-        return Err(M4Error::RingUnclosed { open_pos: pos_open });
+        return Err(M5Error::RingUnclosed { open_pos: pos_open });
     }
 
     let mut mols = builder.finish();
@@ -587,8 +677,10 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_data::Element;
 
     use super::*;
+    use crate::io::ir::{AtomSymbol, BondOrder, Chirality};
     use crate::io::smiles::test_support::build_from_graph;
 
     #[rustfmt::skip]
@@ -598,8 +690,8 @@ mod tests {
     #[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
     #[case::aromatic_c_6(b"cccccc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5:"))]
     #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C Cl O Br N | 0-1 1-2 2-3 3-4"))]
-    fn m4_chain(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles_m4(input);
+    fn m5_chain(#[case] input: &[u8], #[case] expected: Molecule) {
+        let res = parse_smiles_m5(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
@@ -616,8 +708,8 @@ mod tests {
     #[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
     #[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4: 4-5:"))]
     #[case::trailing_branch(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
-    fn m4_tree(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles_m4(input);
+    fn m5_tree(#[case] input: &[u8], #[case] expected: Molecule) {
+        let res = parse_smiles_m5(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
@@ -656,8 +748,8 @@ mod tests {
     #[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
     #[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3: 0-3:"))]
     #[case::substituted_ring_branch_1(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
-    fn m4_ring(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles_m4(input);
+    fn m5_ring(#[case] input: &[u8], #[case] expected: Molecule) {
+        let res = parse_smiles_m5(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
@@ -715,8 +807,8 @@ mod tests {
     #[case::ring_up_bond_percent_close(b"C%12CC/%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
     #[case::ring_down_bond_percent_both(b"C\\%12CC\\%12", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
     #[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
-    fn m4_bonds(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles_m4(input);
+    fn m5_bonds(#[case] input: &[u8], #[case] expected: Molecule) {
+        let res = parse_smiles_m5(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
@@ -762,137 +854,278 @@ mod tests {
     #[case::branch_multiple_components(b"C(.C.C)", build_from_graph("C C C |"))]
     #[case::groups_leading_dot_both(b"(.C).(.C)", build_from_graph("C C |"))]
     #[case::group_leading_dot_middle(b"C.(.C).C", build_from_graph("C C C |"))]
-    fn m4_components(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles_m4(input);
+    fn m5_components(#[case] input: &[u8], #[case] expected: Molecule) {
+        let res = parse_smiles_m5(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::leading_ring(b"1C", M4Error::LeadingRing { pos: 0 })]
-    #[case::bad_percent_short(b"C%1", M4Error::RingIndexInvalid { pos: 1 })]
-    #[case::bad_percent_char(b"C%1a", M4Error::RingIndexInvalid { pos: 1 })]
-    #[case::bad_percent_eoi(b"C%", M4Error::RingIndexInvalid { pos: 1 })]
-    #[case::bad_percent_zero(b"C%0", M4Error::RingIndexInvalid { pos: 1 })]
-    #[case::ring_self_loop(b"C11", M4Error::RingSelfLoop { pos: 2 })]
-    #[case::ring_two_member(b"C1C1", M4Error::RingTwoMember { pos: 3 })]
-    #[case::ring_bond_order_conflict_3(b"C=1CC#1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_4(b"C/1CC=1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_5(b"C\\1CC=1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_6(b"C=1CC/1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_7(b"C=1CC\\1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_8(b"C=%10CC#%10", M4Error::RingBondOrderConflict { pos: 8, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_1(b"C/1CC\\1", M4Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_2(b"C\\1CC/1", M4Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", M4Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", M4Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
-    #[case::ring_unclosed_1(b"C1CC", M4Error::RingUnclosed { open_pos: 1 })]
-    #[case::ring_unclosed_2(b"C1CC1C1", M4Error::RingUnclosed { open_pos: 6 })]
-    #[case::unbalanced_closing_paren_1(b")C", M4Error::UnbalancedBranchClose { pos: 0 })]
-    #[case::unbalanced_closing_paren_2(b"C)C", M4Error::UnbalancedBranchClose { pos: 1 })]
-    #[case::unclosed_group(b"(C", M4Error::UnbalancedBranchOpen { pos: 0 })]
-    #[case::unclosed_branch(b"C(C", M4Error::UnbalancedBranchOpen { pos: 1 })]
-    #[case::empty_branch(b"C()", M4Error::EmptyBranch { pos: 2 })]
-    #[case::empty_group_before_atom(b"()C", M4Error::EmptyGroup { pos: 1 })]
-    #[case::two_top_level_groups(b"(C)(C)", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::three_top_level_groups(b"(C)(C)(C)", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::three_top_level_groups_aromatic(b"(c)(c)(c)", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::two_top_level_groups_rings(b"(C1CC1)(C2CC2)", M4Error::TopLevelGroupTrailing { pos: 6 })]
-    #[case::group_before_atom(b"(C)C", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_before_atom_aromatic(b"(c)c", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_before_atom_dot(b"C.(C)C", M4Error::TopLevelGroupTrailing { pos: 4 })]
-    #[case::trailing_bond_1(b"C-", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_2(b"C=", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_3(b"C#", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_4(b"C$", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_1(b"C/", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_2(b"C\\", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_aromatic_bond(b"C:", M4Error::TrailingBond { pos: 1 })]
-    #[case::branch_trailing_bond_1(b"C(C-)C", M4Error::TrailingBond { pos: 3 })]
-    #[case::branch_trailing_bond_2(b"C(C=)C", M4Error::TrailingBond { pos: 3 })]
-    #[case::branch_trailing_stereo_bond(b"CC(C/)CC", M4Error::TrailingBond { pos: 4 })]
-    #[case::group_trailing_bond_1(b"(C-)", M4Error::TrailingBond { pos: 2 })]
-    #[case::group_trailing_bond_2(b"(C=)", M4Error::TrailingBond { pos: 2 })]
-    #[case::group_trailing_stereo_bond(b"(C/)", M4Error::TrailingBond { pos: 2 })]
-    #[case::group_trailing_aromatic_bond(b"(C:)", M4Error::TrailingBond { pos: 2 })]
-    #[case::trailing_bond_before_dot_1(b"C-.C", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_before_dot_2(b"C=.C", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_before_dot_aromatic(b"C:.C", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_before_dot_up(b"C/.C", M4Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_before_dot_down(b"C\\.C", M4Error::TrailingBond { pos: 1 })]
-    #[case::bond_after_group_1(b"(C)-", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::bond_after_group_2(b"(C)=", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_after_group_1(b"(C)(C)", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_after_group_2(b"(c)(c)", M4Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::ring_after_group(b"(C1CCC)1", M4Error::TopLevelGroupTrailing { pos : 6})]
-    #[case::consecutive_bonds_1(b"C--C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_2(b"C-=C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_3(b"C-#C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_4(b"C-$C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_5(b"C-:C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_stereo_bonds_1(b"C//C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_stereo_bonds_2(b"C\\\\C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bond_and_stereo_bond_1(b"C-/C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bond_and_stereo_bond_2(b"C=\\C", M4Error::ConsecutiveBond { pos: 2 })]
-    #[case::leading_bond_1(b"-C", M4Error::LeadingBond { pos: 0 })]
-    #[case::leading_bond_2(b"=C", M4Error::LeadingBond { pos: 0 })]
-    #[case::leading_bond_3(b"#C", M4Error::LeadingBond { pos: 0 })]
-    #[case::leading_bond_4(b"$C", M4Error::LeadingBond { pos: 0 })]
-    #[case::leading_aromatic_bond(b":C", M4Error::LeadingBond { pos: 0 })]
-    #[case::leading_sterebond_1(b"/C", M4Error::LeadingBond { pos: 0 })]
-    #[case::leading_sterebond_2(b"\\C", M4Error::LeadingBond { pos: 0 })]
-    #[case::group_leading_bond_1(b"(-C)C", M4Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_bond_2(b"(=C)C", M4Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_bond_3(b"(#C)C", M4Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_bond_4(b"($C)C", M4Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_sterebond_1(b"(/C)C", M4Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_sterebond_2(b"(\\C)C", M4Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_aromatic_bond(b"(:C)C", M4Error::LeadingBond { pos: 1 })]
-    #[case::leading_dot_1(b".", M4Error::LeadingDot { pos: 0 })]
-    #[case::leading_dot_2(b".C", M4Error::LeadingDot { pos: 0 })]
-    #[case::leading_dot_3(b"..C", M4Error::LeadingDot { pos: 0 })]
-    #[case::leading_dot_4(b".C.", M4Error::LeadingDot { pos: 0 })]
-    #[case::trailing_dot_1(b"C.", M4Error::TrailingDot { pos: 1 })]
-    #[case::trailing_dot_2(b"C..", M4Error::ConsecutiveDot { pos: 1 })]
-    #[case::double_dot(b"C..C", M4Error::ConsecutiveDot { pos: 1 })]
-    #[case::dot_before_ring_digit(b"C.1", M4Error::LeadingRing { pos: 2 })]
-    #[case::dot_before_ring_percent(b"C.%12", M4Error::LeadingRing { pos: 2 })]
-    #[case::dot_in_group_1(b"(.)", M4Error::LeadingDot { pos: 2 })]
-    #[case::dot_in_group_2(b"(.)C", M4Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_group_3(b"(.).C", M4Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_branch_1(b"C(.)", M4Error::EmptyBranch { pos: 3 })]
-    #[case::dot_in_branch_2(b"C(.)C", M4Error::EmptyBranch { pos: 3 })]
-    #[case::dot_in_branch_3(b"C(.)(C)", M4Error::EmptyBranch { pos: 3 })]
-    #[case::dot_in_component_1(b"().C", M4Error::EmptyGroup { pos: 1 })]
-    #[case::dot_in_component_2(b"(.).C", M4Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_component_3(b"(.).(C)", M4Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_component_4(b"C.()", M4Error::EmptyGroup { pos: 3 })]
-    #[case::dot_in_component_5(b"C.(.)", M4Error::LeadingDot { pos: 4 })]
-    #[case::dot_in_component_6(b"(C).(.)", M4Error::LeadingDot { pos: 6 })]
-    #[case::dot_before_branch_1(b"C1.(C)(C)C1", M4Error::TopLevelGroupTrailing { pos: 5 })]
-    #[case::dot_unclosed_ring_1(b"C1.C", M4Error::RingUnclosed { open_pos: 1 })]
-    #[case::dot_unclosed_ring_2(b"C.C1", M4Error::RingUnclosed { open_pos: 3 })]
-    #[case::ring_order_conflict_digit(b"C=1.CC#1", M4Error::RingBondOrderConflict { pos: 7, open_pos: 2 })]
-    #[case::ring_order_conflict_percent(b"C=%12.CC#%12", M4Error::RingBondOrderConflict { pos: 9, open_pos: 2 })]
-    #[case::ring_dir_conflict_digit(b"C/1.CC\\1", M4Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
-    #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", M4Error::RingBondDirConflict { pos: 9, open_pos: 2 })]
-    #[case::ring_dir_conflict_aromatic(b"c/1.cc\\1", M4Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
-    #[case::group_dot_before_ring_digit(b"(.1)", M4Error::LeadingRing { pos: 2 })]
-    #[case::group_dot_before_ring_percent(b"(.%12)", M4Error::LeadingRing { pos: 2 })]
-    #[case::branch_dot_before_ring_digit(b"C(.1)", M4Error::LeadingRing { pos: 3 })]
-    #[case::branch_dot_before_ring_percent(b"C(.%12)", M4Error::LeadingRing { pos: 3 })]
-    #[case::branch_dot_before_bond_1(b"(.-C)", M4Error::LeadingBond { pos: 2 })]
-    #[case::branch_dot_before_bond_2(b"C(.-C)", M4Error::LeadingBond { pos: 3 })]
-    #[case::leading_bond_after_dot_1(b"C.-C", M4Error::LeadingBond { pos: 2 })]
-    #[case::leading_bond_after_dot_2(b"C.=-C", M4Error::LeadingBond { pos: 2 })]
-    #[case::leading_sterebond_after_dot_up(b"C./C", M4Error::LeadingBond { pos: 2 })]
-    #[case::leading_sterebond_after_dot_down(b"C.\\C", M4Error::LeadingBond { pos: 2 })]
-    #[case::trailing_bond_dot_aromatic(b"C:.", M4Error::TrailingBond { pos: 1 })]
-    #[case::group_trailing_bond_dot(b"(C-.)", M4Error::TrailingBond { pos: 2 })]
-    #[case::branch_trailing_bond_dot(b"C(C-.)", M4Error::TrailingBond { pos: 3 })]
-    fn m4_invalid(#[case] input: &[u8], #[case] expected: M4Error) {
-        let err = parse_smiles_m4(input);
+    #[case::basic_c(b"[C]", Some(Element::C), false, None, None, None, None, None)]
+    #[case::basic_aromatic_c(b"[c]", Some(Element::C), true, None, None, None, None, None)]
+    #[case::wildcard(b"[*]", None, false, None, None, None, None, None)]
+    #[case::isotope_elem(b"[13C]", Some(Element::C), false, Some(13), None, None, None, None)]
+    #[case::isotope_zero(b"[0C]", Some(Element::C), false, Some(0), None, None, None, None)]
+    #[case::isotope_wild(b"[13*]", None, false, Some(13), None, None, None, None)]
+    #[case::chirality_cw(b"[C@]", Some(Element::C), false, None, Some(Chirality::Clockwise), None, None, None)]
+    #[case::chirality_ccw(b"[C@@]", Some(Element::C), false, None, Some(Chirality::CounterClockwise), None, None, None)]
+    #[case::chirality_th2(b"[C@TH2]", Some(Element::C), false, None, Some(Chirality::Tetrahedral { arr: 2 }), None, None, None)]
+    #[case::chirality_al1(b"[C@AL1]", Some(Element::C), false, None, Some(Chirality::Allenal { arr: 1 }), None, None, None)]
+    #[case::chirality_sp3(b"[C@SP3]", Some(Element::C), false, None, Some(Chirality::SquarePlanar { arr: 3 }), None, None, None)]
+    #[case::chirality_tb5(b"[C@TB5]", Some(Element::C), false, None, Some(Chirality::TrigonalBipyramidal { arr: 5 }), None, None, None)]
+    #[case::chirality_oh7(b"[C@OH7]", Some(Element::C), false, None, Some(Chirality::Octahedral { arr: 7 }), None, None, None)]
+    #[case::hcount(b"[CH]", Some(Element::C), false, None, None, Some(1), None, None)]
+    #[case::hcount_1(b"[CH1]", Some(Element::C), false, None, None, Some(1), None, None)]
+    #[case::hcount_0(b"[CH0]", Some(Element::C), false, None,None, Some(0), None, None)]
+    #[case::hcount_3(b"[CH3]", Some(Element::C), false, None, None, Some(3), None, None)]
+    #[case::hcount_aromatic(b"[cH]", Some(Element::C), true, None, None, Some(1), None, None)]
+    #[case::wildcard_h1(b"[*H]", None, false, None, None, Some(1), None, None)]
+    #[case::wildcard_h2(b"[*H2]", None, false, None, None, Some(2), None, None)]
+    #[case::wildcard_h0(b"[*H0]", None, false, None, None, Some(0), None, None)]
+    #[case::chirality_cw_hydrogen(b"[C@H]", Some(Element::C), false, None, Some(Chirality::Clockwise), Some(1), None, None)]
+    #[case::chirality_ccw_hydrogen(b"[C@@H]", Some(Element::C), false, None, Some(Chirality::CounterClockwise), Some(1), None, None)]
+    #[case::charge_plus(b"[C+]", Some(Element::C), false, None, None, None, Some(1), None)]
+    #[case::charge_minus(b"[C-]", Some(Element::C), false, None, None, None, Some(-1), None)]
+    #[case::charge_pp(b"[C++]", Some(Element::C), false, None, None, None, Some(2), None)]
+    #[case::charge_mm(b"[C--]", Some(Element::C), false, None, None, None, Some(-2), None)]
+    #[case::zero_charge_pos(b"[C+0]", Some(Element::C), false, None, None, None, Some(0), None)]
+    #[case::zero_charge_neg(b"[C-0]", Some(Element::C), false, None, None, None, Some(0), None)]
+    #[case::charge_plus_10(b"[C+10]", Some(Element::C), false, None, None, None, Some(10), None)]
+    #[case::charge_minus_10(b"[C-10]", Some(Element::C), false, None, None, None, Some(-10), None)]
+    #[case::charge_plus_hcount(b"[C+H]", Some(Element::C), false, None, None, Some(1), Some(1), None)]
+    #[case::charge_plus_1_hcount(b"[C+1H]", Some(Element::C), false, None, None, Some(1), Some(1), None)]
+    #[case::charge_minus_hcount(b"[C-H]", Some(Element::C), false, None, None, Some(1), Some(-1), None)]
+    #[case::charge_minus_1_hcount(b"[C-1H]", Some(Element::C), false, None, None, Some(1), Some(-1), None)]
+    #[case::class_elem(b"[C:12]", Some(Element::C), false, None, None, None, None, Some(12))]
+    #[case::class_wild(b"[*:5]", None, false, None, None, None, None, Some(5))]
+    fn m5_bracket(
+        #[case] input: &[u8],
+        #[case] elem: Option<Element>,
+        #[case] aromatic: bool,
+        #[case] isotope: Option<u32>,
+        #[case] chirality: Option<Chirality>,
+        #[case] hcount: Option<u32>,
+        #[case] charge: Option<i32>,
+        #[case] class_: Option<u32>,
+    ) {
+        let res = parse_smiles_m5(input);
+        assert!(res.is_ok(), "{:?} should have succeeded", input);
+        let mol = res.unwrap();
+        assert_eq!(mol.atoms.len(), 1, "expected single atom");
+        let a = &mol.atoms[0];
+        match elem {
+            Some(e) => match &a.symbol {
+                AtomSymbol::Element(el) => assert_eq!(*el, e),
+                other => panic!("expected element {:?}, got {:?}", e, other),
+            },
+            None => assert!(matches!(a.symbol, AtomSymbol::Unknown)),
+        }
+        assert_eq!(a.aromatic, Some(aromatic));
+        assert_eq!(a.isotope, isotope);
+        assert_eq!(a.chirality, chirality);
+        assert_eq!(a.hydrogen_count, hcount);
+        assert_eq!(a.charge, charge);
+        assert_eq!(a.class, class_);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case(b"[C@]", Chirality::Clockwise)]
+    #[case(b"[C@@]", Chirality::CounterClockwise)]
+    #[case(b"[C@TH2]", Chirality::Tetrahedral { arr: 2 })]
+    #[case(b"[C@AL1]", Chirality::Allenal { arr: 1 })]
+    #[case(b"[C@SP3]", Chirality::SquarePlanar { arr: 3 })]
+    #[case(b"[C@TB5]", Chirality::TrigonalBipyramidal { arr: 5 })]
+    #[case(b"[C@OH7]", Chirality::Octahedral { arr: 7 })]
+    fn m5_bracket_chiral(#[case] input: &[u8], #[case] ch: Chirality) {
+        let mol = parse_smiles_m5(input).unwrap();
+        assert_eq!(mol.atoms.len(), 1);
+        let a = &mol.atoms[0];
+        assert_eq!(a.chirality, Some(ch));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case(b"c[c]", BondOrder::Aromatic)]
+    #[case(b"[c]c", BondOrder::Aromatic)]
+    #[case(b"C[C]", BondOrder::Single)]
+    #[case(b"[C]C", BondOrder::Single)]
+    #[case(b"c[*]", BondOrder::Single)]
+    fn m5_bracket_adjacency(#[case] input: &[u8], #[case] order: BondOrder) {
+        let mol = parse_smiles_m5(input).unwrap();
+        assert_eq!(mol.atoms.len(), 2);
+        assert_eq!(mol.bonds.len(), 1);
+        match mol.bonds[0].symbol {
+            crate::io::ir::BondSymbol::Bond(o) => assert_eq!(o, order),
+            other => panic!("expected concrete bond, got {:?}", other),
+        }
+    }
+
+    #[rstest]
+    #[case::leading_ring(b"1C", M5Error::LeadingRing { pos: 0 })]
+    #[case::bad_percent_short(b"C%1", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_char(b"C%1a", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_eoi(b"C%", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_zero(b"C%0", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::ring_self_loop(b"C11", M5Error::RingSelfLoop { pos: 2 })]
+    #[case::ring_two_member(b"C1C1", M5Error::RingTwoMember { pos: 3 })]
+    #[case::ring_bond_order_conflict_3(b"C=1CC#1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_4(b"C/1CC=1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_5(b"C\\1CC=1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_6(b"C=1CC/1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_7(b"C=1CC\\1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_8(b"C=%10CC#%10", M5Error::RingBondOrderConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_1(b"C/1CC\\1", M5Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_2(b"C\\1CC/1", M5Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", M5Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", M5Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_unclosed_1(b"C1CC", M5Error::RingUnclosed { open_pos: 1 })]
+    #[case::ring_unclosed_2(b"C1CC1C1", M5Error::RingUnclosed { open_pos: 6 })]
+    #[case::unbalanced_closing_paren_1(b")C", M5Error::UnbalancedBranchClose { pos: 0 })]
+    #[case::unbalanced_closing_paren_2(b"C)C", M5Error::UnbalancedBranchClose { pos: 1 })]
+    #[case::unclosed_group(b"(C", M5Error::UnbalancedBranchOpen { pos: 0 })]
+    #[case::unclosed_branch(b"C(C", M5Error::UnbalancedBranchOpen { pos: 1 })]
+    #[case::empty_branch(b"C()", M5Error::EmptyBranch { pos: 2 })]
+    #[case::empty_group_before_atom(b"()C", M5Error::EmptyGroup { pos: 1 })]
+    #[case::two_top_level_groups(b"(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::three_top_level_groups(b"(C)(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::three_top_level_groups_aromatic(b"(c)(c)(c)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::two_top_level_groups_rings(b"(C1CC1)(C2CC2)", M5Error::TopLevelGroupTrailing { pos: 6 })]
+    #[case::group_before_atom(b"(C)C", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_before_atom_aromatic(b"(c)c", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_before_atom_dot(b"C.(C)C", M5Error::TopLevelGroupTrailing { pos: 4 })]
+    #[case::trailing_bond_1(b"C-", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_2(b"C=", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_3(b"C#", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_4(b"C$", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_1(b"C/", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_2(b"C\\", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_aromatic_bond(b"C:", M5Error::TrailingBond { pos: 1 })]
+    #[case::branch_trailing_bond_1(b"C(C-)C", M5Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_bond_2(b"C(C=)C", M5Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_stereo_bond(b"CC(C/)CC", M5Error::TrailingBond { pos: 4 })]
+    #[case::group_trailing_bond_1(b"(C-)", M5Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_bond_2(b"(C=)", M5Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_stereo_bond(b"(C/)", M5Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_aromatic_bond(b"(C:)", M5Error::TrailingBond { pos: 2 })]
+    #[case::trailing_bond_before_dot_1(b"C-.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_before_dot_2(b"C=.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_before_dot_aromatic(b"C:.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_before_dot_up(b"C/.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_before_dot_down(b"C\\.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::bond_after_group_1(b"(C)-", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::bond_after_group_2(b"(C)=", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_after_group_1(b"(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_after_group_2(b"(c)(c)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::ring_after_group(b"(C1CCC)1", M5Error::TopLevelGroupTrailing { pos : 6})]
+    #[case::consecutive_bonds_1(b"C--C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_2(b"C-=C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_3(b"C-#C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_4(b"C-$C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_5(b"C-:C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_1(b"C//C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_2(b"C\\\\C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_1(b"C-/C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_2(b"C=\\C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::leading_bond_1(b"-C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_2(b"=C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_3(b"#C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_4(b"$C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_aromatic_bond(b":C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_1(b"/C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_2(b"\\C", M5Error::LeadingBond { pos: 0 })]
+    #[case::group_leading_bond_1(b"(-C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_2(b"(=C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_3(b"(#C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_4(b"($C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_1(b"(/C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_2(b"(\\C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_aromatic_bond(b"(:C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::leading_dot_1(b".", M5Error::LeadingDot { pos: 0 })]
+    #[case::leading_dot_2(b".C", M5Error::LeadingDot { pos: 0 })]
+    #[case::leading_dot_3(b"..C", M5Error::LeadingDot { pos: 0 })]
+    #[case::leading_dot_4(b".C.", M5Error::LeadingDot { pos: 0 })]
+    #[case::trailing_dot_1(b"C.", M5Error::TrailingDot { pos: 1 })]
+    #[case::trailing_dot_2(b"C..", M5Error::ConsecutiveDot { pos: 1 })]
+    #[case::double_dot(b"C..C", M5Error::ConsecutiveDot { pos: 1 })]
+    #[case::dot_before_ring_digit(b"C.1", M5Error::LeadingRing { pos: 2 })]
+    #[case::dot_before_ring_percent(b"C.%12", M5Error::LeadingRing { pos: 2 })]
+    #[case::dot_in_group_1(b"(.)", M5Error::LeadingDot { pos: 2 })]
+    #[case::dot_in_group_2(b"(.)C", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_in_group_3(b"(.).C", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_in_branch_1(b"C(.)", M5Error::EmptyBranch { pos: 3 })]
+    #[case::dot_in_branch_2(b"C(.)C", M5Error::EmptyBranch { pos: 3 })]
+    #[case::dot_in_branch_3(b"C(.)(C)", M5Error::EmptyBranch { pos: 3 })]
+    #[case::dot_in_component_1(b"().C", M5Error::EmptyGroup { pos: 1 })]
+    #[case::dot_in_component_2(b"(.).C", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_in_component_3(b"(.).(C)", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_in_component_4(b"C.()", M5Error::EmptyGroup { pos: 3 })]
+    #[case::dot_in_component_5(b"C.(.)", M5Error::LeadingDot { pos: 4 })]
+    #[case::dot_in_component_6(b"(C).(.)", M5Error::LeadingDot { pos: 6 })]
+    #[case::dot_before_branch_1(b"C1.(C)(C)C1", M5Error::TopLevelGroupTrailing { pos: 5 })]
+    #[case::dot_unclosed_ring_1(b"C1.C", M5Error::RingUnclosed { open_pos: 1 })]
+    #[case::dot_unclosed_ring_2(b"C.C1", M5Error::RingUnclosed { open_pos: 3 })]
+    #[case::ring_order_conflict_digit(b"C=1.CC#1", M5Error::RingBondOrderConflict { pos: 7, open_pos: 2 })]
+    #[case::ring_order_conflict_percent(b"C=%12.CC#%12", M5Error::RingBondOrderConflict { pos: 9, open_pos: 2 })]
+    #[case::ring_dir_conflict_digit(b"C/1.CC\\1", M5Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
+    #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", M5Error::RingBondDirConflict { pos: 9, open_pos: 2 })]
+    #[case::ring_dir_conflict_aromatic(b"c/1.cc\\1", M5Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
+    #[case::group_dot_before_ring_digit(b"(.1)", M5Error::LeadingRing { pos: 2 })]
+    #[case::group_dot_before_ring_percent(b"(.%12)", M5Error::LeadingRing { pos: 2 })]
+    #[case::branch_dot_before_ring_digit(b"C(.1)", M5Error::LeadingRing { pos: 3 })]
+    #[case::branch_dot_before_ring_percent(b"C(.%12)", M5Error::LeadingRing { pos: 3 })]
+    #[case::branch_dot_before_bond_1(b"(.-C)", M5Error::LeadingBond { pos: 2 })]
+    #[case::branch_dot_before_bond_2(b"C(.-C)", M5Error::LeadingBond { pos: 3 })]
+    #[case::leading_bond_after_dot_1(b"C.-C", M5Error::LeadingBond { pos: 2 })]
+    #[case::leading_bond_after_dot_2(b"C.=-C", M5Error::LeadingBond { pos: 2 })]
+    #[case::leading_sterebond_after_dot_up(b"C./C", M5Error::LeadingBond { pos: 2 })]
+    #[case::leading_sterebond_after_dot_down(b"C.\\C", M5Error::LeadingBond { pos: 2 })]
+    #[case::trailing_bond_dot_aromatic(b"C:.", M5Error::TrailingBond { pos: 1 })]
+    #[case::group_trailing_bond_dot(b"(C-.)", M5Error::TrailingBond { pos: 2 })]
+    #[case::branch_trailing_bond_dot(b"C(C-.)", M5Error::TrailingBond { pos: 3 })]
+    #[case::empty_bracket(b"[]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::bracket_in_chain_empty(b"C[]", M5Error::InvalidBracket { pos: 1 })]
+    #[case::bracket_in_group_empty(b"C([])", M5Error::InvalidBracket { pos: 1 })]
+    #[case::bracket_in_branch_empty(b"C([])C", M5Error::InvalidBracket { pos: 1 })]
+    #[case::bracket_in_component_empty(b"C([])C", M5Error::InvalidBracket { pos: 1 })]
+    #[case::unknown_element(b"[Xx]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::zero_charge_no_sign(b"[C0]", M5Error::InvalidBracket { pos: 1 })]
+    #[case::pos_charge_no_sign(b"[C1]", M5Error::InvalidBracket { pos: 1 })]
+    #[case::wildcard_no_element(b"[*X]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::charge_no_element_1(b"[+]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::charge_no_element_2(b"[-]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::charge_no_element_3(b"[+0]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::charge_no_element_4(b"[-0]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::charge_no_element_5(b"[+1]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::charge_no_element_6(b"[-1]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::zero_isotope_no_element(b"[0]", M5Error::InvalidBracket { pos: 1 })]
+    #[case::isotope_no_element(b"[13]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::chirality_no_element_1(b"[@]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::chirality_no_element_2(b"[@@]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::chirality_no_element_4(b"[@@TH1]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::class_no_element(b"[:12]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::unclosed_bracket_1(b"[", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_2(b"C[", M5Error::UnclosedBracket { pos: 1 })]
+    #[case::unclosed_bracket_3(b"[C", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_4(b"[)", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_5(b"[.", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_6(b"C]", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_7(b"C[", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_8(b"(]", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_9(b"[C)", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_10(b"(C]", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_11(b"].", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_12(b"[.C", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_13(b"].C", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_14(b"C.]", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_15(b"[.]", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_16(b"C.[", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_17(b"[(]", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_18(b"[)]", M5Error::UnclosedBracket { pos: 0 })]
+    fn m5_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+        let err = parse_smiles_m5(input);
         assert!(err.is_err(), "{:?} should have failed", input);
         let err = err.unwrap_err();
         assert_eq!(err, expected);

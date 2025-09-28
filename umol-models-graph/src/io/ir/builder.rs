@@ -8,9 +8,11 @@ pub struct AtomData {
     pub isotope: Option<u32>,
     pub charge: Option<i32>,
     pub hydrogen_count: Option<u8>,
+    pub class: Option<u32>,
     pub aromatic: bool,
     pub implicit_h: bool,
     pub chirality: Option<super::Chirality>,
+    pub unknown_symbol: bool,
 }
 
 pub struct BondData {
@@ -36,10 +38,11 @@ impl MoleculeBuilder {
     }
 
     pub fn on_atom(&mut self, a: AtomData) -> u32 {
-        let mut atom = IRAtom::from_element(a.element);
+        let mut atom = if a.unknown_symbol { IRAtom::default() } else { IRAtom::from_element(a.element) };
         atom.isotope = a.isotope;
         atom.charge = a.charge;
         atom.hydrogen_count = a.hydrogen_count.map(|v| v as u32);
+        atom.class = a.class;
         atom.aromatic = Some(a.aromatic);
         atom.implicit_h = a.implicit_h;
         atom.chirality = a.chirality;
