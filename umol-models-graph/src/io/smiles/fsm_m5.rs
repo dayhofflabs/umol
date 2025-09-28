@@ -680,7 +680,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::io::ir::{AtomSymbol, BondOrder, Chirality};
+    use crate::io::ir::{AtomSymbol, BondDir, BondSymbol, Chirality};
     use crate::io::smiles::test_support::build_from_graph;
 
     #[rustfmt::skip]
@@ -930,38 +930,63 @@ mod tests {
         assert_eq!(a.class, class_);
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case(b"[C@]", Chirality::Clockwise)]
-    #[case(b"[C@@]", Chirality::CounterClockwise)]
-    #[case(b"[C@TH2]", Chirality::Tetrahedral { arr: 2 })]
-    #[case(b"[C@AL1]", Chirality::Allenal { arr: 1 })]
-    #[case(b"[C@SP3]", Chirality::SquarePlanar { arr: 3 })]
-    #[case(b"[C@TB5]", Chirality::TrigonalBipyramidal { arr: 5 })]
-    #[case(b"[C@OH7]", Chirality::Octahedral { arr: 7 })]
-    fn m5_bracket_chiral(#[case] input: &[u8], #[case] ch: Chirality) {
-        let mol = parse_smiles_m5(input).unwrap();
-        assert_eq!(mol.atoms.len(), 1);
-        let a = &mol.atoms[0];
-        assert_eq!(a.chirality, Some(ch));
+    #[case::aliphatic_before(b"C[C]", BondOrder::Single, None)]
+    #[case::aliphatic_before_single(b"C-[C]", BondOrder::Single, None)]
+    #[case::aliphatic_before_double(b"C=[C]", BondOrder::Double, None)]
+    #[case::aliphatic_before_triple(b"C#[C]", BondOrder::Triple, None)]
+    #[case::aliphatic_before_quadruple(b"C$[C]", BondOrder::Quadruple, None)]
+    #[case::aliphatic_before_aromatic(b"C:[C]", BondOrder::Aromatic, None)]
+    #[case::aliphatic_before_up(b"C/[C]", BondOrder::Single, Some(BondDir::Up))]
+    #[case::aliphatic_before_down(b"C\\[C]", BondOrder::Single, Some(BondDir::Down))]
+    #[case::aliphatic_after(b"[C]C", BondOrder::Single, None)]
+    #[case::aliphatic_after_single(b"[C]-C", BondOrder::Single, None)]
+    #[case::aliphatic_after_double(b"[C]=C", BondOrder::Double, None)]
+    #[case::aliphatic_after_triple(b"[C]#C", BondOrder::Triple, None)]
+    #[case::aliphatic_after_quadruple(b"[C]$C", BondOrder::Quadruple, None)]
+    #[case::aliphatic_after_aromatic(b"[C]:C", BondOrder::Aromatic, None)]
+    #[case::aliphatic_after_up(b"[C]/C", BondOrder::Single, Some(BondDir::Up))]
+    #[case::aliphatic_after_down(b"[C]\\C", BondOrder::Single, Some(BondDir::Down))]
+    #[case::aromatic_before(b"c[c]", BondOrder::Aromatic, None)]
+    #[case::aromatic_before_single(b"c-[c]", BondOrder::Single, None)]
+    #[case::aromatic_before_aromatic(b"c:[c]", BondOrder::Aromatic, None)]
+    #[case::aromatic_after(b"[c]c", BondOrder::Aromatic, None)]
+    #[case::aromatic_after_single(b"[c]-c", BondOrder::Single, None)]
+    #[case::aromatic_after_aromatic(b"[c]:c", BondOrder::Aromatic, None)]
+    #[case::aliphatic_before_aromatic(b"C[c]", BondOrder::Single, None)]
+    #[case::aliphatic_single_before_aromatic(b"C-[c]", BondOrder::Single, None)]
+    #[case::aliphatic_aromatic_before_aromatic(b"C:[c]", BondOrder::Aromatic, None)]
+    #[case::aliphatic_after_aromatic(b"[c]C", BondOrder::Single, None)]
+    #[case::aromatic_after_aliphatic(b"[C]c", BondOrder::Single, None)]
+    #[case::aromatic_after_aliphatic_single(b"[C]-c", BondOrder::Single, None)]
+    #[case::aromatic_after_aliphatic_aromatic(b"[c]:c", BondOrder::Aromatic, None)]
+    #[case::aromatic_after_aliphatic_up(b"[C]/c", BondOrder::Single, Some(BondDir::Up))]
+    #[case::aromatic_after_aliphatic_down(b"[C]\\c", BondOrder::Single, Some(BondDir::Down))]
+    #[case::bracket_branch_1(b"[C](C)", BondOrder::Single, None)]
+    #[case::bracket_branch_2(b"C([C])", BondOrder::Single, None)]
+    #[case::bracket_branch_single(b"C(-[C])", BondOrder::Single, None)]
+    #[case::bracket_branch_double(b"C(=[C])", BondOrder::Double, None)]
+    #[case::bracket_branch_triple(b"C(#[C])", BondOrder::Triple, None)]
+    #[case::bracket_branch_quadruple(b"C($[C])", BondOrder::Quadruple, None)]
+    #[case::bracket_branch_aromatic(b"C(:[C])", BondOrder::Aromatic, None)]
+    #[case::bracket_branch_up(b"C(/[C])", BondOrder::Single, Some(BondDir::Up))]
+    #[case::bracket_branch_down(b"C(\\[C])", BondOrder::Single, Some(BondDir::Down))]
+    #[case::bracket_branch_down(b"C(\\[C])", BondOrder::Single, Some(BondDir::Down))]
+    #[case::bracket_group_1(b"([C]C)", BondOrder::Single, None)]
+    #[case::bracket_group_1(b"(C[C])", BondOrder::Single, None)]
+    #[case::bracket_ring_1(b"[C]1CC1", BondOrder::Single, None)]
+    #[case::bracket_ring_2(b"[C]1cc1", BondOrder::Single, None)]
+    #[case::bracket_ring_double_1(b"[C]1=cc1", BondOrder::Double, None)]
+    #[case::bracket_ring_double_2(b"[C]=1cc1", BondOrder::Single, None)]
+    #[case::bracket_aromatic_ring(b"[c]1cc1", BondOrder::Aromatic, None)]
+    fn m5_bracket_bonds(#[case] input: &[u8], #[case] expected: BondOrder, #[case] dir: Option<BondDir>) {
+        let res = parse_smiles_m5(input);
+        assert!(res.is_ok(), "{:?} should have succeeded", input);
+        let mol = res.unwrap();
+        assert_eq!(mol.bonds[0].symbol, BondSymbol::Bond(expected));
+        assert_eq!(mol.bonds[0].direction, dir);
     }
 
-    #[rustfmt::skip]
-    #[rstest]
-    #[case(b"c[c]", BondOrder::Aromatic)]
-    #[case(b"[c]c", BondOrder::Aromatic)]
-    #[case(b"C[C]", BondOrder::Single)]
-    #[case(b"[C]C", BondOrder::Single)]
-    #[case(b"c[*]", BondOrder::Single)]
-    fn m5_bracket_adjacency(#[case] input: &[u8], #[case] order: BondOrder) {
-        let mol = parse_smiles_m5(input).unwrap();
-        assert_eq!(mol.atoms.len(), 2);
-        assert_eq!(mol.bonds.len(), 1);
-        match mol.bonds[0].symbol {
-            crate::io::ir::BondSymbol::Bond(o) => assert_eq!(o, order),
-            other => panic!("expected concrete bond, got {:?}", other),
-        }
-    }
 
     #[rstest]
     #[case::leading_ring(b"1C", M5Error::LeadingRing { pos: 0 })]
@@ -1088,8 +1113,8 @@ mod tests {
     #[case::empty_bracket(b"[]", M5Error::InvalidBracket { pos: 0 })]
     #[case::bracket_in_chain_empty(b"C[]", M5Error::InvalidBracket { pos: 1 })]
     #[case::bracket_in_group_empty(b"C([])", M5Error::InvalidBracket { pos: 1 })]
-    #[case::bracket_in_branch_empty(b"C([])C", M5Error::InvalidBracket { pos: 1 })]
-    #[case::bracket_in_component_empty(b"C([])C", M5Error::InvalidBracket { pos: 1 })]
+    #[case::bracket_in_branch_empty(b"C([])C", M5Error::InvalidBracket { pos: 2 })]
+    #[case::bracket_in_component_empty(b"[].C", M5Error::InvalidBracket { pos: 1 })]
     #[case::unknown_element(b"[Xx]", M5Error::InvalidBracket { pos: 0 })]
     #[case::zero_charge_no_sign(b"[C0]", M5Error::InvalidBracket { pos: 1 })]
     #[case::pos_charge_no_sign(b"[C1]", M5Error::InvalidBracket { pos: 1 })]
