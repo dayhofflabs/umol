@@ -2,7 +2,7 @@ use umol_data::Element;
 
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Molecule};
-use crate::io::smiles::parser::utils::{parse_bracket, BracketField};
+use crate::io::smiles::parser::utils::{parse_bracket, BracketField, is_valid_bracket_inner};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum M5Error {
@@ -393,18 +393,10 @@ pub fn parse_smiles_m5(input: &[u8]) -> Result<Molecule, M5Error> {
                 return Err(M5Error::UnclosedBracket { pos: i });
             }
             let inner = unsafe { std::str::from_utf8_unchecked(&input[start..j]) };
-            let (elem_opt, iso_opt, fields) = parse_bracket(inner);
-            // Accept wildcard '*' possibly after an isotope prefix (e.g., "13*")
-            let iso_prefix_len = inner
-                .as_bytes()
-                .iter()
-                .take_while(|c| c.is_ascii_digit())
-                .count();
-            let wildcard_ok = inner.as_bytes().get(iso_prefix_len) == Some(&b'*');
-            if elem_opt.is_none() && !wildcard_ok {
-                // parse failed or invalid element symbol
+            if !is_valid_bracket_inner(inner) {
                 return Err(M5Error::InvalidBracket { pos: i });
             }
+            let (elem_opt, iso_opt, fields) = parse_bracket(inner);
 
             // Determine element/aromatic from inner text first char case if element present
             let (element, aromatic) = match elem_opt {
@@ -715,6 +707,26 @@ mod tests {
         assert_eq!(mol, expected);
     }
 
+    #[rstest]
+    #[case::unbalanced_closing_paren_1(b")C", M5Error::UnbalancedBranchClose { pos: 0 })]
+    #[case::unbalanced_closing_paren_2(b"C)C", M5Error::UnbalancedBranchClose { pos: 1 })]
+    #[case::unclosed_group(b"(C", M5Error::UnbalancedBranchOpen { pos: 0 })]
+    #[case::unclosed_branch(b"C(C", M5Error::UnbalancedBranchOpen { pos: 1 })]
+    #[case::empty_branch(b"C()", M5Error::EmptyBranch { pos: 2 })]
+    #[case::empty_group_before_atom(b"()C", M5Error::EmptyGroup { pos: 1 })]
+    #[case::two_top_level_groups(b"(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::three_top_level_groups(b"(C)(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::three_top_level_groups_aromatic(b"(c)(c)(c)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::two_top_level_groups_rings(b"(C1CC1)(C2CC2)", M5Error::TopLevelGroupTrailing { pos: 6 })]
+    #[case::group_before_atom(b"(C)C", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_before_atom_aromatic(b"(c)c", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    fn m5_tree_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+        let err = parse_smiles_m5(input);
+        assert!(err.is_err(), "{:?} should have failed", input);
+        let err = err.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_c_3(b"C1CC1", build_from_graph("C C C | 0-1 1-2 0-2"))]
@@ -753,6 +765,33 @@ mod tests {
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
+    }
+
+    #[rstest]
+    #[case::leading_ring(b"1C", M5Error::LeadingRing { pos: 0 })]
+    #[case::bad_percent_short(b"C%1", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_char(b"C%1a", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_eoi(b"C%", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_zero(b"C%0", M5Error::RingIndexInvalid { pos: 1 })]
+    #[case::ring_self_loop(b"C11", M5Error::RingSelfLoop { pos: 2 })]
+    #[case::ring_two_member(b"C1C1", M5Error::RingTwoMember { pos: 3 })]
+    #[case::ring_bond_order_conflict_3(b"C=1CC#1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_4(b"C/1CC=1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_5(b"C\\1CC=1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_6(b"C=1CC/1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_7(b"C=1CC\\1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_8(b"C=%10CC#%10", M5Error::RingBondOrderConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_1(b"C/1CC\\1", M5Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_2(b"C\\1CC/1", M5Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", M5Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", M5Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_unclosed_1(b"C1CC", M5Error::RingUnclosed { open_pos: 1 })]
+    #[case::ring_unclosed_2(b"C1CC1C1", M5Error::RingUnclosed { open_pos: 6 })]
+    fn m5_ring_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+        let err = parse_smiles_m5(input);
+        assert!(err.is_err(), "{:?} should have failed", input);
+        let err = err.unwrap_err();
+        assert_eq!(err, expected);
     }
 
     #[rustfmt::skip]
@@ -814,6 +853,61 @@ mod tests {
         assert_eq!(mol, expected);
     }
 
+    #[rstest]
+    #[case::trailing_bond_1(b"C-", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_2(b"C=", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_3(b"C#", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_4(b"C$", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_1(b"C/", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_2(b"C\\", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_aromatic_bond(b"C:", M5Error::TrailingBond { pos: 1 })]
+    #[case::branch_trailing_bond_1(b"C(C-)C", M5Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_bond_2(b"C(C=)C", M5Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_stereo_bond(b"CC(C/)CC", M5Error::TrailingBond { pos: 4 })]
+    #[case::group_trailing_bond_1(b"(C-)", M5Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_bond_2(b"(C=)", M5Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_stereo_bond(b"(C/)", M5Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_aromatic_bond(b"(C:)", M5Error::TrailingBond { pos: 2 })]
+    #[case::trailing_bond_before_dot_1(b"C-.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_before_dot_2(b"C=.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_before_dot_aromatic(b"C:.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_before_dot_up(b"C/.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_before_dot_down(b"C\\.C", M5Error::TrailingBond { pos: 1 })]
+    #[case::bond_after_group_1(b"(C)-", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::bond_after_group_2(b"(C)=", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_after_group_1(b"(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_after_group_2(b"(c)(c)", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::ring_after_group(b"(C1CCC)1", M5Error::TopLevelGroupTrailing { pos : 6})]
+    #[case::consecutive_bonds_1(b"C--C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_2(b"C-=C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_3(b"C-#C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_4(b"C-$C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_5(b"C-:C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_1(b"C//C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_2(b"C\\\\C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_1(b"C-/C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_2(b"C=\\C", M5Error::ConsecutiveBond { pos: 2 })]
+    #[case::leading_bond_1(b"-C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_2(b"=C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_3(b"#C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_4(b"$C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_aromatic_bond(b":C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_1(b"/C", M5Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_2(b"\\C", M5Error::LeadingBond { pos: 0 })]
+    #[case::group_leading_bond_1(b"(-C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_2(b"(=C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_3(b"(#C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_4(b"($C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_1(b"(/C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_2(b"(\\C)C", M5Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_aromatic_bond(b"(:C)C", M5Error::LeadingBond { pos: 1 })]
+    fn m5_bonds_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+        let err = parse_smiles_m5(input);
+        assert!(err.is_err(), "{:?} should have failed", input);
+        let err = err.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::components_2(b"CC.CC", build_from_graph("C C C C | 0-1 2-3"))]
@@ -859,6 +953,57 @@ mod tests {
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
+    }
+
+    #[rstest]
+    #[case::leading_dot_1(b".", M5Error::LeadingDot { pos: 0 })]
+    #[case::leading_dot_2(b".C", M5Error::LeadingDot { pos: 0 })]
+    #[case::leading_dot_3(b"..C", M5Error::LeadingDot { pos: 0 })]
+    #[case::leading_dot_4(b".C.", M5Error::LeadingDot { pos: 0 })]
+    #[case::trailing_dot_1(b"C.", M5Error::TrailingDot { pos: 1 })]
+    #[case::trailing_dot_2(b"C..", M5Error::ConsecutiveDot { pos: 1 })]
+    #[case::double_dot(b"C..C", M5Error::ConsecutiveDot { pos: 1 })]
+    #[case::dot_before_ring_digit(b"C.1", M5Error::LeadingRing { pos: 2 })]
+    #[case::dot_before_ring_percent(b"C.%12", M5Error::LeadingRing { pos: 2 })]
+    #[case::dot_in_group_1(b"(.)", M5Error::LeadingDot { pos: 2 })]
+    #[case::dot_in_group_2(b"(.)C", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_in_group_3(b"(.).C", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_before_group(b"C.(C)C", M5Error::TopLevelGroupTrailing { pos: 4 })]
+    #[case::dot_in_branch_1(b"C(.)", M5Error::EmptyBranch { pos: 3 })]
+    #[case::dot_in_branch_2(b"C(.)C", M5Error::EmptyBranch { pos: 3 })]
+    #[case::dot_in_branch_3(b"C(.)(C)", M5Error::EmptyBranch { pos: 3 })]
+    #[case::dot_in_component_1(b"().C", M5Error::EmptyGroup { pos: 1 })]
+    #[case::dot_in_component_2(b"(.).C", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_in_component_3(b"(.).(C)", M5Error::EmptyGroup { pos: 2 })]
+    #[case::dot_in_component_4(b"C.()", M5Error::EmptyGroup { pos: 3 })]
+    #[case::dot_in_component_5(b"C.(.)", M5Error::LeadingDot { pos: 4 })]
+    #[case::dot_in_component_6(b"(C).(.)", M5Error::LeadingDot { pos: 6 })]
+    #[case::dot_unclosed_ring_1(b"C1.C", M5Error::RingUnclosed { open_pos: 1 })]
+    #[case::dot_unclosed_ring_2(b"C.C1", M5Error::RingUnclosed { open_pos: 3 })]
+    #[case::dot_unclosed_ring_before_group(b"C1.(C)(C)C1", M5Error::TopLevelGroupTrailing { pos: 5 })]
+    #[case::ring_order_conflict_digit(b"C=1.CC#1", M5Error::RingBondOrderConflict { pos: 7, open_pos: 2 })]
+    #[case::ring_order_conflict_percent(b"C=%12.CC#%12", M5Error::RingBondOrderConflict { pos: 9, open_pos: 2 })]
+    #[case::ring_dir_conflict_digit(b"C/1.CC\\1", M5Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
+    #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", M5Error::RingBondDirConflict { pos: 9, open_pos: 2 })]
+    #[case::ring_dir_conflict_aromatic(b"c/1.cc\\1", M5Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
+    #[case::group_dot_before_ring_digit(b"(.1)", M5Error::LeadingRing { pos: 2 })]
+    #[case::group_dot_before_ring_percent(b"(.%12)", M5Error::LeadingRing { pos: 2 })]
+    #[case::branch_dot_before_ring_digit(b"C(.1)", M5Error::LeadingRing { pos: 3 })]
+    #[case::branch_dot_before_ring_percent(b"C(.%12)", M5Error::LeadingRing { pos: 3 })]
+    #[case::branch_dot_before_bond_1(b"(.-C)", M5Error::LeadingBond { pos: 2 })]
+    #[case::branch_dot_before_bond_2(b"C(.-C)", M5Error::LeadingBond { pos: 3 })]
+    #[case::leading_bond_after_dot_1(b"C.-C", M5Error::LeadingBond { pos: 2 })]
+    #[case::leading_bond_after_dot_2(b"C.=-C", M5Error::LeadingBond { pos: 2 })]
+    #[case::leading_sterebond_after_dot_up(b"C./C", M5Error::LeadingBond { pos: 2 })]
+    #[case::leading_sterebond_after_dot_down(b"C.\\C", M5Error::LeadingBond { pos: 2 })]
+    #[case::trailing_bond_dot_aromatic(b"C:.", M5Error::TrailingBond { pos: 1 })]
+    #[case::group_trailing_bond_dot(b"(C-.)", M5Error::TrailingBond { pos: 2 })]
+    #[case::branch_trailing_bond_dot(b"C(C-.)", M5Error::TrailingBond { pos: 3 })]
+    fn m5_components_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+        let err = parse_smiles_m5(input);
+        assert!(err.is_err(), "{:?} should have failed", input);
+        let err = err.unwrap_err();
+        assert_eq!(err, expected);
     }
 
     #[rustfmt::skip]
@@ -979,7 +1124,11 @@ mod tests {
     #[case::bracket_ring_double_1(b"[C]1=cc1", BondOrder::Double, None)]
     #[case::bracket_ring_double_2(b"[C]=1cc1", BondOrder::Single, None)]
     #[case::bracket_aromatic_ring(b"[c]1cc1", BondOrder::Aromatic, None)]
-    fn m5_bracket_bonds(#[case] input: &[u8], #[case] expected: BondOrder, #[case] dir: Option<BondDir>) {
+    fn m5_bracket_bonds(
+        #[case] input: &[u8],
+        #[case] expected: BondOrder,
+        #[case] dir: Option<BondDir>,
+    ) {
         let res = parse_smiles_m5(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
@@ -987,169 +1136,60 @@ mod tests {
         assert_eq!(mol.bonds[0].direction, dir);
     }
 
-
     #[rstest]
-    #[case::leading_ring(b"1C", M5Error::LeadingRing { pos: 0 })]
-    #[case::bad_percent_short(b"C%1", M5Error::RingIndexInvalid { pos: 1 })]
-    #[case::bad_percent_char(b"C%1a", M5Error::RingIndexInvalid { pos: 1 })]
-    #[case::bad_percent_eoi(b"C%", M5Error::RingIndexInvalid { pos: 1 })]
-    #[case::bad_percent_zero(b"C%0", M5Error::RingIndexInvalid { pos: 1 })]
-    #[case::ring_self_loop(b"C11", M5Error::RingSelfLoop { pos: 2 })]
-    #[case::ring_two_member(b"C1C1", M5Error::RingTwoMember { pos: 3 })]
-    #[case::ring_bond_order_conflict_3(b"C=1CC#1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_4(b"C/1CC=1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_5(b"C\\1CC=1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_6(b"C=1CC/1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_7(b"C=1CC\\1", M5Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_order_conflict_8(b"C=%10CC#%10", M5Error::RingBondOrderConflict { pos: 8, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_1(b"C/1CC\\1", M5Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_2(b"C\\1CC/1", M5Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", M5Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
-    #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", M5Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
-    #[case::ring_unclosed_1(b"C1CC", M5Error::RingUnclosed { open_pos: 1 })]
-    #[case::ring_unclosed_2(b"C1CC1C1", M5Error::RingUnclosed { open_pos: 6 })]
-    #[case::unbalanced_closing_paren_1(b")C", M5Error::UnbalancedBranchClose { pos: 0 })]
-    #[case::unbalanced_closing_paren_2(b"C)C", M5Error::UnbalancedBranchClose { pos: 1 })]
-    #[case::unclosed_group(b"(C", M5Error::UnbalancedBranchOpen { pos: 0 })]
-    #[case::unclosed_branch(b"C(C", M5Error::UnbalancedBranchOpen { pos: 1 })]
-    #[case::empty_branch(b"C()", M5Error::EmptyBranch { pos: 2 })]
-    #[case::empty_group_before_atom(b"()C", M5Error::EmptyGroup { pos: 1 })]
-    #[case::two_top_level_groups(b"(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::three_top_level_groups(b"(C)(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::three_top_level_groups_aromatic(b"(c)(c)(c)", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::two_top_level_groups_rings(b"(C1CC1)(C2CC2)", M5Error::TopLevelGroupTrailing { pos: 6 })]
-    #[case::group_before_atom(b"(C)C", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_before_atom_aromatic(b"(c)c", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_before_atom_dot(b"C.(C)C", M5Error::TopLevelGroupTrailing { pos: 4 })]
-    #[case::trailing_bond_1(b"C-", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_2(b"C=", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_3(b"C#", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_4(b"C$", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_1(b"C/", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_2(b"C\\", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_aromatic_bond(b"C:", M5Error::TrailingBond { pos: 1 })]
-    #[case::branch_trailing_bond_1(b"C(C-)C", M5Error::TrailingBond { pos: 3 })]
-    #[case::branch_trailing_bond_2(b"C(C=)C", M5Error::TrailingBond { pos: 3 })]
-    #[case::branch_trailing_stereo_bond(b"CC(C/)CC", M5Error::TrailingBond { pos: 4 })]
-    #[case::group_trailing_bond_1(b"(C-)", M5Error::TrailingBond { pos: 2 })]
-    #[case::group_trailing_bond_2(b"(C=)", M5Error::TrailingBond { pos: 2 })]
-    #[case::group_trailing_stereo_bond(b"(C/)", M5Error::TrailingBond { pos: 2 })]
-    #[case::group_trailing_aromatic_bond(b"(C:)", M5Error::TrailingBond { pos: 2 })]
-    #[case::trailing_bond_before_dot_1(b"C-.C", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_before_dot_2(b"C=.C", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_bond_before_dot_aromatic(b"C:.C", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_before_dot_up(b"C/.C", M5Error::TrailingBond { pos: 1 })]
-    #[case::trailing_stereo_bond_before_dot_down(b"C\\.C", M5Error::TrailingBond { pos: 1 })]
-    #[case::bond_after_group_1(b"(C)-", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::bond_after_group_2(b"(C)=", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_after_group_1(b"(C)(C)", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::group_after_group_2(b"(c)(c)", M5Error::TopLevelGroupTrailing { pos: 2 })]
-    #[case::ring_after_group(b"(C1CCC)1", M5Error::TopLevelGroupTrailing { pos : 6})]
-    #[case::consecutive_bonds_1(b"C--C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_2(b"C-=C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_3(b"C-#C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_4(b"C-$C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bonds_5(b"C-:C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_stereo_bonds_1(b"C//C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_stereo_bonds_2(b"C\\\\C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bond_and_stereo_bond_1(b"C-/C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::consecutive_bond_and_stereo_bond_2(b"C=\\C", M5Error::ConsecutiveBond { pos: 2 })]
-    #[case::leading_bond_1(b"-C", M5Error::LeadingBond { pos: 0 })]
-    #[case::leading_bond_2(b"=C", M5Error::LeadingBond { pos: 0 })]
-    #[case::leading_bond_3(b"#C", M5Error::LeadingBond { pos: 0 })]
-    #[case::leading_bond_4(b"$C", M5Error::LeadingBond { pos: 0 })]
-    #[case::leading_aromatic_bond(b":C", M5Error::LeadingBond { pos: 0 })]
-    #[case::leading_sterebond_1(b"/C", M5Error::LeadingBond { pos: 0 })]
-    #[case::leading_sterebond_2(b"\\C", M5Error::LeadingBond { pos: 0 })]
-    #[case::group_leading_bond_1(b"(-C)C", M5Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_bond_2(b"(=C)C", M5Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_bond_3(b"(#C)C", M5Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_bond_4(b"($C)C", M5Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_sterebond_1(b"(/C)C", M5Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_sterebond_2(b"(\\C)C", M5Error::LeadingBond { pos: 1 })]
-    #[case::group_leading_aromatic_bond(b"(:C)C", M5Error::LeadingBond { pos: 1 })]
-    #[case::leading_dot_1(b".", M5Error::LeadingDot { pos: 0 })]
-    #[case::leading_dot_2(b".C", M5Error::LeadingDot { pos: 0 })]
-    #[case::leading_dot_3(b"..C", M5Error::LeadingDot { pos: 0 })]
-    #[case::leading_dot_4(b".C.", M5Error::LeadingDot { pos: 0 })]
-    #[case::trailing_dot_1(b"C.", M5Error::TrailingDot { pos: 1 })]
-    #[case::trailing_dot_2(b"C..", M5Error::ConsecutiveDot { pos: 1 })]
-    #[case::double_dot(b"C..C", M5Error::ConsecutiveDot { pos: 1 })]
-    #[case::dot_before_ring_digit(b"C.1", M5Error::LeadingRing { pos: 2 })]
-    #[case::dot_before_ring_percent(b"C.%12", M5Error::LeadingRing { pos: 2 })]
-    #[case::dot_in_group_1(b"(.)", M5Error::LeadingDot { pos: 2 })]
-    #[case::dot_in_group_2(b"(.)C", M5Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_group_3(b"(.).C", M5Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_branch_1(b"C(.)", M5Error::EmptyBranch { pos: 3 })]
-    #[case::dot_in_branch_2(b"C(.)C", M5Error::EmptyBranch { pos: 3 })]
-    #[case::dot_in_branch_3(b"C(.)(C)", M5Error::EmptyBranch { pos: 3 })]
-    #[case::dot_in_component_1(b"().C", M5Error::EmptyGroup { pos: 1 })]
-    #[case::dot_in_component_2(b"(.).C", M5Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_component_3(b"(.).(C)", M5Error::EmptyGroup { pos: 2 })]
-    #[case::dot_in_component_4(b"C.()", M5Error::EmptyGroup { pos: 3 })]
-    #[case::dot_in_component_5(b"C.(.)", M5Error::LeadingDot { pos: 4 })]
-    #[case::dot_in_component_6(b"(C).(.)", M5Error::LeadingDot { pos: 6 })]
-    #[case::dot_before_branch_1(b"C1.(C)(C)C1", M5Error::TopLevelGroupTrailing { pos: 5 })]
-    #[case::dot_unclosed_ring_1(b"C1.C", M5Error::RingUnclosed { open_pos: 1 })]
-    #[case::dot_unclosed_ring_2(b"C.C1", M5Error::RingUnclosed { open_pos: 3 })]
-    #[case::ring_order_conflict_digit(b"C=1.CC#1", M5Error::RingBondOrderConflict { pos: 7, open_pos: 2 })]
-    #[case::ring_order_conflict_percent(b"C=%12.CC#%12", M5Error::RingBondOrderConflict { pos: 9, open_pos: 2 })]
-    #[case::ring_dir_conflict_digit(b"C/1.CC\\1", M5Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
-    #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", M5Error::RingBondDirConflict { pos: 9, open_pos: 2 })]
-    #[case::ring_dir_conflict_aromatic(b"c/1.cc\\1", M5Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
-    #[case::group_dot_before_ring_digit(b"(.1)", M5Error::LeadingRing { pos: 2 })]
-    #[case::group_dot_before_ring_percent(b"(.%12)", M5Error::LeadingRing { pos: 2 })]
-    #[case::branch_dot_before_ring_digit(b"C(.1)", M5Error::LeadingRing { pos: 3 })]
-    #[case::branch_dot_before_ring_percent(b"C(.%12)", M5Error::LeadingRing { pos: 3 })]
-    #[case::branch_dot_before_bond_1(b"(.-C)", M5Error::LeadingBond { pos: 2 })]
-    #[case::branch_dot_before_bond_2(b"C(.-C)", M5Error::LeadingBond { pos: 3 })]
-    #[case::leading_bond_after_dot_1(b"C.-C", M5Error::LeadingBond { pos: 2 })]
-    #[case::leading_bond_after_dot_2(b"C.=-C", M5Error::LeadingBond { pos: 2 })]
-    #[case::leading_sterebond_after_dot_up(b"C./C", M5Error::LeadingBond { pos: 2 })]
-    #[case::leading_sterebond_after_dot_down(b"C.\\C", M5Error::LeadingBond { pos: 2 })]
-    #[case::trailing_bond_dot_aromatic(b"C:.", M5Error::TrailingBond { pos: 1 })]
-    #[case::group_trailing_bond_dot(b"(C-.)", M5Error::TrailingBond { pos: 2 })]
-    #[case::branch_trailing_bond_dot(b"C(C-.)", M5Error::TrailingBond { pos: 3 })]
     #[case::empty_bracket(b"[]", M5Error::InvalidBracket { pos: 0 })]
     #[case::bracket_in_chain_empty(b"C[]", M5Error::InvalidBracket { pos: 1 })]
-    #[case::bracket_in_group_empty(b"C([])", M5Error::InvalidBracket { pos: 1 })]
+    #[case::bracket_in_group_empty(b"(C[])", M5Error::InvalidBracket { pos: 2 })]
     #[case::bracket_in_branch_empty(b"C([])C", M5Error::InvalidBracket { pos: 2 })]
-    #[case::bracket_in_component_empty(b"[].C", M5Error::InvalidBracket { pos: 1 })]
-    #[case::unknown_element(b"[Xx]", M5Error::InvalidBracket { pos: 0 })]
-    #[case::zero_charge_no_sign(b"[C0]", M5Error::InvalidBracket { pos: 1 })]
-    #[case::pos_charge_no_sign(b"[C1]", M5Error::InvalidBracket { pos: 1 })]
-    #[case::wildcard_no_element(b"[*X]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::bracket_in_component_empty(b"[].C", M5Error::InvalidBracket { pos: 0 })]
+    #[case::invalid_element_1(b"[X]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::invalid_element_2(b"[Z]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::invalid_element_3(b"[Aq]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::invalid_element_4(b"[Sh]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::two_elements_1(b"[CF]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::two_elements_2(b"[AsF]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::two_elements_3(b"[FAs]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::two_elements_4(b"[AsBr]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::two_elements_wildcard_1(b"[*C]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::two_elements_wildcard_2(b"[C*]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::wildcard_invalid_element_1(b"[*X]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::wildcard_invalid_element_2(b"[X*]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::double_wildcard(b"[**]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::zero_charge_no_sign(b"[C0]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::pos_charge_no_sign(b"[C1]", M5Error::InvalidBracket { pos: 0 })]
     #[case::charge_no_element_1(b"[+]", M5Error::InvalidBracket { pos: 0 })]
     #[case::charge_no_element_2(b"[-]", M5Error::InvalidBracket { pos: 0 })]
     #[case::charge_no_element_3(b"[+0]", M5Error::InvalidBracket { pos: 0 })]
     #[case::charge_no_element_4(b"[-0]", M5Error::InvalidBracket { pos: 0 })]
     #[case::charge_no_element_5(b"[+1]", M5Error::InvalidBracket { pos: 0 })]
     #[case::charge_no_element_6(b"[-1]", M5Error::InvalidBracket { pos: 0 })]
-    #[case::zero_isotope_no_element(b"[0]", M5Error::InvalidBracket { pos: 1 })]
+    #[case::zero_isotope_no_element(b"[0]", M5Error::InvalidBracket { pos: 0 })]
     #[case::isotope_no_element(b"[13]", M5Error::InvalidBracket { pos: 0 })]
     #[case::chirality_no_element_1(b"[@]", M5Error::InvalidBracket { pos: 0 })]
     #[case::chirality_no_element_2(b"[@@]", M5Error::InvalidBracket { pos: 0 })]
     #[case::chirality_no_element_4(b"[@@TH1]", M5Error::InvalidBracket { pos: 0 })]
     #[case::class_no_element(b"[:12]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::hcount_two_digits(b"[CH10]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::colon_no_class(b"[C:]", M5Error::InvalidBracket { pos: 0 })]
     #[case::unclosed_bracket_1(b"[", M5Error::UnclosedBracket { pos: 0 })]
     #[case::unclosed_bracket_2(b"C[", M5Error::UnclosedBracket { pos: 1 })]
     #[case::unclosed_bracket_3(b"[C", M5Error::UnclosedBracket { pos: 0 })]
     #[case::unclosed_bracket_4(b"[)", M5Error::UnclosedBracket { pos: 0 })]
     #[case::unclosed_bracket_5(b"[.", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_6(b"C]", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_7(b"C[", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_8(b"(]", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_6(b"C]", M5Error::UnsupportedToken { pos: 1 })]
+    #[case::unclosed_bracket_7(b"C[", M5Error::UnclosedBracket { pos: 1 })]
+    #[case::unclosed_bracket_8(b"(]", M5Error::UnsupportedToken { pos: 1 })]
     #[case::unclosed_bracket_9(b"[C)", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_10(b"(C]", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_11(b"].", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::unclosed_bracket_10(b"(C]", M5Error::UnsupportedToken { pos: 2 })]
+    #[case::unclosed_bracket_11(b"].", M5Error::UnsupportedToken { pos: 0 })]
     #[case::unclosed_bracket_12(b"[.C", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_13(b"].C", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_14(b"C.]", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_15(b"[.]", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_16(b"C.[", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_17(b"[(]", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_18(b"[)]", M5Error::UnclosedBracket { pos: 0 })]
-    fn m5_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+    #[case::unclosed_bracket_13(b"].C", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::unclosed_bracket_14(b"C.]", M5Error::UnsupportedToken { pos: 2 })]
+    #[case::unclosed_bracket_15(b"[.]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::unclosed_bracket_16(b"C.[", M5Error::UnclosedBracket { pos: 2 })]
+    #[case::unclosed_bracket_17(b"[(]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::unclosed_bracket_18(b"[)]", M5Error::InvalidBracket { pos: 0 })]
+    fn m5_bracket_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
         let err = parse_smiles_m5(input);
         assert!(err.is_err(), "{:?} should have failed", input);
         let err = err.unwrap_err();

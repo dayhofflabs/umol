@@ -28,6 +28,7 @@ pub fn parse_state() -> ParseState {
     ParseState::default()
 }
 
+#[allow(dead_code)]
 pub fn count_tokens(input: &str) -> usize {
     let lexer = Lexer::new(input);
     lexer.map(|t| t.ok()).count()

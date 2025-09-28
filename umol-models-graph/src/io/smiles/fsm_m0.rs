@@ -107,14 +107,63 @@ mod tests {
     }
 
     #[rstest]
+    #[case::non_ascii(b"\xf0\x9f\x9c\x8d", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::comma(b",", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::semicolon(b";", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::question_mark(b"?", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::caret(b"^", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::pipe(b"|", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::open_angle_bracket(b"<", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::close_angle_bracket(b"<", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::open_brace(b"{", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::close_brace(b"}", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::single_quote(b"'", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::double_quote(b"\"", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::backtick(b"`", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::tilde(b"~", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::exclamation_mark(b"!", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::ampersand(b"&", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::underscore(b"_", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::bare_chirality(b"C@", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_charge_pos(b"C+", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_charge_neg(b"C-", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_hcount(b"CH", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_digit(b"1", M0Error::UnsupportedToken { pos: 0 })]
+    fn m0_tokens_invalid(#[case] input: &[u8], #[case] expected: M0Error) {
+        let res = parse_smiles_m0(input);
+        assert!(res.is_err(), "{:?} should have failed", input);
+        let err = res.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
+    #[case::invalid_element_1(b"X", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::invalid_element_2(b"Z", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::invalid_element_3(b"Aq", M0Error::UnsupportedToken { pos: 0 })]
+    #[case::invalid_element_4(b"Sh", M0Error::UnsupportedToken { pos: 1 })]
+    fn m0_chain_invalid(#[case] input: &[u8], #[case] expected: M0Error) {
+        let res = parse_smiles_m0(input);
+        assert!(res.is_err(), "{:?} should have failed", input);
+        let err = res.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
+    #[case::wildcard(b"*", M0Error::UnsupportedToken { pos: 0 })]
     #[case::aromatic(b"c", M0Error::UnsupportedToken { pos: 0 })]
     #[case::bond_order(b"C-C", M0Error::UnsupportedToken { pos: 1 })]
     #[case::bracket(b"[C]", M0Error::UnsupportedToken { pos: 0 })]
     #[case::group(b"(C)", M0Error::UnsupportedToken { pos: 0 })]
     #[case::branch(b"CC(C)C", M0Error::UnsupportedToken { pos: 2 })]
     #[case::ring(b"C1CC1", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::ring_percent(b"C%12CC1%2", M0Error::UnsupportedToken { pos: 1 })]
     #[case::component(b"CC.CC", M0Error::UnsupportedToken { pos: 2 })]
-    fn m0_invalid(#[case] input: &[u8], #[case] expected: M0Error) {
+    #[case::whitespace_1(b"C ", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_2(b"C\t", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_3(b"C\n", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_4(b"C\r", M0Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_5(b"C\r\n", M0Error::UnsupportedToken { pos: 1 })]
+    fn m0_unimplemented(#[case] input: &[u8], #[case] expected: M0Error) {
         let res = parse_smiles_m0(input);
         assert!(res.is_err(), "{:?} should have failed", input);
         let err = res.unwrap_err();

@@ -4,7 +4,7 @@ use atoi;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while_m_n};
 use nom::character::complete::{digit1, one_of};
-use nom::combinator::{map, map_res, opt, value};
+use nom::combinator::{all_consuming, complete, map, map_res, opt, value};
 use nom::error::Error;
 use nom::multi::fold_many0;
 use nom::sequence::{pair, preceded};
@@ -34,10 +34,15 @@ pub struct BracketFields {
 /// Zero-allocation bracket field parser used by both parser and linter.
 /// Returns (element, isotope, fields) where fields are bracket fields in appearance order.
 pub fn parse_bracket(inner: &str) -> (Option<Element>, Option<u32>, SmallVec<[BracketField; 4]>) {
-    fields()
+    all_consuming(complete(fields()))
         .parse(inner)
         .map(|(_, f)| f)
         .unwrap_or_else(|_| (None, None, SmallVec::new()))
+}
+
+/// Fast validity check: requires full consumption of `inner` by the bracket parser
+pub fn is_valid_bracket_inner(inner: &str) -> bool {
+    all_consuming(complete(fields())).parse(inner).is_ok()
 }
 
 /// Tail bracket fields can be in any order, return in order of appearance
@@ -80,12 +85,19 @@ fn isotope<'a>() -> impl Parser<&'a str, Output = u32, Error = Error<&'a str>> {
 /// Parse element symbol, follows isotope field
 fn element_symbol<'a>() -> impl Parser<&'a str, Output = Option<Element>, Error = Error<&'a str>> {
     alt((
-        // Try two-letter element first (e.g., Cl, Br). If not a valid element, backtrack.
+        // Two-letter element with proper case: Uppercase + lowercase (e.g., Cl, Br)
         map_res(
             take_while_m_n(2, 2, |c: char| c.is_ascii_alphabetic()),
-            |s: &str| Element::from_symbol(s).ok_or("Invalid element symbol").map(Some),
+            |s: &str| {
+                let b = s.as_bytes();
+                if b[0].is_ascii_uppercase() && b[1].is_ascii_lowercase() {
+                    Element::from_symbol(s).ok_or("Invalid element symbol").map(Some)
+                } else {
+                    Err("Invalid element symbol case")
+                }
+            },
         ),
-        // Then try one-letter element (e.g., C, N, O)
+        // One-letter element (accept both uppercase organic and lowercase aromatic organics: c, n, o, p, s)
         map_res(
             take_while_m_n(1, 1, |c: char| c.is_ascii_alphabetic()),
             |s: &str| Element::from_symbol(s).ok_or("Invalid element symbol").map(Some),

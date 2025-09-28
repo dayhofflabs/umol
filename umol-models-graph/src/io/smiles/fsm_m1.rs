@@ -230,6 +230,48 @@ mod tests {
     }
 
     #[rstest]
+    #[case::non_ascii(b"\xf0\x9f\x9c\x8d", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::comma(b",", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::semicolon(b";", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::question_mark(b"?", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::caret(b"^", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::pipe(b"|", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::open_angle_bracket(b"<", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::close_angle_bracket(b"<", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::open_brace(b"{", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::close_brace(b"}", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::single_quote(b"'", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::double_quote(b"\"", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::backtick(b"`", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::tilde(b"~", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::exclamation_mark(b"!", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::ampersand(b"&", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::underscore(b"_", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::bare_chirality(b"C@", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_charge_pos(b"C+", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_charge_neg(b"C-", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_hcount(b"CH", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::bare_digit(b"1", M1Error::UnsupportedToken { pos: 0 })]
+    fn m1_tokens_invalid(#[case] input: &[u8], #[case] expected: M1Error) {
+        let res = parse_smiles_m1(input);
+        assert!(res.is_err(), "{:?} should have failed", input);
+        let err = res.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
+    #[case::invalid_element_1(b"X", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::invalid_element_2(b"Z", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::invalid_element_3(b"Aq", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::invalid_element_4(b"Sh", M1Error::UnsupportedToken { pos: 1 })]
+    fn m1_chain_invalid(#[case] input: &[u8], #[case] expected: M1Error) {
+        let res = parse_smiles_m1(input);
+        assert!(res.is_err(), "{:?} should have failed", input);
+        let err = res.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
     #[case::empty_group(b"()", Molecule::default())]
     #[case::group_c_1(b"(C)", build_from_graph("C |"))]
     #[case::group_c_4(b"(CCCC)", build_from_graph("C C C C | 0-1 1-2 2-3"))]
@@ -246,19 +288,36 @@ mod tests {
     }
 
     #[rstest]
-    #[case::aromatic(b"c", M1Error::UnsupportedToken { pos: 0 })]
-    #[case::bond_order(b"C-C", M1Error::UnsupportedToken { pos: 1 })]
-    #[case::bracket(b"[C]", M1Error::UnsupportedToken { pos: 0 })]
-    #[case::ring(b"C1CC1", M1Error::UnsupportedToken { pos: 1 })]
-    #[case::component(b"CC.CC", M1Error::UnsupportedToken { pos: 2 })]
-    #[case::stray_closing_paren(b")C", M1Error::UnbalancedBranchClose { pos: 0 })]
+    #[case::unbalanced_closing_paren_1(b")C", M1Error::UnbalancedBranchClose { pos: 0 })]
+    #[case::unbalanced_closing_paren_2(b"C)C", M1Error::UnbalancedBranchClose { pos: 1 })]
     #[case::unclosed_group(b"(C", M1Error::UnbalancedBranchOpen { pos: 0 })]
     #[case::unclosed_branch(b"C(C", M1Error::UnbalancedBranchOpen { pos: 1 })]
     #[case::empty_branch(b"C()", M1Error::EmptyBranch { pos: 2 })]
     #[case::empty_group_before_atom(b"()C", M1Error::EmptyGroup { pos: 1 })]
-    #[case::two_top_level_groups(b"(C)(C)", M1Error::TopLevelGroupTrailing { pos: 2 })]
     #[case::group_before_atom(b"(C)C", M1Error::TopLevelGroupTrailing { pos: 2 })]
-    fn m1_invalid(#[case] input: &[u8], #[case] expected: M1Error) {
+    #[case::two_top_level_groups(b"(C)(C)", M1Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::three_top_level_groups(b"(C)(C)(C)", M1Error::TopLevelGroupTrailing { pos: 2 })]
+    fn m1_tree_invalid(#[case] input: &[u8], #[case] expected: M1Error) {
+        let err = parse_smiles_m1(input);
+        assert!(err.is_err(), "{:?} should have failed", input);
+        let err = err.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
+    #[case::wildcard(b"*", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::aromatic(b"c", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::bond_order(b"C-C", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::bracket(b"[C]", M1Error::UnsupportedToken { pos: 0 })]
+    #[case::ring(b"C1CC1", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::ring_percent(b"C%12CC1%2", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::component(b"CC.CC", M1Error::UnsupportedToken { pos: 2 })]
+    #[case::whitespace_1(b"C ", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_2(b"C\t", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_3(b"C\n", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_4(b"C\r", M1Error::UnsupportedToken { pos: 1 })]
+    #[case::whitespace_5(b"C\r\n", M1Error::UnsupportedToken { pos: 1 })]
+    fn m1_unimplemented(#[case] input: &[u8], #[case] expected: M1Error) {
         let err = parse_smiles_m1(input);
         assert!(err.is_err(), "{:?} should have failed", input);
         let err = err.unwrap_err();

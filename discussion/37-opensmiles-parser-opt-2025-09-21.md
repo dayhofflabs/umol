@@ -366,3 +366,22 @@ If that sounds good, I’ll set up cargo-fuzz with:
 12. Add Criterion benches targeting component-heavy inputs.
 13. Proptest: extend ASCII alphabet to include '.', ensure no panics.
 14. Fuzz: add '.' to dictionary and seed corpus.
+
+### M5 Tasks
+
+1. Copy M4 FSM to fsm_m5.rs and rename to M5
+2. Add M5Error enum mirroring M4Error plus bracket-specific errors
+3. Export parse_smiles_m5 and M5Error in smiles.rs
+4. Integrate utils::parse_bracket in FSM for bracket atoms
+5. Map bracket fields to IR: element, isotope, H, charge, class
+6. Handle bracket chirality to IR (Chirality)
+7. Add unit tests: valid bracket atoms and combinations
+8. Add unit tests: invalid bracket forms and bounds
+9. Property test: M5 matches M4 on inputs without brackets
+10. Update linter rules to cover bracket lexing/syntax cases
+11. Extend fuzz dictionary with bracket tokens and fields
+12. Add Criterion benches for bracket-heavy inputs
+13. Document M5 features and diagnostics (opensmiles-umol.md, errors.md)
+14. Wire M5 into CLI utilities and re-exports, if any
+15. Run full test suite, fuzz, and benches for M5
+
