@@ -2,7 +2,8 @@ use umol_data::Element;
 
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Molecule};
-use crate::io::smiles::parser::utils::{is_valid_bracket_inner, parse_bracket, BracketField};
+use crate::io::smiles::parser::utils::BracketField;
+use smallvec::SmallVec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum M5Error {
@@ -27,6 +28,8 @@ pub enum M5Error {
     ConsecutiveDot { pos: usize },
     UnclosedBracket { pos: usize },
     InvalidBracket { pos: usize },
+    BracketHCountTwoDigits { pos: usize },
+    BracketEmptyClass { pos: usize },
 }
 
 fn is_digit(b: u8) -> bool {
@@ -66,6 +69,31 @@ fn map_bond(b: u8) -> (BondOrder, Option<BondDir>) {
         b'\\' => (BondOrder::Single, Some(BondDir::Down)),
         _ => (BondOrder::Single, None),
     }
+}
+
+// Local bracket parser that emits M5Error directly
+fn parse_bracket_m5(
+    inner: &[u8],
+    pos_offset: usize,
+) -> Result<(Option<Element>, Option<u32>, SmallVec<[BracketField; 4]>), M5Error> {
+    // Specific fast-path checks to map detailed errors
+    let bytes = inner;
+    if bytes.last() == Some(&b':') {
+        return Err(M5Error::BracketEmptyClass { pos: pos_offset });
+    }
+    if bytes
+        .windows(3)
+        .any(|w| w[0] == b'H' && w[1].is_ascii_digit() && w[2].is_ascii_digit())
+    {
+        return Err(M5Error::BracketHCountTwoDigits { pos: pos_offset });
+    }
+    // Fallback validation via existing utility (works on &str)
+    let s = match std::str::from_utf8(inner) { Ok(v) => v, Err(_) => return Err(M5Error::InvalidBracket { pos: pos_offset }) };
+    if !crate::io::smiles::parser::utils::is_valid_bracket_inner(s) {
+        return Err(M5Error::InvalidBracket { pos: pos_offset });
+    }
+    let (elem_opt, iso_opt, tails) = crate::io::smiles::parser::utils::parse_bracket(s);
+    Ok((elem_opt, iso_opt, tails))
 }
 
 pub fn parse_smiles_m5(input: &[u8]) -> Result<Molecule, M5Error> {
@@ -392,17 +420,14 @@ pub fn parse_smiles_m5(input: &[u8]) -> Result<Molecule, M5Error> {
             if j >= n {
                 return Err(M5Error::UnclosedBracket { pos: i });
             }
-            let inner = unsafe { std::str::from_utf8_unchecked(&input[start..j]) };
-            if !is_valid_bracket_inner(inner) {
-                return Err(M5Error::InvalidBracket { pos: i });
-            }
-            let (elem_opt, iso_opt, fields) = parse_bracket(inner);
+            let inner = &input[start..j];
+            let (elem_opt, iso_opt, fields) = parse_bracket_m5(inner, i)?;
 
-            // Determine element/aromatic from inner text first char case if element present
+            // Determine element/aromatic from inner bytes' first byte if element present
             let (element, aromatic) = match elem_opt {
                 Some(e) => {
-                    // If the first char is lowercase, treat as aromatic element
-                    let first = inner.as_bytes().first().copied().unwrap_or_default();
+                    // If the first byte is lowercase ASCII, treat as aromatic element
+                    let first = inner.first().copied().unwrap_or_default();
                     let arom = first.is_ascii_lowercase();
                     (e, arom)
                 }
@@ -1204,8 +1229,8 @@ mod tests {
     #[case::chirality_no_element_2(b"[@@]", M5Error::InvalidBracket { pos: 0 })]
     #[case::chirality_no_element_4(b"[@@TH1]", M5Error::InvalidBracket { pos: 0 })]
     #[case::class_no_element(b"[:12]", M5Error::InvalidBracket { pos: 0 })]
-    #[case::hcount_two_digits(b"[CH10]", M5Error::InvalidBracket { pos: 0 })]
-    #[case::colon_no_class(b"[C:]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::hcount_two_digits(b"[CH10]", M5Error::BracketHCountTwoDigits { pos: 0 })]
+    #[case::colon_no_class(b"[C:]", M5Error::BracketEmptyClass { pos: 0 })]
     #[case::unclosed_bracket_1(b"[", M5Error::UnclosedBracket { pos: 0 })]
     #[case::unclosed_bracket_2(b"C[", M5Error::UnclosedBracket { pos: 1 })]
     #[case::unclosed_bracket_3(b"[C", M5Error::UnclosedBracket { pos: 0 })]

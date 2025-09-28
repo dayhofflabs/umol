@@ -204,6 +204,90 @@ impl Rule for DotRules {
 }
 pub static DOT_RULES: DotRules = DotRules;
 
+// Leading bond
+pub struct LeadingBondRule;
+static META_LEX_LEAD_BOND: RuleMeta = RuleMeta { id: "LEX_LEADING_BOND_RULE", category: Category::Lex, default_severity: Severity::Error };
+impl Rule for LeadingBondRule {
+    fn meta(&self) -> &'static RuleMeta { &META_LEX_LEAD_BOND }
+    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
+        if let Some(seg) = ctx.segments().iter().find(|s| !matches!(s, Segment::WhitespaceBlock { .. })) {
+            if let Segment::Bond { span, .. } = seg {
+                emit.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_BOND"), category: Category::Lex, severity: Severity::Error, span: *span, message: "Leading bond symbol", scope: Scope::Global });
+            }
+        }
+    }
+}
+pub static LEADING_BOND_RULE: LeadingBondRule = LeadingBondRule;
+
+// Leading ring
+pub struct LeadingRingRule;
+static META_LEX_LEAD_RING: RuleMeta = RuleMeta { id: "LEX_LEADING_RING_RULE", category: Category::Lex, default_severity: Severity::Error };
+impl Rule for LeadingRingRule {
+    fn meta(&self) -> &'static RuleMeta { &META_LEX_LEAD_RING }
+    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
+        if let Some(seg) = ctx.segments().iter().find(|s| !matches!(s, Segment::WhitespaceBlock { .. })) {
+            if let Segment::RingClosure { span, .. } = seg {
+                emit.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_RING"), category: Category::Lex, severity: Severity::Error, span: *span, message: "Leading ring index", scope: Scope::Global });
+            }
+        }
+    }
+}
+pub static LEADING_RING_RULE: LeadingRingRule = LeadingRingRule;
+
+// Consecutive bonds
+pub struct ConsecutiveBondsRule;
+static META_LEX_CONS_BONDS: RuleMeta = RuleMeta { id: "LEX_CONSEC_BONDS_RULE", category: Category::Lex, default_severity: Severity::Error };
+impl Rule for ConsecutiveBondsRule {
+    fn meta(&self) -> &'static RuleMeta { &META_LEX_CONS_BONDS }
+    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
+        let segs = ctx.segments();
+        let mut last_bond_span: Option<Span> = None;
+        for seg in segs.iter() {
+            match seg {
+                Segment::WhitespaceBlock { .. } => {}
+                Segment::Bond { span, .. } => {
+                    if let Some(prev) = last_bond_span.take() {
+                        emit.candidate(DiagnosticCandidate { code: Code("LEX_CONSECUTIVE_BONDS"), category: Category::Lex, severity: Severity::Error, span: Span::new(prev.start, span.end), message: "Consecutive bond symbols", scope: Scope::Global });
+                    } else {
+                        last_bond_span = Some(*span);
+                    }
+                }
+                _ => last_bond_span = None,
+            }
+        }
+    }
+}
+pub static CONSECUTIVE_BONDS_RULE: ConsecutiveBondsRule = ConsecutiveBondsRule;
+
+// Top-level group trailing
+pub struct TopGroupTrailingRule;
+static META_TOP_GRP: RuleMeta = RuleMeta { id: "LEX_TOP_GRP_TRAILING_RULE", category: Category::Lex, default_severity: Severity::Error };
+impl Rule for TopGroupTrailingRule {
+    fn meta(&self) -> &'static RuleMeta { &META_TOP_GRP }
+    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
+        let segs = ctx.segments();
+        let mut depth: i32 = 0;
+        for idx in 0..segs.len() {
+            match segs[idx] {
+                Segment::WhitespaceBlock { .. } => {}
+                Segment::BranchOpen { .. } => depth += 1,
+                Segment::BranchClose { span } => {
+                    depth -= 1;
+                    if depth == 0 {
+                        let mut j = idx + 1;
+                        while j < segs.len() && matches!(segs[j], Segment::WhitespaceBlock { .. }) { j += 1; }
+                        if j < segs.len() && !matches!(segs[j], Segment::NewComponent { .. }) {
+                            emit.candidate(DiagnosticCandidate { code: Code("TOP_GRP_TRAILING"), category: Category::Lex, severity: Severity::Error, span, message: "Top-level group followed by non-dot", scope: Scope::Global });
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+pub static TOP_GRP_TRAILING_RULE: TopGroupTrailingRule = TopGroupTrailingRule;
+
 pub struct InconsistentAromaticityRule;
 static META_AROM: RuleMeta = RuleMeta {
     id: "LEX_AROM_CONSISTENCY",

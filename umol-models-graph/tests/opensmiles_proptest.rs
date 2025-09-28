@@ -95,7 +95,9 @@ proptest! {
                 | M5Error::TrailingDot { pos }
                 | M5Error::ConsecutiveDot { pos }
                 | M5Error::UnclosedBracket { pos }
-                | M5Error::InvalidBracket { pos } => pos < len,
+                | M5Error::InvalidBracket { pos }
+                | M5Error::BracketHCountTwoDigits { pos }
+                | M5Error::BracketEmptyClass { pos } => pos < len,
 
                 M5Error::RingBondDirConflict { pos, open_pos }
                 | M5Error::RingBondOrderConflict { pos, open_pos } => pos < len && open_pos < len,

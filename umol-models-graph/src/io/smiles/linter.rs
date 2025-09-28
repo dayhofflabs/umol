@@ -27,6 +27,10 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     registry.register(&rules::WS_RULE);
     registry.register(&rules::TRAILING_BOND_RULE);
     registry.register(&rules::DOT_RULES);
+    registry.register(&rules::LEADING_BOND_RULE);
+    registry.register(&rules::LEADING_RING_RULE);
+    registry.register(&rules::CONSECUTIVE_BONDS_RULE);
+    registry.register(&rules::TOP_GRP_TRAILING_RULE);
     registry.register(&rules::STYLE_PCT_RULE);
     registry.register(&rules::BRANCH_RULE);
     registry.register(&rules::BOND_STYLE_RULE);
