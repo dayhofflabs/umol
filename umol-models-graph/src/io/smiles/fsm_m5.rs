@@ -2,7 +2,7 @@ use umol_data::Element;
 
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Molecule};
-use crate::io::smiles::parser::utils::{parse_bracket, BracketField, is_valid_bracket_inner};
+use crate::io::smiles::parser::utils::{is_valid_bracket_inner, parse_bracket, BracketField};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum M5Error {
@@ -630,6 +630,41 @@ pub fn parse_smiles_m5(input: &[u8]) -> Result<Molecule, M5Error> {
             continue;
         }
 
+        // Bare wildcard atom '*'
+        if b0 == b'*' {
+            let atom = AtomData {
+                element: Element::C, // placeholder, will be ignored due to unknown_symbol
+                isotope: Some(0),
+                charge: Some(0),
+                hydrogen_count: Some(0),
+                class: None,
+                aromatic: false,
+                implicit_h: false,
+                chirality: None,
+                unknown_symbol: true,
+            };
+            let curr = builder.on_atom(atom);
+            if let Some(last) = last_atom_idx {
+                if let Some((order, dir, _pos)) = pending_bond.take() {
+                    builder.on_bond(last, curr, BondData { order, dir });
+                } else {
+                    builder.on_bond_single_fast(last, curr);
+                }
+                prev_atom_idx = Some(last);
+            }
+            last_atom_idx = Some(curr);
+            last_aromatic = false;
+            if let Some(top) = pstack.last_mut() {
+                match top {
+                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
+                        *had_atom = true
+                    }
+                }
+            }
+            i += 1;
+            continue;
+        }
+
         return Err(M5Error::UnsupportedToken { pos: i });
     }
 
@@ -1190,6 +1225,81 @@ mod tests {
     #[case::unclosed_bracket_17(b"[(]", M5Error::InvalidBracket { pos: 0 })]
     #[case::unclosed_bracket_18(b"[)]", M5Error::InvalidBracket { pos: 0 })]
     fn m5_bracket_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+        let err = parse_smiles_m5(input);
+        assert!(err.is_err(), "{:?} should have failed", input);
+        let err = err.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
+    #[case::wildcard(b"*", 0, false)]
+    #[case::two_wildcards(b"**", 0, true)]
+    #[case::wildcard_after_c(b"C*", 1, true)]
+    #[case::wildcard_before_c(b"*C", 0, true)]
+    #[case::wildcard_bond_single(b"C-*", 1, true)]
+    #[case::wildcard_bond_single_rev(b"*-C", 0, true)]
+    #[case::wildcard_branch_1(b"*(C)", 0, true)]
+    #[case::wildcard_branch_2(b"C(*)", 1, true)]
+    #[case::wildcard_branch_3(b"C(*C)", 1, true)]
+    #[case::wildcard_group_1(b"(*)", 0, false)]
+    #[case::wildcard_group_2(b"(*C)", 0, true)]
+    #[case::wildcard_group_3(b"(C*)", 1, true)]
+    #[case::wildcard_ring_1(b"*1CC1", 0, true)]
+    #[case::wildcard_ring_2(b"C1*C1", 1, true)]
+    #[case::wildcard_ring_3(b"C1C*1", 2, true)]
+    #[case::wildcard_component_1(b"*.C", 0, false)]
+    #[case::wildcard_component_2(b"C.*", 1, false)]
+    #[case::wildcard_dot_bond_1(b"*1.C1", 0, true)]
+    #[case::wildcard_dot_bond_2(b"C1.*1", 1, true)]
+    fn m5_wildcard(#[case] input: &[u8], #[case] star_idx: usize, #[case] has_bonds: bool) {
+        let res = parse_smiles_m5(input);
+        assert!(res.is_ok(), "{:?} should have succeeded", input);
+        let mol = res.unwrap();
+        assert!(star_idx < mol.atoms.len());
+        let a = &mol.atoms[star_idx];
+        assert!(matches!(a.symbol, AtomSymbol::Unknown));
+        assert_eq!(a.isotope, Some(0));
+        assert_eq!(a.charge, Some(0));
+        assert_eq!(a.hydrogen_count, Some(0));
+        assert_eq!(a.aromatic, Some(false));
+        assert_eq!(a.implicit_h, false);
+        if has_bonds {
+            assert!(mol.bonds.len() > 0);
+        }
+    }
+
+    #[rstest]
+    #[case::wildcard_after_group(b"(C)*", M5Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::wildcard_unclosed_ring(b"*1", M5Error::RingUnclosed { open_pos: 1 })]
+    #[case::wildcard_unclosed_branch(b"C(*", M5Error::UnbalancedBranchOpen { pos: 1 })]
+    #[case::wildcard_unclosed_group(b"(C*", M5Error::UnbalancedBranchOpen { pos: 0 })]
+    #[case::wildcard_unclosed_bracket(b"[*", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::wildcard_trailing_bond(b"*-", M5Error::TrailingBond { pos: 1 })]
+    #[case::wildcard_trailing_dot(b"*.", M5Error::TrailingDot { pos: 1 })]
+    fn m5_wildcard_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
+        let res = parse_smiles_m5(input);
+        assert!(res.is_err(), "{:?} should have failed", input);
+        let err = res.unwrap_err();
+        assert_eq!(err, expected);
+    }
+
+    #[rstest]
+    #[case::whitespace_1(b" ", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::whitespace_2(b"\t", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::whitespace_3(b"\n", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::whitespace_4(b"\r", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::whitespace_5(b"\r\n", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::leading_whitespace_1(b" C", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::leading_whitespace_2(b"\tC", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::leading_whitespace_3(b"\nC", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::leading_whitespace_4(b"\rC", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::leading_whitespace_5(b"\r\nC", M5Error::UnsupportedToken { pos: 0 })]
+    #[case::trailing_whitespace_1(b"C ", M5Error::UnsupportedToken { pos: 1 })]
+    #[case::trailing_whitespace_2(b"C\t", M5Error::UnsupportedToken { pos: 1 })]
+    #[case::trailing_whitespace_3(b"C\n", M5Error::UnsupportedToken { pos: 1 })]
+    #[case::trailing_whitespace_4(b"C\r", M5Error::UnsupportedToken { pos: 1 })]
+    #[case::trailing_whitespace_5(b"C\r\n", M5Error::UnsupportedToken { pos: 1 })]
+    fn m5_unimplemented(#[case] input: &[u8], #[case] expected: M5Error) {
         let err = parse_smiles_m5(input);
         assert!(err.is_err(), "{:?} should have failed", input);
         let err = err.unwrap_err();
