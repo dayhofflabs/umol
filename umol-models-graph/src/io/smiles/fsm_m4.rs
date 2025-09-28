@@ -66,8 +66,6 @@ fn map_bond(b: u8) -> (BondOrder, Option<BondDir>) {
     }
 }
 
-// M4: components ('.') as a strict superset of M3
-// Streaming FSM (copied from M3) with an added '.' branch that resets adjacency.
 pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
     let mut i = 0usize;
     let n = input.len();
@@ -168,9 +166,15 @@ pub fn parse_smiles_m4(input: &[u8]) -> Result<Molecule, M4Error> {
                 return Err(M4Error::TrailingBond { pos });
             }
             // Invalid dot forms: leading, trailing, or consecutive dots
-            if i == 0 { return Err(M4Error::LeadingDot { pos: i }); }
-            if i + 1 == n { return Err(M4Error::TrailingDot { pos: i }); }
-            if input[i + 1] == b'.' { return Err(M4Error::ConsecutiveDot { pos: i }); }
+            if i == 0 {
+                return Err(M4Error::LeadingDot { pos: i });
+            }
+            if i + 1 == n {
+                return Err(M4Error::TrailingDot { pos: i });
+            }
+            if input[i + 1] == b'.' {
+                return Err(M4Error::ConsecutiveDot { pos: i });
+            }
             last_atom_idx = None;
             prev_atom_idx = None;
             last_aromatic = false;
@@ -581,60 +585,249 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::two_components(b"CC.CC", build_from_graph("C C C C | 0-1 2-3"))]
-    #[case::ring_across_dot_digit(b"C1.CC1", build_from_graph("C C C | 1-2 0-2"))]
-    #[case::ring_across_dot_percent(b"C%12.CC%12", build_from_graph("C C C | 1-2 0-2"))]
-    #[case::branch_local_components(b"C(C.C)", build_from_graph("C C C | 0-1"))]
-    #[case::groups_and_dots(b"(CC).(CC)", build_from_graph("C C C C | 0-1 2-3"))]
-    #[case::group_components_and_atom(b"(C.C).C", build_from_graph("C C C |"))]
-    #[case::dots_around_groups_1(b"C.(C).C", build_from_graph("C C C |"))]
-    #[case::dots_around_groups_2(b"C.C.(C)", build_from_graph("C C C |"))]
-    #[case::rings_across_multiple_dots_digit(b"C1.C.CC1", build_from_graph("C C C C | 2-3 0-3"))]
-    #[case::rings_across_multiple_dots_percent(b"C%12.C.CC%12", build_from_graph("C C C C | 2-3 0-3"))]
-    fn m4_components_valid(#[case] input: &[u8], #[case] expected: Molecule) {
+    #[case::empty(b"", Molecule::default())]
+    #[case::chain_c_1(b"C", build_from_graph("C |"))]
+    #[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
+    #[case::aromatic_c_6(b"cccccc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5:"))]
+    #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C Cl O Br N | 0-1 1-2 2-3 3-4"))]
+    fn m4_chain(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m4(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::leading_dot(b".C")]
-    #[case::trailing_dot(b"C.")]
-    #[case::double_dot(b"C..C")]
-    #[case::dot_before_ring_digit(b"C.1")]
-    #[case::dot_before_ring_percent(b"C.%12")]
-    fn m4_components_invalid(#[case] input: &[u8]) {
+    #[case::empty_group(b"()", Molecule::default())]
+    #[case::group_c_1(b"(C)", build_from_graph("C |"))]
+    #[case::group_c_1_aromatic(b"(c)", build_from_graph("C* |"))]
+    #[case::group_c_4(b"(CCCC)", build_from_graph("C C C C | 0-1 1-2 2-3"))]
+    #[case::group_nested(b"((CC))", build_from_graph("C C | 0-1"))]
+    #[case::branch_c_111(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
+    #[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4: 4-5:"))]
+    #[case::trailing_branch(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
+    fn m4_tree(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m4(input);
-        assert!(res.is_err(), "{:?} should have failed", input);
+        assert!(res.is_ok(), "{:?} should have succeeded", input);
+        let mol = res.unwrap();
+        assert_eq!(mol, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::ring_c_3(b"C1CC1", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_c_10(b"C1CCCCCCCCC1", build_from_graph("C C C C C C C C C C | 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9 0-9"))]
+    #[case::ring_aromatic_c_6(b"c1ccccc1", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5:"))]
+    #[case::ring_index_0(b"C0CC0", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_percent(b"C%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_numeric_equiv_1(b"C1CC%01", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_numeric_equiv_0(b"C0CC%00", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_numeric_equiv_9(b"C9CC%09", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_index_max_percent(b"C%99CC%99", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
+    #[case::two_rings_bonded_0_aromatic(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
+    #[case::two_rings_bonded_0_aromatic_1(b"c1cc1C2CC2", build_from_graph("C* C* C* C C C | 0-1: 1-2: 0-2: 2-3 3-4 4-5 3-5"))]
+    #[case::two_rings_index_reused(b"C1CC1C1CC1", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
+    #[case::two_rings_bonded_2(b"C1CC1CCC2CC2", build_from_graph("C C C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 5-6 6-7 5-7"))]
+    #[case::two_rings_spiro(b"C1CC12CC2", build_from_graph("C C C C C | 0-1 1-2 0-2 2-3 3-4 2-4"))]
+    #[case::two_rings_fused(b"C12CC1C2", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 0-3"))]
+    #[case::two_rings_bridged(b"C12CC(C2)C1", build_from_graph("C C C C C | 0-1 1-2 2-3 0-3 2-4 0-4"))]
+    #[case::two_rings_fused_aromatic(b"c12ccccc1cccc2", build_from_graph("C* C* C* C* C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5: 5-6: 6-7: 7-8: 8-9: 0-9:"))]
+    #[case::three_rings_fused(b"C12C3C1C32", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 1-3 0-3"))]
+    #[case::ring_group(b"(C1CC1)", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_branch_1(b"CC(C1)(C1)", build_from_graph("C C C C | 0-1 1-2 1-3 2-3"))]
+    #[case::ring_branch_2(b"C(C1)CC1", build_from_graph("C C C C | 0-1 0-2 2-3 1-3 "))]
+    #[case::substituted_ring_1(b"CC1CC1", build_from_graph("C C C C | 0-1 1-2 2-3 1-3"))]
+    #[case::substituted_ring_2(b"C1(C)CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
+    #[case::substituted_ring_3(b"C(C)1CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
+    #[case::substituted_ring_4(b"C1C(C)C1", build_from_graph("C C C C | 0-1 1-2 1-3 0-3"))]
+    #[case::substituted_ring_5(b"C1CC(C)1", build_from_graph("C C C C | 0-1 1-2 2-3 0-2"))]
+    #[case::substituted_ring_6(b"C1CC1C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
+    #[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
+    #[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3: 0-3:"))]
+    #[case::substituted_ring_branch_1(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
+    fn m4_ring(#[case] input: &[u8], #[case] expected: Molecule) {
+        let res = parse_smiles_m4(input);
+        assert!(res.is_ok(), "{:?} should have succeeded", input);
+        let mol = res.unwrap();
+        assert_eq!(mol, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::single_bond(b"C-C", build_from_graph("C C | 0-1:-"))]
+    #[case::double_bond(b"C=C", build_from_graph("C C | 0-1:="))]
+    #[case::triple_bond(b"C#C", build_from_graph("C C | 0-1:#"))]
+    #[case::quadruple_bond(b"C$C", build_from_graph("C C | 0-1:$"))]
+    #[case::aromatic_bond(b"C:C", build_from_graph("C C | 0-1::"))]
+    #[case::up_bond(b"C/C", build_from_graph("C C | 0-1:/"))]
+    #[case::down_bond(b"C\\C", build_from_graph("C C | 0-1:\\"))]
+    #[case::single_bond_aromatic(b"c-c", build_from_graph("C* C* | 0-1:-"))]
+    #[case::double_bond_aromatic(b"c=c", build_from_graph("C* C* | 0-1:="))]
+    #[case::triple_bond_aromatic(b"c#c", build_from_graph("C* C* | 0-1:#"))]
+    #[case::quadruple_bond_aromatic(b"c$c", build_from_graph("C* C* | 0-1:$"))]
+    #[case::aromatic_bond_aromatic(b"c:c", build_from_graph("C* C* | 0-1::"))]
+    #[case::up_bond_aromatic(b"c/c", build_from_graph("C* C* | 0-1:/"))]
+    #[case::down_bond_aromatic(b"c\\c", build_from_graph("C* C* | 0-1:\\"))]
+    #[case::cumulated_bonds(b"C=C=C", build_from_graph("C C C | 0-1:= 1-2:="))]
+    #[case::conjugated_bonds(b"C=CC=C", build_from_graph("C C C C | 0-1:= 1-2:- 2-3:="))]
+    #[case::cumulated_bonds_aromatic(b"c=c=c", build_from_graph("C* C* C* | 0-1:= 1-2:="))]
+    #[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C* C* C* C* | 0-1:= 1-2:- 2-3:="))]
+    #[case::branch_leading_bond(b"CC(-C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::branch_leading_double_bond(b"CC(=C)C", build_from_graph("C C C C | 0-1 1-2:= 1-3"))]
+    #[case::branch_internal_bond(b"CC(C-C)C", build_from_graph("C C C C C | 0-1 1-2 2-3 1-4"))]
+    #[case::branch_internal_double_bond(b"CC(C=C)C", build_from_graph("C C C C C | 0-1 1-2 2-3:= 1-4"))]
+    #[case::branch_followed_by_bond(b"CC(C)-C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+    #[case::branch_followed_by_double_bond(b"CC(C)=C", build_from_graph("C C C C | 0-1 1-2 1-3:="))]
+    #[case::branch_leading_bond_aromatic(b"cc(:c)c", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3:"))]
+    #[case::branch_internal_bond_aromatic(b"cc(c:c)c", build_from_graph("C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4:"))]
+    #[case::branch_followed_by_bond_aromatic(b"cc(c):c", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3:"))]
+    #[case::branch_trans_double_bond_1(b"C/C=C/C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:/"))]
+    #[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:\\"))]
+    #[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:/"))]
+    #[case::branch_cis_double_bond_2(b"C/C=C\\C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:\\"))]
+    #[case::ring_single_bond(b"C-1-C-C-1", build_from_graph("C C C | 0-1 1-2 0-2"))]
+    #[case::ring_double_bond_1(b"C1-C=C1", build_from_graph("C C C | 0-1 1-2:= 0-2"))]
+    #[case::ring_double_bond_2(b"C1-CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_3(b"C=1-CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_4(b"C=1-C-C=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_unilateral_close(b"C1CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_double_bond_unilateral_open(b"C=1CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+    #[case::ring_triple_bond(b"C1-C-C#1", build_from_graph("C C C | 0-1 1-2 0-2:#"))]
+    #[case::ring_quadruple_bond(b"C1-C-C$1", build_from_graph("C C C | 0-1 1-2 0-2:$"))]
+    #[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C* C* C* | 0-1: 1-2: 0-2:"))]
+    #[case::ring_up_bond_1(b"C1CC/1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_up_bond_2(b"C/1CC1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_up_bond_3(b"C/1CC/1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_down_bond(b"C1CC\\1", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
+    #[case::ring_down_bond_both(b"C\\1CC\\1", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
+    #[case::ring_up_bond_percent_open(b"C/%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_up_bond_percent_close(b"C%12CC/%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
+    #[case::ring_down_bond_percent_both(b"C\\%12CC\\%12", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
+    #[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
+    fn m4_bonds(#[case] input: &[u8], #[case] expected: Molecule) {
+        let res = parse_smiles_m4(input);
+        assert!(res.is_ok(), "{:?} should have succeeded", input);
+        let mol = res.unwrap();
+        assert_eq!(mol, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::components_2(b"CC.CC", build_from_graph("C C C C | 0-1 2-3"))]
+    #[case::components_5(b"C.C.C.C.C", build_from_graph("C C C C C | "))]
+    #[case::ring_components_1(b"C1.CC1", build_from_graph("C C C | 1-2 0-2"))]
+    #[case::ring_components_2(b"C%12.CC%12", build_from_graph("C C C | 1-2 0-2"))]
+    #[case::branch_components(b"C(C.C)", build_from_graph("C C C | 0-1"))]
+    #[case::group_components_1(b"(C.CC.C)", build_from_graph("C C C C | 1-2"))]
+    #[case::group_components_2(b"(CC).(CC)", build_from_graph("C C C C | 0-1 2-3"))]
+    #[case::group_components_3(b"(C.C).C", build_from_graph("C C C |"))]
+    #[case::group_components_4(b"C.(C).C", build_from_graph("C C C |"))]
+    #[case::group_components_5(b"C.C.(C)", build_from_graph("C C C |"))]
+    #[case::group_ring_components(b"(CC1.C1)", build_from_graph("C C C | 0-1 1-2"))]
+    #[case::rings_across_multiple_dots_digit(b"C1.C.CC1", build_from_graph("C C C C | 2-3 0-3"))]
+    #[case::rings_across_multiple_dots_percent(b"C%12.C.CC%12", build_from_graph("C C C C | 2-3 0-3"))]
     #[case::ring_double_unilateral_open(b"C=1.CC1", build_from_graph("C C C | 1-2 0-2:="))]
     #[case::ring_double_unilateral_close(b"C1.CC=1", build_from_graph("C C C | 1-2 0-2:="))]
     #[case::ring_dir_up_both(b"C/1.CC/1", build_from_graph("C C C | 1-2 0-2:/"))]
     #[case::ring_dir_down_both(b"C\\1.CC\\1", build_from_graph("C C C | 1-2 0-2:\\"))]
     #[case::ring_dir_up_both_percent(b"C/%12.CC/%12", build_from_graph("C C C | 1-2 0-2:/"))]
     #[case::ring_dir_down_both_percent(b"C\\%12.CC\\%12", build_from_graph("C C C | 1-2 0-2:\\"))]
-    fn m4_rings_components_valid(#[case] input: &[u8], #[case] expected: Molecule) {
+    fn m4_components(#[case] input: &[u8], #[case] expected: Molecule) {
         let res = parse_smiles_m4(input);
         assert!(res.is_ok(), "{:?} should have succeeded", input);
         let mol = res.unwrap();
         assert_eq!(mol, expected);
     }
-
     #[rstest]
+    #[case::leading_ring(b"1C", M4Error::LeadingRing { pos: 0 })]
+    #[case::bad_percent_short(b"C%1", M4Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_char(b"C%1a", M4Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_eoi(b"C%", M4Error::RingIndexInvalid { pos: 1 })]
+    #[case::bad_percent_zero(b"C%0", M4Error::RingIndexInvalid { pos: 1 })]
+    #[case::ring_self_loop(b"C11", M4Error::RingSelfLoop { pos: 2 })]
+    #[case::ring_two_member(b"C1C1", M4Error::RingTwoMember { pos: 3 })]
+    #[case::ring_bond_order_conflict_3(b"C=1CC#1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_4(b"C/1CC=1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_5(b"C\\1CC=1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_6(b"C=1CC/1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_7(b"C=1CC\\1", M4Error::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_order_conflict_8(b"C=%10CC#%10", M4Error::RingBondOrderConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_1(b"C/1CC\\1", M4Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_2(b"C\\1CC/1", M4Error::RingBondDirConflict { pos: 6, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", M4Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", M4Error::RingBondDirConflict { pos: 8, open_pos: 2 })]
+    #[case::ring_unclosed_1(b"C1CC", M4Error::RingUnclosed { open_pos: 1 })]
+    #[case::ring_unclosed_2(b"C1CC1C1", M4Error::RingUnclosed { open_pos: 6 })]
+    #[case::unbalanced_closing_paren_1(b")C", M4Error::UnbalancedBranchClose { pos: 0 })]
+    #[case::unbalanced_closing_paren_2(b"C)C", M4Error::UnbalancedBranchClose { pos: 1 })]
+    #[case::unclosed_group(b"(C", M4Error::UnbalancedBranchOpen { pos: 0 })]
+    #[case::unclosed_branch(b"C(C", M4Error::UnbalancedBranchOpen { pos: 1 })]
+    #[case::empty_branch(b"C()", M4Error::EmptyBranch { pos: 2 })]
+    #[case::empty_group_before_atom(b"()C", M4Error::EmptyGroup { pos: 1 })]
+    #[case::two_top_level_groups(b"(C)(C)", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::three_top_level_groups(b"(C)(C)(C)", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::three_top_level_groups_aromatic(b"(c)(c)(c)", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::two_top_level_groups_rings(b"(C1CC1)(C2CC2)", M4Error::TopLevelGroupTrailing { pos: 6 })]
+    #[case::group_before_atom(b"(C)C", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_before_atom_aromatic(b"(c)c", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::trailing_bond_1(b"C-", M4Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_2(b"C=", M4Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_3(b"C#", M4Error::TrailingBond { pos: 1 })]
+    #[case::trailing_bond_4(b"C$", M4Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_1(b"C/", M4Error::TrailingBond { pos: 1 })]
+    #[case::trailing_stereo_bond_2(b"C\\", M4Error::TrailingBond { pos: 1 })]
+    #[case::trailing_aromatic_bond(b"C:", M4Error::TrailingBond { pos: 1 })]
+    #[case::branch_trailing_bond_1(b"C(C-)C", M4Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_bond_2(b"C(C=)C", M4Error::TrailingBond { pos: 3 })]
+    #[case::branch_trailing_stereo_bond(b"CC(C/)CC", M4Error::TrailingBond { pos: 4 })]
+    #[case::group_trailing_bond_1(b"(C-)", M4Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_bond_2(b"(C=)", M4Error::TrailingBond { pos: 2 })]
+    #[case::group_trailing_stereo_bond(b"(C/)", M4Error::TrailingBond { pos: 2 })]
+    #[case::bond_after_group_1(b"(C)-", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::bond_after_group_2(b"(C)=", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_after_group_1(b"(C)(C)", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::group_after_group_2(b"(c)(c)", M4Error::TopLevelGroupTrailing { pos: 2 })]
+    #[case::ring_after_group(b"(C1CCC)1", M4Error::TopLevelGroupTrailing { pos : 6})]
+    #[case::consecutive_bonds_1(b"C--C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_2(b"C-=C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_3(b"C-#C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_4(b"C-$C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bonds_5(b"C-:C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_1(b"C//C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_stereo_bonds_2(b"C\\\\C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_1(b"C-/C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::consecutive_bond_and_stereo_bond_2(b"C=\\C", M4Error::ConsecutiveBond { pos: 2 })]
+    #[case::leading_bond_1(b"-C", M4Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_2(b"=C", M4Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_3(b"#C", M4Error::LeadingBond { pos: 0 })]
+    #[case::leading_bond_4(b"$C", M4Error::LeadingBond { pos: 0 })]
+    #[case::leading_aromatic_bond(b":C", M4Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_1(b"/C", M4Error::LeadingBond { pos: 0 })]
+    #[case::leading_sterebond_2(b"\\C", M4Error::LeadingBond { pos: 0 })]
+    #[case::group_leading_bond_1(b"(-C)C", M4Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_2(b"(=C)C", M4Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_3(b"(#C)C", M4Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_bond_4(b"($C)C", M4Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_1(b"(/C)C", M4Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_sterebond_2(b"(\\C)C", M4Error::LeadingBond { pos: 1 })]
+    #[case::group_leading_aromatic_bond(b"(:C)C", M4Error::LeadingBond { pos: 1 })]
+    #[case::leading_dot(b".C", M4Error::LeadingDot { pos: 0 })]
+    #[case::trailing_dot(b"C.", M4Error::TrailingDot { pos: 1 })]
+    #[case::double_dot(b"C..C", M4Error::ConsecutiveDot { pos: 1 })]
+    #[case::leading_dot_in_group(b"(.C)", M4Error::UnsupportedToken { pos: 1 })]
+    #[case::dot_before_ring_digit(b"C.1", M4Error::LeadingRing { pos: 2 })]
+    #[case::dot_before_ring_percent(b"C.%12", M4Error::LeadingRing { pos: 2 })]
     #[case::ring_order_conflict_digit(b"C=1.CC#1", M4Error::RingBondOrderConflict { pos: 7, open_pos: 2 })]
     #[case::ring_order_conflict_percent(b"C=%12.CC#%12", M4Error::RingBondOrderConflict { pos: 9, open_pos: 2 })]
     #[case::ring_dir_conflict_digit(b"C/1.CC\\1", M4Error::RingBondDirConflict { pos: 7, open_pos: 2 })]
     #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", M4Error::RingBondDirConflict { pos: 9, open_pos: 2 })]
-    fn m4_rings_components_invalid(#[case] input: &[u8], #[case] expected: M4Error) {
+    fn m4_invalid(#[case] input: &[u8], #[case] expected: M4Error) {
         let err = parse_smiles_m4(input);
         assert!(err.is_err(), "{:?} should have failed", input);
         let err = err.unwrap_err();
         assert_eq!(err, expected);
     }
-
-  
 }
