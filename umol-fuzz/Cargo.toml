@@ -14,8 +14,8 @@ libfuzzer-sys = "0.4"
 path = "../umol-models-graph"
 
 [[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
+name = "opensmiles_fuzzing"
+path = "fuzz_targets/opensmiles_fuzzing.rs"
 test = false
 doc = false
 bench = false

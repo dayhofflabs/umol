@@ -5,7 +5,7 @@ use nom::{error, Parser};
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use serde::{Deserialize, Serialize};
 
-use crate::io::config::ParseFlags;
+use crate::io::config::MolParseFlags;
 use crate::io::ctab::molecule::{Molecule, MoleculeLike};
 use crate::io::ctab::parser::{basic_ctab_block, ctab_block};
 use crate::io::mol::parser::header::Header;
@@ -45,7 +45,7 @@ impl MolFileLike {
 
 /// Parse complete MOL file (header + CTAB block)
 pub(crate) fn mol_file<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = MolFile, Error = error::Error<&'a [u8]>> {
     map(
         (header::header(), basic_ctab_block(flags)),
@@ -55,7 +55,7 @@ pub(crate) fn mol_file<'a>(
 
 /// Parse complete MOL file (header + CTAB block)
 pub(crate) fn mol_file_moleculelike<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = MolFileLike, Error = error::Error<&'a [u8]>> {
     map(
         (header::header(), ctab_block(flags)),
@@ -129,8 +129,8 @@ pub fn parse_mol_str(input: &str) -> Result<Molecule> {
 /// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
     // TODO: add configuration options
-    let flags = ParseFlags::LENIENT;
-    if !flags.contains(ParseFlags::UNICODE) {
+    let flags = MolParseFlags::LENIENT;
+    if !flags.contains(MolParseFlags::UNICODE) {
         complete(mol_file_moleculelike(flags))
             .parse(input)
             .map(|(_, mol_file)| mol_file.molecule)
@@ -155,7 +155,7 @@ pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
 /// It will fail if the MOL file contains query features.
 /// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
-    complete(mol_file(ParseFlags::BASIC))
+    complete(mol_file(MolParseFlags::BASIC))
         .parse(input)
         .map(|(_, mol_file)| mol_file.molecule)
         .map_err(|e| DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())

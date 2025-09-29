@@ -13,6 +13,7 @@ pub mod fsm_m2;
 pub mod fsm_m3;
 pub mod fsm_m4;
 pub mod fsm_m5;
+pub mod fsm_m6;
 #[cfg(test)]
 pub mod test_support;
 
@@ -28,3 +29,5 @@ pub use fsm_m4::parse_smiles_m4;
 pub use fsm_m4::M4Error;
 pub use fsm_m5::parse_smiles_m5;
 pub use fsm_m5::M5Error;
+pub use fsm_m6::parse_smiles_m6;
+pub use fsm_m6::M6Error;

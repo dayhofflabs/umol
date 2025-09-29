@@ -22,7 +22,7 @@ pub use self::properties::{
 use super::atom::{Atom, AtomLike};
 use super::bond::{Bond, BondLike};
 use super::molecule::{Molecule, MoleculeLike};
-use crate::io::config::ParseFlags;
+use crate::io::config::MolParseFlags;
 
 mod accumulator;
 mod atom;
@@ -40,7 +40,7 @@ mod utils;
 /// This parser is optimized for basic molecules without query features.
 /// It will fail if the CTAB contains query atoms, query bonds, or other advanced features.
 pub fn basic_ctab_block<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let (remaining, counts) = counts_block(flags).parse(input)?;
@@ -62,10 +62,10 @@ pub fn basic_ctab_block<'a>(
 /// This parser handles all CTAB features including query atoms, query bonds,
 /// R-groups, S-groups, and all property lines.
 pub fn ctab_block<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = MoleculeLike, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
-        let legacy_features = flags.contains(ParseFlags::LEGACY_FEATURES);
+        let legacy_features = flags.contains(MolParseFlags::LEGACY_FEATURES);
         let (remaining, counts) = counts_block(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
@@ -87,7 +87,7 @@ pub fn ctab_block<'a>(
 
 /// Parse counts block
 fn counts_block<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
     map_parser(terminated(is_not("\r\n"), line_ending), counts_input(flags))
 }
@@ -95,7 +95,7 @@ fn counts_block<'a>(
 /// Parse atom block (basic atoms only)
 fn atom_block<'a>(
     atom_count: usize,
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<Atom>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
@@ -120,7 +120,7 @@ fn atom_block<'a>(
 /// Parse atom-like block
 fn atomlike_block<'a>(
     atom_count: usize,
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<AtomLike>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
@@ -145,7 +145,7 @@ fn atomlike_block<'a>(
 /// Parse bond block (basic bonds only)
 fn bond_block<'a>(
     bond_count: usize,
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, Bond)>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
@@ -170,7 +170,7 @@ fn bond_block<'a>(
 /// Parse bond-like block
 fn bondlike_block<'a>(
     bond_count: usize,
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, BondLike)>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
@@ -194,7 +194,7 @@ fn bondlike_block<'a>(
 
 // Parse legacy atom list block
 fn legacy_atom_list_block<'a>(
-    _flags: ParseFlags,
+    _flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
@@ -217,7 +217,7 @@ fn legacy_atom_list_block<'a>(
 
 /// Parse properties block (basic properties only)
 fn basic_properties_block<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
@@ -270,7 +270,7 @@ fn basic_properties_block<'a>(
 
 /// Parse properties block
 fn properties_block<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let mut properties = Vec::new();
@@ -335,9 +335,9 @@ fn build_molecule(
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
-        acc.add_entry(entry, ParseFlags::BASIC)?;
+        acc.add_entry(entry, MolParseFlags::BASIC)?;
     }
-    acc.update_molecule(&mut molecule, ParseFlags::BASIC)?;
+    acc.update_molecule(&mut molecule, MolParseFlags::BASIC)?;
 
     Ok(molecule)
 }
@@ -360,10 +360,10 @@ fn build_moleculelike(
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
-        acc.add_entry(entry, ParseFlags::LENIENT)?;
+        acc.add_entry(entry, MolParseFlags::LENIENT)?;
     }
 
-    acc.update_moleculelike(&mut molecule, ParseFlags::LENIENT)?;
+    acc.update_moleculelike(&mut molecule, MolParseFlags::LENIENT)?;
 
     Ok(molecule)
 }

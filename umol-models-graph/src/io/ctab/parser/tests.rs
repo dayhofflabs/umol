@@ -53,7 +53,7 @@ fn test_atom_block() {
     0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
 ";
     let atom_count = 2;
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = atom_block(atom_count, flags).parse(atom_data);
     assert!(result.is_ok(), "Atom block should parse successfully");
 
@@ -70,7 +70,7 @@ fn test_atomlike_block() {
     0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
 ";
     let atom_count = 2;
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = atomlike_block(atom_count, flags).parse(atom_data);
     assert!(result.is_ok(), "Atom block should parse successfully");
 
@@ -85,7 +85,7 @@ fn test_atomlike_block() {
 fn test_bond_block() {
     let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
     let bond_count = 2;
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = bond_block(bond_count, flags).parse(bond_data);
     assert!(result.is_ok(), "Bond block should parse successfully");
 
@@ -100,7 +100,7 @@ fn test_bond_block() {
 fn test_bondlike_block() {
     let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
     let bond_count = 2;
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = bondlike_block(bond_count, flags).parse(bond_data);
     assert!(result.is_ok(), "Bond block should parse successfully");
 
@@ -114,7 +114,7 @@ fn test_bondlike_block() {
 #[test]
 fn test_legacy_atom_list_block() {
     let atom_list_data = b"  1 F    3   9   7   8  ";
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = legacy_atom_list_block(flags).parse(atom_list_data);
     assert!(
         result.is_ok(),
@@ -130,7 +130,7 @@ fn test_legacy_atom_list_block() {
 #[test]
 fn test_basic_properties_block_missing_newline() {
     let ctab_data = b"M  END";
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = basic_properties_block(flags).parse(ctab_data);
     assert!(
         result.is_ok(),
@@ -151,7 +151,7 @@ fn test_basic_ctab_block_fails_on_query() {
 M  ALS   1  2 F Cl  Br
 M  END
 ";
-    let flags = ParseFlags::BASIC;
+    let flags = MolParseFlags::BASIC;
     let result = basic_ctab_block(flags).parse(ctab_data);
     assert!(
         result.is_err(),
@@ -167,7 +167,7 @@ fn test_ctab_block_truncated_lines() {
   1  2  1
 M  END
 ";
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = ctab_block(flags).parse(ctab_data);
     assert!(
         result.is_ok(),
@@ -186,7 +186,7 @@ fn test_ctab_block_insufficient_atoms() {
     0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
 M  END
 ";
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = ctab_block(flags).parse(ctab_data);
     assert!(result.is_err(), "Should fail with insufficient atoms");
 }
@@ -199,7 +199,7 @@ fn test_ctab_block_insufficient_bonds() {
   1  2  1  0  0  0  0
 M  END
 ";
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = ctab_block(flags).parse(ctab_data);
     assert!(result.is_err(), "Should fail with insufficient bonds");
 }
@@ -213,7 +213,7 @@ fn test_ctab_block_query_features() {
 M  ALS   1  2 F Cl  Br
 M  END
 ";
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = ctab_block(flags).parse(ctab_data);
     assert!(
         result.is_ok(),
@@ -248,7 +248,7 @@ fn test_ctab_block_termination(
 
     data.extend_from_slice(ending);
 
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = ctab_block(flags).parse(&data);
     assert!(result.is_ok(), "{} case should parse successfully", name);
 
@@ -287,7 +287,7 @@ fn test_ctab_block_missing_m_end(
 
     data.extend_from_slice(ending);
 
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = ctab_block(flags).parse(&data);
     assert!(result.is_ok(), "{} case should parse successfully", name);
 
@@ -321,7 +321,7 @@ fn test_ctab_block_missing_m_end_legacy(
 
     data.extend_from_slice(ending);
 
-    let flags = ParseFlags::LENIENT | ParseFlags::LEGACY_FEATURES;
+    let flags = MolParseFlags::LENIENT | MolParseFlags::LEGACY_FEATURES;
     let result = ctab_block(flags).parse(&data);
     assert!(result.is_ok(), "{} case should parse successfully", name);
 
@@ -345,7 +345,7 @@ fn test_ctab_block_m_end_no_newline(
     data.extend_from_slice(properties);
     data.extend_from_slice(m_end_no_newline);
 
-    let flags = ParseFlags::LENIENT;
+    let flags = MolParseFlags::LENIENT;
     let result = ctab_block(flags).parse(&data);
     assert!(
         result.is_ok(),

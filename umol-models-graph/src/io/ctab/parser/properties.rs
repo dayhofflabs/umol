@@ -16,7 +16,7 @@ use super::utils::{
     fixed_width_int_minus1, fixed_width_int_partial, fixed_width_padding, fixed_width_str_partial,
     rgroup_occurrences, to_string,
 };
-use crate::io::config::ParseFlags;
+use crate::io::config::MolParseFlags;
 use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier, sgroup_subscript,
@@ -365,10 +365,10 @@ pub fn atom_alias_input<'a>(
 
 /// Parse property line (basic properties only)
 pub fn basic_property_input<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
-    let allow_sgroups = flags.contains(ParseFlags::SGROUPS);
-    let allow_clark_extensions = flags.contains(ParseFlags::CLARK_EXTENSIONS);
+    let allow_sgroups = flags.contains(MolParseFlags::SGROUPS);
+    let allow_clark_extensions = flags.contains(MolParseFlags::CLARK_EXTENSIONS);
     move |input: &'a [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         if input.len() < 3 {
@@ -454,14 +454,14 @@ pub fn basic_property_input<'a>(
 
 /// Parse property line
 pub fn property_input<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
-    let allow_queries = flags.contains(ParseFlags::QUERIES);
-    let allow_rgroups = flags.contains(ParseFlags::RGROUPS);
-    let allow_sgroups = flags.contains(ParseFlags::SGROUPS);
-    let allow_advanced_sgroups = flags.contains(ParseFlags::ADVANCED_SGROUPS);
-    let allow_clark_extensions = flags.contains(ParseFlags::CLARK_EXTENSIONS);
-    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
+    let allow_queries = flags.contains(MolParseFlags::QUERIES);
+    let allow_rgroups = flags.contains(MolParseFlags::RGROUPS);
+    let allow_sgroups = flags.contains(MolParseFlags::SGROUPS);
+    let allow_advanced_sgroups = flags.contains(MolParseFlags::ADVANCED_SGROUPS);
+    let allow_clark_extensions = flags.contains(MolParseFlags::CLARK_EXTENSIONS);
+    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
 

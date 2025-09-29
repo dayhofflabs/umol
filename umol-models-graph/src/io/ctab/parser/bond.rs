@@ -11,13 +11,13 @@ use super::convert::{
     convert_bond_type_code, convert_bondlike_type_code,
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_n};
-use crate::io::config::ParseFlags;
+use crate::io::config::MolParseFlags;
 use crate::io::ctab::bond::{Bond, BondLike, BondType};
 
 /// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input12(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
-    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
+fn bond_input12(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
+    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
     let first_atom = fixed_width_int_minus1::<usize>(3);
     let second_atom = fixed_width_int_minus1::<usize>(3);
     let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
@@ -51,7 +51,7 @@ fn bond_input12(input: &[u8], flags: ParseFlags) -> IResult<&[u8], (usize, usize
 
 /// Parse  bond inputs with 9 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input9(input: &[u8], _flags: ParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
+fn bond_input9(input: &[u8], _flags: MolParseFlags) -> IResult<&[u8], (usize, usize, Bond)> {
     map(
         (
             fixed_width_int_minus1::<usize>(3),
@@ -81,7 +81,7 @@ fn bond_input9(input: &[u8], _flags: ParseFlags) -> IResult<&[u8], (usize, usize
 /// | ccc   | bond reacting center | 0..=3      | Reaction,Query |
 /// --------------------------------------------------------------
 pub fn bond_input<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, Bond), Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
@@ -97,17 +97,17 @@ pub fn bond_input<'a>(
 }
 
 fn bondlike_input_inner<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, BondLike), Error = error::Error<&'a [u8]>> {
-    let strict_padding = flags.contains(ParseFlags::STRICT_PADDING);
+    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
     move |input: &'a [u8]| {
         // Atom indices
         let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
         let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
 
         // Bond type - allow zero-order/high-order bonds and queries based on flags
-        let extended_range = flags.contains(ParseFlags::EXTENDED_RANGE);
-        let allow_queries = flags.contains(ParseFlags::QUERIES);
+        let extended_range = flags.contains(MolParseFlags::EXTENDED_RANGE);
+        let allow_queries = flags.contains(MolParseFlags::QUERIES);
         let (i, bond_type) = map_res(fixed_width_int::<u8>(3), move |code| {
             convert_bondlike_type_code(code, extended_range, allow_queries)
         })
@@ -165,7 +165,7 @@ fn bondlike_input_inner<'a>(
 }
 
 pub fn bondlike_input<'a>(
-    flags: ParseFlags,
+    flags: MolParseFlags,
 ) -> impl Parser<&'a [u8], Output = (usize, usize, BondLike), Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');

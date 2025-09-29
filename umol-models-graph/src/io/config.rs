@@ -6,7 +6,7 @@ use bitflags::bitflags;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct ParseFlags: u32 {
+    pub struct MolParseFlags: u32 {
         // Core chemical features (bits 0-7)
         const NAMED_ISOTOPES = 1;         // D, T recognition
         const PSEUDOATOMS = 2;            // General pseudoatoms (Ala)
@@ -43,42 +43,62 @@ bitflags! {
     }
 }
 
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct SmilesParseFlags: u32 {
+        // Core OpenSMILES behavior
+        const STRICT_OPENSMILES = 0;   // terminator-only WS, no comments
+
+        // Extensions (lex/syntax only)
+        const INTERTOKEN_WS = 1;       // allow ASCII inter-token whitespace
+        const COMMENTS = 2;            // // line and /* block */ comments
+        const EXPLICIT_EOI = 4;        // explicit end-of-input marker token
+        const CXSMILES_TRAILER = 8;    // accept |...| trailer after SMILES
+        const ELEMENT_NUMBERS = 16;    // [#n] element numbers
+        const NONORGANIC_BARE = 32;    // bare non-organic atoms allowed
+
+        // Presets
+        const UMOL_DIALECT = Self::INTERTOKEN_WS.bits() | Self::COMMENTS.bits();
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParseConfig {
-    pub parse_flags: ParseFlags,
+    pub parse_flags: MolParseFlags,
 }
 
 impl ParseConfig {
-    pub fn to_flags(&self) -> ParseFlags {
+    pub fn to_flags(&self) -> MolParseFlags {
         self.parse_flags
     }
 
-    pub fn with_flags(flags: ParseFlags) -> Self {
+    pub fn with_flags(flags: MolParseFlags) -> Self {
         Self { parse_flags: flags }
     }
 
     pub fn minimal() -> Self {
-        Self::with_flags(ParseFlags::MINIMAL)
+        Self::with_flags(MolParseFlags::MINIMAL)
     }
 
     pub fn basic() -> Self {
-        Self::with_flags(ParseFlags::BASIC)
+        Self::with_flags(MolParseFlags::BASIC)
     }
 
     pub fn extended() -> Self {
-        Self::with_flags(ParseFlags::EXTENDED)
+        Self::with_flags(MolParseFlags::EXTENDED)
     }
 
     pub fn full() -> Self {
-        Self::with_flags(ParseFlags::FULL)
+        Self::with_flags(MolParseFlags::FULL)
     }
 
     pub fn strict() -> Self {
-        Self::with_flags(ParseFlags::STRICT)
+        Self::with_flags(MolParseFlags::STRICT)
     }
 
     pub fn lenient() -> Self {
-        Self::with_flags(ParseFlags::LENIENT)
+        Self::with_flags(MolParseFlags::LENIENT)
     }
 }
 
@@ -94,7 +114,7 @@ impl fmt::Display for ParseConfig {
     }
 }
 
-impl fmt::Display for ParseFlags {
+impl fmt::Display for MolParseFlags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_empty() {
             return write!(f, "EMPTY");
@@ -102,41 +122,41 @@ impl fmt::Display for ParseFlags {
 
         let mut parts = Vec::new();
 
-        if *self == ParseFlags::MINIMAL {
+        if *self == MolParseFlags::MINIMAL {
             parts.push("MINIMAL");
-        } else if *self == ParseFlags::BASIC {
+        } else if *self == MolParseFlags::BASIC {
             parts.push("BASIC");
-        } else if *self == ParseFlags::EXTENDED {
+        } else if *self == MolParseFlags::EXTENDED {
             parts.push("EXTENDED");
-        } else if *self == ParseFlags::FULL {
+        } else if *self == MolParseFlags::FULL {
             parts.push("FULL");
         } else {
             // Show individual flags
-            if self.contains(ParseFlags::NAMED_ISOTOPES) {
+            if self.contains(MolParseFlags::NAMED_ISOTOPES) {
                 parts.push("NAMED_ISOTOPES");
             }
-            if self.contains(ParseFlags::RGROUPS) {
+            if self.contains(MolParseFlags::RGROUPS) {
                 parts.push("RGROUPS");
             }
-            if self.contains(ParseFlags::QUERIES) {
+            if self.contains(MolParseFlags::QUERIES) {
                 parts.push("QUERIES");
             }
-            if self.contains(ParseFlags::EXTENDED_QUERIES) {
+            if self.contains(MolParseFlags::EXTENDED_QUERIES) {
                 parts.push("EXTENDED_QUERIES");
             }
-            if self.contains(ParseFlags::ELECTRONS) {
+            if self.contains(MolParseFlags::ELECTRONS) {
                 parts.push("ELECTRONS");
             }
-            if self.contains(ParseFlags::PSEUDOATOMS) {
+            if self.contains(MolParseFlags::PSEUDOATOMS) {
                 parts.push("PSEUDOATOMS");
             }
-            if self.contains(ParseFlags::UNICODE) {
+            if self.contains(MolParseFlags::UNICODE) {
                 parts.push("UNICODE");
             }
-            if self.contains(ParseFlags::STRICT_PADDING) {
+            if self.contains(MolParseFlags::STRICT_PADDING) {
                 parts.push("STRICT_PADDING");
             }
-            if self.contains(ParseFlags::LEGACY_FEATURES) {
+            if self.contains(MolParseFlags::LEGACY_FEATURES) {
                 parts.push("LEGACY_FEATURES");
             }
         }

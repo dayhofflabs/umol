@@ -385,3 +385,71 @@ If that sounds good, I’ll set up cargo-fuzz with:
 14. Wire M5 into CLI utilities and re-exports, if any
 15. Run full test suite, fuzz, and benches for M5
 
+### M6 Plan
+
+* Core goals
+  - Whitespace handling across the whole grammar (accept inter-token ASCII WS; reject intra-token).
+  - Parse flags framework (dialect/options), modeled after MOL flags: global bitflags + per-parse config.
+  - Full spec pass for OpenSMILES lexing/syntax only; add missing tokens/edge-cases.
+  - Optional micro-optimizations, refactors, versioning, and conformance suite scaffolding.
+* Parse flags framework
+  - Config type: SmilesParseOpts with compact bitflags and a builder-like constructor.
+  - Examples to support (scaffolding only now):
+    + umol dialect (strict OpenSMILES + well-defined extras).
+    + Tool-specific: element numbers [ #4 ], non-organic bare atoms, etc.
+    + CXSMILES trailer: |...| after primary SMILES; just reserve a flag and entry point for now.
+  - Further umol extensions (reserved flags).
+  - Wire SmilesParseOpts through public API: parse_smiles_m6(input, opts).
+  - FSM uses opts for feature gates; unimplemented flags return precise “unsupported feature” errors.
+* Whitespace handling
+  - Define accepted WS: ASCII space, tab, CR, LF.
+  - Permit WS:
+    + Between tokens (atoms, bonds, ring indices, branch parens, after bracket close).
+    + Around dots and bond symbols where unambiguous.
+  - Forbid WS:
+    + Inside multi-char tokens (e.g., Cl, %12, @@, bracket internals [C @H] unless spec allows).
+  - Add tests:
+    + Valid with inter-token WS variations; invalid with intra-token WS.
+    + CRLF coverage.
+* Complete spec coverage (lex/syntax only)
+  - Audit and add cases for:
+    + Ring indices: leading zeros policy, multi-digit via %, stereo markers around ring closures.
+    + Bond runs and precedence with branches and components.
+    + Bracket edge cases not yet covered (field ordering already handled).
+    + Wildcard interactions with branches/rings/components under WS.
+  - Align linter diagnostics for any new lexical/syntactic errors introduced.
+* API and versioning
+  - Export parse_smiles_m6 and M6Error.
+  - Keep M0–M5 intact for now; M6 is additive.
+  - Prepare a feature gate for “finalize M6 as default” later.
+* Tests
+  - Unit: whitespace-valid/invalid, token-boundary edge cases, all new spec surfaces.
+  - Property: no panics; error positions; M6 matches M5 when all flags emulate M5 and inputs don’t use new features.
+  - Conformance suite: add scaffolding for dialect-tagged cases; populate later.
+* Benchmarks
+  - Duplicate nested coverage for M6 mirroring M5 groups.
+  - Add WS stress cases and multi-digit ring/percent-heavy corpora.
+* Refactors/micro-opts (optional)
+  - Tighten hot paths in FSM transitions; reduce branches in common-case states.
+  - Reuse small-ring digit parsing; unify ring table lookups.
+
+### M6 Tasks
+
+1. Rename ParseFlags to MolParseFlags across codebase
+2. Add SmilesParseFlags bitflags type
+3. Add parse_smiles_m6(input, flags) public entrypoint
+4. Implement strict OpenSMILES terminator whitespace handling
+5. Allow inter-token ASCII whitespace without splitting tokens
+6. Support C-style comments (//, /* */) in SMILES
+7. Support explicit end-of-input marker token
+8. Update lexer to handle whitespace, comments, and EOI
+9. Add unit tests for whitespace-valid/invalid, comments, and EOI
+10. Add property tests including whitespace/comment-heavy inputs
+11. Create insta conformance suite scaffolding and file layout
+12. Seed conformance data and initial snapshots
+13. Extend fuzz dictionary with whitespace, comments, and EOI tokens
+14. Add M6 benchmarks with whitespace/comment-heavy corpora
+15. Align linter rules and diagnostics for whitespace/comments
+16. Document M6 features, flags, whitespace, and comments
+17. Export parse_smiles_m6 and M6Error in smiles.rs
+18. Optional micro-optimizations and small FSM refactors

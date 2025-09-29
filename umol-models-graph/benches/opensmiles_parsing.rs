@@ -9,6 +9,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use umol_models_graph::io::smiles::{
     parse_smiles_m0, parse_smiles_m1, parse_smiles_m2, parse_smiles_m3, parse_smiles_m4,
+    parse_smiles_m5, parse_smiles_m6,
 };
 
 fn opensmiles_parsing(c: &mut Criterion) {
@@ -139,53 +140,83 @@ fn opensmiles_parsing(c: &mut Criterion) {
         ("pct_dir_down_both", &b"C\\%12CC\\%12"[..]),
     ];
 
-    // // Lex-only baseline
-    // let mut group_lex = c.benchmark_group("opensmiles_parsing/lex_only");
-    // for (name, s) in inputs.iter() {
-    //     group_lex.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-    //         b.iter(|| {
-    //             let input = black_box(input);
-    //             let mut n = 0usize;
-    //             for tok in Lexer::new(input) {
-    //                 let _ = tok;
-    //                 n += 1;
-    //             }
-    //             std::hint::black_box(n);
-    //         })
-    //     });
-    // }
-    // group_lex.finish();
+    // Components corpus
+    let component_inputs = [
+        ("two", &b"CC.CC"[..]),
+        ("three", &b"C.C.C"[..]),
+        ("grouped", &b"C(C).C(C)"[..]),
+        ("rings_across_digit", &b"C1.CC1"[..]),
+        ("rings_across_pct", &b"C%12.CC%12"[..]),
+        ("stereo_up", &b"C/1.CC/1"[..]),
+        ("stereo_down", &b"C\\1.CC\\1"[..]),
+        ("stereo_up_pct", &b"C/%12.CC/%12"[..]),
+        ("stereo_down_pct", &b"C\\%12.CC\\%12"[..]),
+    ];
 
-    // // Parse only
-    // let mut group_parse = c.benchmark_group("opensmiles_parsing/parse_only");
-    // for (name, s) in inputs.iter() {
-    //     group_parse.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-    //         b.iter(|| {
-    //             let input = black_box(input);
-    //             let mut state = ParseState::default();
-    //             let parser = MoleculeParser::new();
-    //             let lexer = Lexer::new(input);
-    //             let _ = parser.parse(&mut state, lexer);
-    //         })
-    //     });
-    // }
-    // group_parse.finish();
+    // Bracket corpus
+    let make_repeat = |pat: &[u8], n: usize| -> Vec<u8> {
+        let mut v = Vec::with_capacity(pat.len() * n);
+        for _ in 0..n {
+            v.extend_from_slice(pat);
+        }
+        v
+    };
 
-    // // Parser minimal (no IR, no diags, increment counter in every action)
-    // let mut group_min = c.benchmark_group("opensmiles_parsing/parse_minimal");
-    // for (name, s) in inputs.iter() {
-    //     group_min.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-    //         b.iter(|| {
-    //             let input = black_box(input);
-    //             let mut state = ParseState::with_mode(ParserMode::Minimal);
-    //             let parser = MoleculeParser::new();
-    //             let lexer = Lexer::new(input);
-    //             let _ = parser.parse(&mut state, lexer);
-    //             std::hint::black_box(state.action_count);
-    //         })
-    //     });
-    // }
-    // group_min.finish();
+    let bracket_inputs: [(&str, Vec<u8>); 8] = [
+        ("brkt_C_50", make_repeat(b"[C]", 50)),
+        ("brkt_c_50", make_repeat(b"[c]", 50)),
+        ("brkt_wild_50", make_repeat(b"[*]", 50)),
+        ("brkt_chiral_50", make_repeat(b"[C@H]", 50)),
+        ("brkt_charge_50", make_repeat(b"[C+10]", 50)),
+        ("brkt_class_50", make_repeat(b"[C:12]", 50)),
+        ("brkt_hcount_50", make_repeat(b"[CH3]", 50)),
+        ("brkt_mixed_100", {
+            let mut v = Vec::with_capacity(6 * 100);
+            for _ in 0..50 {
+                v.extend_from_slice(b"[C]");
+                v.push(b'C');
+            }
+            v
+        }),
+    ];
+
+    // Wildcard corpus
+    let wildcard_inputs: [(&str, Vec<u8>); 4] = [
+        ("wild_star_50", make_repeat(b"*", 50)),
+        ("wild_star_200", make_repeat(b"*", 200)),
+        ("wild_star_in_chain_100", {
+            let mut v = Vec::with_capacity(2 * 100);
+            for _ in 0..50 {
+                v.push(b'C');
+                v.push(b'*');
+            }
+            v
+        }),
+        ("wild_star_in_chain_bonds_100", {
+            let mut v = Vec::new();
+            for _ in 0..50 {
+                v.extend_from_slice(b"C-*");
+            }
+            v
+        }),
+    ];
+
+    // Whitespace corpus (strict mode: only trailing/terminator whitespace allowed)
+    let whitespace_inputs = [
+        ("empty_space", &b" "[..]),
+        ("empty_tabs", &b"\t\t"[..]),
+        ("empty_newlines", &b"\n\n"[..]),
+        ("empty_crlf", &b"\r\n"[..]),
+        ("trail_space_short", &b"CC "[..]),
+        ("trail_space_long", &b"CCCCCCCCCC     "[..]),
+        ("trail_tab", &b"CC\t"[..]),
+        ("trail_tabs", &b"CC\t\t\t"[..]),
+        ("trail_newline", &b"CC\n"[..]),
+        ("trail_newlines", &b"CC\n\n"[..]),
+        ("trail_cr", &b"CC\r"[..]),
+        ("trail_crlf", &b"CC\r\n"[..]),
+        ("trail_mixed", &b"CC \t\r\n\t "[..]),
+    ];
 
     // FSM M0 chain-only
     let mut group_m0_chain = c.benchmark_group("opensmiles_parsing/parse_m0_chain");
@@ -226,32 +257,6 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_m1_tree.finish();
 
-    // FSM M2 chain
-    let mut group_m2_chain = c.benchmark_group("opensmiles_parsing/parse_m2_chain");
-    for (name, s) in chain_inputs.iter() {
-        group_m2_chain.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles_m2(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_m2_chain.finish();
-
-    // FSM M2 tree
-    let mut group_m2_tree = c.benchmark_group("opensmiles_parsing/parse_m2_tree");
-    for (name, s) in tree_inputs.iter() {
-        group_m2_tree.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles_m2(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_m2_tree.finish();
-
     // FSM M2 chain bonds
     let mut group_m2_chain_bonds = c.benchmark_group("opensmiles_parsing/parse_m2_chain_bonds");
     for (name, s) in chain_bonds_inputs.iter() {
@@ -278,6 +283,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_m2_tree_bonds.finish();
 
+    // FSM M3 cycles
     let mut group_m3_cycles = c.benchmark_group("opensmiles_parsing/parse_m3_cycles");
     for (name, s) in ring_cycles_inputs.iter() {
         group_m3_cycles.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -290,6 +296,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_m3_cycles.finish();
 
+    // FSM M3 fused & spiro
     let mut group_m3_fused = c.benchmark_group("opensmiles_parsing/parse_m3_fused_spiro");
     for (name, s) in ring_fused_spiro_inputs.iter() {
         group_m3_fused.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -302,6 +309,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_m3_fused.finish();
 
+    // FSM M3 ring stereo
     let mut group_m3_stereo = c.benchmark_group("opensmiles_parsing/parse_m3_ring_stereo");
     for (name, s) in ring_stereo_inputs.iter() {
         group_m3_stereo.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -314,18 +322,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_m3_stereo.finish();
 
-    // M4: components
-    let component_inputs = [
-        ("two", &b"CC.CC"[..]),
-        ("three", &b"C.C.C"[..]),
-        ("grouped", &b"C(C).C(C)"[..]),
-        ("rings_across_digit", &b"C1.CC1"[..]),
-        ("rings_across_pct", &b"C%12.CC%12"[..]),
-        ("stereo_up", &b"C/1.CC/1"[..]),
-        ("stereo_down", &b"C\\1.CC\\1"[..]),
-        ("stereo_up_pct", &b"C/%12.CC/%12"[..]),
-        ("stereo_down_pct", &b"C\\%12.CC\\%12"[..]),
-    ];
+    // FSM M4 components
     let mut group_m4_components = c.benchmark_group("opensmiles_parsing/parse_m4_components");
     for (name, s) in component_inputs.iter() {
         group_m4_components.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -337,6 +334,175 @@ fn opensmiles_parsing(c: &mut Criterion) {
         });
     }
     group_m4_components.finish();
+
+    // FSM M5 brackets
+    let mut group_m5_brackets = c.benchmark_group("opensmiles_parsing/parse_m5_brackets");
+    for (name, bytes) in bracket_inputs.iter() {
+        group_m5_brackets.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
+            b.iter(|| {
+                let input = black_box(input.as_slice());
+                let result = parse_smiles_m5(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m5_brackets.finish();
+
+    // FSM M5 wildcards
+    let mut group_m5_wild = c.benchmark_group("opensmiles_parsing/parse_m5_wildcards");
+    for (name, bytes) in wildcard_inputs.iter() {
+        group_m5_wild.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
+            b.iter(|| {
+                let input = black_box(input.as_slice());
+                let result = parse_smiles_m5(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m5_wild.finish();
+
+    // FSM M6 complete coverage
+    let mut group_m6_chain = c.benchmark_group("opensmiles_parsing/parse_m6_chain");
+    for (name, s) in chain_inputs.iter() {
+        group_m6_chain.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_chain.finish();
+
+    // Tree
+    let mut group_m6_tree = c.benchmark_group("opensmiles_parsing/parse_m6_tree");
+    for (name, s) in tree_inputs.iter() {
+        group_m6_tree.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_tree.finish();
+
+    // Chain bonds
+    let mut group_m6_chain_bonds = c.benchmark_group("opensmiles_parsing/parse_m6_chain_bonds");
+    for (name, s) in chain_bonds_inputs.iter() {
+        group_m6_chain_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_chain_bonds.finish();
+
+    // Tree bonds
+    let mut group_m6_tree_bonds = c.benchmark_group("opensmiles_parsing/parse_m6_tree_bonds");
+    for (name, s) in tree_bonds_inputs.iter() {
+        group_m6_tree_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_tree_bonds.finish();
+
+    // Cycles
+    let mut group_m6_cycles = c.benchmark_group("opensmiles_parsing/parse_m6_cycles");
+    for (name, s) in ring_cycles_inputs.iter() {
+        group_m6_cycles.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_cycles.finish();
+
+    // Fused & spiro
+    let mut group_m6_fused = c.benchmark_group("opensmiles_parsing/parse_m6_fused_spiro");
+    for (name, s) in ring_fused_spiro_inputs.iter() {
+        group_m6_fused.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_fused.finish();
+
+    // Ring stereo
+    let mut group_m6_stereo = c.benchmark_group("opensmiles_parsing/parse_m6_ring_stereo");
+    for (name, s) in ring_stereo_inputs.iter() {
+        group_m6_stereo.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_stereo.finish();
+
+    let mut group_m6_components = c.benchmark_group("opensmiles_parsing/parse_m6_components");
+    for (name, s) in component_inputs.iter() {
+        group_m6_components.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_components.finish();
+
+    // Brackets
+    let mut group_m6_brackets = c.benchmark_group("opensmiles_parsing/parse_m6_brackets");
+    for (name, bytes) in bracket_inputs.iter() {
+        group_m6_brackets.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
+            b.iter(|| {
+                let input = black_box(input.as_slice());
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_brackets.finish();
+
+    // Wildcards
+    let mut group_m6_wild = c.benchmark_group("opensmiles_parsing/parse_m6_wildcards");
+    for (name, bytes) in wildcard_inputs.iter() {
+        group_m6_wild.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
+            b.iter(|| {
+                let input = black_box(input.as_slice());
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_wild.finish();
+
+    // Whitespace
+    let mut group_m6_whitespace = c.benchmark_group("opensmiles_parsing/parse_m6_whitespace");
+    for (name, s) in whitespace_inputs.iter() {
+        group_m6_whitespace.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles_m6(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_m6_whitespace.finish();
+
 }
 
 criterion_group!(benches, opensmiles_parsing);
