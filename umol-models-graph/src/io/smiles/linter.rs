@@ -25,6 +25,7 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     let mut registry = RuleRegistry::new();
     registry.register(&rules::LEX_ERRORS_RULE);
     registry.register(&rules::WS_RULE);
+    registry.register(&rules::COMMENTS_RULE);
     registry.register(&rules::TRAILING_BOND_RULE);
     registry.register(&rules::DOT_RULES);
     registry.register(&rules::LEADING_BOND_RULE);

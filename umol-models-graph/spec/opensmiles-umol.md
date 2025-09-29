@@ -13,7 +13,7 @@ This specification uses the terminology of RFC 2119 and RFC 8174. A conforming p
 
 ### Lexical Conventions
 
-Input is ASCII and case-sensitive. Tokens are recognized using a maximal‑munch policy: at each source position the longest possible token is chosen. If multiple tokens of equal maximal length can begin at a position, the one appearing earlier in the token definition order below is selected. Whitespace (SPACE, TAB, LINEFEED, CARRIAGE_RETURN) may appear only as trailing terminator at end of input; inter-token whitespace is not permitted. A valid SMILES is followed only by optional trailing whitespace and end-of-string.
+Input is ASCII and case-sensitive. Tokens are recognized using a maximal‑munch policy: at each source position the longest possible token is chosen. If multiple tokens of equal maximal length can begin at a position, the one appearing earlier in the token definition order below is selected. Whitespace (SPACE, TAB, LINEFEED, CARRIAGE_RETURN) may appear as the only content (empty molecule) or as trailing terminator at end of input; inter-token whitespace is not permitted.
 
 ### Tokens (normative summary)
 

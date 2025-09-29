@@ -14,6 +14,9 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - LEX_INVALID_TOKEN (LEX, Error): input slice cannot be tokenized per lexical rules
 - LEX_RING_INDEX_INVALID (LEX, Error): percent ring form invalid (must be exactly two digits)
 - LEX_TRAILING_BOND (LEX, Error): bond symbol found at end of input or before terminator
+- LEX_INTERTOKEN_WHITESPACE (LEX, Error): inter-token whitespace encountered
+- LEX_COMMENT (LEX, Error): C-style comment encountered
+- LEX_UNTERMINATED_BLOCK_COMMENT (LEX, Error): block comment not terminated before end of input
 - LEX_DOT_BEFORE_RING (LEX, Error): dot placed before a ring index
 - LEX_LEADING_DOT (LEX, Error): dot at start of input or component
 - LEX_TRAILING_DOT (LEX, Error): dot at end of input or component
@@ -22,8 +25,8 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - LEX_CONSECUTIVE_BONDS (LEX, Error): consecutive bond tokens without an intervening atom or ring index
 - LEX_TRAILING_BOND (LEX, Error): bond token found at end of input or component
 - LEX_LEADING_RING (LEX, Error): ring index appears with no preceding atom (start of input or after a top-level group)
-
-- BRKT_UNCLOSED (BRKT, Error): bracket atom not properly closed
+- PARSER_UNBALANCED_OPEN_BRACKET (BRKT, Error): '[' without a matching closing ']' (reported by parser)
+- PARSER_UNBALANCED_CLOSE_BRACKET (BRKT, Error): ']' without a matching '[' (reported by parser)
 - BRKT_UNEXPECTED_CLOSE (BRKT, Error): ']' outside of a bracket atom
 - BRKT_FIELD_OUTSIDE (BRKT, Error): bracket-only field (e.g., @, +, ++) outside of a bracket atom
 - BRKT_DUP_FIELD (BRKT, Error): duplicate bracket field of the same kind

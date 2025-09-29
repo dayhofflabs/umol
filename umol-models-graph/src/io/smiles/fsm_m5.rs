@@ -26,7 +26,8 @@ pub enum M5Error {
     LeadingDot { pos: usize },
     TrailingDot { pos: usize },
     ConsecutiveDot { pos: usize },
-    UnclosedBracket { pos: usize },
+    UnbalancedOpenBracket { pos: usize },
+    UnbalancedCloseBracket { pos: usize },
     InvalidBracket { pos: usize },
     BracketHCountTwoDigits { pos: usize },
     BracketEmptyClass { pos: usize },
@@ -418,7 +419,7 @@ pub fn parse_smiles_m5(input: &[u8]) -> Result<Molecule, M5Error> {
                 j += 1;
             }
             if j >= n {
-                return Err(M5Error::UnclosedBracket { pos: i });
+                return Err(M5Error::UnbalancedOpenBracket { pos: i });
             }
             let inner = &input[start..j];
             let (elem_opt, iso_opt, fields) = parse_bracket_m5(inner, i)?;
@@ -690,6 +691,9 @@ pub fn parse_smiles_m5(input: &[u8]) -> Result<Molecule, M5Error> {
             continue;
         }
 
+        if b0 == b']' {
+            return Err(M5Error::UnbalancedCloseBracket { pos: i });
+        }
         return Err(M5Error::UnsupportedToken { pos: i });
     }
 
@@ -1231,31 +1235,33 @@ mod tests {
     #[case::class_no_element(b"[:12]", M5Error::InvalidBracket { pos: 0 })]
     #[case::hcount_two_digits(b"[CH10]", M5Error::BracketHCountTwoDigits { pos: 0 })]
     #[case::colon_no_class(b"[C:]", M5Error::BracketEmptyClass { pos: 0 })]
-    #[case::unclosed_bracket_1(b"[", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_2(b"C[", M5Error::UnclosedBracket { pos: 1 })]
-    #[case::unclosed_bracket_3(b"[C", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_4(b"[)", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_5(b"[.", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_6(b"C]", M5Error::UnsupportedToken { pos: 1 })]
-    #[case::unclosed_bracket_7(b"C[", M5Error::UnclosedBracket { pos: 1 })]
-    #[case::unclosed_bracket_8(b"(]", M5Error::UnsupportedToken { pos: 1 })]
-    #[case::unclosed_bracket_9(b"[C)", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_10(b"(C]", M5Error::UnsupportedToken { pos: 2 })]
-    #[case::unclosed_bracket_11(b"[.C", M5Error::UnclosedBracket { pos: 0 })]
-    #[case::unclosed_bracket_12(b"C.]", M5Error::UnsupportedToken { pos: 2 })]
-    #[case::unclosed_bracket_13(b"[.]", M5Error::InvalidBracket { pos: 0 })]
-    #[case::unclosed_bracket_14(b"C.[", M5Error::UnclosedBracket { pos: 2 })]
-    #[case::unclosed_bracket_15(b"[(]", M5Error::InvalidBracket { pos: 0 })]
-    #[case::unclosed_bracket_16(b"[)]", M5Error::InvalidBracket { pos: 0 })]
-    // TODO: Needs specific error variant: UnbalancedCloseBracket (?)
-    #[case::unbalanced_bracket_1(b"]", M5Error::UnsupportedToken { pos: 0 })]
-    #[case::unbalanced_bracket_2(b"]C", M5Error::UnsupportedToken { pos: 0 })]
-    #[case::unbalanced_bracket_3(b"C]", M5Error::UnsupportedToken { pos: 1 })]
-    #[case::unbalanced_bracket_4(b"*]", M5Error::UnsupportedToken { pos: 1 })]
-    #[case::unbalanced_bracket_5(b"C.]", M5Error::UnsupportedToken { pos: 2 })]
-    #[case::unbalanced_bracket_6(b"].", M5Error::UnsupportedToken { pos: 0 })]
-    #[case::unbalanced_bracket_7(b"].C", M5Error::UnsupportedToken { pos: 0 })]
-    #[case::unbalanced_bracket_8(b"C(])", M5Error::UnsupportedToken { pos: 2 })]
+    #[case::unbalanced_open_bracket_1(b"[", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_2(b"C[", M5Error::UnbalancedOpenBracket { pos: 1 })]
+    #[case::unbalanced_open_bracket_3(b"[C", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_4(b"[*", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_5(b"[)", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_6(b"[[", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_7(b"[.", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_8(b"C[", M5Error::UnbalancedOpenBracket { pos: 1 })]
+    #[case::unbalanced_open_bracket_9(b"[C)", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_10(b"[.C", M5Error::UnbalancedOpenBracket { pos: 0 })]
+    #[case::unbalanced_open_bracket_11(b"C.[", M5Error::UnbalancedOpenBracket { pos: 2 })]
+    #[case::dot_in_bracket(b"[.]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::branch_open_in_bracket(b"[(]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::branch_close_in_bracket(b"[)]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::bracket_in_bracket_1(b"[[]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::bracket_in_bracket_2(b"[]]", M5Error::InvalidBracket { pos: 0 })]
+    #[case::open_bracket_in_branch(b"C([)", M5Error::UnbalancedOpenBracket { pos: 2 })]
+    #[case::close_bracket_in_branch(b"C(])", M5Error::UnbalancedCloseBracket { pos: 2 })]
+    #[case::unbalanced_close_bracket_1(b"]", M5Error::UnbalancedCloseBracket { pos: 0 })]
+    #[case::unbalanced_close_bracket_2(b"]C", M5Error::UnbalancedCloseBracket { pos: 0 })]
+    #[case::unbalanced_close_bracket_3(b"C]", M5Error::UnbalancedCloseBracket { pos: 1 })]
+    #[case::unbalanced_close_bracket_4(b"*]", M5Error::UnbalancedCloseBracket { pos: 1 })]
+    #[case::unbalanced_close_bracket_5(b"C.]", M5Error::UnbalancedCloseBracket { pos: 2 })]
+    #[case::unbalanced_close_bracket_6(b"].", M5Error::UnbalancedCloseBracket { pos: 0 })]
+    #[case::unbalanced_close_bracket_7(b"].C", M5Error::UnbalancedCloseBracket { pos: 0 })]
+    #[case::unbalanced_close_bracket_8(b"(]", M5Error::UnbalancedCloseBracket { pos: 1 })]
+    #[case::unbalanced_close_bracket_9(b"(C]", M5Error::UnbalancedCloseBracket { pos: 2 })]
     fn m5_bracket_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
         let err = parse_smiles_m5(input);
         assert!(err.is_err(), "{:?} should have failed", input);
@@ -1305,7 +1311,7 @@ mod tests {
     #[case::wildcard_unclosed_ring(b"*1", M5Error::RingUnclosed { open_pos: 1 })]
     #[case::wildcard_unclosed_branch(b"C(*", M5Error::UnbalancedBranchOpen { pos: 1 })]
     #[case::wildcard_unclosed_group(b"(C*", M5Error::UnbalancedBranchOpen { pos: 0 })]
-    #[case::wildcard_unclosed_bracket(b"[*", M5Error::UnclosedBracket { pos: 0 })]
+    #[case::wildcard_unclosed_bracket(b"[*", M5Error::UnbalancedOpenBracket { pos: 0 })]
     #[case::wildcard_trailing_bond(b"*-", M5Error::TrailingBond { pos: 1 })]
     #[case::wildcard_trailing_dot(b"*.", M5Error::TrailingDot { pos: 1 })]
     fn m5_wildcard_invalid(#[case] input: &[u8], #[case] expected: M5Error) {
