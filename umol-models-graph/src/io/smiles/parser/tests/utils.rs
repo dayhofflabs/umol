@@ -1,13 +1,9 @@
-//! Test support: compact graph builder for expected Molecule IR
+//! Utilities for SMILES parser tests.
 
-#[cfg(test)]
 use crate::io::ir::builder::{BondData, MoleculeBuilder};
-#[cfg(test)]
 use crate::io::ir::{BondDir, BondOrder, Molecule};
-#[cfg(test)]
 use umol_data::Element;
 
-#[cfg(test)]
 fn parse_atom_token(tok: &str) -> (Element, bool) {
     // Asterisk denotes aromatic variant of the organic subset: C*, N*, O*, P*, S*, B*, c*, n*, ...
     // Two-letter atoms (Cl, Br) are recognized as-is; aromaticity via trailing '*'.
@@ -29,7 +25,6 @@ fn parse_atom_token(tok: &str) -> (Element, bool) {
     (el, aromatic)
 }
 
-#[cfg(test)]
 fn parse_bond_token(tok: &str) -> (usize, usize, BondOrder, Option<BondDir>) {
     // token forms: i-j, i-j:-, i-j:=, i-j:#, i-j:$, i-j::, i-j:/, i-j:\
     // indices are base-10, 0-based; direction optional only for single bonds
@@ -51,7 +46,6 @@ fn parse_bond_token(tok: &str) -> (usize, usize, BondOrder, Option<BondDir>) {
     (i, j, order, dir)
 }
 
-#[cfg(test)]
 pub fn build_from_graph(spec: &str) -> Molecule {
     // Format: "atoms... | edges..."; atoms are space- or comma-separated tokens.
     // '*' suffix means aromatic atom.
