@@ -4,10 +4,6 @@ use super::context::LintContext;
 use super::emitter::Emitter;
 use crate::diagnostics::{Category, Severity};
 
-pub mod lexical;
-
-pub use lexical::{LEX_ERRORS_RULE, WS_RULE, COMMENTS_RULE};
-
 pub struct RuleMeta {
     pub id: &'static str,
     pub category: Category,

@@ -85,3 +85,24 @@ Emitted by parser/state during ring processing; codes may appear in `lint_smiles
 - NUM_CHARGE_EXCEEDS_VALENCE_ELECTRONS (NUM, Warning): charge exceeds valence electron count
 - NUM_ISOTOPE_UNCATALOGUED (NUM, Warning): isotope is not catalogued (unstable or too short-lived)
 - STYLE_INCONSISTENT_AROMATICITY (AROM, Warning): Non-aromatic bonds (single, double, triple, quadruple) between aromatic atoms or aromatic bonds between non-aromatic atoms
+
+#### Sources (post-parse modality)
+
+- Parser-mapped (reported directly from FSM parser `ParseError`):
+  - PARSER_UNBALANCED_OPEN_BRACKET, PARSER_UNBALANCED_CLOSE_BRACKET
+  - BRCH_UNCLOSED, BRCH_UNEXPECTED_CLOSE, BRCH_EMPTY_BRANCH
+  - LEX_LEADING_BOND, LEX_CONSECUTIVE_BONDS, LEX_TRAILING_BOND
+  - LEX_LEADING_DOT, LEX_TRAILING_DOT, LEX_MULTIPLE_DOTS
+  - LEX_LEADING_RING, LEX_RING_INDEX_INVALID
+  - LEX_INTERTOKEN_WHITESPACE, LEX_COMMENT, LEX_UNTERMINATED_BLOCK_COMMENT
+  - RING_UNCLOSED, RING_SELF_LOOP, RING_TWO_MEMBER, RING_BOND_DIR_CONFLICT, RING_BOND_ORDER_CONFLICT
+
+- Post-parse derived (simple context around `ParseError`):
+  - LEX_DOT_BEFORE_RING (from LeadingRing with preceding '.')
+  - BRCH_DANGLING_BOND (from TrailingBond before ')'/component end)
+  - STYLE_FIRST_RING_NOT_ONE, STYLE_NONCONSECUTIVE_RING_NUMBERING (sequence over parsed ring indices when parse succeeds)
+  - STYLE_UNNECESSARY_PERCENT_RING_INDEX (scan for `%0n` where n in 1..9)
+
+- Bracket-utils-based (parsed via `parser::utils::parse_bracket`):
+  - STYLE_BRKT_ORDER, STYLE_BRKT_ORGANIC, STYLE_CHARGE_SIGN_SIMPLE, STYLE_HCOUNT_ONE_SIMPLE
+  - NUM_ISOTOPE_TOO_LARGE, NUM_CHIRAL_OUT_OF_RANGE

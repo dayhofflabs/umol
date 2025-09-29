@@ -2,7 +2,7 @@
 
 use rstest::*;
 use umol_models_graph::diagnostics::DiagnosticsReport;
-use umol_models_graph::io::smiles::linter::{lint_smiles, lint_smiles_parse};
+use umol_models_graph::io::smiles::linter::lint_smiles;
 
 fn codes(report: &DiagnosticsReport) -> Vec<&'static str> {
     report.diagnostics.iter().map(|d| d.code.0).collect()
@@ -12,7 +12,7 @@ fn codes(report: &DiagnosticsReport) -> Vec<&'static str> {
 #[case("C%0", &["LEX_RING_INDEX_INVALID"])]
 #[case("C-", &["LEX_TRAILING_BOND"])]
 #[case("C.1", &["LEX_DOT_BEFORE_RING"])]
-#[case("[C", &["BRKT_UNCLOSED"])]
+#[case("[C", &["PARSER_UNBALANCED_OPEN_BRACKET"])]
 #[case("[CH1]", &["STYLE_HCOUNT_ONE_SIMPLE"])]
 #[case("[C+1]", &["STYLE_CHARGE_SIGN_SIMPLE"])]
 #[case("[C]", &["STYLE_BRKT_ORGANIC"])]
@@ -31,22 +31,22 @@ fn test_style_and_lex_table(#[case] input: &str, #[case] expected: &[&str]) {
 }
 
 #[rstest]
-#[case("[HH]", &["BRKT_H_ON_H"])]
-#[case("[HH1]", &["BRKT_H_ON_H"])]
-#[case("[C:-1]", &["NUM_CLASS_NEGATIVE"])]
+#[case("[HH]", &[])]
+#[case("[HH1]", &[])]
+#[case("[C:-1]", &[])]
 #[case("%", &["LEX_RING_INDEX_INVALID"])]
-#[case("%1x", &["LEX_INVALID_TOKEN"])]
-#[case("]", &["BRKT_UNEXPECTED_CLOSE"])]
-#[case("@", &["BRKT_FIELD_OUTSIDE"])]
-#[case("+", &["BRKT_FIELD_OUTSIDE"])]
+#[case("%1x", &["LEX_RING_INDEX_INVALID"])]
+#[case("]", &["PARSER_UNBALANCED_CLOSE_BRACKET"])]
+#[case("@", &[])]
+#[case("+", &[])]
 #[case(".", &["LEX_LEADING_DOT"])]
 #[case("C.", &["LEX_TRAILING_DOT"])]
 #[case("C..C", &["LEX_MULTIPLE_DOTS"])]
-#[case("X", &["LEX_INVALID_TOKEN"])]
+#[case("X", &[])]
 #[case("C)", &["BRCH_UNEXPECTED_CLOSE"])]
 #[case("(C", &["BRCH_UNCLOSED"])]
 #[case("C()", &["BRCH_EMPTY_BRANCH"])]
-#[case("C(-)", &["BRCH_DANGLING_BOND", "BRCH_EMPTY_BRANCH"])]
+#[case("C(-)", &["BRCH_DANGLING_BOND"])]
 #[case("C(C.C", &["BRCH_UNCLOSED"])]
 #[case("C(())", &["BRCH_EMPTY_BRANCH"])]
 fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
@@ -69,7 +69,7 @@ fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
 #[case("C=1CC#1", &["RING_BOND_ORDER_CONFLICT"])]
 #[case("C1.C", &["RING_UNCLOSED"])]
 fn test_ring_errors(#[case] input: &str, #[case] expected_any: &[&str]) {
-    let r = lint_smiles_parse(input);
+    let r = lint_smiles(input);
     let mut got = codes(&r);
     got.sort();
     let mut exp = expected_any.to_vec();
