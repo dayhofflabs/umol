@@ -4,15 +4,8 @@ use std::{env, fs};
 use walkdir::WalkDir;
 
 fn main() {
-    // LALRPOP was removed; keep only conformance test generation
     generate_conformance_tests();
 }
-
-// Removed: generate_smiles_parser (LALRPOP)
-
-// Remove any non-UTF8 environment variables for the duration of this build script
-// LALRPOP has a dependency on env, which iterates over env as UTF-8
-// Removed: sanitize_env_for_lalrpop
 
 fn generate_conformance_tests() {
     let out_dir = env::var("OUT_DIR").unwrap();

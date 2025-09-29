@@ -1,7 +1,5 @@
 //! Linting for SMILES: collect diagnostics from lexing/parsing.
 
-// Removed lalrpop dependency
-
 mod context;
 mod emitter;
 mod registry;
@@ -12,10 +10,9 @@ pub use emitter::{DiagnosticCandidate, Emitter, Scope};
 pub use registry::{LintEngine, RuleRegistry};
 pub use rules::Rule;
 
-// Use FSM-based parser via io::smiles::parser
 use super::parser::parse_smiles;
 use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
-use crate::io::smiles::state::{ParseState, ParserMode};
+// Remove legacy parser state
 
 // Initial linter for lexical/syntactic errors.
 pub fn lint_smiles(input: &str) -> DiagnosticsReport {
@@ -47,7 +44,7 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     report
 }
 
-// Run the parser and translate lalrpop errors to diagnostics; also runs the lexical/style lint.
+// Run the parser and translate parser errors to diagnostics; also runs the lexical/style lint.
 pub fn lint_smiles_parse(input: &str) -> DiagnosticsReport {
     let mut report = lint_smiles(input);
 
@@ -58,22 +55,9 @@ pub fn lint_smiles_parse(input: &str) -> DiagnosticsReport {
         .any(|d| matches!(d.category, Category::Lex | Category::Bracket | Category::Branch | Category::Ring) && d.severity == Severity::Error);
 
     // If lexical errors present, parsing is likely to cascade; still attempt a parse for location.
-    let mut state = ParseState::default();
     // Call FSM-based parser for location sanity; translate only generic failure
     if !has_syntactic_errors {
         let _ = parse_smiles(input.as_bytes());
-    }
-    // Merge any diagnostics emitted by the parser/state (e.g., ring rules)
-    for d in state.diagnostics.into_iter() {
-        // Allow only parser diagnostics that are not covered by pre-parse syntactic lints
-        let c = d.code.0;
-        let allow = match d.category {
-            Category::Stereo | Category::Internal => true,
-            Category::Ring => matches!(c, "RING_SELF_LOOP" | "RING_TWO_MEMBER" | "RING_BOND_DIR_CONFLICT" | "RING_BOND_ORDER_CONFLICT"),
-            // Drop Lex/Bracket/Branch/Style/Num from parser in favor of lint-only
-            Category::Lex | Category::Bracket | Category::Branch | Category::Style | Category::Num | Category::Syn => false,
-        };
-        if allow { report.push(d); }
     }
     report
 }

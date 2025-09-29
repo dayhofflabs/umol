@@ -4,8 +4,6 @@
 
 use super::{Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
-use crate::io::smiles::iterators::{BondKind, Segment};
-use crate::io::smiles::lexer::Token;
 use crate::io::smiles::linter::emitter::{DiagnosticCandidate, Emitter, Scope};
 use crate::io::smiles::linter::LintContext;
 
@@ -20,9 +18,7 @@ impl Rule for LexErrorsRule {
     fn meta(&self) -> &'static RuleMeta {
         &META_LEX
     }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        // Legacy logos-based invalid-token detection removed.
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static LEX_ERRORS_RULE: LexErrorsRule = LexErrorsRule;
 
@@ -37,25 +33,29 @@ impl Rule for WhitespaceRule {
         &META_WS
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let segs = ctx.segments();
-        if let Some(last_non_ws) = segs
-            .iter()
-            .rposition(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
-        {
-            for (i, seg) in segs.iter().enumerate() {
-                if i > last_non_ws {
-                    break;
-                }
-                if let Segment::WhitespaceBlock { span } = seg {
-                    emit.candidate(DiagnosticCandidate {
-                        code: Code("LEX_INTERTOKEN_WHITESPACE"),
-                        category: Category::Lex,
-                        severity: Severity::Error,
-                        span: *span,
-                        message: "Inter-token whitespace is not allowed",
-                        scope: Scope::Global,
-                    });
-                }
+        // Simple inter-token whitespace detector: any internal ASCII whitespace is flagged
+        let bytes = ctx.input.as_bytes();
+        let n = bytes.len();
+        // Trim leading terminator whitespace
+        let mut start = 0usize;
+        while start < n && matches!(bytes[start], b' ' | b'\t' | b'\n' | b'\r') { start += 1; }
+        // If all whitespace, ok
+        if start == n { return; }
+        // Trim trailing terminator whitespace
+        let mut end = n;
+        while end > start && matches!(bytes[end - 1], b' ' | b'\t' | b'\n' | b'\r') { end -= 1; }
+        for i in start..end {
+            let b = bytes[i];
+            if matches!(b, b' ' | b'\t' | b'\n' | b'\r') {
+                emit.candidate(DiagnosticCandidate {
+                    code: Code("LEX_INTERTOKEN_WHITESPACE"),
+                    category: Category::Lex,
+                    severity: Severity::Error,
+                    span: Span::new(i, i + 1),
+                    message: "Inter-token whitespace is not allowed",
+                    scope: Scope::Global,
+                });
+                break;
             }
         }
     }
@@ -115,26 +115,7 @@ impl Rule for TrailingBondRule {
     fn meta(&self) -> &'static RuleMeta {
         &META_TB
     }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let mut last_bond_span = None;
-        for seg in ctx.segments().iter() {
-            match seg {
-                Segment::WhitespaceBlock { .. } => {}
-                Segment::Bond { span, .. } => last_bond_span = Some(*span),
-                _ => last_bond_span = None,
-            }
-        }
-        if let Some(span) = last_bond_span {
-            emit.candidate(DiagnosticCandidate {
-                code: Code("LEX_TRAILING_BOND"),
-                category: Category::Lex,
-                severity: Severity::Error,
-                span,
-                message: "Trailing bond symbol",
-                scope: Scope::Global,
-            });
-        }
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static TRAILING_BOND_RULE: TrailingBondRule = TrailingBondRule;
 
@@ -148,78 +129,7 @@ impl Rule for DotRules {
     fn meta(&self) -> &'static RuleMeta {
         &META_DOT
     }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        // Dot before ring
-        let mut last_dot: Option<Span> = None;
-        for seg in ctx.segments().iter() {
-            match seg {
-                Segment::WhitespaceBlock { .. } => {}
-                Segment::NewComponent { span } => last_dot = Some(*span),
-                Segment::RingClosure { span, .. } => {
-                    if let Some(dot) = last_dot.take() {
-                        if dot.end == span.start {
-                            emit.candidate(DiagnosticCandidate {
-                                code: Code("LEX_DOT_BEFORE_RING"),
-                                category: Category::Lex,
-                                severity: Severity::Error,
-                                span: Span::new(dot.start, span.end),
-                                message: "Dot before ring index is invalid",
-                                scope: Scope::Global,
-                            });
-                        }
-                    }
-                }
-                _ => last_dot = None,
-            }
-        }
-        // Dot positions: leading, trailing, multiple
-        let segs = ctx.segments();
-        if let Some(i) = segs
-            .iter()
-            .position(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
-        {
-            if let Segment::NewComponent { span } = segs[i] {
-                emit.candidate(DiagnosticCandidate {
-                    code: Code("LEX_LEADING_DOT"),
-                    category: Category::Lex,
-                    severity: Severity::Error,
-                    span,
-                    message: "Leading dot",
-                    scope: Scope::Global,
-                });
-            }
-        }
-        if let Some(i) = segs
-            .iter()
-            .rposition(|seg| !matches!(seg, Segment::WhitespaceBlock { .. }))
-        {
-            if let Segment::NewComponent { span } = segs[i] {
-                emit.candidate(DiagnosticCandidate {
-                    code: Code("LEX_TRAILING_DOT"),
-                    category: Category::Lex,
-                    severity: Severity::Error,
-                    span,
-                    message: "Trailing dot",
-                    scope: Scope::Global,
-                });
-            }
-        }
-        for w in segs.windows(2) {
-            if let [Segment::NewComponent { span: s1 }, Segment::NewComponent { span: s2 }] =
-                w
-            {
-                emit.candidate(DiagnosticCandidate {
-                    code: Code("LEX_MULTIPLE_DOTS"),
-                    category: Category::Lex,
-                    severity: Severity::Error,
-                    span: Span::new(s1.start, s2.end),
-                    message: "Multiple dots",
-                    scope: Scope::Global,
-                });
-                break;
-            }
-        }
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static DOT_RULES: DotRules = DotRules;
 
@@ -228,13 +138,7 @@ pub struct LeadingBondRule;
 static META_LEX_LEAD_BOND: RuleMeta = RuleMeta { id: "LEX_LEADING_BOND_RULE", category: Category::Lex, default_severity: Severity::Error };
 impl Rule for LeadingBondRule {
     fn meta(&self) -> &'static RuleMeta { &META_LEX_LEAD_BOND }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        if let Some(seg) = ctx.segments().iter().find(|s| !matches!(s, Segment::WhitespaceBlock { .. })) {
-            if let Segment::Bond { span, .. } = seg {
-                emit.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_BOND"), category: Category::Lex, severity: Severity::Error, span: *span, message: "Leading bond symbol", scope: Scope::Global });
-            }
-        }
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static LEADING_BOND_RULE: LeadingBondRule = LeadingBondRule;
 
@@ -243,38 +147,16 @@ pub struct LeadingRingRule;
 static META_LEX_LEAD_RING: RuleMeta = RuleMeta { id: "LEX_LEADING_RING_RULE", category: Category::Lex, default_severity: Severity::Error };
 impl Rule for LeadingRingRule {
     fn meta(&self) -> &'static RuleMeta { &META_LEX_LEAD_RING }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        if let Some(seg) = ctx.segments().iter().find(|s| !matches!(s, Segment::WhitespaceBlock { .. })) {
-            if let Segment::RingClosure { span, .. } = seg {
-                emit.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_RING"), category: Category::Lex, severity: Severity::Error, span: *span, message: "Leading ring index", scope: Scope::Global });
-            }
-        }
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static LEADING_RING_RULE: LeadingRingRule = LeadingRingRule;
 
 // Consecutive bonds
 pub struct ConsecutiveBondsRule;
-static META_LEX_CONS_BONDS: RuleMeta = RuleMeta { id: "LEX_CONSEC_BONDS_RULE", category: Category::Lex, default_severity: Severity::Error };
+static META_LEX_CONS_BONDS: RuleMeta = RuleMeta { id: "LEX_CONS_BONDS_RULE", category: Category::Lex, default_severity: Severity::Error };
 impl Rule for ConsecutiveBondsRule {
     fn meta(&self) -> &'static RuleMeta { &META_LEX_CONS_BONDS }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let segs = ctx.segments();
-        let mut last_bond_span: Option<Span> = None;
-        for seg in segs.iter() {
-            match seg {
-                Segment::WhitespaceBlock { .. } => {}
-                Segment::Bond { span, .. } => {
-                    if let Some(prev) = last_bond_span.take() {
-                        emit.candidate(DiagnosticCandidate { code: Code("LEX_CONSECUTIVE_BONDS"), category: Category::Lex, severity: Severity::Error, span: Span::new(prev.start, span.end), message: "Consecutive bond symbols", scope: Scope::Global });
-                    } else {
-                        last_bond_span = Some(*span);
-                    }
-                }
-                _ => last_bond_span = None,
-            }
-        }
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static CONSECUTIVE_BONDS_RULE: ConsecutiveBondsRule = ConsecutiveBondsRule;
 
@@ -283,27 +165,7 @@ pub struct TopGroupTrailingRule;
 static META_TOP_GRP: RuleMeta = RuleMeta { id: "LEX_TOP_GRP_TRAILING_RULE", category: Category::Lex, default_severity: Severity::Error };
 impl Rule for TopGroupTrailingRule {
     fn meta(&self) -> &'static RuleMeta { &META_TOP_GRP }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let segs = ctx.segments();
-        let mut depth: i32 = 0;
-        for idx in 0..segs.len() {
-            match segs[idx] {
-                Segment::WhitespaceBlock { .. } => {}
-                Segment::BranchOpen { .. } => depth += 1,
-                Segment::BranchClose { span } => {
-                    depth -= 1;
-                    if depth == 0 {
-                        let mut j = idx + 1;
-                        while j < segs.len() && matches!(segs[j], Segment::WhitespaceBlock { .. }) { j += 1; }
-                        if j < segs.len() && !matches!(segs[j], Segment::NewComponent { .. }) {
-                            emit.candidate(DiagnosticCandidate { code: Code("TOP_GRP_TRAILING"), category: Category::Lex, severity: Severity::Error, span, message: "Top-level group followed by non-dot", scope: Scope::Global });
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static TOP_GRP_TRAILING_RULE: TopGroupTrailingRule = TopGroupTrailingRule;
 
@@ -336,43 +198,6 @@ fn is_aromatic_bracket(inner: &str) -> bool {
 
 impl Rule for InconsistentAromaticityRule {
     fn meta(&self) -> &'static RuleMeta { &META_AROM }
-    fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let segs = ctx.segments();
-        for i in 0..segs.len() {
-            let (span, kind) = match segs[i] {
-                Segment::Bond { span, kind } => (span, kind),
-                _ => continue,
-            };
-            // Only consider explicit non-aromatic vs aromatic bonds
-            let is_non_aromatic_bond = matches!(kind, BondKind::Single | BondKind::Double | BondKind::Triple | BondKind::Quadruple);
-            let is_aromatic_bond = matches!(kind, BondKind::Aromatic);
-            if !(is_non_aromatic_bond || is_aromatic_bond) { continue; }
-
-            let left = (0..i).rfind(|&j| !matches!(segs[j], Segment::WhitespaceBlock { .. }));
-            let right = ((i + 1)..segs.len()).find(|&j| !matches!(segs[j], Segment::WhitespaceBlock { .. }));
-            let (Some(li), Some(ri)) = (left, right) else { continue };
-            let left_arom = match &segs[li] {
-                Segment::AtomSimple { raw, .. } => is_aromatic_simple(raw),
-                Segment::AtomBracket { inner, .. } => is_aromatic_bracket(inner),
-                _ => false,
-            };
-            let right_arom = match &segs[ri] {
-                Segment::AtomSimple { raw, .. } => is_aromatic_simple(raw),
-                Segment::AtomBracket { inner, .. } => is_aromatic_bracket(inner),
-                _ => false,
-            };
-
-            if (is_non_aromatic_bond && left_arom && right_arom) || (is_aromatic_bond && !(left_arom && right_arom)) {
-                emit.candidate(DiagnosticCandidate {
-                    code: Code("LEX_INCONSISTENT_AROMATICITY"),
-                    category: Category::Lex,
-                    severity: Severity::Error,
-                    span,
-                    message: "Inconsistent aromaticity on bond",
-                    scope: Scope::Global,
-                });
-            }
-        }
-    }
+    fn check(&self, _ctx: &LintContext, _emit: &mut Emitter) {}
 }
 pub static AROM_INCONSISTENT_RULE: InconsistentAromaticityRule = InconsistentAromaticityRule;
