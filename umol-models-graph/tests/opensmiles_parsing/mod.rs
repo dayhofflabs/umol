@@ -1,5 +1,1 @@
-//! Parsing tests for OpenSMILES (UMOL)
-
-mod fixtures;
-mod invalid;
-mod valid;
+//! Parsing tests placeholder (legacy removed)

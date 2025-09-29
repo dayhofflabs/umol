@@ -23,22 +23,6 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     registry.register(&rules::LEX_ERRORS_RULE);
     registry.register(&rules::WS_RULE);
     registry.register(&rules::COMMENTS_RULE);
-    registry.register(&rules::TRAILING_BOND_RULE);
-    registry.register(&rules::DOT_RULES);
-    registry.register(&rules::LEADING_BOND_RULE);
-    registry.register(&rules::LEADING_RING_RULE);
-    registry.register(&rules::CONSECUTIVE_BONDS_RULE);
-    registry.register(&rules::TOP_GRP_TRAILING_RULE);
-    registry.register(&rules::STYLE_PCT_RULE);
-    registry.register(&rules::BRANCH_RULE);
-    registry.register(&rules::BOND_STYLE_RULE);
-    registry.register(&rules::GROUP_PARENS_RULE);
-    registry.register(&rules::MIXED_AFTER_RULE);
-    registry.register(&rules::RING_STYLE_RULE);
-    registry.register(&rules::RING_NUMBERING_RULE);
-    registry.register(&rules::RING_ERRORS_RULE);
-    registry.register(&rules::BRACKET_RULE);
-    registry.register(&rules::AROM_INCONSISTENT_RULE);
     let engine = LintEngine::new(registry);
     engine.run(&ctx, &mut report);
     report

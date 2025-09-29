@@ -4,17 +4,9 @@ use super::context::LintContext;
 use super::emitter::Emitter;
 use crate::diagnostics::{Category, Severity};
 
-pub mod bracket;
-pub mod branch;
 pub mod lexical;
-pub mod ring;
-pub mod style;
 
-pub use bracket::BRACKET_RULE;
-pub use branch::BRANCH_RULE;
-pub use lexical::{DOT_RULES, LEX_ERRORS_RULE, TRAILING_BOND_RULE, WS_RULE, COMMENTS_RULE, AROM_INCONSISTENT_RULE, LEADING_BOND_RULE, LEADING_RING_RULE, CONSECUTIVE_BONDS_RULE, TOP_GRP_TRAILING_RULE};
-pub use ring::{RING_ERRORS_RULE, RING_STYLE_RULE};
-pub use style::{BOND_STYLE_RULE, GROUP_PARENS_RULE, MIXED_AFTER_RULE, STYLE_PCT_RULE, RING_NUMBERING_RULE};
+pub use lexical::{LEX_ERRORS_RULE, WS_RULE, COMMENTS_RULE};
 
 pub struct RuleMeta {
     pub id: &'static str,
