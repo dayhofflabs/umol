@@ -10,8 +10,6 @@ bstr = "1.12.0"
 fast-float = "0.2.0"
 float-cmp = "0.10.0"
 indexmap = { version = "2.11.1", features = ["serde"] }
-lalrpop-util = { version = "0.22.2", features = ["lexer"] }
-logos = "0.15.1"
 memchr = "2.7.4"
 nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
 nom = { version = "8.0.0" }
@@ -27,7 +25,6 @@ umol = { path = "../umol" }
 umol-data = { path = "../umol-data" }
 
 [build-dependencies]
-lalrpop = { version = "0.22.2", default-features = false }
 walkdir = "2.5.0"
 
 [dev-dependencies]

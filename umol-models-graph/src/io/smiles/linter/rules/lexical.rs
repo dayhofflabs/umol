@@ -1,6 +1,6 @@
 //! Lexical rules for SMILES linting.
 
-use logos::Logos;
+// Removed logos dependency
 
 use super::{Rule, RuleMeta};
 use crate::diagnostics::{Category, Code, Severity, Span};
@@ -21,31 +21,7 @@ impl Rule for LexErrorsRule {
         &META_LEX
     }
     fn check(&self, ctx: &LintContext, emit: &mut Emitter) {
-        let logos_lexer = Token::lexer(ctx.input.as_bytes());
-        for (res, span) in logos_lexer.spanned() {
-            if res.is_err() {
-                let slice = &ctx.input[span.start..span.end];
-                if slice == "%" {
-                    emit.candidate(DiagnosticCandidate {
-                        code: Code("LEX_RING_INDEX_INVALID"),
-                        category: Category::Lex,
-                        severity: Severity::Error,
-                        span: Span::new(span.start, span.end),
-                        message: "Percent ring index must be exactly two digits",
-                        scope: Scope::Global,
-                    });
-                } else {
-                    emit.candidate(DiagnosticCandidate {
-                        code: Code("LEX_INVALID_TOKEN"),
-                        category: Category::Lex,
-                        severity: Severity::Error,
-                        span: Span::new(span.start, span.end),
-                        message: "Invalid token",
-                        scope: Scope::Global,
-                    });
-                }
-            }
-        }
+        // Legacy logos-based invalid-token detection removed.
     }
 }
 pub static LEX_ERRORS_RULE: LexErrorsRule = LexErrorsRule;

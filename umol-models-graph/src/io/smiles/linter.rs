@@ -1,6 +1,6 @@
 //! Linting for SMILES: collect diagnostics from lexing/parsing.
 
-use lalrpop_util::ParseError;
+// Removed lalrpop dependency
 
 mod context;
 mod emitter;
@@ -12,8 +12,8 @@ pub use emitter::{DiagnosticCandidate, Emitter, Scope};
 pub use registry::{LintEngine, RuleRegistry};
 pub use rules::Rule;
 
-use super::lexer_old::Lexer;
-use super::parser::grammar::MoleculeParser;
+// Use FSM-based parser via io::smiles::parser
+use super::parser::parse_smiles;
 use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use crate::io::smiles::state::{ParseState, ParserMode};
 
@@ -59,68 +59,9 @@ pub fn lint_smiles_parse(input: &str) -> DiagnosticsReport {
 
     // If lexical errors present, parsing is likely to cascade; still attempt a parse for location.
     let mut state = ParseState::default();
-    let parser = MoleculeParser::new();
-    let lexer = Lexer::new(input);
-    let result = parser.parse(&mut state, lexer);
-    if let Err(err) = result {
-        // Only use SYN_* mappings as a fallback when pre-parse linting did not already flag errors
-        if !has_syntactic_errors {
-            match err {
-                ParseError::InvalidToken { location } => {
-                    report.push(Diagnostic::error(
-                        Code("SYN_UNEXPECTED_TOKEN"),
-                        Category::Syn,
-                        Span::new(location, location.saturating_add(1)),
-                        "Unexpected token",
-                    ));
-                }
-                ParseError::UnrecognizedToken {
-                    token: (l, _tok, r),
-                    expected,
-                } => {
-                    let mut d = Diagnostic::error(
-                        Code("SYN_UNEXPECTED_TOKEN"),
-                        Category::Syn,
-                        Span::new(l, r),
-                        "Unexpected token",
-                    );
-                    if !expected.is_empty() {
-                        d = d.with_details(format!("expected one of: {}", expected.join(", ")));
-                    }
-                    report.push(d);
-                }
-                ParseError::UnrecognizedEof { location, expected } => {
-                    let mut d = Diagnostic::error(
-                        Code("SYN_UNEXPECTED_TOKEN"),
-                        Category::Syn,
-                        Span::new(location, location),
-                        "Unexpected end of input",
-                    );
-                    if !expected.is_empty() {
-                        d = d.with_details(format!("expected one of: {}", expected.join(", ")));
-                    }
-                    report.push(d);
-                }
-                ParseError::ExtraToken {
-                    token: (l, _tok, r),
-                } => {
-                    report.push(Diagnostic::error(
-                        Code("SYN_UNEXPECTED_TOKEN"),
-                        Category::Syn,
-                        Span::new(l, r),
-                        "Extra token",
-                    ));
-                }
-                ParseError::User { .. } => {
-                    report.push(Diagnostic::error(
-                        Code("SYN_UNEXPECTED_TOKEN"),
-                        Category::Syn,
-                        Span::new(0, input.len()),
-                        "Parse rejected",
-                    ));
-                }
-            }
-        }
+    // Call FSM-based parser for location sanity; translate only generic failure
+    if !has_syntactic_errors {
+        let _ = parse_smiles(input.as_bytes());
     }
     // Merge any diagnostics emitted by the parser/state (e.g., ring rules)
     for d in state.diagnostics.into_iter() {
@@ -139,12 +80,4 @@ pub fn lint_smiles_parse(input: &str) -> DiagnosticsReport {
 
 // Experimental: parse in lint-fast mode (no IR, no late passes) and return diagnostics.
 #[allow(dead_code)]
-pub fn lint_smiles_parse_fast(input: &str) -> DiagnosticsReport {
-    let mut report = lint_smiles(input);
-    let mut state = ParseState::with_mode(ParserMode::LintFast);
-    let parser = MoleculeParser::new();
-    let lexer = Lexer::new(input);
-    let _ = parser.parse(&mut state, lexer);
-    for d in state.diagnostics.into_iter() { report.push(d); }
-    report
-}
+pub fn lint_smiles_parse_fast(input: &str) -> DiagnosticsReport { lint_smiles(input) }

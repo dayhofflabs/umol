@@ -3,9 +3,9 @@
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_models_graph::io::smiles::{parse_smiles_m6, M6Error};
+use umol_models_graph::io::smiles::parser::parse_smiles_inner;
+use umol_models_graph::io::smiles::{parse_smiles, ParseError};
 use umol_models_graph::io::config::SmilesParseFlags;
-use umol_models_graph::io::smiles::fsm_m6::parse_smiles_inner;
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".
@@ -35,40 +35,40 @@ proptest! {
     // Error spans must point within the input bounds (M6 strict)
     #[test]
     fn m6_error_positions_within_bounds(input in smilesish()) {
-        let res = parse_smiles_m6(&input);
+        let res = parse_smiles(&input);
         if let Err(err) = res {
             let len = input.len();
             let ok = match err {
-                M6Error::InvalidWhitespace { pos }
-                | M6Error::InvalidComment { pos }
-                | M6Error::UnsupportedToken { pos }
-                | M6Error::UnbalancedBranchOpen { pos }
-                | M6Error::UnbalancedBranchClose { pos }
-                | M6Error::EmptyBranch { pos }
-                | M6Error::EmptyGroup { pos }
-                | M6Error::TopLevelGroupTrailing { pos }
-                | M6Error::TrailingBond { pos }
-                | M6Error::ConsecutiveBond { pos }
-                | M6Error::LeadingBond { pos }
-                | M6Error::RingIndexInvalid { pos }
-                | M6Error::LeadingRing { pos }
-                | M6Error::RingSelfLoop { pos }
-                | M6Error::RingTwoMember { pos }
-                | M6Error::LeadingDot { pos }
-                | M6Error::TrailingDot { pos }
-                | M6Error::ConsecutiveDot { pos }
-                | M6Error::UnbalancedOpenBracket { pos }
-                | M6Error::UnbalancedCloseBracket { pos }
-                | M6Error::InvalidBracket { pos }
-                | M6Error::BracketHCountTwoDigits { pos }
-                | M6Error::BracketEmptyClass { pos } => pos < len,
+                ParseError::InvalidWhitespace { pos }
+                | ParseError::InvalidComment { pos }
+                | ParseError::UnsupportedToken { pos }
+                | ParseError::UnbalancedBranchOpen { pos }
+                | ParseError::UnbalancedBranchClose { pos }
+                | ParseError::EmptyBranch { pos }
+                | ParseError::EmptyGroup { pos }
+                | ParseError::TopLevelGroupTrailing { pos }
+                | ParseError::TrailingBond { pos }
+                | ParseError::ConsecutiveBond { pos }
+                | ParseError::LeadingBond { pos }
+                | ParseError::RingIndexInvalid { pos }
+                | ParseError::LeadingRing { pos }
+                | ParseError::RingSelfLoop { pos }
+                | ParseError::RingTwoMember { pos }
+                | ParseError::LeadingDot { pos }
+                | ParseError::TrailingDot { pos }
+                | ParseError::ConsecutiveDot { pos }
+                | ParseError::UnbalancedOpenBracket { pos }
+                | ParseError::UnbalancedCloseBracket { pos }
+                | ParseError::InvalidBracket { pos }
+                | ParseError::BracketHCountTwoDigits { pos }
+                | ParseError::BracketEmptyClass { pos } => pos < len,
 
-                M6Error::UnterminatedBlockComment { pos } => pos < len,
+                ParseError::UnterminatedBlockComment { pos } => pos < len,
 
-                M6Error::RingBondDirConflict { pos, open_pos }
-                | M6Error::RingBondOrderConflict { pos, open_pos } => pos < len && open_pos < len,
+                ParseError::RingBondDirConflict { pos, open_pos }
+                | ParseError::RingBondOrderConflict { pos, open_pos } => pos < len && open_pos < len,
 
-                M6Error::RingUnclosed { open_pos } => open_pos < len,
+                ParseError::RingUnclosed { open_pos } => open_pos < len,
             };
             prop_assert!(ok, "error positions out of bounds: {:?}, len={}", err, len);
         }
@@ -77,7 +77,7 @@ proptest! {
     // Bonds in successful parses must reference valid, distinct atom indices
     #[test]
     fn m6_bonds_well_formed_on_success(input in smilesish()) {
-        if let Ok(mol) = parse_smiles_m6(&input) {
+        if let Ok(mol) = parse_smiles(&input) {
             let n = mol.atoms.len() as u32;
             for b in &mol.bonds {
                 let sa = b.start_atom.expect("bond missing start");

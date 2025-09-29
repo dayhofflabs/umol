@@ -4,40 +4,15 @@ use std::{env, fs};
 use walkdir::WalkDir;
 
 fn main() {
-    generate_smiles_parser();
+    // LALRPOP was removed; keep only conformance test generation
     generate_conformance_tests();
 }
 
-fn generate_smiles_parser() {
-    let in_dir = "src/io/smiles/parser";
-    // Rebuild if any file in the parser directory changes (including new files)
-    println!("cargo:rerun-if-changed={}", in_dir);
-    for entry in fs::read_dir(in_dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.extension().is_some_and(|e| e == "lalrpop") {
-            println!("cargo:rerun-if-changed={}", path.display());
-        }
-    }
-    sanitize_env_for_lalrpop();
-    lalrpop::Configuration::new()
-        .log_debug()
-        // Disable report emission to avoid IO issues on renamed files/paths
-        .set_in_dir(in_dir)
-        .process()
-        .unwrap();
-}
+// Removed: generate_smiles_parser (LALRPOP)
 
 // Remove any non-UTF8 environment variables for the duration of this build script
 // LALRPOP has a dependency on env, which iterates over env as UTF-8
-fn sanitize_env_for_lalrpop() {
-    let vars: Vec<(std::ffi::OsString, std::ffi::OsString)> = env::vars_os().collect();
-    for (k, v) in vars {
-        if k.clone().into_string().is_err() || v.clone().into_string().is_err() {
-            env::remove_var(&k);
-        }
-    }
-}
+// Removed: sanitize_env_for_lalrpop
 
 fn generate_conformance_tests() {
     let out_dir = env::var("OUT_DIR").unwrap();
