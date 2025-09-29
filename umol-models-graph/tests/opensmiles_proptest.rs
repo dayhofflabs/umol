@@ -3,9 +3,9 @@
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
+use umol_models_graph::io::config::SmilesParseFlags;
 use umol_models_graph::io::smiles::parser::parse_smiles_inner;
 use umol_models_graph::io::smiles::{parse_smiles, ParseError};
-use umol_models_graph::io::config::SmilesParseFlags;
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".
@@ -61,14 +61,16 @@ proptest! {
                 | ParseError::UnbalancedCloseBracket { pos }
                 | ParseError::InvalidBracket { pos }
                 | ParseError::BracketHCountTwoDigits { pos }
-                | ParseError::BracketEmptyClass { pos } => pos < len,
-
-                ParseError::UnterminatedBlockComment { pos } => pos < len,
-
+                | ParseError::BracketEmptyClass { pos }
+                | ParseError::FieldOutsideBracket { pos }
+                | ParseError::BracketDuplicateField { pos }
+                | ParseError::BracketHOnH { pos }
+                | ParseError::GroupLeadingConnector { pos }
+                | ParseError::UnterminatedBlockComment { pos }
+                 => pos < len,
+                | ParseError::RingUnclosed { open_pos } => open_pos < len,
                 ParseError::RingBondDirConflict { pos, open_pos }
                 | ParseError::RingBondOrderConflict { pos, open_pos } => pos < len && open_pos < len,
-
-                ParseError::RingUnclosed { open_pos } => open_pos < len,
             };
             prop_assert!(ok, "error positions out of bounds: {:?}, len={}", err, len);
         }

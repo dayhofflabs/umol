@@ -25,8 +25,8 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - LEX_CONSECUTIVE_BONDS (LEX, Error): consecutive bond tokens without an intervening atom or ring index
 - LEX_TRAILING_BOND (LEX, Error): bond token found at end of input or component
 - LEX_LEADING_RING (LEX, Error): ring index appears with no preceding atom (start of input or after a top-level group)
-- PARSER_UNBALANCED_OPEN_BRACKET (BRKT, Error): '[' without a matching closing ']' (reported by parser)
-- PARSER_UNBALANCED_CLOSE_BRACKET (BRKT, Error): ']' without a matching '[' (reported by parser)
+- BRKT_UNBALANCED_OPEN (BRKT, Error): '[' without a matching closing ']' (reported by parser)
+- BRKT_UNBALANCED_CLOSE (BRKT, Error): ']' without a matching '[' (reported by parser)
 - BRKT_UNEXPECTED_CLOSE (BRKT, Error): ']' outside of a bracket atom
 - BRKT_FIELD_OUTSIDE (BRKT, Error): bracket-only field (e.g., @, +, ++) outside of a bracket atom
 - BRKT_DUP_FIELD (BRKT, Error): duplicate bracket field of the same kind
@@ -89,7 +89,7 @@ Emitted by parser/state during ring processing; codes may appear in `lint_smiles
 #### Sources (post-parse modality)
 
 - Parser-mapped (reported directly from FSM parser `ParseError`):
-  - PARSER_UNBALANCED_OPEN_BRACKET, PARSER_UNBALANCED_CLOSE_BRACKET
+  - BRKT_UNBALANCED_OPEN, BRKT_UNBALANCED_CLOSE
   - BRCH_UNCLOSED, BRCH_UNEXPECTED_CLOSE, BRCH_EMPTY_BRANCH
   - LEX_LEADING_BOND, LEX_CONSECUTIVE_BONDS, LEX_TRAILING_BOND
   - LEX_LEADING_DOT, LEX_TRAILING_DOT, LEX_MULTIPLE_DOTS

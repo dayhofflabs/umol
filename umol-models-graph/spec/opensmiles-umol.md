@@ -157,7 +157,3 @@ UMOL accepts '0' as a single‑digit ring index. UMOL requires percent ring indi
 ### Invalid Forms — informational
 
 The following examples illustrate inputs that must be rejected: "%0" (invalid percent ring index), "C1CC" (unclosed ring index), "C11" (self‑loop ring closure), "C12C21" (two‑member ring), "C/1CC\\1" (conflicting directions on a ring bond), "C-" (trailing bond), and "C==C" (consecutive bond tokens without an intervening atom or ring index).
-
-### Non‑Normative Appendix: Implementation Grammar
-
-The implementation grammar (e.g., LALRPOP) may be included as an appendix for reference. When discrepancies arise, the EBNF grammar above is authoritative.

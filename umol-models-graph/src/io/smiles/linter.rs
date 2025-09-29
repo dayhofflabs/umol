@@ -12,7 +12,6 @@ pub use rules::Rule;
 use super::parser::parse_smiles;
 use crate::diagnostics::{Category, Code, DiagnosticsReport, Severity, Span};
 use crate::io::smiles::ParseError;
-use crate::io::smiles::parser::utils::{is_valid_bracket_inner, parse_bracket, BracketField};
 
 
 // SMILES linter, runs post-parse
@@ -80,7 +79,7 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             // Bracket balance
             ParseError::UnbalancedOpenBracket { pos } => {
                 emitter.candidate(DiagnosticCandidate {
-                    code: Code("PARSER_UNBALANCED_OPEN_BRACKET"),
+                    code: Code("BRKT_UNBALANCED_OPEN"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
@@ -90,13 +89,28 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             }
             ParseError::UnbalancedCloseBracket { pos } => {
                 emitter.candidate(DiagnosticCandidate {
-                    code: Code("PARSER_UNBALANCED_CLOSE_BRACKET"),
+                    code: Code("BRKT_UNBALANCED_CLOSE"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Unbalanced ']' bracket",
                     scope: Scope::Bracket { start: pos, end: pos.saturating_add(1) },
                 });
+            }
+            ParseError::InvalidBracket { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_INVALID"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Invalid bracket atom", scope: Scope::Global });
+            }
+            ParseError::BracketHCountTwoDigits { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_HCOUNT_TWO_DIGITS"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "H-count must be one digit", scope: Scope::Global });
+            }
+            ParseError::BracketEmptyClass { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_EMPTY_CLASS"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Empty atom class field", scope: Scope::Global });
+            }
+            ParseError::BracketDuplicateField { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_DUP_FIELD"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Duplicate bracket field", scope: Scope::Global });
+            }
+            ParseError::BracketHOnH { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_H_ON_H"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Hydrogen field on hydrogen element", scope: Scope::Global });
             }
 
             // Branch/group
@@ -119,10 +133,6 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             }
             ParseError::TrailingBond { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("LEX_TRAILING_BOND"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Trailing bond token", scope: Scope::Global });
-                // Derive dangling bond before component end or ')'
-                if next_non_ws_is(input.as_bytes(), pos, b')') || next_non_ws_is(input.as_bytes(), pos, b'.') || pos + 1 >= input.len() {
-                    emitter.candidate(DiagnosticCandidate { code: Code("BRCH_DANGLING_BOND"), category: Category::Branch, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Dangling bond before group end or component boundary", scope: Scope::Global });
-                }
             }
             ParseError::LeadingDot { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_DOT"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Leading dot", scope: Scope::Global });
@@ -137,9 +147,11 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             // Ring leading and index invalid
             ParseError::LeadingRing { pos } => {
                 if pos > 0 && input.as_bytes()[pos - 1] == b'.' {
-                    emitter.candidate(DiagnosticCandidate { code: Code("LEX_DOT_BEFORE_RING"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos - 1, pos + 1), message: "Dot before ring index", scope: Scope::Global });
+                    // Treat as leading dot instead of dot-before-ring
+                    emitter.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_DOT"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos - 1, pos), message: "Leading dot", scope: Scope::Global });
+                } else {
+                    emitter.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_RING"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Leading ring index", scope: Scope::Global });
                 }
-                emitter.candidate(DiagnosticCandidate { code: Code("LEX_LEADING_RING"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Leading ring index", scope: Scope::Global });
             }
             ParseError::RingIndexInvalid { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("LEX_RING_INDEX_INVALID"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Invalid percent ring index", scope: Scope::Global });
@@ -155,8 +167,18 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             ParseError::UnterminatedBlockComment { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("LEX_UNTERMINATED_BLOCK_COMMENT"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos, input.len()), message: "Unterminated block comment", scope: Scope::Global });
             }
-
-            _ => {}
+            ParseError::TopLevelGroupTrailing { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRCH_GROUP_TRAILING"), category: Category::Branch, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Group trailing content", scope: Scope::Global });
+            }
+            ParseError::UnsupportedToken { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("LEX_INVALID_TOKEN"), category: Category::Lex, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Invalid token", scope: Scope::Global });
+            }
+            ParseError::FieldOutsideBracket { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_FIELD_OUTSIDE"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Bracket-only field outside brackets", scope: Scope::Global });
+            }
+            ParseError::GroupLeadingConnector { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("GRP_LEADING_CONNECTOR"), category: Category::Branch, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Group begins with a connector", scope: Scope::Global });
+            }
         }
     }
 
@@ -165,12 +187,6 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
 
     emitter.flush();
     report
-}
-
-fn next_non_ws_is(bytes: &[u8], pos: usize, ch: u8) -> bool {
-    let mut i = pos + 1;
-    while i < bytes.len() && matches!(bytes[i], b' ' | b'\t' | b'\n' | b'\r') { i += 1; }
-    i < bytes.len() && bytes[i] == ch
 }
 
 fn run_style_and_numeric_checks(ctx: &LintContext, emit: &mut Emitter, only_when_parse_ok: bool) {
@@ -186,63 +202,7 @@ fn run_style_and_numeric_checks(ctx: &LintContext, emit: &mut Emitter, only_when
         i += 1;
     }
 
-    // Bracket-based style/num checks
-    let mut j = 0usize;
-    while j < bytes.len() {
-        if bytes[j] == b'[' {
-            let start = j;
-            let mut k = j + 1;
-            while k < bytes.len() && bytes[k] != b']' { k += 1; }
-            if k >= bytes.len() { break; }
-            if let Ok(inner) = std::str::from_utf8(&bytes[start + 1..k]) {
-                // Only check style against valid bracket substrings
-                if is_valid_bracket_inner(inner) {
-                    let (elem_opt, iso_opt, fields) = parse_bracket(inner);
-
-                    // STYLE_BRKT_ORGANIC
-                    if fields.is_empty() && iso_opt.is_none() {
-                        if let Some(elem) = elem_opt {
-                            if is_organic_subset(elem) {
-                                emit.candidate(DiagnosticCandidate { code: Code("STYLE_BRKT_ORGANIC"), category: Category::Style, severity: Severity::Warning, span: Span::new(start, k + 1), message: "Prefer bare organic atom over bracketed form", scope: Scope::Bracket { start, end: k + 1 } });
-                            }
-                        }
-                    }
-
-                    // STYLE_BRKT_ORDER
-                    let mut last_rank = 0u8;
-                    let mut ordered = true;
-                    for f in &fields {
-                        let r = field_rank(f);
-                        if r < last_rank { ordered = false; break; }
-                        last_rank = r;
-                    }
-                    if !ordered {
-                        emit.candidate(DiagnosticCandidate { code: Code("STYLE_BRKT_ORDER"), category: Category::Style, severity: Severity::Warning, span: Span::new(start, k + 1), message: "Prefer [chirality][H][charge][class] ordering", scope: Scope::Bracket { start, end: k + 1 } });
-                    }
-
-                    // NUM_ISOTOPE_TOO_LARGE
-                    if let Some(iso) = iso_opt { if iso >= 1000 { emit.candidate(DiagnosticCandidate { code: Code("NUM_ISOTOPE_TOO_LARGE"), category: Category::Num, severity: Severity::Error, span: Span::new(start + 1, k), message: "Isotope mass number too large", scope: Scope::Bracket { start, end: k + 1 } }); } }
-                }
-
-                // STYLE_CHARGE_SIGN_SIMPLE: detect +1 / -1 literally
-                if contains_sign_one(inner) {
-                    emit.candidate(DiagnosticCandidate { code: Code("STYLE_CHARGE_SIGN_SIMPLE"), category: Category::Style, severity: Severity::Warning, span: Span::new(start, k + 1), message: "Prefer [+]/[-] over [+1]/[-1]", scope: Scope::Bracket { start, end: k + 1 } });
-                }
-                // STYLE_HCOUNT_ONE_SIMPLE: detect H1 literally
-                if contains_h1(inner) {
-                    emit.candidate(DiagnosticCandidate { code: Code("STYLE_HCOUNT_ONE_SIMPLE"), category: Category::Style, severity: Severity::Warning, span: Span::new(start, k + 1), message: "Prefer H over H1", scope: Scope::Bracket { start, end: k + 1 } });
-                }
-
-                // NUM_CHIRAL_OUT_OF_RANGE: detect @TBn/@OHn over limits by raw pattern
-                if chiral_param_out_of_range(inner) {
-                    emit.candidate(DiagnosticCandidate { code: Code("NUM_CHIRAL_OUT_OF_RANGE"), category: Category::Num, severity: Severity::Error, span: Span::new(start + 1, k), message: "Chirality parameter out of range", scope: Scope::Bracket { start, end: k + 1 } });
-                }
-            }
-            j = k + 1;
-            continue;
-        }
-        j += 1;
-    }
+    // Bracket-based style/num checks are deferred to a later pass to avoid re-parsing.
 
     // Ring numbering style checks only when parsing succeeded to avoid noise
     if only_when_parse_ok {
@@ -289,66 +249,4 @@ fn ring_indices_sequence(bytes: &[u8]) -> Vec<(u32, usize, usize)> {
     res
 }
 
-fn field_rank(f: &BracketField) -> u8 {
-    match f { BracketField::Chiral(_) => 0, BracketField::HydrogenCount(_) => 1, BracketField::Charge(_) => 2, BracketField::Class(_) => 3 }
-}
-
-fn is_organic_subset(elem: umol_data::Element) -> bool {
-    use umol_data::Element::*;
-    matches!(elem, B | C | N | O | P | S | F | Cl | Br | I)
-}
-
-fn contains_sign_one(inner: &str) -> bool {
-    let b = inner.as_bytes();
-    let mut i = 0usize;
-    while i < b.len() {
-        let c = b[i];
-        if c == b'+' || c == b'-' {
-            let mut j = i + 1;
-            let mut val: i32 = 0;
-            let mut has_digit = false;
-            while j < b.len() && b[j].is_ascii_digit() {
-                has_digit = true;
-                val = val.saturating_mul(10) + (b[j] - b'0') as i32;
-                j += 1;
-            }
-            if has_digit && val == 1 { return true; }
-            i = j; continue;
-        }
-        i += 1;
-    }
-    false
-}
-
-fn contains_h1(inner: &str) -> bool {
-    let b = inner.as_bytes();
-    let mut i = 0usize;
-    while i + 1 < b.len() {
-        if b[i] == b'H' && b[i + 1] == b'1' {
-            if i + 2 >= b.len() || !b[i + 2].is_ascii_digit() { return true; }
-        }
-        i += 1;
-    }
-    false
-}
-
-fn chiral_param_out_of_range(inner: &str) -> bool {
-    let b = inner.as_bytes();
-    let mut i = 0usize;
-    while i + 3 < b.len() {
-        if b[i] == b'@' && b[i + 1] == b'T' && b[i + 2] == b'B' {
-            let mut j = i + 3; let mut val: u32 = 0; let mut has_digit=false;
-            while j < b.len() && b[j].is_ascii_digit() { has_digit=true; val = val.saturating_mul(10) + (b[j] - b'0') as u32; j += 1; }
-            if has_digit && val > 20 { return true; }
-            i = j; continue;
-        }
-        if b[i] == b'@' && b[i + 1] == b'O' && b[i + 2] == b'H' {
-            let mut j = i + 3; let mut val: u32 = 0; let mut has_digit=false;
-            while j < b.len() && b[j].is_ascii_digit() { has_digit=true; val = val.saturating_mul(10) + (b[j] - b'0') as u32; j += 1; }
-            if has_digit && val > 30 { return true; }
-            i = j; continue;
-        }
-        i += 1;
-    }
-    false
-}
+// Bracket-style helper functions removed along with bracket re-parsing.

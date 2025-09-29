@@ -64,16 +64,18 @@ fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::group_c_1_aromatic(b"(c)", build_from_graph("C* |"))]
 #[case::group_c_4(b"(CCCC)", build_from_graph("C C C C | 0-1 1-2 2-3"))]
 #[case::group_nested(b"((CC))", build_from_graph("C C | 0-1"))]
-#[case::branch_c_111(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
 #[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
 #[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4: 4-5:"))]
-#[case::trailing_branch(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
-    fn tree(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles(input);
-        assert!(res.is_ok(), "{:?} should have succeeded", input);
-        let mol = res.unwrap();
-        assert_eq!(mol, expected);
-    }
+#[case::branch_trailing(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
+#[case::branch_multiple(b"CC(C)(C)C", build_from_graph("C C C C C | 0-1 1-2 1-3 1-4"))]
+#[case::branch_multiple_trailing(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
+#[case::branch_nested(b"C(C(C)C)C", build_from_graph("C C C C C | 0-1 1-2 1-3 0-4"))]
+fn tree(#[case] input: &[u8], #[case] expected: Molecule) {
+    let res = parse_smiles(input);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
+}
 
 #[rstest]
 #[case::unbalanced_closing_paren_1(b")C", ParseError::UnbalancedBranchClose { pos: 0 })]
@@ -102,10 +104,10 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_aromatic_c_6(b"c1ccccc1", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5:"))]
 #[case::ring_index_0(b"C0CC0", build_from_graph("C C C | 0-1 1-2 0-2"))]
 #[case::ring_index_percent(b"C%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_numeric_equiv_1(b"C1CC%01", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_numeric_equiv_0(b"C0CC%00", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_numeric_equiv_9(b"C9CC%09", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_max_percent(b"C%99CC%99", build_from_graph("C C C | 0-1 1-2 0-2"))]
+#[case::ring_index_zero_prefix_1(b"C1CC%01", build_from_graph("C C C | 0-1 1-2 0-2"))]
+#[case::ring_index_zero_prefix_2(b"C0CC%00", build_from_graph("C C C | 0-1 1-2 0-2"))]
+#[case::ring_index_zero_prefix_3(b"C9CC%09", build_from_graph("C C C | 0-1 1-2 0-2"))]
+#[case::ring_index_max_99(b"C%99CC%99", build_from_graph("C C C | 0-1 1-2 0-2"))]
 #[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
 #[case::two_rings_bonded_0_aromatic(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
 #[case::two_rings_bonded_0_aromatic_1(b"c1cc1C2CC2", build_from_graph("C* C* C* C C C | 0-1: 1-2: 0-2: 2-3 3-4 4-5 3-5"))]
@@ -115,6 +117,7 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::two_rings_fused(b"C12CC1C2", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 0-3"))]
 #[case::two_rings_bridged(b"C12CC(C2)C1", build_from_graph("C C C C C | 0-1 1-2 2-3 0-3 2-4 0-4"))]
 #[case::two_rings_fused_aromatic(b"c12ccccc1cccc2", build_from_graph("C* C* C* C* C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5: 5-6: 6-7: 7-8: 8-9: 0-9:"))]
+#[case::two_rings_interleaved_indices(b"N1CC2CCCCC2CC1", build_from_graph("N C C C C C C C C C | 0-1 1-2 2-3 3-4 4-5 5-6 6-7 2-7 7-8 8-9 0-9"))]
 #[case::three_rings_fused(b"C12C3C1C32", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 1-3 0-3"))]
 #[case::ring_group(b"(C1CC1)", build_from_graph("C C C | 0-1 1-2 0-2"))]
 #[case::ring_branch_1(b"CC(C1)(C1)", build_from_graph("C C C C | 0-1 1-2 1-3 2-3"))]
@@ -128,12 +131,12 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
 #[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3: 0-3:"))]
 #[case::substituted_ring_branch_1(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
-    fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles(input);
-        assert!(res.is_ok(), "{:?} should have succeeded", input);
-        let mol = res.unwrap();
-        assert_eq!(mol, expected);
-    }
+fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
+    let res = parse_smiles(input);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
+}
 
 #[rstest]
 #[case::leading_ring(b"1C", ParseError::LeadingRing { pos: 0 })]
@@ -182,8 +185,10 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::conjugated_bonds(b"C=CC=C", build_from_graph("C C C C | 0-1:= 1-2:- 2-3:="))]
 #[case::cumulated_bonds_aromatic(b"c=c=c", build_from_graph("C* C* C* | 0-1:= 1-2:="))]
 #[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C* C* C* C* | 0-1:= 1-2:- 2-3:="))]
-#[case::branch_leading_bond(b"CC(-C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+#[case::branch_leading_single_bond(b"CC(-C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+#[case::branch_leading_single_bond_multiple(b"CC(-C)(-C)C", build_from_graph("C C C C C | 0-1 1-2 1-3 1-4"))]
 #[case::branch_leading_double_bond(b"CC(=C)C", build_from_graph("C C C C | 0-1 1-2:= 1-3"))]
+#[case::branch_leading_double_bond_multiple(b"OS(=O)(=O)O", build_from_graph("O S O O O | 0-1 1-2:= 1-3:= 1-4"))]
 #[case::branch_internal_bond(b"CC(C-C)C", build_from_graph("C C C C C | 0-1 1-2 2-3 1-4"))]
 #[case::branch_internal_double_bond(b"CC(C=C)C", build_from_graph("C C C C C | 0-1 1-2 2-3:= 1-4"))]
 #[case::branch_followed_by_bond(b"CC(C)-C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
@@ -196,6 +201,7 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:/"))]
 #[case::branch_cis_double_bond_2(b"C/C=C\\C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:\\"))]
 #[case::ring_single_bond(b"C-1-C-C-1", build_from_graph("C C C | 0-1 1-2 0-2"))]
+#[case::ring_single_bond_percent(b"C-%12-C-C-%12", build_from_graph("C C C | 0-1 1-2 0-2"))]
 #[case::ring_double_bond_1(b"C1-C=C1", build_from_graph("C C C | 0-1 1-2:= 0-2"))]
 #[case::ring_double_bond_2(b"C1-CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
 #[case::ring_double_bond_3(b"C=1-CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
@@ -214,12 +220,12 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_up_bond_percent_close(b"C%12CC/%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
 #[case::ring_down_bond_percent_both(b"C\\%12CC\\%12", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
 #[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
-    fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles(input);
-        assert!(res.is_ok(), "{:?} should have succeeded", input);
-        let mol = res.unwrap();
-        assert_eq!(mol, expected);
-    }
+fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
+    let res = parse_smiles(input);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
+}
 
 #[rstest]
 #[case::trailing_bond_1(b"C-", ParseError::TrailingBond { pos: 1 })]
@@ -262,13 +268,13 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::leading_aromatic_bond(b":C", ParseError::LeadingBond { pos: 0 })]
 #[case::leading_sterebond_1(b"/C", ParseError::LeadingBond { pos: 0 })]
 #[case::leading_sterebond_2(b"\\C", ParseError::LeadingBond { pos: 0 })]
-#[case::group_leading_bond_1(b"(-C)C", ParseError::LeadingBond { pos: 1 })]
-#[case::group_leading_bond_2(b"(=C)C", ParseError::LeadingBond { pos: 1 })]
-#[case::group_leading_bond_3(b"(#C)C", ParseError::LeadingBond { pos: 1 })]
-#[case::group_leading_bond_4(b"($C)C", ParseError::LeadingBond { pos: 1 })]
-#[case::group_leading_sterebond_1(b"(/C)C", ParseError::LeadingBond { pos: 1 })]
-#[case::group_leading_sterebond_2(b"(\\C)C", ParseError::LeadingBond { pos: 1 })]
-#[case::group_leading_aromatic_bond(b"(:C)C", ParseError::LeadingBond { pos: 1 })]
+#[case::group_leading_bond_1(b"(-C)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::group_leading_bond_2(b"(=C)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::group_leading_bond_3(b"(#C)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::group_leading_bond_4(b"($C)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::group_leading_sterebond_1(b"(/C)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::group_leading_sterebond_2(b"(\\C)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::group_leading_aromatic_bond(b"(:C)C", ParseError::GroupLeadingConnector { pos: 1 })]
 fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles(input);
     assert!(err.is_err(), "{:?} should have failed", input);
@@ -286,7 +292,8 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::branch_components(b"C(C.C)", build_from_graph("C C C | 0-1"))]
 #[case::leading_dot_in_branch_1(b"C(.C)", build_from_graph("C C | "))]
 #[case::leading_dot_in_branch_2(b"C(.C)(C)", build_from_graph("C C C | 0-2"))]
-#[case::leading_dot_in_branch_3(b"C(C)(.C)", build_from_graph("C C C | 0-1"))]
+#[case::leading_dot_in_branch_3(b"C(.C.C)", build_from_graph("C C C |"))]
+#[case::leading_dot_in_branch_4(b"C(C)(.C)", build_from_graph("C C C | 0-1"))]
 #[case::trailing_dot_in_branch_1(b"C(C.)", build_from_graph("C C | 0-1"))]
 #[case::trailing_dot_in_branch_2(b"C(C.)C", build_from_graph("C C C | 0-1 0-2"))]
 #[case::trailing_dot_in_branch_3(b"C(C.)(C)", build_from_graph("C C C | 0-1 0-2"))]
@@ -295,10 +302,6 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::group_components_3(b"(C.C).C", build_from_graph("C C C |"))]
 #[case::group_components_4(b"C.(C).C", build_from_graph("C C C |"))]
 #[case::group_components_5(b"C.C.(C)", build_from_graph("C C C |"))]
-#[case::leading_dot_in_group_1(b"(.CC)", build_from_graph("C C | 0-1"))]
-#[case::leading_dot_in_group_2(b"(.CC).(CC)", build_from_graph("C C C C | 0-1 2-3"))]
-#[case::leading_dot_in_group_3(b"(CC).(.CC)", build_from_graph("C C C C | 0-1 2-3"))]
-#[case::leading_dot_in_group_4(b"C(.C.C)", build_from_graph("C C C |"))]
 #[case::trailing_dot_in_group_1(b"(CC.)", build_from_graph("C C | 0-1"))]
 #[case::trailing_dot_in_group_2(b"(CC.).CC", build_from_graph("C C C C | 0-1 2-3"))]
 #[case::trailing_dot_in_group_3(b"(CC).(CC.)", build_from_graph("C C C C | 0-1 2-3"))]
@@ -314,14 +317,12 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_dir_up_both_percent(b"C/%12.CC/%12", build_from_graph("C C C | 1-2 0-2:/"))]
 #[case::ring_dir_down_both_percent(b"C\\%12.CC\\%12", build_from_graph("C C C | 1-2 0-2:\\"))]
 #[case::branch_multiple_components(b"C(.C.C)", build_from_graph("C C C |"))]
-#[case::groups_leading_dot_both(b"(.C).(.C)", build_from_graph("C C |"))]
-#[case::group_leading_dot_middle(b"C.(.C).C", build_from_graph("C C C |"))]
-    fn components(#[case] input: &[u8], #[case] expected: Molecule) {
-        let res = parse_smiles(input);
-        assert!(res.is_ok(), "{:?} should have succeeded", input);
-        let mol = res.unwrap();
-        assert_eq!(mol, expected);
-    }
+fn components(#[case] input: &[u8], #[case] expected: Molecule) {
+    let res = parse_smiles(input);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
+}
 
 #[rstest]
 #[case::leading_dot_1(b".", ParseError::LeadingDot { pos: 0 })]
@@ -333,19 +334,25 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::double_dot(b"C..C", ParseError::ConsecutiveDot { pos: 1 })]
 #[case::dot_before_ring_digit(b"C.1", ParseError::LeadingRing { pos: 2 })]
 #[case::dot_before_ring_percent(b"C.%12", ParseError::LeadingRing { pos: 2 })]
-#[case::dot_in_group_1(b"(.)", ParseError::LeadingDot { pos: 2 })]
-#[case::dot_in_group_2(b"(.)C", ParseError::EmptyGroup { pos: 2 })]
-#[case::dot_in_group_3(b"(.).C", ParseError::EmptyGroup { pos: 2 })]
+// TODO: Replace GroupLeadingConnector by LeadingDot / LeadingBond?
+#[case::dot_in_group_1(b"(.)", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::dot_in_group_2(b"(.)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::dot_in_group_3(b"(.).C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::leading_dot_in_group_1(b"(.CC)", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::leading_dot_in_group_2(b"(.CC).(CC)", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::leading_dot_in_group_3(b"(CC).(.CC)", ParseError::GroupLeadingConnector { pos: 6 })]
+#[case::leading_dot_in_group_4(b"(.C).(.C)", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::leading_dot_in_group_5(b"C.(.C).C", ParseError::GroupLeadingConnector { pos: 3 })]
 #[case::dot_before_group(b"C.(C)C", ParseError::TopLevelGroupTrailing { pos: 4 })]
 #[case::dot_in_branch_1(b"C(.)", ParseError::EmptyBranch { pos: 3 })]
 #[case::dot_in_branch_2(b"C(.)C", ParseError::EmptyBranch { pos: 3 })]
 #[case::dot_in_branch_3(b"C(.)(C)", ParseError::EmptyBranch { pos: 3 })]
 #[case::dot_in_component_1(b"().C", ParseError::EmptyGroup { pos: 1 })]
-#[case::dot_in_component_2(b"(.).C", ParseError::EmptyGroup { pos: 2 })]
-#[case::dot_in_component_3(b"(.).(C)", ParseError::EmptyGroup { pos: 2 })]
+#[case::dot_in_component_2(b"(.).C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::dot_in_component_3(b"(.).(C)", ParseError::GroupLeadingConnector { pos: 1})]
 #[case::dot_in_component_4(b"C.()", ParseError::EmptyGroup { pos: 3 })]
-#[case::dot_in_component_5(b"C.(.)", ParseError::LeadingDot { pos: 4 })]
-#[case::dot_in_component_6(b"(C).(.)", ParseError::LeadingDot { pos: 6 })]
+#[case::dot_in_component_5(b"C.(.)", ParseError::GroupLeadingConnector { pos: 3 })]
+#[case::dot_in_component_6(b"(C).(.)", ParseError::GroupLeadingConnector { pos: 5 })]
 #[case::dot_unclosed_ring_1(b"C1.C", ParseError::RingUnclosed { open_pos: 1 })]
 #[case::dot_unclosed_ring_2(b"C.C1", ParseError::RingUnclosed { open_pos: 3 })]
 #[case::dot_unclosed_ring_before_group(b"C1.(C)(C)C1", ParseError::TopLevelGroupTrailing { pos: 5 })]
@@ -354,16 +361,16 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_dir_conflict_digit(b"C/1.CC\\1", ParseError::RingBondDirConflict { pos: 7, open_pos: 2 })]
 #[case::ring_dir_conflict_percent(b"C/%12.CC\\%12", ParseError::RingBondDirConflict { pos: 9, open_pos: 2 })]
 #[case::ring_dir_conflict_aromatic(b"c/1.cc\\1", ParseError::RingBondDirConflict { pos: 7, open_pos: 2 })]
-#[case::group_dot_before_ring_digit(b"(.1)", ParseError::LeadingRing { pos: 2 })]
-#[case::group_dot_before_ring_percent(b"(.%12)", ParseError::LeadingRing { pos: 2 })]
+#[case::group_dot_before_ring_digit(b"(.1)", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::group_dot_before_ring_percent(b"(.%12)", ParseError::GroupLeadingConnector { pos: 1 })]
 #[case::branch_dot_before_ring_digit(b"C(.1)", ParseError::LeadingRing { pos: 3 })]
 #[case::branch_dot_before_ring_percent(b"C(.%12)", ParseError::LeadingRing { pos: 3 })]
-#[case::branch_dot_before_bond_1(b"(.-C)", ParseError::LeadingBond { pos: 2 })]
-#[case::branch_dot_before_bond_2(b"C(.-C)", ParseError::LeadingBond { pos: 3 })]
+#[case::group_dot_before_bond(b"(.-C)", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::branch_dot_before_bond(b"C(.-C)", ParseError::LeadingBond { pos: 3 })]
 #[case::leading_bond_after_dot_1(b"C.-C", ParseError::LeadingBond { pos: 2 })]
 #[case::leading_bond_after_dot_2(b"C.=-C", ParseError::LeadingBond { pos: 2 })]
-#[case::leading_sterebond_after_dot_up(b"C./C", ParseError::LeadingBond { pos: 2 })]
-#[case::leading_sterebond_after_dot_down(b"C.\\C", ParseError::LeadingBond { pos: 2 })]
+#[case::leading_stereobond_after_dot_up(b"C./C", ParseError::LeadingBond { pos: 2 })]
+#[case::leading_stereobond_after_dot_down(b"C.\\C", ParseError::LeadingBond { pos: 2 })]
 #[case::trailing_bond_dot_aromatic(b"C:.", ParseError::TrailingBond { pos: 1 })]
 #[case::group_trailing_bond_dot(b"(C-.)", ParseError::TrailingBond { pos: 2 })]
 #[case::branch_trailing_bond_dot(b"C(C-.)", ParseError::TrailingBond { pos: 3 })]
@@ -376,12 +383,24 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::basic_c(b"[C]", Some(Element::C), false, None, None, None, None, None)]
-#[case::basic_aromatic_c(b"[c]", Some(Element::C), true, None, None, None, None, None)]
+#[case::atom_c(b"[C]", Some(Element::C), false, None, None, None, None, None)]
+#[case::atom_h(b"[H]", Some(Element::H), false, None, None, None, None, None)]
+#[case::atom_zn(b"[Zn]", Some(Element::Zn), false, None, None, None, None, None)]
+#[case::atom_og(b"[Og]", Some(Element::Og), false, None, None, None, None, None)]
+#[case::atom_aromatic_c(b"[c]", Some(Element::C), true, None, None, None, None, None)]
+#[case::atom_aromatic_se(b"[se]", Some(Element::Se), true, None, None, None, None, None)]
 #[case::wildcard(b"[*]", None, false, None, None, None, None, None)]
-#[case::isotope_elem(b"[13C]", Some(Element::C), false, Some(13), None, None, None, None)]
+#[case::isotope_element(b"[13C]", Some(Element::C), false, Some(13), None, None, None, None)]
 #[case::isotope_zero(b"[0C]", Some(Element::C), false, Some(0), None, None, None, None)]
-#[case::isotope_wild(b"[13*]", None, false, Some(13), None, None, None, None)]
+#[case::isotope_wildcard(b"[13*]", None, false, Some(13), None, None, None, None)]
+#[case::isotope_zero_prefix_1(b"[02H]", Some(Element::H), false, Some(2), None, None, None, None)]
+#[case::isotope_zero_prefix_2(b"[002H]", Some(Element::H), false, Some(2), None, None, None, None)]
+#[case::isotope_three_digits_1(b"[238U]", Some(Element::U), false, Some(238), None, None, None, None)]
+#[case::isotope_three_digits_2(b"[208Pb]", Some(Element::Pb), false, Some(208), None, None, None, None)]
+#[case::isotope_unstable(b"[36Cl]", Some(Element::Cl), false, Some(36), None, None, None, None)]
+#[case::isotope_max_999(b"[999Og]", Some(Element::Og), false, Some(999), None, None, None, None)]
+#[case::isotope_hcount(b"[13CH4]", Some(Element::C), false, Some(13), None, Some(4), None, None)]
+#[case::isotope_charge(b"[2H+]", Some(Element::H), false, Some(2), None, None, Some(1), None)]
 #[case::chirality_cw(b"[C@]", Some(Element::C), false, None, Some(Chirality::Clockwise), None, None, None)]
 #[case::chirality_ccw(b"[C@@]", Some(Element::C), false, None, Some(Chirality::CounterClockwise), None, None, None)]
 #[case::chirality_th2(b"[C@TH2]", Some(Element::C), false, None, Some(Chirality::Tetrahedral { arr: 2 }), None, None, None)]
@@ -394,6 +413,8 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::hcount_0(b"[CH0]", Some(Element::C), false, None,None, Some(0), None, None)]
 #[case::hcount_3(b"[CH3]", Some(Element::C), false, None, None, Some(3), None, None)]
 #[case::hcount_aromatic(b"[cH]", Some(Element::C), true, None, None, Some(1), None, None)]
+#[case::hcount_two_characters_1(b"[ClH]", Some(Element::Cl), false, None, None, Some(1), None, None)]
+#[case::hcount_two_character_2(b"[ClH1]", Some(Element::Cl), false, None, None, Some(1), None, None)]
 #[case::wildcard_h1(b"[*H]", None, false, None, None, Some(1), None, None)]
 #[case::wildcard_h2(b"[*H2]", None, false, None, None, Some(2), None, None)]
 #[case::wildcard_h0(b"[*H0]", None, false, None, None, Some(0), None, None)]
@@ -405,43 +426,70 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::charge_mm(b"[C--]", Some(Element::C), false, None, None, None, Some(-2), None)]
 #[case::zero_charge_pos(b"[C+0]", Some(Element::C), false, None, None, None, Some(0), None)]
 #[case::zero_charge_neg(b"[C-0]", Some(Element::C), false, None, None, None, Some(0), None)]
-#[case::charge_plus_10(b"[C+10]", Some(Element::C), false, None, None, None, Some(10), None)]
-#[case::charge_minus_10(b"[C-10]", Some(Element::C), false, None, None, None, Some(-10), None)]
+#[case::charge_plus_15(b"[C+15]", Some(Element::C), false, None, None, None, Some(15), None)]
+#[case::charge_minus_15(b"[C-15]", Some(Element::C), false, None, None, None, Some(-15), None)]
+#[case::charge_two_characters_plus_1(b"[Na+]", Some(Element::Na), false, None, None, None, Some(1), None)]
+#[case::charge_two_characters_plus_2(b"[Ca+2]", Some(Element::Ca), false, None, None, None, Some(2), None)]
+#[case::charge_two_characters_pp(b"[Ca++]", Some(Element::Ca), false, None, None, None, Some(2), None)]
+#[case::charge_two_characters_minus_1(b"[Cl-]", Some(Element::Cl), false, None, None, None, Some(-1), None)]
+#[case::charge_two_characters_minus_2(b"[Se-2]", Some(Element::Se), false, None, None, None, Some(-2), None)]
+#[case::charge_two_characters_mm(b"[Se--]", Some(Element::Se), false, None, None, None, Some(-2), None)]
 #[case::charge_plus_hcount(b"[C+H]", Some(Element::C), false, None, None, Some(1), Some(1), None)]
 #[case::charge_plus_1_hcount(b"[C+1H]", Some(Element::C), false, None, None, Some(1), Some(1), None)]
 #[case::charge_minus_hcount(b"[C-H]", Some(Element::C), false, None, None, Some(1), Some(-1), None)]
 #[case::charge_minus_1_hcount(b"[C-1H]", Some(Element::C), false, None, None, Some(1), Some(-1), None)]
+#[case::hcount_charge_pos_1(b"[NH+]", Some(Element::N), false, None, None, Some(1), Some(1), None)]
+#[case::hcount_charge_pos_2(b"[NH+1]", Some(Element::N), false, None, None, Some(1), Some(1), None)]
+#[case::hcount_charge_pos_two_characters_1(b"[NaH+]", Some(Element::Na), false, None, None, Some(1), Some(1), None)]
+#[case::hcount_charge_pos_two_characters_2(b"[AlH+2]", Some(Element::Al), false, None, None, Some(1), Some(2), None)]
+#[case::hcount_charge_pos_two_characters_pp(b"[AlH++]", Some(Element::Al), false, None, None, Some(1), Some(2), None)]
+#[case::hcount_charge_neg_1(b"[NH-]", Some(Element::N), false, None, None, Some(1), Some(-1), None)]
+#[case::hcount_charge_neg_2(b"[NH-1]", Some(Element::N), false, None, None, Some(1), Some(-1), None)]
+#[case::hcount_charge_neg_3(b"[N-H1]", Some(Element::N), false, None, None, Some(1), Some(-1), None)]
+#[case::hcount_charge_neg_two_characters_1(b"[AsH-]", Some(Element::As), false, None, None, Some(1), Some(-1), None)]
+#[case::hcount_charge_neg_two_characters_2(b"[AsH-2]", Some(Element::As), false, None, None, Some(1), Some(-2), None)]
+#[case::hcount_charge_neg_two_characters_mm(b"[AsH--]", Some(Element::As), false, None, None, Some(1), Some(-2), None)]
 #[case::class_elem(b"[C:12]", Some(Element::C), false, None, None, None, None, Some(12))]
-#[case::class_wild(b"[*:5]", None, false, None, None, None, None, Some(5))]
-    fn bracket(
-        #[case] input: &[u8],
-        #[case] elem: Option<Element>,
-        #[case] aromatic: bool,
-        #[case] isotope: Option<u32>,
-        #[case] chirality: Option<Chirality>,
-        #[case] hcount: Option<u32>,
-        #[case] charge: Option<i32>,
-        #[case] class_: Option<u32>,
-    ) {
-        let res = parse_smiles(input);
-        assert!(res.is_ok(), "{:?} should have succeeded", input);
-        let mol = res.unwrap();
-        assert_eq!(mol.atoms.len(), 1, "expected single atom");
-        let a = &mol.atoms[0];
-        match elem {
-            Some(e) => match &a.symbol {
-                AtomSymbol::Element(el) => assert_eq!(*el, e),
-                other => panic!("expected element {:?}, got {:?}", e, other),
-            },
-            None => assert!(matches!(a.symbol, AtomSymbol::Unknown)),
-        }
-        assert_eq!(a.aromatic, Some(aromatic));
-        assert_eq!(a.isotope, isotope);
-        assert_eq!(a.chirality, chirality);
-        assert_eq!(a.hydrogen_count, hcount);
-        assert_eq!(a.charge, charge);
-        assert_eq!(a.class, class_);
+#[case::class_wildcard(b"[*:5]", None, false, None, None, None, None, Some(5))]
+#[case::class_zero(b"[C:0]", Some(Element::C), false, None, None, None, None, Some(0))]
+#[case::class_zero_prefix_1(b"[C:03]", Some(Element::C), false, None, None, None, None, Some(3))]
+#[case::class_zero_prefix_2(b"[C:003]", Some(Element::C), false, None, None, None, None, Some(3))]
+#[case::class_max_9999(b"[C:9999]", Some(Element::C), false, None, None, None, None, Some(9999))]
+#[case::ordering_1(b"[C@H+1:2]", Some(Element::C), false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
+#[case::ordering_2(b"[CH@+1:2]", Some(Element::C), false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
+#[case::ordering_3(b"[CH+1@:2]", Some(Element::C), false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
+#[case::ordering_4(b"[CH+1:2@]", Some(Element::C), false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
+#[case::ordering_5(b"[C+1@H:2]", Some(Element::C), false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
+#[case::ordering_6(b"[C:2@H+1]", Some(Element::C), false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
+fn bracket(
+    #[case] input: &[u8],
+    #[case] elem: Option<Element>,
+    #[case] aromatic: bool,
+    #[case] isotope: Option<u32>,
+    #[case] chirality: Option<Chirality>,
+    #[case] hcount: Option<u32>,
+    #[case] charge: Option<i32>,
+    #[case] class_: Option<u32>,
+) {
+    let res = parse_smiles(input);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol.atoms.len(), 1, "expected single atom");
+    let a = &mol.atoms[0];
+    match elem {
+        Some(e) => match &a.symbol {
+            AtomSymbol::Element(el) => assert_eq!(*el, e),
+            other => panic!("expected element {:?}, got {:?}", e, other),
+        },
+        None => assert!(matches!(a.symbol, AtomSymbol::Unknown)),
     }
+    assert_eq!(a.aromatic, Some(aromatic));
+    assert_eq!(a.isotope, isotope);
+    assert_eq!(a.chirality, chirality);
+    assert_eq!(a.hydrogen_count, hcount);
+    assert_eq!(a.charge, charge);
+    assert_eq!(a.class, class_);
+}
 
 #[rstest]
 #[case::aliphatic_before(b"C[C]", BondOrder::Single, None)]
@@ -510,6 +558,8 @@ fn bracket_bonds(#[case] input: &[u8], #[case] expected: BondOrder, #[case] dir:
 #[case::invalid_element_2(b"[Z]", ParseError::InvalidBracket { pos: 0 })]
 #[case::invalid_element_3(b"[Aq]", ParseError::InvalidBracket { pos: 0 })]
 #[case::invalid_element_4(b"[Sh]", ParseError::InvalidBracket { pos: 0 })]
+#[case::invalid_aromatic_element_1(b"[f]", ParseError::InvalidBracket { pos: 0 })]
+#[case::invalid_aromatic_element_2(b"[ca]", ParseError::InvalidBracket { pos: 0 })]
 #[case::two_elements_1(b"[CF]", ParseError::InvalidBracket { pos: 0 })]
 #[case::two_elements_2(b"[AsF]", ParseError::InvalidBracket { pos: 0 })]
 #[case::two_elements_3(b"[FAs]", ParseError::InvalidBracket { pos: 0 })]
@@ -533,7 +583,8 @@ fn bracket_bonds(#[case] input: &[u8], #[case] expected: BondOrder, #[case] dir:
 #[case::chirality_no_element_2(b"[@@]", ParseError::InvalidBracket { pos: 0 })]
 #[case::chirality_no_element_4(b"[@@TH1]", ParseError::InvalidBracket { pos: 0 })]
 #[case::class_no_element(b"[:12]", ParseError::InvalidBracket { pos: 0 })]
-#[case::hcount_two_digits(b"[CH10]", ParseError::BracketHCountTwoDigits { pos: 0 })]
+#[case::hcount_two_digits_1(b"[CH10]", ParseError::BracketHCountTwoDigits { pos: 0 })]
+#[case::hcount_two_digits_2(b"[SeH10]", ParseError::BracketHCountTwoDigits { pos: 0 })]
 #[case::colon_no_class(b"[C:]", ParseError::BracketEmptyClass { pos: 0 })]
 #[case::unbalanced_open_bracket_1(b"[", ParseError::UnbalancedOpenBracket { pos: 0 })]
 #[case::unbalanced_open_bracket_2(b"C[", ParseError::UnbalancedOpenBracket { pos: 1 })]
@@ -562,6 +613,46 @@ fn bracket_bonds(#[case] input: &[u8], #[case] expected: BondOrder, #[case] dir:
 #[case::unbalanced_close_bracket_7(b"].C", ParseError::UnbalancedCloseBracket { pos: 0 })]
 #[case::unbalanced_close_bracket_8(b"(]", ParseError::UnbalancedCloseBracket { pos: 1 })]
 #[case::unbalanced_close_bracket_9(b"(C]", ParseError::UnbalancedCloseBracket { pos: 2 })]
+// TODO: Allow this?
+#[case::h_on_h_1(b"[HH]", ParseError::BracketHOnH { pos: 0 })]
+#[case::h_on_h_2(b"[HH1]", ParseError::BracketHOnH { pos: 0 })]
+#[case::h_on_h_3(b"[HH0]", ParseError::BracketHOnH { pos: 0 })]
+#[case::duplicate_hcount_1(b"[CHH]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_hcount_2(b"[CHH1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_hcount_3(b"[CH1H1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_hcount_4(b"[CH1H]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_hcount_5(b"[CH+H]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_pos_1(b"[C++1]", ParseError::InvalidBracket { pos: 0 })]
+#[case::duplicate_charge_pos_2(b"[C+1+1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_pos_3(b"[C+1+]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_pos_4(b"[C+-]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_pos_5(b"[C+-1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_pos_6(b"[C+1-1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_pos_7(b"[C+1-]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_pos_8(b"[C+H+]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_neg_1(b"[C--1]", ParseError::InvalidBracket { pos: 0 })]
+#[case::duplicate_charge_neg_2(b"[C-1-1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_neg_3(b"[C-1-]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_neg_4(b"[C-+]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_neg_5(b"[C-+1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_neg_6(b"[C-1+1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_neg_7(b"[C-1+]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_charge_neg_8(b"[C-H-]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_chirality_1(b"[C@@@]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_chirality_2(b"[C@TH1@@]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_chirality_3(b"[C@H@]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::empty_class(b"[C:]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::empty_class_two_characters(b"[Cl:]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::empty_class_hcount(b"[Cl:H]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::empty_class_charge_pos(b"[Na:+]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::empty_class_charge_neg(b"[Cl:-]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::empty_class_chirality_cw(b"[C:@]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::empty_class_chirality_ccw(b"[C:@@]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::empty_class_double_colon(b"[C::]", ParseError::BracketEmptyClass { pos: 0 })]
+#[case::duplicate_class_1(b"[C:1:1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_class_2(b"[C:12:1]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_class_3(b"[C:12:12]", ParseError::BracketDuplicateField { pos: 0 })]
+#[case::duplicate_class_4(b"[C:1:12]", ParseError::BracketDuplicateField { pos: 0 })]
 fn bracket_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles(input);
     assert!(err.is_err(), "{:?} should have failed", input);
@@ -570,26 +661,41 @@ fn bracket_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 }
 
 #[rstest]
-#[case::wildcard(b"*", 0, false)]
-#[case::two_wildcards(b"**", 0, true)]
-#[case::wildcard_after_c(b"C*", 1, true)]
-#[case::wildcard_before_c(b"*C", 0, true)]
-#[case::wildcard_bond_single(b"C-*", 1, true)]
-#[case::wildcard_bond_single_rev(b"*-C", 0, true)]
-#[case::wildcard_branch_1(b"*(C)", 0, true)]
-#[case::wildcard_branch_2(b"C(*)", 1, true)]
-#[case::wildcard_branch_3(b"C(*C)", 1, true)]
-#[case::wildcard_group_1(b"(*)", 0, false)]
-#[case::wildcard_group_2(b"(*C)", 0, true)]
-#[case::wildcard_group_3(b"(C*)", 1, true)]
-#[case::wildcard_ring_1(b"*1CC1", 0, true)]
-#[case::wildcard_ring_2(b"C1*C1", 1, true)]
-#[case::wildcard_ring_3(b"C1C*1", 2, true)]
-#[case::wildcard_component_1(b"*.C", 0, false)]
-#[case::wildcard_component_2(b"C.*", 1, false)]
-#[case::wildcard_dot_bond_1(b"*1.C1", 0, true)]
-#[case::wildcard_dot_bond_2(b"C1.*1", 1, true)]
-fn wildcard(#[case] input: &[u8], #[case] star_idx: usize, #[case] has_bonds: bool) {
+#[case::chirality_outside_bracket(b"C@C", ParseError::FieldOutsideBracket { pos: 1 })]
+#[case::charge_outside_bracket(b"C+C", ParseError::FieldOutsideBracket { pos: 1 })]
+// TODO: Should be InvalidElement
+#[case::hcount_outside_bracket(b"CHC", ParseError::UnsupportedToken { pos: 1 })]
+#[case::class_outside_bracket(b"C:1C", ParseError::RingUnclosed { open_pos: 2 })]
+fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let err = parse_smiles(input);
+    assert!(err.is_err(), "{:?} should have failed", input);
+    let err = err.unwrap_err();
+    assert_eq!(err, expected);
+}
+
+#[rstest]
+#[case::wildcard(b"*", 0, false, false)]
+#[case::two_wildcards(b"**", 0, true, false)]
+#[case::wildcard_after_c(b"C*", 1, true, false)]
+#[case::wildcard_before_c(b"*C", 0, true, false)]
+#[case::wildcard_bond_single(b"C-*", 1, true, false)]
+#[case::wildcard_bond_single_rev(b"*-C", 0, true, false)]
+#[case::wildcard_branch_1(b"*(C)", 0, true, false)]
+#[case::wildcard_branch_2(b"C(*)", 1, true, false)]
+#[case::wildcard_branch_3(b"C(*C)", 1, true, false)]
+#[case::wildcard_group_1(b"(*)", 0, false, false)]
+#[case::wildcard_group_2(b"(*C)", 0, true, false)]
+#[case::wildcard_group_3(b"(C*)", 1, true, false)]
+#[case::wildcard_ring_1(b"*1CC1", 0, true, false)]
+#[case::wildcard_ring_2(b"C1*C1", 1, true, false)]
+#[case::wildcard_ring_3(b"C1C*1", 2, true, false)]
+// TODO: Should be aromatic? Not important for the atom but for incident bonds
+#[case::wildcard_ring_aromatic(b"c1*c1", 1, true, false)]
+#[case::wildcard_component_1(b"*.C", 0, false, false)]
+#[case::wildcard_component_2(b"C.*", 1, false, false)]
+#[case::wildcard_dot_bond_1(b"*1.C1", 0, true, false)]
+#[case::wildcard_dot_bond_2(b"C1.*1", 1, true, false)]
+fn wildcard(#[case] input: &[u8], #[case] star_idx: usize, #[case] has_bonds: bool, #[case] aromatic: bool) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
@@ -599,7 +705,7 @@ fn wildcard(#[case] input: &[u8], #[case] star_idx: usize, #[case] has_bonds: bo
     assert_eq!(a.isotope, Some(0));
     assert_eq!(a.charge, Some(0));
     assert_eq!(a.hydrogen_count, Some(0));
-    assert_eq!(a.aromatic, Some(false));
+    assert_eq!(a.aromatic, Some(aromatic));
     assert_eq!(a.implicit_h, false);
     if has_bonds {
         assert!(mol.bonds.len() > 0);
@@ -622,6 +728,11 @@ fn wildcard_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 }
 
 #[rstest]
+#[case::space(b" ", Molecule::default())]
+#[case::tab(b"\t", Molecule::default())]
+#[case::newline(b"\n", Molecule::default())]
+#[case::cr(b"\r", Molecule::default())]
+#[case::crlf(b"\r\n", Molecule::default())]
 #[case::terminator_space(b"CC ", build_from_graph("C C | 0-1"))]
 #[case::terminator_tab(b"CC\t", build_from_graph("C C | 0-1"))]
 #[case::terminator_newline(b"CC\n", build_from_graph("C C | 0-1"))]

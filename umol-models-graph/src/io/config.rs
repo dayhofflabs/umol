@@ -57,6 +57,7 @@ bitflags! {
         const CXSMILES_TRAILER = 8;    // accept |...| trailer after SMILES
         const ELEMENT_NUMBERS = 16;    // [#n] element numbers
         const NONORGANIC_BARE = 32;    // bare non-organic atoms allowed
+        const LINT_SIDECHANNEL = 64;   // capture lint-only side-channel hints
 
         // Presets
         const UMOL_DIALECT = Self::INTERTOKEN_WS.bits() | Self::COMMENTS.bits();
