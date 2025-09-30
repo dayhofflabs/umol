@@ -55,6 +55,16 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
                     scope: Scope::Global,
                 });
             }
+            ParseError::RingMultipleRings { pos } => {
+                emitter.candidate(DiagnosticCandidate {
+                    code: Code("RING_MULTIPLE_RINGS"),
+                    category: Category::Ring,
+                    severity: Severity::Error,
+                    span: Span::new(pos, pos.saturating_add(1)),
+                    message: "Multiple ring closures between the same atom pair",
+                    scope: Scope::Global,
+                });
+            }
             ParseError::RingBondDirConflict { pos, .. } => {
                 emitter.candidate(DiagnosticCandidate {
                     code: Code("RING_BOND_DIR_CONFLICT"),
@@ -99,9 +109,6 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             }
             ParseError::InvalidBracket { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("BRKT_INVALID"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Invalid bracket atom", scope: Scope::Global });
-            }
-            ParseError::BracketHCountTwoDigits { pos } => {
-                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_HCOUNT_TWO_DIGITS"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "H-count must be one digit", scope: Scope::Global });
             }
             ParseError::BracketEmptyClass { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("BRKT_EMPTY_CLASS"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Empty atom class field", scope: Scope::Global });

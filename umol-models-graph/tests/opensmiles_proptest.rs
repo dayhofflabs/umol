@@ -54,13 +54,13 @@ proptest! {
                 | ParseError::LeadingRing { pos }
                 | ParseError::RingSelfLoop { pos }
                 | ParseError::RingTwoMember { pos }
+                | ParseError::RingMultipleRings { pos }
                 | ParseError::LeadingDot { pos }
                 | ParseError::TrailingDot { pos }
                 | ParseError::ConsecutiveDot { pos }
                 | ParseError::UnbalancedOpenBracket { pos }
                 | ParseError::UnbalancedCloseBracket { pos }
                 | ParseError::InvalidBracket { pos }
-                | ParseError::BracketHCountTwoDigits { pos }
                 | ParseError::BracketEmptyClass { pos }
                 | ParseError::FieldOutsideBracket { pos }
                 | ParseError::BracketDuplicateField { pos }

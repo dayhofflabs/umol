@@ -100,6 +100,7 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[rustfmt::skip]
 #[rstest]
 #[case::ring_c_3(b"C1CC1", build_from_graph("C C C | 0-1 1-2 0-2"))]
+#[case::ring_c_6(b"C1CCCCC1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5"))]
 #[case::ring_c_10(b"C1CCCCCCCCC1", build_from_graph("C C C C C C C C C C | 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9 0-9"))]
 #[case::ring_aromatic_c_6(b"c1ccccc1", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5:"))]
 #[case::ring_index_0(b"C0CC0", build_from_graph("C C C | 0-1 1-2 0-2"))]
@@ -108,9 +109,10 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_index_zero_prefix_2(b"C0CC%00", build_from_graph("C C C | 0-1 1-2 0-2"))]
 #[case::ring_index_zero_prefix_3(b"C9CC%09", build_from_graph("C C C | 0-1 1-2 0-2"))]
 #[case::ring_index_max_99(b"C%99CC%99", build_from_graph("C C C | 0-1 1-2 0-2"))]
+#[case::ring_indices_single_percent(b"C%123CCC%12CC3", build_from_graph("C C C C C C | 0-1 1-2 2-3 0-3 3-4 4-5 0-5"))]
 #[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
-#[case::two_rings_bonded_0_aromatic(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
-#[case::two_rings_bonded_0_aromatic_1(b"c1cc1C2CC2", build_from_graph("C* C* C* C C C | 0-1: 1-2: 0-2: 2-3 3-4 4-5 3-5"))]
+#[case::two_rings_bonded_0_aromatic_1(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
+#[case::two_rings_bonded_0_aromatic_2(b"c1cc1C2CC2", build_from_graph("C* C* C* C C C | 0-1: 1-2: 0-2: 2-3 3-4 4-5 3-5"))]
 #[case::two_rings_index_reused(b"C1CC1C1CC1", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
 #[case::two_rings_bonded_2(b"C1CC1CCC2CC2", build_from_graph("C C C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 5-6 6-7 5-7"))]
 #[case::two_rings_spiro(b"C1CC12CC2", build_from_graph("C C C C C | 0-1 1-2 0-2 2-3 3-4 2-4"))]
@@ -130,7 +132,7 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::substituted_ring_6(b"C1CC1C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
 #[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
 #[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3: 0-3:"))]
-#[case::substituted_ring_branch_1(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
+#[case::substituted_ring_branch(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
 fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -139,30 +141,45 @@ fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
 }
 
 #[rstest]
-#[case::leading_ring(b"1C", ParseError::LeadingRing { pos: 0 })]
-#[case::bad_percent_short(b"C%1", ParseError::RingIndexInvalid { pos: 1 })]
-#[case::bad_percent_char(b"C%1a", ParseError::RingIndexInvalid { pos: 1 })]
-#[case::bad_percent_eoi(b"C%", ParseError::RingIndexInvalid { pos: 1 })]
-#[case::bad_percent_zero(b"C%0", ParseError::RingIndexInvalid { pos: 1 })]
-#[case::ring_self_loop(b"C11", ParseError::RingSelfLoop { pos: 2 })]
-#[case::ring_two_member(b"C1C1", ParseError::RingTwoMember { pos: 3 })]
-#[case::ring_bond_order_conflict_3(b"C=1CC#1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-#[case::ring_bond_order_conflict_4(b"C/1CC=1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-#[case::ring_bond_order_conflict_5(b"C\\1CC=1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-#[case::ring_bond_order_conflict_6(b"C=1CC/1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-#[case::ring_bond_order_conflict_7(b"C=1CC\\1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
-#[case::ring_bond_order_conflict_8(b"C=%10CC#%10", ParseError::RingBondOrderConflict { pos: 8, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_1(b"C/1CC\\1", ParseError::RingBondDirConflict { pos: 6, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_2(b"C\\1CC/1", ParseError::RingBondDirConflict { pos: 6, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", ParseError::RingBondDirConflict { pos: 8, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", ParseError::RingBondDirConflict { pos: 8, open_pos: 2 })]
+#[case::leading_ring_0(b"0C", ParseError::LeadingRing { pos: 0 })]
+#[case::leading_ring_1(b"1C", ParseError::LeadingRing { pos: 0 })]
+#[case::leading_ring_percent(b"%12C", ParseError::LeadingRing { pos: 0 })]
+#[case::leading_ring_group(b"(1CCC)", ParseError::LeadingRing { pos: 1 })]
+#[case::leading_ring_branch(b"C(1CCC)", ParseError::LeadingRing { pos: 0 })]
 #[case::ring_unclosed_1(b"C1CC", ParseError::RingUnclosed { open_pos: 1 })]
 #[case::ring_unclosed_2(b"C1CC1C1", ParseError::RingUnclosed { open_pos: 6 })]
+#[case::ring_unclosed_3(b"C1CC2C", ParseError::RingUnclosed { open_pos: 4 })]
+#[case::ring_unclosed_self_loop(b"C111", ParseError::RingUnclosed { open_pos: 3 })]
+#[case::ring_unclosed_percent(b"C%12CC", ParseError::RingUnclosed { open_pos: 1 })]
+#[case::bad_percent_no_index_1(b"C%", ParseError::RingIndexInvalid { pos: 1 })]
+#[case::bad_percent_no_index_2(b"C%C", ParseError::RingIndexInvalid { pos: 1 })]
+#[case::bad_percent_single_digit_0(b"C%0", ParseError::RingIndexInvalid { pos: 1 })]
+#[case::bad_percent_single_digit_1(b"C%1", ParseError::RingIndexInvalid { pos: 1 })]
+#[case::bad_percent_char(b"C%1a", ParseError::RingIndexInvalid { pos: 1 })]
 fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles(input);
     assert!(err.is_err(), "{:?} should have failed", input);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
+}
+
+#[rustfmt::skip]
+#[rstest]
+#[case::ring_self_loop(b"C11", build_from_graph("C | 0-0"))]
+#[case::ring_self_loop_percent(b"C%11%11", build_from_graph("C | 0-0"))]
+#[case::ring_two_member(b"C1C1", build_from_graph("C C | 0-1 0-1"))]
+#[case::ring_two_member_multiple(b"C12C12", build_from_graph("C C | 0-1 0-1 0-1"))]
+#[case::ring_two_member_percent(b"C%12C%12", build_from_graph("C C | 0-1 0-1"))]
+#[case::ring_two_member_single_percent(b"C%123CCC%123", build_from_graph("C C C C | 0-1 1-2 2-3 0-3 0-3"))]
+#[case::ring_multiple_rings(b"C12CCCCC12", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5 0-5"))]
+#[case::ring_multiple_rings_triple(b"C123CCCCC123", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5 0-5 0-5"))]
+#[case::ring_multiple_rings_percent(b"C%12%13CCCCC%12%13", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5 0-5"))]
+fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
+    // Expected to pass here, fail in post-parse topology check
+    let res = parse_smiles(input);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
 }
 
 #[rustfmt::skip]
@@ -206,8 +223,11 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_double_bond_2(b"C1-CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
 #[case::ring_double_bond_3(b"C=1-CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
 #[case::ring_double_bond_4(b"C=1-C-C=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
-#[case::ring_double_bond_unilateral_close(b"C1CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
-#[case::ring_double_bond_unilateral_open(b"C=1CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+#[case::ring_double_bond_5(b"C=1CCCCC=1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5:="))]
+#[case::ring_double_bond_unilateral_close_1(b"C1CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+#[case::ring_double_bond_unilateral_close_2(b"C1CCCCC=1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5:="))]
+#[case::ring_double_bond_unilateral_open_1(b"C=1CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
+#[case::ring_double_bond_unilateral_open_2(b"C=1CCCCC1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5:="))]
 #[case::ring_triple_bond(b"C1-C-C#1", build_from_graph("C C C | 0-1 1-2 0-2:#"))]
 #[case::ring_quadruple_bond(b"C1-C-C$1", build_from_graph("C C C | 0-1 1-2 0-2:$"))]
 #[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C* C* C* | 0-1: 1-2: 0-2:"))]
@@ -275,6 +295,18 @@ fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::group_leading_sterebond_1(b"(/C)C", ParseError::GroupLeadingConnector { pos: 1 })]
 #[case::group_leading_sterebond_2(b"(\\C)C", ParseError::GroupLeadingConnector { pos: 1 })]
 #[case::group_leading_aromatic_bond(b"(:C)C", ParseError::GroupLeadingConnector { pos: 1 })]
+#[case::ring_bond_order_conflict_1(b"C-1CCCCC=1", ParseError::RingBondOrderConflict { pos: 9, open_pos: 2 })]
+#[case::ring_bond_order_conflict_2(b"C=1CCCCC-1", ParseError::RingBondOrderConflict { pos: 9, open_pos: 2 })]
+#[case::ring_bond_order_conflict_3(b"C=1CC#1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+#[case::ring_bond_order_conflict_4(b"C/1CC=1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+#[case::ring_bond_order_conflict_5(b"C\\1CC=1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+#[case::ring_bond_order_conflict_6(b"C=1CC/1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+#[case::ring_bond_order_conflict_7(b"C=1CC\\1", ParseError::RingBondOrderConflict { pos: 6, open_pos: 2 })]
+#[case::ring_bond_order_conflict_8(b"C=%10CC#%10", ParseError::RingBondOrderConflict { pos: 8, open_pos: 2 })]
+#[case::ring_bond_dir_conflict_1(b"C/1CC\\1", ParseError::RingBondDirConflict { pos: 6, open_pos: 2 })]
+#[case::ring_bond_dir_conflict_2(b"C\\1CC/1", ParseError::RingBondDirConflict { pos: 6, open_pos: 2 })]
+#[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", ParseError::RingBondDirConflict { pos: 8, open_pos: 2 })]
+#[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", ParseError::RingBondDirConflict { pos: 8, open_pos: 2 })]
 fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles(input);
     assert!(err.is_err(), "{:?} should have failed", input);
@@ -554,6 +586,8 @@ fn bracket_bonds(#[case] input: &[u8], #[case] expected: BondOrder, #[case] dir:
 #[case::bracket_in_group_empty(b"(C[])", ParseError::InvalidBracket { pos: 2 })]
 #[case::bracket_in_branch_empty(b"C([])C", ParseError::InvalidBracket { pos: 2 })]
 #[case::bracket_in_component_empty(b"[].C", ParseError::InvalidBracket { pos: 0 })]
+#[case::bracket_in_ring_empty(b"C1[]C1", ParseError::InvalidBracket { pos: 2 })]
+#[case::double_bracket(b"[[C]]", ParseError::InvalidBracket { pos: 0 })]
 #[case::invalid_element_1(b"[X]", ParseError::InvalidBracket { pos: 0 })]
 #[case::invalid_element_2(b"[Z]", ParseError::InvalidBracket { pos: 0 })]
 #[case::invalid_element_3(b"[Aq]", ParseError::InvalidBracket { pos: 0 })]
@@ -583,8 +617,8 @@ fn bracket_bonds(#[case] input: &[u8], #[case] expected: BondOrder, #[case] dir:
 #[case::chirality_no_element_2(b"[@@]", ParseError::InvalidBracket { pos: 0 })]
 #[case::chirality_no_element_4(b"[@@TH1]", ParseError::InvalidBracket { pos: 0 })]
 #[case::class_no_element(b"[:12]", ParseError::InvalidBracket { pos: 0 })]
-#[case::hcount_two_digits_1(b"[CH10]", ParseError::BracketHCountTwoDigits { pos: 0 })]
-#[case::hcount_two_digits_2(b"[SeH10]", ParseError::BracketHCountTwoDigits { pos: 0 })]
+#[case::hcount_two_digits_1(b"[CH10]", ParseError::InvalidBracket { pos: 0 })]
+#[case::hcount_two_digits_2(b"[SeH10]", ParseError::InvalidBracket { pos: 0 })]
 #[case::colon_no_class(b"[C:]", ParseError::BracketEmptyClass { pos: 0 })]
 #[case::unbalanced_open_bracket_1(b"[", ParseError::UnbalancedOpenBracket { pos: 0 })]
 #[case::unbalanced_open_bracket_2(b"C[", ParseError::UnbalancedOpenBracket { pos: 1 })]
@@ -695,7 +729,12 @@ fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::wildcard_component_2(b"C.*", 1, false, false)]
 #[case::wildcard_dot_bond_1(b"*1.C1", 0, true, false)]
 #[case::wildcard_dot_bond_2(b"C1.*1", 1, true, false)]
-fn wildcard(#[case] input: &[u8], #[case] star_idx: usize, #[case] has_bonds: bool, #[case] aromatic: bool) {
+fn wildcard(
+    #[case] input: &[u8],
+    #[case] star_idx: usize,
+    #[case] has_bonds: bool,
+    #[case] aromatic: bool,
+) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();

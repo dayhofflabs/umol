@@ -30,7 +30,6 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - BRKT_UNEXPECTED_CLOSE (BRKT, Error): ']' outside of a bracket atom
 - BRKT_FIELD_OUTSIDE (BRKT, Error): bracket-only field (e.g., @, +, ++) outside of a bracket atom
 - BRKT_DUP_FIELD (BRKT, Error): duplicate bracket field of the same kind
-- BRKT_HCOUNT_TWO_DIGITS (BRKT, Error): H-count with two or more digits
 - BRKT_EMPTY_CLASS (BRKT, Error): class field without a numeric value
 - BRKT_H_ON_H (BRKT, Error): hydrogen element carries an H-count field
 
@@ -45,6 +44,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - RING_BOND_ORDER_CONFLICT (RING, Error): explicit bond orders on the two endpoints of a ring closure differ
 - RING_SELF_LOOP (RING, Error): ring closure creates a self-loop
 - RING_TWO_MEMBER (RING, Error): ring closure creates a two‑member ring
+- RING_MULTIPLE_RINGS (RING, Error): multiple ring closures between the same atom pair
 
 Emitted by parser/state during ring processing; codes may appear in `lint_smiles_parse` reports even when lexing succeeds.
 
@@ -95,7 +95,7 @@ Emitted by parser/state during ring processing; codes may appear in `lint_smiles
   - LEX_LEADING_DOT, LEX_TRAILING_DOT, LEX_MULTIPLE_DOTS
   - LEX_LEADING_RING, LEX_RING_INDEX_INVALID
   - LEX_INTERTOKEN_WHITESPACE, LEX_COMMENT, LEX_UNTERMINATED_BLOCK_COMMENT
-  - RING_UNCLOSED, RING_SELF_LOOP, RING_TWO_MEMBER, RING_BOND_DIR_CONFLICT, RING_BOND_ORDER_CONFLICT
+  - RING_UNCLOSED, RING_SELF_LOOP, RING_TWO_MEMBER, RING_MULTIPLE_RINGS, RING_BOND_DIR_CONFLICT, RING_BOND_ORDER_CONFLICT
 
 - Post-parse derived (simple context around `ParseError`):
   - LEX_DOT_BEFORE_RING (from LeadingRing with preceding '.')

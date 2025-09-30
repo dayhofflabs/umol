@@ -68,7 +68,6 @@ fn test_error_table(#[case] input: &str, #[case] expected_any: &[&str]) {
 
 #[rstest]
 #[case("C1C", &["RING_UNCLOSED"])]
-#[case("C11", &["RING_SELF_LOOP"])]
 #[case("C/1CC\\1", &["RING_BOND_DIR_CONFLICT"])]
 #[case("C=1CC#1", &["RING_BOND_ORDER_CONFLICT"])]
 #[case("C1.C", &["RING_UNCLOSED"])]
