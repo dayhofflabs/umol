@@ -38,6 +38,7 @@ pub enum ParseError {
     UnbalancedCloseBracket { pos: usize },
     InvalidBracket { pos: usize },
     BracketEmptyClass { pos: usize },
+    BracketChiralityOutOfRange { pos: usize },
     FieldOutsideBracket { pos: usize },
     BracketDuplicateField { pos: usize },
     BracketHOnH { pos: usize },
@@ -293,25 +294,39 @@ fn parse_bracket(inner: &[u8], pos_offset: usize)
                 if chir.is_some() { return Err(ParseError::BracketDuplicateField { pos: pos_offset }); }
                 // @@
                 if i + 1 < n && inner[i + 1] == b'@' { chir = Some(Chirality::CounterClockwise); i += 2; continue; }
-                // @THn
+                // @TH[12]
                 if i + 3 < n && inner[i + 1] == b'T' && inner[i + 2] == b'H' && inner[i + 3].is_ascii_digit() {
-                    chir = Some(Chirality::Tetrahedral { arr: (inner[i + 3] - b'0') as u32 }); i += 4; continue;
+                    let v = (inner[i + 3] - b'0') as u32;
+                    if v == 1 || v == 2 { chir = Some(Chirality::Tetrahedral { arr: v }); i += 4; continue; }
+                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
                 }
                 // @AL[12]
-                if i + 3 < n && inner[i + 1] == b'A' && inner[i + 2] == b'L' && (inner[i + 3] == b'1' || inner[i + 3] == b'2') {
-                    chir = Some(Chirality::Allenal { arr: (inner[i + 3] - b'0') as u32 }); i += 4; continue;
+                if i + 3 < n && inner[i + 1] == b'A' && inner[i + 2] == b'L' && inner[i + 3].is_ascii_digit() {
+                    let v = (inner[i + 3] - b'0') as u32;
+                    if v == 1 || v == 2 { chir = Some(Chirality::Allenal { arr: v }); i += 4; continue; }
+                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
                 }
                 // @SP[123]
-                if i + 3 < n && inner[i + 1] == b'S' && inner[i + 2] == b'P' && (inner[i + 3] == b'1' || inner[i + 3] == b'2' || inner[i + 3] == b'3') {
-                    chir = Some(Chirality::SquarePlanar { arr: (inner[i + 3] - b'0') as u32 }); i += 4; continue;
+                if i + 3 < n && inner[i + 1] == b'S' && inner[i + 2] == b'P' && inner[i + 3].is_ascii_digit() {
+                    let v = (inner[i + 3] - b'0') as u32;
+                    if v >= 1 && v <= 3 { chir = Some(Chirality::SquarePlanar { arr: v }); i += 4; continue; }
+                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
                 }
-                // @TBn (n: first digit only)
-                if i + 3 <= n && i + 3 - 1 < n && inner[i + 1] == b'T' && inner[i + 2] == b'B' && i + 3 < n && inner[i + 3].is_ascii_digit() {
-                    chir = Some(Chirality::TrigonalBipyramidal { arr: (inner[i + 3] - b'0') as u32 }); i += 4; continue;
+                // @TBn (allow 1..20 with optional leading 0)
+                if i + 3 < n && inner[i + 1] == b'T' && inner[i + 2] == b'B' {
+                    let mut j = i + 3; let mut v: u32 = 0; let mut cnt = 0;
+                    while j < n && inner[j].is_ascii_digit() && cnt < 2 { v = v * 10 + (inner[j]-b'0') as u32; j += 1; cnt += 1; }
+                    if cnt == 0 { return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset }); }
+                    if v >= 1 && v <= 20 { chir = Some(Chirality::TrigonalBipyramidal { arr: v }); i = j; continue; }
+                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
                 }
-                // @OHn (n: first digit only)
-                if i + 3 <= n && i + 3 - 1 < n && inner[i + 1] == b'O' && inner[i + 2] == b'H' && i + 3 < n && inner[i + 3].is_ascii_digit() {
-                    chir = Some(Chirality::Octahedral { arr: (inner[i + 3] - b'0') as u32 }); i += 4; continue;
+                // @OHn (allow 1..30 with optional leading 0)
+                if i + 3 < n && inner[i + 1] == b'O' && inner[i + 2] == b'H' {
+                    let mut j = i + 3; let mut v: u32 = 0; let mut cnt = 0;
+                    while j < n && inner[j].is_ascii_digit() && cnt < 2 { v = v * 10 + (inner[j]-b'0') as u32; j += 1; cnt += 1; }
+                    if cnt == 0 { return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset }); }
+                    if v >= 1 && v <= 30 { chir = Some(Chirality::Octahedral { arr: v }); i = j; continue; }
+                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
                 }
                 // '@' alone
                 chir = Some(Chirality::Clockwise);

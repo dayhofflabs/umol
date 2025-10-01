@@ -113,6 +113,9 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             ParseError::BracketEmptyClass { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("BRKT_EMPTY_CLASS"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Empty atom class field", scope: Scope::Global });
             }
+            ParseError::BracketChiralityOutOfRange { pos } => {
+                emitter.candidate(DiagnosticCandidate { code: Code("BRKT_CHIRAL_OUT_OF_RANGE"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Chirality descriptor parameter out of range", scope: Scope::Global });
+            }
             ParseError::BracketDuplicateField { pos } => {
                 emitter.candidate(DiagnosticCandidate { code: Code("BRKT_DUP_FIELD"), category: Category::Bracket, severity: Severity::Error, span: Span::new(pos, pos.saturating_add(1)), message: "Duplicate bracket field", scope: Scope::Global });
             }

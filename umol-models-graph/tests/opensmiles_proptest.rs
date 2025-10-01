@@ -65,6 +65,7 @@ proptest! {
                 | ParseError::FieldOutsideBracket { pos }
                 | ParseError::BracketDuplicateField { pos }
                 | ParseError::BracketHOnH { pos }
+                | ParseError::BracketChiralityOutOfRange { pos }
                 | ParseError::GroupLeadingConnector { pos }
                 | ParseError::UnterminatedBlockComment { pos }
                  => pos < len,
