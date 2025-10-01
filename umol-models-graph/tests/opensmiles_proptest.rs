@@ -25,7 +25,7 @@ proptest! {
 
     // Crash-only: parser should never panic on arbitrary ASCII up to length 256
     #[test]
-    fn m6_never_panics_on_ascii_lenient(input in smilesish()) {
+    fn never_panics_on_ascii_lenient(input in smilesish()) {
         let flags = SmilesParseFlags::INTERTOKEN_WS | SmilesParseFlags::COMMENTS | SmilesParseFlags::EXPLICIT_EOI;
         let _ = std::panic::catch_unwind(|| {
             let _ = parse_smiles_inner(&input, flags);
@@ -34,7 +34,7 @@ proptest! {
 
     // Error spans must point within the input bounds (M6 strict)
     #[test]
-    fn m6_error_positions_within_bounds(input in smilesish()) {
+    fn error_positions_within_bounds(input in smilesish()) {
         let res = parse_smiles(&input);
         if let Err(err) = res {
             let len = input.len();
@@ -42,6 +42,7 @@ proptest! {
                 ParseError::InvalidWhitespace { pos }
                 | ParseError::InvalidComment { pos }
                 | ParseError::UnsupportedToken { pos }
+                | ParseError::InvalidElement { pos }
                 | ParseError::UnbalancedBranchOpen { pos }
                 | ParseError::UnbalancedBranchClose { pos }
                 | ParseError::EmptyBranch { pos }
@@ -66,7 +67,8 @@ proptest! {
                 | ParseError::BracketDuplicateField { pos }
                 | ParseError::BracketHOnH { pos }
                 | ParseError::BracketChiralityOutOfRange { pos }
-                | ParseError::GroupLeadingConnector { pos }
+                | ParseError::GroupLeadingDot { pos }
+                | ParseError::GroupLeadingBond { pos }
                 | ParseError::UnterminatedBlockComment { pos }
                  => pos < len,
                 | ParseError::RingUnclosed { open_pos } => open_pos < len,
@@ -79,7 +81,7 @@ proptest! {
 
     // Bonds in successful parses must reference valid, distinct atom indices
     #[test]
-    fn m6_bonds_well_formed_on_success(input in smilesish()) {
+    fn bonds_well_formed_on_success(input in smilesish()) {
         if let Ok(mol) = parse_smiles(&input) {
             let n = mol.atoms.len() as u32;
             for b in &mol.bonds {

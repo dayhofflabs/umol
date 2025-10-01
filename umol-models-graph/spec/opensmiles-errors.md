@@ -14,6 +14,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 ##### Lexical / syntactic (during parse)
 
 - LEX_INVALID_TOKEN (LEX, Error): input slice cannot be tokenized per lexical rules
+- LEX_INVALID_ELEMENT (LEX, Error): invalid element symbol
 - LEX_RING_INDEX_INVALID (LEX, Error): percent ring form invalid (must be exactly two digits)
 - LEX_TRAILING_BOND (LEX, Error): bond symbol found at end of input or before terminator
 - LEX_INTERTOKEN_WHITESPACE (LEX, Error): inter-token whitespace encountered
@@ -40,8 +41,8 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - BRCH_UNCLOSED (BRANCH, Error): open '(' not closed before component/end
 - BRCH_DANGLING_BOND (BRANCH, Error): bond before ')' or component end
 - BRCH_EMPTY_BRANCH (BRANCH, Error): empty branch (e.g., '()')
-// TODO: Split into GRP_LEADING_DOT and GRP_LEADING_BOND as everywhere else
-- GRP_LEADING_CONNECTOR (BRANCH, Error): group begins with a connector (bond or dot); groups must start with an atom or '('
+- GRP_LEADING_DOT (BRANCH, Error): group begins with a dot; groups must start with an atom or '('
+- GRP_LEADING_BOND (BRANCH, Error): group begins with a bond; groups must start with an atom or '('
 
 - RING_UNCLOSED (RING, Error): ring index opened but not closed by end of component/molecule
 - RING_BOND_DIR_CONFLICT (RING, Error): conflicting up/down bond directions on the same ring closure
