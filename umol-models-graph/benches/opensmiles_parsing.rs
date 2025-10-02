@@ -126,6 +126,15 @@ fn opensmiles_parsing(c: &mut Criterion) {
         ("spiro_2", &b"C1CC2(C1)CC2C"[..]),
     ];
 
+    // Ring corpus, many rings
+    let ring_complex_inputs = [
+        ("adamantane", &b"C1C2CC3CC1CC(C2)C3"[..]),
+        ("dodecahedrane", &b"C12C3C4C5C1C1C6C2C2C3C3C4C4C5C1C1C6C2C3C41"[..]),
+        ("closo-dodecaborane", &b"[H]B1234B567([H])B189([H])B21%10([H])B32%11([H])B453([H])B645([H])B786([H])B478([H])B12([H])([B-]9%1067[H])[B-]3%1158[H]"[..]),
+        ("c60_fullerene", &b"C12=C3C4=C5C6=C1C7=C8C9=C1C%10=C%11C(=C29)C3=C2C3=C4C4=C5C5=C9C6=C7C6=C7C8=C1C1=C8C%10=C%10C%11=C2C2=C3C3=C4C4=C5C5=C%11C%12=C(C6=C95)C7=C1C1=C%12C5=C%11C4=C3C3=C5C(=C81)C%10=C23"[..]),
+        ("vitamin_b12", &b"[H][C@]12[C@H](CC(N)=O)[C@@]3(C)CCC(=O)NC[C@@H](C)OP(=O)([O-])O[C@H]4[C@@H](O)[C@H](O[C@@H]4COP(=O)(O)O)n4c[n+](c5cc(C)c(C)cc54)[Co-3]456([CH2][C@H]7O[C@@H](n8cnc9c(N)ncnc98)[C@H](O)[C@@H]7O)[N]1C3=C(C)C1=[N+]4C(=CC3=[N+]5C(=C(C)C4=[N+]6[C@]2(C)[C@@](C)(CC(N)=O)[C@@H]4CCC(N)=O)[C@@](C)(CC(N)=O)[C@@H]3CCC(N)=O)C(C)(C)[C@@H]1CCC(N)=O"[..]),
+    ];
+
     // Ring corpus, directed closures and percent indices
     let ring_stereo_inputs = [
         ("dir_up_open", &b"C/1CC1"[..]),
@@ -215,10 +224,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         ("trail_mixed", &b"CC \t\r\n\t "[..]),
     ];
 
-    // FSM M0 chain-only
-    // Unified parser benchmarks
-
-    // FSM M1 chain
+    // Chain
     let mut group_chain = c.benchmark_group("opensmiles_parsing/parse_chain");
     for (name, s) in chain_inputs.iter() {
         group_chain.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -231,7 +237,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_chain.finish();
 
-    // FSM M1 branch
+    // Branch
     let mut group_tree = c.benchmark_group("opensmiles_parsing/parse_tree");
     for (name, s) in tree_inputs.iter() {
         group_tree.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -244,7 +250,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_tree.finish();
 
-    // FSM M2 chain bonds
+    // Chain bonds
     let mut group_chain_bonds = c.benchmark_group("opensmiles_parsing/parse_chain_bonds");
     for (name, s) in chain_bonds_inputs.iter() {
         group_chain_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -257,7 +263,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_chain_bonds.finish();
 
-    // FSM M2 tree bonds
+    // Tree bonds
     let mut group_tree_bonds = c.benchmark_group("opensmiles_parsing/parse_tree_bonds");
     for (name, s) in tree_bonds_inputs.iter() {
         group_tree_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -270,7 +276,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_tree_bonds.finish();
 
-    // FSM M3 cycles
+    // Cycles
     let mut group_cycles = c.benchmark_group("opensmiles_parsing/parse_cycles");
     for (name, s) in ring_cycles_inputs.iter() {
         group_cycles.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -283,7 +289,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_cycles.finish();
 
-    // FSM M3 fused & spiro
+    // Fused & spiro rings
     let mut group_fused = c.benchmark_group("opensmiles_parsing/parse_fused_spiro");
     for (name, s) in ring_fused_spiro_inputs.iter() {
         group_fused.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -296,7 +302,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_fused.finish();
 
-    // FSM M3 ring stereo
+    // Ring stereo
     let mut group_ring_stereo = c.benchmark_group("opensmiles_parsing/parse_ring_stereo");
     for (name, s) in ring_stereo_inputs.iter() {
         group_ring_stereo.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -309,7 +315,20 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_ring_stereo.finish();
 
-    // FSM M4 components
+    // Complex rings
+    let mut group_complex_rings = c.benchmark_group("opensmiles_parsing/parse_complex_rings");
+    for (name, s) in ring_complex_inputs.iter() {
+        group_complex_rings.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
+            b.iter(|| {
+                let input = black_box(input);
+                let result = parse_smiles(input);
+                assert!(result.is_ok());
+            })
+        });
+    }
+    group_complex_rings.finish();
+
+    // Components
     let mut group_components = c.benchmark_group("opensmiles_parsing/parse_components");
     for (name, s) in component_inputs.iter() {
         group_components.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
@@ -322,7 +341,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_components.finish();
 
-    // FSM M5 brackets
+    // Brackets
     let mut group_brackets = c.benchmark_group("opensmiles_parsing/parse_brackets");
     for (name, bytes) in bracket_inputs.iter() {
         group_brackets.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
@@ -335,7 +354,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
     }
     group_brackets.finish();
 
-    // FSM M5 wildcards
+    // Wildcards
     let mut group_wild = c.benchmark_group("opensmiles_parsing/parse_wildcards");
     for (name, bytes) in wildcard_inputs.iter() {
         group_wild.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
@@ -347,135 +366,6 @@ fn opensmiles_parsing(c: &mut Criterion) {
         });
     }
     group_wild.finish();
-
-    // FSM M6 complete coverage
-    let mut group_chain2 = c.benchmark_group("opensmiles_parsing/parse_chain2");
-    for (name, s) in chain_inputs.iter() {
-        group_chain2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_chain2.finish();
-
-    // Tree
-    let mut group_tree2 = c.benchmark_group("opensmiles_parsing/parse_tree2");
-    for (name, s) in tree_inputs.iter() {
-        group_tree2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_tree2.finish();
-
-    // Chain bonds
-    let mut group_chain_bonds2 = c.benchmark_group("opensmiles_parsing/parse_chain_bonds2");
-    for (name, s) in chain_bonds_inputs.iter() {
-        group_chain_bonds2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_chain_bonds2.finish();
-
-    // Tree bonds
-    let mut group_tree_bonds2 = c.benchmark_group("opensmiles_parsing/parse_tree_bonds2");
-    for (name, s) in tree_bonds_inputs.iter() {
-        group_tree_bonds2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_tree_bonds2.finish();
-
-    // Cycles
-    let mut group_cycles2 = c.benchmark_group("opensmiles_parsing/parse_cycles2");
-    for (name, s) in ring_cycles_inputs.iter() {
-        group_cycles2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_cycles2.finish();
-
-    // Fused & spiro
-    let mut group_fused2 = c.benchmark_group("opensmiles_parsing/parse_m6_fused_spiro");
-    for (name, s) in ring_fused_spiro_inputs.iter() {
-        group_fused2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_fused2.finish();
-
-    // Ring stereo
-    let mut group_ring_stereo2 = c.benchmark_group("opensmiles_parsing/parse_m6_ring_stereo");
-    for (name, s) in ring_stereo_inputs.iter() {
-        group_ring_stereo2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_ring_stereo2.finish();
-
-    let mut group_components2 = c.benchmark_group("opensmiles_parsing/parse_m6_components");
-    for (name, s) in component_inputs.iter() {
-        group_components2.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
-            b.iter(|| {
-                let input = black_box(input);
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_components2.finish();
-
-    // Brackets
-    let mut group_brackets2 = c.benchmark_group("opensmiles_parsing/parse_m6_brackets");
-    for (name, bytes) in bracket_inputs.iter() {
-        group_brackets2.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
-            b.iter(|| {
-                let input = black_box(input.as_slice());
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_brackets2.finish();
-
-    // Wildcards
-    let mut group_wild2 = c.benchmark_group("opensmiles_parsing/parse_m6_wildcards");
-    for (name, bytes) in wildcard_inputs.iter() {
-        group_wild2.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
-            b.iter(|| {
-                let input = black_box(input.as_slice());
-                let result = parse_smiles(input);
-                assert!(result.is_ok());
-            })
-        });
-    }
-    group_wild2.finish();
 
     // Whitespace
     let mut group_whitespace = c.benchmark_group("opensmiles_parsing/parse_whitespace");

@@ -5,6 +5,7 @@ use std::fmt;
 use bitflags::bitflags;
 
 bitflags! {
+    /// Flags for parsing MOL files
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct MolParseFlags: u32 {
         // Core chemical features (bits 0-7)
@@ -40,78 +41,6 @@ bitflags! {
         const FULL = Self::EXTENDED.bits() | Self::ADVANCED_SGROUPS.bits() | Self::EXTENDED_QUERIES.bits();
         const STRICT = Self::MINIMAL.bits() | Self::STRICT_PADDING.bits();
         const LENIENT = Self::FULL.bits() | Self::UNICODE.bits();
-    }
-}
-
-
-bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct SmilesParseFlags: u32 {
-        // Core OpenSMILES behavior
-        const STRICT_OPENSMILES = 0;   // terminator-only WS, no comments
-
-        // Extensions (lex/syntax only)
-        const INTERTOKEN_WS = 1;       // allow ASCII inter-token whitespace
-        const COMMENTS = 2;            // // line and /* block */ comments
-        const EXPLICIT_EOI = 4;        // explicit end-of-input marker token
-        const CXSMILES_TRAILER = 8;    // accept |...| trailer after SMILES
-        const ELEMENT_NUMBERS = 16;    // [#n] element numbers
-        const NONORGANIC_BARE = 32;    // bare non-organic atoms allowed
-        const LINT_SIDECHANNEL = 64;   // capture lint-only side-channel hints
-
-        // Presets
-        const UMOL_DIALECT = Self::INTERTOKEN_WS.bits() | Self::COMMENTS.bits();
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ParseConfig {
-    pub parse_flags: MolParseFlags,
-}
-
-impl ParseConfig {
-    pub fn to_flags(&self) -> MolParseFlags {
-        self.parse_flags
-    }
-
-    pub fn with_flags(flags: MolParseFlags) -> Self {
-        Self { parse_flags: flags }
-    }
-
-    pub fn minimal() -> Self {
-        Self::with_flags(MolParseFlags::MINIMAL)
-    }
-
-    pub fn basic() -> Self {
-        Self::with_flags(MolParseFlags::BASIC)
-    }
-
-    pub fn extended() -> Self {
-        Self::with_flags(MolParseFlags::EXTENDED)
-    }
-
-    pub fn full() -> Self {
-        Self::with_flags(MolParseFlags::FULL)
-    }
-
-    pub fn strict() -> Self {
-        Self::with_flags(MolParseFlags::STRICT)
-    }
-
-    pub fn lenient() -> Self {
-        Self::with_flags(MolParseFlags::LENIENT)
-    }
-}
-
-impl Default for ParseConfig {
-    fn default() -> Self {
-        Self::basic()
-    }
-}
-
-impl fmt::Display for ParseConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ParseConfig({})", self.parse_flags)
     }
 }
 
@@ -163,5 +92,145 @@ impl fmt::Display for MolParseFlags {
         }
 
         write!(f, "{}", parts.join(" | "))
+    }
+}
+
+/// Configuration for MOL file parsing/writing
+#[derive(Debug, Clone)]
+pub struct MolIoConfig {
+    pub parse_flags: MolParseFlags,
+}
+
+impl MolIoConfig {
+    pub fn to_flags(&self) -> MolParseFlags {
+        self.parse_flags
+    }
+
+    pub fn with_flags(flags: MolParseFlags) -> Self {
+        Self { parse_flags: flags }
+    }
+
+    pub fn minimal() -> Self {
+        Self::with_flags(MolParseFlags::MINIMAL)
+    }
+
+    pub fn basic() -> Self {
+        Self::with_flags(MolParseFlags::BASIC)
+    }
+
+    pub fn extended() -> Self {
+        Self::with_flags(MolParseFlags::EXTENDED)
+    }
+
+    pub fn full() -> Self {
+        Self::with_flags(MolParseFlags::FULL)
+    }
+
+    pub fn strict() -> Self {
+        Self::with_flags(MolParseFlags::STRICT)
+    }
+
+    pub fn lenient() -> Self {
+        Self::with_flags(MolParseFlags::LENIENT)
+    }
+}
+
+impl Default for MolIoConfig {
+    fn default() -> Self {
+        Self::basic()
+    }
+}
+
+impl fmt::Display for MolIoConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MolIoConfig({})", self.parse_flags)
+    }
+}
+
+bitflags! {
+    /// Flags for parsing SMILES strings
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct SmilesParseFlags: u32 {
+        // Core OpenSMILES behavior
+        const STRICT_OPENSMILES = 0;   // terminator-only WS, no comments
+
+        // Extensions (lex/syntax only)
+        const INTERTOKEN_WS = 1;       // allow ASCII inter-token whitespace
+        const COMMENTS = 2;            // // line and /* block */ comments
+        const EXPLICIT_EOI = 4;        // explicit end-of-input marker token
+        const CXSMILES_TRAILER = 8;    // accept |...| trailer after SMILES
+        const ELEMENT_NUMBERS = 16;    // [#n] element numbers
+        const NONORGANIC_BARE = 32;    // bare non-organic atoms allowed
+        const LINT_SIDECHANNEL = 64;   // capture lint-only side-channel hints
+
+        // Presets
+        const UMOL_DIALECT = Self::INTERTOKEN_WS.bits() | Self::COMMENTS.bits();
+    }
+}
+
+impl fmt::Display for SmilesParseFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_empty() {
+            return write!(f, "EMPTY");
+        }
+
+        let mut parts = Vec::new();
+
+        if self.contains(SmilesParseFlags::STRICT_OPENSMILES) {
+            parts.push("STRICT_OPENSMILES");
+        }
+        if self.contains(SmilesParseFlags::INTERTOKEN_WS) {
+            parts.push("INTERTOKEN_WS");
+        }
+        if self.contains(SmilesParseFlags::COMMENTS) {
+            parts.push("COMMENTS");
+        }
+        if self.contains(SmilesParseFlags::EXPLICIT_EOI) {
+            parts.push("EXPLICIT_EOI");
+        }
+        if self.contains(SmilesParseFlags::CXSMILES_TRAILER) {
+            parts.push("CXSMILES_TRAILER");
+        }
+        if self.contains(SmilesParseFlags::ELEMENT_NUMBERS) {
+            parts.push("ELEMENT_NUMBERS");
+        }
+        if self.contains(SmilesParseFlags::NONORGANIC_BARE) {
+            parts.push("NONORGANIC_BARE");
+        }
+        if self.contains(SmilesParseFlags::LINT_SIDECHANNEL) {
+            parts.push("LINT_SIDECHANNEL");
+        }
+
+        write!(f, "{}", parts.join(" | "))
+    }
+}
+
+pub struct SmilesIoConfig {
+    pub parse_flags: SmilesParseFlags,
+}
+
+impl SmilesIoConfig {
+    pub fn to_flags(&self) -> SmilesParseFlags {
+        self.parse_flags
+    }
+
+    pub fn with_flags(flags: SmilesParseFlags) -> Self {
+        Self { parse_flags: flags }
+    }
+
+    pub fn strict_opensmiles() -> Self {
+        Self::with_flags(SmilesParseFlags::STRICT_OPENSMILES)
+    }
+}
+
+impl Default for SmilesIoConfig {
+    fn default() -> Self {
+        Self::strict_opensmiles()
+    }
+}
+
+impl fmt::Display for SmilesIoConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SmilesIoConfig({})", self.parse_flags)
     }
 }

@@ -9,8 +9,8 @@ use super::checker::{
     check_aromaticity, check_stereo_double, check_topology, check_valence, AromaticityConfig,
     AromaticityModel, ValenceConfig, ValenceModel,
 };
+use super::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use super::parser::parse_smiles;
-use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use crate::io::smiles::ParseError;
 
 // SMILES linter, runs post-parse

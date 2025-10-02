@@ -1,8 +1,9 @@
-use super::*;
-use crate::diagnostics::Category;
-use crate::io::ir::BondOrder;
-use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use umol_data::Element;
+
+use super::super::diagnostics::Category;
+use super::*;
+use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
+use crate::io::ir::BondOrder;
 
 fn build_linear(m: &mut MoleculeBuilder, elements: &[Element], orders: &[BondOrder]) -> Molecule {
     assert!(elements.len() >= 1);
@@ -23,7 +24,14 @@ fn build_linear(m: &mut MoleculeBuilder, elements: &[Element], orders: &[BondOrd
         ids.push(id);
     }
     for (i, &ord) in orders.iter().enumerate() {
-        m.on_bond(ids[i], ids[i + 1], BondData { order: ord, dir: None });
+        m.on_bond(
+            ids[i],
+            ids[i + 1],
+            BondData {
+                order: ord,
+                dir: None,
+            },
+        );
     }
     let mut mols = m.finish();
     mols.pop().unwrap()
@@ -35,10 +43,31 @@ fn topo_self_loop_and_parallel_edges() {
     let c1 = mb.on_atom_fast(Element::C, true, false);
     let c2 = mb.on_atom_fast(Element::C, true, false);
     // self-loop on c1
-    mb.on_bond(c1, c1, BondData { order: BondOrder::Single, dir: None });
+    mb.on_bond(
+        c1,
+        c1,
+        BondData {
+            order: BondOrder::Single,
+            dir: None,
+        },
+    );
     // two edges between c1-c2
-    mb.on_bond(c1, c2, BondData { order: BondOrder::Single, dir: None });
-    mb.on_bond(c1, c2, BondData { order: BondOrder::Double, dir: None });
+    mb.on_bond(
+        c1,
+        c2,
+        BondData {
+            order: BondOrder::Single,
+            dir: None,
+        },
+    );
+    mb.on_bond(
+        c1,
+        c2,
+        BondData {
+            order: BondOrder::Double,
+            dir: None,
+        },
+    );
     let mut mols = mb.finish();
     let mol = mols.pop().unwrap();
 
@@ -56,10 +85,22 @@ fn valence_pattern_match() {
     let mol = build_linear(&mut mb, &[Element::C, Element::C], &[BondOrder::Single]);
 
     let model = ValenceModel::simple_organic();
-    let cfg = ValenceConfig { enabled: true, overflow_policy: OverflowPolicy::Error, check_bracket: true, infer_bracket_implicit: false, aromatic_as_one: true, patterns_enabled: true, no_match_policy: OverflowPolicy::Off, ambiguous_match_policy: OverflowPolicy::Off };
+    let cfg = ValenceConfig {
+        enabled: true,
+        overflow_policy: OverflowPolicy::Error,
+        check_bracket: true,
+        infer_bracket_implicit: false,
+        aromatic_as_one: true,
+        patterns_enabled: true,
+        no_match_policy: OverflowPolicy::Off,
+        ambiguous_match_policy: OverflowPolicy::Off,
+    };
     let mut report = DiagnosticsReport::new();
     check_valence(&mol, None, &mut report, 0, &model, &cfg);
-    assert!(report.diagnostics.iter().all(|d| d.category != Category::Valence));
+    assert!(report
+        .diagnostics
+        .iter()
+        .all(|d| d.category != Category::Valence));
 }
 
 #[test]
@@ -69,18 +110,44 @@ fn valence_pattern_mismatch() {
     let c1 = mb.on_atom_fast(Element::C, true, false);
     let c2 = mb.on_atom_fast(Element::C, true, false);
     let c3 = mb.on_atom_fast(Element::C, true, false);
-    mb.on_bond(c1, c2, BondData { order: BondOrder::Triple, dir: None });
-    mb.on_bond(c1, c3, BondData { order: BondOrder::Double, dir: None });
+    mb.on_bond(
+        c1,
+        c2,
+        BondData {
+            order: BondOrder::Triple,
+            dir: None,
+        },
+    );
+    mb.on_bond(
+        c1,
+        c3,
+        BondData {
+            order: BondOrder::Double,
+            dir: None,
+        },
+    );
     let mut mols = mb.finish();
     let mol = mols.pop().unwrap();
 
     let mut model = ValenceModel::simple_organic();
     // Use numeric fallback only: set states for C and disable patterns so we get overflow
     model.set_states(Element::C, vec![4]);
-    let cfg = ValenceConfig { enabled: true, overflow_policy: OverflowPolicy::Warn, check_bracket: true, infer_bracket_implicit: false, aromatic_as_one: true, patterns_enabled: false, no_match_policy: OverflowPolicy::Off, ambiguous_match_policy: OverflowPolicy::Off };
+    let cfg = ValenceConfig {
+        enabled: true,
+        overflow_policy: OverflowPolicy::Warn,
+        check_bracket: true,
+        infer_bracket_implicit: false,
+        aromatic_as_one: true,
+        patterns_enabled: false,
+        no_match_policy: OverflowPolicy::Off,
+        ambiguous_match_policy: OverflowPolicy::Off,
+    };
     let mut report = DiagnosticsReport::new();
     check_valence(&mol, None, &mut report, 0, &model, &cfg);
-    assert!(report.diagnostics.iter().any(|d| d.code.0 == "VALENCE_EXCEEDS_MAX"));
+    assert!(report
+        .diagnostics
+        .iter()
+        .any(|d| d.code.0 == "VALENCE_EXCEEDS_MAX"));
 }
 
 #[test]
@@ -116,24 +183,46 @@ fn valence_bracket_h_match_and_mismatch() {
             chirality: None,
             unknown_symbol: false,
         });
-        mb.on_bond(c0, c1, BondData { order: BondOrder::Single, dir: None });
+        mb.on_bond(
+            c0,
+            c1,
+            BondData {
+                order: BondOrder::Single,
+                dir: None,
+            },
+        );
         mb.finish().pop().unwrap()
     };
 
     let model = ValenceModel::simple_organic();
-    let cfg = ValenceConfig { enabled: true, overflow_policy: OverflowPolicy::Error, check_bracket: true, infer_bracket_implicit: false, aromatic_as_one: true, patterns_enabled: true, no_match_policy: OverflowPolicy::Off, ambiguous_match_policy: OverflowPolicy::Off };
+    let cfg = ValenceConfig {
+        enabled: true,
+        overflow_policy: OverflowPolicy::Error,
+        check_bracket: true,
+        infer_bracket_implicit: false,
+        aromatic_as_one: true,
+        patterns_enabled: true,
+        no_match_policy: OverflowPolicy::Off,
+        ambiguous_match_policy: OverflowPolicy::Off,
+    };
 
     // Match: H3 OK
     let mol_ok = build_with_h(3);
     let mut report_ok = DiagnosticsReport::new();
     check_valence(&mol_ok, None, &mut report_ok, 0, &model, &cfg);
-    assert!(report_ok.diagnostics.iter().all(|d| d.code.0 != "VALENCE_BRACKET_H_MISMATCH"));
+    assert!(report_ok
+        .diagnostics
+        .iter()
+        .all(|d| d.code.0 != "VALENCE_BRACKET_H_MISMATCH"));
 
     // Mismatch: H1 vs implied 3
     let mol_bad = build_with_h(1);
     let mut report_bad = DiagnosticsReport::new();
     let _ = check_valence(&mol_bad, None, &mut report_bad, 0, &model, &cfg);
-    assert!(report_bad.diagnostics.iter().any(|d| d.code.0 == "VALENCE_BRACKET_H_MISMATCH"));
+    assert!(report_bad
+        .diagnostics
+        .iter()
+        .any(|d| d.code.0 == "VALENCE_BRACKET_H_MISMATCH"));
 }
 
 #[test]
@@ -145,16 +234,29 @@ fn arom_inconsistent_lowercase_when_no_fractional_bonding() {
         .collect::<Vec<_>>();
     for i in 0..6 {
         let j = (i + 1) % 6;
-        mb.on_bond(a[i], a[j], BondData { order: BondOrder::Single, dir: None });
+        mb.on_bond(
+            a[i],
+            a[j],
+            BondData {
+                order: BondOrder::Single,
+                dir: None,
+            },
+        );
     }
     let mut mols = mb.finish();
     let mol = mols.pop().unwrap();
 
-    let a_cfg = AromaticityConfig { enabled: true, ..Default::default() };
+    let a_cfg = AromaticityConfig {
+        enabled: true,
+        ..Default::default()
+    };
     let a_model = AromaticityModel::default();
     let mut report = DiagnosticsReport::new();
     let _ = check_aromaticity(&mol, None, &mut report, 0, &a_model, &a_cfg);
-    assert!(report.diagnostics.iter().any(|d| d.code.0 == "AROM_INCONSISTENT_LOWERCASE"));
+    assert!(report
+        .diagnostics
+        .iter()
+        .any(|d| d.code.0 == "AROM_INCONSISTENT_LOWERCASE"));
 }
 
 #[test]
@@ -166,16 +268,32 @@ fn style_prefer_aromatic_form_when_fractional_bonding() {
         .collect::<Vec<_>>();
     for i in 0..6 {
         let j = (i + 1) % 6;
-        let ord = if i % 2 == 0 { BondOrder::Double } else { BondOrder::Single };
-        mb.on_bond(a[i], a[j], BondData { order: ord, dir: None });
+        let ord = if i % 2 == 0 {
+            BondOrder::Double
+        } else {
+            BondOrder::Single
+        };
+        mb.on_bond(
+            a[i],
+            a[j],
+            BondData {
+                order: ord,
+                dir: None,
+            },
+        );
     }
     let mut mols = mb.finish();
     let mol = mols.pop().unwrap();
 
-    let a_cfg = AromaticityConfig { enabled: true, ..Default::default() };
+    let a_cfg = AromaticityConfig {
+        enabled: true,
+        ..Default::default()
+    };
     let a_model = AromaticityModel::default();
     let mut report = DiagnosticsReport::new();
     let _ = check_aromaticity(&mol, None, &mut report, 0, &a_model, &a_cfg);
-    assert!(report.diagnostics.iter().any(|d| d.code.0 == "STYLE_PREFER_AROMATIC_FORM"));
+    assert!(report
+        .diagnostics
+        .iter()
+        .any(|d| d.code.0 == "STYLE_PREFER_AROMATIC_FORM"));
 }
-

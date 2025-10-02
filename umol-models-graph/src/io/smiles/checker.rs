@@ -32,7 +32,7 @@ pub struct CheckOptions<'a> {
     pub lint: &'a LintConfig,
 }
 
-use crate::diagnostics::DiagnosticsReport;
+use super::diagnostics::DiagnosticsReport;
 use crate::io::ir::Molecule;
 
 pub fn check_smiles(

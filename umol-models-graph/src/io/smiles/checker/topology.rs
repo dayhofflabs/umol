@@ -1,10 +1,9 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::diagnostics::{Category, Code, DiagnosticsReport, Severity, Span};
-use crate::io::ir::Molecule;
-
+use super::super::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use super::SideChannel;
+use crate::io::ir::Molecule;
 
 pub struct TopologyArtifacts {
     pub self_loops: usize,
@@ -30,7 +29,7 @@ pub fn check_topology(
         };
         if a == c {
             artifacts.self_loops += 1;
-            report.push(crate::diagnostics::Diagnostic {
+            report.push(Diagnostic {
                 code: Code("TOPO_SELF_LOOP"),
                 category: Category::Topology,
                 severity: Severity::Error,
@@ -55,7 +54,7 @@ pub fn check_topology(
     for ((_a, _b), (cnt, _ab)) in edge_mult.into_iter() {
         if cnt >= 2 {
             artifacts.parallel_pairs += 1;
-            report.push(crate::diagnostics::Diagnostic {
+            report.push(Diagnostic {
                 code: Code("TOPO_PARALLEL_EDGES"),
                 category: Category::Topology,
                 severity: Severity::Error,
@@ -68,5 +67,3 @@ pub fn check_topology(
 
     artifacts
 }
-
-

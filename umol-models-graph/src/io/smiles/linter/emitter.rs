@@ -2,12 +2,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::diagnostics::{Diagnostic, DiagnosticsReport, Severity};
+use super::super::diagnostics::{Diagnostic, DiagnosticsReport, Severity};
 
 #[derive(Default)]
 pub struct LintConfig {
     pub enabled_codes: Option<HashSet<&'static str>>, // if Some, only these codes are emitted
-    pub disabled_codes: HashSet<&'static str>,         // always suppressed codes
+    pub disabled_codes: HashSet<&'static str>,        // always suppressed codes
     pub severity_overrides: HashMap<&'static str, Severity>, // per-code severity override
 }
 
@@ -18,7 +18,10 @@ pub struct Emitter<'a> {
 
 impl<'a> Emitter<'a> {
     pub fn new(report: &'a mut DiagnosticsReport) -> Self {
-        Self { report, config: LintConfig::default() }
+        Self {
+            report,
+            config: LintConfig::default(),
+        }
     }
 
     pub fn with_config(report: &'a mut DiagnosticsReport, config: LintConfig) -> Self {

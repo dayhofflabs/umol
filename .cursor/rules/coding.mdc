@@ -18,6 +18,8 @@ alwaysApply: true
 - **DO NOT** create placeholder code just to cover a task. All coding tasks imply real coding,
   not placeholder code.
 - **DO NOT** mark code tasks as completed based on placeholder code.
+- **DO NOT** remove or simplify code during refactors to keep the tests passing. Break such
+  refactor tasks into multiple steps, accepting that tests will not pass after the first step.
 
 ## Use modern Rust (edition 2021) and leverage the ecosystem
 - Use <module>.rs for file names instead of <module>/mod.rs

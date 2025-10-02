@@ -59,6 +59,10 @@ bench = false
 name = "file_catalog"
 bench = false
 
+[[bin]]
+name = "smiles_parse"
+bench = false
+
 [[bench]]
 name = "mol_parsing"
 harness = false

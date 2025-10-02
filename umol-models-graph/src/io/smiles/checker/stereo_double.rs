@@ -1,7 +1,6 @@
-use crate::diagnostics::{Category, Code, DiagnosticsReport, Severity, Span};
-use crate::io::ir::{BondDir, BondOrder, BondSymbol, Molecule};
-
+use super::super::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use super::SideChannel;
+use crate::io::ir::{BondDir, BondOrder, BondSymbol, Molecule};
 
 pub struct StereoArtifacts {
     pub checked_double_bonds: usize,
@@ -59,7 +58,7 @@ pub fn check_stereo_double(
             // Insufficient: need at least one oriented substituent on each end
             if (up_a + down_a) == 0 || (up_c + down_c) == 0 {
                 artifacts.insufficient_count += 1;
-                report.push(crate::diagnostics::Diagnostic {
+                report.push(Diagnostic {
                     code: Code("STEREO_DOUBLE_INSUFFICIENT"),
                     category: Category::Stereo,
                     severity: Severity::Error,
@@ -73,7 +72,7 @@ pub fn check_stereo_double(
             // Conflict: two or more oriented substituents with the same direction on the same end
             if up_a >= 2 || down_a >= 2 || up_c >= 2 || down_c >= 2 {
                 artifacts.conflict_count += 1;
-                report.push(crate::diagnostics::Diagnostic {
+                report.push(Diagnostic {
                     code: Code("STEREO_DOUBLE_CONFLICT"),
                     category: Category::Stereo,
                     severity: Severity::Error,
@@ -88,5 +87,3 @@ pub fn check_stereo_double(
 
     artifacts
 }
-
-
