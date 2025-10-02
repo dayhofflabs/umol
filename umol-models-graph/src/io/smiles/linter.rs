@@ -2,15 +2,15 @@
 
 mod context;
 mod emitter;
-mod registry;
-mod rules;
 pub use context::LintContext;
-pub use emitter::{DiagnosticCandidate, Emitter, Scope};
-pub use registry::{LintEngine, RuleRegistry};
-pub use rules::Rule;
+pub use emitter::{Emitter, LintConfig};
 
+use super::checker::{
+    check_aromaticity, check_stereo_double, check_topology, check_valence, AromaticityConfig,
+    AromaticityModel, ValenceConfig, ValenceModel,
+};
 use super::parser::parse_smiles;
-use crate::diagnostics::{Category, Code, DiagnosticsReport, Severity, Span};
+use crate::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use crate::io::smiles::ParseError;
 
 // SMILES linter, runs post-parse
@@ -25,235 +25,229 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
         match *err {
             // Ring diagnostics
             ParseError::RingUnclosed { open_pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("RING_UNCLOSED"),
                     category: Category::Ring,
                     severity: Severity::Error,
                     span: Span::new(open_pos, open_pos),
                     message: "Ring index opened but not closed",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::RingSelfLoop { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("RING_SELF_LOOP"),
                     category: Category::Ring,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Ring closure creates a self-loop",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::RingTwoMember { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("RING_TWO_MEMBER"),
                     category: Category::Ring,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Ring closure creates a two-member ring",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::RingMultipleRings { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("RING_MULTIPLE_RINGS"),
                     category: Category::Ring,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Multiple ring closures between the same atom pair",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::RingBondDirConflict { pos, .. } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("RING_BOND_DIR_CONFLICT"),
                     category: Category::Ring,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Conflicting ring bond directions",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::RingBondOrderConflict { pos, .. } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("RING_BOND_ORDER_CONFLICT"),
                     category: Category::Ring,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Conflicting ring bond orders",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
 
             // Bracket balance
             ParseError::UnbalancedOpenBracket { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_UNBALANCED_OPEN"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Unbalanced '[' bracket",
-                    scope: Scope::Bracket {
-                        start: pos,
-                        end: pos.saturating_add(1),
-                    },
+                    details: None,
                 });
             }
             ParseError::UnbalancedCloseBracket { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_UNBALANCED_CLOSE"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Unbalanced ']' bracket",
-                    scope: Scope::Bracket {
-                        start: pos,
-                        end: pos.saturating_add(1),
-                    },
+                    details: None,
                 });
             }
             ParseError::InvalidBracket { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_INVALID"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Invalid bracket atom",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::BracketEmptyClass { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_EMPTY_CLASS"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Empty atom class field",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::BracketChiralityOutOfRange { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_CHIRAL_OUT_OF_RANGE"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Chirality descriptor parameter out of range",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::BracketDuplicateField { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_DUP_FIELD"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Duplicate bracket field",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::BracketHOnH { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_H_ON_H"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Hydrogen field on hydrogen element",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
 
             // Branch/group
             ParseError::UnbalancedBranchOpen { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRCH_UNCLOSED"),
                     category: Category::Branch,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Open '(' not closed",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::UnbalancedBranchClose { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRCH_UNEXPECTED_CLOSE"),
                     category: Category::Branch,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Unexpected ')'",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::EmptyBranch { pos } | ParseError::EmptyGroup { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRCH_EMPTY_BRANCH"),
                     category: Category::Branch,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Empty branch/group",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
 
             // Bond/dot
             ParseError::LeadingBond { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_LEADING_BOND"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Leading bond token",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::ConsecutiveBond { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_CONSECUTIVE_BONDS"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Consecutive bond tokens",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::TrailingBond { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_TRAILING_BOND"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Trailing bond token",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::LeadingDot { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_LEADING_DOT"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Leading dot",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::ConsecutiveDot { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_MULTIPLE_DOTS"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Consecutive dots",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::TrailingDot { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_TRAILING_DOT"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Trailing dot",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
 
@@ -261,125 +255,125 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
             ParseError::LeadingRing { pos } => {
                 if pos > 0 && input.as_bytes()[pos - 1] == b'.' {
                     // Treat as leading dot instead of dot-before-ring
-                    emitter.candidate(DiagnosticCandidate {
+                    emitter.emit(Diagnostic {
                         code: Code("LEX_LEADING_DOT"),
                         category: Category::Lex,
                         severity: Severity::Error,
                         span: Span::new(pos - 1, pos),
                         message: "Leading dot",
-                        scope: Scope::Global,
+                        details: None,
                     });
                 } else {
-                    emitter.candidate(DiagnosticCandidate {
+                    emitter.emit(Diagnostic {
                         code: Code("LEX_LEADING_RING"),
                         category: Category::Lex,
                         severity: Severity::Error,
                         span: Span::new(pos, pos.saturating_add(1)),
                         message: "Leading ring index",
-                        scope: Scope::Global,
+                        details: None,
                     });
                 }
             }
             ParseError::RingIndexInvalid { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_RING_INDEX_INVALID"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Invalid percent ring index",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
 
             // Whitespace/comments (strict mode)
             ParseError::InvalidWhitespace { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_INTERTOKEN_WHITESPACE"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Inter-token whitespace is not allowed",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::InvalidComment { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_COMMENT"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(2)),
                     message: "Comments are not allowed",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::UnterminatedBlockComment { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_UNTERMINATED_BLOCK_COMMENT"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, input.len()),
                     message: "Unterminated block comment",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::TopLevelGroupTrailing { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRCH_GROUP_TRAILING"),
                     category: Category::Branch,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Group trailing content",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::UnsupportedToken { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_INVALID_TOKEN"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Invalid token",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::InvalidElement { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("LEX_INVALID_ELEMENT"),
                     category: Category::Lex,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Invalid element symbol",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::FieldOutsideBracket { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("BRKT_FIELD_OUTSIDE"),
                     category: Category::Bracket,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Bracket-only field outside brackets",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::GroupLeadingDot { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("GRP_LEADING_DOT"),
                     category: Category::Branch,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Group begins with a dot",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
             ParseError::GroupLeadingBond { pos } => {
-                emitter.candidate(DiagnosticCandidate {
+                emitter.emit(Diagnostic {
                     code: Code("GRP_LEADING_BOND"),
                     category: Category::Branch,
                     severity: Severity::Error,
                     span: Span::new(pos, pos.saturating_add(1)),
                     message: "Group begins with a bond",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
         }
@@ -388,7 +382,20 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     // Style and numeric advisories
     run_style_and_numeric_checks(&ctx, &mut emitter, parse_res.is_ok());
 
-    emitter.flush();
+    // Post-parse: topology + stereo checks when parsing succeeds (after emitter releases &mut report)
+    if let Ok(ref mol) = parse_res {
+        let input_len = input.len();
+        check_topology(mol, None, &mut report, input_len);
+        let v_cfg = ValenceConfig::default();
+        let v_model = ValenceModel::simple_organic();
+        check_valence(mol, None, &mut report, input_len, &v_model, &v_cfg);
+        check_stereo_double(mol, None, &mut report, input_len);
+        // Aromaticity verification scaffold (HMO/Clar config only)
+        let a_cfg = AromaticityConfig::default();
+        let a_model = AromaticityModel::default();
+        let _ = check_aromaticity(mol, None, &mut report, input_len, &a_model, &a_cfg);
+    }
+
     report
 }
 
@@ -403,13 +410,13 @@ fn run_style_and_numeric_checks(ctx: &LintContext, emit: &mut Emitter, only_when
             && bytes[i + 1] == b'0'
             && (bytes[i + 2] >= b'1' && bytes[i + 2] <= b'9')
         {
-            emit.candidate(DiagnosticCandidate {
+            emit.emit(Diagnostic {
                 code: Code("STYLE_UNNECESSARY_PERCENT_RING_INDEX"),
                 category: Category::Style,
                 severity: Severity::Warning,
                 span: Span::new(i, i + 3),
                 message: "Prefer single-digit ring index for 1..9",
-                scope: Scope::Global,
+                details: None,
             });
         }
         i += 1;
@@ -422,13 +429,13 @@ fn run_style_and_numeric_checks(ctx: &LintContext, emit: &mut Emitter, only_when
         let seq = ring_indices_sequence(bytes);
         if let Some((first_num, s, e)) = seq.first().copied() {
             if first_num != 1 {
-                emit.candidate(DiagnosticCandidate {
+                emit.emit(Diagnostic {
                     code: Code("STYLE_FIRST_RING_NOT_ONE"),
                     category: Category::Style,
                     severity: Severity::Warning,
                     span: Span::new(s, e),
                     message: "Prefer starting ring numbering at 1",
-                    scope: Scope::Global,
+                    details: None,
                 });
             }
         }
@@ -437,13 +444,13 @@ fn run_style_and_numeric_checks(ctx: &LintContext, emit: &mut Emitter, only_when
         for (num, s, e) in seq.into_iter() {
             if let Some(p) = last {
                 if num > p + 1 {
-                    emit.candidate(DiagnosticCandidate {
+                    emit.emit(Diagnostic {
                         code: Code("STYLE_NONCONSECUTIVE_RING_NUMBERING"),
                         category: Category::Style,
                         severity: Severity::Warning,
                         span: Span::new(s, e),
                         message: "Non-consecutive ring numbering",
-                        scope: Scope::Global,
+                        details: None,
                     });
                     break;
                 }
@@ -491,5 +498,3 @@ fn ring_indices_sequence(bytes: &[u8]) -> Vec<(u32, usize, usize)> {
     }
     res
 }
-
-// Bracket-style helper functions removed along with bracket re-parsing.

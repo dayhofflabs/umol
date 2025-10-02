@@ -5,7 +5,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 #### Taxonomy
 
 - Severity: Error | Warning
-- Category: LEX (lexing), BRKT (bracket) BRCH (branch structure), GRP (groups), RING (ring rules), TOPO (graph topology), NUM (numeric constraints), BRKT (bracket fields), STEREO (stereochemistry), STYLE (style/normalization), SYN (parser-only fallback), INTERNAL (fallback)
+- Category: LEX (lexing), BRKT (bracket) BRCH (branch structure), GRP (groups), RING (ring rules), TOPO (graph topology), VALENCE (valence checks), NUM (numeric constraints), BRKT (bracket fields), STEREO (stereochemistry), STYLE (style/normalization), SYN (parser-only fallback), INTERNAL (fallback)
 - Code: stable UPPER_SNAKE identifiers (no numeric prefixes); messages are short and deterministic; parameters are carried as named fields
 - Span: byte range [start, end) over the original input
 
@@ -52,6 +52,11 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 
 - TOPO_SELF_LOOP (TOPOLOGY, Error): self-loop edge present
 - TOPO_PARALLEL_EDGES (TOPOLOGY, Error): more than one edge between the same atom pair
+
+- VALENCE_EXCEEDS_MAX (VALENCE, Error): observed valence exceeds the highest allowed valence state for the element
+- VALENCE_BRACKET_H_MISMATCH (VALENCE, Error): explicit bracket H-count conflicts with valence-based implicit hydrogen count
+- VALENCE_NO_MATCH (VALENCE, Warning): no valence pattern matched the atom (element, bond sum, charge, etc.)
+- VALENCE_AMBIGUOUS_MATCH (VALENCE, Warning): multiple valence patterns matched; selected the most specific
 
 // TODO: Syntactic error = STYLE_AVOID_AROMATICITY_OUTSIDE_RINGS 
 - AROM_ATOM_NOT_IN_RING (AROM, Error): aromatic atom not in ring
@@ -112,6 +117,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - STYLE_PREFER_DIRECT_BOND_OVER_DOT_RING_CLOSURE (STYLE, Warning): avoid making ring closures across dot bonds, replace with simple bonds
 // TODO: What about the biphenyl example?
 - STYLE_AVOID_INCONSISTENT_AROMATICITY (AROM, Warning): Non-aromatic bonds (single, double, triple, quadruple) between aromatic atoms or aromatic bonds between non-aromatic atoms
+ - AROM_INCONSISTENT_LOWERCASE (AROM, Warning): aromatic tokens used but HMO shows no significant delocalization
 
 - NUM_HCOUNT_EXCEEDS_MAX_IMPLICIT (NUM, Warning): H-count exceeds element's max implicit hydrogens
 - NUM_CHARGE_OUTSIDE_ELEMENT_RANGE (NUM, Warning): charge outside element-supported bounds
