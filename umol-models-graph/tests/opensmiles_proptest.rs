@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_models_graph::io::config::SmilesParseFlags;
-use umol_models_graph::io::smiles::parser::parse_smiles_inner;
+use umol_models_graph::io::smiles::parser::parse_smiles_with;
 use umol_models_graph::io::smiles::{parse_smiles, ParseError};
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
@@ -28,7 +28,7 @@ proptest! {
     fn never_panics_on_ascii_lenient(input in smilesish()) {
         let flags = SmilesParseFlags::INTERTOKEN_WS | SmilesParseFlags::COMMENTS | SmilesParseFlags::EXPLICIT_EOI;
         let _ = std::panic::catch_unwind(|| {
-            let _ = parse_smiles_inner(&input, flags);
+            let _ = parse_smiles_with(&input, flags);
         }).expect("parse_smiles_m6(lenient) panicked");
     }
 

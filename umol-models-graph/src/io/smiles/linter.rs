@@ -422,8 +422,6 @@ fn run_style_and_numeric_checks(ctx: &LintContext, emit: &mut Emitter, only_when
         i += 1;
     }
 
-    // Bracket-based style/num checks are deferred to a later pass to avoid re-parsing.
-
     // Ring numbering style checks only when parsing succeeded to avoid noise
     if only_when_parse_ok {
         let seq = ring_indices_sequence(bytes);

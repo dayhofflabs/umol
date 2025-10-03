@@ -1000,7 +1000,7 @@ fn whitespace_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
     let flags = SmilesParseFlags::INTERTOKEN_WS
         | SmilesParseFlags::COMMENTS
         | SmilesParseFlags::EXPLICIT_EOI;
-    let res = parse_smiles_inner(input, flags);
+    let res = parse_smiles_with(input, flags);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -1016,7 +1016,7 @@ fn whitespace_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError
     let flags = SmilesParseFlags::INTERTOKEN_WS
         | SmilesParseFlags::COMMENTS
         | SmilesParseFlags::EXPLICIT_EOI;
-    let res = parse_smiles_inner(input, flags);
+    let res = parse_smiles_with(input, flags);
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);

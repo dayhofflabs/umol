@@ -429,3 +429,122 @@ Threading:
 - Add parser ring side-channel (flag-gated) for spans.
 
 
+### Interface design
+
+### Core critiques and proposed simplifications
+
+- Diagnostics
+  - Single source of truth: centralize code/kind definitions as enums. Provide a complete list via an API.
+  - Decouple emission from formatting: producers emit structured events with code+args; formatting is lazy at output time.
+  - Remove ad-hoc conversion sites: map `ParseError` to diagnostics in one place (diagnostics mapper), not inside `linter`.
+  - Replace side-channel with explicit `ParseMeta` return value; pass it to later stages instead of hidden channels.
+  - Provide an indexable catalog of diagnostics for tooling and docs.
+
+- Configuration
+  - Consolidate into one `SmilesIoConfig { parse, lint, check, models }`.
+  - Split flags by concern: `SmilesParseFlags`, `SmilesLintFlags`, `SmilesCheckFlags`.
+  - Externalize model data (valence/aromaticity) to files and load into `Models`.
+  - Keep severity overrides and enable/disable lists in `SmilesLintFlags`.
+
+- API coherence
+  - Make stages explicit and composable:
+    - parse → check → transform
+  - Replace “artifacts” with strongly-typed annotations:
+    - `TopologyInfo`, `ValenceAnnotations`, `AromaticityAnnotations`, `StereoInfo`
+  - Offer both stage APIs and a “pipeline” convenience API.
+  - No global sinks; every function returns data + diagnostics.
+
+### Proposed user-visible types
+
+- Diagnostics (enumerable and structured)
+  - enum DiagnosticCategory { Lex, Ring, Bracket, Branch, Stereo, Topology, Valence, Arom, Style, Io }
+  - enum DiagnosticCode { RING_UNCLOSED, LEX_INVALID_ELEMENT, TOPO_PARALLEL_EDGES, VALENCE_EXCEEDS_MAX, AROM_INCONSISTENT_LOWERCASE, … }
+  - struct Diagnostic { code: DiagnosticCode, category: DiagnosticCategory, severity: Severity, span: Span, args: DiagnosticArgs }
+  - struct DiagnosticArgs { key/value small data; lazily formatted }
+  - struct DiagnosticsReport { diagnostics: Vec<Diagnostic> }
+  - fn DiagnosticCode::all() -> &'static [DiagnosticCode]
+
+- Parse results and metadata
+  - struct ParseOutput { sir: Option<SimpleMolecule>, meta: ParseMeta, diagnostics: DiagnosticsReport }
+  - struct ParseMeta { ring_events: Vec<RingEvent>, bracket_spans: Vec<Span>, token_spans: Vec<Span>, … }
+
+- Check results (annotations)
+  - struct CheckOutput { annotations: Annotations, diagnostics: DiagnosticsReport }
+  - struct Annotations { topology: Option<TopologyInfo>, valence: Option<ValenceAnnotations>, arom: Option<AromaticityAnnotations>, stereo: Option<StereoInfo> }
+  - struct TopologyInfo { self_loops: usize, parallel_edge_pairs: usize, … }
+  - struct ValenceAnnotations { implicit_h: Vec<u8>, overflow_atoms: Vec<AtomId>, … }
+  - struct AromaticityAnnotations { pi_centers: Vec<AtomId>, pi_edges: Vec<(AtomId, AtomId)>, bond_order_pi: Vec<((AtomId,AtomId), f32)>, … }
+  - struct StereoInfo { double_bond_marks: Vec<BondId>, issues: Vec<StereoIssue>, … }
+
+- Graph transformation
+  - struct GraphOutput { gir: Graph, diagnostics: DiagnosticsReport }
+
+- Configuration and models
+  - struct SmilesIoConfig { parse: SmilesParseFlags, lint: SmilesLintFlags, check: SmilesCheckFlags, models: Models }
+  - struct SmilesParseFlags { whitespace: Mode, lenient_comments: bool, … }
+  - struct SmilesLintFlags { enabled: Vec<DiagnosticCode>, disabled: Vec<DiagnosticCode>, severity_overrides: Vec<(DiagnosticCode, Severity)> }
+  - struct SmilesCheckFlags { enable_topology: bool, enable_valence: bool, enable_aromaticity: bool, enable_stereo: bool, valence: ValenceConfig, aromaticity: AromaticityConfig }
+  - struct Models { valence: ValenceModel, aromaticity: AromaticityModel }
+
+### Stage APIs
+
+- Parsing
+  - fn parse_smiles(input: &str, flags: &SmilesParseFlags) -> ParseOutput
+
+- Checking (post-parse)
+  - fn check_smiles(sir: &SimpleMolecule, meta: &ParseMeta, cfg: &SmilesCheckFlags, models: &Models) -> CheckOutput
+
+- Transform
+  - fn sir_to_gir(sir: &SimpleMolecule, ann: &Annotations) -> GraphOutput
+
+- Lint-only (style/advice; optional)
+  - fn lint_smiles(input: &str, flags: &SmilesLintFlags) -> DiagnosticsReport
+
+- Pipeline (convenience)
+  - fn smiles_to_graph(input: &str, cfg: &SmilesIoConfig) -> (GraphOutput, Annotations, DiagnosticsReport)
+  - fn check_and_annotate(input: &str, cfg: &SmilesIoConfig) -> (ParseOutput, CheckOutput)
+
+### Diagnostics emission model
+
+- Producers call a small bus with structured events:
+  - parser emits ParseEvents (including `ParseError` + positions) and raw diagnostic events
+  - checker emits CheckEvents
+- A centralized mapper transforms events → `Diagnostic` with enum `DiagnosticCode` + `args`.
+- Reporter aggregates diagnostics; formatting defers until display. Messages are interned by `DiagnosticCode`.
+
+This yields:
+- Enumerability of all diagnostics (via `DiagnosticCode::all()`).
+- One mapping table and formatter; minimal duplication.
+- No side-channels: `ParseMeta` is explicit.
+
+### Scenarios and ergonomic calls
+
+- a) read SMILES → validate topology → convert to graph → features
+  - let p = parse_smiles(input, &cfg.parse)
+  - let c = check_smiles(p.sir.as_ref().unwrap(), &p.meta, &cfg.check, &cfg.models)
+  - let g = sir_to_gir(p.sir.as_ref().unwrap(), &c.annotations)
+  - use g.gir for fingerprints
+
+- b) read SMILES → validate → graph → reactions
+  - same as (a), then apply reaction ops to `g.gir`
+
+- c) read SMILES → validate → write SMILES/MOL
+  - parse + check; if diagnostics have no Errors in critical categories, render canonical SMILES or MOL from `sir` (or `gir` if needed)
+
+- d) read SMILES → run all validations → emit lints
+  - lint_smiles(input, &cfg.lint)
+  - or parse+check and collect `DiagnosticsReport`, then present via your emitter
+
+- e) read SMILES → … → graph → distance geometry 3D
+  - parse + check + sir_to_gir
+  - pass `gir` to DG; optionally use `annotations.arom/valence` to parameterize
+
+### Migration steps (short)
+
+- Introduce `diagnostics::code` enum and central mapper; route parser/linter/checker through it.
+- Add `ParseMeta` return from parser; remove ad-hoc side channels.
+- Create `SmilesIoConfig` and split flags; thread through functions.
+- Rename checker “artifacts” to typed `Annotations`.
+- Provide `smiles_to_graph` pipeline wrapper.
+
+This keeps the system simple/composable, eliminates hidden state, provides full diagnostics enumerability, and clarifies where configuration/data live (flags vs. external models).

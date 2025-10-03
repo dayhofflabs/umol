@@ -48,11 +48,11 @@ pub enum ParseError {
 // Public entrypoint: strict OpenSMILES
 pub fn parse_smiles(input: &[u8]) -> Result<Molecule, ParseError> {
     let flags = SmilesParseFlags::STRICT_OPENSMILES;
-    parse_smiles_inner(input, flags)
+    parse_smiles_with(input, flags)
 }
 
 // Flags-aware inner parser
-pub fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
+pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
     let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
     let use_eoi = flags.contains(SmilesParseFlags::EXPLICIT_EOI);
