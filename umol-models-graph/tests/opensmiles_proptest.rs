@@ -41,37 +41,37 @@ proptest! {
             let ok = match err {
                 ParseError::InvalidWhitespace { pos }
                 | ParseError::InvalidComment { pos }
-                | ParseError::UnsupportedToken { pos }
+                | ParseError::InvalidToken { pos }
                 | ParseError::InvalidElement { pos }
-                | ParseError::UnbalancedBranchOpen { pos }
-                | ParseError::UnbalancedBranchClose { pos }
+                | ParseError::UnbalancedOpenParen { pos }
+                | ParseError::UnbalancedCloseParen { pos }
                 | ParseError::EmptyBranch { pos }
                 | ParseError::EmptyGroup { pos }
-                | ParseError::TopLevelGroupTrailing { pos }
-                | ParseError::TrailingBond { pos }
-                | ParseError::ConsecutiveBond { pos }
-                | ParseError::LeadingBond { pos }
-                | ParseError::RingIndexInvalid { pos }
+                | ParseError::NonfinalGroup { pos }
+                | ParseError::TrailingBondSymbol { pos }
+                | ParseError::ConsecutiveBonds { pos }
+                | ParseError::LeadingBondSymbol { pos }
+                | ParseError::InvalidRingIndex { pos }
                 | ParseError::LeadingRing { pos }
-                | ParseError::RingSelfLoop { pos }
-                | ParseError::RingTwoMember { pos }
-                | ParseError::RingMultipleRings { pos }
+                | ParseError::SelfLoopRing { pos }
+                | ParseError::TwoMemberRing { pos }
+                | ParseError::MultipleRings { pos }
                 | ParseError::LeadingDot { pos }
                 | ParseError::TrailingDot { pos }
-                | ParseError::ConsecutiveDot { pos }
+                | ParseError::ConsecutiveDots { pos }
                 | ParseError::UnbalancedOpenBracket { pos }
                 | ParseError::UnbalancedCloseBracket { pos }
                 | ParseError::InvalidBracket { pos }
-                | ParseError::BracketEmptyClass { pos }
-                | ParseError::FieldOutsideBracket { pos }
-                | ParseError::BracketDuplicateField { pos }
-                | ParseError::BracketHOnH { pos }
-                | ParseError::BracketChiralityOutOfRange { pos }
+                | ParseError::MissingClassIndex { pos }
+                | ParseError::StrayBracketField { pos }
+                | ParseError::DuplicateBracketField { pos }
+                | ParseError::BracketHwithH { pos }
+                | ParseError::ChiralityOutOfRange { pos }
                 | ParseError::GroupLeadingDot { pos }
                 | ParseError::GroupLeadingBond { pos }
                 | ParseError::UnterminatedBlockComment { pos }
                  => pos < len,
-                | ParseError::RingUnclosed { open_pos } => open_pos < len,
+                | ParseError::UnbalancedRingIndex { open_pos } => open_pos < len,
                 ParseError::RingBondDirConflict { pos, open_pos }
                 | ParseError::RingBondOrderConflict { pos, open_pos } => pos < len && open_pos < len,
             };

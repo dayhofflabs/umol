@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use super::super::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
+use super::super::diagnostics::{Category, Diagnostic, DiagnosticsReport, Severity, Span};
 use crate::io::ir::{AtomSymbol, BondOrder, BondSymbol, Molecule};
 use umol_data::{e, Element};
 
 use super::SideChannel;
 
 #[derive(Clone, Copy)]
-pub enum OverflowPolicy {
+pub enum ValencePolicy {
     Off,
     Warn,
     Error,
@@ -16,34 +16,34 @@ pub enum OverflowPolicy {
 #[derive(Clone, Copy)]
 pub struct ValenceConfig {
     pub enabled: bool,
-    pub overflow_policy: OverflowPolicy,
+    pub overflow_policy: ValencePolicy,
     pub check_bracket: bool,
     pub infer_bracket_implicit: bool,
     pub aromatic_as_one: bool,
     pub patterns_enabled: bool,
-    pub no_match_policy: OverflowPolicy,
-    pub ambiguous_match_policy: OverflowPolicy,
+    pub no_match_policy: ValencePolicy,
+    pub ambiguous_match_policy: ValencePolicy,
 }
 
 impl Default for ValenceConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            overflow_policy: OverflowPolicy::Warn,
+            overflow_policy: ValencePolicy::Warn,
             check_bracket: true,
             infer_bracket_implicit: false,
             aromatic_as_one: true,
             patterns_enabled: true,
-            no_match_policy: OverflowPolicy::Off,
-            ambiguous_match_policy: OverflowPolicy::Off,
+            no_match_policy: ValencePolicy::Off,
+            ambiguous_match_policy: ValencePolicy::Off,
         }
     }
 }
 
 #[derive(Default)]
 pub struct ValenceModel {
-    states: HashMap<Element, Vec<u8>>, // numeric fallback (empty initially)
-    pub patterns: ValencePatternTable, // explicit pattern table
+    states: HashMap<Element, Vec<u8>>,
+    pub patterns: ValencePatternTable,
 }
 
 impl ValenceModel {
@@ -343,54 +343,54 @@ pub fn check_valence(
         let total_valence = sum_orders - charge_i32;
         artifacts.atoms_checked += 1;
         let mut implicit_h_opt: Option<i32> = None;
-        if cfg.patterns_enabled {
-            let d = resolve_valence_pattern(elem, sum_orders_u8, charge_i8, None, &model.patterns);
-            if d.matches == 0 {
-                match cfg.no_match_policy {
-                    OverflowPolicy::Off => {}
-                    OverflowPolicy::Warn => report.push(Diagnostic { code: Code("VALENCE_NO_MATCH"), category: Category::Valence, severity: Severity::Warning, span: Span::new(0, input_len), message: "No valence pattern matched", details: Some(format!("atom_index={}", i)) }),
-                    OverflowPolicy::Error => report.push(Diagnostic { code: Code("VALENCE_NO_MATCH"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "No valence pattern matched", details: Some(format!("atom_index={}", i)) }),
-                }
-            } else {
-                if d.matches > 1 {
-                    match cfg.ambiguous_match_policy {
-                        OverflowPolicy::Off => {}
-                        OverflowPolicy::Warn => report.push(Diagnostic { code: Code("VALENCE_AMBIGUOUS_MATCH"), category: Category::Valence, severity: Severity::Warning, span: Span::new(0, input_len), message: "Multiple valence patterns matched; selected most specific", details: Some(format!("atom_index={}", i)) }),
-                        OverflowPolicy::Error => report.push(Diagnostic { code: Code("VALENCE_AMBIGUOUS_MATCH"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "Multiple valence patterns matched; selected most specific", details: Some(format!("atom_index={}", i)) }),
-                    }
-                }
-                if let Some(h) = d.implicit_h { implicit_h_opt = Some(h as i32); }
-            }
-        }
-        if implicit_h_opt.is_none() {
-            let states_opt = model.states_for(elem);
-            if states_opt.is_none() { continue; }
-            let states = states_opt.unwrap();
-            if states.is_empty() { continue; }
-            let mut chosen: Option<u8> = None;
-            for &s in states { if (s as i32) >= total_valence { chosen = Some(s); break; } }
-            if chosen.is_none() {
-                artifacts.overflow_count += 1;
-                match cfg.overflow_policy {
-                    OverflowPolicy::Off => {}
-                    OverflowPolicy::Warn => report.push(Diagnostic { code: Code("VALENCE_EXCEEDS_MAX"), category: Category::Valence, severity: Severity::Warning, span: Span::new(0, input_len), message: "Valence exceeds maximum allowed state", details: Some(format!("atom_index={}", i)) }),
-                    OverflowPolicy::Error => report.push(Diagnostic { code: Code("VALENCE_EXCEEDS_MAX"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "Valence exceeds maximum allowed state", details: Some(format!("atom_index={}", i)) }),
-                }
-                continue;
-            }
-            let chosen_state = chosen.unwrap() as i32;
-            implicit_h_opt = Some(chosen_state - total_valence);
-        }
-        let implicit_h = implicit_h_opt.unwrap_or(0);
-        if cfg.check_bracket {
-            if let Some(h_explicit) = atom.hydrogen_count {
-                let implied = implicit_h.max(0) as u32;
-                if h_explicit != implied {
-                    artifacts.bracket_mismatch_count += 1;
-                    report.push(Diagnostic { code: Code("VALENCE_BRACKET_H_MISMATCH"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "Bracket H count mismatches valence-based implicit H", details: Some(format!("atom_index={}, expected_H={}, found_H={}", i, implied, h_explicit)) });
-                }
-            }
-        }
+        // if cfg.patterns_enabled {
+        //     let d = resolve_valence_pattern(elem, sum_orders_u8, charge_i8, None, &model.patterns);
+        //     if d.matches == 0 {
+        //         match cfg.no_match_policy {
+        //             ValencePolicy::Off => {}
+        //             ValencePolicy::Warn => report.push(Diagnostic { code: Code("VALENCE_NO_MATCH"), category: Category::Valence, severity: Severity::Warning, span: Span::new(0, input_len), message: "No valence pattern matched", details: Some(format!("atom_index={}", i)) }),
+        //             ValencePolicy::Error => report.push(Diagnostic { code: Code("VALENCE_NO_MATCH"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "No valence pattern matched", details: Some(format!("atom_index={}", i)) }),
+        //         }
+        //     } else {
+        //         if d.matches > 1 {
+        //             match cfg.ambiguous_match_policy {
+        //                 ValencePolicy::Off => {}
+        //                 ValencePolicy::Warn => report.push(Diagnostic { code: Code("VALENCE_AMBIGUOUS_MATCH"), category: Category::Valence, severity: Severity::Warning, span: Span::new(0, input_len), message: "Multiple valence patterns matched; selected most specific", details: Some(format!("atom_index={}", i)) }),
+        //                 ValencePolicy::Error => report.push(Diagnostic { code: Code("VALENCE_AMBIGUOUS_MATCH"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "Multiple valence patterns matched; selected most specific", details: Some(format!("atom_index={}", i)) }),
+        //             }
+        //         }
+        //         if let Some(h) = d.implicit_h { implicit_h_opt = Some(h as i32); }
+        //     }
+        // }
+        // if implicit_h_opt.is_none() {
+        //     let states_opt = model.states_for(elem);
+        //     if states_opt.is_none() { continue; }
+        //     let states = states_opt.unwrap();
+        //     if states.is_empty() { continue; }
+        //     let mut chosen: Option<u8> = None;
+        //     for &s in states { if (s as i32) >= total_valence { chosen = Some(s); break; } }
+        //     if chosen.is_none() {
+        //         artifacts.overflow_count += 1;
+        //         match cfg.overflow_policy {
+        //             ValencePolicy::Off => {}
+        //             ValencePolicy::Warn => report.push(Diagnostic { code: Code("VALENCE_EXCEEDS_MAX"), category: Category::Valence, severity: Severity::Warning, span: Span::new(0, input_len), message: "Valence exceeds maximum allowed state", details: Some(format!("atom_index={}", i)) }),
+        //             ValencePolicy::Error => report.push(Diagnostic { code: Code("VALENCE_EXCEEDS_MAX"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "Valence exceeds maximum allowed state", details: Some(format!("atom_index={}", i)) }),
+        //         }
+        //         continue;
+        //     }
+        //     let chosen_state = chosen.unwrap() as i32;
+        //     implicit_h_opt = Some(chosen_state - total_valence);
+        // }
+        // let implicit_h = implicit_h_opt.unwrap_or(0);
+        // if cfg.check_bracket {
+        //     if let Some(h_explicit) = atom.hydrogen_count {
+        //         let implied = implicit_h.max(0) as u32;
+        //         if h_explicit != implied {
+        //             artifacts.bracket_mismatch_count += 1;
+        //             report.push(Diagnostic { code: Code("VALENCE_HCOUNT_MISMATCH"), category: Category::Valence, severity: Severity::Error, span: Span::new(0, input_len), message: "Bracket H count mismatches valence-based implicit H", details: Some(format!("atom_index={}, expected_H={}, found_H={}", i, implied, h_explicit)) });
+        //         }
+        //     }
+        // }
     }
     artifacts
 }

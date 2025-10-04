@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use super::super::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
+use super::super::diagnostics::{Category, Diagnostic, DiagnosticsReport, Severity, Span};
 use super::linalg::hmo_density_from_adjacency;
 use super::SideChannel;
 use crate::io::ir::{BondOrder, BondSymbol, Molecule};
+use crate::io::smiles::diagnostics::DiagnosticCode;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AromaticityMethod {
@@ -199,29 +200,29 @@ pub fn check_aromaticity(
         has_significant = significant_count > 0;
     }
 
-    if has_aromatic_tokens && (!has_significant || pg.size == 0) {
-        report.push(Diagnostic {
-            code: Code("AROM_INCONSISTENT_LOWERCASE"),
-            category: Category::Arom,
-            severity: Severity::Warning,
-            span: Span::new(0, input_len),
-            message: "Aromatic annotations inconsistent with HMO delocalization",
-            details: Some(format!(
-                "pi_centers={}, significant_edges={}",
-                pg.size, significant_count
-            )),
-        });
-    }
-    if !has_aromatic_tokens && has_significant {
-        report.push(Diagnostic {
-            code: Code("STYLE_PREFER_AROMATIC_FORM"),
-            category: Category::Style,
-            severity: Severity::Warning,
-            span: Span::new(0, input_len),
-            message: "Consider aromatic form for delocalized system",
-            details: Some(format!("significant_edges={}", significant_count)),
-        });
-    }
+    // if has_aromatic_tokens && (!has_significant || pg.size == 0) {
+    //     report.push(Diagnostic {
+    //         code: DiagnosticCode::,
+    //         category: Category::Arom,
+    //         severity: Severity::Warning,
+    //         span: Span::new(0, input_len),
+    //         message: "Aromatic annotations inconsistent with HMO delocalization",
+    //         details: Some(format!(
+    //             "pi_centers={}, significant_edges={}",
+    //             pg.size, significant_count
+    //         )),
+    //     });
+    // }
+    // if !has_aromatic_tokens && has_significant {
+    //     report.push(Diagnostic {
+    //         code: DiagnosticCode::StylePreferAromaticForm,
+    //         category: Category::Style,
+    //         severity: Severity::Warning,
+    //         span: Span::new(0, input_len),
+    //         message: "Consider aromatic form for delocalized system",
+    //         details: Some(format!("significant_edges={}", significant_count)),
+    //     });
+    // }
 
     AromaticityArtifacts {
         checked_atoms: n_atoms,

@@ -2,6 +2,127 @@
 
 use std::fmt;
 
+use strum::{AsRefStr, EnumIter, IntoEnumIterator, VariantNames};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, AsRefStr, VariantNames)]
+#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
+pub enum DiagnosticCode {
+    // Lexical errors
+    InvalidWhitespace,
+    InvalidComment,
+    UnterminatedBlockComment,
+    InvalidElement,
+    InvalidToken,
+
+    // Syntactic errors
+    UnbalancedOpenParen,
+    UnbalancedCloseParen,
+    EmptyBranch,
+    EmptyGroup,
+    NonfinalGroup,
+    LeadingBond,
+    TrailingBond,
+    ConsecutiveBonds,
+    LeadingRing,
+    UnbalancedRingIndex,
+    InvalidRingIndex,
+    MismatchedRingBondDirs,
+    MismatchedRingBondOrders,
+    LeadingDot,
+    TrailingDot,
+    ConsecutiveDots,
+    DotBeforeRing,
+    EmptyBracket,
+    UnbalancedOpenBracket,
+    UnbalancedCloseBracket,
+    StrayBracketField,
+    DuplicateBracketField,
+    MissingClassIndex,
+    MissingChiralityIndex,
+    BracketHwithHcount,
+    InvalidBracket,
+
+    // Topology errors
+    SelfLoopRing,
+    ParallelEdges,
+
+    // Valence errors
+    ValenceOutOfElementRange,
+    HcountOutOfElementRange,
+    ChargeOutOElementfRange,
+    HcountMismatch,
+    NoMatch,
+    AmbiguousMatch,
+
+    // Aromaticity errors
+    AromaticAtomNotInRing,
+    AromaticBondNotInRing,
+    NoMatchingAromaticAtomConfig,
+    InvalidAromaticAtom,
+    InvalidAromaticBondAtom,
+    AromaticBondOrderMismatch,
+    KekuleInconsistent,
+    HuckelFail,
+
+    // Aromaticity warnings
+    AvoidMixedAromaticity,
+    AvoidInconsistentAromaticity,
+    HuckelInconsistent,
+
+    // Stereochemistry errors
+    DoubleConflict,
+    DoubleInsufficient,
+
+    // Stereochemistry warnings
+    AvoidUnnecessaryStereoDescriptor,
+
+    // Numeric errors
+    Overflow,
+    ClassOutOfRange,
+    HcountOutOfRange,
+    ChargeOutOfRange,
+    IsotopeOutOfRange,
+    ChiralityOutOfRange,
+
+    // Numeric warnings
+    IsotopeUncatalogued,
+
+    // Internal errors
+    InternalError,
+
+    // Style warnings
+    PreferBareOrganicAtom,
+    PreferImplicitH,
+    PreferBracketFieldOrder,
+    PreferSimpleChargeSign,
+    PreferSimpleHcount,
+    AvoidExplicitSingleBond,
+    AvoidExplicitAromaticBond,
+    AvoidUnnecessaryGroup,
+    AvoidRedundantNestedParens,
+    PreferBranchesBeforeRingBonds,
+    PreferFirstRingOne,
+    PreferConsecutiveRingNumbering,
+    AvoidReusedRingIndices,
+    PreferSingleDigitRingIndex,
+    PreferSingleRingClosure,
+    AvoidAdjacentRingClosures,
+    PreferBondSymbolAtRingOpen,
+    AvoidRingClosureAcrossDot,
+    PreferAromaticForm,
+}
+
+impl DiagnosticCode {
+    // Iterate all enum variants
+    pub fn all() -> impl Iterator<Item = DiagnosticCode> {
+        DiagnosticCode::iter()
+    }
+    // Stable string name for this code (SCREAMING_SNAKE_CASE variant name)
+    pub fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     Error,
@@ -12,20 +133,13 @@ pub enum Severity {
 pub enum Category {
     Lex,
     Syn,
-    Ring,
-    Branch,
-    Num,
-    Bracket,
-    Topology,
+    Topo,
     Valence,
     Arom,
     Stereo,
     Style,
     Internal,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Code(pub &'static str);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
@@ -41,7 +155,7 @@ impl Span {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
-    pub code: Code,
+    pub code: DiagnosticCode,
     pub severity: Severity,
     pub category: Category,
     pub span: Span,
@@ -50,9 +164,14 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error(code: Code, category: Category, span: Span, message: &'static str) -> Self {
+    pub fn error(
+        code: impl Into<DiagnosticCode>,
+        category: Category,
+        span: Span,
+        message: &'static str,
+    ) -> Self {
         Self {
-            code,
+            code: code.into(),
             severity: Severity::Error,
             category,
             span,
@@ -60,9 +179,14 @@ impl Diagnostic {
             details: None,
         }
     }
-    pub fn warning(code: Code, category: Category, span: Span, message: &'static str) -> Self {
+    pub fn warning(
+        code: impl Into<DiagnosticCode>,
+        category: Category,
+        span: Span,
+        message: &'static str,
+    ) -> Self {
         Self {
-            code,
+            code: code.into(),
             severity: Severity::Warning,
             category,
             span,
@@ -111,13 +235,28 @@ impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} [{}:{:?}] @{}..{}: {}",
+            "{} [{}:{:?}] @{}..{}",
             self.message,
-            self.code.0,
+            self.code.as_str(),
             self.category,
             self.span.start,
             self.span.end,
-            self.details.as_deref().unwrap_or("")
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_diagnostic_display() {
+        let d = Diagnostic::error(
+            DiagnosticCode::InvalidToken,
+            Category::Lex,
+            Span::new(0, 10),
+            "Invalid token",
+        );
+        assert_eq!(d.to_string(), "Invalid token [LEX:0..10]");
     }
 }

@@ -22,6 +22,7 @@ regex = "1.11.2"
 serde = { version = "1.0.221", features = ["derive"] }
 slog = "2.7.0"
 smallvec = "1.15.1"
+strum = { version = "0.27.2", features = ["derive"] }
 umol = { path = "../umol" }
 umol-data = { path = "../umol-data" }
 

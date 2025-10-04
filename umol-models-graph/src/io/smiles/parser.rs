@@ -6,43 +6,47 @@ use umol_data::Element;
 use crate::io::config::SmilesParseFlags;
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
+use super::api::ParseMeta;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseError {
     InvalidWhitespace { pos: usize },
     InvalidComment { pos: usize },
     UnterminatedBlockComment { pos: usize },
-    UnsupportedToken { pos: usize },
     InvalidElement { pos: usize },
-    UnbalancedBranchOpen { pos: usize },
-    UnbalancedBranchClose { pos: usize },
+    InvalidToken { pos: usize },
+
+    UnbalancedOpenParen { pos: usize },
+    UnbalancedCloseParen { pos: usize },
     EmptyBranch { pos: usize },
     EmptyGroup { pos: usize },
-    TopLevelGroupTrailing { pos: usize },
-    TrailingBond { pos: usize },
-    ConsecutiveBond { pos: usize },
+    NonfinalGroup { pos: usize },
+
     LeadingBond { pos: usize },
-    RingIndexInvalid { pos: usize },
+    TrailingBond { pos: usize },
+    ConsecutiveBonds { pos: usize },
+
     LeadingRing { pos: usize },
-    RingBondDirConflict { pos: usize, open_pos: usize },
-    RingBondOrderConflict { pos: usize, open_pos: usize },
-    RingSelfLoop { pos: usize },
-    RingTwoMember { pos: usize },
-    RingMultipleRings { pos: usize },
-    RingUnclosed { open_pos: usize },
+    UnbalancedRingIndex { open_pos: usize },
+    InvalidRingIndex { pos: usize },
+    MismatchedRingBondDirs { pos: usize, open_pos: usize },
+    MismatchedRingBondOrders { pos: usize, open_pos: usize },
+
     LeadingDot { pos: usize },
     TrailingDot { pos: usize },
-    ConsecutiveDot { pos: usize },
+    ConsecutiveDots { pos: usize },
+    DotBeforeRing { pos: usize },
+
+    EmptyBracket { pos: usize },
     UnbalancedOpenBracket { pos: usize },
     UnbalancedCloseBracket { pos: usize },
+    StrayBracketField { pos: usize },
+    DuplicateBracketField { pos: usize },
+    MissingClassIndex { pos: usize },
+    MissingChiralityIndex { pos: usize },
+    ChiralityOutOfRange { pos: usize },
+    BracketHwithHcount { pos: usize },
     InvalidBracket { pos: usize },
-    BracketEmptyClass { pos: usize },
-    BracketChiralityOutOfRange { pos: usize },
-    FieldOutsideBracket { pos: usize },
-    BracketDuplicateField { pos: usize },
-    BracketHOnH { pos: usize },
-    GroupLeadingDot { pos: usize },
-    GroupLeadingBond { pos: usize },
 }
 
 // Public entrypoint: strict OpenSMILES
@@ -85,10 +89,10 @@ pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecu
                 return Err(ParseError::InvalidWhitespace { pos: start + k });
             }
         }
-        return parse_core(&input[start..end], flags);
+        return parse_core(&input[start..end], flags).map(|(m, _)| m);
     }
 
-    parse_core(input, flags)
+    parse_core(input, flags).map(|(m, _)| m)
 }
 
 fn is_digit(b: u8) -> bool {
@@ -317,7 +321,7 @@ fn parse_bracket(
                             element = Some(e);
                             consumed = 1;
                         } else {
-                            return Err(ParseError::InvalidBracket { pos: pos_offset });
+                            return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
                         }
                     }
                     i += consumed;
@@ -371,17 +375,17 @@ fn parse_bracket(
                         aromatic = true;
                         i += 2;
                     } else {
-                        return Err(ParseError::InvalidBracket { pos: pos_offset });
+                        return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
                     }
                 }
                 _ => {
-                    return Err(ParseError::InvalidBracket { pos: pos_offset });
+                    return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
                 }
             }
         }
     } else {
         // Neither '*' nor element
-        return Err(ParseError::InvalidBracket { pos: pos_offset });
+        return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
     }
 
     // 3) Tail fields in any order
@@ -395,10 +399,10 @@ fn parse_bracket(
         match b0 {
             b'H' => {
                 if element == Some(Element::H) {
-                    return Err(ParseError::BracketHOnH { pos: pos_offset });
+                    return Err(ParseError::BracketHwithHcount { pos: pos_offset + 1 + i });
                 }
                 if hcount.is_some() {
-                    return Err(ParseError::BracketDuplicateField { pos: pos_offset });
+                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
                 }
                 let mut val: u32 = 1; // default H
                 if i + 1 < n && inner[i + 1].is_ascii_digit() {
@@ -410,7 +414,7 @@ fn parse_bracket(
             }
             b'+' | b'-' => {
                 if charge.is_some() {
-                    return Err(ParseError::BracketDuplicateField { pos: pos_offset });
+                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
                 }
                 let sign = if b0 == b'+' { 1 } else { -1 };
                 let mut j = i + 1;
@@ -439,10 +443,10 @@ fn parse_bracket(
             }
             b':' => {
                 if class_num.is_some() {
-                    return Err(ParseError::BracketDuplicateField { pos: pos_offset });
+                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
                 }
                 if i + 1 >= n || !inner[i + 1].is_ascii_digit() {
-                    return Err(ParseError::BracketEmptyClass { pos: pos_offset });
+                    return Err(ParseError::MissingClassIndex { pos: pos_offset + 1 + i });
                 }
                 let mut j = i + 1;
                 let mut v: u32 = 0;
@@ -457,7 +461,7 @@ fn parse_bracket(
             }
             b'@' => {
                 if chir.is_some() {
-                    return Err(ParseError::BracketDuplicateField { pos: pos_offset });
+                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
                 }
                 // @@
                 if i + 1 < n && inner[i + 1] == b'@' {
@@ -466,49 +470,46 @@ fn parse_bracket(
                     continue;
                 }
                 // @TH[12]
-                if i + 3 < n
-                    && inner[i + 1] == b'T'
-                    && inner[i + 2] == b'H'
-                    && inner[i + 3].is_ascii_digit()
-                {
+                if i + 2 < n && inner[i + 1] == b'T' && inner[i + 2] == b'H' {
+                    if i + 3 >= n || !inner[i + 3].is_ascii_digit() {
+                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
+                    }
                     let v = (inner[i + 3] - b'0') as u32;
                     if v == 1 || v == 2 {
                         chir = Some(Chirality::Tetrahedral { arr: v });
                         i += 4;
                         continue;
                     }
-                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
+                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
                 }
                 // @AL[12]
-                if i + 3 < n
-                    && inner[i + 1] == b'A'
-                    && inner[i + 2] == b'L'
-                    && inner[i + 3].is_ascii_digit()
-                {
+                if i + 2 < n && inner[i + 1] == b'A' && inner[i + 2] == b'L' {
+                    if i + 3 >= n || !inner[i + 3].is_ascii_digit() {
+                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
+                    }
                     let v = (inner[i + 3] - b'0') as u32;
                     if v == 1 || v == 2 {
                         chir = Some(Chirality::Allenal { arr: v });
                         i += 4;
                         continue;
                     }
-                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
+                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
                 }
                 // @SP[123]
-                if i + 3 < n
-                    && inner[i + 1] == b'S'
-                    && inner[i + 2] == b'P'
-                    && inner[i + 3].is_ascii_digit()
-                {
+                if i + 2 < n && inner[i + 1] == b'S' && inner[i + 2] == b'P' {
+                    if i + 3 >= n || !inner[i + 3].is_ascii_digit() {
+                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
+                    }
                     let v = (inner[i + 3] - b'0') as u32;
                     if v >= 1 && v <= 3 {
                         chir = Some(Chirality::SquarePlanar { arr: v });
                         i += 4;
                         continue;
                     }
-                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
+                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
                 }
                 // @TBn (allow 1..20 with optional leading 0)
-                if i + 3 < n && inner[i + 1] == b'T' && inner[i + 2] == b'B' {
+                if i + 2 < n && inner[i + 1] == b'T' && inner[i + 2] == b'B' {
                     let mut j = i + 3;
                     let mut v: u32 = 0;
                     let mut cnt = 0;
@@ -518,17 +519,17 @@ fn parse_bracket(
                         cnt += 1;
                     }
                     if cnt == 0 {
-                        return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
+                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
                     }
                     if v >= 1 && v <= 20 {
                         chir = Some(Chirality::TrigonalBipyramidal { arr: v });
                         i = j;
                         continue;
                     }
-                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
+                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
                 }
                 // @OHn (allow 1..30 with optional leading 0)
-                if i + 3 < n && inner[i + 1] == b'O' && inner[i + 2] == b'H' {
+                if i + 2 < n && inner[i + 1] == b'O' && inner[i + 2] == b'H' {
                     let mut j = i + 3;
                     let mut v: u32 = 0;
                     let mut cnt = 0;
@@ -538,21 +539,21 @@ fn parse_bracket(
                         cnt += 1;
                     }
                     if cnt == 0 {
-                        return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
+                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
                     }
                     if v >= 1 && v <= 30 {
                         chir = Some(Chirality::Octahedral { arr: v });
                         i = j;
                         continue;
                     }
-                    return Err(ParseError::BracketChiralityOutOfRange { pos: pos_offset });
+                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
                 }
                 // '@' alone
                 chir = Some(Chirality::Clockwise);
                 i += 1;
             }
             _ => {
-                return Err(ParseError::InvalidBracket { pos: pos_offset });
+                return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
             }
         }
     }
@@ -624,7 +625,7 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
+fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option<ParseMeta>), ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
     let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
     let _record_lint = flags.contains(SmilesParseFlags::LINT_SIDECHANNEL);
@@ -650,31 +651,37 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
 
     while i < n {
         let b0 = input[i];
-        if allow_comments && b0 == b'/' && i + 1 < n {
+        if b0 == b'/' && i + 1 < n {
             let b1 = input[i + 1];
-            if b1 == b'/' {
-                i += 2;
-                while i < n && input[i] != b'\n' {
-                    i += 1;
-                }
-                continue;
-            }
-            if b1 == b'*' {
-                let start_pos = i;
-                i += 2;
-                let mut closed = false;
-                while i + 1 < n {
-                    if input[i] == b'*' && input[i + 1] == b'/' {
-                        i += 2;
-                        closed = true;
-                        break;
+            if allow_comments {
+                if b1 == b'/' {
+                    i += 2;
+                    while i < n && input[i] != b'\n' {
+                        i += 1;
                     }
-                    i += 1;
+                    continue;
                 }
-                if !closed {
-                    return Err(ParseError::UnterminatedBlockComment { pos: start_pos });
+                if b1 == b'*' {
+                    let start_pos = i;
+                    i += 2;
+                    let mut closed = false;
+                    while i + 1 < n {
+                        if input[i] == b'*' && input[i + 1] == b'/' {
+                            i += 2;
+                            closed = true;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    if !closed {
+                        return Err(ParseError::UnterminatedBlockComment { pos: start_pos });
+                    }
+                    continue;
                 }
-                continue;
+            } else {
+                if b1 == b'/' || b1 == b'*' {
+                    return Err(ParseError::InvalidComment { pos: i });
+                }
             }
         }
         if matches!(b0, b' ' | b'\t' | b'\n' | b'\r') {
@@ -719,7 +726,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                 return Err(ParseError::TrailingBond { pos });
             }
             let Some(frame) = pstack.pop() else {
-                return Err(ParseError::UnbalancedBranchClose { pos: i });
+                return Err(ParseError::UnbalancedCloseParen { pos: i });
             };
             match frame {
                 Frame::Branch { base, had_atom, .. } => {
@@ -736,7 +743,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                             return Err(ParseError::EmptyGroup { pos: i });
                         }
                         if i > 0 && input[i - 1] == b'.' {
-                            return Err(ParseError::LeadingDot { pos: i });
+                            return Err(ParseError::LeadingDot { pos: i - 1 });
                         }
                         if open_pos != 0 {
                             return Err(ParseError::EmptyGroup { pos: i });
@@ -748,7 +755,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                         if pstack.is_empty() && i + 1 != n {
                             let next = input[i + 1];
                             if next != b'.' {
-                                return Err(ParseError::TopLevelGroupTrailing { pos: i });
+                                return Err(ParseError::NonfinalGroup { pos: i });
                             }
                         }
                     }
@@ -768,13 +775,21 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                 had_atom: false, ..
             }) = pstack.last()
             {
-                return Err(ParseError::GroupLeadingDot { pos: i });
+                return Err(ParseError::LeadingDot { pos: i });
             }
             if i + 1 == n {
                 return Err(ParseError::TrailingDot { pos: i });
             }
             if input[i + 1] == b'.' {
-                return Err(ParseError::ConsecutiveDot { pos: i });
+                return Err(ParseError::ConsecutiveDots { pos: i });
+            }
+            // Detect dot before ring (single digit ring index)
+            if input[i + 1].is_ascii_digit() {
+                return Err(ParseError::DotBeforeRing { pos: i });
+            }
+            // Detect dot before percent ring index
+            if input[i + 1] == b'%' {
+                return Err(ParseError::DotBeforeRing { pos: i });
             }
             last_atom_idx = None;
             last_aromatic = false;
@@ -821,7 +836,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                     let _b = last_atom_idx.unwrap();
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(ParseError::RingBondDirConflict {
+                            return Err(ParseError::MismatchedRingBondDirs {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -829,7 +844,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                     }
                     if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                         if o1 != o2 {
-                            return Err(ParseError::RingBondOrderConflict {
+                            return Err(ParseError::MismatchedRingBondOrders {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -838,7 +853,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                     if open.dir.is_some() || dir_opt.is_some() {
                         let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                         if ord != BondOrder::Single {
-                            return Err(ParseError::RingBondOrderConflict {
+                            return Err(ParseError::MismatchedRingBondOrders {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -876,7 +891,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
         }
         if b0 == b'%' {
             if i + 2 >= n || !is_digit(input[i + 1]) || !is_digit(input[i + 2]) {
-                return Err(ParseError::RingIndexInvalid { pos: i });
+                return Err(ParseError::InvalidRingIndex { pos: i });
             }
             if last_atom_idx.is_none() {
                 return Err(ParseError::LeadingRing { pos: i });
@@ -920,7 +935,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                     let _b = last_atom_idx.unwrap();
                     if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
                         if d1 != d2 {
-                            return Err(ParseError::RingBondDirConflict {
+                            return Err(ParseError::MismatchedRingBondDirs {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -928,7 +943,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                     }
                     if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                         if o1 != o2 {
-                            return Err(ParseError::RingBondOrderConflict {
+                            return Err(ParseError::MismatchedRingBondOrders {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -937,7 +952,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
                     if open.dir.is_some() || dir_opt.is_some() {
                         let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                         if ord != BondOrder::Single {
-                            return Err(ParseError::RingBondOrderConflict {
+                            return Err(ParseError::MismatchedRingBondOrders {
                                 pos: i,
                                 open_pos: open.open_pos,
                             });
@@ -975,14 +990,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
         }
         if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') {
             if pending_bond.is_some() {
-                return Err(ParseError::ConsecutiveBond { pos: i });
+                return Err(ParseError::ConsecutiveBonds { pos: i });
             }
             if last_atom_idx.is_none() {
                 if let Some(Frame::Group {
                     had_atom: false, ..
                 }) = pstack.last()
                 {
-                    return Err(ParseError::GroupLeadingBond { pos: i });
+                    return Err(ParseError::LeadingBond { pos: i });
                 }
                 return Err(ParseError::LeadingBond { pos: i });
             }
@@ -999,6 +1014,10 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
             }
             if j >= n {
                 return Err(ParseError::UnbalancedOpenBracket { pos: i });
+            }
+            // Empty bracket []
+            if j == start {
+                return Err(ParseError::EmptyBracket { pos: i });
             }
             let inner = &input[start..j];
             let (elem_opt, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt, unknown) =
@@ -1252,9 +1271,9 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
         }
         // Bracket-only fields outside bracket
         if b0 == b'@' || b0 == b'+' {
-            return Err(ParseError::FieldOutsideBracket { pos: i });
+            return Err(ParseError::StrayBracketField { pos: i });
         }
-        return Err(ParseError::UnsupportedToken { pos: i });
+        return Err(ParseError::InvalidToken { pos: i });
     }
 
     if pending_bond.is_some() {
@@ -1265,7 +1284,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
         let pos = match pstack.last().unwrap() {
             Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
         };
-        return Err(ParseError::UnbalancedBranchOpen { pos });
+        return Err(ParseError::UnbalancedOpenParen { pos });
     }
     let mut last_open: Option<usize> = None;
     for entry in ring_table.iter().flatten() {
@@ -1279,10 +1298,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseEr
         }
     }
     if let Some(pos_open) = last_open {
-        return Err(ParseError::RingUnclosed { open_pos: pos_open });
+        return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
     }
+    let meta_opt = if let Some(seq) = _ring_sequence {
+        Some(ParseMeta { token_spans: Vec::new(), ring_events: seq.into_iter().map(|(d, _)| d).collect() })
+    } else { None };
     let mut mols = builder.finish();
-    Ok(mols.pop().unwrap_or_default())
+    let mol = mols.pop().unwrap_or_default();
+    Ok((mol, meta_opt))
 }
 
 #[cfg(test)]

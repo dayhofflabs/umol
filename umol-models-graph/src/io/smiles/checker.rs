@@ -12,7 +12,7 @@ pub use aromaticity::{
 pub use stereo_double::{check_stereo_double, StereoArtifacts};
 pub use topology::{check_topology, TopologyArtifacts};
 pub use valence::{
-    check_valence, OverflowPolicy, ValenceArtifacts, ValenceConfig, ValenceModel, ValencePattern,
+    check_valence, ValencePolicy, ValenceArtifacts, ValenceConfig, ValenceModel, ValencePattern,
     ValencePatternTable,
 };
 

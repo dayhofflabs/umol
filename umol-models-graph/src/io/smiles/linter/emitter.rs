@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::super::diagnostics::{Diagnostic, DiagnosticsReport, Severity};
+use super::super::diagnostics::{Diagnostic, DiagnosticCode, DiagnosticsReport, Severity};
 
 #[derive(Default)]
 pub struct LintConfig {
@@ -29,7 +29,7 @@ impl<'a> Emitter<'a> {
     }
 
     pub fn emit(&mut self, mut d: Diagnostic) {
-        let code_str = d.code.0;
+        let code_str = d.code.as_str();
         if self.config.disabled_codes.contains(code_str) {
             return;
         }

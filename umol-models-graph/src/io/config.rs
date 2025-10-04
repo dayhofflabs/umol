@@ -207,6 +207,8 @@ impl fmt::Display for SmilesParseFlags {
 
 pub struct SmilesIoConfig {
     pub parse_flags: SmilesParseFlags,
+    pub lint: Option<SmilesLintFlags>,
+    pub check: SmilesCheckFlags,
 }
 
 impl SmilesIoConfig {
@@ -215,7 +217,7 @@ impl SmilesIoConfig {
     }
 
     pub fn with_flags(flags: SmilesParseFlags) -> Self {
-        Self { parse_flags: flags }
+        Self { parse_flags: flags, lint: None, check: SmilesCheckFlags::default() }
     }
 
     pub fn strict_opensmiles() -> Self {
@@ -233,4 +235,18 @@ impl fmt::Display for SmilesIoConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SmilesIoConfig({})", self.parse_flags)
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SmilesLintFlags {
+    pub enabled: Vec<&'static str>,
+    pub disabled: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SmilesCheckFlags {
+    pub enable_topology: bool,
+    pub enable_valence: bool,
+    pub enable_aromaticity: bool,
+    pub enable_stereo: bool,
 }
