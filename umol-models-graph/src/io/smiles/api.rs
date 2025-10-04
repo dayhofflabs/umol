@@ -1,7 +1,7 @@
 //! SMILES API scaffolding: stage outputs, annotations, and helpers
 
 use crate::io::ir::Molecule;
-use crate::io::smiles::diagnostics::{Category, Diagnostic, DiagnosticCode, DiagnosticsReport, Span};
+use crate::io::smiles::diagnostics::{DiagnosticCategory, Diagnostic, DiagnosticCode, DiagnosticsReport, Span};
 // use super::checker::{
 //     check_aromaticity, check_stereo_double, check_topology, check_valence, AromaticityConfig,
 //     AromaticityModel, SideChannel, ValenceConfig, ValenceModel,

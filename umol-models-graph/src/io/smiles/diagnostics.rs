@@ -2,9 +2,9 @@
 
 use std::fmt;
 
-use strum::{AsRefStr, EnumIter, IntoEnumIterator, VariantNames};
+use strum::{AsRefStr, EnumIter, IntoEnumIterator};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, AsRefStr, VariantNames)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, AsRefStr)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum DiagnosticCode {
     // Lexical errors
@@ -129,8 +129,9 @@ pub enum Severity {
     Warning,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Category {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, AsRefStr, EnumIter)]
+#[strum(serialize_all = "UPPERCASE")]
+pub enum DiagnosticCategory {
     Lex,
     Syn,
     Topo,
@@ -139,6 +140,23 @@ pub enum Category {
     Stereo,
     Style,
     Internal,
+}
+
+impl DiagnosticCategory {
+    pub fn all() -> impl Iterator<Item = DiagnosticCategory> {
+        DiagnosticCategory::iter()
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+
+    pub fn default_category(&self) -> DiagnosticCategory {
+        DiagnosticCategory::Internal
+    }
+    pub fn default_severity(&self) -> Severity {
+        Severity::Error
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,7 +175,7 @@ impl Span {
 pub struct Diagnostic {
     pub code: DiagnosticCode,
     pub severity: Severity,
-    pub category: Category,
+    pub category: DiagnosticCategory,
     pub span: Span,
     pub message: &'static str,
     pub details: Option<String>,
@@ -166,7 +184,7 @@ pub struct Diagnostic {
 impl Diagnostic {
     pub fn error(
         code: impl Into<DiagnosticCode>,
-        category: Category,
+        category: DiagnosticCategory,
         span: Span,
         message: &'static str,
     ) -> Self {
@@ -181,7 +199,7 @@ impl Diagnostic {
     }
     pub fn warning(
         code: impl Into<DiagnosticCode>,
-        category: Category,
+        category: DiagnosticCategory,
         span: Span,
         message: &'static str,
     ) -> Self {
@@ -235,10 +253,10 @@ impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} [{}:{:?}] @{}..{}",
+            "{} [{}:{}] @{}..{}",
             self.message,
+            self.category.as_ref(),
             self.code.as_str(),
-            self.category,
             self.span.start,
             self.span.end,
         )
@@ -253,7 +271,7 @@ mod tests {
     fn test_diagnostic_display() {
         let d = Diagnostic::error(
             DiagnosticCode::InvalidToken,
-            Category::Lex,
+            DiagnosticCategory::Lex,
             Span::new(0, 10),
             "Invalid token",
         );

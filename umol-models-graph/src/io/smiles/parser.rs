@@ -1,14 +1,17 @@
 //! SMILES parser
 
 use smallvec::SmallVec;
+use strum::{AsRefStr, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
+use super::api::ParseMeta;
 use crate::io::config::SmilesParseFlags;
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
-use super::api::ParseMeta;
+use crate::io::smiles::diagnostics::DiagnosticCode;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
+#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum ParseError {
     InvalidWhitespace { pos: usize },
     InvalidComment { pos: usize },
@@ -47,6 +50,62 @@ pub enum ParseError {
     ChiralityOutOfRange { pos: usize },
     BracketHwithHcount { pos: usize },
     InvalidBracket { pos: usize },
+}
+
+impl ParseError {
+    pub fn all() -> impl Iterator<Item = ParseError> {
+        ParseError::iter()
+    }
+    pub fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl From<ParseErrorDiscriminants> for DiagnosticCode {
+    fn from(discriminant: ParseErrorDiscriminants) -> Self {
+        match discriminant {
+            ParseErrorDiscriminants::InvalidWhitespace => DiagnosticCode::InvalidWhitespace,
+            ParseErrorDiscriminants::InvalidComment => DiagnosticCode::InvalidComment,
+            ParseErrorDiscriminants::UnterminatedBlockComment => {
+                DiagnosticCode::UnterminatedBlockComment
+            }
+            ParseErrorDiscriminants::InvalidElement => DiagnosticCode::InvalidElement,
+            ParseErrorDiscriminants::InvalidToken => DiagnosticCode::InvalidToken,
+            ParseErrorDiscriminants::UnbalancedOpenParen => DiagnosticCode::UnbalancedOpenParen,
+            ParseErrorDiscriminants::UnbalancedCloseParen => DiagnosticCode::UnbalancedCloseParen,
+            ParseErrorDiscriminants::EmptyBranch => DiagnosticCode::EmptyBranch,
+            ParseErrorDiscriminants::EmptyGroup => DiagnosticCode::EmptyGroup,
+            ParseErrorDiscriminants::NonfinalGroup => DiagnosticCode::NonfinalGroup,
+            ParseErrorDiscriminants::LeadingBond => DiagnosticCode::LeadingBond,
+            ParseErrorDiscriminants::TrailingBond => DiagnosticCode::TrailingBond,
+            ParseErrorDiscriminants::ConsecutiveBonds => DiagnosticCode::ConsecutiveBonds,
+            ParseErrorDiscriminants::LeadingRing => DiagnosticCode::LeadingRing,
+            ParseErrorDiscriminants::UnbalancedRingIndex => DiagnosticCode::UnbalancedRingIndex,
+            ParseErrorDiscriminants::InvalidRingIndex => DiagnosticCode::InvalidRingIndex,
+            ParseErrorDiscriminants::MismatchedRingBondDirs => {
+                DiagnosticCode::MismatchedRingBondDirs
+            }
+            ParseErrorDiscriminants::MismatchedRingBondOrders => {
+                DiagnosticCode::MismatchedRingBondOrders
+            }
+            ParseErrorDiscriminants::LeadingDot => DiagnosticCode::LeadingDot,
+            ParseErrorDiscriminants::TrailingDot => DiagnosticCode::TrailingDot,
+            ParseErrorDiscriminants::ConsecutiveDots => DiagnosticCode::ConsecutiveDots,
+            ParseErrorDiscriminants::DotBeforeRing => DiagnosticCode::DotBeforeRing,
+            ParseErrorDiscriminants::EmptyBracket => DiagnosticCode::EmptyBracket,
+            ParseErrorDiscriminants::UnbalancedOpenBracket => DiagnosticCode::UnbalancedOpenBracket,
+            ParseErrorDiscriminants::UnbalancedCloseBracket => {
+                DiagnosticCode::UnbalancedCloseBracket
+            }
+            ParseErrorDiscriminants::StrayBracketField => DiagnosticCode::StrayBracketField,
+            ParseErrorDiscriminants::DuplicateBracketField => DiagnosticCode::DuplicateBracketField,
+            ParseErrorDiscriminants::MissingClassIndex => DiagnosticCode::MissingClassIndex,
+            ParseErrorDiscriminants::MissingChiralityIndex => DiagnosticCode::MissingChiralityIndex,
+            ParseErrorDiscriminants::ChiralityOutOfRange => DiagnosticCode::ChiralityOutOfRange,
+            ParseErrorDiscriminants::BracketHwithHcount => DiagnosticCode::BracketHwithHcount,
+            ParseErrorDiscriminants::InvalidBracket => DiagnosticCode::InvalidBracket,
+        }
+    }
 }
 
 // Public entrypoint: strict OpenSMILES
@@ -95,10 +154,6 @@ pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecu
     parse_core(input, flags).map(|(m, _)| m)
 }
 
-fn is_digit(b: u8) -> bool {
-    (b'0'..=b'9').contains(&b)
-}
-
 // Fixed-size resources for parser internals
 const RING_TABLE_LEN: usize = 100; // OpenSMILES ring indices: 0..9 and %00..%99
 const BRANCH_STACK_DEPTH: usize = 16; // Branch stack depth
@@ -125,7 +180,398 @@ enum Frame {
     },
 }
 
-fn map_bond(b: u8) -> (BondOrder, Option<BondDir>) {
+fn is_digit(b: u8) -> bool {
+    (b'0'..=b'9').contains(&b)
+}
+
+#[inline]
+fn skip_line_comment(input: &[u8], mut i: usize) -> usize {
+    while i < input.len() && input[i] != b'\n' && input[i] != b'\r' {
+        i += 1;
+    }
+    i
+}
+
+#[inline]
+fn skip_block_comment(input: &[u8], mut i: usize, start_pos: usize) -> Result<usize, usize> {
+    while i + 1 < input.len() {
+        if input[i] == b'*' && input[i + 1] == b'/' {
+            return Ok(i + 2);
+        }
+        i += 1;
+    }
+    Err(start_pos)
+}
+
+#[inline]
+fn parse_ring_index(input: &[u8], i: usize) -> Result<Option<(usize, usize, bool)>, ParseError> {
+    let n = input.len();
+    if i >= n {
+        return Ok(None);
+    }
+    let b0 = input[i];
+    if is_digit(b0) {
+        let idx = (b0 - b'0') as usize;
+        return Ok(Some((idx, i + 1, false)));
+    }
+    if b0 == b'%' {
+        if i + 2 >= n || !is_digit(input[i + 1]) || !is_digit(input[i + 2]) {
+            return Err(ParseError::InvalidRingIndex { pos: i });
+        }
+        let idx = ((input[i + 1] - b'0') as usize) * 10 + (input[i + 2] - b'0') as usize;
+        return Ok(Some((idx, i + 3, true)));
+    }
+    Ok(None)
+}
+
+#[inline]
+fn process_ring_closure(
+    ring_table: &mut [Option<OpenRing>; RING_TABLE_LEN],
+    builder: &mut MoleculeBuilder,
+    last_aromatic: bool,
+    last_atom_idx: u32,
+    idx: usize,
+    order_opt: Option<BondOrder>,
+    dir_opt: Option<BondDir>,
+    pos: usize,
+) -> Result<(), ParseError> {
+    let entry = &mut ring_table[idx];
+    match entry.take() {
+        None => {
+            *entry = Some(OpenRing {
+                atom_id: last_atom_idx,
+                order: order_opt,
+                dir: dir_opt,
+                open_pos: pos,
+                open_aromatic: last_aromatic,
+            });
+        }
+        Some(open) => {
+            if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
+                if d1 != d2 {
+                    return Err(ParseError::MismatchedRingBondDirs {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            if let (Some(o1), Some(o2)) = (open.order, order_opt) {
+                if o1 != o2 {
+                    return Err(ParseError::MismatchedRingBondOrders {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            if open.dir.is_some() || dir_opt.is_some() {
+                let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
+                if ord != BondOrder::Single {
+                    return Err(ParseError::MismatchedRingBondOrders {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            let mut final_order = match (open.order, order_opt) {
+                (Some(o1), Some(o2)) => {
+                    if o1 == o2 {
+                        o1
+                    } else {
+                        o2
+                    }
+                }
+                (Some(o), None) | (None, Some(o)) => o,
+                (None, None) => BondOrder::Single,
+            };
+            let final_dir = open.dir.or(dir_opt);
+            let a = open.atom_id;
+            let b = last_atom_idx;
+            if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
+                final_order = BondOrder::Aromatic;
+            }
+            builder.on_bond(
+                a,
+                b,
+                BondData {
+                    order: final_order,
+                    dir: final_dir,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+#[inline]
+fn invalid_ring_context(pstack: &SmallVec<[Frame; BRANCH_STACK_DEPTH]>) -> bool {
+    matches!(
+        pstack.last(),
+        Some(
+            Frame::Branch {
+                had_atom: false,
+                ..
+            } | Frame::Group {
+                had_atom: false,
+                ..
+            }
+        )
+    )
+}
+
+#[inline]
+fn parse_organic_aliphatic_element(input: &[u8], i: usize) -> Option<(Element, usize)> {
+    let n = input.len();
+    if i >= n {
+        return None;
+    }
+    match input[i] {
+        b'B' => {
+            if i + 1 < n && input[i + 1] == b'r' {
+                Some((Element::Br, 2))
+            } else {
+                Some((Element::B, 1))
+            }
+        }
+        b'C' => {
+            if i + 1 < n && input[i + 1] == b'l' {
+                Some((Element::Cl, 2))
+            } else {
+                Some((Element::C, 1))
+            }
+        }
+        b'N' => Some((Element::N, 1)),
+        b'O' => Some((Element::O, 1)),
+        b'S' => Some((Element::S, 1)),
+        b'P' => Some((Element::P, 1)),
+        b'F' => Some((Element::F, 1)),
+        b'I' => Some((Element::I, 1)),
+        _ => None,
+    }
+}
+
+#[inline]
+fn parse_organic_aromatic_element(input: &[u8], i: usize) -> Option<(Element, usize)> {
+    if i >= input.len() {
+        return None;
+    }
+    match input[i] {
+        b'b' => Some((Element::B, 1)),
+        b'c' => Some((Element::C, 1)),
+        b'n' => Some((Element::N, 1)),
+        b'o' => Some((Element::O, 1)),
+        b'p' => Some((Element::P, 1)),
+        b's' => Some((Element::S, 1)),
+        _ => None,
+    }
+}
+
+#[inline]
+fn parse_bracket_aliphatic_element(inner: &[u8], i: usize) -> Option<(Element, usize)> {
+    // Only allow uppercase-starting symbols for aliphatic branch
+    let n = inner.len();
+    if i >= n || !inner[i].is_ascii_uppercase() {
+        return None;
+    }
+    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
+        if let Some(e) = Element::from_symbol_bytes(&inner[i..i + 2]) {
+            return Some((e, 2));
+        }
+    }
+    if let Some(e) = Element::from_symbol_bytes(&inner[i..i + 1]) {
+        return Some((e, 1));
+    }
+    None
+}
+
+#[inline]
+fn parse_bracket_aromatic_element(inner: &[u8], i: usize) -> Option<(Element, usize)> {
+    let n = inner.len();
+    if i >= n {
+        return None;
+    }
+    match inner[i] {
+        b'b' => Some((Element::B, 1)),
+        b'c' => Some((Element::C, 1)),
+        b'n' => Some((Element::N, 1)),
+        b'o' => Some((Element::O, 1)),
+        b'p' => Some((Element::P, 1)),
+        b's' => {
+            if i + 1 < n && inner[i + 1] == b'e' {
+                Some((Element::Se, 2))
+            } else {
+                Some((Element::S, 1))
+            }
+        }
+        b'a' => {
+            if i + 1 < n && inner[i + 1] == b's' {
+                Some((Element::As, 2))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+#[inline]
+fn parse_u32(input: &[u8], mut i: usize, max_digits: usize) -> (u32, usize, usize) {
+    let mut v: u32 = 0;
+    let mut cnt = 0usize;
+    while i < input.len() && input[i].is_ascii_digit() && cnt < max_digits {
+        v = v
+            .saturating_mul(10)
+            .saturating_add((input[i] - b'0') as u32);
+        i += 1;
+        cnt += 1;
+    }
+    (v, i, cnt)
+}
+
+#[inline]
+fn parse_charge(inner: &[u8], i: usize, sign_char: u8) -> (i32, usize) {
+    let n = inner.len();
+    let sign = if sign_char == b'+' { 1 } else { -1 };
+    let j = i + 1;
+    if j < n && inner[j] == sign_char {
+        return (2 * sign, j + 1);
+    }
+    let (mut val, j2, cnt) = parse_u32(inner, j, 2);
+    if cnt == 0 {
+        val = 1;
+    }
+    (val as i32 * sign, j2)
+}
+
+#[inline]
+fn parse_class_index(inner: &[u8], i: usize, pos_base: usize) -> Result<(u32, usize), ParseError> {
+    let n = inner.len();
+    if i + 1 >= n || !inner[i + 1].is_ascii_digit() {
+        return Err(ParseError::MissingClassIndex {
+            pos: pos_in_bracket(pos_base, i),
+        });
+    }
+    let (v, j, _) = parse_u32(inner, i + 1, 10);
+    Ok((v, j))
+}
+
+#[inline]
+fn parse_chirality(
+    inner: &[u8],
+    i: usize,
+    pos_base: usize,
+) -> Result<(Option<Chirality>, usize), ParseError> {
+    let n = inner.len();
+    let k = i;
+    if k + 1 < n && inner[k + 1] == b'@' {
+        return Ok((Some(Chirality::CounterClockwise), k + 2));
+    }
+    if k + 2 < n && inner[k + 1] == b'T' && inner[k + 2] == b'H' {
+        if k + 3 >= n || !inner[k + 3].is_ascii_digit() {
+            return Err(ParseError::MissingChiralityIndex {
+                pos: pos_in_bracket(pos_base, k),
+            });
+        }
+        let v = (inner[k + 3] - b'0') as u32;
+        if v == 1 || v == 2 {
+            return Ok((Some(Chirality::Tetrahedral { arr: v }), k + 4));
+        }
+        return Err(ParseError::ChiralityOutOfRange {
+            pos: pos_in_bracket(pos_base, k),
+        });
+    }
+    if k + 2 < n && inner[k + 1] == b'A' && inner[k + 2] == b'L' {
+        if k + 3 >= n || !inner[k + 3].is_ascii_digit() {
+            return Err(ParseError::MissingChiralityIndex {
+                pos: pos_in_bracket(pos_base, k),
+            });
+        }
+        let v = (inner[k + 3] - b'0') as u32;
+        if v == 1 || v == 2 {
+            return Ok((Some(Chirality::Allenal { arr: v }), k + 4));
+        }
+        return Err(ParseError::ChiralityOutOfRange {
+            pos: pos_in_bracket(pos_base, k),
+        });
+    }
+    if k + 2 < n && inner[k + 1] == b'S' && inner[k + 2] == b'P' {
+        if k + 3 >= n || !inner[k + 3].is_ascii_digit() {
+            return Err(ParseError::MissingChiralityIndex {
+                pos: pos_in_bracket(pos_base, k),
+            });
+        }
+        let v = (inner[k + 3] - b'0') as u32;
+        if (1..=3).contains(&v) {
+            return Ok((Some(Chirality::SquarePlanar { arr: v }), k + 4));
+        }
+        return Err(ParseError::ChiralityOutOfRange {
+            pos: pos_in_bracket(pos_base, k),
+        });
+    }
+    if k + 2 < n && inner[k + 1] == b'T' && inner[k + 2] == b'B' {
+        let (v, j, cnt) = parse_u32(inner, k + 3, 2);
+        if cnt == 0 {
+            return Err(ParseError::MissingChiralityIndex {
+                pos: pos_in_bracket(pos_base, k),
+            });
+        }
+        if (1..=20).contains(&v) {
+            return Ok((Some(Chirality::TrigonalBipyramidal { arr: v }), j));
+        }
+        return Err(ParseError::ChiralityOutOfRange {
+            pos: pos_in_bracket(pos_base, k),
+        });
+    }
+    if k + 2 < n && inner[k + 1] == b'O' && inner[k + 2] == b'H' {
+        let (v, j, cnt) = parse_u32(inner, k + 3, 2);
+        if cnt == 0 {
+            return Err(ParseError::MissingChiralityIndex {
+                pos: pos_in_bracket(pos_base, k),
+            });
+        }
+        if (1..=30).contains(&v) {
+            return Ok((Some(Chirality::Octahedral { arr: v }), j));
+        }
+        return Err(ParseError::ChiralityOutOfRange {
+            pos: pos_in_bracket(pos_base, k),
+        });
+    }
+    Ok((Some(Chirality::Clockwise), k + 1))
+}
+
+#[inline]
+fn pos_in_bracket(base: usize, local: usize) -> usize {
+    base + 1 + local
+}
+
+#[inline]
+fn attach_atom(
+    builder: &mut MoleculeBuilder,
+    last_atom_idx: Option<u32>,
+    curr_atom_idx: u32,
+    pending_bond: &mut Option<(BondOrder, Option<BondDir>, usize)>,
+    last_aromatic: bool,
+    curr_aromatic: bool,
+) {
+    if let Some(last) = last_atom_idx {
+        if let Some((order, dir, _)) = pending_bond.take() {
+            builder.on_bond(last, curr_atom_idx, BondData { order, dir });
+        } else if last_aromatic && curr_aromatic {
+            builder.on_bond(
+                last,
+                curr_atom_idx,
+                BondData {
+                    order: BondOrder::Aromatic,
+                    dir: None,
+                },
+            );
+        } else {
+            builder.on_bond_single_fast(last, curr_atom_idx);
+        }
+    }
+}
+
+#[inline]
+fn parse_bond(b: u8) -> (BondOrder, Option<BondDir>) {
     match b {
         b'-' => (BondOrder::Single, None),
         b'=' => (BondOrder::Double, None),
@@ -172,7 +618,7 @@ fn parse_bracket(
     }
 
     // 2) Element symbol or wildcard '*'
-    let mut element: Option<Element> = None;
+    let element: Option<Element>;
     let mut aromatic = false;
     let mut unknown_symbol = false;
     if i < n && inner[i] == b'*' {
@@ -180,212 +626,24 @@ fn parse_bracket(
         unknown_symbol = true;
         i += 1;
     } else if i < n && inner[i].is_ascii_alphabetic() {
-        // Hybrid fast path + fallback
-        let b0 = inner[i];
-        if b0.is_ascii_uppercase() {
-            // Fast path: common aliphatic
-            match b0 {
-                b'C' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if inner[i + 1] == b'l' {
-                            element = Some(Element::Cl);
-                            i += 2;
-                        } else if let Some(e) =
-                            umol_data::Element::from_symbol_bytes(&inner[i..i + 2])
-                        {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::C);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::C);
-                        i += 1;
-                    }
-                }
-                b'B' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if inner[i + 1] == b'r' {
-                            element = Some(Element::Br);
-                            i += 2;
-                        } else if let Some(e) =
-                            umol_data::Element::from_symbol_bytes(&inner[i..i + 2])
-                        {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::B);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::B);
-                        i += 1;
-                    }
-                }
-                b'N' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 2]) {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::N);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::N);
-                        i += 1;
-                    }
-                }
-                b'O' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 2]) {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::O);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::O);
-                        i += 1;
-                    }
-                }
-                b'S' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 2]) {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::S);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::S);
-                        i += 1;
-                    }
-                }
-                b'P' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 2]) {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::P);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::P);
-                        i += 1;
-                    }
-                }
-                b'F' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 2]) {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::F);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::F);
-                        i += 1;
-                    }
-                }
-                b'I' => {
-                    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 2]) {
-                            element = Some(e);
-                            i += 2;
-                        } else {
-                            element = Some(Element::I);
-                            i += 1;
-                        }
-                    } else {
-                        element = Some(Element::I);
-                        i += 1;
-                    }
-                }
-                _ => {
-                    // Fallback: full periodic table (aliphatic only)
-                    let mut consumed = 0usize;
-                    if i + 1 < n && inner[i + 1].is_ascii_alphabetic() {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 2]) {
-                            element = Some(e);
-                            consumed = 2;
-                        }
-                    }
-                    if consumed == 0 {
-                        if let Some(e) = umol_data::Element::from_symbol_bytes(&inner[i..i + 1]) {
-                            element = Some(e);
-                            consumed = 1;
-                        } else {
-                            return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
-                        }
-                    }
-                    i += consumed;
-                }
-            }
+        if let Some((e, consumed)) = parse_bracket_aliphatic_element(inner, i) {
+            element = Some(e);
+            i += consumed;
             aromatic = false;
+        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(inner, i) {
+            element = Some(e);
+            i += consumed;
+            aromatic = true;
         } else {
-            // Lowercase start: aromatic only if in allowed set
-            match b0 {
-                b'b' => {
-                    element = Some(Element::B);
-                    aromatic = true;
-                    i += 1;
-                }
-                b'c' => {
-                    element = Some(Element::C);
-                    aromatic = true;
-                    i += 1;
-                }
-                b'n' => {
-                    element = Some(Element::N);
-                    aromatic = true;
-                    i += 1;
-                }
-                b'o' => {
-                    element = Some(Element::O);
-                    aromatic = true;
-                    i += 1;
-                }
-                b'p' => {
-                    element = Some(Element::P);
-                    aromatic = true;
-                    i += 1;
-                }
-                b's' => {
-                    // 's' (S) or 'se' (Se) aromatic
-                    if i + 1 < n && inner[i + 1] == b'e' {
-                        element = Some(Element::Se);
-                        aromatic = true;
-                        i += 2;
-                    } else {
-                        element = Some(Element::S);
-                        aromatic = true;
-                        i += 1;
-                    }
-                }
-                b'a' => {
-                    // 'as' (As) aromatic
-                    if i + 1 < n && inner[i + 1] == b's' {
-                        element = Some(Element::As);
-                        aromatic = true;
-                        i += 2;
-                    } else {
-                        return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
-                    }
-                }
-                _ => {
-                    return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
-                }
-            }
+            return Err(ParseError::InvalidBracket {
+                pos: pos_offset + 1 + i,
+            });
         }
     } else {
         // Neither '*' nor element
-        return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
+        return Err(ParseError::InvalidBracket {
+            pos: pos_offset + 1 + i,
+        });
     }
 
     // 3) Tail fields in any order
@@ -399,10 +657,14 @@ fn parse_bracket(
         match b0 {
             b'H' => {
                 if element == Some(Element::H) {
-                    return Err(ParseError::BracketHwithHcount { pos: pos_offset + 1 + i });
+                    return Err(ParseError::BracketHwithHcount {
+                        pos: pos_offset + 1 + i,
+                    });
                 }
                 if hcount.is_some() {
-                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
                 }
                 let mut val: u32 = 1; // default H
                 if i + 1 < n && inner[i + 1].is_ascii_digit() {
@@ -414,146 +676,38 @@ fn parse_bracket(
             }
             b'+' | b'-' => {
                 if charge.is_some() {
-                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
                 }
-                let sign = if b0 == b'+' { 1 } else { -1 };
-                let mut j = i + 1;
-                let mut val: i32 = 0;
-                let mut cnt = 0;
-                if j < n && inner[j] == b'+' && b0 == b'+' {
-                    charge = Some(2);
-                    i = j + 1;
-                    continue;
-                }
-                if j < n && inner[j] == b'-' && b0 == b'-' {
-                    charge = Some(-2);
-                    i = j + 1;
-                    continue;
-                }
-                while j < n && inner[j].is_ascii_digit() && cnt < 2 {
-                    val = val.saturating_mul(10) + (inner[j] - b'0') as i32;
-                    j += 1;
-                    cnt += 1;
-                }
-                if cnt == 0 {
-                    val = 1;
-                }
-                charge = Some(val * sign);
-                i = j;
+                let (val, j2) = parse_charge(inner, i, b0);
+                charge = Some(val);
+                i = j2;
             }
             b':' => {
                 if class_num.is_some() {
-                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
                 }
-                if i + 1 >= n || !inner[i + 1].is_ascii_digit() {
-                    return Err(ParseError::MissingClassIndex { pos: pos_offset + 1 + i });
-                }
-                let mut j = i + 1;
-                let mut v: u32 = 0;
-                while j < n && inner[j].is_ascii_digit() {
-                    v = v
-                        .saturating_mul(10)
-                        .saturating_add((inner[j] - b'0') as u32);
-                    j += 1;
-                }
+                let (v, j2) = parse_class_index(inner, i, pos_offset)?;
                 class_num = Some(v);
-                i = j;
+                i = j2;
             }
             b'@' => {
                 if chir.is_some() {
-                    return Err(ParseError::DuplicateBracketField { pos: pos_offset + 1 + i });
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
                 }
-                // @@
-                if i + 1 < n && inner[i + 1] == b'@' {
-                    chir = Some(Chirality::CounterClockwise);
-                    i += 2;
-                    continue;
-                }
-                // @TH[12]
-                if i + 2 < n && inner[i + 1] == b'T' && inner[i + 2] == b'H' {
-                    if i + 3 >= n || !inner[i + 3].is_ascii_digit() {
-                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
-                    }
-                    let v = (inner[i + 3] - b'0') as u32;
-                    if v == 1 || v == 2 {
-                        chir = Some(Chirality::Tetrahedral { arr: v });
-                        i += 4;
-                        continue;
-                    }
-                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
-                }
-                // @AL[12]
-                if i + 2 < n && inner[i + 1] == b'A' && inner[i + 2] == b'L' {
-                    if i + 3 >= n || !inner[i + 3].is_ascii_digit() {
-                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
-                    }
-                    let v = (inner[i + 3] - b'0') as u32;
-                    if v == 1 || v == 2 {
-                        chir = Some(Chirality::Allenal { arr: v });
-                        i += 4;
-                        continue;
-                    }
-                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
-                }
-                // @SP[123]
-                if i + 2 < n && inner[i + 1] == b'S' && inner[i + 2] == b'P' {
-                    if i + 3 >= n || !inner[i + 3].is_ascii_digit() {
-                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
-                    }
-                    let v = (inner[i + 3] - b'0') as u32;
-                    if v >= 1 && v <= 3 {
-                        chir = Some(Chirality::SquarePlanar { arr: v });
-                        i += 4;
-                        continue;
-                    }
-                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
-                }
-                // @TBn (allow 1..20 with optional leading 0)
-                if i + 2 < n && inner[i + 1] == b'T' && inner[i + 2] == b'B' {
-                    let mut j = i + 3;
-                    let mut v: u32 = 0;
-                    let mut cnt = 0;
-                    while j < n && inner[j].is_ascii_digit() && cnt < 2 {
-                        v = v * 10 + (inner[j] - b'0') as u32;
-                        j += 1;
-                        cnt += 1;
-                    }
-                    if cnt == 0 {
-                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
-                    }
-                    if v >= 1 && v <= 20 {
-                        chir = Some(Chirality::TrigonalBipyramidal { arr: v });
-                        i = j;
-                        continue;
-                    }
-                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
-                }
-                // @OHn (allow 1..30 with optional leading 0)
-                if i + 2 < n && inner[i + 1] == b'O' && inner[i + 2] == b'H' {
-                    let mut j = i + 3;
-                    let mut v: u32 = 0;
-                    let mut cnt = 0;
-                    while j < n && inner[j].is_ascii_digit() && cnt < 2 {
-                        v = v * 10 + (inner[j] - b'0') as u32;
-                        j += 1;
-                        cnt += 1;
-                    }
-                    if cnt == 0 {
-                        return Err(ParseError::MissingChiralityIndex { pos: pos_offset + 1 + i });
-                    }
-                    if v >= 1 && v <= 30 {
-                        chir = Some(Chirality::Octahedral { arr: v });
-                        i = j;
-                        continue;
-                    }
-                    return Err(ParseError::ChiralityOutOfRange { pos: pos_offset + 1 + i });
-                }
-                // '@' alone
-                chir = Some(Chirality::Clockwise);
-                i += 1;
+                let (chir_opt, j2) = parse_chirality(inner, i, pos_offset)?;
+                chir = chir_opt;
+                i = j2;
             }
             _ => {
-                return Err(ParseError::InvalidBracket { pos: pos_offset + 1 + i });
+                return Err(ParseError::InvalidBracket {
+                    pos: pos_offset + 1 + i,
+                });
             }
         }
     }
@@ -570,6 +724,7 @@ fn parse_bracket(
     ))
 }
 
+#[inline]
 fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     let n = input.len();
     let mut i = 0usize;
@@ -582,19 +737,16 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
             continue;
         }
         if allow_comments && b0 == b'/' && i + 1 < n && input[i + 1] == b'/' {
-            i += 2;
-            while i < n && input[i] != b'\n' && input[i] != b'\r' {
-                i += 1;
-            }
+            i = skip_line_comment(input, i + 2);
         }
         if allow_comments && b0 == b'/' && i + 1 < n && input[i + 1] == b'*' {
-            i += 2;
-            while i + 1 < n {
-                if input[i] == b'*' && input[i + 1] == b'/' {
-                    i += 2;
-                    break;
+            match skip_block_comment(input, i + 2, i) {
+                Ok(next) => {
+                    i = next;
                 }
-                i += 1;
+                Err(_) => {
+                    i = n;
+                }
             }
             continue;
         }
@@ -625,7 +777,10 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option<ParseMeta>), ParseError> {
+fn parse_core(
+    input: &[u8],
+    flags: SmilesParseFlags,
+) -> Result<(Molecule, Option<ParseMeta>), ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
     let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
     let _record_lint = flags.contains(SmilesParseFlags::LINT_SIDECHANNEL);
@@ -646,8 +801,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
     } else {
         None
     };
-    let mut _first_ring_digit: Option<u32> = None;
-    let mut _percent_padded: bool = false;
+    let mut first_ring_digit: Option<u32> = None;
 
     while i < n {
         let b0 = input[i];
@@ -796,198 +950,44 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
             i += 1;
             continue;
         }
-        if is_digit(b0) {
-            if last_atom_idx.is_none() {
-                return Err(ParseError::LeadingRing { pos: i });
-            }
-            if let Some(
-                Frame::Branch {
-                    had_atom: false, ..
+        match parse_ring_index(input, i) {
+            Ok(Some((idx, next_i, percent))) => {
+                if last_atom_idx.is_none() {
+                    return Err(ParseError::LeadingRing { pos: i });
                 }
-                | Frame::Group {
-                    had_atom: false, ..
-                },
-            ) = pstack.last()
-            {
-                return Err(ParseError::LeadingRing { pos: 0 });
-            }
-            let idx: usize = (b0 - b'0') as usize;
-            if let Some(seq) = _ring_sequence.as_mut() {
-                let d = idx as u32;
-                if _first_ring_digit.is_none() {
-                    _first_ring_digit = Some(d);
+                if invalid_ring_context(&pstack) {
+                    return Err(ParseError::LeadingRing { pos: 0 });
                 }
-                seq.push((d, i));
-            }
-            let bond = pending_bond.take();
-            let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
-            let entry = &mut ring_table[idx];
-            match entry.take() {
-                None => {
-                    *entry = Some(OpenRing {
-                        atom_id: last_atom_idx.unwrap(),
-                        order: order_opt,
-                        dir: dir_opt,
-                        open_pos: i,
-                        open_aromatic: last_aromatic,
-                    });
-                }
-                Some(open) => {
-                    let _b = last_atom_idx.unwrap();
-                    if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
-                        if d1 != d2 {
-                            return Err(ParseError::MismatchedRingBondDirs {
-                                pos: i,
-                                open_pos: open.open_pos,
-                            });
-                        }
-                    }
-                    if let (Some(o1), Some(o2)) = (open.order, order_opt) {
-                        if o1 != o2 {
-                            return Err(ParseError::MismatchedRingBondOrders {
-                                pos: i,
-                                open_pos: open.open_pos,
-                            });
-                        }
-                    }
-                    if open.dir.is_some() || dir_opt.is_some() {
-                        let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
-                        if ord != BondOrder::Single {
-                            return Err(ParseError::MismatchedRingBondOrders {
-                                pos: i,
-                                open_pos: open.open_pos,
-                            });
-                        }
-                    }
-                    let mut final_order = match (open.order, order_opt) {
-                        (Some(o1), Some(o2)) => {
-                            if o1 == o2 {
-                                o1
-                            } else {
-                                o2
-                            }
-                        }
-                        (Some(o), None) | (None, Some(o)) => o,
-                        (None, None) => BondOrder::Single,
+                if let Some(seq) = _ring_sequence.as_mut() {
+                    let d = if percent {
+                        ((input[i + 1] - b'0') as u32) * 10 + (input[i + 2] - b'0') as u32
+                    } else {
+                        (input[i] - b'0') as u32
                     };
-                    let final_dir = open.dir.or(dir_opt);
-                    let a = open.atom_id;
-                    let b = last_atom_idx.unwrap();
-                    if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
-                        final_order = BondOrder::Aromatic;
+                    if first_ring_digit.is_none() {
+                        first_ring_digit = Some(d);
                     }
-                    builder.on_bond(
-                        a,
-                        b,
-                        BondData {
-                            order: final_order,
-                            dir: final_dir,
-                        },
-                    );
+                    seq.push((d, i));
                 }
+                let bond = pending_bond.take();
+                let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
+                process_ring_closure(
+                    &mut ring_table,
+                    &mut builder,
+                    last_aromatic,
+                    last_atom_idx.unwrap(),
+                    idx,
+                    order_opt,
+                    dir_opt,
+                    i,
+                )?;
+                i = next_i;
+                continue;
             }
-            i += 1;
-            continue;
+            Err(e) => return Err(e),
+            Ok(None) => {}
         }
-        if b0 == b'%' {
-            if i + 2 >= n || !is_digit(input[i + 1]) || !is_digit(input[i + 2]) {
-                return Err(ParseError::InvalidRingIndex { pos: i });
-            }
-            if last_atom_idx.is_none() {
-                return Err(ParseError::LeadingRing { pos: i });
-            }
-            if let Some(
-                Frame::Branch {
-                    had_atom: false, ..
-                }
-                | Frame::Group {
-                    had_atom: false, ..
-                },
-            ) = pstack.last()
-            {
-                return Err(ParseError::LeadingRing { pos: 0 });
-            }
-            if let Some(seq) = _ring_sequence.as_mut() {
-                if input[i + 1] == b'0' && (input[i + 2] >= b'1' && input[i + 2] <= b'9') {
-                    _percent_padded = true;
-                }
-                let d = ((input[i + 1] - b'0') as u32) * 10 + (input[i + 2] - b'0') as u32;
-                if _first_ring_digit.is_none() {
-                    _first_ring_digit = Some(d);
-                }
-                seq.push((d, i));
-            }
-            let idx: usize = ((input[i + 1] - b'0') as usize) * 10 + (input[i + 2] - b'0') as usize;
-            let bond = pending_bond.take();
-            let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
-            let entry = &mut ring_table[idx];
-            match entry.take() {
-                None => {
-                    *entry = Some(OpenRing {
-                        atom_id: last_atom_idx.unwrap(),
-                        order: order_opt,
-                        dir: dir_opt,
-                        open_pos: i,
-                        open_aromatic: last_aromatic,
-                    });
-                }
-                Some(open) => {
-                    let _b = last_atom_idx.unwrap();
-                    if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
-                        if d1 != d2 {
-                            return Err(ParseError::MismatchedRingBondDirs {
-                                pos: i,
-                                open_pos: open.open_pos,
-                            });
-                        }
-                    }
-                    if let (Some(o1), Some(o2)) = (open.order, order_opt) {
-                        if o1 != o2 {
-                            return Err(ParseError::MismatchedRingBondOrders {
-                                pos: i,
-                                open_pos: open.open_pos,
-                            });
-                        }
-                    }
-                    if open.dir.is_some() || dir_opt.is_some() {
-                        let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
-                        if ord != BondOrder::Single {
-                            return Err(ParseError::MismatchedRingBondOrders {
-                                pos: i,
-                                open_pos: open.open_pos,
-                            });
-                        }
-                    }
-                    let mut final_order = match (open.order, order_opt) {
-                        (Some(o1), Some(o2)) => {
-                            if o1 == o2 {
-                                o1
-                            } else {
-                                o2
-                            }
-                        }
-                        (Some(o), None) | (None, Some(o)) => o,
-                        (None, None) => BondOrder::Single,
-                    };
-                    let final_dir = open.dir.or(dir_opt);
-                    let a = open.atom_id;
-                    let b_idx = last_atom_idx.unwrap();
-                    if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
-                        final_order = BondOrder::Aromatic;
-                    }
-                    builder.on_bond(
-                        a,
-                        b_idx,
-                        BondData {
-                            order: final_order,
-                            dir: final_dir,
-                        },
-                    );
-                }
-            }
-            i += 3;
-            continue;
-        }
+        // percent branch is handled by parse_ring_index above
         if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') {
             if pending_bond.is_some() {
                 return Err(ParseError::ConsecutiveBonds { pos: i });
@@ -1001,7 +1001,7 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
                 }
                 return Err(ParseError::LeadingBond { pos: i });
             }
-            let (order, dir) = map_bond(b0);
+            let (order, dir) = parse_bond(b0);
             pending_bond = Some((order, dir, i));
             i += 1;
             continue;
@@ -1038,25 +1038,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
                 unknown_symbol: unknown,
             };
             let curr = builder.on_atom(atom);
-            let old_last = last_atom_idx;
-            if let Some(last) = old_last {
-                if let Some((order, dir, _)) = pending_bond.take() {
-                    builder.on_bond(last, curr, BondData { order, dir });
-                } else {
-                    if last_aromatic && aromatic {
-                        builder.on_bond(
-                            last,
-                            curr,
-                            BondData {
-                                order: BondOrder::Aromatic,
-                                dir: None,
-                            },
-                        );
-                    } else {
-                        builder.on_bond_single_fast(last, curr);
-                    }
-                }
-            }
+            attach_atom(
+                &mut builder,
+                last_atom_idx,
+                curr,
+                &mut pending_bond,
+                last_aromatic,
+                aromatic,
+            );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
             if let Some(top) = pstack.last_mut() {
@@ -1072,14 +1061,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
                 let curr = builder.on_atom_fast(Element::Cl, true, false);
-                let old_last = last_atom_idx;
-                if let Some(last) = old_last {
-                    if let Some((order, dir, _)) = pending_bond.take() {
-                        builder.on_bond(last, curr, BondData { order, dir });
-                    } else {
-                        builder.on_bond_single_fast(last, curr);
-                    }
-                }
+                attach_atom(
+                    &mut builder,
+                    last_atom_idx,
+                    curr,
+                    &mut pending_bond,
+                    last_aromatic,
+                    false,
+                );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
                 if let Some(top) = pstack.last_mut() {
@@ -1093,14 +1082,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
                 continue;
             }
             let curr = builder.on_atom_fast(Element::C, true, false);
-            let old_last = last_atom_idx;
-            if let Some(last) = old_last {
-                if let Some((order, dir, _)) = pending_bond.take() {
-                    builder.on_bond(last, curr, BondData { order, dir });
-                } else {
-                    builder.on_bond_single_fast(last, curr);
-                }
-            }
+            attach_atom(
+                &mut builder,
+                last_atom_idx,
+                curr,
+                &mut pending_bond,
+                last_aromatic,
+                false,
+            );
             last_atom_idx = Some(curr);
             last_aromatic = false;
             if let Some(top) = pstack.last_mut() {
@@ -1116,14 +1105,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
                 let curr = builder.on_atom_fast(Element::Br, true, false);
-                let old_last = last_atom_idx;
-                if let Some(last) = old_last {
-                    if let Some((order, dir, _)) = pending_bond.take() {
-                        builder.on_bond(last, curr, BondData { order, dir });
-                    } else {
-                        builder.on_bond_single_fast(last, curr);
-                    }
-                }
+                attach_atom(
+                    &mut builder,
+                    last_atom_idx,
+                    curr,
+                    &mut pending_bond,
+                    last_aromatic,
+                    false,
+                );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
                 if let Some(top) = pstack.last_mut() {
@@ -1137,14 +1126,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
                 continue;
             }
             let curr = builder.on_atom_fast(Element::B, true, false);
-            let old_last = last_atom_idx;
-            if let Some(last) = old_last {
-                if let Some((order, dir, _)) = pending_bond.take() {
-                    builder.on_bond(last, curr, BondData { order, dir });
-                } else {
-                    builder.on_bond_single_fast(last, curr);
-                }
-            }
+            attach_atom(
+                &mut builder,
+                last_atom_idx,
+                curr,
+                &mut pending_bond,
+                last_aromatic,
+                false,
+            );
             last_atom_idx = Some(curr);
             last_aromatic = false;
             if let Some(top) = pstack.last_mut() {
@@ -1157,80 +1146,52 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
             i += 1;
             continue;
         }
-        let elem = match b0 {
-            b'N' => Some(Element::N),
-            b'O' => Some(Element::O),
-            b'P' => Some(Element::P),
-            b'S' => Some(Element::S),
-            b'F' => Some(Element::F),
-            b'I' => Some(Element::I),
-            _ => None,
-        };
-        if let Some(element) = elem {
-            let curr = builder.on_atom_fast(element, true, false);
-            let old_last = last_atom_idx;
-            if let Some(last) = old_last {
-                if let Some((order, dir, _)) = pending_bond.take() {
-                    builder.on_bond(last, curr, BondData { order, dir });
-                } else {
-                    builder.on_bond_single_fast(last, curr);
-                }
-            }
-            last_atom_idx = Some(curr);
-            last_aromatic = false;
-            if let Some(top) = pstack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
-            i += 1;
-            continue;
-        }
-        if matches!(b0, b'b' | b'c' | b'n' | b'o' | b'p' | b's') {
-            let element = match b0 {
-                b'b' => Element::B,
-                b'c' => Element::C,
-                b'n' => Element::N,
-                b'o' => Element::O,
-                b'p' => Element::P,
-                _ => Element::S,
-            };
-            let curr = builder.on_atom_fast(element, true, true);
-            let old_last = last_atom_idx;
-            if let Some(last) = old_last {
-                if let Some((order, dir, _)) = pending_bond.take() {
-                    builder.on_bond(last, curr, BondData { order, dir });
-                } else {
-                    if last_aromatic {
-                        builder.on_bond(
-                            last,
-                            curr,
-                            BondData {
-                                order: BondOrder::Aromatic,
-                                dir: None,
-                            },
-                        );
-                    } else {
-                        builder.on_bond_single_fast(last, curr);
-                    }
-                }
-            }
-            last_atom_idx = Some(curr);
-            last_aromatic = true;
-            if let Some(top) = pstack.last_mut() {
-                match top {
-                    Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
-                        *had_atom = true
-                    }
-                }
-            }
-            i += 1;
-            continue;
-        }
-        // Bare invalid element token
+        // Elements
         if b0.is_ascii_alphabetic() {
+            if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
+                let curr = builder.on_atom_fast(element, true, false);
+                attach_atom(
+                    &mut builder,
+                    last_atom_idx,
+                    curr,
+                    &mut pending_bond,
+                    last_aromatic,
+                    false,
+                );
+                last_atom_idx = Some(curr);
+                last_aromatic = false;
+                if let Some(top) = pstack.last_mut() {
+                    match top {
+                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
+                            *had_atom = true
+                        }
+                    }
+                }
+                i += consumed;
+                continue;
+            }
+            if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
+                let curr = builder.on_atom_fast(element, true, true);
+                attach_atom(
+                    &mut builder,
+                    last_atom_idx,
+                    curr,
+                    &mut pending_bond,
+                    last_aromatic,
+                    true,
+                );
+                last_atom_idx = Some(curr);
+                last_aromatic = true;
+                if let Some(top) = pstack.last_mut() {
+                    match top {
+                        Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
+                            *had_atom = true
+                        }
+                    }
+                }
+                i += consumed;
+                continue;
+            }
             return Err(ParseError::InvalidElement { pos: i });
         }
         if b0 == b'*' {
@@ -1246,14 +1207,14 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
                 unknown_symbol: true,
             };
             let curr = builder.on_atom(atom);
-            let old_last = last_atom_idx;
-            if let Some(last) = old_last {
-                if let Some((order, dir, _)) = pending_bond.take() {
-                    builder.on_bond(last, curr, BondData { order, dir });
-                } else {
-                    builder.on_bond_single_fast(last, curr);
-                }
-            }
+            attach_atom(
+                &mut builder,
+                last_atom_idx,
+                curr,
+                &mut pending_bond,
+                last_aromatic,
+                false,
+            );
             last_atom_idx = Some(curr);
             last_aromatic = false;
             if let Some(top) = pstack.last_mut() {
@@ -1301,8 +1262,13 @@ fn parse_core(input: &[u8], flags: SmilesParseFlags) -> Result<(Molecule, Option
         return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
     }
     let meta_opt = if let Some(seq) = _ring_sequence {
-        Some(ParseMeta { token_spans: Vec::new(), ring_events: seq.into_iter().map(|(d, _)| d).collect() })
-    } else { None };
+        Some(ParseMeta {
+            token_spans: Vec::new(),
+            ring_events: seq.into_iter().map(|(d, _)| d).collect(),
+        })
+    } else {
+        None
+    };
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_default();
     Ok((mol, meta_opt))
