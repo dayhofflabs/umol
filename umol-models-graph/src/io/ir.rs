@@ -68,14 +68,12 @@ pub struct Variable {}
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Atom {
     // Core atomic properties (common to all formats)
-    pub index: Option<u32>,
     pub symbol: AtomSymbol,
     pub position: Option<Point3D>,
     pub charge: Option<i32>,
     pub isotope: Option<u32>,
     pub radical: Option<AtomRadical>,
     pub hydrogen_count: Option<u32>,
-    /// True when the hydrogen count is implicit (to be resolved in semantic pass)
     pub implicit_h: bool,
 
     pub aromatic: Option<bool>,
@@ -142,9 +140,8 @@ pub enum AtomRadical {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Bond {
     // Core properties
-    pub index: Option<u32>,
-    pub start_atom: Option<u32>, // TODO: builder will set directly; keep Option for compatibility now
-    pub end_atom: Option<u32>,   // TODO: builder will set directly; keep Option for compatibility now
+    pub start_atom: u32,
+    pub end_atom: u32,
     pub ring: Option<u32>,
     pub symbol: BondSymbol,
     pub stereo: Option<BondStereo>,

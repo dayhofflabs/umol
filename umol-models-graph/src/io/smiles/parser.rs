@@ -180,6 +180,7 @@ enum Frame {
     },
 }
 
+#[inline]
 fn is_digit(b: u8) -> bool {
     (b'0'..=b'9').contains(&b)
 }
@@ -584,6 +585,7 @@ fn parse_bond(b: u8) -> (BondOrder, Option<BondDir>) {
     }
 }
 
+#[inline]
 fn parse_bracket(
     inner: &[u8],
     pos_offset: usize,
@@ -594,7 +596,7 @@ fn parse_bracket(
         Option<u32>,
         Option<i32>,
         Option<u32>,
-        Option<u8>,
+        Option<u32>,
         Option<Chirality>,
         bool,
     ),
@@ -649,7 +651,7 @@ fn parse_bracket(
     // 3) Tail fields in any order
     let mut charge: Option<i32> = None;
     let mut class_num: Option<u32> = None;
-    let mut hcount: Option<u8> = None;
+    let mut hcount: Option<u32> = None;
     let mut chir: Option<Chirality> = None;
 
     while i < n {
@@ -671,7 +673,7 @@ fn parse_bracket(
                     val = (inner[i + 1] - b'0') as u32;
                     i += 1;
                 }
-                hcount = Some((val as u8).min(u8::MAX));
+                hcount = Some(val);
                 i += 1;
             }
             b'+' | b'-' => {
@@ -1030,7 +1032,7 @@ fn parse_core(
                 element,
                 isotope: iso_opt,
                 charge: charge_opt,
-                hydrogen_count: h_opt.map(|h| (h as u8).min(u8::MAX)),
+                hydrogen_count: h_opt,
                 class: class_opt,
                 aromatic,
                 implicit_h: false,
