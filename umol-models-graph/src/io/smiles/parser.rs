@@ -1,6 +1,5 @@
 //! SMILES parser
 
-use smallvec::SmallVec;
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
@@ -119,7 +118,6 @@ pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecu
     let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
     let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
     let use_eoi = flags.contains(SmilesParseFlags::EXPLICIT_EOI);
-    let _record_lint = flags.contains(SmilesParseFlags::LINT_SIDECHANNEL);
 
     let input = if use_eoi {
         let cut = truncate_at_eoi(input, allow_comments);
@@ -148,15 +146,16 @@ pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecu
                 return Err(ParseError::InvalidWhitespace { pos: start + k });
             }
         }
-        return parse_core(&input[start..end], flags).map(|(m, _)| m);
+        return parse_smiles_inner(&input[start..end], flags).map(|(m, _)| m);
     }
 
-    parse_core(input, flags).map(|(m, _)| m)
+    parse_smiles_inner(input, flags).map(|(m, _)| m)
 }
 
 // Fixed-size resources for parser internals
 const RING_TABLE_LEN: usize = 100; // OpenSMILES ring indices: 0..9 and %00..%99
 const BRANCH_STACK_DEPTH: usize = 16; // Branch stack depth
+const RING_SEQUENCE_CAPACITY: usize = 8; // Ring sequence capacity
 
 #[derive(Debug, Clone, Copy)]
 struct OpenRing {
@@ -304,7 +303,7 @@ fn process_ring_closure(
 }
 
 #[inline]
-fn invalid_ring_context(pstack: &SmallVec<[Frame; BRANCH_STACK_DEPTH]>) -> bool {
+fn invalid_ring_context(pstack: &Vec<Frame>) -> bool {
     matches!(
         pstack.last(),
         Some(
@@ -779,30 +778,28 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-fn parse_core(
+fn parse_smiles_inner(
     input: &[u8],
     flags: SmilesParseFlags,
 ) -> Result<(Molecule, Option<ParseMeta>), ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
     let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
-    let _record_lint = flags.contains(SmilesParseFlags::LINT_SIDECHANNEL);
+    let no_lints = flags.contains(SmilesParseFlags::NO_LINTS);
 
     let mut i = 0usize;
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
-    let mut last_atom_idx: Option<u32> = None;
-    let mut pending_bond: Option<(BondOrder, Option<BondDir>, usize)> = None;
-    let mut last_aromatic: bool = false;
-    let mut pstack: SmallVec<[Frame; BRANCH_STACK_DEPTH]> = SmallVec::new();
+    let mut branch_stack: Vec<Frame> = Vec::with_capacity(BRANCH_STACK_DEPTH);
     let mut ring_table: [Option<OpenRing>; RING_TABLE_LEN] = [None; RING_TABLE_LEN];
-    let mut just_closed_group: bool = false;
-
-    // Gated side-channel (not exposed yet): ring sequence and percent padding
-    let mut _ring_sequence: Option<Vec<(u32, usize)>> = if _record_lint {
-        Some(Vec::with_capacity(8))
+    let mut ring_sequence: Option<Vec<(u32, usize)>> = if !no_lints {
+        Some(Vec::with_capacity(RING_SEQUENCE_CAPACITY))
     } else {
         None
     };
+    let mut last_atom_idx: Option<u32> = None;
+    let mut pending_bond: Option<(BondOrder, Option<BondDir>, usize)> = None;
+    let mut last_aromatic: bool = false;
+    let mut just_closed_group: bool = false;
     let mut first_ring_digit: Option<u32> = None;
 
     while i < n {
@@ -856,19 +853,19 @@ fn parse_core(
             }
             if just_closed_group {
                 last_atom_idx = None;
-                pstack.push(Frame::Group {
+                branch_stack.push(Frame::Group {
                     had_atom: false,
                     open_pos: i,
                 });
                 just_closed_group = false;
             } else {
                 match last_atom_idx {
-                    Some(idx) => pstack.push(Frame::Branch {
+                    Some(idx) => branch_stack.push(Frame::Branch {
                         base: idx,
                         had_atom: false,
                         open_pos: i,
                     }),
-                    None => pstack.push(Frame::Group {
+                    None => branch_stack.push(Frame::Group {
                         had_atom: false,
                         open_pos: i,
                     }),
@@ -881,7 +878,7 @@ fn parse_core(
             if let Some((_, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos });
             }
-            let Some(frame) = pstack.pop() else {
+            let Some(frame) = branch_stack.pop() else {
                 return Err(ParseError::UnbalancedCloseParen { pos: i });
             };
             match frame {
@@ -908,7 +905,7 @@ fn parse_core(
                         just_closed_group = false;
                     } else {
                         just_closed_group = true;
-                        if pstack.is_empty() && i + 1 != n {
+                        if branch_stack.is_empty() && i + 1 != n {
                             let next = input[i + 1];
                             if next != b'.' {
                                 return Err(ParseError::NonfinalGroup { pos: i });
@@ -929,7 +926,7 @@ fn parse_core(
             }
             if let Some(Frame::Group {
                 had_atom: false, ..
-            }) = pstack.last()
+            }) = branch_stack.last()
             {
                 return Err(ParseError::LeadingDot { pos: i });
             }
@@ -957,10 +954,10 @@ fn parse_core(
                 if last_atom_idx.is_none() {
                     return Err(ParseError::LeadingRing { pos: i });
                 }
-                if invalid_ring_context(&pstack) {
+                if invalid_ring_context(&branch_stack) {
                     return Err(ParseError::LeadingRing { pos: 0 });
                 }
-                if let Some(seq) = _ring_sequence.as_mut() {
+                if let Some(seq) = ring_sequence.as_mut() {
                     let d = if percent {
                         ((input[i + 1] - b'0') as u32) * 10 + (input[i + 2] - b'0') as u32
                     } else {
@@ -997,7 +994,7 @@ fn parse_core(
             if last_atom_idx.is_none() {
                 if let Some(Frame::Group {
                     had_atom: false, ..
-                }) = pstack.last()
+                }) = branch_stack.last()
                 {
                     return Err(ParseError::LeadingBond { pos: i });
                 }
@@ -1050,7 +1047,7 @@ fn parse_core(
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
-            if let Some(top) = pstack.last_mut() {
+            if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                         *had_atom = true
@@ -1073,7 +1070,7 @@ fn parse_core(
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
-                if let Some(top) = pstack.last_mut() {
+                if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                             *had_atom = true
@@ -1094,7 +1091,7 @@ fn parse_core(
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
-            if let Some(top) = pstack.last_mut() {
+            if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                         *had_atom = true
@@ -1117,7 +1114,7 @@ fn parse_core(
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
-                if let Some(top) = pstack.last_mut() {
+                if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                             *had_atom = true
@@ -1138,7 +1135,7 @@ fn parse_core(
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
-            if let Some(top) = pstack.last_mut() {
+            if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                         *had_atom = true
@@ -1162,7 +1159,7 @@ fn parse_core(
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
-                if let Some(top) = pstack.last_mut() {
+                if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                             *had_atom = true
@@ -1184,7 +1181,7 @@ fn parse_core(
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = true;
-                if let Some(top) = pstack.last_mut() {
+                if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                             *had_atom = true
@@ -1219,7 +1216,7 @@ fn parse_core(
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
-            if let Some(top) = pstack.last_mut() {
+            if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
                         *had_atom = true
@@ -1243,8 +1240,8 @@ fn parse_core(
         let (_, _, pos) = pending_bond.unwrap();
         return Err(ParseError::TrailingBond { pos });
     }
-    if !pstack.is_empty() {
-        let pos = match pstack.last().unwrap() {
+    if !branch_stack.is_empty() {
+        let pos = match branch_stack.last().unwrap() {
             Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
         };
         return Err(ParseError::UnbalancedOpenParen { pos });
@@ -1263,7 +1260,7 @@ fn parse_core(
     if let Some(pos_open) = last_open {
         return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
     }
-    let meta_opt = if let Some(seq) = _ring_sequence {
+    let meta_opt = if let Some(seq) = ring_sequence {
         Some(ParseMeta {
             token_spans: Vec::new(),
             ring_events: seq.into_iter().map(|(d, _)| d).collect(),

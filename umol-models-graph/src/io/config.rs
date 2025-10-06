@@ -158,10 +158,7 @@ bitflags! {
         const INTERTOKEN_WS = 1;       // allow ASCII inter-token whitespace
         const COMMENTS = 2;            // // line and /* block */ comments
         const EXPLICIT_EOI = 4;        // explicit end-of-input marker token
-        const CXSMILES_TRAILER = 8;    // accept |...| trailer after SMILES
-        const ELEMENT_NUMBERS = 16;    // [#n] element numbers
-        const NONORGANIC_BARE = 32;    // bare non-organic atoms allowed
-        const LINT_SIDECHANNEL = 64;   // capture lint-only side-channel hints
+        const NO_LINTS = 64;           // no lints emitted
 
         // Presets
         const UMOL_DIALECT = Self::INTERTOKEN_WS.bits() | Self::COMMENTS.bits();
@@ -188,17 +185,8 @@ impl fmt::Display for SmilesParseFlags {
         if self.contains(SmilesParseFlags::EXPLICIT_EOI) {
             parts.push("EXPLICIT_EOI");
         }
-        if self.contains(SmilesParseFlags::CXSMILES_TRAILER) {
-            parts.push("CXSMILES_TRAILER");
-        }
-        if self.contains(SmilesParseFlags::ELEMENT_NUMBERS) {
-            parts.push("ELEMENT_NUMBERS");
-        }
-        if self.contains(SmilesParseFlags::NONORGANIC_BARE) {
-            parts.push("NONORGANIC_BARE");
-        }
-        if self.contains(SmilesParseFlags::LINT_SIDECHANNEL) {
-            parts.push("LINT_SIDECHANNEL");
+        if self.contains(SmilesParseFlags::NO_LINTS) {
+            parts.push("NO_LINTS");
         }
 
         write!(f, "{}", parts.join(" | "))
@@ -217,7 +205,11 @@ impl SmilesIoConfig {
     }
 
     pub fn with_flags(flags: SmilesParseFlags) -> Self {
-        Self { parse_flags: flags, lint: None, check: SmilesCheckFlags::default() }
+        Self {
+            parse_flags: flags,
+            lint: None,
+            check: SmilesCheckFlags::default(),
+        }
     }
 
     pub fn strict_opensmiles() -> Self {
