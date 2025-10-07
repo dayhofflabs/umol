@@ -275,6 +275,6 @@ mod tests {
             Span::new(0, 10),
             "Invalid token",
         );
-        assert_eq!(d.to_string(), "Invalid token [LEX:0..10]");
+        assert_eq!(d.to_string(), "Invalid token [LEX:INVALID_TOKEN] @0..10");
     }
 }

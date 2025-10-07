@@ -10,7 +10,7 @@ use crate::io::smiles::parse_smiles;
 
 /// Lightweight parse metadata (explicit side-channel replacement)
 #[derive(Debug, Default, Clone)]
-pub struct ParseMeta {
+pub struct ParseMetadata {
     pub token_spans: Vec<(usize, usize)>,
     pub ring_events: Vec<u32>,
 }
@@ -19,7 +19,7 @@ pub struct ParseMeta {
 #[derive(Debug, Default, Clone)]
 pub struct ParseOutput {
     pub sir: Option<Molecule>,
-    pub meta: ParseMeta,
+    pub meta: ParseMetadata,
     pub diagnostics: DiagnosticsReport,
 }
 

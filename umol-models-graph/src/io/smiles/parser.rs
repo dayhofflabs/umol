@@ -3,7 +3,7 @@
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
-use super::api::ParseMeta;
+use super::api::ParseMetadata;
 use crate::io::config::SmilesParseFlags;
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
@@ -152,11 +152,6 @@ pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecu
     parse_smiles_inner(input, flags).map(|(m, _)| m)
 }
 
-// Fixed-size resources for parser internals
-const RING_TABLE_LEN: usize = 100; // OpenSMILES ring indices: 0..9 and %00..%99
-const BRANCH_STACK_DEPTH: usize = 16; // Branch stack depth
-const RING_SEQUENCE_CAPACITY: usize = 8; // Ring sequence capacity
-
 #[derive(Debug, Clone, Copy)]
 struct OpenRing {
     atom_id: u32,
@@ -226,7 +221,7 @@ fn parse_ring_index(input: &[u8], i: usize) -> Result<Option<(usize, usize, bool
 
 #[inline]
 fn process_ring_closure(
-    ring_table: &mut [Option<OpenRing>; RING_TABLE_LEN],
+    ring_table: &mut Vec<Option<OpenRing>>,
     builder: &mut MoleculeBuilder,
     last_aromatic: bool,
     last_atom_idx: u32,
@@ -235,6 +230,9 @@ fn process_ring_closure(
     dir_opt: Option<BondDir>,
     pos: usize,
 ) -> Result<(), ParseError> {
+    if ring_table.len() <= idx {
+        ring_table.resize_with(idx + 1, || None);
+    }
     let entry = &mut ring_table[idx];
     match entry.take() {
         None => {
@@ -778,10 +776,10 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-fn parse_smiles_inner(
+pub(crate) fn parse_smiles_inner(
     input: &[u8],
     flags: SmilesParseFlags,
-) -> Result<(Molecule, Option<ParseMeta>), ParseError> {
+) -> Result<(Molecule, Option<ParseMetadata>), ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
     let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
     let no_lints = flags.contains(SmilesParseFlags::NO_LINTS);
@@ -789,13 +787,10 @@ fn parse_smiles_inner(
     let mut i = 0usize;
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
-    let mut branch_stack: Vec<Frame> = Vec::with_capacity(BRANCH_STACK_DEPTH);
-    let mut ring_table: [Option<OpenRing>; RING_TABLE_LEN] = [None; RING_TABLE_LEN];
-    let mut ring_sequence: Option<Vec<(u32, usize)>> = if !no_lints {
-        Some(Vec::with_capacity(RING_SEQUENCE_CAPACITY))
-    } else {
-        None
-    };
+    let mut branch_stack: Vec<Frame> = Vec::new();
+    let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
+    let mut ring_sequence: Option<Vec<(u32, usize)>> =
+        if !no_lints { Some(Vec::new()) } else { None };
     let mut last_atom_idx: Option<u32> = None;
     let mut pending_bond: Option<(BondOrder, Option<BondDir>, usize)> = None;
     let mut last_aromatic: bool = false;
@@ -1260,8 +1255,8 @@ fn parse_smiles_inner(
     if let Some(pos_open) = last_open {
         return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
     }
-    let meta_opt = if let Some(seq) = ring_sequence {
-        Some(ParseMeta {
+    let metadata = if let Some(seq) = ring_sequence {
+        Some(ParseMetadata {
             token_spans: Vec::new(),
             ring_events: seq.into_iter().map(|(d, _)| d).collect(),
         })
@@ -1270,7 +1265,7 @@ fn parse_smiles_inner(
     };
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_default();
-    Ok((mol, meta_opt))
+    Ok((mol, metadata))
 }
 
 #[cfg(test)]
