@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use umol::error::DataError;
 use umol::Result;
 
-use crate::io::ctab::config::CtabParseFlags;
+use crate::io::ctab::config::{CtabParseFlags, MolIoConfig};
 use crate::io::mol::parser::{mol_file_moleculelike, MolFileLike};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +43,8 @@ impl SdfCompound {
 }
 
 /// Parse data field header: `> <Field Name>`
-fn data_header<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
+pub(crate) fn data_header<'inp>(
+) -> impl Parser<&'inp [u8], Output = String, Error = error::Error<&'inp [u8]>> {
     map(
         delimited(
             (tag(">"), many1(tag(" "))), // Allow multiple spaces after >
@@ -55,7 +56,8 @@ fn data_header<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Er
 }
 
 /// Parse multi-line data value until blank line
-fn data_value<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
+pub(crate) fn data_value<'inp>(
+) -> impl Parser<&'inp [u8], Output = String, Error = error::Error<&'inp [u8]>> {
     map(
         many_till(
             terminated(not_line_ending::<&[u8], error::Error<&[u8]>>, line_ending),
@@ -75,19 +77,20 @@ fn data_value<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Err
 }
 
 /// Parse complete data field (header + value)
-fn data_field<'a>(
-) -> impl Parser<&'a [u8], Output = (String, String), Error = error::Error<&'a [u8]>> {
+pub(crate) fn data_field<'inp>(
+) -> impl Parser<&'inp [u8], Output = (String, String), Error = error::Error<&'inp [u8]>> {
     (terminated(data_header(), line_ending), data_value())
 }
 
 /// Parse SDF record delimiter
-fn sdf_delimiter<'a>() -> impl Parser<&'a [u8], Output = (), Error = error::Error<&'a [u8]>> {
+pub(crate) fn sdf_delimiter<'inp>(
+) -> impl Parser<&'inp [u8], Output = (), Error = error::Error<&'inp [u8]>> {
     value((), (tag("$$$$"), opt(line_ending)))
 }
 
 /// Parse multiple data fields
-fn data_block<'a>(
-) -> impl Parser<&'a [u8], Output = IndexMap<String, String>, Error = error::Error<&'a [u8]>> {
+pub(crate) fn data_block<'inp>(
+) -> impl Parser<&'inp [u8], Output = IndexMap<String, String>, Error = error::Error<&'inp [u8]>> {
     map(
         many_till(
             alt((
@@ -110,13 +113,15 @@ fn data_block<'a>(
 }
 
 /// Parse single SDF compound (MOL + data + $$$$)
-fn sdf_compound<'a>() -> impl Parser<&'a [u8], Output = SdfCompound, Error = error::Error<&'a [u8]>>
+pub(crate) fn sdf_compound<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = SdfCompound, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
 {
-    move |input: &'a [u8]| {
+    move |input: &'inp [u8]| {
         let (remaining, mol_input) =
             alt((take_until(">"), take_until("$$$$"), rest)).parse(input)?;
 
-        let (_, mol_file) = mol_file_moleculelike(&CtabParseFlags::LENIENT)
+        let (_, mol_file) = mol_file_moleculelike(flags)
             .parse(mol_input)
             .map_err(|_| nom::Err::Error(error::Error::new(input, error::ErrorKind::Verify)))?;
 
@@ -128,16 +133,21 @@ fn sdf_compound<'a>() -> impl Parser<&'a [u8], Output = SdfCompound, Error = err
 }
 
 /// Parse complete SDF file (multiple compounds)
-fn sdf_file<'a>() -> impl Parser<&'a [u8], Output = SdfFile, Error = error::Error<&'a [u8]>> {
-    map(many1(sdf_compound()), SdfFile::new)
+pub(crate) fn sdf_file<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = SdfFile, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+    map(many1(sdf_compound(flags)), SdfFile::new)
 }
 
 /// Public API function to parse SDF files
 pub fn parse_sdf(input: &[u8]) -> Result<SdfFile> {
-    all_consuming(complete(terminated(sdf_file(), multispace0)))
+    let config = MolIoConfig::lenient();
+    let flags = config.parse_flags;
+    let result = all_consuming(complete(terminated(sdf_file(&flags), multispace0)))
         .parse(input)
         .map(|(_, sdf_file)| sdf_file)
-        .map_err(|e| DataError::InvalidSdfFormat(format!("SDF parsing failed: {:?}", e)).into())
+        .map_err(|e| DataError::InvalidSdfFormat(format!("SDF parsing failed: {:?}", e)).into());
+    result
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@
 
 use rstest::*;
 use umol_models_graph::io::smiles::diagnostics::DiagnosticsReport;
-use umol_models_graph::io::smiles::linter::lint_smiles;
+use umol_models_graph::io::smiles::lint::lint_smiles;
 
 fn codes(report: &DiagnosticsReport) -> Vec<&'static str> {
     report.diagnostics.iter().map(|d| d.code.0).collect()

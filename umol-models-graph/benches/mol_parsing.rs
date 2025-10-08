@@ -19,7 +19,7 @@ fn mol_parsing(c: &mut Criterion) {
         ];
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| counts_input(CtabParseFlags::BASIC).parse(black_box(input)))
+                b.iter(|| counts_input(&CtabParseFlags::BASIC).parse(black_box(input)))
             });
         }
         group.finish();
@@ -75,7 +75,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| atom_input(CtabParseFlags::BASIC).parse(black_box(input)))
+                b.iter(|| atom_input(&CtabParseFlags::BASIC).parse(black_box(input)))
             });
         }
 
@@ -123,7 +123,9 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| atomlike_input(CtabParseFlags::LENIENT).parse(std::hint::black_box(input)))
+                b.iter(|| {
+                    atomlike_input(&CtabParseFlags::LENIENT).parse(std::hint::black_box(input))
+                })
             });
         }
 
@@ -143,7 +145,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| bond_input(CtabParseFlags::BASIC).parse(black_box(input)))
+                b.iter(|| bond_input(&CtabParseFlags::BASIC).parse(black_box(input)))
             });
         }
         group.finish();
@@ -164,7 +166,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| bondlike_input(CtabParseFlags::LENIENT).parse(black_box(input)))
+                b.iter(|| bondlike_input(&CtabParseFlags::LENIENT).parse(black_box(input)))
             });
         }
         group.finish();
@@ -179,7 +181,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| legacy_atom_list_input().parse(black_box(input)))
+                b.iter(|| legacy_atom_list_input(&CtabParseFlags::BASIC).parse(black_box(input)))
             });
         }
         group.finish();
@@ -241,7 +243,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| basic_property_input(CtabParseFlags::BASIC).parse(black_box(input)))
+                b.iter(|| basic_property_input(&CtabParseFlags::BASIC).parse(black_box(input)))
             });
         }
         group.finish();
@@ -321,7 +323,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| property_input(CtabParseFlags::LENIENT).parse(black_box(input)))
+                b.iter(|| property_input(&CtabParseFlags::LENIENT).parse(black_box(input)))
             });
         }
         group.finish();

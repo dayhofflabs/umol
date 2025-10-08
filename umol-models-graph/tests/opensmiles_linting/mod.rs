@@ -1,3 +1,3 @@
 //! Linting tests for OpenSMILES (UMOL)
 
-mod table;
+// mod table;

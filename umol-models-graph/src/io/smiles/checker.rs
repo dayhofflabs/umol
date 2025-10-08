@@ -19,7 +19,7 @@
 use super::diagnostics::DiagnosticsReport;
 use super::parser::ParseMetadata;
 use crate::io::ir::Molecule;
-use crate::io::smiles::config::{SmilesParseFlags, SmilesCheckFlags, SmilesLintConfig, SmilesIoConfig};
+use crate::io::smiles::config::{SmilesCheckFlags, SmilesIoConfig, SmilesLintConfig};
 use crate::io::smiles::parser::parse_smiles_inner;
 
 #[derive(Default)]
@@ -45,11 +45,11 @@ pub struct CheckOutput {
 }
 
 pub fn check_parsed(
-    mol: &Molecule,
-    meta: &ParseMetadata,
-    check_flags: &SmilesCheckFlags,
-    lint_config: &SmilesLintConfig,
-    models: &SmilesModels,
+    _mol: &Molecule,
+    _meta: &ParseMetadata,
+    _check_flags: &SmilesCheckFlags,
+    _lint_config: &SmilesLintConfig,
+    _models: &SmilesModels,
 ) -> CheckOutput {
     let report = DiagnosticsReport::new();
     let annotations = Annotations::default();
@@ -79,7 +79,13 @@ pub fn check_smiles_with(
             let meta = parse_output.meta.unwrap_or_default();
             let _report = DiagnosticsReport::new();
             let _annotations = Annotations::default();
-            let check_output = check_parsed(&mol, &meta, &io_config.check_flags, &io_config.lint_config, models);
+            let check_output = check_parsed(
+                &mol,
+                &meta,
+                &io_config.check_flags,
+                &io_config.lint_config,
+                models,
+            );
             check_output.diagnostics
         }
         Err(e) => {
