@@ -5,7 +5,7 @@ use umol_data::Element;
 
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
-use crate::io::smiles::config::SmilesParseFlags;
+use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
 use crate::io::smiles::diagnostics::{Diagnostic, DiagnosticCategory, DiagnosticCode, Span};
 
 #[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
@@ -128,17 +128,18 @@ pub struct ParseOutput {
     pub meta: Option<ParseMetadata>,
 }
 
-// Public entrypoint: strict OpenSMILES
+// Public entrypoint for strict OpenSMILES
 pub fn parse_smiles<'inp>(input: &'inp [u8]) -> Result<Molecule, ParseError> {
-    let flags = SmilesParseFlags::STRICT_OPENSMILES;
-    parse_smiles_with(input, &flags)
+    let config = SmilesIoConfig::strict_opensmiles();
+    parse_smiles_with(input, &config)
 }
 
-// Flags-aware inner parser
-pub fn parse_smiles_with<'inp, 'fl>(
+// Public entrypoint for configuration-aware parser
+pub fn parse_smiles_with<'inp, 'conf>(
     input: &'inp [u8],
-    flags: &'fl SmilesParseFlags,
+    config: &'conf SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {
+    let flags = config.parse_flags;
     let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
     let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
     let use_eoi = flags.contains(SmilesParseFlags::EXPLICIT_EOI);
@@ -170,10 +171,10 @@ pub fn parse_smiles_with<'inp, 'fl>(
                 return Err(ParseError::InvalidWhitespace { pos: start + k });
             }
         }
-        return parse_smiles_inner(&input[start..end], flags).map(|o| o.sir);
+        return parse_smiles_inner(&input[start..end], &flags).map(|o| o.sir);
     }
 
-    parse_smiles_inner(input, flags).map(|o| o.sir)
+    parse_smiles_inner(input, &flags).map(|o| o.sir)
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -1003,14 +1003,26 @@ fn whitespace_strict_invalid(#[case] input: &[u8], #[case] expected: ParseError)
 #[case::line_comment_flags(b"C// x\nC", build_from_graph("C C | 0-1"))]
 #[case::block_comment_flags(b"C/* x */C", build_from_graph("C C | 0-1"))]
 #[case::block_comment_multiline_flags(b"C/* x\n y */C", build_from_graph("C C | 0-1"))]
+fn whitespace_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
+    let config = SmilesIoConfig::umol_dialect();
+    let res = parse_smiles_with(input, &config);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
+}
+
+#[rstest]
 #[case::eoi_blank_line(b"C\n\nC", build_from_graph("C |"))]
 #[case::eoi_blank_line_crlf(b"C\r\n\r\nC", build_from_graph("C |"))]
 #[case::eoi_blank_line_with_comment(b"C\n/* comment */\n\nC", build_from_graph("C |"))]
-fn whitespace_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
-    let flags = SmilesParseFlags::EXTENDED_WS
-        | SmilesParseFlags::ALLOWS_COMMENTS
-        | SmilesParseFlags::EXPLICIT_EOI;
-    let res = parse_smiles_with(input, &flags);
+fn eoi_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
+    let config = SmilesIoConfig {
+        parse_flags: SmilesParseFlags::EXTENDED_WS
+            | SmilesParseFlags::ALLOWS_COMMENTS
+            | SmilesParseFlags::EXPLICIT_EOI,
+        ..Default::default()
+    };
+    let res = parse_smiles_with(input, &config);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -1023,10 +1035,8 @@ fn whitespace_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::unterminated_block_comment(b"C/* x", ParseError::UnterminatedBlockComment { pos: 1 })]
 #[case::bracket_inner_ws(b"[ C ]", ParseError::InvalidBracket { pos: 1 })]
 fn whitespace_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let flags = SmilesParseFlags::EXTENDED_WS
-        | SmilesParseFlags::ALLOWS_COMMENTS
-        | SmilesParseFlags::EXPLICIT_EOI;
-    let res = parse_smiles_with(input, &flags);
+    let config = SmilesIoConfig::umol_dialect();
+    let res = parse_smiles_with(input, &config);
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);

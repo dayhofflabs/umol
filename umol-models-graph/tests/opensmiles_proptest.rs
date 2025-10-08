@@ -3,7 +3,7 @@
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_models_graph::io::smiles::config::SmilesParseFlags;
+use umol_models_graph::io::smiles::config::SmilesIoConfig;
 use umol_models_graph::io::smiles::parser::parse_smiles_with;
 use umol_models_graph::io::smiles::{parse_smiles, ParseError};
 
@@ -25,11 +25,11 @@ proptest! {
 
     // Crash-only: parser should never panic on arbitrary ASCII up to length 256
     #[test]
-    fn never_panics_on_ascii_lenient(input in smilesish()) {
-        let flags = SmilesParseFlags::EXTENDED_WS | SmilesParseFlags::ALLOWS_COMMENTS | SmilesParseFlags::EXPLICIT_EOI;
+    fn never_panics_on_ascii(input in smilesish()) {
+        let config = SmilesIoConfig::umol_dialect();
         let _ = std::panic::catch_unwind(|| {
-            let _ = parse_smiles_with(&input, &flags);
-        }).expect("parse_smiles(lenient) panicked");
+            let _ = parse_smiles_with(&input, &config);
+        }).expect("parse_smiles panicked");
     }
 
     // Error spans must point within the input bounds (M6 strict)
