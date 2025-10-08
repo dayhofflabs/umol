@@ -8,7 +8,7 @@ use nom::sequence::{delimited, preceded, terminated};
 use nom::{error, Parser};
 
 use super::utils::{fixed_width_int, fixed_width_padding_n};
-use crate::io::config::MolParseFlags;
+use crate::io::ctab::config::CtabParseFlags;
 
 /// Parse counts line (39 characters wide)
 /// aaabbblllfffcccsssxxxrrrpppiiimmmvvvvvv
@@ -27,10 +27,10 @@ use crate::io::config::MolParseFlags;
 /// ---------------------------------------------------------------
 ///
 pub fn counts_input<'a>(
-    flags: MolParseFlags,
+    flags: CtabParseFlags,
 ) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
-    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
-    let legacy_features = flags.contains(MolParseFlags::LEGACY_FEATURES);
+    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
+    let legacy_features = flags.contains(CtabParseFlags::LEGACY_FEATURES);
     terminated(
         move |input: &'a [u8]| {
             map(
@@ -114,7 +114,7 @@ mod tests {
     #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded",
       Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
     fn test_counts_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: Counts) {
-        let res = all_consuming(counts_input(MolParseFlags::LENIENT)).parse(input);
+        let res = all_consuming(counts_input(CtabParseFlags::LENIENT)).parse(input);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(
@@ -135,7 +135,7 @@ mod tests {
         #[case] desc: &str,
         #[case] expected: Counts,
     ) {
-        let res = all_consuming(counts_input(MolParseFlags::LEGACY_FEATURES)).parse(input);
+        let res = all_consuming(counts_input(CtabParseFlags::LEGACY_FEATURES)).parse(input);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(
@@ -157,7 +157,7 @@ mod tests {
         #[case] desc: &str,
         #[case] expected_kind: error::ErrorKind,
     ) {
-        let res = counts_input(MolParseFlags::STRICT).parse(input);
+        let res = counts_input(CtabParseFlags::STRICT).parse(input);
         assert!(res.is_err(), "{} should have failed", desc);
         assert!(
             matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),

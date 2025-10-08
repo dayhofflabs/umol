@@ -5,7 +5,7 @@ use rstest::*;
 use umol_data::Element;
 
 use super::*;
-use crate::io::config::MolParseFlags;
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::sgroup::{SGroupMultiplierOp, SGroupMultiplierTerm};
 
 #[rstest]
@@ -22,7 +22,7 @@ fn test_legacy_atom_list_input(
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let result = legacy_atom_list_input().parse(input);
+    let result = legacy_atom_list_input(&CtabParseFlags::BASIC).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
@@ -40,7 +40,7 @@ fn test_legacy_atom_list_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = legacy_atom_list_input().parse(input);
+    let result = legacy_atom_list_input(&CtabParseFlags::BASIC).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -72,7 +72,7 @@ fn test_basic_property_input(
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let (remaining, result) = all_consuming(basic_property_input(MolParseFlags::BASIC))
+    let (remaining, result) = all_consuming(basic_property_input(&CtabParseFlags::BASIC))
         .parse(input)
         .unwrap();
     assert!(
@@ -115,7 +115,7 @@ fn test_basic_property_input(
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property, requires allow_clark_extensions")]
 #[case(b"M  HYD  1   1   1", "HYD atom property, requires allow_clark_extensions")]
 fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc: &str) {
-    let result = all_consuming(basic_property_input(MolParseFlags::STRICT)).parse(input);
+    let result = all_consuming(basic_property_input(&CtabParseFlags::STRICT)).parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == error::ErrorKind::Tag),
@@ -174,7 +174,7 @@ fn test_property_input(
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let result = all_consuming(property_input(MolParseFlags::LENIENT)).parse(input);
+    let result = all_consuming(property_input(&CtabParseFlags::LENIENT)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(
@@ -202,7 +202,7 @@ fn test_property_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(property_input(MolParseFlags::STRICT)).parse(input);
+    let result = all_consuming(property_input(&CtabParseFlags::STRICT)).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),

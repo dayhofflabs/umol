@@ -12,7 +12,7 @@ use super::convert::{
     convert_radical_type_code, convert_ring_bond_count_code, convert_substitution_count_code,
     convert_unsaturated_atom_code,
 };
-use crate::io::config::MolParseFlags;
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::atom::{
     AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, RingBondCount,
     SubstitutionCount, UnsaturatedAtom,
@@ -124,8 +124,8 @@ impl MoleculeProperties {
         }
     }
 
-    pub fn add_entry(&mut self, entry: PropertyEntries, flags: MolParseFlags) -> Result<()> {
-        let extended_range = flags.contains(MolParseFlags::EXTENDED_RANGE);
+    pub fn add_entry(&mut self, entry: PropertyEntries, flags: CtabParseFlags) -> Result<()> {
+        let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
         match entry {
             PropertyEntries::AtomAliasEntry(e) => {
                 let props = self.atom_properties.entry(e.atom_index).or_default();
@@ -614,8 +614,8 @@ impl MoleculeProperties {
     }
 
     /// Apply all properties to Molecule
-    pub fn update_molecule(&mut self, molecule: &mut Molecule, flags: MolParseFlags) -> Result<()> {
-        let extended_isotopes = flags.contains(MolParseFlags::EXTENDED_ISOTOPES);
+    pub fn update_molecule(&mut self, molecule: &mut Molecule, flags: CtabParseFlags) -> Result<()> {
+        let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
         for (atom_index, props) in &self.atom_properties {
             if props.alias.is_some() {
                 self.apply_atom_alias(*atom_index, props, molecule)?;
@@ -648,9 +648,9 @@ impl MoleculeProperties {
     pub fn update_moleculelike(
         &mut self,
         molecule: &mut MoleculeLike,
-        flags: MolParseFlags,
+        flags: CtabParseFlags,
     ) -> Result<()> {
-        let extended_isotopes = flags.contains(MolParseFlags::EXTENDED_ISOTOPES);
+        let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
         for (&atom_index, props) in &self.atom_properties {
             let atom = molecule
                 .atom_mut(atom_index)

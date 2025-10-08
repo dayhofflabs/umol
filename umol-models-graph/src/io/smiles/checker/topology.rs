@@ -1,10 +1,9 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use super::super::diagnostics::{Category, Diagnostic, DiagnosticsReport, Severity, Span};
+use super::super::diagnostics::{Diagnostic, DiagnosticsReport};
 use super::SideChannel;
 use crate::io::ir::Molecule;
-use crate::io::smiles::diagnostics::DiagnosticCode;
 
 pub struct TopologyArtifacts {
     pub self_loops: usize,

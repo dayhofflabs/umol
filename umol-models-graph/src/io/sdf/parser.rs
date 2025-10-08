@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use umol::error::DataError;
 use umol::Result;
 
-use crate::io::config::MolParseFlags;
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::mol::parser::{mol_file_moleculelike, MolFileLike};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,7 +116,7 @@ fn sdf_compound<'a>() -> impl Parser<&'a [u8], Output = SdfCompound, Error = err
         let (remaining, mol_input) =
             alt((take_until(">"), take_until("$$$$"), rest)).parse(input)?;
 
-        let (_, mol_file) = mol_file_moleculelike(MolParseFlags::LENIENT)
+        let (_, mol_file) = mol_file_moleculelike(&CtabParseFlags::LENIENT)
             .parse(mol_input)
             .map_err(|_| nom::Err::Error(error::Error::new(input, error::ErrorKind::Verify)))?;
 

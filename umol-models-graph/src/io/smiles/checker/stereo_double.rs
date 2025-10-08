@@ -1,7 +1,6 @@
-use super::super::diagnostics::{Category, Diagnostic, DiagnosticsReport, Severity, Span};
+use super::super::diagnostics::{Diagnostic, DiagnosticsReport};
 use super::SideChannel;
 use crate::io::ir::{BondDir, BondOrder, BondSymbol, Molecule};
-use crate::io::smiles::diagnostics::DiagnosticCode;
 
 pub struct StereoArtifacts {
     pub checked_double_bonds: usize,

@@ -21,8 +21,8 @@ pub use self::properties::{
 };
 use super::atom::{Atom, AtomLike};
 use super::bond::{Bond, BondLike};
+use super::config::CtabParseFlags;
 use super::molecule::{Molecule, MoleculeLike};
-use crate::io::config::MolParseFlags;
 
 mod accumulator;
 mod atom;
@@ -39,10 +39,10 @@ mod utils;
 /// Parses from the counts line through M END, returning a Molecule.
 /// This parser is optimized for basic molecules without query features.
 /// It will fail if the CTAB contains query atoms, query bonds, or other advanced features.
-pub fn basic_ctab_block<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Molecule, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+pub fn basic_ctab_block<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Molecule, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let (remaining, counts) = counts_block(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
@@ -61,11 +61,12 @@ pub fn basic_ctab_block<'a>(
 /// Parses from the counts line through M END, returning a complete Molecule.
 /// This parser handles all CTAB features including query atoms, query bonds,
 /// R-groups, S-groups, and all property lines.
-pub fn ctab_block<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = MoleculeLike, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
-        let legacy_features = flags.contains(MolParseFlags::LEGACY_FEATURES);
+pub fn ctab_block<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = MoleculeLike, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
+    move |input: &'inp [u8]| {
+        let legacy_features = flags.contains(CtabParseFlags::LEGACY_FEATURES);
         let (remaining, counts) = counts_block(flags).parse(input)?;
         let atom_count = counts.atom_count as usize;
         let bond_count = counts.bond_count as usize;
@@ -86,18 +87,22 @@ pub fn ctab_block<'a>(
 }
 
 /// Parse counts block
-fn counts_block<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Counts, Error = error::Error<&'a [u8]>> {
-    map_parser(terminated(is_not("\r\n"), line_ending), counts_input(flags))
+fn counts_block<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Counts, Error = error::Error<&'inp [u8]>> {
+    map_parser(
+        terminated(is_not("\r\n"), line_ending),
+        counts_input(*flags),
+    )
 }
 
 /// Parse atom block (basic atoms only)
-fn atom_block<'a>(
+fn atom_block<'inp, 'fl>(
     atom_count: usize,
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Vec<Atom>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Vec<Atom>, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
+    move |input: &'inp [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -118,11 +123,12 @@ fn atom_block<'a>(
 }
 
 /// Parse atom-like block
-fn atomlike_block<'a>(
+fn atomlike_block<'inp, 'fl>(
     atom_count: usize,
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Vec<AtomLike>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Vec<AtomLike>, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
+    move |input: &'inp [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -143,11 +149,12 @@ fn atomlike_block<'a>(
 }
 
 /// Parse bond block (basic bonds only)
-fn bond_block<'a>(
+fn bond_block<'inp, 'fl>(
     bond_count: usize,
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, Bond)>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Vec<(usize, usize, Bond)>, Error = error::Error<&'inp [u8]>>
+       + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -168,11 +175,12 @@ fn bond_block<'a>(
 }
 
 /// Parse bond-like block
-fn bondlike_block<'a>(
+fn bondlike_block<'inp, 'fl>(
     bond_count: usize,
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Vec<(usize, usize, BondLike)>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Vec<(usize, usize, BondLike)>, Error = error::Error<&'inp [u8]>>
+       + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -193,16 +201,17 @@ fn bondlike_block<'a>(
 }
 
 // Parse legacy atom list block
-fn legacy_atom_list_block<'a>(
-    _flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+fn legacy_atom_list_block<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'inp [u8]>>
+       + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let mut properties = Vec::new();
         let lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
 
         for line in lines_iter {
-            if let Ok((_, property)) = all_consuming(legacy_atom_list_input()).parse(line) {
+            if let Ok((_, property)) = all_consuming(legacy_atom_list_input(flags)).parse(line) {
                 properties.push(property);
                 consumed += line.len();
             } else {
@@ -216,10 +225,11 @@ fn legacy_atom_list_block<'a>(
 }
 
 /// Parse properties block (basic properties only)
-fn basic_properties_block<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+fn basic_properties_block<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'inp [u8]>>
+       + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let mut properties = Vec::new();
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -269,10 +279,11 @@ fn basic_properties_block<'a>(
 }
 
 /// Parse properties block
-fn properties_block<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+fn properties_block<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Vec<PropertyEntries>, Error = error::Error<&'inp [u8]>>
+       + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let mut properties = Vec::new();
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
@@ -313,7 +324,7 @@ fn properties_block<'a>(
 }
 
 /// Parse end block (M END line)
-fn end_block<'a>() -> impl Parser<&'a [u8], Output = (), Error = error::Error<&'a [u8]>> {
+fn end_block<'inp>() -> impl Parser<&'inp [u8], Output = (), Error = error::Error<&'inp [u8]>> {
     value((), opt(terminated(tag("M  END"), multispace0)))
 }
 
@@ -335,9 +346,9 @@ fn build_molecule(
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
-        acc.add_entry(entry, MolParseFlags::BASIC)?;
+        acc.add_entry(entry, CtabParseFlags::BASIC)?;
     }
-    acc.update_molecule(&mut molecule, MolParseFlags::BASIC)?;
+    acc.update_molecule(&mut molecule, CtabParseFlags::BASIC)?;
 
     Ok(molecule)
 }
@@ -360,10 +371,10 @@ fn build_moleculelike(
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
-        acc.add_entry(entry, MolParseFlags::LENIENT)?;
+        acc.add_entry(entry, CtabParseFlags::LENIENT)?;
     }
 
-    acc.update_moleculelike(&mut molecule, MolParseFlags::LENIENT)?;
+    acc.update_moleculelike(&mut molecule, CtabParseFlags::LENIENT)?;
 
     Ok(molecule)
 }

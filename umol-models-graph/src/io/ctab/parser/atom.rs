@@ -18,8 +18,8 @@ use super::utils::{
     fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt,
     fixed_width_padding_n, to_string,
 };
-use crate::io::config::MolParseFlags;
 use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol, Point3D};
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::parser::utils::fixed_width_partial;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
@@ -28,14 +28,14 @@ use crate::io::ctab::rgroup::RGroup;
 ///
 /// Returns error for atom-like symbols (L, A, Q, *, LP, R#).
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-fn atom_symbol<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    let allow_named_isotopes = flags.contains(MolParseFlags::NAMED_ISOTOPES);
-    move |input: &'a [u8]| {
+fn atom_symbol<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = AtomSymbol, Error = error::Error<&'inp [u8]>> {
+    let allow_named_isotopes = flags.contains(CtabParseFlags::NAMED_ISOTOPES);
+    move |input: &'inp [u8]| {
         fixed_width_partial(
             3,
-            move |s: &'a [u8]| {
+            move |s: &'inp [u8]| {
                 let s = s.trim_ascii();
                 if let Some(element) = Element::from_symbol_bytes(s) {
                     Ok((&b""[..], AtomSymbol::Element(element)))
@@ -81,19 +81,19 @@ fn atom_symbol<'a>(
 /// If `allow_extended_queries` is true, allow extended queries (AH, QH, XH, MH).
 /// If `allow_subatoms` is true, allow subatoms (LP).
 ///
-fn atomlike_symbol<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = AtomSymbol, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
-        let allow_named_isotopes = flags.contains(MolParseFlags::NAMED_ISOTOPES);
-        let allow_rgroups = flags.contains(MolParseFlags::RGROUPS);
-        let allow_queries = flags.contains(MolParseFlags::QUERIES);
-        let allow_extended_queries = flags.contains(MolParseFlags::EXTENDED_QUERIES);
-        let allow_electrons = flags.contains(MolParseFlags::ELECTRONS);
-        let allow_pseudoatoms = flags.contains(MolParseFlags::PSEUDOATOMS);
+fn atomlike_symbol<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = AtomSymbol, Error = error::Error<&'inp [u8]>> {
+    let allow_named_isotopes = flags.contains(CtabParseFlags::NAMED_ISOTOPES);
+    let allow_rgroups = flags.contains(CtabParseFlags::RGROUPS);
+    let allow_queries = flags.contains(CtabParseFlags::QUERIES);
+    let allow_extended_queries = flags.contains(CtabParseFlags::EXTENDED_QUERIES);
+    let allow_electrons = flags.contains(CtabParseFlags::ELECTRONS);
+    let allow_pseudoatoms = flags.contains(CtabParseFlags::PSEUDOATOMS);
+    move |input: &'inp [u8]| {
         fixed_width_partial(
             3,
-            move |s: &'a [u8]| {
+            move |s: &'inp [u8]| {
                 let s = s.trim_ascii();
                 if let Some(element) = Element::from_symbol_bytes(s) {
                     return Ok((&b""[..], AtomSymbol::Element(element)));
@@ -148,8 +148,11 @@ fn atomlike_symbol<'a>(
 
 /// Parse atom inputs with 52-69 characters (s. `atom_input` for more details).
 /// Includes atom mapping number.
-fn atom_input69(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
+fn atom_input69<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl CtabParseFlags,
+) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -210,8 +213,11 @@ fn atom_input69(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, erro
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input51(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
+fn atom_input51<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl CtabParseFlags,
+) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -269,8 +275,11 @@ fn atom_input51(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, erro
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input42(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
-    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
+fn atom_input42<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl CtabParseFlags,
+) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -324,7 +333,10 @@ fn atom_input42(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, erro
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 ///
-fn atom_input39(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input39<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl CtabParseFlags,
+) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -371,7 +383,10 @@ fn atom_input39(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, erro
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input36(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input36<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl CtabParseFlags,
+) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -408,7 +423,10 @@ fn atom_input36(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, erro
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 /// If `strict_padding` is true, require strict padding.
 ///
-fn atom_input34(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, error::Error<&[u8]>> {
+fn atom_input34<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl CtabParseFlags,
+) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -453,10 +471,10 @@ fn atom_input34(input: &[u8], flags: MolParseFlags) -> IResult<&[u8], Atom, erro
 /// | mmm   | atom mapping       | 1..=#atoms   | Reaction, accepted as extension |
 /// -------------------------------------------------------------------------------
 ///
-pub fn atom_input<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = Atom, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+pub fn atom_input<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Atom, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         let len = input.len();
 
@@ -499,21 +517,21 @@ pub fn atom_input<'a>(
 /// | nnn   | inversion          | 0..=2        | Reaction                                  |
 /// | eee   | exact change       | 0, 1         | Reaction                                  |
 /// -----------------------------------------------------------------------------------------
-pub fn atomlike_input<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+pub fn atomlike_input<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = AtomLike, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+    move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         terminated(atomlike_input_inner(flags), space0).parse(input)
     }
 }
 
 // Internal parser for atomlike_input
-fn atomlike_input_inner<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = AtomLike, Error = error::Error<&'a [u8]>> {
-    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
-    move |input: &'a [u8]| {
+fn atomlike_input_inner<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = AtomLike, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
+    move |input: &'inp [u8]| {
         // x, y, z coordinates
         let (i, x) = fixed_width_float::<f64>(10, 4).parse(input)?;
         let (i, y) = fixed_width_float::<f64>(10, 4).parse(i)?;
@@ -544,7 +562,7 @@ fn atomlike_input_inner<'a>(
         .parse(i)?;
 
         // Hydrogen count
-        let extended_range = flags.contains(MolParseFlags::EXTENDED_RANGE);
+        let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
         let max_hydrogen = if extended_range { 255 } else { 5 };
         let (i, hydrogen_count) = cond(
             i.len() >= 3,

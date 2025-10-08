@@ -16,7 +16,7 @@ use super::utils::{
     fixed_width_int_minus1, fixed_width_int_partial, fixed_width_padding, fixed_width_str_partial,
     rgroup_occurrences, to_string,
 };
-use crate::io::config::MolParseFlags;
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier, sgroup_subscript,
@@ -307,9 +307,11 @@ pub enum PropertyEntries {
 /// k: exclusion flag
 /// n: count
 /// 111 222 333 444 555: element symbols
-pub fn legacy_atom_list_input<'a>(
-) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
-    move |input: &'a [u8]| {
+pub fn legacy_atom_list_input<'inp, 'fl>(
+    _flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
+    move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         map(
             (
@@ -364,12 +366,13 @@ pub fn atom_alias_input<'a>(
 }
 
 /// Parse property line (basic properties only)
-pub fn basic_property_input<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
-    let allow_sgroups = flags.contains(MolParseFlags::SGROUPS);
-    let allow_clark_extensions = flags.contains(MolParseFlags::CLARK_EXTENSIONS);
-    move |input: &'a [u8]| {
+pub fn basic_property_input<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
+    let allow_sgroups = flags.contains(CtabParseFlags::SGROUPS);
+    let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
+    move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         if input.len() < 3 {
             return Err(Err::Error(error::Error::new(input, error::ErrorKind::Eof)));
@@ -453,16 +456,17 @@ pub fn basic_property_input<'a>(
 }
 
 /// Parse property line
-pub fn property_input<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
-    let allow_queries = flags.contains(MolParseFlags::QUERIES);
-    let allow_rgroups = flags.contains(MolParseFlags::RGROUPS);
-    let allow_sgroups = flags.contains(MolParseFlags::SGROUPS);
-    let allow_advanced_sgroups = flags.contains(MolParseFlags::ADVANCED_SGROUPS);
-    let allow_clark_extensions = flags.contains(MolParseFlags::CLARK_EXTENSIONS);
-    let strict_padding = flags.contains(MolParseFlags::STRICT_PADDING);
-    move |input: &'a [u8]| {
+pub fn property_input<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
+    let allow_queries = flags.contains(CtabParseFlags::QUERIES);
+    let allow_rgroups = flags.contains(CtabParseFlags::RGROUPS);
+    let allow_sgroups = flags.contains(CtabParseFlags::SGROUPS);
+    let allow_advanced_sgroups = flags.contains(CtabParseFlags::ADVANCED_SGROUPS);
+    let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
+    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
+    move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
 
         if input.len() < 3 {

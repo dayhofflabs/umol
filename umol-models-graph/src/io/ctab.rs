@@ -2,6 +2,7 @@
 
 pub mod atom;
 pub mod bond;
+pub mod config;
 pub mod molecule;
 pub mod parser;
 pub mod query;

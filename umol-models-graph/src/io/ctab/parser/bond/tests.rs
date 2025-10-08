@@ -3,8 +3,8 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
-use crate::io::config::MolParseFlags;
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
+use crate::io::ctab::config::CtabParseFlags;
 
 #[rustfmt::skip]
 #[rstest]
@@ -34,7 +34,7 @@ fn test_bond_input12(
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let result = bond_input12(input, MolParseFlags::BASIC);
+    let result = bond_input12(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -77,7 +77,7 @@ fn test_bond_input12_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = bond_input12(input, MolParseFlags::STRICT);
+    let result = bond_input12(input, &CtabParseFlags::STRICT);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{} should have failed with error kind {:?}, got {:?}",
@@ -99,7 +99,7 @@ fn test_bond_input9(
     #[case] atom2: usize,
     #[case] bond_type: BondType,
 ) {
-    let result = bond_input9(input, MolParseFlags::BASIC);
+    let result = bond_input9(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -133,7 +133,7 @@ fn test_bond_input9_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = bond_input9(input, MolParseFlags::STRICT);
+    let result = bond_input9(input, &CtabParseFlags::STRICT);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{} should have failed with error kind {:?}, got {:?}",
@@ -160,7 +160,7 @@ fn test_bond_input(
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
-    let mut parser = bond_input(MolParseFlags::BASIC);
+    let mut parser = bond_input(&CtabParseFlags::BASIC);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
@@ -201,7 +201,7 @@ fn test_bond_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = bond_input(MolParseFlags::STRICT);
+    let mut parser = bond_input(&CtabParseFlags::STRICT);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -216,7 +216,7 @@ fn test_bond_input_invalid(
 #[rstest]
 #[case(b"  1  2  1 1", "len 11")]
 fn test_bond_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input(MolParseFlags::BASIC);
+    let mut parser = bond_input(&CtabParseFlags::BASIC);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
 }
@@ -225,7 +225,7 @@ fn test_bond_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
 #[case(b"  1  2  1\n", "len 9 padded")]
 #[case(b"  1  3  1  1  ", "len 12 padded")]
 fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = bond_input(MolParseFlags::BASIC);
+    let mut parser = bond_input(&CtabParseFlags::BASIC);
     let trimmed_input = input.trim_ascii_end();
     let result = parser.parse(trimmed_input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -260,7 +260,7 @@ fn test_bondlike_input(
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {
-    let mut parser = bondlike_input(MolParseFlags::LENIENT);
+    let mut parser = bondlike_input(&CtabParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
@@ -313,7 +313,7 @@ fn test_bondlike_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = bondlike_input(MolParseFlags::STRICT);
+    let mut parser = bondlike_input(&CtabParseFlags::STRICT);
     let result = parser.parse(input);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -335,7 +335,7 @@ fn test_bond_input_extended(
     #[case] atom2: usize,
     #[case] bond_type: BondType,
 ) {
-    let result = bondlike_input(MolParseFlags::EXTENDED).parse(input);
+    let result = bondlike_input(&CtabParseFlags::EXTENDED).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} should consume all input", desc);

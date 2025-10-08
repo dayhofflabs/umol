@@ -1,51 +1,93 @@
 //! Post-parse SMILES checkers: re-exports of category modules
 
-pub mod aromaticity;
-pub mod linalg;
-pub mod stereo_double;
-pub mod topology;
-pub mod valence;
+// pub mod aromaticity;
+// pub mod linalg;
+// pub mod stereo_double;
+// pub mod topology;
+// pub mod valence;
 
-pub use aromaticity::{
-    check_aromaticity, AromaticityArtifacts, AromaticityConfig, AromaticityMethod, AromaticityModel,
-};
-pub use stereo_double::{check_stereo_double, StereoArtifacts};
-pub use topology::{check_topology, TopologyArtifacts};
-pub use valence::{
-    check_valence, ValencePolicy, ValenceArtifacts, ValenceConfig, ValenceModel, ValencePattern,
-    ValencePatternTable,
-};
-
-// Placeholder for future side-channel (ring events, bond/atom spans, etc.)
-pub struct SideChannel;
-
-#[derive(Default)]
-pub struct LintConfig {
-    pub enabled_codes: Vec<&'static str>,
-    pub disabled_codes: Vec<&'static str>,
-}
-
-pub struct ModelProfile;
-
-pub struct CheckOptions<'a> {
-    pub profile: &'a ModelProfile,
-    pub lint: &'a LintConfig,
-}
+// pub use aromaticity::{
+//     check_aromaticity, AromaticityArtifacts, AromaticityConfig, AromaticityMethod, AromaticityModel,
+// };
+// pub use stereo_double::{check_stereo_double, StereoArtifacts};
+// pub use topology::{check_topology, TopologyArtifacts};
+// pub use valence::{
+//     check_valence, ValencePolicy, ValenceArtifacts, ValenceConfig, ValenceModel, ValencePattern,
+//     ValencePatternTable,
+// };
 
 use super::diagnostics::DiagnosticsReport;
+use super::parser::ParseMetadata;
 use crate::io::ir::Molecule;
+use crate::io::smiles::config::{SmilesParseFlags, SmilesCheckFlags, SmilesLintConfig, SmilesIoConfig};
+use crate::io::smiles::parser::parse_smiles_inner;
 
-pub fn check_smiles(
+#[derive(Default)]
+pub struct SmilesModels;
+
+pub struct TopologyAnnotations;
+pub struct ValenceAnnotations;
+pub struct AromaticityAnnotations;
+pub struct StereoAnnotations;
+
+#[derive(Default)]
+pub struct Annotations {
+    pub topology: Option<TopologyAnnotations>,
+    pub valence: Option<ValenceAnnotations>,
+    pub arom: Option<AromaticityAnnotations>,
+    pub stereo: Option<StereoAnnotations>,
+}
+
+#[derive(Default)]
+pub struct CheckOutput {
+    pub diagnostics: DiagnosticsReport,
+    pub annotations: Annotations,
+}
+
+pub fn check_parsed(
     mol: &Molecule,
-    side: Option<&SideChannel>,
-    input_len: usize,
-    _opts: &CheckOptions,
+    meta: &ParseMetadata,
+    check_flags: &SmilesCheckFlags,
+    lint_config: &SmilesLintConfig,
+    models: &SmilesModels,
+) -> CheckOutput {
+    let report = DiagnosticsReport::new();
+    let annotations = Annotations::default();
+    // check_topology(mol, side, &mut report, input_len);
+    // check_stereo_double(mol, side, &mut report, input_len);
+    CheckOutput {
+        diagnostics: report,
+        annotations: annotations,
+    }
+}
+
+pub fn check_smiles(input: &[u8]) -> DiagnosticsReport {
+    let io_config = SmilesIoConfig::default();
+    let models = SmilesModels::default();
+    check_smiles_with(input, &io_config, &models)
+}
+
+pub fn check_smiles_with(
+    input: &[u8],
+    io_config: &SmilesIoConfig,
+    models: &SmilesModels,
 ) -> DiagnosticsReport {
-    let mut report = DiagnosticsReport::new();
-    let _topo = topology::check_topology(mol, side, &mut report, input_len);
-    let _st = stereo_double::check_stereo_double(mol, side, &mut report, input_len);
-    // valence/aromaticity are invoked from the linter today
-    report
+    let parse_output = parse_smiles_inner(input, &io_config.parse_flags);
+    match parse_output {
+        Ok(parse_output) => {
+            let mol = parse_output.sir;
+            let meta = parse_output.meta.unwrap_or_default();
+            let _report = DiagnosticsReport::new();
+            let _annotations = Annotations::default();
+            let check_output = check_parsed(&mol, &meta, &io_config.check_flags, &io_config.lint_config, models);
+            check_output.diagnostics
+        }
+        Err(e) => {
+            let mut report = DiagnosticsReport::new();
+            report.push(e.as_diagnostic(""));
+            report
+        }
+    }
 }
 
 #[cfg(test)]

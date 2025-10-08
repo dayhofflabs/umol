@@ -3,11 +3,10 @@
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
-use super::api::ParseMetadata;
-use crate::io::config::SmilesParseFlags;
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
-use crate::io::smiles::diagnostics::DiagnosticCode;
+use crate::io::smiles::config::SmilesParseFlags;
+use crate::io::smiles::diagnostics::{Diagnostic, DiagnosticCategory, DiagnosticCode, Span};
 
 #[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -58,6 +57,14 @@ impl ParseError {
     pub fn as_str(&self) -> &str {
         self.as_ref()
     }
+
+    pub fn as_diagnostic(&self, input: &str) -> Diagnostic {
+        let discriminant: ParseErrorDiscriminants = self.into();
+        let code: DiagnosticCode = discriminant.into();
+        let span = Span::new(0, input.len());
+        let message = "Parse error";
+        Diagnostic::error(code, DiagnosticCategory::Lex, span, message)
+    }
 }
 
 impl From<ParseErrorDiscriminants> for DiagnosticCode {
@@ -107,16 +114,33 @@ impl From<ParseErrorDiscriminants> for DiagnosticCode {
     }
 }
 
+/// Lightweight parse metadata
+#[derive(Debug, Default, Clone)]
+pub struct ParseMetadata {
+    pub token_spans: Vec<(usize, usize)>,
+    pub ring_events: Vec<u32>,
+}
+
+// Parse stage output
+#[derive(Debug, Default, Clone)]
+pub struct ParseOutput {
+    pub sir: Molecule,
+    pub meta: Option<ParseMetadata>,
+}
+
 // Public entrypoint: strict OpenSMILES
-pub fn parse_smiles(input: &[u8]) -> Result<Molecule, ParseError> {
+pub fn parse_smiles<'inp>(input: &'inp [u8]) -> Result<Molecule, ParseError> {
     let flags = SmilesParseFlags::STRICT_OPENSMILES;
-    parse_smiles_with(input, flags)
+    parse_smiles_with(input, &flags)
 }
 
 // Flags-aware inner parser
-pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
-    let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
-    let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
+pub fn parse_smiles_with<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl SmilesParseFlags,
+) -> Result<Molecule, ParseError> {
+    let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
+    let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
     let use_eoi = flags.contains(SmilesParseFlags::EXPLICIT_EOI);
 
     let input = if use_eoi {
@@ -146,10 +170,10 @@ pub fn parse_smiles_with(input: &[u8], flags: SmilesParseFlags) -> Result<Molecu
                 return Err(ParseError::InvalidWhitespace { pos: start + k });
             }
         }
-        return parse_smiles_inner(&input[start..end], flags).map(|(m, _)| m);
+        return parse_smiles_inner(&input[start..end], flags).map(|o| o.sir);
     }
 
-    parse_smiles_inner(input, flags).map(|(m, _)| m)
+    parse_smiles_inner(input, flags).map(|o| o.sir)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -776,13 +800,13 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-pub(crate) fn parse_smiles_inner(
-    input: &[u8],
-    flags: SmilesParseFlags,
-) -> Result<(Molecule, Option<ParseMetadata>), ParseError> {
-    let allow_ws = flags.contains(SmilesParseFlags::INTERTOKEN_WS);
-    let allow_comments = flags.contains(SmilesParseFlags::COMMENTS);
-    let no_lints = flags.contains(SmilesParseFlags::NO_LINTS);
+pub fn parse_smiles_inner<'inp, 'fl>(
+    input: &'inp [u8],
+    flags: &'fl SmilesParseFlags,
+) -> Result<ParseOutput, ParseError> {
+    let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
+    let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
+    let no_lints = flags.contains(SmilesParseFlags::NO_METADATA);
 
     let mut i = 0usize;
     let n = input.len();
@@ -1265,7 +1289,10 @@ pub(crate) fn parse_smiles_inner(
     };
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_default();
-    Ok((mol, metadata))
+    Ok(ParseOutput {
+        sir: mol,
+        meta: metadata,
+    })
 }
 
 #[cfg(test)]

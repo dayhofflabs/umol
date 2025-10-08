@@ -90,7 +90,7 @@ fn molecule_with_bond() -> Molecule {
 }
 
 #[fixture]
-fn acc_with_superatom_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculeProperties {
+fn acc_with_superatom_sgroup(parse_flags_lenient: CtabParseFlags) -> MoleculeProperties {
     let mut acc = MoleculeProperties::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -101,7 +101,7 @@ fn acc_with_superatom_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculeProp
 }
 
 #[fixture]
-fn acc_with_data_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculeProperties {
+fn acc_with_data_sgroup(parse_flags_lenient: CtabParseFlags) -> MoleculeProperties {
     let mut acc = MoleculeProperties::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -123,7 +123,7 @@ fn acc_with_data_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculePropertie
 }
 
 #[fixture]
-fn acc_with_multiple_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculeProperties {
+fn acc_with_multiple_sgroup(parse_flags_lenient: CtabParseFlags) -> MoleculeProperties {
     let mut acc = MoleculeProperties::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -134,7 +134,7 @@ fn acc_with_multiple_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculePrope
 }
 
 #[fixture]
-fn acc_with_copolymer_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculeProperties {
+fn acc_with_copolymer_sgroup(parse_flags_lenient: CtabParseFlags) -> MoleculeProperties {
     let mut acc = MoleculeProperties::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -145,24 +145,24 @@ fn acc_with_copolymer_sgroup(parse_flags_lenient: MolParseFlags) -> MoleculeProp
 }
 
 #[fixture]
-fn parse_flags_lenient() -> MolParseFlags {
-    MolParseFlags::LENIENT
+fn parse_flags_lenient() -> CtabParseFlags {
+    CtabParseFlags::LENIENT
 }
 
 #[fixture]
-fn parse_flags_strict() -> MolParseFlags {
-    MolParseFlags::STRICT
+fn parse_flags_strict() -> CtabParseFlags {
+    CtabParseFlags::STRICT
 }
 
 #[fixture]
-fn parse_flags_extended() -> MolParseFlags {
-    MolParseFlags::EXTENDED
+fn parse_flags_extended() -> CtabParseFlags {
+    CtabParseFlags::EXTENDED
 }
 
 #[rstest]
 fn test_apply_atom_alias_molecule(
     mut molecule_single_atom: Molecule,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -184,7 +184,7 @@ fn test_apply_atom_alias_molecule(
 #[rstest]
 fn test_apply_atom_alias_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -201,7 +201,7 @@ fn test_apply_atom_alias_molecule_invalid(
 #[rstest]
 fn test_apply_atom_value_molecule(
     mut molecule_single_atom: Molecule,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -220,7 +220,7 @@ fn test_apply_atom_value_molecule(
 #[rstest]
 fn test_apply_atom_value_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -235,7 +235,7 @@ fn test_apply_atom_value_molecule_invalid(
 }
 
 #[rstest]
-fn test_apply_charge_molecule(mut molecule_single_atom: Molecule, parse_flags_lenient: MolParseFlags) {
+fn test_apply_charge_molecule(mut molecule_single_atom: Molecule, parse_flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
 
     let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
@@ -254,7 +254,7 @@ fn test_apply_charge_molecule(mut molecule_single_atom: Molecule, parse_flags_le
 #[rstest]
 fn test_apply_charge_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -271,7 +271,7 @@ fn test_apply_charge_molecule_invalid(
 #[rstest]
 fn test_apply_radical_molecule(
     mut molecule_single_atom: Molecule,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -291,7 +291,7 @@ fn test_apply_radical_molecule(
 #[rstest]
 fn test_apply_radical_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -308,7 +308,7 @@ fn test_apply_radical_molecule_invalid(
 #[rstest]
 fn test_apply_isotope_molecule(
     mut molecule_single_atom: Molecule,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -327,7 +327,7 @@ fn test_apply_isotope_molecule(
 #[rstest]
 fn test_apply_isotope_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -344,7 +344,7 @@ fn test_apply_isotope_molecule_invalid(
 #[rstest]
 fn test_apply_zero_order_bond_molecule(
     mut molecule_with_bond: Molecule,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -364,7 +364,7 @@ fn test_apply_zero_order_bond_molecule(
 #[rstest]
 fn test_apply_zero_order_bond_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -381,7 +381,7 @@ fn test_apply_zero_order_bond_molecule_invalid(
 #[rstest]
 fn test_apply_zero_atom_charge_entries_molecule(
     mut molecule_single_atom: Molecule,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -402,7 +402,7 @@ fn test_apply_zero_atom_charge_entries_molecule(
 #[rstest]
 fn test_apply_zero_atom_charge_entries_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -421,7 +421,7 @@ fn test_apply_zero_atom_charge_entries_molecule_invalid(
 #[rstest]
 fn test_apply_atom_hydrogen_count_entries_molecule(
     mut molecule_single_atom: Molecule,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -443,7 +443,7 @@ fn test_apply_atom_hydrogen_count_entries_molecule(
 #[rstest]
 fn test_apply_atom_hydrogen_count_entries_molecule_invalid(
     molecule_single_atom: Molecule,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = molecule_single_atom;
@@ -462,7 +462,7 @@ fn test_apply_atom_hydrogen_count_entries_molecule_invalid(
 #[rstest]
 fn test_apply_atom_alias_entry(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
@@ -485,7 +485,7 @@ fn test_apply_atom_alias_entry(
 #[rstest]
 fn test_atom_alias_entry_invalid(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
@@ -506,7 +506,7 @@ fn test_atom_alias_entry_invalid(
 #[rstest]
 fn test_atom_alias_entry_conflict(
     mut moleculelike_with_properties: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
@@ -530,7 +530,7 @@ fn test_atom_alias_entry_conflict(
 #[rstest]
 fn test_apply_atom_value_entry(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
@@ -553,7 +553,7 @@ fn test_apply_atom_value_entry(
 #[rstest]
 fn test_apply_atom_value_entry_invalid(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
@@ -574,7 +574,7 @@ fn test_apply_atom_value_entry_invalid(
 #[rstest]
 fn test_apply_atom_value_conflict(
     mut moleculelike_with_properties: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
@@ -598,7 +598,7 @@ fn test_apply_atom_value_conflict(
 #[rstest]
 fn test_apply_charge_entries(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
@@ -615,7 +615,7 @@ fn test_apply_charge_entries(
 #[rstest]
 fn test_apply_charge_entries_multiple(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     moleculelike_single_atom.add_atom(AtomLike::new(AtomSymbol::Element(e!(C))));
@@ -644,7 +644,7 @@ fn test_apply_charge_entries_multiple(
 #[rstest]
 fn test_apply_charge_entries_invalid(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
@@ -664,7 +664,7 @@ fn test_apply_charge_entries_invalid(
 #[rstest]
 fn test_apply_charge_entries_overwrite(
     mut moleculelike_with_properties: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
@@ -689,7 +689,7 @@ fn test_apply_radical_entries(
     mut moleculelike_single_atom: MoleculeLike,
     #[case] radical_type: u8,
     #[case] expected: Option<AtomRadical>,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
@@ -703,7 +703,7 @@ fn test_apply_radical_entries(
 }
 
 #[rstest]
-fn test_apply_radical_entries_invalid(parse_flags_strict: MolParseFlags) {
+fn test_apply_radical_entries_invalid(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
@@ -723,7 +723,7 @@ fn test_apply_radical_entries_invalid(parse_flags_strict: MolParseFlags) {
 #[rstest]
 fn test_apply_radical_entries_overwrite(
     mut moleculelike_with_properties: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
@@ -742,7 +742,7 @@ fn test_apply_radical_entries_overwrite(
 #[rstest]
 fn test_apply_isotope_entries(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
@@ -760,7 +760,7 @@ fn test_apply_isotope_entries(
 #[rstest]
 fn test_apply_isotope_entries_extended(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_extended: MolParseFlags,
+    parse_flags_extended: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
@@ -778,7 +778,7 @@ fn test_apply_isotope_entries_extended(
 #[rstest]
 fn test_apply_isotope_entries_conflict(
     mut moleculelike_with_properties: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
@@ -800,7 +800,7 @@ fn test_apply_isotope_entries_conflict(
 #[rstest]
 fn test_apply_isotope_entries_invalid(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
@@ -822,7 +822,7 @@ fn test_apply_isotope_entries_invalid(
 #[rstest]
 fn test_apply_isotope_named_isotope(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     moleculelike_single_atom.atom_mut(0).unwrap().symbol =
         AtomSymbol::NamedIsotope(NamedIsotope::D);
@@ -848,7 +848,7 @@ fn test_apply_ring_bond_count_entries(
     mut moleculelike_single_atom: MoleculeLike,
     #[case] code: i8,
     #[case] expected: Option<RingBondCount>,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
@@ -867,7 +867,7 @@ fn test_apply_ring_bond_count_entries(
 #[rstest]
 fn test_apply_ring_bond_count_entries_conflict(
     mut moleculelike_with_properties: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
@@ -889,7 +889,7 @@ fn test_apply_ring_bond_count_entries_conflict(
 #[rstest]
 #[case(1)]
 #[case(5)]
-fn test_apply_ring_bond_count_entries_invalid(#[case] code: i8, parse_flags_strict: MolParseFlags) {
+fn test_apply_ring_bond_count_entries_invalid(#[case] code: i8, parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
@@ -908,7 +908,7 @@ fn test_apply_substitution_count_entries(
     mut moleculelike_single_atom: MoleculeLike,
     #[case] code: i8,
     #[case] expected: Option<SubstitutionCount>,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
@@ -927,7 +927,7 @@ fn test_apply_substitution_count_entries(
 #[rstest]
 fn test_apply_substitution_count_entries_conflict(
     mut moleculelike_with_properties: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
@@ -949,7 +949,7 @@ fn test_apply_substitution_count_entries_conflict(
 #[rstest]
 #[case(-3)]
 #[case(7)]
-fn test_apply_substitution_count_entries_invalid(#[case] code: i8, parse_flags_strict: MolParseFlags) {
+fn test_apply_substitution_count_entries_invalid(#[case] code: i8, parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
@@ -966,7 +966,7 @@ fn test_apply_unsaturated_atom_entries(
     mut moleculelike_single_atom: MoleculeLike,
     #[case] code: u8,
     #[case] expected: Option<UnsaturatedAtom>,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry {
@@ -984,7 +984,7 @@ fn test_apply_unsaturated_atom_entries(
 
 #[rstest]
 #[case(2)]
-fn test_apply_unsaturated_atom_entries_invalid(#[case] code: u8, parse_flags_strict: MolParseFlags) {
+fn test_apply_unsaturated_atom_entries_invalid(#[case] code: u8, parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry {
         atom_index: 0,
@@ -997,7 +997,7 @@ fn test_apply_unsaturated_atom_entries_invalid(#[case] code: u8, parse_flags_str
 #[rstest]
 fn test_apply_link_atom_entries(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::LinkAtomEntries(vec![LinkAtomEntry {
@@ -1020,7 +1020,7 @@ fn test_apply_link_atom_entries(
 }
 
 #[rstest]
-fn test_apply_link_atom_entries_conflict(parse_flags_lenient: MolParseFlags) {
+fn test_apply_link_atom_entries_conflict(parse_flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::LinkAtomEntries(vec![
         LinkAtomEntry {
@@ -1043,7 +1043,7 @@ fn test_apply_link_atom_entries_conflict(parse_flags_lenient: MolParseFlags) {
 #[rstest]
 fn test_apply_atom_list_entry(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
@@ -1066,7 +1066,7 @@ fn test_apply_atom_list_entry(
 #[rstest]
 fn test_apply_atom_list_entry_conflict(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     moleculelike_single_atom.atom_mut(0).unwrap().symbol =
@@ -1090,7 +1090,7 @@ fn test_apply_attachment_point_entries(
     mut moleculelike_single_atom: MoleculeLike,
     #[case] code: u8,
     #[case] expected: Option<AttachmentPointType>,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry {
@@ -1107,7 +1107,7 @@ fn test_apply_attachment_point_entries(
 }
 
 #[rstest]
-fn test_apply_attachment_point_entries_conflict(parse_flags_lenient: MolParseFlags) {
+fn test_apply_attachment_point_entries_conflict(parse_flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![
         AttachmentPointEntry {
@@ -1124,7 +1124,7 @@ fn test_apply_attachment_point_entries_conflict(parse_flags_lenient: MolParseFla
 }
 
 #[rstest]
-fn test_apply_attachment_point_entries_invalid(parse_flags_strict: MolParseFlags) {
+fn test_apply_attachment_point_entries_invalid(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry {
         atom_index: 0,
@@ -1137,7 +1137,7 @@ fn test_apply_attachment_point_entries_invalid(parse_flags_strict: MolParseFlags
 #[rstest]
 fn test_apply_atom_attachment_order_entry(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry {
@@ -1161,7 +1161,7 @@ fn test_apply_atom_attachment_order_entry(
 #[rstest]
 fn test_apply_atom_attachment_order_entry_conflict(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     moleculelike_single_atom
@@ -1180,7 +1180,7 @@ fn test_apply_atom_attachment_order_entry_conflict(
 #[rstest]
 fn test_apply_rgroup_label_entries(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
@@ -1199,7 +1199,7 @@ fn test_apply_rgroup_label_entries(
 #[rstest]
 fn test_apply_rgroup_label_entries_keep(
     mut moleculelike_with_rgroup: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
@@ -1219,7 +1219,7 @@ fn test_apply_rgroup_label_entries_keep(
 #[rstest]
 fn test_apply_rgroup_label_entries_overwrite(
     mut moleculelike_with_unlabeled_rgroup: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
@@ -1239,7 +1239,7 @@ fn test_apply_rgroup_label_entries_overwrite(
 #[rstest]
 fn test_apply_rgroup_label_entries_conflict(
     mut moleculelike_with_rgroup: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
@@ -1254,7 +1254,7 @@ fn test_apply_rgroup_label_entries_conflict(
 #[rstest]
 fn test_apply_rgroup_label_entries_invalid(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     moleculelike_single_atom.atom_mut(0).unwrap().symbol = AtomSymbol::AtomList(AtomList {
@@ -1274,7 +1274,7 @@ fn test_apply_rgroup_label_entries_invalid(
 #[rstest]
 fn test_apply_rgroup_logic_entry(
     mut moleculelike_with_rgroup: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLogicEntry(RGroupLogicEntry {
@@ -1301,7 +1301,7 @@ fn test_apply_rgroup_logic_entry(
 #[rstest]
 fn test_apply_rgroup_logic_entry_multiple_occurrences(
     mut moleculelike_with_rgroup: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RGroupLogicEntry(RGroupLogicEntry {
@@ -1330,7 +1330,7 @@ fn test_apply_rgroup_logic_entry_multiple_occurrences(
 #[rstest]
 fn test_apply_sgroup_type_entries(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
@@ -1347,7 +1347,7 @@ fn test_apply_sgroup_type_entries(
 }
 
 #[rstest]
-fn test_apply_sgroup_type_entries_conflict(parse_flags_lenient: MolParseFlags) {
+fn test_apply_sgroup_type_entries_conflict(parse_flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SGroupTypeEntries(vec![
         SGroupTypeEntry {
@@ -1367,7 +1367,7 @@ fn test_apply_sgroup_type_entries_conflict(parse_flags_lenient: MolParseFlags) {
 fn test_apply_sgroup_subtype_entries(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_copolymer_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let subtype_entry = PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry {
         sgroup_index: 0,
@@ -1386,7 +1386,7 @@ fn test_apply_sgroup_subtype_entries(
 }
 
 #[rstest]
-fn test_apply_sgroup_subtype_entries_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_subtype_entries_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let subtype_entry = PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry {
         sgroup_index: 0,
@@ -1400,7 +1400,7 @@ fn test_apply_sgroup_subtype_entries_missing(parse_flags_strict: MolParseFlags) 
 fn test_apply_sgroup_label_entries(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let label_entry = PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry {
         sgroup_index: 0,
@@ -1419,7 +1419,7 @@ fn test_apply_sgroup_label_entries(
 }
 
 #[rstest]
-fn test_apply_sgroup_label_entries_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_label_entries_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let label_entry = PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry {
         sgroup_index: 0,
@@ -1433,7 +1433,7 @@ fn test_apply_sgroup_label_entries_missing(parse_flags_strict: MolParseFlags) {
 fn test_apply_sgroup_connectivity_entries(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let connectivity_entry =
         PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry {
@@ -1453,7 +1453,7 @@ fn test_apply_sgroup_connectivity_entries(
 }
 
 #[rstest]
-fn test_apply_sgroup_connectivity_entries_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_connectivity_entries_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let connectivity_entry =
         PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry {
@@ -1468,7 +1468,7 @@ fn test_apply_sgroup_connectivity_entries_missing(parse_flags_strict: MolParseFl
 fn test_apply_sgroup_expansion_entries(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let expansion_entry =
         PropertyEntries::SGroupExpansionEntries(vec![SGroupExpansionEntry { sgroup_index: 0 }]);
@@ -1485,7 +1485,7 @@ fn test_apply_sgroup_expansion_entries(
 }
 
 #[rstest]
-fn test_apply_sgroup_expansion_entries_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_expansion_entries_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let expansion_entry =
         PropertyEntries::SGroupExpansionEntries(vec![SGroupExpansionEntry { sgroup_index: 0 }]);
@@ -1497,7 +1497,7 @@ fn test_apply_sgroup_expansion_entries_missing(parse_flags_strict: MolParseFlags
 fn test_apply_sgroup_atom_list_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let atom_list_entry = PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry {
         sgroup_index: 0,
@@ -1516,7 +1516,7 @@ fn test_apply_sgroup_atom_list_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_atom_list_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_atom_list_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let atom_list_entry = PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry {
         sgroup_index: 0,
@@ -1530,7 +1530,7 @@ fn test_apply_sgroup_atom_list_entry_missing(parse_flags_strict: MolParseFlags) 
 fn test_apply_sgroup_bond_list_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let bond_list_entry = PropertyEntries::SGroupBondListEntry(SGroupBondListEntry {
         sgroup_index: 0,
@@ -1549,7 +1549,7 @@ fn test_apply_sgroup_bond_list_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_bond_list_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_bond_list_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let bond_list_entry = PropertyEntries::SGroupBondListEntry(SGroupBondListEntry {
         sgroup_index: 0,
@@ -1563,7 +1563,7 @@ fn test_apply_sgroup_bond_list_entry_missing(parse_flags_strict: MolParseFlags) 
 fn test_apply_sgroup_parent_atom_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let parent_atom_entry = PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry {
         sgroup_index: 0,
@@ -1582,7 +1582,7 @@ fn test_apply_sgroup_parent_atom_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_parent_atom_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_parent_atom_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let parent_atom_entry = PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry {
         sgroup_index: 0,
@@ -1596,7 +1596,7 @@ fn test_apply_sgroup_parent_atom_entry_missing(parse_flags_strict: MolParseFlags
 fn test_apply_sgroup_subscript_entry_subscript(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 0,
@@ -1620,7 +1620,7 @@ fn test_apply_sgroup_subscript_entry_subscript(
 fn test_apply_sgroup_subscript_entry_multiplier(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_multiple_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 0,
@@ -1650,7 +1650,7 @@ fn test_apply_sgroup_subscript_entry_multiplier(
 #[rstest]
 fn test_apply_sgroup_subscript_entry_invalid(
     mut acc_with_data_sgroup: MoleculeProperties,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 0,
@@ -1663,7 +1663,7 @@ fn test_apply_sgroup_subscript_entry_invalid(
 }
 
 #[rstest]
-fn test_apply_sgroup_subscript_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_subscript_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let subscript_entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
         sgroup_index: 0,
@@ -1678,7 +1678,7 @@ fn test_apply_sgroup_subscript_entry_missing(parse_flags_strict: MolParseFlags) 
 fn test_apply_sgroup_correspondence_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let correspondence_entry =
         PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry {
@@ -1698,7 +1698,7 @@ fn test_apply_sgroup_correspondence_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_correspondence_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_correspondence_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let correspondence_entry =
         PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry {
@@ -1713,7 +1713,7 @@ fn test_apply_sgroup_correspondence_entry_missing(parse_flags_strict: MolParseFl
 fn test_apply_sgroup_display_info_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let display_info_entry = PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry {
         sgroup_index: 0,
@@ -1738,7 +1738,7 @@ fn test_apply_sgroup_display_info_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_display_info_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_display_info_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let display_info_entry = PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry {
         sgroup_index: 0,
@@ -1752,7 +1752,7 @@ fn test_apply_sgroup_display_info_entry_missing(parse_flags_strict: MolParseFlag
 fn test_apply_sgroup_connecting_bond_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let connecting_bond_entry =
         PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry {
@@ -1779,7 +1779,7 @@ fn test_apply_sgroup_connecting_bond_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_connecting_bond_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_connecting_bond_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let connecting_bond_entry =
         PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry {
@@ -1795,7 +1795,7 @@ fn test_apply_sgroup_connecting_bond_entry_missing(parse_flags_strict: MolParseF
 fn test_apply_sgroup_data_description_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_data_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     acc_with_data_sgroup
         .update_moleculelike(&mut moleculelike_single_atom, parse_flags_lenient)
@@ -1811,7 +1811,7 @@ fn test_apply_sgroup_data_description_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_data_description_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_data_description_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let data_description_entry =
         PropertyEntries::SGroupDataDescriptionEntry(SGroupDataDescriptionEntry {
@@ -1830,7 +1830,7 @@ fn test_apply_sgroup_data_description_entry_missing(parse_flags_strict: MolParse
 fn test_apply_sgroup_data_display_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let display_entry = PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry {
         sgroup_index: 0,
@@ -1863,7 +1863,7 @@ fn test_apply_sgroup_data_display_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_data_display_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_data_display_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let display_entry = PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry {
         sgroup_index: 0,
@@ -1883,7 +1883,7 @@ fn test_apply_sgroup_data_display_entry_missing(parse_flags_strict: MolParseFlag
 fn test_apply_sgroup_data_entry(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_data_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
         sgroup_index: 0,
@@ -1909,7 +1909,7 @@ fn test_apply_sgroup_data_entry(
 }
 
 #[rstest]
-fn test_apply_sgroup_data_entry_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_data_entry_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let data_entry =
         PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 });
@@ -1918,7 +1918,7 @@ fn test_apply_sgroup_data_entry_missing(parse_flags_strict: MolParseFlags) {
 }
 
 #[rstest]
-fn test_apply_sgroup_data_entry_no_description(parse_flags_lenient: MolParseFlags) {
+fn test_apply_sgroup_data_entry_no_description(parse_flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -1935,7 +1935,7 @@ fn test_apply_sgroup_data_entry_no_description(parse_flags_lenient: MolParseFlag
 fn test_apply_sgroup_data_entry_auto_finalization(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_data_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
         sgroup_index: 0,
@@ -1957,7 +1957,7 @@ fn test_apply_sgroup_data_entry_auto_finalization(
 }
 
 #[rstest]
-fn test_apply_sgroup_data_entry_multi_continuation(parse_flags_lenient: MolParseFlags) {
+fn test_apply_sgroup_data_entry_multi_continuation(parse_flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
@@ -2008,7 +2008,7 @@ fn test_apply_sgroup_data_entry_multi_continuation(parse_flags_lenient: MolParse
 fn test_apply_sgroup_hierarchy_entries(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     // Add a second SGroup as parent
     let parent_type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
@@ -2036,7 +2036,7 @@ fn test_apply_sgroup_hierarchy_entries(
 }
 
 #[rstest]
-fn test_apply_sgroup_hierarchy_entries_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_hierarchy_entries_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let hierarchy_entry = PropertyEntries::SGroupHierarchyEntries(vec![SGroupHierarchyEntry {
         sgroup_index: 0,
@@ -2050,7 +2050,7 @@ fn test_apply_sgroup_hierarchy_entries_missing(parse_flags_strict: MolParseFlags
 fn test_apply_sgroup_component_entries(
     mut moleculelike_single_atom: MoleculeLike,
     mut acc_with_superatom_sgroup: MoleculeProperties,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let component_entry = PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry {
         sgroup_index: 0,
@@ -2069,7 +2069,7 @@ fn test_apply_sgroup_component_entries(
 }
 
 #[rstest]
-fn test_apply_sgroup_component_entries_missing(parse_flags_strict: MolParseFlags) {
+fn test_apply_sgroup_component_entries_missing(parse_flags_strict: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
     let component_entry = PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry {
         sgroup_index: 0,
@@ -2082,7 +2082,7 @@ fn test_apply_sgroup_component_entries_missing(parse_flags_strict: MolParseFlags
 #[rstest]
 fn test_apply_zero_order_bond_entries(
     mut moleculelike_with_bond: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -2102,7 +2102,7 @@ fn test_apply_zero_order_bond_entries(
 #[rstest]
 fn test_apply_zero_order_bond_entries_invalid(
     moleculelike_with_bond: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = moleculelike_with_bond;
@@ -2119,7 +2119,7 @@ fn test_apply_zero_order_bond_entries_invalid(
 #[rstest]
 fn test_apply_zero_atom_charge_entries(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -2140,7 +2140,7 @@ fn test_apply_zero_atom_charge_entries(
 #[rstest]
 fn test_apply_zero_atom_charge_entries_invalid(
     moleculelike_single_atom: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = moleculelike_single_atom;
@@ -2159,7 +2159,7 @@ fn test_apply_zero_atom_charge_entries_invalid(
 #[rstest]
 fn test_apply_atom_hydrogen_count_entries(
     mut moleculelike_single_atom: MoleculeLike,
-    parse_flags_lenient: MolParseFlags,
+    parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
 
@@ -2180,7 +2180,7 @@ fn test_apply_atom_hydrogen_count_entries(
 #[rstest]
 fn test_apply_atom_hydrogen_count_entries_invalid(
     moleculelike_single_atom: MoleculeLike,
-    parse_flags_strict: MolParseFlags,
+    parse_flags_strict: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let mut molecule = moleculelike_single_atom;

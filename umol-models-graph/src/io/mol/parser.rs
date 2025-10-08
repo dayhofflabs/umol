@@ -5,7 +5,7 @@ use nom::{error, Parser};
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use serde::{Deserialize, Serialize};
 
-use crate::io::config::MolParseFlags;
+use crate::io::ctab::config::{CtabParseFlags, MolIoConfig};
 use crate::io::ctab::molecule::{Molecule, MoleculeLike};
 use crate::io::ctab::parser::{basic_ctab_block, ctab_block};
 use crate::io::mol::parser::header::Header;
@@ -44,9 +44,9 @@ impl MolFileLike {
 }
 
 /// Parse complete MOL file (header + CTAB block)
-pub(crate) fn mol_file<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = MolFile, Error = error::Error<&'a [u8]>> {
+pub(crate) fn mol_file<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = MolFile, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
     map(
         (header::header(), basic_ctab_block(flags)),
         |(header, molecule)| MolFile::new(header, molecule),
@@ -54,9 +54,10 @@ pub(crate) fn mol_file<'a>(
 }
 
 /// Parse complete MOL file (header + CTAB block)
-pub(crate) fn mol_file_moleculelike<'a>(
-    flags: MolParseFlags,
-) -> impl Parser<&'a [u8], Output = MolFileLike, Error = error::Error<&'a [u8]>> {
+pub(crate) fn mol_file_moleculelike<'inp, 'fl>(
+    flags: &'fl CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = MolFileLike, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
     map(
         (header::header(), ctab_block(flags)),
         |(header, molecule)| MolFileLike::new(header, molecule),
@@ -129,36 +130,41 @@ pub fn parse_mol_str(input: &str) -> Result<Molecule> {
 /// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
     // TODO: add configuration options
-    let flags = MolParseFlags::LENIENT;
-    if !flags.contains(MolParseFlags::UNICODE) {
-        complete(mol_file_moleculelike(flags))
+    let config = MolIoConfig::lenient();
+    let flags = config.parse_flags;
+    let result: Result<MoleculeLike>;
+    if !flags.contains(CtabParseFlags::UNICODE) {
+        result = complete(mol_file_moleculelike(&flags))
             .parse(input)
             .map(|(_, mol_file)| mol_file.molecule)
             .map_err(|e| {
                 DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
-            })
+            });
     } else {
         let normalized = normalize_whitespace(input);
-        let result = complete(mol_file_moleculelike(flags))
+        result = complete(mol_file_moleculelike(&flags))
             .parse(&normalized)
             .map(|(_, mol_file)| mol_file.molecule)
             .map_err(|e| {
                 DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
             });
-        result
-    }
+    };
+    result
 }
 
 /// Parse MOL bytes into a Molecule (optimized, basic molecules only)
 ///
-/// This is the high-performance parsing function for basic molecules.
+/// This is the optimized parsing function for basic molecules.
 /// It will fail if the MOL file contains query features.
 /// Stops parsing at M  END and ignores trailing input.
 pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
-    complete(mol_file(MolParseFlags::BASIC))
+    let config = MolIoConfig::basic();
+    let flags = config.parse_flags;
+    let result = complete(mol_file(&flags))
         .parse(input)
         .map(|(_, mol_file)| mol_file.molecule)
-        .map_err(|e| DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into())
+        .map_err(|e| DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into());
+    result
 }
 
 #[cfg(test)]

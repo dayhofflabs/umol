@@ -4,7 +4,7 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
-use crate::io::config::MolParseFlags;
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::atom::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity,
 };
@@ -19,7 +19,7 @@ use crate::io::ctab::query::QueryAtom;
 #[case(b"H ", "H, two characters", AtomSymbol::Element(Element::H))]
 #[case(b"Hg", "Hg, two characters", AtomSymbol::Element(Element::Hg))]
 fn test_atom_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
-    let result = atom_symbol(MolParseFlags::BASIC).parse(input);
+    let result = atom_symbol(&CtabParseFlags::BASIC).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, symbol) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -37,7 +37,7 @@ fn test_atom_symbol_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_symbol(MolParseFlags::STRICT).parse(input);
+    let result = atom_symbol(&CtabParseFlags::STRICT).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -73,7 +73,7 @@ fn test_atom_symbol_invalid(
 #[case(b"Hg", "Hg, two characters", AtomSymbol::Element(Element::Hg))]
 #[case(b"Ala", "pseudoatom", AtomSymbol::Pseudoatom(String::from("Ala")))]
 fn test_atomlike_symbol(#[case] input: &[u8], #[case] desc: &str, #[case] expected: AtomSymbol) {
-    let result = atomlike_symbol(MolParseFlags::LENIENT).parse(input);
+    let result = atomlike_symbol(&CtabParseFlags::LENIENT).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, symbol) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -99,7 +99,7 @@ fn test_atomlike_symbol_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atomlike_symbol(MolParseFlags::STRICT).parse(input);
+    let result = atomlike_symbol(&CtabParseFlags::STRICT).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -121,7 +121,7 @@ fn test_atomlike_symbol_extended(
     #[case] desc: &str,
     #[case] expected: AtomSymbol,
 ) {
-    let result = atomlike_symbol(MolParseFlags::EXTENDED).parse(input);
+    let result = atomlike_symbol(&CtabParseFlags::EXTENDED).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, symbol) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -172,7 +172,7 @@ fn test_atom_input69(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input69(input, MolParseFlags::BASIC);
+    let result = atom_input69(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -235,7 +235,7 @@ fn test_atom_input69_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_input69(input, MolParseFlags::STRICT);
+    let result = atom_input69(input, &CtabParseFlags::STRICT);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -267,7 +267,7 @@ fn test_atom_input51(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input51(input, MolParseFlags::LENIENT);
+    let result = atom_input51(input, &CtabParseFlags::LENIENT);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -326,7 +326,7 @@ fn test_atom_input51_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_input51(input, MolParseFlags::STRICT);
+    let result = atom_input51(input, &CtabParseFlags::STRICT);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -352,7 +352,7 @@ fn test_atom_input51_empty_fields(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input51(input, MolParseFlags::BASIC);
+    let result = atom_input51(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -411,7 +411,7 @@ fn test_atom_input42(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input42(input, MolParseFlags::BASIC);
+    let result = atom_input42(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -471,7 +471,7 @@ fn test_atom_input42_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_input42(input, MolParseFlags::STRICT);
+    let result = atom_input42(input, &CtabParseFlags::STRICT);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -497,7 +497,7 @@ fn test_atom_input42_empty_fields(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input42(input, MolParseFlags::BASIC);
+    let result = atom_input42(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -558,7 +558,7 @@ fn test_atom_input39(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input39(input, MolParseFlags::BASIC);
+    let result = atom_input39(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     let position = atom.position.unwrap();
@@ -616,7 +616,7 @@ fn test_atom_input39_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_input39(input, MolParseFlags::STRICT);
+    let result = atom_input39(input, &CtabParseFlags::STRICT);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -637,7 +637,7 @@ fn test_atom_input39_empty_fields(
     #[case] isotope_mass: Option<u32>,
     #[case] charge: i8,
 ) {
-    let result = atom_input39(input, MolParseFlags::BASIC);
+    let result = atom_input39(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -666,7 +666,7 @@ fn test_atom_input36(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input36(input, MolParseFlags::BASIC);
+    let result = atom_input36(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -722,7 +722,7 @@ fn test_atom_input36_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_input36(input, MolParseFlags::STRICT);
+    let result = atom_input36(input, &CtabParseFlags::STRICT);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -740,7 +740,7 @@ fn test_atom_input36_empty_fields(
     #[case] desc: &str,
     #[case] isotope_mass: Option<u32>,
 ) {
-    let result = atom_input36(input, MolParseFlags::BASIC);
+    let result = atom_input36(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -763,7 +763,7 @@ fn test_atom_input34(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input34(input, MolParseFlags::BASIC);
+    let result = atom_input34(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} has non-empty remaining", desc);
@@ -819,7 +819,7 @@ fn test_atom_input34_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_input34(input, MolParseFlags::STRICT);
+    let result = atom_input34(input, &CtabParseFlags::STRICT);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -851,7 +851,7 @@ fn test_atom_input(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let result = atom_input(MolParseFlags::BASIC).parse(input);
+    let result = atom_input(&CtabParseFlags::BASIC).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} should consume all input", desc);
@@ -918,7 +918,7 @@ fn test_atom_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = atom_input(MolParseFlags::STRICT).parse(input);
+    let result = atom_input(&CtabParseFlags::STRICT).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -938,7 +938,7 @@ fn test_atom_input_extended(
     #[case] expected_element: Element,
     #[case] expected_isotope: Option<u32>,
 ) {
-    let result = atom_input(MolParseFlags::EXTENDED).parse(input);
+    let result = atom_input(&CtabParseFlags::EXTENDED).parse(input);
     assert!(result.is_ok(), "{} should have succeeded with EXTENDED flags", desc);
     let (remaining, atom) = result.unwrap();
     assert!(remaining.is_empty(), "{} should consume all input", desc);
@@ -1002,7 +1002,7 @@ fn test_atomlike_input(
     #[case] y_position: f64,
     #[case] z_position: f64,
 ) {
-    let mut parser = atomlike_input(MolParseFlags::LENIENT);
+    let mut parser = atomlike_input(&CtabParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();
@@ -1091,7 +1091,7 @@ fn test_atomlike_input_invalid(
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = atomlike_input(MolParseFlags::STRICT);
+    let mut parser = atomlike_input(&CtabParseFlags::STRICT);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -1106,7 +1106,7 @@ fn test_atomlike_input_invalid(
 #[rstest]
 #[case(b"    1.0000    2.0000    3.0000 C  -2 3", "len 38")]
 fn test_atomlike_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = atomlike_input(MolParseFlags::LENIENT);
+    let mut parser = atomlike_input(&CtabParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
@@ -1123,7 +1123,7 @@ fn test_atomlike_input_partial_fields(#[case] input: &[u8], #[case] desc: &str) 
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4   \t", "len 55")]
 #[case(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0           ", "len 80")]
 fn test_atomlike_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
-    let mut parser = atomlike_input(MolParseFlags::LENIENT);
+    let mut parser = atomlike_input(&CtabParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, atom) = result.unwrap();

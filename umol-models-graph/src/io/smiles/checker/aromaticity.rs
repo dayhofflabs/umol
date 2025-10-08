@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
-use super::super::diagnostics::{Category, Diagnostic, DiagnosticsReport, Severity, Span};
+use super::super::diagnostics::{Diagnostic, DiagnosticsReport};
 use super::linalg::hmo_density_from_adjacency;
 use super::SideChannel;
 use crate::io::ir::{BondOrder, BondSymbol, Molecule};
-use crate::io::smiles::diagnostics::DiagnosticCode;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AromaticityMethod {
