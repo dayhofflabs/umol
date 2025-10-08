@@ -3,7 +3,7 @@
 // pub mod aromaticity;
 // pub mod linalg;
 // pub mod stereo_double;
-// pub mod topology;
+pub mod topology;
 // pub mod valence;
 
 // pub use aromaticity::{
@@ -16,11 +16,11 @@
 //     ValencePatternTable,
 // };
 
-use super::diagnostics::DiagnosticsReport;
-use super::parser::ParseMetadata;
 use crate::io::ir::Molecule;
+use crate::io::smiles::checker::topology::{check_topology, TopologyArtifacts};
 use crate::io::smiles::config::{SmilesCheckFlags, SmilesIoConfig, SmilesLintConfig};
-use crate::io::smiles::parser::parse_smiles_inner;
+use crate::io::smiles::diagnostics::DiagnosticsReport;
+use crate::io::smiles::parser::{parse_smiles_inner, ParseMetadata};
 
 #[derive(Default)]
 pub struct SmilesModels;
@@ -45,15 +45,15 @@ pub struct CheckOutput {
 }
 
 pub fn check_parsed(
-    _mol: &Molecule,
-    _meta: &ParseMetadata,
-    _check_flags: &SmilesCheckFlags,
-    _lint_config: &SmilesLintConfig,
-    _models: &SmilesModels,
+    mol: &Molecule,
+    metadata: &ParseMetadata,
+    check_flags: &SmilesCheckFlags,
+    lint_config: &SmilesLintConfig,
+    models: &SmilesModels,
 ) -> CheckOutput {
     let report = DiagnosticsReport::new();
     let annotations = Annotations::default();
-    // check_topology(mol, side, &mut report, input_len);
+    check_topology(mol, side, &mut report, input_len);
     // check_stereo_double(mol, side, &mut report, input_len);
     CheckOutput {
         diagnostics: report,

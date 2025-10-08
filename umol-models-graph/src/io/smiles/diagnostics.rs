@@ -6,7 +6,7 @@ use strum::{AsRefStr, EnumIter, IntoEnumIterator};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, AsRefStr)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
-pub enum DiagnosticCode {
+pub enum Code {
     // Lexical errors
     InvalidWhitespace,
     InvalidComment,
@@ -112,10 +112,10 @@ pub enum DiagnosticCode {
     PreferAromaticForm,
 }
 
-impl DiagnosticCode {
+impl Code {
     // Iterate all enum variants
-    pub fn all() -> impl Iterator<Item = DiagnosticCode> {
-        DiagnosticCode::iter()
+    pub fn all() -> impl Iterator<Item = Code> {
+        Code::iter()
     }
     // Stable string name for this code (SCREAMING_SNAKE_CASE variant name)
     pub fn as_str(&self) -> &str {
@@ -131,28 +131,28 @@ pub enum Severity {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, AsRefStr, EnumIter)]
 #[strum(serialize_all = "UPPERCASE")]
-pub enum DiagnosticCategory {
-    Lex,
-    Syn,
-    Topo,
+pub enum Category {
+    Lexical,
+    Syntactic,
+    Topology,
     Valence,
-    Arom,
+    Aromaticity,
     Stereo,
     Style,
     Internal,
 }
 
-impl DiagnosticCategory {
-    pub fn all() -> impl Iterator<Item = DiagnosticCategory> {
-        DiagnosticCategory::iter()
+impl Category {
+    pub fn all() -> impl Iterator<Item = Category> {
+        Category::iter()
     }
 
     pub fn as_str(&self) -> &str {
         self.as_ref()
     }
 
-    pub fn default_category(&self) -> DiagnosticCategory {
-        DiagnosticCategory::Internal
+    pub fn default_category(&self) -> Category {
+        Category::Internal
     }
     pub fn default_severity(&self) -> Severity {
         Severity::Error
@@ -173,9 +173,9 @@ impl Span {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
-    pub code: DiagnosticCode,
+    pub code: Code,
     pub severity: Severity,
-    pub category: DiagnosticCategory,
+    pub category: Category,
     pub span: Span,
     pub message: &'static str,
     pub details: Option<String>,
@@ -183,8 +183,8 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn error(
-        code: impl Into<DiagnosticCode>,
-        category: DiagnosticCategory,
+        code: impl Into<Code>,
+        category: Category,
         span: Span,
         message: &'static str,
     ) -> Self {
@@ -198,8 +198,8 @@ impl Diagnostic {
         }
     }
     pub fn warning(
-        code: impl Into<DiagnosticCode>,
-        category: DiagnosticCategory,
+        code: impl Into<Code>,
+        category: Category,
         span: Span,
         message: &'static str,
     ) -> Self {
@@ -270,8 +270,8 @@ mod tests {
     #[test]
     fn test_diagnostic_display() {
         let d = Diagnostic::error(
-            DiagnosticCode::InvalidToken,
-            DiagnosticCategory::Lex,
+            Code::InvalidToken,
+            Category::Lexical,
             Span::new(0, 10),
             "Invalid token",
         );

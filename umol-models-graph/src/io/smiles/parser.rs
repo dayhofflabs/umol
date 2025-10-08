@@ -6,7 +6,7 @@ use umol_data::Element;
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use crate::io::smiles::diagnostics::{Diagnostic, DiagnosticCategory, DiagnosticCode, Span};
+use crate::io::smiles::diagnostics::{Diagnostic, Category, Code, Span};
 
 #[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -60,56 +60,56 @@ impl ParseError {
 
     pub fn as_diagnostic(&self, input: &str) -> Diagnostic {
         let discriminant: ParseErrorDiscriminants = self.into();
-        let code: DiagnosticCode = discriminant.into();
+        let code: Code = discriminant.into();
         let span = Span::new(0, input.len());
         let message = "Parse error";
-        Diagnostic::error(code, DiagnosticCategory::Lex, span, message)
+        Diagnostic::error(code, Category::Lex, span, message)
     }
 }
 
-impl From<ParseErrorDiscriminants> for DiagnosticCode {
+impl From<ParseErrorDiscriminants> for Code {
     fn from(discriminant: ParseErrorDiscriminants) -> Self {
         match discriminant {
-            ParseErrorDiscriminants::InvalidWhitespace => DiagnosticCode::InvalidWhitespace,
-            ParseErrorDiscriminants::InvalidComment => DiagnosticCode::InvalidComment,
+            ParseErrorDiscriminants::InvalidWhitespace => Code::InvalidWhitespace,
+            ParseErrorDiscriminants::InvalidComment => Code::InvalidComment,
             ParseErrorDiscriminants::UnterminatedBlockComment => {
-                DiagnosticCode::UnterminatedBlockComment
+                Code::UnterminatedBlockComment
             }
-            ParseErrorDiscriminants::InvalidElement => DiagnosticCode::InvalidElement,
-            ParseErrorDiscriminants::InvalidToken => DiagnosticCode::InvalidToken,
-            ParseErrorDiscriminants::UnbalancedOpenParen => DiagnosticCode::UnbalancedOpenParen,
-            ParseErrorDiscriminants::UnbalancedCloseParen => DiagnosticCode::UnbalancedCloseParen,
-            ParseErrorDiscriminants::EmptyBranch => DiagnosticCode::EmptyBranch,
-            ParseErrorDiscriminants::EmptyGroup => DiagnosticCode::EmptyGroup,
-            ParseErrorDiscriminants::NonfinalGroup => DiagnosticCode::NonfinalGroup,
-            ParseErrorDiscriminants::LeadingBond => DiagnosticCode::LeadingBond,
-            ParseErrorDiscriminants::TrailingBond => DiagnosticCode::TrailingBond,
-            ParseErrorDiscriminants::ConsecutiveBonds => DiagnosticCode::ConsecutiveBonds,
-            ParseErrorDiscriminants::LeadingRing => DiagnosticCode::LeadingRing,
-            ParseErrorDiscriminants::UnbalancedRingIndex => DiagnosticCode::UnbalancedRingIndex,
-            ParseErrorDiscriminants::InvalidRingIndex => DiagnosticCode::InvalidRingIndex,
+            ParseErrorDiscriminants::InvalidElement => Code::InvalidElement,
+            ParseErrorDiscriminants::InvalidToken => Code::InvalidToken,
+            ParseErrorDiscriminants::UnbalancedOpenParen => Code::UnbalancedOpenParen,
+            ParseErrorDiscriminants::UnbalancedCloseParen => Code::UnbalancedCloseParen,
+            ParseErrorDiscriminants::EmptyBranch => Code::EmptyBranch,
+            ParseErrorDiscriminants::EmptyGroup => Code::EmptyGroup,
+            ParseErrorDiscriminants::NonfinalGroup => Code::NonfinalGroup,
+            ParseErrorDiscriminants::LeadingBond => Code::LeadingBond,
+            ParseErrorDiscriminants::TrailingBond => Code::TrailingBond,
+            ParseErrorDiscriminants::ConsecutiveBonds => Code::ConsecutiveBonds,
+            ParseErrorDiscriminants::LeadingRing => Code::LeadingRing,
+            ParseErrorDiscriminants::UnbalancedRingIndex => Code::UnbalancedRingIndex,
+            ParseErrorDiscriminants::InvalidRingIndex => Code::InvalidRingIndex,
             ParseErrorDiscriminants::MismatchedRingBondDirs => {
-                DiagnosticCode::MismatchedRingBondDirs
+                Code::MismatchedRingBondDirs
             }
             ParseErrorDiscriminants::MismatchedRingBondOrders => {
-                DiagnosticCode::MismatchedRingBondOrders
+                Code::MismatchedRingBondOrders
             }
-            ParseErrorDiscriminants::LeadingDot => DiagnosticCode::LeadingDot,
-            ParseErrorDiscriminants::TrailingDot => DiagnosticCode::TrailingDot,
-            ParseErrorDiscriminants::ConsecutiveDots => DiagnosticCode::ConsecutiveDots,
-            ParseErrorDiscriminants::DotBeforeRing => DiagnosticCode::DotBeforeRing,
-            ParseErrorDiscriminants::EmptyBracket => DiagnosticCode::EmptyBracket,
-            ParseErrorDiscriminants::UnbalancedOpenBracket => DiagnosticCode::UnbalancedOpenBracket,
+            ParseErrorDiscriminants::LeadingDot => Code::LeadingDot,
+            ParseErrorDiscriminants::TrailingDot => Code::TrailingDot,
+            ParseErrorDiscriminants::ConsecutiveDots => Code::ConsecutiveDots,
+            ParseErrorDiscriminants::DotBeforeRing => Code::DotBeforeRing,
+            ParseErrorDiscriminants::EmptyBracket => Code::EmptyBracket,
+            ParseErrorDiscriminants::UnbalancedOpenBracket => Code::UnbalancedOpenBracket,
             ParseErrorDiscriminants::UnbalancedCloseBracket => {
-                DiagnosticCode::UnbalancedCloseBracket
+                Code::UnbalancedCloseBracket
             }
-            ParseErrorDiscriminants::StrayBracketField => DiagnosticCode::StrayBracketField,
-            ParseErrorDiscriminants::DuplicateBracketField => DiagnosticCode::DuplicateBracketField,
-            ParseErrorDiscriminants::MissingClassIndex => DiagnosticCode::MissingClassIndex,
-            ParseErrorDiscriminants::MissingChiralityIndex => DiagnosticCode::MissingChiralityIndex,
-            ParseErrorDiscriminants::ChiralityOutOfRange => DiagnosticCode::ChiralityOutOfRange,
-            ParseErrorDiscriminants::BracketHwithHcount => DiagnosticCode::BracketHwithHcount,
-            ParseErrorDiscriminants::InvalidBracket => DiagnosticCode::InvalidBracket,
+            ParseErrorDiscriminants::StrayBracketField => Code::StrayBracketField,
+            ParseErrorDiscriminants::DuplicateBracketField => Code::DuplicateBracketField,
+            ParseErrorDiscriminants::MissingClassIndex => Code::MissingClassIndex,
+            ParseErrorDiscriminants::MissingChiralityIndex => Code::MissingChiralityIndex,
+            ParseErrorDiscriminants::ChiralityOutOfRange => Code::ChiralityOutOfRange,
+            ParseErrorDiscriminants::BracketHwithHcount => Code::BracketHwithHcount,
+            ParseErrorDiscriminants::InvalidBracket => Code::InvalidBracket,
         }
     }
 }

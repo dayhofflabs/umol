@@ -1,9 +1,10 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use super::super::diagnostics::{Diagnostic, DiagnosticsReport};
-use super::SideChannel;
 use crate::io::ir::Molecule;
+use crate::io::smiles::diagnostics::{
+    Category, Code, Diagnostic, DiagnosticsReport, Severity, Span,
+};
+use crate::io::smiles::parser::ParseMetadata;
 
 pub struct TopologyArtifacts {
     pub self_loops: usize,
@@ -12,7 +13,7 @@ pub struct TopologyArtifacts {
 
 pub fn check_topology(
     mol: &Molecule,
-    _side: Option<&SideChannel>,
+    _metadata: &ParseMetadata,
     report: &mut DiagnosticsReport,
     input_len: usize,
 ) -> TopologyArtifacts {
@@ -21,48 +22,45 @@ pub fn check_topology(
         parallel_pairs: 0,
     };
     // Track multiplicity of edges between unordered atom pairs
-    let mut edge_mult: HashMap<(u32, u32), (usize, (usize, usize))> = HashMap::new();
+    let mut edge_mult: HashMap<(u32, u32), usize> = HashMap::new();
 
-    for (bi, b) in mol.bonds.iter().enumerate() {
-        let (Some(a), Some(c)) = (b.start_atom, b.end_atom) else {
+    for (index, bond) in mol.bonds.iter().enumerate() {
+        let (atom1, atom2) = (bond.start_atom, bond.end_atom);
+        if atom1 == atom2 {
+            artifacts.self_loops += 1;
+            report.push(Diagnostic {
+                code: Code::SelfLoopRing,
+                category: Category::Topology,
+                severity: Severity::Error,
+                span: Span::new(0, input_len),
+                message: "Self-loop bond",
+                details: Some(format!("bond_index={}", index)),
+            });
             continue;
-        };
-        // if a == c {
-        //     artifacts.self_loops += 1;
-        //     report.push(Diagnostic {
-        //         code: DiagnosticCode::TopoSelfLoop,
-        //         category: Category::Topology,
-        //         severity: Severity::Error,
-        //         span: Span::new(0, input_len),
-        //         message: "Self-loop bond",
-        //         details: Some(format!("bond_index={}", bi)),
-        //     });
-        //     continue;
-        // }
-        let key = if a < c { (a, c) } else { (c, a) };
-        match edge_mult.entry(key) {
-            Entry::Vacant(v) => {
-                v.insert((1, (a as usize, c as usize)));
-            }
-            Entry::Occupied(mut o) => {
-                let (ref mut cnt, _ab) = o.get_mut();
-                *cnt += 1;
-            }
         }
+        let key = if atom1 < atom2 {
+            (atom1, atom2)
+        } else {
+            (atom2, atom1)
+        };
+        edge_mult
+            .entry(key)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
     }
 
-    for ((_a, _b), (cnt, _ab)) in edge_mult.into_iter() {
-        // if cnt >= 2 {
-        //     artifacts.parallel_pairs += 1;
-        //     report.push(Diagnostic {
-        //         code: DiagnosticCode::TopoParallelEdges,
-        //         category: Category::Topology,
-        //         severity: Severity::Error,
-        //         span: Span::new(0, input_len),
-        //         message: "Multiple bonds between the same atom pair",
-        //         details: None,
-        //     });
-        // }
+    for ((atom1, atom2), count) in edge_mult.into_iter() {
+        if count >= 2 {
+            artifacts.parallel_pairs += 1;
+            report.push(Diagnostic {
+                code: Code::ParallelEdges,
+                category: Category::Topology,
+                severity: Severity::Error,
+                span: Span::new(0, input_len),
+                message: "Multiple bonds between the same atom pair",
+                details: Some(format!("atom1={atom1}, atom2={atom2}, count={count}")),
+            });
+        }
     }
 
     artifacts
