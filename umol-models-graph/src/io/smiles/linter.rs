@@ -2,7 +2,6 @@
 
 mod context;
 mod emitter;
-mod diag_map;
 pub use context::LintContext;
 pub use emitter::{Emitter, LintConfig};
 
@@ -23,7 +22,7 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     let parse_res = parse_smiles(input.as_bytes());
     if let Err(err) = &parse_res {
         // Central mapping for parser errors (full coverage)
-        let d = diag_map::map_parse_error(err, input);
+        // TODO: Generate the diagnostic here
         emitter.emit(d);
     }
     if let Err(_err) = &parse_res {

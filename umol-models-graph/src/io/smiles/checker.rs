@@ -4,7 +4,7 @@
 // pub mod linalg;
 // pub mod stereo_double;
 pub mod topology;
-// pub mod valence;
+pub mod valence;
 
 // pub use aromaticity::{
 //     check_aromaticity, AromaticityArtifacts, AromaticityConfig, AromaticityMethod, AromaticityModel,
@@ -18,12 +18,22 @@ pub mod topology;
 
 use crate::io::ir::Molecule;
 use crate::io::smiles::checker::topology::{check_topology, TopologyArtifacts};
+use crate::io::smiles::checker::valence::{ValenceConfig, ValenceModel};
 use crate::io::smiles::config::{SmilesCheckFlags, SmilesIoConfig, SmilesLintConfig};
 use crate::io::smiles::diagnostics::DiagnosticsReport;
 use crate::io::smiles::parser::{parse_smiles_inner, ParseMetadata};
 
-#[derive(Default)]
-pub struct SmilesModels;
+pub struct SmilesModels {
+    pub valence: ValenceModel,
+}
+
+impl Default for SmilesModels {
+    fn default() -> Self {
+        Self {
+            valence: ValenceModel::simple_organic(),
+        }
+    }
+}
 
 pub struct TopologyAnnotations;
 pub struct ValenceAnnotations;
@@ -47,17 +57,26 @@ pub struct CheckOutput {
 pub fn check_parsed(
     mol: &Molecule,
     metadata: &ParseMetadata,
-    check_flags: &SmilesCheckFlags,
-    lint_config: &SmilesLintConfig,
+    _check_flags: &SmilesCheckFlags,
+    _lint_config: &SmilesLintConfig,
     models: &SmilesModels,
 ) -> CheckOutput {
-    let report = DiagnosticsReport::new();
+    let mut report = DiagnosticsReport::new();
     let annotations = Annotations::default();
-    check_topology(mol, side, &mut report, input_len);
-    // check_stereo_double(mol, side, &mut report, input_len);
+    
+    // Run topology checks
+    check_topology(mol, metadata, &mut report);
+    
+    // Run valence checks
+    let valence_cfg = ValenceConfig::default();
+    valence::check_valence(mol, metadata, &mut report, &models.valence, &valence_cfg);
+    
+    // TODO: Run stereo checks
+    // check_stereo_double(mol, metadata, &mut report);
+    
     CheckOutput {
         diagnostics: report,
-        annotations: annotations,
+        annotations,
     }
 }
 

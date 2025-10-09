@@ -1042,4 +1042,109 @@ fn whitespace_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError
     assert_eq!(err, expected);
 }
 
+// Span tracking tests
+#[test]
+fn metadata_atom_spans_basic() {
+    let input = b"CCO";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.atom_spans.len(), 3);
+    assert_eq!(meta.atom_spans[0], Span::new(0, 1)); // First C
+    assert_eq!(meta.atom_spans[1], Span::new(1, 2)); // Second C
+    assert_eq!(meta.atom_spans[2], Span::new(2, 3)); // O
+}
+
+#[test]
+fn metadata_atom_spans_bracketed() {
+    let input = b"[CH3]O";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.atom_spans.len(), 2);
+    assert_eq!(meta.atom_spans[0], Span::new(0, 5)); // [CH3]
+    assert_eq!(meta.atom_spans[1], Span::new(5, 6)); // O
+}
+
+#[test]
+fn metadata_atom_spans_multi_char() {
+    let input = b"ClBr";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.atom_spans.len(), 2);
+    assert_eq!(meta.atom_spans[0], Span::new(0, 2)); // Cl
+    assert_eq!(meta.atom_spans[1], Span::new(2, 4)); // Br
+}
+
+#[test]
+fn metadata_bond_spans_implicit() {
+    let input = b"CCO";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.bond_spans.len(), 2);
+    assert_eq!(meta.bond_spans[0], Span::new(1, 1)); // Implicit bond before second C
+    assert_eq!(meta.bond_spans[1], Span::new(2, 2)); // Implicit bond before O
+}
+
+#[test]
+fn metadata_bond_spans_explicit() {
+    let input = b"C-C=O";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.bond_spans.len(), 2);
+    assert_eq!(meta.bond_spans[0], Span::new(1, 2)); // - bond
+    assert_eq!(meta.bond_spans[1], Span::new(3, 4)); // = bond
+}
+
+#[test]
+fn metadata_bond_spans_ring() {
+    let input = b"C1CC1";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.bond_spans.len(), 3);
+    assert_eq!(meta.bond_spans[0], Span::new(2, 2)); // Implicit bond C-C
+    assert_eq!(meta.bond_spans[1], Span::new(3, 3)); // Implicit bond C-C
+    assert_eq!(meta.bond_spans[2], Span::new(1, 4)); // Ring bond from pos 1 to pos 4
+}
+
+#[test]
+fn metadata_ring_events() {
+    let input = b"C1CC1";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.ring_events.len(), 1);
+    let event = &meta.ring_events[0];
+    assert_eq!(event.ring_idx, 1);
+    assert_eq!(event.open_pos, 1);
+    assert_eq!(event.close_pos, Some(4));
+    assert_eq!(event.atom_a, 1); // First atom (1-indexed)
+    assert_eq!(event.atom_b, Some(3)); // Third atom
+}
+
+#[test]
+fn metadata_ring_events_multiple() {
+    let input = b"C12CC1C2";
+    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
+    let meta = output.meta.expect("metadata should be present");
+    
+    assert_eq!(meta.ring_events.len(), 2);
+    
+    let event1 = meta.ring_events.iter().find(|e| e.ring_idx == 1).unwrap();
+    assert_eq!(event1.open_pos, 1);
+    assert_eq!(event1.close_pos, Some(5));
+    assert_eq!(event1.atom_a, 1);
+    assert_eq!(event1.atom_b, Some(3));
+    
+    let event2 = meta.ring_events.iter().find(|e| e.ring_idx == 2).unwrap();
+    assert_eq!(event2.open_pos, 2);
+    assert_eq!(event2.close_pos, Some(7));
+    assert_eq!(event2.atom_a, 1);
+    assert_eq!(event2.atom_b, Some(4));
+}
+
 mod utils;

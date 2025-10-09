@@ -6,7 +6,7 @@ use umol_data::Element;
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use crate::io::smiles::diagnostics::{Diagnostic, Category, Code, Span};
+use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, Span};
 
 #[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -63,7 +63,8 @@ impl ParseError {
         let code: Code = discriminant.into();
         let span = Span::new(0, input.len());
         let message = "Parse error";
-        Diagnostic::error(code, Category::Lex, span, message)
+        // FIX: Use correct category
+        Diagnostic::error(code, Category::Lexical, span, message)
     }
 }
 
@@ -72,9 +73,7 @@ impl From<ParseErrorDiscriminants> for Code {
         match discriminant {
             ParseErrorDiscriminants::InvalidWhitespace => Code::InvalidWhitespace,
             ParseErrorDiscriminants::InvalidComment => Code::InvalidComment,
-            ParseErrorDiscriminants::UnterminatedBlockComment => {
-                Code::UnterminatedBlockComment
-            }
+            ParseErrorDiscriminants::UnterminatedBlockComment => Code::UnterminatedBlockComment,
             ParseErrorDiscriminants::InvalidElement => Code::InvalidElement,
             ParseErrorDiscriminants::InvalidToken => Code::InvalidToken,
             ParseErrorDiscriminants::UnbalancedOpenParen => Code::UnbalancedOpenParen,
@@ -88,21 +87,15 @@ impl From<ParseErrorDiscriminants> for Code {
             ParseErrorDiscriminants::LeadingRing => Code::LeadingRing,
             ParseErrorDiscriminants::UnbalancedRingIndex => Code::UnbalancedRingIndex,
             ParseErrorDiscriminants::InvalidRingIndex => Code::InvalidRingIndex,
-            ParseErrorDiscriminants::MismatchedRingBondDirs => {
-                Code::MismatchedRingBondDirs
-            }
-            ParseErrorDiscriminants::MismatchedRingBondOrders => {
-                Code::MismatchedRingBondOrders
-            }
+            ParseErrorDiscriminants::MismatchedRingBondDirs => Code::MismatchedRingBondDirs,
+            ParseErrorDiscriminants::MismatchedRingBondOrders => Code::MismatchedRingBondOrders,
             ParseErrorDiscriminants::LeadingDot => Code::LeadingDot,
             ParseErrorDiscriminants::TrailingDot => Code::TrailingDot,
             ParseErrorDiscriminants::ConsecutiveDots => Code::ConsecutiveDots,
             ParseErrorDiscriminants::DotBeforeRing => Code::DotBeforeRing,
             ParseErrorDiscriminants::EmptyBracket => Code::EmptyBracket,
             ParseErrorDiscriminants::UnbalancedOpenBracket => Code::UnbalancedOpenBracket,
-            ParseErrorDiscriminants::UnbalancedCloseBracket => {
-                Code::UnbalancedCloseBracket
-            }
+            ParseErrorDiscriminants::UnbalancedCloseBracket => Code::UnbalancedCloseBracket,
             ParseErrorDiscriminants::StrayBracketField => Code::StrayBracketField,
             ParseErrorDiscriminants::DuplicateBracketField => Code::DuplicateBracketField,
             ParseErrorDiscriminants::MissingClassIndex => Code::MissingClassIndex,
@@ -114,11 +107,32 @@ impl From<ParseErrorDiscriminants> for Code {
     }
 }
 
+/// Ring event tracking open and close positions
+#[derive(Debug, Clone, Copy)]
+pub struct RingEvent {
+    pub ring_idx: u32,
+    pub open_pos: usize,
+    pub close_pos: Option<usize>,
+    pub atom_a: u32,
+    pub atom_b: Option<u32>,
+}
+
 /// Lightweight parse metadata
 #[derive(Debug, Default, Clone)]
 pub struct ParseMetadata {
-    pub token_spans: Vec<(usize, usize)>,
-    pub ring_events: Vec<u32>,
+    /// Span for each atom in the molecule (0-indexed vector, but atom IDs are 1-based)
+    /// To get span for atom_id: `atom_spans[atom_id - 1]`
+    /// Example: atom_id=1 (first atom) → atom_spans[0]
+    pub atom_spans: Vec<Span>,
+    
+    /// Span for each bond in the molecule (0-indexed vector, but bond IDs are 1-based)
+    /// To get span for bond_id: `bond_spans[bond_id - 1]`
+    /// Example: bond_id=1 (first bond) → bond_spans[0]
+    /// Includes both chain bonds and ring bonds
+    pub bond_spans: Vec<Span>,
+    
+    /// Ring opening/closing events for ring-specific diagnostics
+    pub ring_events: Vec<RingEvent>,
 }
 
 // Parse stage output
@@ -254,6 +268,8 @@ fn process_ring_closure(
     order_opt: Option<BondOrder>,
     dir_opt: Option<BondDir>,
     pos: usize,
+    bond_spans: &mut Option<Vec<Span>>,
+    ring_events: &mut Option<Vec<RingEvent>>,
 ) -> Result<(), ParseError> {
     if ring_table.len() <= idx {
         ring_table.resize_with(idx + 1, || None);
@@ -268,6 +284,16 @@ fn process_ring_closure(
                 open_pos: pos,
                 open_aromatic: last_aromatic,
             });
+            // Track ring opening event
+            if let Some(events) = ring_events.as_mut() {
+                events.push(RingEvent {
+                    ring_idx: idx as u32,
+                    open_pos: pos,
+                    close_pos: None,
+                    atom_a: last_atom_idx,
+                    atom_b: None,
+                });
+            }
         }
         Some(open) => {
             if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
@@ -320,6 +346,24 @@ fn process_ring_closure(
                     dir: final_dir,
                 },
             );
+            
+            // Track ring bond span
+            if let Some(spans) = bond_spans.as_mut() {
+                // Ring bond span from opening position to closing position
+                spans.push(Span::new(open.open_pos, pos));
+            }
+            
+            // Update ring event with close info
+            if let Some(events) = ring_events.as_mut() {
+                // Find the matching opening event and update it
+                for event in events.iter_mut().rev() {
+                    if event.ring_idx == idx as u32 && event.close_pos.is_none() {
+                        event.close_pos = Some(pos);
+                        event.atom_b = Some(b);
+                        break;
+                    }
+                }
+            }
         }
     }
     Ok(())
@@ -574,10 +618,13 @@ fn attach_atom(
     pending_bond: &mut Option<(BondOrder, Option<BondDir>, usize)>,
     last_aromatic: bool,
     curr_aromatic: bool,
+    bond_spans: &mut Option<Vec<Span>>,
+    curr_atom_start: usize,
 ) {
     if let Some(last) = last_atom_idx {
-        if let Some((order, dir, _)) = pending_bond.take() {
+        let bond_start = if let Some((order, dir, pos)) = pending_bond.take() {
             builder.on_bond(last, curr_atom_idx, BondData { order, dir });
+            pos
         } else if last_aromatic && curr_aromatic {
             builder.on_bond(
                 last,
@@ -587,8 +634,16 @@ fn attach_atom(
                     dir: None,
                 },
             );
+            curr_atom_start
         } else {
             builder.on_bond_single_fast(last, curr_atom_idx);
+            curr_atom_start
+        };
+        
+        if let Some(spans) = bond_spans.as_mut() {
+            // For implicit bonds, span starts at current atom
+            // For explicit bonds, span starts at the bond symbol
+            spans.push(Span::new(bond_start, curr_atom_start));
         }
     }
 }
@@ -814,13 +869,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
-    let mut ring_sequence: Option<Vec<(u32, usize)>> =
-        if !no_lints { Some(Vec::new()) } else { None };
+    let mut atom_spans: Option<Vec<Span>> = if !no_lints { Some(Vec::new()) } else { None };
+    let mut bond_spans: Option<Vec<Span>> = if !no_lints { Some(Vec::new()) } else { None };
+    let mut ring_events: Option<Vec<RingEvent>> = if !no_lints { Some(Vec::new()) } else { None };
     let mut last_atom_idx: Option<u32> = None;
     let mut pending_bond: Option<(BondOrder, Option<BondDir>, usize)> = None;
     let mut last_aromatic: bool = false;
     let mut just_closed_group: bool = false;
-    let mut first_ring_digit: Option<u32> = None;
 
     while i < n {
         let b0 = input[i];
@@ -977,17 +1032,6 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 if invalid_ring_context(&branch_stack) {
                     return Err(ParseError::LeadingRing { pos: 0 });
                 }
-                if let Some(seq) = ring_sequence.as_mut() {
-                    let d = if percent {
-                        ((input[i + 1] - b'0') as u32) * 10 + (input[i + 2] - b'0') as u32
-                    } else {
-                        (input[i] - b'0') as u32
-                    };
-                    if first_ring_digit.is_none() {
-                        first_ring_digit = Some(d);
-                    }
-                    seq.push((d, i));
-                }
                 let bond = pending_bond.take();
                 let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
                 process_ring_closure(
@@ -999,6 +1043,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     order_opt,
                     dir_opt,
                     i,
+                    &mut bond_spans,
+                    &mut ring_events,
                 )?;
                 i = next_i;
                 continue;
@@ -1056,7 +1102,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 chirality: chir_opt,
                 unknown_symbol: unknown,
             };
+            let atom_start = i;
             let curr = builder.on_atom(atom);
+            
+            if let Some(spans) = atom_spans.as_mut() {
+                spans.push(Span::new(atom_start, j + 1));
+            }
+            
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1064,6 +1116,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 aromatic,
+                &mut bond_spans,
+                atom_start,
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
@@ -1079,7 +1133,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
+                let atom_start = i;
                 let curr = builder.on_atom_fast(Element::Cl, true, false);
+                
+                if let Some(spans) = atom_spans.as_mut() {
+                    spans.push(Span::new(atom_start, i + 2));
+                }
+                
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1087,6 +1147,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     false,
+                    &mut bond_spans,
+                    atom_start,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1100,7 +1162,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
+            let atom_start = i;
             let curr = builder.on_atom_fast(Element::C, true, false);
+            
+            if let Some(spans) = atom_spans.as_mut() {
+                spans.push(Span::new(atom_start, i + 1));
+            }
+            
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1108,6 +1176,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 false,
+                &mut bond_spans,
+                atom_start,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1123,7 +1193,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
+                let atom_start = i;
                 let curr = builder.on_atom_fast(Element::Br, true, false);
+                
+                if let Some(spans) = atom_spans.as_mut() {
+                    spans.push(Span::new(atom_start, i + 2));
+                }
+                
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1131,6 +1207,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     false,
+                    &mut bond_spans,
+                    atom_start,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1144,7 +1222,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
+            let atom_start = i;
             let curr = builder.on_atom_fast(Element::B, true, false);
+            
+            if let Some(spans) = atom_spans.as_mut() {
+                spans.push(Span::new(atom_start, i + 1));
+            }
+            
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1152,6 +1236,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 false,
+                &mut bond_spans,
+                atom_start,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1168,7 +1254,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         // Elements
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
+                let atom_start = i;
                 let curr = builder.on_atom_fast(element, true, false);
+                
+                if let Some(spans) = atom_spans.as_mut() {
+                    spans.push(Span::new(atom_start, i + consumed));
+                }
+                
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1176,6 +1268,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     false,
+                    &mut bond_spans,
+                    atom_start,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1190,7 +1284,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
+                let atom_start = i;
                 let curr = builder.on_atom_fast(element, true, true);
+                
+                if let Some(spans) = atom_spans.as_mut() {
+                    spans.push(Span::new(atom_start, i + consumed));
+                }
+                
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1198,6 +1298,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     true,
+                    &mut bond_spans,
+                    atom_start,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = true;
@@ -1225,7 +1327,13 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 chirality: None,
                 unknown_symbol: true,
             };
+            let atom_start = i;
             let curr = builder.on_atom(atom);
+            
+            if let Some(spans) = atom_spans.as_mut() {
+                spans.push(Span::new(atom_start, i + 1));
+            }
+            
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1233,6 +1341,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 false,
+                &mut bond_spans,
+                atom_start,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1280,10 +1390,11 @@ pub fn parse_smiles_inner<'inp, 'fl>(
     if let Some(pos_open) = last_open {
         return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
     }
-    let metadata = if let Some(seq) = ring_sequence {
+    let metadata = if atom_spans.is_some() || bond_spans.is_some() || ring_events.is_some() {
         Some(ParseMetadata {
-            token_spans: Vec::new(),
-            ring_events: seq.into_iter().map(|(d, _)| d).collect(),
+            atom_spans: atom_spans.unwrap_or_default(),
+            bond_spans: bond_spans.unwrap_or_default(),
+            ring_events: ring_events.unwrap_or_default(),
         })
     } else {
         None

@@ -13,28 +13,32 @@ pub struct TopologyArtifacts {
 
 pub fn check_topology(
     mol: &Molecule,
-    _metadata: &ParseMetadata,
+    metadata: &ParseMetadata,
     report: &mut DiagnosticsReport,
-    input_len: usize,
 ) -> TopologyArtifacts {
     let mut artifacts = TopologyArtifacts {
         self_loops: 0,
         parallel_pairs: 0,
     };
-    // Track multiplicity of edges between unordered atom pairs
-    let mut edge_mult: HashMap<(u32, u32), usize> = HashMap::new();
+    let mut edge_mult: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
 
-    for (index, bond) in mol.bonds.iter().enumerate() {
+    for (bond_id, bond) in (1u32..).zip(mol.bonds.iter()) {
         let (atom1, atom2) = (bond.start_atom, bond.end_atom);
         if atom1 == atom2 {
             artifacts.self_loops += 1;
+            // Convert 1-based bond_id to 0-based index for span lookup
+            let span = metadata
+                .bond_spans
+                .get((bond_id - 1) as usize)
+                .copied()
+                .unwrap_or_else(|| Span::new(0, 0));
             report.push(Diagnostic {
                 code: Code::SelfLoopRing,
                 category: Category::Topology,
                 severity: Severity::Error,
-                span: Span::new(0, input_len),
+                span,
                 message: "Self-loop bond",
-                details: Some(format!("bond_index={}", index)),
+                details: Some(format!("bond_id={}", bond_id)),
             });
             continue;
         }
@@ -45,20 +49,32 @@ pub fn check_topology(
         };
         edge_mult
             .entry(key)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
+            .and_modify(|ids| ids.push(bond_id))
+            .or_insert_with(|| vec![bond_id]);
     }
 
-    for ((atom1, atom2), count) in edge_mult.into_iter() {
-        if count >= 2 {
+    for ((atom1, atom2), bond_ids) in edge_mult.into_iter() {
+        if bond_ids.len() >= 2 {
             artifacts.parallel_pairs += 1;
+            // Use the span of the first bond for diagnostic location
+            let span = bond_ids
+                .first()
+                .and_then(|&bond_id| {
+                    // Convert 1-based bond_id to 0-based index for span lookup
+                    let index = (bond_id - 1) as usize;
+                    metadata.bond_spans.get(index).copied()
+                })
+                .unwrap_or_else(|| Span::new(0, 0));
             report.push(Diagnostic {
                 code: Code::ParallelEdges,
                 category: Category::Topology,
                 severity: Severity::Error,
-                span: Span::new(0, input_len),
+                span,
                 message: "Multiple bonds between the same atom pair",
-                details: Some(format!("atom1={atom1}, atom2={atom2}, count={count}")),
+                details: Some(format!(
+                    "atom1={}, atom2={}, bond_ids={:?}",
+                    atom1, atom2, bond_ids
+                )),
             });
         }
     }
