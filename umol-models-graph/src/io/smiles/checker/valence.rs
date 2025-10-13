@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use super::super::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
+use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
 use crate::io::ir::{AtomSymbol, BondOrder, BondSymbol, Molecule};
-use crate::io::smiles::parser::ParseMetadata;
 use umol_data::{e, Element};
 
 #[derive(Clone, Copy)]
@@ -304,7 +303,6 @@ pub struct ValenceArtifacts {
 
 pub fn check_valence(
     mol: &Molecule,
-    metadata: &ParseMetadata,
     report: &mut DiagnosticsReport,
     model: &ValenceModel,
     cfg: &ValenceConfig,
@@ -345,13 +343,13 @@ pub fn check_valence(
         artifacts.atoms_checked += 1;
         let mut implicit_h_opt: Option<i32> = None;
         
-        // Get atom span for diagnostics (atom IDs are 1-based, vector is 0-indexed)
-        let atom_id = (i + 1) as u32;
-        let atom_span = metadata
-            .atom_spans
+        // Get atom span for diagnostics: prefer IR start; fallback to whole input
+        let atom_span = mol
+            .atoms
             .get(i)
-            .copied()
+            .and_then(|a| a.span_start.map(|s| Span::new(s as usize, s as usize + 1)))
             .unwrap_or_else(|| Span::new(0, 0));
+        let atom_id = (i + 1) as u32;
         
         if cfg.patterns_enabled {
             let d = resolve_valence_pattern(elem, sum_orders_u8, charge_i8, None, &model.patterns);

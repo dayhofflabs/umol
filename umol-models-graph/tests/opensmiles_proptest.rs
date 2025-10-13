@@ -85,7 +85,8 @@ proptest! {
             for b in &mol.bonds {
                 let sa = b.start_atom;
                 let ea = b.end_atom;
-                prop_assert!(sa < n && ea < n, "bond endpoints out of bounds: {}-{} / n={}", sa, ea, n);
+                // Molecule uses 1-based atom indices in bonds
+                prop_assert!(sa >= 1 && sa <= n && ea >= 1 && ea <= n, "bond endpoints out of bounds: {}-{} / n={}", sa, ea, n);
                 prop_assert!(sa != ea, "self-loop bond unexpectedly present");
             }
         }

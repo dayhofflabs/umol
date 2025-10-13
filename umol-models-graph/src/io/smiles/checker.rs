@@ -17,11 +17,11 @@ pub mod valence;
 // };
 
 use crate::io::ir::Molecule;
-use crate::io::smiles::checker::topology::{check_topology, TopologyArtifacts};
+use crate::io::smiles::checker::topology::check_topology;
 use crate::io::smiles::checker::valence::{ValenceConfig, ValenceModel};
 use crate::io::smiles::config::{SmilesCheckFlags, SmilesIoConfig, SmilesLintConfig};
 use crate::io::smiles::diagnostics::DiagnosticsReport;
-use crate::io::smiles::parser::{parse_smiles_inner, ParseMetadata};
+use crate::io::smiles::parser::parse_smiles_inner;
 
 pub struct SmilesModels {
     pub valence: ValenceModel,
@@ -56,7 +56,6 @@ pub struct CheckOutput {
 
 pub fn check_parsed(
     mol: &Molecule,
-    metadata: &ParseMetadata,
     _check_flags: &SmilesCheckFlags,
     _lint_config: &SmilesLintConfig,
     models: &SmilesModels,
@@ -65,11 +64,11 @@ pub fn check_parsed(
     let annotations = Annotations::default();
     
     // Run topology checks
-    check_topology(mol, metadata, &mut report);
+    check_topology(mol, &mut report);
     
     // Run valence checks
     let valence_cfg = ValenceConfig::default();
-    valence::check_valence(mol, metadata, &mut report, &models.valence, &valence_cfg);
+    valence::check_valence(mol, &mut report, &models.valence, &valence_cfg);
     
     // TODO: Run stereo checks
     // check_stereo_double(mol, metadata, &mut report);
@@ -95,12 +94,10 @@ pub fn check_smiles_with(
     match parse_output {
         Ok(parse_output) => {
             let mol = parse_output.sir;
-            let meta = parse_output.meta.unwrap_or_default();
             let _report = DiagnosticsReport::new();
             let _annotations = Annotations::default();
             let check_output = check_parsed(
                 &mol,
-                &meta,
                 &io_config.check_flags,
                 &io_config.lint_config,
                 models,

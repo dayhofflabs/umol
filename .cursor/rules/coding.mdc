@@ -1,7 +1,5 @@
 ---
-description: Coding rules
-globs: *.rs
-alwaysApply: true
+alwaysApply: false
 ---
 ## Do not write code unless explicitly asked
 - **NEVER** proceed with an implementation as a response to a "how?" question

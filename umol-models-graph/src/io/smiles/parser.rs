@@ -107,39 +107,12 @@ impl From<ParseErrorDiscriminants> for Code {
     }
 }
 
-/// Ring event tracking open and close positions
-#[derive(Debug, Clone, Copy)]
-pub struct RingEvent {
-    pub ring_idx: u32,
-    pub open_pos: usize,
-    pub close_pos: Option<usize>,
-    pub atom_a: u32,
-    pub atom_b: Option<u32>,
-}
-
-/// Lightweight parse metadata
-#[derive(Debug, Default, Clone)]
-pub struct ParseMetadata {
-    /// Span for each atom in the molecule (0-indexed vector, but atom IDs are 1-based)
-    /// To get span for atom_id: `atom_spans[atom_id - 1]`
-    /// Example: atom_id=1 (first atom) → atom_spans[0]
-    pub atom_spans: Vec<Span>,
-    
-    /// Span for each bond in the molecule (0-indexed vector, but bond IDs are 1-based)
-    /// To get span for bond_id: `bond_spans[bond_id - 1]`
-    /// Example: bond_id=1 (first bond) → bond_spans[0]
-    /// Includes both chain bonds and ring bonds
-    pub bond_spans: Vec<Span>,
-    
-    /// Ring opening/closing events for ring-specific diagnostics
-    pub ring_events: Vec<RingEvent>,
-}
+// Note: ring events are now part of IR via Molecule.ring_events
 
 // Parse stage output
 #[derive(Debug, Default, Clone)]
 pub struct ParseOutput {
     pub sir: Molecule,
-    pub meta: Option<ParseMetadata>,
 }
 
 // Public entrypoint for strict OpenSMILES
@@ -268,8 +241,6 @@ fn process_ring_closure(
     order_opt: Option<BondOrder>,
     dir_opt: Option<BondDir>,
     pos: usize,
-    bond_spans: &mut Option<Vec<Span>>,
-    ring_events: &mut Option<Vec<RingEvent>>,
 ) -> Result<(), ParseError> {
     if ring_table.len() <= idx {
         ring_table.resize_with(idx + 1, || None);
@@ -284,16 +255,7 @@ fn process_ring_closure(
                 open_pos: pos,
                 open_aromatic: last_aromatic,
             });
-            // Track ring opening event
-            if let Some(events) = ring_events.as_mut() {
-                events.push(RingEvent {
-                    ring_idx: idx as u32,
-                    open_pos: pos,
-                    close_pos: None,
-                    atom_a: last_atom_idx,
-                    atom_b: None,
-                });
-            }
+            builder.on_ring_open(idx as u32, pos as u32, last_atom_idx);
         }
         Some(open) => {
             if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
@@ -344,26 +306,10 @@ fn process_ring_closure(
                 BondData {
                     order: final_order,
                     dir: final_dir,
+                    span_start: Some(open.open_pos as u32),
                 },
             );
-            
-            // Track ring bond span
-            if let Some(spans) = bond_spans.as_mut() {
-                // Ring bond span from opening position to closing position
-                spans.push(Span::new(open.open_pos, pos));
-            }
-            
-            // Update ring event with close info
-            if let Some(events) = ring_events.as_mut() {
-                // Find the matching opening event and update it
-                for event in events.iter_mut().rev() {
-                    if event.ring_idx == idx as u32 && event.close_pos.is_none() {
-                        event.close_pos = Some(pos);
-                        event.atom_b = Some(b);
-                        break;
-                    }
-                }
-            }
+            builder.on_ring_close(idx as u32, pos as u32, b);
         }
     }
     Ok(())
@@ -618,13 +564,11 @@ fn attach_atom(
     pending_bond: &mut Option<(BondOrder, Option<BondDir>, usize)>,
     last_aromatic: bool,
     curr_aromatic: bool,
-    bond_spans: &mut Option<Vec<Span>>,
-    curr_atom_start: usize,
+    curr_atom_start: u32,
 ) {
     if let Some(last) = last_atom_idx {
-        let bond_start = if let Some((order, dir, pos)) = pending_bond.take() {
-            builder.on_bond(last, curr_atom_idx, BondData { order, dir });
-            pos
+        if let Some((order, dir, pos)) = pending_bond.take() {
+            builder.on_bond(last, curr_atom_idx, BondData { order, dir, span_start: Some(pos as u32) });
         } else if last_aromatic && curr_aromatic {
             builder.on_bond(
                 last,
@@ -632,19 +576,12 @@ fn attach_atom(
                 BondData {
                     order: BondOrder::Aromatic,
                     dir: None,
+                    span_start: Some(curr_atom_start),
                 },
             );
-            curr_atom_start
         } else {
-            builder.on_bond_single_fast(last, curr_atom_idx);
-            curr_atom_start
+            builder.on_bond_single_fast(last, curr_atom_idx, Some(curr_atom_start));
         };
-        
-        if let Some(spans) = bond_spans.as_mut() {
-            // For implicit bonds, span starts at current atom
-            // For explicit bonds, span starts at the bond symbol
-            spans.push(Span::new(bond_start, curr_atom_start));
-        }
     }
 }
 
@@ -862,16 +799,12 @@ pub fn parse_smiles_inner<'inp, 'fl>(
 ) -> Result<ParseOutput, ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
     let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
-    let no_lints = flags.contains(SmilesParseFlags::NO_METADATA);
 
     let mut i = 0usize;
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
-    let mut atom_spans: Option<Vec<Span>> = if !no_lints { Some(Vec::new()) } else { None };
-    let mut bond_spans: Option<Vec<Span>> = if !no_lints { Some(Vec::new()) } else { None };
-    let mut ring_events: Option<Vec<RingEvent>> = if !no_lints { Some(Vec::new()) } else { None };
     let mut last_atom_idx: Option<u32> = None;
     let mut pending_bond: Option<(BondOrder, Option<BondDir>, usize)> = None;
     let mut last_aromatic: bool = false;
@@ -1025,7 +958,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
             continue;
         }
         match parse_ring_index(input, i) {
-            Ok(Some((idx, next_i, percent))) => {
+            Ok(Some((idx, next_i, _percent))) => {
                 if last_atom_idx.is_none() {
                     return Err(ParseError::LeadingRing { pos: i });
                 }
@@ -1043,8 +976,6 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     order_opt,
                     dir_opt,
                     i,
-                    &mut bond_spans,
-                    &mut ring_events,
                 )?;
                 i = next_i;
                 continue;
@@ -1101,13 +1032,9 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 implicit_h: false,
                 chirality: chir_opt,
                 unknown_symbol: unknown,
+                span_start: Some(i as u32),
             };
-            let atom_start = i;
             let curr = builder.on_atom(atom);
-            
-            if let Some(spans) = atom_spans.as_mut() {
-                spans.push(Span::new(atom_start, j + 1));
-            }
             
             attach_atom(
                 &mut builder,
@@ -1116,8 +1043,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 aromatic,
-                &mut bond_spans,
-                atom_start,
+                i as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
@@ -1133,12 +1059,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
-                let atom_start = i;
-                let curr = builder.on_atom_fast(Element::Cl, true, false);
-                
-                if let Some(spans) = atom_spans.as_mut() {
-                    spans.push(Span::new(atom_start, i + 2));
-                }
+                let curr = builder.on_atom_fast(Element::Cl, true, false, Some(i as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1147,8 +1068,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     false,
-                    &mut bond_spans,
-                    atom_start,
+                    i as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1162,12 +1082,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let atom_start = i;
-            let curr = builder.on_atom_fast(Element::C, true, false);
-            
-            if let Some(spans) = atom_spans.as_mut() {
-                spans.push(Span::new(atom_start, i + 1));
-            }
+            let curr = builder.on_atom_fast(Element::C, true, false, Some(i as u32));
             
             attach_atom(
                 &mut builder,
@@ -1176,8 +1091,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 false,
-                &mut bond_spans,
-                atom_start,
+                i as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1193,12 +1107,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
-                let atom_start = i;
-                let curr = builder.on_atom_fast(Element::Br, true, false);
-                
-                if let Some(spans) = atom_spans.as_mut() {
-                    spans.push(Span::new(atom_start, i + 2));
-                }
+                let curr = builder.on_atom_fast(Element::Br, true, false, Some(i as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1207,8 +1116,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     false,
-                    &mut bond_spans,
-                    atom_start,
+                    i as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1222,12 +1130,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let atom_start = i;
-            let curr = builder.on_atom_fast(Element::B, true, false);
-            
-            if let Some(spans) = atom_spans.as_mut() {
-                spans.push(Span::new(atom_start, i + 1));
-            }
+            let curr = builder.on_atom_fast(Element::B, true, false, Some(i as u32));
             
             attach_atom(
                 &mut builder,
@@ -1236,8 +1139,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 false,
-                &mut bond_spans,
-                atom_start,
+                i as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1254,12 +1156,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         // Elements
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
-                let atom_start = i;
-                let curr = builder.on_atom_fast(element, true, false);
-                
-                if let Some(spans) = atom_spans.as_mut() {
-                    spans.push(Span::new(atom_start, i + consumed));
-                }
+                let curr = builder.on_atom_fast(element, true, false, Some(i as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1268,8 +1165,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     false,
-                    &mut bond_spans,
-                    atom_start,
+                    i as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1284,12 +1180,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
-                let atom_start = i;
-                let curr = builder.on_atom_fast(element, true, true);
-                
-                if let Some(spans) = atom_spans.as_mut() {
-                    spans.push(Span::new(atom_start, i + consumed));
-                }
+                let curr = builder.on_atom_fast(element, true, true, Some(i as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1298,8 +1189,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     &mut pending_bond,
                     last_aromatic,
                     true,
-                    &mut bond_spans,
-                    atom_start,
+                    i as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = true;
@@ -1326,13 +1216,9 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 implicit_h: false,
                 chirality: None,
                 unknown_symbol: true,
+                span_start: Some(i as u32),
             };
-            let atom_start = i;
             let curr = builder.on_atom(atom);
-            
-            if let Some(spans) = atom_spans.as_mut() {
-                spans.push(Span::new(atom_start, i + 1));
-            }
             
             attach_atom(
                 &mut builder,
@@ -1341,8 +1227,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 &mut pending_bond,
                 last_aromatic,
                 false,
-                &mut bond_spans,
-                atom_start,
+                i as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1390,21 +1275,9 @@ pub fn parse_smiles_inner<'inp, 'fl>(
     if let Some(pos_open) = last_open {
         return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
     }
-    let metadata = if atom_spans.is_some() || bond_spans.is_some() || ring_events.is_some() {
-        Some(ParseMetadata {
-            atom_spans: atom_spans.unwrap_or_default(),
-            bond_spans: bond_spans.unwrap_or_default(),
-            ring_events: ring_events.unwrap_or_default(),
-        })
-    } else {
-        None
-    };
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_default();
-    Ok(ParseOutput {
-        sir: mol,
-        meta: metadata,
-    })
+    Ok(ParseOutput { sir: mol })
 }
 
 #[cfg(test)]

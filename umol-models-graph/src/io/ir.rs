@@ -1,5 +1,7 @@
 //! Intermediate representation for molecular structures
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use umol_data::{Element, NamedIsotope};
 
@@ -24,6 +26,7 @@ pub struct Molecule {
     // Core structure
     pub atoms: Vec<Atom>,
     pub bonds: Vec<Bond>,
+    pub ring_events: Vec<Ring>,
 
     // Fragment/Link architecture for structural organization
     pub fragments: Vec<Fragment>,
@@ -37,7 +40,7 @@ pub struct Molecule {
     pub source_format: SourceFormat,
 }
 
-impl std::fmt::Display for Molecule {
+impl fmt::Display for Molecule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -81,6 +84,7 @@ pub struct Atom {
     pub class: Option<u32>,
 
     // Metadata
+    pub span_start: Option<u32>,
     pub source_format: SourceFormat,
 }
 
@@ -148,6 +152,7 @@ pub struct Bond {
     pub direction: Option<BondDir>,
 
     // Metadata
+    pub span_start: Option<u32>,
     pub source_format: SourceFormat,
 }
 
@@ -268,6 +273,16 @@ pub struct RingBond {
     pub index: Option<u32>,
     pub bond: Option<Bond>,
     pub ring: Option<u32>,
+}
+
+/// Ring
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Ring {
+    pub ring_idx: u32,
+    pub open_pos: Option<u32>,
+    pub close_pos: Option<u32>,
+    pub atom_a: Option<u32>,
+    pub atom_b: Option<u32>,
 }
 
 /// Fragment

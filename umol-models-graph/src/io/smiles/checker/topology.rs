@@ -4,7 +4,6 @@ use crate::io::ir::Molecule;
 use crate::io::smiles::diagnostics::{
     Category, Code, Diagnostic, DiagnosticsReport, Severity, Span,
 };
-use crate::io::smiles::parser::ParseMetadata;
 
 pub struct TopologyArtifacts {
     pub self_loops: usize,
@@ -13,7 +12,6 @@ pub struct TopologyArtifacts {
 
 pub fn check_topology(
     mol: &Molecule,
-    metadata: &ParseMetadata,
     report: &mut DiagnosticsReport,
 ) -> TopologyArtifacts {
     let mut artifacts = TopologyArtifacts {
@@ -26,11 +24,10 @@ pub fn check_topology(
         let (atom1, atom2) = (bond.start_atom, bond.end_atom);
         if atom1 == atom2 {
             artifacts.self_loops += 1;
-            // Convert 1-based bond_id to 0-based index for span lookup
-            let span = metadata
-                .bond_spans
-                .get((bond_id - 1) as usize)
-                .copied()
+            let span = bond
+                .span_start
+                .map(|s| Span::new(s as usize, s as usize + 1))
+                // FIX 
                 .unwrap_or_else(|| Span::new(0, 0));
             report.push(Diagnostic {
                 code: Code::SelfLoopRing,
@@ -56,15 +53,17 @@ pub fn check_topology(
     for ((atom1, atom2), bond_ids) in edge_mult.into_iter() {
         if bond_ids.len() >= 2 {
             artifacts.parallel_pairs += 1;
-            // Use the span of the first bond for diagnostic location
-            let span = bond_ids
-                .first()
-                .and_then(|&bond_id| {
-                    // Convert 1-based bond_id to 0-based index for span lookup
-                    let index = (bond_id - 1) as usize;
-                    metadata.bond_spans.get(index).copied()
-                })
-                .unwrap_or_else(|| Span::new(0, 0));
+            // Use the span of the first bond for diagnostic location; prefer IR start
+            let span = if let Some(&first_id) = bond_ids.first() {
+                let idx = (first_id - 1) as usize;
+                mol.bonds
+                    .get(idx)
+                    .and_then(|b| b.span_start.map(|s| Span::new(s as usize, s as usize + 1)))
+                    // FIX 
+                    .unwrap_or_else(|| Span::new(0, 0))
+            } else {
+                Span::new(0, 0)
+            };
             report.push(Diagnostic {
                 code: Code::ParallelEdges,
                 category: Category::Topology,

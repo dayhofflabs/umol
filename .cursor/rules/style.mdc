@@ -1,7 +1,5 @@
 ---
-description: Stylistic rules
-globs: *.rs
-alwaysApply: true
+alwaysApply: false
 ---
 ## Give concise and factual answers
 - Do not broad background unless explicitly asked

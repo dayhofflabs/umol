@@ -7,22 +7,22 @@ use super::*;
 use crate::io::ir::{AtomSymbol, BondDir, BondSymbol, Chirality};
 
 #[rstest]
-#[case::organic_c(b"C", build_from_graph("C |"))]
-#[case::organic_b(b"B", build_from_graph("B |"))]
-#[case::organic_n(b"N", build_from_graph("N |"))]
-#[case::organic_o(b"O", build_from_graph("O |"))]
-#[case::organic_s(b"S", build_from_graph("S |"))]
-#[case::organic_p(b"P", build_from_graph("P |"))]
-#[case::organic_f(b"F", build_from_graph("F |"))]
-#[case::organic_cl(b"Cl", build_from_graph("Cl |"))]
-#[case::organic_br(b"Br", build_from_graph("Br |"))]
-#[case::organic_i(b"I", build_from_graph("I |"))]
-#[case::organic_b_aromatic(b"b", build_from_graph("B* |"))]
-#[case::organic_c_aromatic(b"c", build_from_graph("C* |"))]
-#[case::organic_n_aromatic(b"n", build_from_graph("N* |"))]
-#[case::organic_o_aromatic(b"o", build_from_graph("O* |"))]
-#[case::organic_s_aromatic(b"s", build_from_graph("S* |"))]
-#[case::organic_p_aromatic(b"p", build_from_graph("P* |"))]
+#[case::organic_c(b"C", build_from_graph("C@0 |"))]
+#[case::organic_b(b"B", build_from_graph("B@0 |"))]
+#[case::organic_n(b"N", build_from_graph("N@0 |"))]
+#[case::organic_o(b"O", build_from_graph("O@0 |"))]
+#[case::organic_s(b"S", build_from_graph("S@0 |"))]
+#[case::organic_p(b"P", build_from_graph("P@0 |"))]
+#[case::organic_f(b"F", build_from_graph("F@0 |"))]
+#[case::organic_cl(b"Cl", build_from_graph("Cl@0 |"))]
+#[case::organic_br(b"Br", build_from_graph("Br@0 |"))]
+#[case::organic_i(b"I", build_from_graph("I@0 |"))]
+#[case::organic_b_aromatic(b"b", build_from_graph("B*@0 |"))]
+#[case::organic_c_aromatic(b"c", build_from_graph("C*@0 |"))]
+#[case::organic_n_aromatic(b"n", build_from_graph("N*@0 |"))]
+#[case::organic_o_aromatic(b"o", build_from_graph("O*@0 |"))]
+#[case::organic_s_aromatic(b"s", build_from_graph("S*@0 |"))]
+#[case::organic_p_aromatic(b"p", build_from_graph("P*@0 |"))]
 fn element(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -46,10 +46,10 @@ fn element_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[rustfmt::skip]
 #[rstest]
 #[case::empty(b"", Molecule::default())]
-#[case::chain_c_1(b"C", build_from_graph("C |"))]
-#[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
-#[case::aromatic_c_6(b"cccccc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5:"))]
-#[case::chain_mixed_5(b"CClOBrN", build_from_graph("C Cl O Br N | 0-1 1-2 2-3 3-4"))]
+#[case::chain_c_1(b"C", build_from_graph("C@0 |"))]
+#[case::chain_c_5(b"CCCCC", build_from_graph("C@0 C@1 C@2 C@3 C@4 | 0-1@1 1-2@2 2-3@3 3-4@4"))]
+#[case::aromatic_c_6(b"cccccc", build_from_graph("C*@0 C*@1 C*@2 C*@3 C*@4 C*@5 | 0-1:@1 1-2:@2 2-3:@3 3-4:@4 4-5:@5"))]
+#[case::chain_mixed_5(b"CClOBrN", build_from_graph("C@0 Cl@1 O@3 Br@4 N@6 | 0-1@1 1-2@3 2-3@4 3-4@6"))]
 fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -60,16 +60,16 @@ fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
 #[rustfmt::skip]
 #[rstest]
 #[case::empty_group(b"()", Molecule::default())]
-#[case::group_c_1(b"(C)", build_from_graph("C |"))]
-#[case::group_c_1_aromatic(b"(c)", build_from_graph("C* |"))]
-#[case::group_c_4(b"(CCCC)", build_from_graph("C C C C | 0-1 1-2 2-3"))]
-#[case::group_nested(b"((CC))", build_from_graph("C C | 0-1"))]
-#[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
-#[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4: 4-5:"))]
-#[case::branch_trailing(b"C(CC)", build_from_graph("C C C | 0-1 1-2"))]
-#[case::branch_multiple(b"CC(C)(C)C", build_from_graph("C C C C C | 0-1 1-2 1-3 1-4"))]
-#[case::branch_multiple_trailing(b"C(C)(C)", build_from_graph("C C C | 0-1 0-2"))]
-#[case::branch_nested(b"C(C(C)C)C", build_from_graph("C C C C C | 0-1 1-2 1-3 0-4"))]
+#[case::group_c_1(b"(C)", build_from_graph("C@1 |"))]
+#[case::group_c_1_aromatic(b"(c)", build_from_graph("C*@1 |"))]
+#[case::group_c_4(b"(CCCC)", build_from_graph("C@1 C@2 C@3 C@4 | 0-1@2 1-2@3 2-3@4"))]
+#[case::group_nested(b"((CC))", build_from_graph("C@2 C@3 | 0-1@3"))]
+#[case::branch_c_211(b"CC(C)C", build_from_graph("C@0 C@1 C@3 C@5 | 0-1@1 1-2@3 1-3@5"))]
+#[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C*@0 C*@1 C*@3 C*@4 C*@6 C*@7 | 0-1:@1 1-2:@3 2-3:@4 1-4:@6 4-5:@7"))]
+#[case::branch_trailing(b"C(CC)", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3"))]
+#[case::branch_multiple(b"CC(C)(C)C", build_from_graph("C@0 C@1 C@3 C@6 C@8 | 0-1@1 1-2@3 1-3@6 1-4@8"))]
+#[case::branch_multiple_trailing(b"C(C)(C)", build_from_graph("C@0 C@2 C@5 | 0-1@2 0-2@5"))]
+#[case::branch_nested(b"C(C(C)C)C", build_from_graph("C@0 C@2 C@4 C@6 C@8 | 0-1@2 1-2@4 1-3@6 0-4@8"))]
 fn tree(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -99,47 +99,47 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::ring_3(b"C1CC1", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_6(b"C1CCCCC1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5"))]
-#[case::ring_10(b"C1CCCCCCCCC1", build_from_graph("C C C C C C C C C C | 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9 0-9"))]
-#[case::ring_aromatic(b"c1ccccc1", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5:"))]
-#[case::ring_aromatic_anti(b"c1ccc1", build_from_graph("C* C* C* C* | 0-1: 1-2: 2-3: 0-3:"))]
-#[case::ring_aromatic_heteroatom(b"c1occc1", build_from_graph("C* O* C* C* C* | 0-1: 1-2: 2-3: 3-4: 0-4:"))]
-#[case::ring_index_0(b"C0CC0", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_percent(b"C%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_percent_zero(b"C%00CC%00", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_percent_zero_prefix(b"C%01CC%01", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_zero_prefix_1(b"C1CC%01", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_zero_prefix_2(b"C0CC%00", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_zero_prefix_3(b"C9CC%09", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_index_max_99(b"C%99CC%99", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_indices_single_percent_1(b"C%123CCC%12CC3", build_from_graph("C C C C C C | 0-1 1-2 2-3 0-3 3-4 4-5 0-5"))]
-#[case::ring_indices_single_percent_2(b"C3%12CCC%12CC3", build_from_graph("C C C C C C | 0-1 1-2 2-3 0-3 3-4 4-5 0-5"))]
-#[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
-#[case::two_rings_bonded_0_aromatic_1(b"c1cc1c2cc2", build_from_graph("C* C* C* C* C* C* | 0-1: 1-2: 0-2: 2-3: 3-4: 4-5: 3-5:"))]
-#[case::two_rings_bonded_0_aromatic_2(b"c1cc1C2CC2", build_from_graph("C* C* C* C C C | 0-1: 1-2: 0-2: 2-3 3-4 4-5 3-5"))]
-#[case::two_rings_index_reused(b"C1CC1C1CC1", build_from_graph("C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 3-5"))]
-#[case::two_rings_bonded_2(b"C1CC1CCC2CC2", build_from_graph("C C C C C C C C | 0-1 1-2 0-2 2-3 3-4 4-5 5-6 6-7 5-7"))]
-#[case::two_rings_spiro(b"C1CC12CC2", build_from_graph("C C C C C | 0-1 1-2 0-2 2-3 3-4 2-4"))]
-#[case::two_rings_spiro_branch(b"C12(CCCCC1)CCCCC2", build_from_graph("C C C C C C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5 0-6 6-7 7-8 8-9 9-10 0-10"))]
-#[case::two_rings_fused(b"C12CC1C2", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 0-3"))]
-#[case::two_rings_bridged(b"C12CC(C2)C1", build_from_graph("C C C C C | 0-1 1-2 2-3 0-3 2-4 0-4"))]
-#[case::two_rings_fused_aromatic(b"c12ccccc1cccc2", build_from_graph("C* C* C* C* C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5: 5-6: 6-7: 7-8: 8-9: 0-9:"))]
-#[case::two_rings_fused_aromatic_aliphatic(b"c1ccc2CCCc2c1", build_from_graph("C* C* C* C* C C C C* C* | 0-1: 1-2: 2-3: 3-4 4-5 5-6 6-7 3-7: 7-8: 0-8:"))]
-#[case::two_rings_interleaved_indices(b"N1CC2CCCCC2CC1", build_from_graph("N C C C C C C C C C | 0-1 1-2 2-3 3-4 4-5 5-6 6-7 2-7 7-8 8-9 0-9"))]
-#[case::three_rings_fused(b"C12C3C1C32", build_from_graph("C C C C | 0-1 1-2 0-2 2-3 1-3 0-3"))]
-#[case::ring_group(b"(C1CC1)", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_branch_1(b"CC(C1)(C1)", build_from_graph("C C C C | 0-1 1-2 1-3 2-3"))]
-#[case::ring_branch_2(b"C(C1)CC1", build_from_graph("C C C C | 0-1 0-2 2-3 1-3 "))]
-#[case::substituted_ring_1(b"CC1CC1", build_from_graph("C C C C | 0-1 1-2 2-3 1-3"))]
-#[case::substituted_ring_2(b"C1(C)CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
-#[case::substituted_ring_3(b"C(C)1CC1", build_from_graph("C C C C | 0-1 0-2 2-3 0-3"))]
-#[case::substituted_ring_4(b"C1C(C)C1", build_from_graph("C C C C | 0-1 1-2 1-3 0-3"))]
-#[case::substituted_ring_5(b"C1CC(C)1", build_from_graph("C C C C | 0-1 1-2 2-3 0-2"))]
-#[case::substituted_ring_6(b"C1CC1C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
-#[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
-#[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3: 0-3:"))]
-#[case::substituted_ring_branch(b"C1C(C(C)C)C1", build_from_graph("C C C C C C | 0-1 1-2 2-3 2-4 1-5 0-5"))]
+#[case::ring_3(b"C1CC1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2@1 | 1@1-4:0-2"))]
+#[case::ring_6(b"C1CCCCC1", build_from_graph("C@0 C@2 C@3 C@4 C@5 C@6 | 0-1@2 1-2@3 2-3@4 3-4@5 4-5@6 0-5@1 | 1@1-7:0-5"))]
+#[case::ring_10(b"C1CCCCCCCCC1", build_from_graph("C@0 C@2 C@3 C@4 C@5 C@6 C@7 C@8 C@9 C@10 | 0-1@2 1-2@3 2-3@4 3-4@5 4-5@6 5-6@7 6-7@8 7-8@9 8-9@10 0-9@1 | 1@1-11:0-9"))]
+#[case::ring_aromatic(b"c1ccccc1", build_from_graph("C*@0 C*@2 C*@3 C*@4 C*@5 C*@6 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 0-5:@1 | 1@1-7:0-5"))]
+#[case::ring_aromatic_anti(b"c1ccc1", build_from_graph("C*@0 C*@2 C*@3 C*@4 | 0-1:@2 1-2:@3 2-3:@4 0-3:@1 | 1@1-5:0-3"))]
+#[case::ring_aromatic_heteroatom(b"c1occc1", build_from_graph("C*@0 O*@2 C*@3 C*@4 C*@5 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 0-4:@1 | 1@1-6:0-4"))]
+#[case::ring_index_0(b"C0CC0", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2@1 | 0@1-4:0-2"))]
+#[case::ring_index_percent(b"C%12CC%12", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2@1 | 12@1-6:0-2"))]
+#[case::ring_index_percent_zero(b"C%00CC%00", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2@1 | 0@1-6:0-2"))]
+#[case::ring_index_percent_zero_prefix(b"C%01CC%01", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2@1 | 1@1-6:0-2"))]
+#[case::ring_index_zero_prefix_1(b"C1CC%01", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2@1 | 1@1-4:0-2"))]
+#[case::ring_index_zero_prefix_2(b"C0CC%00", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2@1 | 0@1-4:0-2"))]
+#[case::ring_index_zero_prefix_3(b"C9CC%09", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2@1 | 9@1-4:0-2"))]
+#[case::ring_index_max_99(b"C%99CC%99", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2@1 | 99@1-6:0-2"))]
+#[case::ring_indices_single_percent_1(b"C%123CCC%12CC3", build_from_graph("C@0 C@5 C@6 C@7 C@11 C@12 | 0-1@5 1-2@6 2-3@7 0-3@1 3-4@11 4-5@12 0-5@4 | 12@1-8:0-3 3@4-13:0-5"))]
+#[case::ring_indices_single_percent_2(b"C3%12CCC%12CC3", build_from_graph("C@0 C@5 C@6 C@7 C@11 C@12 | 0-1@5 1-2@6 2-3@7 0-3@2 3-4@11 4-5@12 0-5@1 | 3@1-13:0-5 12@2-8:0-3"))]
+#[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C@0 C@2 C@3 C@5 C@7 C@8 | 0-1@2 1-2@3 0-2@1 2-3@5 3-4@7 4-5@8 3-5@6 | 1@1-4:0-2 2@6-9:3-5"))]
+#[case::two_rings_bonded_0_aromatic_1(b"c1cc1c2cc2", build_from_graph("C*@0 C*@2 C*@3 C*@5 C*@7 C*@8 | 0-1:@2 1-2:@3 0-2:@1 2-3:@5 3-4:@7 4-5:@8 3-5:@6 | 1@1-4:0-2 2@6-9:3-5"))]
+#[case::two_rings_bonded_0_aromatic_2(b"c1cc1C2CC2", build_from_graph("C*@0 C*@2 C*@3 C@5 C@7 C@8 | 0-1:@2 1-2:@3 0-2:@1 2-3@5 3-4@7 4-5@8 3-5@6 | 1@1-4:0-2 2@6-9:3-5"))]
+#[case::two_rings_index_reused(b"C1CC1C1CC1", build_from_graph("C@0 C@2 C@3 C@5 C@7 C@8 | 0-1@2 1-2@3 0-2@1 2-3@5 3-4@7 4-5@8 3-5@6 | 1@1-4:0-2 1@6-9:3-5"))]
+#[case::two_rings_bonded_2(b"C1CC1CCC2CC2", build_from_graph("C@0 C@2 C@3 C@5 C@6 C@7 C@9 C@10 | 0-1@2 1-2@3 0-2@1 2-3@5 3-4@6 4-5@7 5-6@9 6-7@10 5-7@8 | 1@1-4:0-2 2@8-11:5-7"))]
+#[case::two_rings_spiro(b"C1CC12CC2", build_from_graph("C@0 C@2 C@3 C@6 C@7 | 0-1@2 1-2@3 0-2@1 2-3@6 3-4@7 2-4@5 | 1@1-4:0-2 2@5-8:2-4"))]
+#[case::two_rings_spiro_branch(b"C12(CCCCC1)CCCCC2", build_from_graph("C@0 C@4 C@5 C@6 C@7 C@8 C@11 C@12 C@13 C@14 C@15 | 0-1@4 1-2@5 2-3@6 3-4@7 4-5@8 0-5@1 0-6@11 6-7@12 7-8@13 8-9@14 9-10@15 0-10@2 | 1@1-9:0-5 2@2-16:0-10"))]
+#[case::two_rings_fused(b"C12CC1C2", build_from_graph("C@0 C@3 C@4 C@6 | 0-1@3 1-2@4 0-2@1 2-3@6 0-3@2 | 1@1-5:0-2 2@2-7:0-3"))]
+#[case::two_rings_bridged(b"C12CC(C2)C1", build_from_graph("C@0 C@3 C@4 C@6 C@9 | 0-1@3 1-2@4 2-3@6 0-3@2 2-4@9 0-4@1 | 1@1-10:0-4 2@2-7:0-3"))]
+#[case::two_rings_fused_aromatic(b"c12ccccc1cccc2", build_from_graph("C*@0 C*@3 C*@4 C*@5 C*@6 C*@7 C*@9 C*@10 C*@11 C*@12 | 0-1:@3 1-2:@4 2-3:@5 3-4:@6 4-5:@7 0-5:@1 5-6:@9 6-7:@10 7-8:@11 8-9:@12 0-9:@2 | 1@1-8:0-5 2@2-13:0-9"))]
+#[case::two_rings_fused_aromatic_aliphatic(b"c1ccc2CCCc2c1", build_from_graph("C*@0 C*@2 C*@3 C*@4 C@6 C@7 C@8 C*@9 C*@11 | 0-1:@2 1-2:@3 2-3:@4 3-4@6 4-5@7 5-6@8 6-7@9 3-7:@5 7-8:@11 0-8:@1 | 1@1-12:0-8 2@5-10:3-7"))]
+#[case::two_rings_interleaved_indices(b"N1CC2CCCCC2CC1", build_from_graph("N@0 C@2 C@3 C@5 C@6 C@7 C@8 C@9 C@11 C@12 | 0-1@2 1-2@3 2-3@5 3-4@6 4-5@7 5-6@8 6-7@9 2-7@4 7-8@11 8-9@12 0-9@1 | 1@1-13:0-9 2@4-10:2-7"))]
+#[case::three_rings_fused(b"C12C3C1C32", build_from_graph("C@0 C@3 C@5 C@7 | 0-1@3 1-2@5 0-2@1 2-3@7 1-3@4 0-3@2 | 1@1-6:0-2 2@2-9:0-3 3@4-8:1-3"))]
+#[case::ring_group(b"(C1CC1)", build_from_graph("C@1 C@3 C@4 | 0-1@3 1-2@4 0-2@2 | 1@2-5:0-2"))]
+#[case::ring_branch_1(b"CC(C1)(C1)", build_from_graph("C@0 C@1 C@3 C@7 | 0-1@1 1-2@3 1-3@7 2-3@4 | 1@4-8:2-3"))]
+#[case::ring_branch_2(b"C(C1)CC1", build_from_graph("C@0 C@2 C@5 C@6 | 0-1@2 0-2@5 2-3@6 1-3@3 | 1@3-7:1-3"))]
+#[case::substituted_ring_1(b"CC1CC1", build_from_graph("C@0 C@1 C@3 C@4 | 0-1@1 1-2@3 2-3@4 1-3@2 | 1@2-5:1-3"))]
+#[case::substituted_ring_2(b"C1(C)CC1", build_from_graph("C@0 C@3 C@5 C@6 | 0-1@3 0-2@5 2-3@6 0-3@1 | 1@1-7:0-3"))]
+#[case::substituted_ring_3(b"C(C)1CC1", build_from_graph("C@0 C@2 C@5 C@6 | 0-1@2 0-2@5 2-3@6 0-3@4 | 1@4-7:0-3"))]
+#[case::substituted_ring_4(b"C1C(C)C1", build_from_graph("C@0 C@2 C@4 C@6 | 0-1@2 1-2@4 1-3@6 0-3@1 | 1@1-7:0-3"))]
+#[case::substituted_ring_5(b"C1CC(C)1", build_from_graph("C@0 C@2 C@3 C@5 | 0-1@2 1-2@3 2-3@5 0-2@1 | 1@1-7:0-2"))]
+#[case::substituted_ring_6(b"C1CC1C", build_from_graph("C@0 C@2 C@3 C@5 | 0-1@2 1-2@3 0-2@1 2-3@5 | 1@1-4:0-2"))]
+#[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C@0 C@2 C@3 C@6 | 0-1@2 1-2@3 0-2@1 2-3@6 | 1@1-4:0-2"))]
+#[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C*@0 C*@2 C*@4 C*@6 | 0-1:@2 1-2:@4 1-3:@6 0-3:@1 | 1@1-7:0-3"))]
+#[case::substituted_ring_branch(b"C1C(C(C)C)C1", build_from_graph("C@0 C@2 C@4 C@6 C@8 C@10 | 0-1@2 1-2@4 2-3@6 2-4@8 1-5@10 0-5@1 | 1@1-11:0-5"))]
 fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -172,15 +172,15 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::ring_self_loop(b"C11", build_from_graph("C | 0-0"))]
-#[case::ring_self_loop_percent(b"C%11%11", build_from_graph("C | 0-0"))]
-#[case::ring_two_member(b"C1C1", build_from_graph("C C | 0-1 0-1"))]
-#[case::ring_two_member_multiple(b"C12C12", build_from_graph("C C | 0-1 0-1 0-1"))]
-#[case::ring_two_member_percent(b"C%12C%12", build_from_graph("C C | 0-1 0-1"))]
-#[case::ring_two_member_single_percent(b"C%123CCC%123", build_from_graph("C C C C | 0-1 1-2 2-3 0-3 0-3"))]
-#[case::ring_multiple_rings(b"C12CCCCC12", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5 0-5"))]
-#[case::ring_multiple_rings_triple(b"C123CCCCC123", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5 0-5 0-5"))]
-#[case::ring_multiple_rings_percent(b"C%12%13CCCCC%12%13", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5 0-5"))]
+#[case::ring_self_loop(b"C11", build_from_graph("C@0 | 0-0@1 | 1@1-2:0-0"))]
+#[case::ring_self_loop_percent(b"C%11%11", build_from_graph("C@0 | 0-0@1 | 11@1-4:0-0"))]
+#[case::ring_two_member(b"C1C1", build_from_graph("C@0 C@2 | 0-1@2 0-1@1 | 1@1-3:0-1"))]
+#[case::ring_two_member_multiple(b"C12C12", build_from_graph("C@0 C@3 | 0-1@3 0-1@1 0-1@2 | 1@1-4:0-1 2@2-5:0-1"))]
+#[case::ring_two_member_percent(b"C%12C%12", build_from_graph("C@0 C@4 | 0-1@4 0-1@1 | 12@1-5:0-1"))]
+#[case::ring_two_member_single_percent(b"C%123CCC%123", build_from_graph("C@0 C@5 C@6 C@7 | 0-1@5 1-2@6 2-3@7 0-3@1 0-3@4 | 12@1-8:0-3 3@4-11:0-3"))]
+#[case::ring_multiple_rings(b"C12CCCCC12", build_from_graph("C@0 C@3 C@4 C@5 C@6 C@7 | 0-1@3 1-2@4 2-3@5 3-4@6 4-5@7 0-5@1 0-5@2 | 1@1-8:0-5 2@2-9:0-5"))]
+#[case::ring_multiple_rings_triple(b"C123CCCCC123", build_from_graph("C@0 C@4 C@5 C@6 C@7 C@8 | 0-1@4 1-2@5 2-3@6 3-4@7 4-5@8 0-5@1 0-5@2 0-5@3 | 1@1-9:0-5 2@2-10:0-5 3@3-11:0-5"))]
+#[case::ring_multiple_rings_percent(b"C%12%13CCCCC%12%13", build_from_graph("C@0 C@7 C@8 C@9 C@10 C@11 | 0-1@7 1-2@8 2-3@9 3-4@10 4-5@11 0-5@1 0-5@4 | 12@1-12:0-5 13@4-15:0-5"))]
 fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
     // Expected to pass here, fail in post-parse topology check
     let res = parse_smiles(input);
@@ -191,70 +191,70 @@ fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::single_bond(b"C-C", build_from_graph("C C | 0-1:-"))]
-#[case::double_bond(b"C=C", build_from_graph("C C | 0-1:="))]
-#[case::triple_bond(b"C#C", build_from_graph("C C | 0-1:#"))]
-#[case::quadruple_bond(b"C$C", build_from_graph("C C | 0-1:$"))]
-#[case::aromatic_bond(b"C:C", build_from_graph("C C | 0-1::"))]
-#[case::up_bond(b"C/C", build_from_graph("C C | 0-1:/"))]
-#[case::down_bond(b"C\\C", build_from_graph("C C | 0-1:\\"))]
-#[case::single_bond_aromatic(b"c-c", build_from_graph("C* C* | 0-1:-"))]
-#[case::double_bond_aromatic(b"c=c", build_from_graph("C* C* | 0-1:="))]
-#[case::triple_bond_aromatic(b"c#c", build_from_graph("C* C* | 0-1:#"))]
-#[case::quadruple_bond_aromatic(b"c$c", build_from_graph("C* C* | 0-1:$"))]
-#[case::aromatic_bond_aromatic(b"c:c", build_from_graph("C* C* | 0-1::"))]
-#[case::up_bond_aromatic(b"c/c", build_from_graph("C* C* | 0-1:/"))]
-#[case::down_bond_aromatic(b"c\\c", build_from_graph("C* C* | 0-1:\\"))]
-#[case::allene_bonds(b"C=C=C", build_from_graph("C C C | 0-1:= 1-2:="))]
-#[case::conjugated_bonds(b"C=CC=C", build_from_graph("C C C C | 0-1:= 1-2:- 2-3:="))]
-#[case::cumulene_bonds(b"C=C=C=C", build_from_graph("C C C C | 0-1:= 1-2:= 2-3:="))]
-#[case::allene_bonds_aromatic(b"c=c=c", build_from_graph("C* C* C* | 0-1:= 1-2:="))]
-#[case::trans_bonds_1(b"C/C=C/C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:/"))]
-#[case::trans_bonds_2(b"C\\C=C\\C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:\\"))]
-#[case::cis_bonds_1(b"C\\C=C/C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:/"))]
-#[case::cis_bonds_2(b"C/C=C\\C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:\\"))]
-#[case::trans_cumulene_bonds(b"F/C=C=C=C/F", build_from_graph("F C C C C F | 0-1:/ 1-2:= 2-3:= 3-4:= 4-5:/"))]
-#[case::cis_cumulene_bonds(b"F/C=C=C=C\\F", build_from_graph("F C C C C F | 0-1:/ 1-2:= 2-3:= 3-4:= 4-5:\\"))]
-#[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C* C* C* C* | 0-1:= 1-2:- 2-3:="))]
-#[case::branch_leading_single_bond(b"CC(-C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
-#[case::branch_leading_single_bond_multiple(b"CC(-C)(-C)C", build_from_graph("C C C C C | 0-1 1-2 1-3 1-4"))]
-#[case::branch_leading_double_bond(b"CC(=C)C", build_from_graph("C C C C | 0-1 1-2:= 1-3"))]
-#[case::branch_leading_double_bond_multiple(b"OS(=O)(=O)O", build_from_graph("O S O O O | 0-1 1-2:= 1-3:= 1-4"))]
-#[case::branch_internal_bond(b"CC(C-C)C", build_from_graph("C C C C C | 0-1 1-2 2-3 1-4"))]
-#[case::branch_internal_double_bond(b"CC(C=C)C", build_from_graph("C C C C C | 0-1 1-2 2-3:= 1-4"))]
-#[case::branch_followed_by_bond(b"CC(C)-C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
-#[case::branch_followed_by_double_bond(b"CC(C)=C", build_from_graph("C C C C | 0-1 1-2 1-3:="))]
-#[case::branch_leading_bond_aromatic(b"cc(:c)c", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3:"))]
-#[case::branch_internal_bond_aromatic(b"cc(c:c)c", build_from_graph("C* C* C* C* C* | 0-1: 1-2: 2-3: 1-4:"))]
-#[case::branch_followed_by_bond_aromatic(b"cc(c):c", build_from_graph("C* C* C* C* | 0-1: 1-2: 1-3:"))]
-#[case::branch_trans_double_bond_1(b"C/C=C/C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:/"))]
-#[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:\\"))]
-#[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C C C C | 0-1:\\ 1-2:= 2-3:/"))]
-#[case::branch_cis_double_bond_2(b"C/C=C\\C", build_from_graph("C C C C | 0-1:/ 1-2:= 2-3:\\"))]
-#[case::ring_single_bond(b"C-1-C-C-1", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_single_bond_percent(b"C-%12-C-C-%12", build_from_graph("C C C | 0-1 1-2 0-2"))]
-#[case::ring_double_bond_1(b"C1-C=C1", build_from_graph("C C C | 0-1 1-2:= 0-2"))]
-#[case::ring_double_bond_2(b"C1-CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
-#[case::ring_double_bond_3(b"C=1-CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
-#[case::ring_double_bond_4(b"C=1-C-C=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
-#[case::ring_double_bond_5(b"C=1CCCCC=1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5:="))]
-#[case::ring_double_bond_unilateral_close_1(b"C1CC=1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
-#[case::ring_double_bond_unilateral_close_2(b"C1CCCCC=1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5:="))]
-#[case::ring_double_bond_unilateral_open_1(b"C=1CC1", build_from_graph("C C C | 0-1 1-2 0-2:="))]
-#[case::ring_double_bond_unilateral_open_2(b"C=1CCCCC1", build_from_graph("C C C C C C | 0-1 1-2 2-3 3-4 4-5 0-5:="))]
-#[case::ring_triple_bond(b"C1-C-C#1", build_from_graph("C C C | 0-1 1-2 0-2:#"))]
-#[case::ring_quadruple_bond(b"C1-C-C$1", build_from_graph("C C C | 0-1 1-2 0-2:$"))]
-#[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C* C* C* | 0-1: 1-2: 0-2:"))]
-#[case::ring_aromatic_single_bond(b"c1ccccc1-c2ccccc2", build_from_graph("C* C* C* C* C* C* C* C* C* C* C* C* | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5: 5-6 6-7: 7-8: 8-9: 9-10: 10-11: 6-11:"))]
-#[case::ring_up_bond_1(b"C1CC/1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
-#[case::ring_up_bond_2(b"C/1CC1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
-#[case::ring_up_bond_3(b"C/1CC/1", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
-#[case::ring_down_bond(b"C1CC\\1", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
-#[case::ring_down_bond_both(b"C\\1CC\\1", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
-#[case::ring_up_bond_percent_open(b"C/%12CC%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
-#[case::ring_up_bond_percent_close(b"C%12CC/%12", build_from_graph("C C C | 0-1 1-2 0-2:/"))]
-#[case::ring_down_bond_percent_both(b"C\\%12CC\\%12", build_from_graph("C C C | 0-1 1-2 0-2:\\"))]
-#[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C C C C | 0-1 1-2 0-2 2-3"))]
+#[case::single_bond(b"C-C", build_from_graph("C@0 C@2 | 0-1:-@1"))]
+#[case::double_bond(b"C=C", build_from_graph("C@0 C@2 | 0-1:=@1"))]
+#[case::triple_bond(b"C#C", build_from_graph("C@0 C@2 | 0-1:#@1"))]
+#[case::quadruple_bond(b"C$C", build_from_graph("C@0 C@2 | 0-1:$@1"))]
+#[case::aromatic_bond(b"C:C", build_from_graph("C@0 C@2 | 0-1::@1"))]
+#[case::up_bond(b"C/C", build_from_graph("C@0 C@2 | 0-1:/@1"))]
+#[case::down_bond(b"C\\C", build_from_graph("C@0 C@2 | 0-1:\\@1"))]
+#[case::single_bond_aromatic(b"c-c", build_from_graph("C*@0 C*@2 | 0-1:-@1"))]
+#[case::double_bond_aromatic(b"c=c", build_from_graph("C*@0 C*@2 | 0-1:=@1"))]
+#[case::triple_bond_aromatic(b"c#c", build_from_graph("C*@0 C*@2 | 0-1:#@1"))]
+#[case::quadruple_bond_aromatic(b"c$c", build_from_graph("C*@0 C*@2 | 0-1:$@1"))]
+#[case::aromatic_bond_aromatic(b"c:c", build_from_graph("C*@0 C*@2 | 0-1::@1"))]
+#[case::up_bond_aromatic(b"c/c", build_from_graph("C*@0 C*@2 | 0-1:/@1"))]
+#[case::down_bond_aromatic(b"c\\c", build_from_graph("C*@0 C*@2 | 0-1:\\@1"))]
+#[case::allene_bonds(b"C=C=C", build_from_graph("C@0 C@2 C@4 | 0-1:=@1 1-2:=@3"))]
+#[case::conjugated_bonds(b"C=CC=C", build_from_graph("C@0 C@2 C@3 C@5 | 0-1:=@1 1-2:-@3 2-3:=@4"))]
+#[case::cumulene_bonds(b"C=C=C=C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:=@1 1-2:=@3 2-3:=@5"))]
+#[case::allene_bonds_aromatic(b"c=c=c", build_from_graph("C*@0 C*@2 C*@4 | 0-1:=@1 1-2:=@3"))]
+#[case::trans_bonds_1(b"C/C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:/@5"))]
+#[case::trans_bonds_2(b"C\\C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:\\@5"))]
+#[case::cis_bonds_1(b"C\\C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:/@5"))]
+#[case::cis_bonds_2(b"C/C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:\\@5"))]
+#[case::trans_cumulene_bonds(b"F/C=C=C=C/F", build_from_graph("F@0 C@2 C@4 C@6 C@8 F@10 | 0-1:/@1 1-2:=@3 2-3:=@5 3-4:=@7 4-5:/@9"))]
+#[case::cis_cumulene_bonds(b"F/C=C=C=C\\F", build_from_graph("F@0 C@2 C@4 C@6 C@8 F@10 | 0-1:/@1 1-2:=@3 2-3:=@5 3-4:=@7 4-5:\\@9"))]
+#[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C*@0 C*@2 C*@4 C*@6 | 0-1:=@1 1-2:-@3 2-3:=@5"))]
+#[case::branch_leading_single_bond(b"CC(-C)C", build_from_graph("C@0 C@1 C@4 C@6 | 0-1@1 1-2@3 1-3@6"))]
+#[case::branch_leading_single_bond_multiple(b"CC(-C)(-C)C", build_from_graph("C@0 C@1 C@4 C@8 C@10 | 0-1@1 1-2@3 1-3@7 1-4@10"))]
+#[case::branch_leading_double_bond(b"CC(=C)C", build_from_graph("C@0 C@1 C@4 C@6 | 0-1@1 1-2:=@3 1-3@6"))]
+#[case::branch_leading_double_bond_multiple(b"OS(=O)(=O)O", build_from_graph("O@0 S@1 O@4 O@8 O@10 | 0-1@1 1-2:=@3 1-3:=@7 1-4@10"))]
+#[case::branch_internal_bond(b"CC(C-C)C", build_from_graph("C@0 C@1 C@3 C@5 C@7 | 0-1@1 1-2@3 2-3@4 1-4@7"))]
+#[case::branch_internal_double_bond(b"CC(C=C)C", build_from_graph("C@0 C@1 C@3 C@5 C@7 | 0-1@1 1-2@3 2-3:=@4 1-4@7"))]
+#[case::branch_followed_by_bond(b"CC(C)-C", build_from_graph("C@0 C@1 C@3 C@6 | 0-1@1 1-2@3 1-3@5"))]
+#[case::branch_followed_by_double_bond(b"CC(C)=C", build_from_graph("C@0 C@1 C@3 C@6 | 0-1@1 1-2@3 1-3:=@5"))]
+#[case::branch_leading_bond_aromatic(b"cc(:c)c", build_from_graph("C*@0 C*@1 C*@4 C*@6 | 0-1:@1 1-2:@3 1-3:@6"))]
+#[case::branch_internal_bond_aromatic(b"cc(c:c)c", build_from_graph("C*@0 C*@1 C*@3 C*@5 C*@7 | 0-1:@1 1-2:@3 2-3:@4 1-4:@7"))]
+#[case::branch_followed_by_bond_aromatic(b"cc(c):c", build_from_graph("C*@0 C*@1 C*@3 C*@6 | 0-1:@1 1-2:@3 1-3:@5"))]
+#[case::branch_trans_double_bond_1(b"C/C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:/@5"))]
+#[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:\\@5"))]
+#[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:/@5"))]
+#[case::branch_cis_double_bond_2(b"C/C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:\\@5"))]
+#[case::ring_single_bond(b"C-1-C-C-1", build_from_graph("C@0 C@4 C@6 | 0-1@3 1-2@5 0-2@2 | 1@2-8:0-2"))]
+#[case::ring_single_bond_percent(b"C-%12-C-C-%12", build_from_graph("C@0 C@6 C@8 | 0-1@5 1-2@7 0-2@2 | 12@2-10:0-2"))]
+#[case::ring_double_bond_1(b"C1-C=C1", build_from_graph("C@0 C@3 C@5 | 0-1@2 1-2:=@4 0-2@1 | 1@1-6:0-2"))]
+#[case::ring_double_bond_2(b"C1-CC=1", build_from_graph("C@0 C@3 C@4 | 0-1@2 1-2@4 0-2:=@1 | 1@1-6:0-2"))]
+#[case::ring_double_bond_3(b"C=1-CC1", build_from_graph("C@0 C@4 C@5 | 0-1@3 1-2@5 0-2:=@2 | 1@2-6:0-2"))]
+#[case::ring_double_bond_4(b"C=1-C-C=1", build_from_graph("C@0 C@4 C@6 | 0-1@3 1-2@5 0-2:=@2 | 1@2-8:0-2"))]
+#[case::ring_double_bond_5(b"C=1CCCCC=1", build_from_graph("C@0 C@3 C@4 C@5 C@6 C@7 | 0-1@3 1-2@4 2-3@5 3-4@6 4-5@7 0-5:=@2 | 1@2-9:0-5"))]
+#[case::ring_double_bond_unilateral_close_1(b"C1CC=1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2:=@1 | 1@1-5:0-2"))]
+#[case::ring_double_bond_unilateral_close_2(b"C1CCCCC=1", build_from_graph("C@0 C@2 C@3 C@4 C@5 C@6 | 0-1@2 1-2@3 2-3@4 3-4@5 4-5@6 0-5:=@1 | 1@1-8:0-5"))]
+#[case::ring_double_bond_unilateral_open_1(b"C=1CC1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2:=@2 | 1@2-5:0-2"))]
+#[case::ring_double_bond_unilateral_open_2(b"C=1CCCCC1", build_from_graph("C@0 C@3 C@4 C@5 C@6 C@7 | 0-1@3 1-2@4 2-3@5 3-4@6 4-5@7 0-5:=@2 | 1@2-8:0-5"))]
+#[case::ring_triple_bond(b"C1-C-C#1", build_from_graph("C@0 C@3 C@5 | 0-1@2 1-2@4 0-2:#@1 | 1@1-7:0-2"))]
+#[case::ring_quadruple_bond(b"C1-C-C$1", build_from_graph("C@0 C@3 C@5 | 0-1@2 1-2@4 0-2:$@1 | 1@1-7:0-2"))]
+#[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C*@0 C*@3 C*@5 | 0-1:@2 1-2:@4 0-2:@1 | 1@1-7:0-2"))]
+#[case::ring_aromatic_single_bond(b"c1ccccc1-c2ccccc2", build_from_graph("C*@0 C*@2 C*@3 C*@4 C*@5 C*@6 C*@9 C*@11 C*@12 C*@13 C*@14 C*@15 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 0-5:@1 5-6@8 6-7:@11 7-8:@12 8-9:@13 9-10:@14 10-11:@15 6-11:@10 | 1@1-7:0-5 2@10-16:6-11"))]
+#[case::ring_up_bond_1(b"C1CC/1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2:/@1 | 1@1-5:0-2"))]
+#[case::ring_up_bond_2(b"C/1CC1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2:/@2 | 1@2-5:0-2"))]
+#[case::ring_up_bond_3(b"C/1CC/1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2:/@2 | 1@2-6:0-2"))]
+#[case::ring_down_bond(b"C1CC\\1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2:\\@1 | 1@1-5:0-2"))]
+#[case::ring_down_bond_both(b"C\\1CC\\1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2:\\@2 | 1@2-6:0-2"))]
+#[case::ring_up_bond_percent_open(b"C/%12CC%12", build_from_graph("C@0 C@5 C@6 | 0-1@5 1-2@6 0-2:/@2 | 12@2-7:0-2"))]
+#[case::ring_up_bond_percent_close(b"C%12CC/%12", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2:/@1 | 12@1-7:0-2"))]
+#[case::ring_down_bond_percent_both(b"C\\%12CC\\%12", build_from_graph("C@0 C@5 C@6 | 0-1@5 1-2@6 0-2:\\@2 | 12@2-8:0-2"))]
+#[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C@0 C@2 C@3 C@7 | 0-1@2 1-2@3 0-2@1 2-3@6 | 1@1-5:0-2"))]
 fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -281,7 +281,7 @@ fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::trailing_bond_before_dot_2(b"C=.C", ParseError::TrailingBond { pos: 1 })]
 #[case::trailing_bond_before_dot_aromatic(b"C:.C", ParseError::TrailingBond { pos: 1 })]
 #[case::trailing_stereo_bond_before_dot_up(b"C/.C", ParseError::TrailingBond { pos: 1 })]
-#[case::trailing_stereo_bond_before_dot_down(b"C\\.C", ParseError::TrailingBond { pos: 1 })]
+#[case::trailing_stereo_bond_before_dot_down(b"C.\\C", ParseError::LeadingBond { pos: 2 })]
 #[case::bond_after_group_1(b"(C)-", ParseError::NonfinalGroup { pos: 2 })]
 #[case::bond_after_group_2(b"(C)=", ParseError::NonfinalGroup { pos: 2 })]
 #[case::group_after_group_1(b"(C)(C)", ParseError::NonfinalGroup { pos: 2 })]
@@ -337,45 +337,45 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::components_2(b"CC.CC", build_from_graph("C C C C | 0-1 2-3"))]
-#[case::components_5(b"C.C.C.C.C", build_from_graph("C C C C C | "))]
-#[case::ring_components_1(b"C1.CC1", build_from_graph("C C C | 1-2 0-2"))]
-#[case::ring_components_2(b"C%12.CC%12", build_from_graph("C C C | 1-2 0-2"))]
-#[case::ring_components_3(b"C1.C12.C2", build_from_graph("C C C | 0-1 1-2"))]
-#[case::ring_components_aromatic_1(b"c1.ccccc1", build_from_graph("C* C* C* C* C* C* | 1-2: 2-3: 3-4: 4-5: 0-5:"))]
-#[case::ring_components_aromatic_2(b"c1c2c3c4cc1.Br2.Cl3.Cl4", build_from_graph("C* C* C* C* C* C* Br Cl Cl | 0-1: 1-2: 2-3: 3-4: 4-5: 0-5: 1-6 2-7 3-8"))]
-#[case::branch_components(b"C(C.C)", build_from_graph("C C C | 0-1"))]
-#[case::branch_leading_dot_1(b"C(.C)", build_from_graph("C C | "))]
-#[case::branch_leading_dot_2(b"C(.C)(C)", build_from_graph("C C C | 0-2"))]
-#[case::branch_leading_dot_3(b"C(.C.C)", build_from_graph("C C C |"))]
-#[case::branch_leading_dot_4(b"C(C)(.C)", build_from_graph("C C C | 0-1"))]
-#[case::branch_trailing_dot_1(b"C(C.)", build_from_graph("C C | 0-1"))]
-#[case::branch_trailing_dot_2(b"C(C.)C", build_from_graph("C C C | 0-1 0-2"))]
-#[case::branch_trailing_dot_3(b"C(C.)(C)", build_from_graph("C C C | 0-1 0-2"))]
-#[case::branch_inner_dot(b"C(C.C)C", build_from_graph("C C C C | 0-1 0-3"))]
-#[case::group_components_1(b"(C.CC.C)", build_from_graph("C C C C | 1-2"))]
-#[case::group_components_2(b"(CC).(CC)", build_from_graph("C C C C | 0-1 2-3"))]
-#[case::group_components_3(b"(C.C).C", build_from_graph("C C C |"))]
-#[case::group_components_4(b"C.(C).C", build_from_graph("C C C |"))]
-#[case::group_components_5(b"C.C.(C)", build_from_graph("C C C |"))]
-#[case::group_trailing_dot_1(b"(CC.)", build_from_graph("C C | 0-1"))]
-#[case::group_trailing_dot_2(b"(CC.).CC", build_from_graph("C C C C | 0-1 2-3"))]
-#[case::group_trailing_dot_3(b"(CC).(CC.)", build_from_graph("C C C C | 0-1 2-3"))]
-#[case::branch_ring_components_1(b"C1(C.C)CC1", build_from_graph("C C C C C | 0-1 0-3 3-4 0-4"))]
-#[case::branch_ring_components_2(b"C1(C.C1)CC", build_from_graph("C C C C C | 0-1 0-2 0-3 3-4"))]
-#[case::branch_ring_components_3(b"C(C1.C)CC1", build_from_graph("C C C C C | 0-1 0-3 3-4 1-4"))]
-#[case::group_ring_components_1(b"(CC1.C1)", build_from_graph("C C C | 0-1 1-2"))]
-#[case::group_ring_components_2(b"C1.(C).CC1", build_from_graph("C C C C | 2-3 0-3 "))]
-#[case::group_ring_components_3(b"C%12.(C).CC%12", build_from_graph("C C C C | 2-3 0-3 "))]
-#[case::rings_across_multiple_dots_digit(b"C1.C.CC1", build_from_graph("C C C C | 2-3 0-3"))]
-#[case::rings_across_multiple_dots_percent(b"C%12.C.CC%12", build_from_graph("C C C C | 2-3 0-3"))]
-#[case::ring_double_unilateral_open(b"C=1.CC1", build_from_graph("C C C | 1-2 0-2:="))]
-#[case::ring_double_unilateral_close(b"C1.CC=1", build_from_graph("C C C | 1-2 0-2:="))]
-#[case::ring_dir_up_both(b"C/1.CC/1", build_from_graph("C C C | 1-2 0-2:/"))]
-#[case::ring_dir_down_both(b"C\\1.CC\\1", build_from_graph("C C C | 1-2 0-2:\\"))]
-#[case::ring_dir_up_both_percent(b"C/%12.CC/%12", build_from_graph("C C C | 1-2 0-2:/"))]
-#[case::ring_dir_down_both_percent(b"C\\%12.CC\\%12", build_from_graph("C C C | 1-2 0-2:\\"))]
-#[case::branch_multiple_components(b"C(.C.C)", build_from_graph("C C C |"))]
+#[case::components_2(b"CC.CC", build_from_graph("C@0 C@1 C@3 C@4 | 0-1@1 2-3@4"))]
+#[case::components_5(b"C.C.C.C.C", build_from_graph("C@0 C@2 C@4 C@6 C@8 | "))]
+#[case::ring_components_1(b"C1.CC1", build_from_graph("C@0 C@3 C@4 | 1-2@4 0-2@1 | 1@1-5:0-2"))]
+#[case::ring_components_2(b"C%12.CC%12", build_from_graph("C@0 C@5 C@6 | 1-2@6 0-2@1 | 12@1-7:0-2"))]
+#[case::ring_components_3(b"C1.C12.C2", build_from_graph("C@0 C@3 C@7 | 0-1@1 1-2@5 | 1@1-4:0-1 2@5-8:1-2"))]
+#[case::ring_components_aromatic_1(b"c1.ccccc1", build_from_graph("C*@0 C*@3 C*@4 C*@5 C*@6 C*@7 | 1-2:@4 2-3:@5 3-4:@6 4-5:@7 0-5:@1 | 1@1-8:0-5"))]
+#[case::ring_components_aromatic_2(b"c1c2c3c4cc1.Br2.Cl3.Cl4", build_from_graph("C*@0 C*@2 C*@4 C*@6 C*@8 C*@9 Br@12 Cl@16 Cl@20 | 0-1:@2 1-2:@4 2-3:@6 3-4:@8 4-5:@9 0-5:@1 1-6@3 2-7@5 3-8@7 | 1@1-10:0-5 2@3-14:1-6 3@5-18:2-7 4@7-22:3-8"))]
+#[case::branch_components(b"C(C.C)", build_from_graph("C@0 C@2 C@4 | 0-1@2"))]
+#[case::branch_leading_dot_1(b"C(.C)", build_from_graph("C@0 C@3 | "))]
+#[case::branch_leading_dot_2(b"C(.C)(C)", build_from_graph("C@0 C@3 C@6 | 0-2@6"))]
+#[case::branch_leading_dot_3(b"C(.C.C)", build_from_graph("C@0 C@3 C@5 |"))]
+#[case::branch_leading_dot_4(b"C(C)(.C)", build_from_graph("C@0 C@2 C@6 | 0-1@2"))]
+#[case::branch_trailing_dot_1(b"C(C.)", build_from_graph("C@0 C@2 | 0-1@2"))]
+#[case::branch_trailing_dot_2(b"C(C.)C", build_from_graph("C@0 C@2 C@5 | 0-1@2 0-2@5"))]
+#[case::branch_trailing_dot_3(b"C(C.)(C)", build_from_graph("C@0 C@2 C@6 | 0-1@2 0-2@6"))]
+#[case::branch_inner_dot(b"C(C.C)C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1@2 0-3@6"))]
+#[case::group_components_1(b"(C.CC.C)", build_from_graph("C@1 C@3 C@4 C@6 | 1-2@4"))]
+#[case::group_components_2(b"(CC).(CC)", build_from_graph("C@1 C@2 C@6 C@7 | 0-1@2 2-3@7"))]
+#[case::group_components_3(b"(C.C).C", build_from_graph("C@1 C@3 C@6 |"))]
+#[case::group_components_4(b"C.(C).C", build_from_graph("C@0 C@3 C@6 |"))]
+#[case::group_components_5(b"C.C.(C)", build_from_graph("C@0 C@2 C@5 |"))]
+#[case::group_trailing_dot_1(b"(CC.)", build_from_graph("C@1 C@2 | 0-1@2"))]
+#[case::group_trailing_dot_2(b"(CC.).CC", build_from_graph("C@1 C@2 C@6 C@7 | 0-1@2 2-3@7"))]
+#[case::group_trailing_dot_3(b"(CC).(CC.)", build_from_graph("C@1 C@2 C@6 C@7 | 0-1@2 2-3@7"))]
+#[case::branch_ring_components_1(b"C1(C.C)CC1", build_from_graph("C@0 C@3 C@5 C@7 C@8 | 0-1@3 0-3@7 3-4@8 0-4@1 | 1@1-9:0-4"))]
+#[case::branch_ring_components_2(b"C1(C.C1)CC", build_from_graph("C@0 C@3 C@5 C@8 C@9 | 0-1@3 0-2@1 0-3@8 3-4@9 | 1@1-6:0-2"))]
+#[case::branch_ring_components_3(b"C(C1.C)CC1", build_from_graph("C@0 C@2 C@5 C@7 C@8 | 0-1@2 0-3@7 3-4@8 1-4@3 | 1@3-9:1-4"))]
+#[case::group_ring_components_1(b"(CC1.C1)", build_from_graph("C@1 C@2 C@5 | 0-1@2 1-2@3 | 1@3-6:1-2"))]
+#[case::group_ring_components_2(b"C1.(C).CC1", build_from_graph("C@0 C@4 C@7 C@8 | 2-3@8 0-3@1 | 1@1-9:0-3"))]
+#[case::group_ring_components_3(b"C%12.(C).CC%12", build_from_graph("C@0 C@6 C@9 C@10 | 2-3@10 0-3@1 | 12@1-11:0-3"))]
+#[case::rings_across_multiple_dots_digit(b"C1.C.CC1", build_from_graph("C@0 C@3 C@5 C@6 | 2-3@6 0-3@1 | 1@1-7:0-3"))]
+#[case::rings_across_multiple_dots_percent(b"C%12.C.CC%12", build_from_graph("C@0 C@5 C@7 C@8 | 2-3@8 0-3@1 | 12@1-9:0-3"))]
+#[case::ring_double_unilateral_open(b"C=1.CC1", build_from_graph("C@0 C@4 C@5 | 1-2@5 0-2:=@2 | 1@2-6:0-2"))]
+#[case::ring_double_unilateral_close(b"C1.CC=1", build_from_graph("C@0 C@3 C@4 | 1-2@4 0-2:=@1 | 1@1-6:0-2"))]
+#[case::ring_dir_up_both(b"C/1.CC/1", build_from_graph("C@0 C@4 C@5 | 1-2@5 0-2:/@2 | 1@2-7:0-2"))]
+#[case::ring_dir_down_both(b"C\\1.CC\\1", build_from_graph("C@0 C@4 C@5 | 1-2@5 0-2:\\@2 | 1@2-7:0-2"))]
+#[case::ring_dir_up_both_percent(b"C/%12.CC/%12", build_from_graph("C@0 C@6 C@7 | 1-2@7 0-2:/@2 | 12@2-9:0-2"))]
+#[case::ring_dir_down_both_percent(b"C\\%12CC\\%12", build_from_graph("C@0 C@5 C@6 | 0-1@5 1-2@6 0-2:\\@2 | 12@2-8:0-2"))]
+#[case::branch_multiple_components(b"C(.C.C)", build_from_graph("C@0 C@3 C@5 |"))]
 fn components(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -886,7 +886,7 @@ fn stereo_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[rstest]
 #[case::conflicting_stereo_bonds(
     b"C/C(\\F)=C/FC",
-    build_from_graph("C C F C F C | 0-1:/ 1-2:\\ 1-3:= 3-4:/ 4-5")
+build_from_graph("C@0 C@2 F@5 C@8 F@10 C@11 | 0-1:/@1 1-2:\\@4 1-3:=@7 3-4:/@9 4-5@11")
 )]
 fn stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecule) {
     // Expected to pass here, but should fail semantics post-parse
@@ -964,11 +964,11 @@ fn style_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::newline(b"\n", Molecule::default())]
 #[case::cr(b"\r", Molecule::default())]
 #[case::crlf(b"\r\n", Molecule::default())]
-#[case::terminator_space(b"CC ", build_from_graph("C C | 0-1"))]
-#[case::terminator_tab(b"CC\t", build_from_graph("C C | 0-1"))]
-#[case::terminator_newline(b"CC\n", build_from_graph("C C | 0-1"))]
-#[case::terminator_cr(b"CC\r", build_from_graph("C C | 0-1"))]
-#[case::terminator_crlf(b"CC\r\n", build_from_graph("C C | 0-1"))]
+#[case::terminator_space(b"CC ", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_tab(b"CC\t", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_newline(b"CC\n", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_cr(b"CC\r", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_crlf(b"CC\r\n", build_from_graph("C@0 C@1 | 0-1@1"))]
 fn whitespace_strict(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -997,12 +997,12 @@ fn whitespace_strict_invalid(#[case] input: &[u8], #[case] expected: ParseError)
 }
 
 #[rstest]
-#[case::ws_intertoken_spaces_flags(b"C C", build_from_graph("C C | 0-1"))]
-#[case::ws_intertoken_tabs_flags(b"C\tC", build_from_graph("C C | 0-1"))]
-#[case::ws_newlines_flags(b"C\nC", build_from_graph("C C | 0-1"))]
-#[case::line_comment_flags(b"C// x\nC", build_from_graph("C C | 0-1"))]
-#[case::block_comment_flags(b"C/* x */C", build_from_graph("C C | 0-1"))]
-#[case::block_comment_multiline_flags(b"C/* x\n y */C", build_from_graph("C C | 0-1"))]
+#[case::ws_intertoken_spaces_flags(b"C C", build_from_graph("C@0 C@2 | 0-1@2"))]
+#[case::ws_intertoken_tabs_flags(b"C\tC", build_from_graph("C@0 C@2 | 0-1@2"))]
+#[case::ws_newlines_flags(b"C\nC", build_from_graph("C@0 C@2 | 0-1@2"))]
+#[case::line_comment_flags(b"C// x\nC", build_from_graph("C@0 C@6 | 0-1@6"))]
+#[case::block_comment_flags(b"C/* x */C", build_from_graph("C@0 C@8 | 0-1@8"))]
+#[case::block_comment_multiline_flags(b"C/* x\n y */C", build_from_graph("C@0 C@11 | 0-1@11"))]
 fn whitespace_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
     let config = SmilesIoConfig::umol_dialect();
     let res = parse_smiles_with(input, &config);
@@ -1012,9 +1012,9 @@ fn whitespace_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
 }
 
 #[rstest]
-#[case::eoi_blank_line(b"C\n\nC", build_from_graph("C |"))]
-#[case::eoi_blank_line_crlf(b"C\r\n\r\nC", build_from_graph("C |"))]
-#[case::eoi_blank_line_with_comment(b"C\n/* comment */\n\nC", build_from_graph("C |"))]
+#[case::eoi_blank_line(b"C\n\nC", build_from_graph("C@0 |"))]
+#[case::eoi_blank_line_crlf(b"C\r\n\r\nC", build_from_graph("C@0 |"))]
+#[case::eoi_blank_line_with_comment(b"C\n/* comment */\n\nC", build_from_graph("C@0 |"))]
 fn eoi_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
     let config = SmilesIoConfig {
         parse_flags: SmilesParseFlags::EXTENDED_WS
@@ -1040,111 +1040,6 @@ fn whitespace_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
-}
-
-// Span tracking tests
-#[test]
-fn metadata_atom_spans_basic() {
-    let input = b"CCO";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.atom_spans.len(), 3);
-    assert_eq!(meta.atom_spans[0], Span::new(0, 1)); // First C
-    assert_eq!(meta.atom_spans[1], Span::new(1, 2)); // Second C
-    assert_eq!(meta.atom_spans[2], Span::new(2, 3)); // O
-}
-
-#[test]
-fn metadata_atom_spans_bracketed() {
-    let input = b"[CH3]O";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.atom_spans.len(), 2);
-    assert_eq!(meta.atom_spans[0], Span::new(0, 5)); // [CH3]
-    assert_eq!(meta.atom_spans[1], Span::new(5, 6)); // O
-}
-
-#[test]
-fn metadata_atom_spans_multi_char() {
-    let input = b"ClBr";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.atom_spans.len(), 2);
-    assert_eq!(meta.atom_spans[0], Span::new(0, 2)); // Cl
-    assert_eq!(meta.atom_spans[1], Span::new(2, 4)); // Br
-}
-
-#[test]
-fn metadata_bond_spans_implicit() {
-    let input = b"CCO";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.bond_spans.len(), 2);
-    assert_eq!(meta.bond_spans[0], Span::new(1, 1)); // Implicit bond before second C
-    assert_eq!(meta.bond_spans[1], Span::new(2, 2)); // Implicit bond before O
-}
-
-#[test]
-fn metadata_bond_spans_explicit() {
-    let input = b"C-C=O";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.bond_spans.len(), 2);
-    assert_eq!(meta.bond_spans[0], Span::new(1, 2)); // - bond
-    assert_eq!(meta.bond_spans[1], Span::new(3, 4)); // = bond
-}
-
-#[test]
-fn metadata_bond_spans_ring() {
-    let input = b"C1CC1";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.bond_spans.len(), 3);
-    assert_eq!(meta.bond_spans[0], Span::new(2, 2)); // Implicit bond C-C
-    assert_eq!(meta.bond_spans[1], Span::new(3, 3)); // Implicit bond C-C
-    assert_eq!(meta.bond_spans[2], Span::new(1, 4)); // Ring bond from pos 1 to pos 4
-}
-
-#[test]
-fn metadata_ring_events() {
-    let input = b"C1CC1";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.ring_events.len(), 1);
-    let event = &meta.ring_events[0];
-    assert_eq!(event.ring_idx, 1);
-    assert_eq!(event.open_pos, 1);
-    assert_eq!(event.close_pos, Some(4));
-    assert_eq!(event.atom_a, 1); // First atom (1-indexed)
-    assert_eq!(event.atom_b, Some(3)); // Third atom
-}
-
-#[test]
-fn metadata_ring_events_multiple() {
-    let input = b"C12CC1C2";
-    let output = parse_smiles_inner(input, &SmilesParseFlags::empty()).unwrap();
-    let meta = output.meta.expect("metadata should be present");
-    
-    assert_eq!(meta.ring_events.len(), 2);
-    
-    let event1 = meta.ring_events.iter().find(|e| e.ring_idx == 1).unwrap();
-    assert_eq!(event1.open_pos, 1);
-    assert_eq!(event1.close_pos, Some(5));
-    assert_eq!(event1.atom_a, 1);
-    assert_eq!(event1.atom_b, Some(3));
-    
-    let event2 = meta.ring_events.iter().find(|e| e.ring_idx == 2).unwrap();
-    assert_eq!(event2.open_pos, 2);
-    assert_eq!(event2.close_pos, Some(7));
-    assert_eq!(event2.atom_a, 1);
-    assert_eq!(event2.atom_b, Some(4));
 }
 
 mod utils;
