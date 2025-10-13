@@ -177,6 +177,7 @@ struct OpenRing {
     order: Option<BondOrder>,
     dir: Option<BondDir>,
     open_pos: usize,
+    open_end: usize,
     open_aromatic: bool,
 }
 
@@ -248,6 +249,7 @@ fn process_ring_closure(
     order_opt: Option<BondOrder>,
     dir_opt: Option<BondDir>,
     pos: usize,
+    token_end: usize,
 ) -> Result<(), ParseError> {
     if ring_table.len() <= idx {
         ring_table.resize_with(idx + 1, || None);
@@ -260,9 +262,10 @@ fn process_ring_closure(
                 order: order_opt,
                 dir: dir_opt,
                 open_pos: pos,
+                open_end: token_end,
                 open_aromatic: last_aromatic,
             });
-            builder.on_ring_open(idx as u32, pos as u32, last_atom_idx);
+            builder.on_ring_open(idx as u32, pos as u32, token_end as u32, last_atom_idx);
         }
         Some(open) => {
             if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
@@ -314,9 +317,10 @@ fn process_ring_closure(
                     order: final_order,
                     dir: final_dir,
                     span_start: Some(open.open_pos as u32),
+                    span_end: Some(open.open_end as u32),
                 },
             );
-            builder.on_ring_close(idx as u32, pos as u32, b);
+            builder.on_ring_close(idx as u32, pos as u32, token_end as u32, b);
         }
     }
     Ok(())
@@ -572,10 +576,11 @@ fn attach_atom(
     last_aromatic: bool,
     curr_aromatic: bool,
     curr_atom_start: u32,
+    curr_atom_end: u32,
 ) {
     if let Some(last) = last_atom_idx {
         if let Some((order, dir, pos)) = pending_bond.take() {
-            builder.on_bond(last, curr_atom_idx, BondData { order, dir, span_start: Some(pos as u32) });
+            builder.on_bond(last, curr_atom_idx, BondData { order, dir, span_start: Some(pos as u32), span_end: Some((pos as u32)+1) });
         } else if last_aromatic && curr_aromatic {
             builder.on_bond(
                 last,
@@ -584,10 +589,11 @@ fn attach_atom(
                     order: BondOrder::Aromatic,
                     dir: None,
                     span_start: Some(curr_atom_start),
+                    span_end: Some(curr_atom_end),
                 },
             );
         } else {
-            builder.on_bond_single_fast(last, curr_atom_idx, Some(curr_atom_start));
+            builder.on_bond_single_fast(last, curr_atom_idx, Some(curr_atom_start), Some(curr_atom_end));
         };
     }
 }
@@ -983,6 +989,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     order_opt,
                     dir_opt,
                     i,
+                    i + 1,
                 )?;
                 i = next_i;
                 continue;
@@ -1040,6 +1047,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 chirality: chir_opt,
                 unknown_symbol: unknown,
                 span_start: Some(i as u32),
+                span_end: Some((j) as u32),
             };
             let curr = builder.on_atom(atom);
             
@@ -1051,6 +1059,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 last_aromatic,
                 aromatic,
                 i as u32,
+                j as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
@@ -1066,7 +1075,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
-                let curr = builder.on_atom_fast(Element::Cl, true, false, Some(i as u32));
+                let curr = builder.on_atom_fast(Element::Cl, true, false, Some(i as u32), Some((i+2) as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1076,6 +1085,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
+                    (i+2) as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1089,7 +1099,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let curr = builder.on_atom_fast(Element::C, true, false, Some(i as u32));
+            let curr = builder.on_atom_fast(Element::C, true, false, Some(i as u32), Some((i+1) as u32));
             
             attach_atom(
                 &mut builder,
@@ -1099,6 +1109,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 last_aromatic,
                 false,
                 i as u32,
+                (i+1) as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1114,7 +1125,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
-                let curr = builder.on_atom_fast(Element::Br, true, false, Some(i as u32));
+                let curr = builder.on_atom_fast(Element::Br, true, false, Some(i as u32), Some((i+2) as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1124,6 +1135,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
+                    (i+2) as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1137,7 +1149,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let curr = builder.on_atom_fast(Element::B, true, false, Some(i as u32));
+            let curr = builder.on_atom_fast(Element::B, true, false, Some(i as u32), Some((i+1) as u32));
             
             attach_atom(
                 &mut builder,
@@ -1147,6 +1159,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 last_aromatic,
                 false,
                 i as u32,
+                (i+1) as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1163,7 +1176,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         // Elements
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
-                let curr = builder.on_atom_fast(element, true, false, Some(i as u32));
+                let curr = builder.on_atom_fast(element, true, false, Some(i as u32), Some((i+consumed) as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1173,6 +1186,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
+                    (i+consumed) as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1187,7 +1201,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
-                let curr = builder.on_atom_fast(element, true, true, Some(i as u32));
+                let curr = builder.on_atom_fast(element, true, true, Some(i as u32), Some((i+consumed) as u32));
                 
                 attach_atom(
                     &mut builder,
@@ -1197,6 +1211,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     true,
                     i as u32,
+                    (i+consumed) as u32,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = true;
@@ -1224,6 +1239,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 chirality: None,
                 unknown_symbol: true,
                 span_start: Some(i as u32),
+                span_end: Some((i+1) as u32),
             };
             let curr = builder.on_atom(atom);
             
@@ -1235,6 +1251,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 last_aromatic,
                 false,
                 i as u32,
+                (i+1) as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;

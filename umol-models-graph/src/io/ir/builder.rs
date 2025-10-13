@@ -17,12 +17,14 @@ pub struct AtomData {
     pub chirality: Option<Chirality>,
     pub unknown_symbol: bool,
     pub span_start: Option<u32>,
+    pub span_end: Option<u32>,
 }
 
 pub struct BondData {
     pub order: BondOrder,
     pub dir: Option<BondDir>,
     pub span_start: Option<u32>,
+    pub span_end: Option<u32>,
 }
 
 pub struct MoleculeBuilder {
@@ -64,6 +66,7 @@ impl MoleculeBuilder {
                 chirality: a.chirality,
                 class: a.class,
                 span_start: a.span_start,
+                span_end: a.span_end,
                 source_format: SourceFormat::SMILES,
             }
         } else {
@@ -79,6 +82,7 @@ impl MoleculeBuilder {
                 chirality: a.chirality,
                 class: a.class,
                 span_start: a.span_start,
+                span_end: a.span_end,
                 source_format: SourceFormat::SMILES,
             }
         };
@@ -97,6 +101,7 @@ impl MoleculeBuilder {
             ring: None,
             stereo: None,
             span_start: b.span_start,
+            span_end: b.span_end,
             source_format: SourceFormat::SMILES,
         };
         self.bonds.push(bond);
@@ -104,11 +109,12 @@ impl MoleculeBuilder {
 
     // Fast-path constructors for hot parser loops
     #[inline]
-    pub fn on_atom_fast(&mut self, element: Element, implicit_h: bool, aromatic: bool, span_start: Option<u32>) -> u32 {
+    pub fn on_atom_fast(&mut self, element: Element, implicit_h: bool, aromatic: bool, span_start: Option<u32>, span_end: Option<u32>) -> u32 {
         let atom = Atom {
             symbol: AtomSymbol::Element(element),
             position: None,
             span_start,
+            span_end,
             charge: None,
             isotope: None,
             radical: None,
@@ -124,7 +130,7 @@ impl MoleculeBuilder {
     }
 
     #[inline]
-    pub fn on_bond_single_fast(&mut self, start: u32, end: u32, span_start: Option<u32>) {
+    pub fn on_bond_single_fast(&mut self, start: u32, end: u32, span_start: Option<u32>, span_end: Option<u32>) {
         let bond = Bond {
             start_atom: start,
             end_atom: end,
@@ -133,6 +139,7 @@ impl MoleculeBuilder {
             ring: None,
             stereo: None,
             span_start,
+            span_end,
             source_format: SourceFormat::SMILES,
         };
         self.bonds.push(bond);
@@ -171,33 +178,38 @@ impl MoleculeBuilder {
     }
 
     #[inline]
-    pub fn on_ring_open(&mut self, ring_idx: u32, pos: u32, atom_id: u32) {
+    pub fn on_ring_open(&mut self, ring_idx: u32, pos: u32, end: u32, atom_id: u32) {
         self.rings.push(Ring {
             ring_idx,
-            open_pos: Some(pos),
-            close_pos: None,
+            open_start: Some(pos),
+            close_start: None,
             atom_a: Some(atom_id),
             atom_b: None,
+            open_end: Some(end),
+            close_end: None,
         });
     }
 
     #[inline]
-    pub fn on_ring_close(&mut self, ring_idx: u32, pos: u32, atom_id: u32) {
-        // find last open event for this index without close_pos
+    pub fn on_ring_close(&mut self, ring_idx: u32, pos: u32, end: u32, atom_id: u32) {
+        // find last open event for this index without close_start
         for ev in self.rings.iter_mut().rev() {
-            if ev.ring_idx == ring_idx && ev.close_pos.is_none() {
-                ev.close_pos = Some(pos);
+            if ev.ring_idx == ring_idx && ev.close_start.is_none() {
+                ev.close_start = Some(pos);
                 ev.atom_b = Some(atom_id);
+                ev.close_end = Some(end);
                 return;
             }
         }
         // if none found, record a close-only event
         self.rings.push(Ring {
             ring_idx,
-            open_pos: None,
-            close_pos: Some(pos),
+            open_start: None,
+            close_start: Some(pos),
             atom_a: None,
             atom_b: Some(atom_id),
+            open_end: None,
+            close_end: Some(end),
         });
     }
 }

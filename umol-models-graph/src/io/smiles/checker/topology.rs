@@ -6,7 +6,7 @@ use crate::io::smiles::diagnostics::{
     Category, Code, Diagnostic, Severity, Span,
 };
 
-pub fn check_topology(mol: &Molecule, flags: SmilesCheckFlags) -> impl Iterator<Item = Diagnostic> {
+pub fn check_topology(mol: &Molecule, flags: &SmilesCheckFlags) -> impl Iterator<Item = Diagnostic> {
     let mut diags: Vec<Diagnostic> = Vec::new();
     if !flags.contains(SmilesCheckFlags::TOPOLOGY) {
         return diags.into_iter();

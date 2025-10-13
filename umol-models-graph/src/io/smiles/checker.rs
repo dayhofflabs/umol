@@ -57,7 +57,7 @@ pub struct CheckOutput {
 
 pub fn check_parsed(
     mol: &Molecule,
-    _check_flags: &SmilesCheckFlags,
+    check_flags: &SmilesCheckFlags,
     _lint_config: &SmilesLintConfig,
     models: &SmilesModels,
 ) -> CheckOutput {
@@ -65,7 +65,7 @@ pub fn check_parsed(
     let annotations = Annotations::default();
     
     // Run topology checks
-    report.extend(check_topology(mol, *_check_flags));
+    report.extend(check_topology(mol, check_flags));
     
     // Run valence checks
     let valence_cfg = ValenceConfig::default();

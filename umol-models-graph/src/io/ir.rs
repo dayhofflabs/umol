@@ -85,6 +85,7 @@ pub struct Atom {
 
     // Metadata
     pub span_start: Option<u32>,
+    pub span_end: Option<u32>,
     pub source_format: SourceFormat,
 }
 
@@ -153,6 +154,7 @@ pub struct Bond {
 
     // Metadata
     pub span_start: Option<u32>,
+    pub span_end: Option<u32>,
     pub source_format: SourceFormat,
 }
 
@@ -279,10 +281,12 @@ pub struct RingBond {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Ring {
     pub ring_idx: u32,
-    pub open_pos: Option<u32>,
-    pub close_pos: Option<u32>,
     pub atom_a: Option<u32>,
     pub atom_b: Option<u32>,
+    pub open_start: Option<u32>,
+    pub open_end: Option<u32>,
+    pub close_start: Option<u32>,
+    pub close_end: Option<u32>,
 }
 
 /// Fragment
