@@ -64,7 +64,14 @@ impl ParseError {
         let span = Span::new(0, input.len());
         let message = "Parse error";
         // FIX: Use correct category
-        Diagnostic::error(code, Category::Lexical, span, message)
+        Diagnostic {
+            code,
+            severity: crate::io::smiles::diagnostics::Severity::Error,
+            category: Category::Lexical,
+            span,
+            message,
+            details: None,
+        }
     }
 }
 

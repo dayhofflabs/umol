@@ -181,49 +181,14 @@ pub struct Diagnostic {
     pub details: Option<String>,
 }
 
-impl Diagnostic {
-    pub fn error(
-        code: impl Into<Code>,
-        category: Category,
-        span: Span,
-        message: &'static str,
-    ) -> Self {
-        Self {
-            code: code.into(),
-            severity: Severity::Error,
-            category,
-            span,
-            message,
-            details: None,
-        }
-    }
-    pub fn warning(
-        code: impl Into<Code>,
-        category: Category,
-        span: Span,
-        message: &'static str,
-    ) -> Self {
-        Self {
-            code: code.into(),
-            severity: Severity::Warning,
-            category,
-            span,
-            message,
-            details: None,
-        }
-    }
-    pub fn with_details(mut self, details: impl Into<String>) -> Self {
-        self.details = Some(details.into());
-        self
-    }
-}
+impl Diagnostic {}
 
 #[derive(Debug, Default, Clone)]
-pub struct DiagnosticsReport {
+pub struct DiagnosticList {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-impl DiagnosticsReport {
+impl DiagnosticList {
     pub fn new() -> Self {
         Self {
             diagnostics: Vec::new(),
@@ -231,6 +196,18 @@ impl DiagnosticsReport {
     }
     pub fn push(&mut self, d: Diagnostic) {
         self.diagnostics.push(d);
+    }
+    pub fn extend<I: IntoIterator<Item = Diagnostic>>(&mut self, it: I) {
+        self.diagnostics.extend(it);
+    }
+    pub fn append_list(&mut self, other: &mut DiagnosticList) {
+        self.diagnostics.append(&mut other.diagnostics);
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
+        self.diagnostics.iter()
+    }
+    pub fn into_vec(self) -> Vec<Diagnostic> {
+        self.diagnostics
     }
     pub fn has_errors(&self) -> bool {
         self.diagnostics
@@ -246,6 +223,14 @@ impl DiagnosticsReport {
         self.diagnostics
             .iter()
             .filter(|d| d.severity == Severity::Warning)
+    }
+}
+
+impl IntoIterator for DiagnosticList {
+    type Item = Diagnostic;
+    type IntoIter = std::vec::IntoIter<Diagnostic>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.diagnostics.into_iter()
     }
 }
 
@@ -269,12 +254,14 @@ mod tests {
 
     #[test]
     fn test_diagnostic_display() {
-        let d = Diagnostic::error(
-            Code::InvalidToken,
-            Category::Lexical,
-            Span::new(0, 10),
-            "Invalid token",
-        );
+        let d = Diagnostic {
+            code: Code::InvalidToken,
+            severity: Severity::Error,
+            category: Category::Lexical,
+            span: Span::new(0, 10),
+            message: "Invalid token",
+            details: None,
+        };
         assert_eq!(d.to_string(), "Invalid token [LEXICAL:INVALID_TOKEN] @0..10");
     }
 }

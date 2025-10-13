@@ -15,12 +15,13 @@ pub mod valence;
 //     check_valence, ValencePolicy, ValenceArtifacts, ValenceConfig, ValenceModel, ValencePattern,
 //     ValencePatternTable,
 // };
+pub use valence::check_valence;
 
 use crate::io::ir::Molecule;
 use crate::io::smiles::checker::topology::check_topology;
 use crate::io::smiles::checker::valence::{ValenceConfig, ValenceModel};
 use crate::io::smiles::config::{SmilesCheckFlags, SmilesIoConfig, SmilesLintConfig};
-use crate::io::smiles::diagnostics::DiagnosticsReport;
+use crate::io::smiles::diagnostics::DiagnosticList;
 use crate::io::smiles::parser::parse_smiles_inner;
 
 pub struct SmilesModels {
@@ -50,7 +51,7 @@ pub struct Annotations {
 
 #[derive(Default)]
 pub struct CheckOutput {
-    pub diagnostics: DiagnosticsReport,
+    pub diagnostics: DiagnosticList,
     pub annotations: Annotations,
 }
 
@@ -60,15 +61,15 @@ pub fn check_parsed(
     _lint_config: &SmilesLintConfig,
     models: &SmilesModels,
 ) -> CheckOutput {
-    let mut report = DiagnosticsReport::new();
+    let mut report = DiagnosticList::new();
     let annotations = Annotations::default();
     
     // Run topology checks
-    check_topology(mol, &mut report);
+    report.extend(check_topology(mol, *_check_flags));
     
     // Run valence checks
     let valence_cfg = ValenceConfig::default();
-    valence::check_valence(mol, &mut report, &models.valence, &valence_cfg);
+    check_valence(mol, &mut report, &models.valence, &valence_cfg);
     
     // TODO: Run stereo checks
     // check_stereo_double(mol, metadata, &mut report);
@@ -79,7 +80,7 @@ pub fn check_parsed(
     }
 }
 
-pub fn check_smiles(input: &[u8]) -> DiagnosticsReport {
+pub fn check_smiles(input: &[u8]) -> DiagnosticList {
     let io_config = SmilesIoConfig::default();
     let models = SmilesModels::default();
     check_smiles_with(input, &io_config, &models)
@@ -89,12 +90,12 @@ pub fn check_smiles_with(
     input: &[u8],
     io_config: &SmilesIoConfig,
     models: &SmilesModels,
-) -> DiagnosticsReport {
+) -> DiagnosticList {
     let parse_output = parse_smiles_inner(input, &io_config.parse_flags);
     match parse_output {
         Ok(parse_output) => {
             let mol = parse_output.sir;
-            let _report = DiagnosticsReport::new();
+            let _report = DiagnosticList::new();
             let _annotations = Annotations::default();
             let check_output = check_parsed(
                 &mol,
@@ -105,7 +106,7 @@ pub fn check_smiles_with(
             check_output.diagnostics
         }
         Err(e) => {
-            let mut report = DiagnosticsReport::new();
+            let mut report = DiagnosticList::new();
             report.push(e.as_diagnostic(""));
             report
         }

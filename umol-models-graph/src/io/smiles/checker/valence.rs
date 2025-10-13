@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, DiagnosticsReport, Severity, Span};
+use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, DiagnosticList, Severity, Span};
 use crate::io::ir::{AtomSymbol, BondOrder, BondSymbol, Molecule};
 use umol_data::{e, Element};
 
@@ -303,7 +303,7 @@ pub struct ValenceArtifacts {
 
 pub fn check_valence(
     mol: &Molecule,
-    report: &mut DiagnosticsReport,
+    report: &mut DiagnosticList,
     model: &ValenceModel,
     cfg: &ValenceConfig,
 ) -> ValenceArtifacts {

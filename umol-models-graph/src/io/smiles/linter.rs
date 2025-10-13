@@ -9,13 +9,13 @@ use super::checker::{
     check_aromaticity, check_stereo_double, check_topology, check_valence, AromaticityConfig,
     AromaticityModel, ValenceConfig, ValenceModel,
 };
-use super::diagnostics::{Category, Diagnostic, DiagnosticsReport, Severity, Span};
+use super::diagnostics::{Category, Diagnostic, DiagnosticList, Severity, Span};
 use super::parser::parse_smiles;
 
 // SMILES linter, runs post-parse
-pub fn lint_smiles(input: &str) -> DiagnosticsReport {
+pub fn lint_smiles(input: &str) -> DiagnosticList {
     let ctx = LintContext::new(input);
-    let mut report = DiagnosticsReport::new();
+    let mut report = DiagnosticList::new();
     let mut emitter = Emitter::new(&mut report);
 
     // Map parser errors into diagnostics
@@ -39,10 +39,10 @@ pub fn lint_smiles(input: &str) -> DiagnosticsReport {
     // Post-parse: topology + stereo checks when parsing succeeds (after emitter releases &mut report)
     if let Ok(ref mol) = parse_res {
         let input_len = input.len();
-        check_topology(mol, None, &mut report, input_len);
+        report.extend(check_topology(mol, super::config::SmilesCheckFlags::ALL));
         let v_cfg = ValenceConfig::default();
         let v_model = ValenceModel::simple_organic();
-        check_valence(mol, None, &mut report, input_len, &v_model, &v_cfg);
+        check_valence(mol, &mut report, &v_model, &v_cfg);
         check_stereo_double(mol, None, &mut report, input_len);
         // Aromaticity verification scaffold (HMO/Clar config only)
         let a_cfg = AromaticityConfig::default();

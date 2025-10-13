@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::super::diagnostics::{Diagnostic, DiagnosticCode, DiagnosticsReport, Severity};
+use super::super::diagnostics::{Diagnostic, DiagnosticCode, DiagnosticList, Severity};
 
 #[derive(Default)]
 pub struct LintConfig {
@@ -12,19 +12,19 @@ pub struct LintConfig {
 }
 
 pub struct Emitter<'a> {
-    pub report: &'a mut DiagnosticsReport,
+    pub report: &'a mut DiagnosticList,
     pub config: LintConfig,
 }
 
 impl<'a> Emitter<'a> {
-    pub fn new(report: &'a mut DiagnosticsReport) -> Self {
+    pub fn new(report: &'a mut DiagnosticList) -> Self {
         Self {
             report,
             config: LintConfig::default(),
         }
     }
 
-    pub fn with_config(report: &'a mut DiagnosticsReport, config: LintConfig) -> Self {
+    pub fn with_config(report: &'a mut DiagnosticList, config: LintConfig) -> Self {
         Self { report, config }
     }
 
