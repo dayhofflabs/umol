@@ -161,7 +161,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                 }
                 let ring_idx: u32 = idx_str.parse().expect("ring idx");
                 let mut open_start: Option<u32> = None;
-                let mut close_pos: Option<u32> = None;
+                let mut close_start: Option<u32> = None;
                 let mut open_end: Option<u32> = None;
                 let mut close_end: Option<u32> = None;
                 if chars.peek() == Some(&'@') {
@@ -171,7 +171,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                     while let Some(c) = chars.peek() {
                         if c.is_ascii_digit() { num.push(*c); chars.next(); } else { break; }
                     }
-                    if !num.is_empty() { open_start = Some(num.parse::<u32>().expect("open pos")); }
+                    if !num.is_empty() { open_start = Some(num.parse::<u32>().expect("open start")); }
                     // optional ..end
                     if chars.peek() == Some(&'.') { chars.next(); if chars.peek() == Some(&'.') { chars.next(); let mut num2 = String::new(); while let Some(c) = chars.peek() { if c.is_ascii_digit() { num2.push(*c); chars.next(); } else { break; } } if !num2.is_empty() { open_end = Some(num2.parse::<u32>().expect("open end")); } } }
                 }
@@ -179,7 +179,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                     chars.next();
                     let mut num = String::new();
                     while let Some(c) = chars.peek() { if c.is_ascii_digit() { num.push(*c); chars.next(); } else { break; } }
-                    if !num.is_empty() { close_pos = Some(num.parse::<u32>().expect("close pos")); }
+                    if !num.is_empty() { close_start = Some(num.parse::<u32>().expect("close start")); }
                     if chars.peek() == Some(&'.') { chars.next(); if chars.peek() == Some(&'.') { chars.next(); let mut num2 = String::new(); while let Some(c) = chars.peek() { if c.is_ascii_digit() { num2.push(*c); chars.next(); } else { break; } } if !num2.is_empty() { close_end = Some(num2.parse::<u32>().expect("close end")); } } }
                 }
                 // Parse right: a-b (either side may be empty)
@@ -205,11 +205,11 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                 let atom_b = b_opt.map(|bi| ids[bi]);
                 // Default ends if positions are provided without ends
                 if open_end.is_none() { if let Some(s) = open_start { open_end = Some(s + 1); } }
-                if close_end.is_none() { if let Some(s) = close_pos { close_end = Some(s + 1); } }
+                if close_end.is_none() { if let Some(s) = close_start { close_end = Some(s + 1); } }
                 rings.push(Ring {
                     ring_idx,
                     open_start,
-                    close_start: close_pos,
+                    close_start,
                     atom_a,
                     atom_b,
                     open_end,

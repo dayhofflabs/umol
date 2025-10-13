@@ -86,7 +86,6 @@ pub struct Atom {
     // Metadata
     pub span_start: Option<u32>,
     pub span_end: Option<u32>,
-    pub source_format: SourceFormat,
 }
 
 impl Atom {
@@ -155,7 +154,6 @@ pub struct Bond {
     // Metadata
     pub span_start: Option<u32>,
     pub span_end: Option<u32>,
-    pub source_format: SourceFormat,
 }
 
 impl Bond {

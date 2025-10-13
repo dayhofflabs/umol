@@ -250,6 +250,7 @@ fn process_ring_closure(
     dir_opt: Option<BondDir>,
     pos: usize,
     token_end: usize,
+    no_meta: bool,
 ) -> Result<(), ParseError> {
     if ring_table.len() <= idx {
         ring_table.resize_with(idx + 1, || None);
@@ -265,7 +266,8 @@ fn process_ring_closure(
                 open_end: token_end,
                 open_aromatic: last_aromatic,
             });
-            builder.on_ring_open(idx as u32, pos as u32, token_end as u32, last_atom_idx);
+            let (start, end, aid) = if no_meta { (None, None, None) } else { (Some(pos as u32), Some(token_end as u32), Some(last_atom_idx)) };
+            builder.on_ring_open(idx as u32, start, end, aid);
         }
         Some(open) => {
             if let (Some(d1), Some(d2)) = (open.dir, dir_opt) {
@@ -310,17 +312,19 @@ fn process_ring_closure(
             if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
                 final_order = BondOrder::Aromatic;
             }
+            let (bs, be) = if no_meta { (None, None) } else { (Some(open.open_pos as u32), Some(open.open_end as u32)) };
             builder.on_bond(
                 a,
                 b,
                 BondData {
                     order: final_order,
                     dir: final_dir,
-                    span_start: Some(open.open_pos as u32),
-                    span_end: Some(open.open_end as u32),
+                    span_start: bs,
+                    span_end: be,
                 },
             );
-            builder.on_ring_close(idx as u32, pos as u32, token_end as u32, b);
+            let (start, end, aid) = if no_meta { (None, None, None) } else { (Some(pos as u32), Some(token_end as u32), Some(b)) };
+            builder.on_ring_close(idx as u32, start, end, aid);
         }
     }
     Ok(())
@@ -577,23 +581,27 @@ fn attach_atom(
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
+    include_metadata: bool,
 ) {
     if let Some(last) = last_atom_idx {
         if let Some((order, dir, pos)) = pending_bond.take() {
-            builder.on_bond(last, curr_atom_idx, BondData { order, dir, span_start: Some(pos as u32), span_end: Some((pos as u32)+1) });
+            let (s, e) = if include_metadata { (Some(pos as u32), Some((pos as u32)+1)) } else { (None, None) };
+            builder.on_bond(last, curr_atom_idx, BondData { order, dir, span_start: s, span_end: e });
         } else if last_aromatic && curr_aromatic {
+            let (s, e) = if include_metadata { (Some(curr_atom_start), Some(curr_atom_end)) } else { (None, None) };
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order: BondOrder::Aromatic,
                     dir: None,
-                    span_start: Some(curr_atom_start),
-                    span_end: Some(curr_atom_end),
+                    span_start: s,
+                    span_end: e,
                 },
             );
         } else {
-            builder.on_bond_single_fast(last, curr_atom_idx, Some(curr_atom_start), Some(curr_atom_end));
+            let (s, e) = if include_metadata { (Some(curr_atom_start), Some(curr_atom_end)) } else { (None, None) };
+            builder.on_bond_single_fast(last, curr_atom_idx, s, e);
         };
     }
 }
@@ -812,6 +820,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
 ) -> Result<ParseOutput, ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
     let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
+    let no_meta = flags.contains(SmilesParseFlags::NO_METADATA);
 
     let mut i = 0usize;
     let n = input.len();
@@ -990,6 +999,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     dir_opt,
                     i,
                     i + 1,
+                    no_meta,
                 )?;
                 i = next_i;
                 continue;
@@ -1036,6 +1046,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 Some(e) => (e, aromatic),
                 None => (Element::C, false),
             };
+            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((j) as u32)) };
             let atom = AtomData {
                 element,
                 isotope: iso_opt,
@@ -1046,8 +1057,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 implicit_h: false,
                 chirality: chir_opt,
                 unknown_symbol: unknown,
-                span_start: Some(i as u32),
-                span_end: Some((j) as u32),
+                span_start: s,
+                span_end: e,
             };
             let curr = builder.on_atom(atom);
             
@@ -1060,6 +1071,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 aromatic,
                 i as u32,
                 j as u32,
+                !no_meta,
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
@@ -1075,7 +1087,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
-                let curr = builder.on_atom_fast(Element::Cl, true, false, Some(i as u32), Some((i+2) as u32));
+                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+2) as u32)) };
+                let curr = builder.on_atom_fast(Element::Cl, true, false, s, e);
                 
                 attach_atom(
                     &mut builder,
@@ -1085,7 +1098,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
-                    (i+2) as u32,
+                (i+2) as u32,
+                !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1099,7 +1113,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let curr = builder.on_atom_fast(Element::C, true, false, Some(i as u32), Some((i+1) as u32));
+            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+1) as u32)) };
+            let curr = builder.on_atom_fast(Element::C, true, false, s, e);
             
             attach_atom(
                 &mut builder,
@@ -1110,6 +1125,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 false,
                 i as u32,
                 (i+1) as u32,
+                !no_meta,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1125,7 +1141,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
-                let curr = builder.on_atom_fast(Element::Br, true, false, Some(i as u32), Some((i+2) as u32));
+                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+2) as u32)) };
+                let curr = builder.on_atom_fast(Element::Br, true, false, s, e);
                 
                 attach_atom(
                     &mut builder,
@@ -1135,7 +1152,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
-                    (i+2) as u32,
+                (i+2) as u32,
+                !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1149,7 +1167,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let curr = builder.on_atom_fast(Element::B, true, false, Some(i as u32), Some((i+1) as u32));
+            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+1) as u32)) };
+            let curr = builder.on_atom_fast(Element::B, true, false, s, e);
             
             attach_atom(
                 &mut builder,
@@ -1160,6 +1179,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 false,
                 i as u32,
                 (i+1) as u32,
+                !no_meta,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -1176,7 +1196,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
         // Elements
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
-                let curr = builder.on_atom_fast(element, true, false, Some(i as u32), Some((i+consumed) as u32));
+                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+consumed) as u32)) };
+                let curr = builder.on_atom_fast(element, true, false, s, e);
                 
                 attach_atom(
                     &mut builder,
@@ -1186,7 +1207,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
-                    (i+consumed) as u32,
+                (i+consumed) as u32,
+                !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1201,7 +1223,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
-                let curr = builder.on_atom_fast(element, true, true, Some(i as u32), Some((i+consumed) as u32));
+                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+consumed) as u32)) };
+                let curr = builder.on_atom_fast(element, true, true, s, e);
                 
                 attach_atom(
                     &mut builder,
@@ -1211,7 +1234,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                     last_aromatic,
                     true,
                     i as u32,
-                    (i+consumed) as u32,
+                (i+consumed) as u32,
+                !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = true;
@@ -1228,6 +1252,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
             return Err(ParseError::InvalidElement { pos: i });
         }
         if b0 == b'*' {
+            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+1) as u32)) };
             let atom = AtomData {
                 element: Element::C,
                 isotope: Some(0),
@@ -1238,8 +1263,8 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 implicit_h: false,
                 chirality: None,
                 unknown_symbol: true,
-                span_start: Some(i as u32),
-                span_end: Some((i+1) as u32),
+                span_start: s,
+                span_end: e,
             };
             let curr = builder.on_atom(atom);
             
@@ -1252,6 +1277,7 @@ pub fn parse_smiles_inner<'inp, 'fl>(
                 false,
                 i as u32,
                 (i+1) as u32,
+                !no_meta,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;

@@ -46,10 +46,10 @@ fn element_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[rustfmt::skip]
 #[rstest]
 #[case::empty(b"", Molecule::default())]
-#[case::chain_c_1(b"C", build_from_graph("C@0 |"))]
-#[case::chain_c_5(b"CCCCC", build_from_graph("C@0 C@1 C@2 C@3 C@4 | 0-1@1 1-2@2 2-3@3 3-4@4"))]
-#[case::aromatic_c_6(b"cccccc", build_from_graph("C*@0 C*@1 C*@2 C*@3 C*@4 C*@5 | 0-1:@1 1-2:@2 2-3:@3 3-4:@4 4-5:@5"))]
-#[case::chain_mixed_5(b"CClOBrN", build_from_graph("C@0 Cl@1 O@3 Br@4 N@6 | 0-1@1 1-2@3 2-3@4 3-4@6"))]
+#[case::chain_c_1(b"C", build_from_graph("C@0..1 |"))]
+#[case::chain_c_5(b"CCCCC", build_from_graph("C@0..1 C@1..2 C@2..3 C@3..4 C@4..5 | 0-1@1..2 1-2@2..3 2-3@3..4 3-4@4..5"))]
+#[case::aromatic_c_6(b"cccccc", build_from_graph("C*@0..1 C*@1..2 C*@2..3 C*@3..4 C*@4..5 C*@5..6 | 0-1:@1..2 1-2:@2..3 2-3:@3..4 3-4:@4..5 4-5:@5..6"))]
+#[case::chain_mixed_5(b"CClOBrN", build_from_graph("C@0..1 Cl@1..3 O@3..4 Br@4..6 N@6..7 | 0-1@1..3 1-2@3..4 2-3@4..6 3-4@6..7"))]
 fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -886,7 +886,7 @@ fn stereo_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[rstest]
 #[case::conflicting_stereo_bonds(
     b"C/C(\\F)=C/FC",
-build_from_graph("C@0 C@2 F@5 C@8 F@10 C@11 | 0-1:/@1 1-2:\\@4 1-3:=@7 3-4:/@9 4-5@11")
+    build_from_graph("C@0 C@2 F@5 C@8 F@10 C@11 | 0-1:/@1 1-2:\\@4 1-3:=@7 3-4:/@9 4-5@11")
 )]
 fn stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecule) {
     // Expected to pass here, but should fail semantics post-parse
@@ -1040,6 +1040,23 @@ fn whitespace_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
+}
+
+#[rstest]
+#[case::chain_c_1(b"C", build_from_graph("C |"))]
+#[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
+#[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
+#[case::ring_3(b"C1CC1", build_from_graph("C C C | 0-1 1-2 0-2 | 1"))]
+#[case::single_bond(b"C-C", build_from_graph("C C | 0-1:-"))]
+fn no_metadata(#[case] input: &[u8], #[case] expected: Molecule) {
+    let config = SmilesIoConfig {
+        parse_flags: SmilesParseFlags::NO_METADATA,
+        ..Default::default()
+    };
+    let res = parse_smiles_with(input, &config);
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
 }
 
 mod utils;
