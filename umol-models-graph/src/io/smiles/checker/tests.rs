@@ -1,3 +1,72 @@
+use super::super::diagnostics::{Category, Code, DiagnosticList};
+use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
+use crate::io::ir::{BondOrder};
+use crate::io::smiles::checker::aromaticity::{check_aromaticity, AromaticityConfig, AromaticityModel};
+use umol_data::Element;
+
+fn spanless_atom(element: Element, aromatic: bool) -> AtomData {
+    AtomData {
+        element,
+        isotope: None,
+        charge: None,
+        hydrogen_count: None,
+        class: None,
+        aromatic,
+        implicit_h: false,
+        chirality: None,
+        unknown_symbol: false,
+        span_start: None,
+        span_end: None,
+    }
+}
+
+fn spanless_bond(order: BondOrder) -> BondData {
+    BondData { order, dir: None, span_start: None, span_end: None }
+}
+
+#[test]
+fn aromatic_atom_not_in_ring() {
+    let mut mb = MoleculeBuilder::with_capacity(2, 1);
+    let c1 = mb.on_atom(spanless_atom(Element::C, true)); // aromatic annotated
+    let c2 = mb.on_atom(spanless_atom(Element::C, false));
+    mb.on_bond(c1, c2, spanless_bond(BondOrder::Single));
+    let mol = mb.finish().pop().unwrap();
+
+    let cfg = AromaticityConfig::default();
+    let model = AromaticityModel::default();
+    let mut diags = DiagnosticList::new();
+    let mut ann = super::Annotations::default();
+    check_aromaticity(&mol, &crate::io::smiles::config::SmilesCheckFlags::ALL, &mut ann, &mut diags, &model, &cfg);
+    assert!(diags.iter().any(|d| d.code == Code::AromaticAtomNotInRing && d.category == Category::Aromaticity));
+}
+
+#[test]
+fn aromatic_bond_not_in_ring() {
+    let mut mb = MoleculeBuilder::with_capacity(2, 1);
+    let c1 = mb.on_atom(spanless_atom(Element::C, false));
+    let c2 = mb.on_atom(spanless_atom(Element::C, false));
+    // Set bond as aromatic but not part of any cycle
+    mb.on_bond(c1, c2, spanless_bond(BondOrder::Aromatic));
+    let mol = mb.finish().pop().unwrap();
+
+    let cfg = AromaticityConfig::default();
+    let model = AromaticityModel::default();
+    let mut diags = DiagnosticList::new();
+    let mut ann = super::Annotations::default();
+    check_aromaticity(&mol, &crate::io::smiles::config::SmilesCheckFlags::ALL, &mut ann, &mut diags, &model, &cfg);
+    assert!(diags.iter().any(|d| d.code == Code::AromaticBondNotInRing));
+}
+
+#[test]
+fn aromatic_model_loading() {
+    let toml_data = r#"
+eligible_elements = ["C", "N"]
+"#;
+    let model = AromaticityModel::from_patterns_reader(toml_data.as_bytes()).expect("load model");
+    // Ensure C is supported, Si is not under this model
+    assert!(model.patterns.eligible_elements.contains(&Element::C));
+    assert!(!model.patterns.eligible_elements.contains(&Element::Si));
+}
 // use umol_data::Element;
 
 // use super::super::diagnostics::Category;

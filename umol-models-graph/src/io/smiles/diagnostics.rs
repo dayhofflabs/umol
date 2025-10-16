@@ -53,6 +53,9 @@ pub enum Code {
     HcountMismatch,
     NoMatch,
     AmbiguousMatch,
+    NoKnownValenceStates,
+    ValenceUnknownBondOrder,
+    MissingBracketH,
 
     // Aromaticity errors
     AromaticAtomNotInRing,
@@ -75,6 +78,9 @@ pub enum Code {
 
     // Stereochemistry warnings
     AvoidUnnecessaryStereoDescriptor,
+    UnsupportedCentralChiralityElement,
+    ChiralitySubstituentMismatch,
+    NonChiralAnnotated,
 
     // Numeric errors
     Overflow,
@@ -208,6 +214,11 @@ impl DiagnosticList {
     }
     pub fn into_vec(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+    pub fn from(d: Diagnostic) -> Self {
+        let mut list = DiagnosticList::new();
+        list.push(d);
+        list
     }
     pub fn has_errors(&self) -> bool {
         self.diagnostics

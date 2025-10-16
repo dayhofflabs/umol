@@ -1,8 +1,15 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
+use crate::io::smiles::checker::{Annotations, ValenceAnnotations, ValenceSource, ValenceStatus};
 use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, DiagnosticList, Severity, Span};
 use crate::io::ir::{AtomSymbol, BondOrder, BondSymbol, Molecule};
+use crate::io::smiles::config::SmilesCheckFlags;
 use umol_data::{e, Element};
+use umol::{Error as UmolError, Result as UmolResult};
+use umol::error::ParseError as UmolParseError;
 
 #[derive(Clone, Copy)]
 pub enum ValencePolicy {
@@ -14,7 +21,7 @@ pub enum ValencePolicy {
 #[derive(Clone, Copy)]
 pub struct ValenceConfig {
     pub enabled: bool,
-    pub overflow_policy: ValencePolicy,
+    pub out_of_range_policy: ValencePolicy,
     pub check_bracket: bool,
     pub infer_bracket_implicit: bool,
     pub aromatic_as_one: bool,
@@ -27,7 +34,7 @@ impl Default for ValenceConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            overflow_policy: ValencePolicy::Warn,
+            out_of_range_policy: ValencePolicy::Warn,
             check_bracket: true,
             infer_bracket_implicit: false,
             aromatic_as_one: true,
@@ -50,9 +57,25 @@ impl ValenceModel {
     }
     pub fn states_for(&self, e: Element) -> Option<&[u8]> { self.states.get(&e).map(|v| &v[..]) }
     pub fn set_states(&mut self, e: Element, states: Vec<u8>) { self.states.insert(e, states); }
+    pub fn set_patterns(&mut self, patterns: ValencePatternTable) { self.patterns = patterns; }
+    pub fn load_patterns_from_vec(&mut self, patterns: Vec<ValencePattern>) { self.patterns = ValencePatternTable { patterns }; }
+    pub fn with_patterns(table: ValencePatternTable) -> Self { Self { states: HashMap::new(), patterns: table } }
+    pub fn from_patterns_reader<R: Read>(mut r: R) -> UmolResult<Self> {
+        let mut buf = String::new();
+        r.read_to_string(&mut buf)
+            .map_err(|e| UmolError::from(UmolParseError::IoError(e)))?;
+        let table: ValencePatternTable = toml::from_str(&buf)
+            .map_err(|e| UmolError::from(UmolParseError::Invalid(format!("TOML parse error: {}", e))))?;
+        Ok(Self::with_patterns(table))
+    }
+    pub fn from_patterns_file(path: &Path) -> UmolResult<Self> {
+        let f = File::open(path)
+            .map_err(|e| UmolError::from(UmolParseError::IoError(e)))?;
+        Self::from_patterns_reader(f)
+    }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
 pub struct ValencePattern {
     pub element: Option<Element>,
     pub bond_sum: Option<u8>,
@@ -61,7 +84,7 @@ pub struct ValencePattern {
     pub unpaired: Option<u8>,
 }
 
-#[derive(Default)]
+#[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct ValencePatternTable { pub patterns: Vec<ValencePattern> }
 
 impl ValencePatternTable {
@@ -190,7 +213,7 @@ impl ValencePatternTable {
             ValencePattern { element: Some(e!(S)), bond_sum: Some(0), charge: Some(-1), implicit_h: Some(1), unpaired: Some(0) }, // HS-
             ValencePattern { element: Some(e!(S)), bond_sum: Some(4), charge: Some(0), implicit_h: Some(0), unpaired: Some(0) }, // S(=O)R2, SO2, SO(OH)2
             ValencePattern { element: Some(e!(S)), bond_sum: Some(3), charge: Some(0), implicit_h: Some(1), unpaired: Some(0) }, // HS(=O)R
-            ValencePattern { element: Some(e!(S)), bond_sum: Some(2), charge: Some(0), implicit_h: Some(2), unpaired: Some(0) }, // H2S=O
+            ValencePattern { element: Some(e!(S)), bond_sum: Some(2), charge: Some(0), implicit_h: Some(2), unpaired: Some(0) }, // H2S(=O)=O
             ValencePattern { element: Some(e!(S)), bond_sum: Some(6), charge: Some(0), implicit_h: Some(0), unpaired: Some(0) }, // S(=O)(=O)R2, SO3, SO(OH)2
             ValencePattern { element: Some(e!(S)), bond_sum: Some(5), charge: Some(0), implicit_h: Some(1), unpaired: Some(0) }, // HS(=O)(=O)R
             ValencePattern { element: Some(e!(S)), bond_sum: Some(4), charge: Some(0), implicit_h: Some(2), unpaired: Some(0) }, // H2S(=O)=O
@@ -235,7 +258,7 @@ impl ValencePatternTable {
             ValencePattern { element: Some(e!(Br)), bond_sum: Some(6), charge: Some(1), implicit_h: Some(0), unpaired: Some(0) }, // BrO3+
             ValencePattern { element: Some(e!(Br)), bond_sum: Some(6), charge: Some(-1), implicit_h: Some(0), unpaired: Some(0) }, // BrO3-
             ValencePattern { element: Some(e!(Br)), bond_sum: Some(7), charge: Some(0), implicit_h: Some(0), unpaired: Some(0) }, // Br(=O)(=O)(=O)OH, RBrO3, BrO4-
-            ValencePattern { element: Some(e!(Br)), bond_sum: Some(6), charge: Some(0), implicit_h: Some(1), unpaired: Some(0) }, // HBrO3
+            ValencePattern { element: Some(e!(Br)), bond_sum: Some(6), charge: Some(0), implicit_h: Some(1), unpaired: Some(1) }, // HBrO3
         
             // I
             ValencePattern { element: Some(e!(I)), bond_sum: Some(1), charge: Some(0), implicit_h: Some(0), unpaired: Some(0) }, // IR
@@ -257,7 +280,7 @@ impl ValencePatternTable {
             ValencePattern { element: Some(e!(I)), bond_sum: Some(6), charge: Some(1), implicit_h: Some(0), unpaired: Some(0) }, // IO3+
             ValencePattern { element: Some(e!(I)), bond_sum: Some(6), charge: Some(-1), implicit_h: Some(0), unpaired: Some(0) }, // IO3-
             ValencePattern { element: Some(e!(I)), bond_sum: Some(7), charge: Some(0), implicit_h: Some(0), unpaired: Some(0) }, // I(=O)(=O)(=O)OH, RIO3, IO4-
-            ValencePattern { element: Some(e!(I)), bond_sum: Some(6), charge: Some(0), implicit_h: Some(1), unpaired: Some(0) }, // HIO3
+            ValencePattern { element: Some(e!(I)), bond_sum: Some(6), charge: Some(0), implicit_h: Some(1), unpaired: Some(1) }, // HIO3
         ]}
     }
 }
@@ -295,21 +318,16 @@ fn resolve_valence_pattern(
     if let Some(i) = best_idx { let p = tbl.patterns[i]; PatternDecision { implicit_h: p.implicit_h, matches: match_count } } else { PatternDecision::default() }
 }
 
-pub struct ValenceArtifacts {
-    pub atoms_checked: usize,
-    pub overflow_count: usize,
-    pub bracket_mismatch_count: usize,
-}
-
 pub fn check_valence(
     mol: &Molecule,
-    report: &mut DiagnosticList,
+    check_flags: &SmilesCheckFlags,
+    annotations: &mut Annotations,
+    diagnostics: &mut DiagnosticList,
     model: &ValenceModel,
     cfg: &ValenceConfig,
-) -> ValenceArtifacts {
-    if !cfg.enabled {
-        return ValenceArtifacts { atoms_checked: 0, overflow_count: 0, bracket_mismatch_count: 0 };
-    }
+) {
+    if !check_flags.contains(SmilesCheckFlags::VALENCE) { return; }
+    if !cfg.enabled { return; }
     let atom_len = mol.atoms.len();
     let mut order_sum: Vec<u8> = vec![0; atom_len];
     let order_weight = |o: BondOrder| -> u8 { match o {
@@ -320,6 +338,7 @@ pub fn check_valence(
         BondOrder::Aromatic => if cfg.aromatic_as_one { 1 } else { 1 },
         BondOrder::Unknown => 0,
     }};
+    let mut has_unknown_bond_order_atom: Vec<bool> = vec![false; atom_len];
     for b in &mol.bonds {
         let (a, c) = (b.start_atom, b.end_atom);
         if let BondSymbol::Bond(ord) = b.symbol {
@@ -329,9 +348,26 @@ pub fn check_valence(
             let c_idx = (c as usize).saturating_sub(1);
             if a_idx < atom_len { order_sum[a_idx] = order_sum[a_idx].saturating_add(w); }
             if c_idx < atom_len { order_sum[c_idx] = order_sum[c_idx].saturating_add(w); }
+        } else if let BondSymbol::Unknown = b.symbol {
+            let a_idx = (a as usize).saturating_sub(1);
+            let c_idx = (c as usize).saturating_sub(1);
+            if a_idx < atom_len { has_unknown_bond_order_atom[a_idx] = true; }
+            if c_idx < atom_len { has_unknown_bond_order_atom[c_idx] = true; }
         }
     }
-    let mut artifacts = ValenceArtifacts { atoms_checked: 0, overflow_count: 0, bracket_mismatch_count: 0 };
+    if annotations.valence.is_none() {
+        annotations.valence = Some(ValenceAnnotations::default());
+    }
+    let vann = annotations.valence.as_mut().unwrap();
+    vann.total_valence_observed = vec![0; atom_len];
+    vann.implicit_h_suggested = vec![None; atom_len];
+    vann.chosen_valence_state = vec![None; atom_len];
+    vann.valence_status = vec![ValenceStatus::Valid; atom_len];
+    vann.source = vec![ValenceSource::Numeric; atom_len];
+    vann.match_count = vec![0; atom_len];
+    vann.overflow_amount = vec![None; atom_len];
+    vann.required_bracket_h = vec![None; atom_len];
+    vann.has_unknown_bond_order = vec![false; atom_len];
     let atom_element = |idx: usize| -> Option<Element> { match &mol.atoms[idx].symbol { AtomSymbol::Element(e) => Some(*e), _ => None } };
     for (i, atom) in mol.atoms.iter().enumerate() {
         let Some(elem) = atom_element(i) else { continue; };
@@ -340,23 +376,29 @@ pub fn check_valence(
         let sum_orders_u8 = order_sum[i];
         let sum_orders = sum_orders_u8 as i32;
         let total_valence = sum_orders - charge_i32;
-        artifacts.atoms_checked += 1;
+        vann.total_valence_observed[i] = total_valence;
         let mut implicit_h_opt: Option<i32> = None;
         
-        // Get atom span for diagnostics: prefer IR start; fallback to whole input
+        // Get atom span for diagnostics: prefer full IR span (start..end), fallback to 1-char start
         let atom_span = mol
             .atoms
             .get(i)
-            .and_then(|a| a.span_start.map(|s| Span::new(s as usize, s as usize + 1)))
+            .map(|a| match (a.span_start, a.span_end) {
+                (Some(s), Some(e)) if e >= s => Span::new(s as usize, e as usize),
+                (Some(s), _) => Span::new(s as usize, s as usize + 1),
+                _ => Span::new(0, 0),
+            })
             .unwrap_or_else(|| Span::new(0, 0));
         let atom_id = (i + 1) as u32;
         
         if cfg.patterns_enabled {
             let d = resolve_valence_pattern(elem, sum_orders_u8, charge_i8, None, &model.patterns);
+            vann.match_count[i] = d.matches as u16;
             if d.matches == 0 {
+                vann.valence_status[i] = ValenceStatus::NoMatch;
                 match cfg.no_match_policy {
                     ValencePolicy::Off => {}
-                    ValencePolicy::Warn => report.push(Diagnostic {
+                    ValencePolicy::Warn => diagnostics.push(Diagnostic {
                         code: Code::NoMatch,
                         category: Category::Valence,
                         severity: Severity::Warning,
@@ -364,7 +406,7 @@ pub fn check_valence(
                         message: "No valence pattern matched",
                         details: Some(format!("atom_id={}", atom_id)),
                     }),
-                    ValencePolicy::Error => report.push(Diagnostic {
+                    ValencePolicy::Error => diagnostics.push(Diagnostic {
                         code: Code::NoMatch,
                         category: Category::Valence,
                         severity: Severity::Error,
@@ -375,9 +417,10 @@ pub fn check_valence(
                 }
             } else {
                 if d.matches > 1 {
-                    match cfg.ambiguous_match_policy {
+                    vann.valence_status[i] = ValenceStatus::Ambiguous;
+                match cfg.ambiguous_match_policy {
                         ValencePolicy::Off => {}
-                        ValencePolicy::Warn => report.push(Diagnostic {
+                        ValencePolicy::Warn => diagnostics.push(Diagnostic {
                             code: Code::AmbiguousMatch,
                             category: Category::Valence,
                             severity: Severity::Warning,
@@ -385,7 +428,7 @@ pub fn check_valence(
                             message: "Multiple valence patterns matched; selected most specific",
                             details: Some(format!("atom_id={}", atom_id)),
                         }),
-                        ValencePolicy::Error => report.push(Diagnostic {
+                        ValencePolicy::Error => diagnostics.push(Diagnostic {
                             code: Code::AmbiguousMatch,
                             category: Category::Valence,
                             severity: Severity::Error,
@@ -395,22 +438,35 @@ pub fn check_valence(
                         }),
                     }
                 }
-                if let Some(h) = d.implicit_h { implicit_h_opt = Some(h as i32); }
+                if let Some(h) = d.implicit_h { implicit_h_opt = Some(h as i32); vann.implicit_h_suggested[i] = Some(h as u8); vann.source[i] = ValenceSource::Pattern; }
             }
         }
         
         if implicit_h_opt.is_none() {
             let states_opt = model.states_for(elem);
-            if states_opt.is_none() { continue; }
+            if states_opt.is_none() {
+                vann.valence_status[i] = ValenceStatus::MissingStates;
+                diagnostics.push(Diagnostic {
+                    code: Code::NoKnownValenceStates,
+                    category: Category::Valence,
+                    severity: Severity::Warning,
+                    span: atom_span,
+                    message: "No known valence states for element in model",
+                    details: Some(format!("atom_id={}, element={:?}", atom_id, elem)),
+                });
+                continue;
+            }
             let states = states_opt.unwrap();
             if states.is_empty() { continue; }
             let mut chosen: Option<u8> = None;
             for &s in states { if (s as i32) >= total_valence { chosen = Some(s); break; } }
             if chosen.is_none() {
-                artifacts.overflow_count += 1;
-                match cfg.overflow_policy {
+                vann.unknown_valence_atoms.push(atom_id);
+                if let Some(&mx) = states.iter().max() { vann.overflow_amount[i] = Some(total_valence - (mx as i32)); }
+                vann.valence_status[i] = ValenceStatus::OutOfRange;
+                match cfg.out_of_range_policy {
                     ValencePolicy::Off => {}
-                    ValencePolicy::Warn => report.push(Diagnostic {
+                    ValencePolicy::Warn => diagnostics.push(Diagnostic {
                         code: Code::ValenceOutOfElementRange,
                         category: Category::Valence,
                         severity: Severity::Warning,
@@ -418,7 +474,7 @@ pub fn check_valence(
                         message: "Valence exceeds maximum allowed state",
                         details: Some(format!("atom_id={}, total_valence={}", atom_id, total_valence)),
                     }),
-                    ValencePolicy::Error => report.push(Diagnostic {
+                    ValencePolicy::Error => diagnostics.push(Diagnostic {
                         code: Code::ValenceOutOfElementRange,
                         category: Category::Valence,
                         severity: Severity::Error,
@@ -430,16 +486,32 @@ pub fn check_valence(
                 continue;
             }
             let chosen_state = chosen.unwrap() as i32;
+            vann.chosen_valence_state[i] = Some(chosen.unwrap());
             implicit_h_opt = Some(chosen_state - total_valence);
+            vann.source[i] = ValenceSource::Numeric;
         }
         
         let implicit_h = implicit_h_opt.unwrap_or(0);
+        if has_unknown_bond_order_atom[i] {
+            vann.has_unknown_bond_order[i] = true;
+            if vann.valence_status[i] == ValenceStatus::Valid { vann.valence_status[i] = ValenceStatus::UnknownBondOrder; }
+            diagnostics.push(Diagnostic {
+                code: Code::ValenceUnknownBondOrder,
+                category: Category::Valence,
+                severity: Severity::Warning,
+                span: atom_span,
+                message: "Valence assessment may be incomplete due to unknown bond order",
+                details: Some(format!("atom_id={}", atom_id)),
+            });
+        }
         if cfg.check_bracket {
             if let Some(h_explicit) = atom.hydrogen_count {
                 let implied = implicit_h.max(0) as u32;
                 if h_explicit != implied {
-                    artifacts.bracket_mismatch_count += 1;
-                    report.push(Diagnostic {
+                    vann.bracket_mismatch_atoms.push(atom_id);
+                    vann.valence_status[i] = ValenceStatus::BracketMismatch;
+                    vann.required_bracket_h[i] = Some(implied as u8);
+                    diagnostics.push(Diagnostic {
                         code: Code::HcountMismatch,
                         category: Category::Valence,
                         severity: Severity::Error,
@@ -451,10 +523,23 @@ pub fn check_valence(
                         )),
                     });
                 }
+            } else if !cfg.infer_bracket_implicit {
+                let implied = implicit_h.max(0) as u32;
+                if implied > 0 {
+                    vann.required_bracket_h[i] = Some(implied as u8);
+                    diagnostics.push(Diagnostic {
+                        code: Code::MissingBracketH,
+                        category: Category::Valence,
+                        severity: Severity::Warning,
+                        span: atom_span,
+                        message: "Implicit H inferred but bracket H omitted",
+                        details: Some(format!("atom_id={}, implied_H={}", atom_id, implied)),
+                    });
+                }
             }
         }
     }
-    artifacts
+    // done
 }
 
 

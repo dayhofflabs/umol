@@ -1,45 +1,90 @@
 //! Post-parse SMILES checkers: re-exports of category modules
 
-// pub mod aromaticity;
-// pub mod linalg;
-// pub mod stereo_double;
+pub mod aromaticity;
+pub mod stereo_double;
+pub mod stereo_chiral;
 pub mod topology;
 pub mod valence;
 
-// pub use aromaticity::{
-//     check_aromaticity, AromaticityArtifacts, AromaticityConfig, AromaticityMethod, AromaticityModel,
-// };
-// pub use stereo_double::{check_stereo_double, StereoArtifacts};
-// pub use topology::{check_topology, TopologyArtifacts};
-// pub use valence::{
-//     check_valence, ValencePolicy, ValenceArtifacts, ValenceConfig, ValenceModel, ValencePattern,
-//     ValencePatternTable,
-// };
+
 pub use valence::check_valence;
 
 use crate::io::ir::Molecule;
+use crate::io::smiles::checker::aromaticity::check_aromaticity;
+use crate::io::smiles::checker::stereo_double::check_stereo_double;
+use crate::io::smiles::checker::stereo_chiral::check_stereo_chiral;
 use crate::io::smiles::checker::topology::check_topology;
 use crate::io::smiles::checker::valence::{ValenceConfig, ValenceModel};
+use crate::io::smiles::checker::aromaticity::{AromaticityConfig, AromaticityModel};
 use crate::io::smiles::config::{SmilesCheckFlags, SmilesIoConfig, SmilesLintConfig};
 use crate::io::smiles::diagnostics::DiagnosticList;
-use crate::io::smiles::parser::parse_smiles_inner;
+use crate::io::smiles::parser::parse_smiles_core;
 
 pub struct SmilesModels {
     pub valence: ValenceModel,
+    pub aromaticity: AromaticityModel,
 }
 
 impl Default for SmilesModels {
     fn default() -> Self {
         Self {
             valence: ValenceModel::simple_organic(),
+            aromaticity: AromaticityModel::default(),
         }
     }
 }
 
-pub struct TopologyAnnotations;
-pub struct ValenceAnnotations;
+#[derive(Default, Clone)]
+pub struct TopologyAnnotations {
+    pub self_loops: Vec<u32>,                      // bond_ids
+    pub parallel_groups: Vec<(u32, u32, Vec<u32>)>,// (atom_a, atom_b, bond_ids)
+    pub component_id: Vec<u32>,                    // per-atom component index (1-based group id)
+    pub components: Vec<Vec<u32>>,                 // list of components as atom_ids
+    pub bridges: Vec<u32>,                         // bond_ids
+    pub articulation_points: Vec<u32>,             // atom_ids
+    pub is_in_cycle_atom: Vec<bool>,               // length = num_atoms
+    pub is_in_cycle_bond: Vec<bool>,               // length = num_bonds
+}
+#[derive(Default, Clone)]
+pub struct ValenceAnnotations {
+    pub total_valence_observed: Vec<i32>,        // per-atom
+    pub implicit_h_suggested: Vec<Option<u8>>,   // per-atom
+    pub chosen_valence_state: Vec<Option<u8>>,   // per-atom
+    pub unknown_valence_atoms: Vec<u32>,         // atom_ids with unverified/unknown valence state
+    pub bracket_mismatch_atoms: Vec<u32>,        // atom_ids
+    // New neutral per-atom annotations
+    pub valence_status: Vec<ValenceStatus>,      // per-atom final status
+    pub source: Vec<ValenceSource>,              // how the state was chosen
+    pub match_count: Vec<u16>,                   // number of matching patterns
+    pub overflow_amount: Vec<Option<i32>>,       // (total_valence - max_allowed) when out of range
+    pub required_bracket_h: Vec<Option<u8>>,     // implied H if bracket omitted and >0
+    pub has_unknown_bond_order: Vec<bool>,       // incident unknown bond order
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValenceStatus {
+    Valid,
+    NoMatch,
+    Ambiguous,
+    OutOfRange,
+    MissingStates,
+    BracketMismatch,
+    UnknownBondOrder,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValenceSource {
+    Pattern,
+    Numeric,
+}
 pub struct AromaticityAnnotations;
-pub struct StereoAnnotations;
+#[derive(Default, Clone)]
+pub struct StereoAnnotations {
+    pub checked_double_bonds: Vec<u32>,
+    pub candidates: Vec<u32>,
+    pub insufficient: Vec<u32>,
+    pub conflicts: Vec<u32>,
+}
 
 #[derive(Default)]
 pub struct Annotations {
@@ -61,21 +106,41 @@ pub fn check_parsed(
     _lint_config: &SmilesLintConfig,
     models: &SmilesModels,
 ) -> CheckOutput {
-    let mut report = DiagnosticList::new();
-    let annotations = Annotations::default();
+    let mut diagnostics = DiagnosticList::new();
+    let mut annotations = Annotations::default();
     
     // Run topology checks
-    report.extend(check_topology(mol, check_flags));
+    check_topology(mol, check_flags, &mut annotations, &mut diagnostics);
     
     // Run valence checks
     let valence_cfg = ValenceConfig::default();
-    check_valence(mol, &mut report, &models.valence, &valence_cfg);
+    check_valence(
+        mol,
+        check_flags,
+        &mut annotations,
+        &mut diagnostics,
+        &models.valence,
+        &valence_cfg,
+    );
     
-    // TODO: Run stereo checks
-    // check_stereo_double(mol, metadata, &mut report);
+    // Run stereo checks
+    check_stereo_double(mol, check_flags, &mut annotations, &mut diagnostics);
+    check_stereo_chiral(mol, check_flags, &mut annotations, &mut diagnostics);
+    // Run aromaticity checks
+    let arom_cfg = AromaticityConfig::default();
+    check_aromaticity(mol, check_flags, &mut annotations, &mut diagnostics, &models.aromaticity, &arom_cfg);
+    
+    // STRICT mode: upgrade warnings to errors
+    if check_flags.contains(SmilesCheckFlags::STRICT) {
+        for d in diagnostics.diagnostics.iter_mut() {
+            if d.severity == crate::io::smiles::diagnostics::Severity::Warning {
+                d.severity = crate::io::smiles::diagnostics::Severity::Error;
+            }
+        }
+    }
     
     CheckOutput {
-        diagnostics: report,
+        diagnostics,
         annotations,
     }
 }
@@ -91,7 +156,7 @@ pub fn check_smiles_with(
     io_config: &SmilesIoConfig,
     models: &SmilesModels,
 ) -> DiagnosticList {
-    let parse_output = parse_smiles_inner(input, &io_config.parse_flags);
+    let parse_output = parse_smiles_core(input, &io_config.parse_flags);
     match parse_output {
         Ok(parse_output) => {
             let mol = parse_output.sir;
@@ -105,11 +170,7 @@ pub fn check_smiles_with(
             );
             check_output.diagnostics
         }
-        Err(e) => {
-            let mut report = DiagnosticList::new();
-            report.push(e.as_diagnostic(""));
-            report
-        }
+        Err(e) => DiagnosticList::from(e.as_diagnostic("")),
     }
 }
 

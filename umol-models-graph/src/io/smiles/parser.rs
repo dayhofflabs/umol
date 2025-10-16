@@ -165,10 +165,10 @@ pub fn parse_smiles_with<'inp, 'conf>(
                 return Err(ParseError::InvalidWhitespace { pos: start + k });
             }
         }
-        return parse_smiles_inner(&input[start..end], &flags).map(|o| o.sir);
+        return parse_smiles_core(&input[start..end], &flags).map(|o| o.sir);
     }
 
-    parse_smiles_inner(input, &flags).map(|o| o.sir)
+    parse_smiles_core(input, &flags).map(|o| o.sir)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -814,7 +814,7 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-pub fn parse_smiles_inner<'inp, 'fl>(
+pub fn parse_smiles_core<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl SmilesParseFlags,
 ) -> Result<ParseOutput, ParseError> {

@@ -85,6 +85,7 @@ bitflags! {
         const VALENCE = 2;
         const AROMATICITY = 4;
         const STEREO = 8;
+        const STRICT = 16; // convert warnings to errors
 
     // Presets
     const NONE = 0;
