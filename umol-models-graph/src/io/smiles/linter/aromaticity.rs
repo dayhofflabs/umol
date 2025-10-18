@@ -1,8 +1,7 @@
 use super::super::diagnostics::DiagnosticList;
 use crate::io::ir::Molecule;
-use crate::io::smiles::checker::Annotations;
+use crate::io::smiles::linter::Annotations;
 use crate::io::smiles::config::SmilesCheckFlags;
-use nalgebra::{DMatrix, SymmetricEigen};
 use super::super::diagnostics::{Category, Code, Diagnostic, Severity, Span};
 use crate::io::ir::AtomSymbol;
 use umol_data::Element;
@@ -11,8 +10,9 @@ use std::io::Read;
 use std::path::Path;
 use umol::{Error as UmolError, Result as UmolResult};
 use umol::error::ParseError as UmolParseError;
+use nalgebra::{DMatrix, SymmetricEigen};
 
-pub fn check_aromaticity(
+pub fn lint_aromaticity(
     mol: &Molecule,
     check_flags: &SmilesCheckFlags,
     _annotations: &mut Annotations,
@@ -370,3 +370,5 @@ fn clar_stub(pi: &PiGraph) {
     let _ = pi;
     // Placeholder for Clar sextet analysis; to be implemented in a future todo
 }
+
+

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use crate::io::ir::Molecule;
-use crate::io::smiles::checker::Annotations;
+use crate::io::smiles::linter::Annotations;
 use crate::io::smiles::config::SmilesCheckFlags;
 use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, DiagnosticList, Severity, Span};
 
-pub fn check_topology(
+pub fn lint_topology(
     mol: &Molecule,
     check_flags: &SmilesCheckFlags,
     _annotations: &mut Annotations,
@@ -35,15 +35,8 @@ pub fn check_topology(
             });
             continue;
         }
-        let key = if atom1 < atom2 {
-            (atom1, atom2)
-        } else {
-            (atom2, atom1)
-        };
-        edge_mult
-            .entry(key)
-            .and_modify(|ids| ids.push(bond_id))
-            .or_insert_with(|| vec![bond_id]);
+        let key = if atom1 < atom2 { (atom1, atom2) } else { (atom2, atom1) };
+        edge_mult.entry(key).and_modify(|ids| ids.push(bond_id)).or_insert_with(|| vec![bond_id]);
     }
 
     // Parallel edges
@@ -77,3 +70,5 @@ pub fn check_topology(
         }
     }
 }
+
+

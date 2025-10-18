@@ -6,7 +6,7 @@ use umol_data::Element;
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, Span};
+use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, Severity, Span};
 
 #[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -66,7 +66,7 @@ impl ParseError {
         // FIX: Use correct category
         Diagnostic {
             code,
-            severity: crate::io::smiles::diagnostics::Severity::Error,
+            severity: Severity::Error,
             category: Category::Lexical,
             span,
             message,
@@ -114,12 +114,10 @@ impl From<ParseErrorDiscriminants> for Code {
     }
 }
 
-// Note: ring events are now part of IR via Molecule.ring_events
-
 // Parse stage output
 #[derive(Debug, Default, Clone)]
 pub struct ParseOutput {
-    pub sir: Molecule,
+    pub ir: Molecule,
 }
 
 // Public entrypoint for strict OpenSMILES
@@ -165,10 +163,10 @@ pub fn parse_smiles_with<'inp, 'conf>(
                 return Err(ParseError::InvalidWhitespace { pos: start + k });
             }
         }
-        return parse_smiles_core(&input[start..end], &flags).map(|o| o.sir);
+        return parse_smiles_to_ir(&input[start..end], &flags).map(|o| o.ir);
     }
 
-    parse_smiles_core(input, &flags).map(|o| o.sir)
+    parse_smiles_to_ir(input, &flags).map(|o| o.ir)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -814,7 +812,7 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-pub fn parse_smiles_core<'inp, 'fl>(
+pub fn parse_smiles_to_ir<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl SmilesParseFlags,
 ) -> Result<ParseOutput, ParseError> {
@@ -1327,7 +1325,7 @@ pub fn parse_smiles_core<'inp, 'fl>(
     }
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_default();
-    Ok(ParseOutput { sir: mol })
+    Ok(ParseOutput { ir: mol })
 }
 
 #[cfg(test)]

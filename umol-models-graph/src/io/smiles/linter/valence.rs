@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use crate::io::smiles::checker::{Annotations, ValenceAnnotations, ValenceSource, ValenceStatus};
+use crate::io::smiles::linter::{Annotations, ValenceAnnotations, ValenceSource, ValenceStatus};
 use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, DiagnosticList, Severity, Span};
 use crate::io::ir::{AtomSymbol, BondOrder, BondSymbol, Molecule};
 use crate::io::smiles::config::SmilesCheckFlags;
@@ -318,7 +318,7 @@ fn resolve_valence_pattern(
     if let Some(i) = best_idx { let p = tbl.patterns[i]; PatternDecision { implicit_h: p.implicit_h, matches: match_count } } else { PatternDecision::default() }
 }
 
-pub fn check_valence(
+pub fn lint_valence(
     mol: &Molecule,
     check_flags: &SmilesCheckFlags,
     annotations: &mut Annotations,

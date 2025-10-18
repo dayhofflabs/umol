@@ -1,7 +1,7 @@
 use super::super::diagnostics::{Category, Code, DiagnosticList};
 use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::io::ir::{BondOrder};
-use crate::io::smiles::checker::aromaticity::{check_aromaticity, AromaticityConfig, AromaticityModel};
+use crate::io::smiles::linter::aromaticity::{lint_aromaticity, AromaticityConfig, AromaticityModel};
 use umol_data::Element;
 
 fn spanless_atom(element: Element, aromatic: bool) -> AtomData {
@@ -36,7 +36,7 @@ fn aromatic_atom_not_in_ring() {
     let model = AromaticityModel::default();
     let mut diags = DiagnosticList::new();
     let mut ann = super::Annotations::default();
-    check_aromaticity(&mol, &crate::io::smiles::config::SmilesCheckFlags::ALL, &mut ann, &mut diags, &model, &cfg);
+    lint_aromaticity(&mol, &crate::io::smiles::config::SmilesCheckFlags::ALL, &mut ann, &mut diags, &model, &cfg);
     assert!(diags.iter().any(|d| d.code == Code::AromaticAtomNotInRing && d.category == Category::Aromaticity));
 }
 
@@ -53,7 +53,7 @@ fn aromatic_bond_not_in_ring() {
     let model = AromaticityModel::default();
     let mut diags = DiagnosticList::new();
     let mut ann = super::Annotations::default();
-    check_aromaticity(&mol, &crate::io::smiles::config::SmilesCheckFlags::ALL, &mut ann, &mut diags, &model, &cfg);
+    lint_aromaticity(&mol, &crate::io::smiles::config::SmilesCheckFlags::ALL, &mut ann, &mut diags, &model, &cfg);
     assert!(diags.iter().any(|d| d.code == Code::AromaticBondNotInRing));
 }
 

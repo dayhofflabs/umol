@@ -1,8 +1,9 @@
-use super::super::diagnostics::{Category, Code, Diagnostic, DiagnosticList, Severity, Span};
-use crate::io::ir::Molecule;
-use crate::io::smiles::checker::{Annotations, StereoAnnotations};
-use crate::io::smiles::config::SmilesCheckFlags;
 use umol_data::Element;
+
+use super::super::diagnostics::{DiagnosticList, Span};
+use crate::io::ir::Molecule;
+use crate::io::smiles::config::SmilesCheckFlags;
+use crate::io::smiles::linter::{Annotations, StereoAnnotations};
 
 pub struct StereoArtifacts {
     pub checked_double_bonds: usize,
@@ -10,18 +11,27 @@ pub struct StereoArtifacts {
     pub conflict_count: usize,
 }
 
-pub fn check_stereo_double(
+pub fn lint_stereo_double(
     mol: &Molecule,
     check_flags: &SmilesCheckFlags,
     annotations: &mut Annotations,
     diagnostics: &mut DiagnosticList,
 ) {
-    if !check_flags.contains(SmilesCheckFlags::STEREO) { return; }
-    if annotations.stereo.is_none() { annotations.stereo = Some(StereoAnnotations::default()); }
+    if !check_flags.contains(SmilesCheckFlags::STEREO) {
+        return;
+    }
+    if annotations.stereo.is_none() {
+        annotations.stereo = Some(StereoAnnotations::default());
+    }
     let stereo = annotations.stereo.as_mut().unwrap();
     for (bond_id, b) in (1u32..).zip(mol.bonds.iter()) {
-        let is_double = matches!(b.symbol, crate::io::ir::BondSymbol::Bond(crate::io::ir::BondOrder::Double));
-        if !is_double { continue; }
+        let is_double = matches!(
+            b.symbol,
+            crate::io::ir::BondSymbol::Bond(crate::io::ir::BondOrder::Double)
+        );
+        if !is_double {
+            continue;
+        }
         if is_stereogenic_candidate(mol, (bond_id - 1) as usize) {
             stereo.candidates.push(bond_id);
         }
@@ -42,32 +52,48 @@ pub fn check_stereo_double(
 fn is_stereogenic_candidate(mol: &Molecule, bond_idx: usize) -> bool {
     if let Some(b) = mol.bonds.get(bond_idx) {
         use crate::io::ir::{BondOrder, BondSymbol};
-        if !matches!(b.symbol, BondSymbol::Bond(BondOrder::Double)) { return false; }
+        if !matches!(b.symbol, BondSymbol::Bond(BondOrder::Double)) {
+            return false;
+        }
         let a = (b.start_atom as usize).saturating_sub(1);
         let c = (b.end_atom as usize).saturating_sub(1);
         let n_atoms = mol.atoms.len();
-        if a >= n_atoms || c >= n_atoms { return false; }
+        if a >= n_atoms || c >= n_atoms {
+            return false;
+        }
         let mut neigh_a: Vec<u32> = Vec::new();
         let mut neigh_c: Vec<u32> = Vec::new();
         for bb in &mol.bonds {
-            if bb.start_atom == b.start_atom && bb.end_atom != b.end_atom { neigh_a.push(bb.end_atom); }
-            if bb.end_atom == b.start_atom && bb.start_atom != b.end_atom { neigh_a.push(bb.start_atom); }
-            if bb.start_atom == b.end_atom && bb.end_atom != b.start_atom { neigh_c.push(bb.end_atom); }
-            if bb.end_atom == b.end_atom && bb.start_atom != b.start_atom { neigh_c.push(bb.start_atom); }
+            if bb.start_atom == b.start_atom && bb.end_atom != b.end_atom {
+                neigh_a.push(bb.end_atom);
+            }
+            if bb.end_atom == b.start_atom && bb.start_atom != b.end_atom {
+                neigh_a.push(bb.start_atom);
+            }
+            if bb.start_atom == b.end_atom && bb.end_atom != b.start_atom {
+                neigh_c.push(bb.end_atom);
+            }
+            if bb.end_atom == b.end_atom && bb.start_atom != b.start_atom {
+                neigh_c.push(bb.start_atom);
+            }
         }
         // Remove hydrogens from consideration (by element)
         let is_h = |id: u32| -> bool {
             let idx = (id as usize).saturating_sub(1);
             if let Some(atom) = mol.atoms.get(idx) {
-                if let crate::io::ir::AtomSymbol::Element(el) = atom.symbol { return el == Element::H; }
+                if let crate::io::ir::AtomSymbol::Element(el) = atom.symbol {
+                    return el == Element::H;
+                }
             }
             false
         };
         neigh_a.retain(|&id| id != b.end_atom && !is_h(id));
         neigh_c.retain(|&id| id != b.start_atom && !is_h(id));
         // Distinctness by atom id (cheap placeholder; full CIP not implemented here)
-        let distinct_a = neigh_a.len() >= 2 && (neigh_a[0] != *neigh_a.get(1).unwrap_or(&neigh_a[0]));
-        let distinct_c = neigh_c.len() >= 2 && (neigh_c[0] != *neigh_c.get(1).unwrap_or(&neigh_c[0]));
+        let distinct_a =
+            neigh_a.len() >= 2 && (neigh_a[0] != *neigh_a.get(1).unwrap_or(&neigh_a[0]));
+        let distinct_c =
+            neigh_c.len() >= 2 && (neigh_c[0] != *neigh_c.get(1).unwrap_or(&neigh_c[0]));
         return distinct_a && distinct_c;
     }
     false

@@ -1,10 +1,10 @@
 use super::super::diagnostics::{Category, Code, Diagnostic, DiagnosticList, Severity, Span};
 use crate::io::ir::{AtomSymbol, Molecule};
-use crate::io::smiles::checker::{Annotations, StereoAnnotations};
+use crate::io::smiles::linter::{Annotations, StereoAnnotations};
 use crate::io::smiles::config::SmilesCheckFlags;
 use umol_data::Element;
 
-pub fn check_stereo_chiral(
+pub fn lint_stereo_chiral(
     mol: &Molecule,
     check_flags: &SmilesCheckFlags,
     annotations: &mut Annotations,
@@ -67,7 +67,6 @@ pub fn check_stereo_chiral(
 }
 
 fn degree(mol: &Molecule, atom_id: u32) -> usize {
-    let idx = (atom_id as usize).saturating_sub(1);
     let mut d = 0usize;
     for b in &mol.bonds {
         if b.start_atom == atom_id || b.end_atom == atom_id { d += 1; }
@@ -95,3 +94,5 @@ fn is_potentially_stereogenic_atom(mol: &Molecule, atom_id: u32) -> bool {
     neigh.sort_unstable(); neigh.dedup();
     neigh.len() >= 3
 }
+
+
