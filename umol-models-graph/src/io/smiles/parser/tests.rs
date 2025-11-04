@@ -4,7 +4,7 @@ use umol_data::Element;
 
 use self::utils::build_from_graph;
 use super::*;
-use crate::io::ir::{AtomSymbol, BondDir, BondSymbol, Chirality};
+use crate::simple_ir::{AtomSymbol, BondDir, BondSymbol, Chirality};
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -550,7 +550,7 @@ fn bracket(
     assert_eq!(a.aromatic, Some(aromatic));
     assert_eq!(a.isotope, isotope);
     assert_eq!(a.chirality, chirality);
-    assert_eq!(a.hydrogen_count, hcount);
+    assert_eq!(a.hydrogens, hcount);
     assert_eq!(a.charge, charge);
     assert_eq!(a.class, class_);
 }
@@ -784,7 +784,7 @@ fn wildcard(
     assert!(matches!(a.symbol, AtomSymbol::Unknown));
     assert_eq!(a.isotope, Some(0));
     assert_eq!(a.charge, Some(0));
-    assert_eq!(a.hydrogen_count, Some(0));
+    assert_eq!(a.hydrogens, Some(0));
     assert_eq!(a.aromatic, Some(aromatic));
     assert_eq!(a.implicit_h, false);
     if has_bonds {

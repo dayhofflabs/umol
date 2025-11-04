@@ -34,7 +34,7 @@ where
 impl<M1: Model, M2: Model> Default for ConversionOperation<M1, M2>
 where
     M1: ConvertTo<M2>,
- {
+{
     fn default() -> Self {
         Self::new()
     }

@@ -12,11 +12,11 @@ use super::convert::{
     convert_radical_type_code, convert_ring_bond_count_code, convert_substitution_count_code,
     convert_unsaturated_atom_code,
 };
-use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::atom::{
     AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, RingBondCount,
     SubstitutionCount, UnsaturatedAtom,
 };
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::molecule::{Molecule, MoleculeLike};
 use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry};
 use crate::io::ctab::rgroup::{RGroup, RGroupOccurrence};
@@ -614,7 +614,11 @@ impl MoleculeProperties {
     }
 
     /// Apply all properties to Molecule
-    pub fn update_molecule(&mut self, molecule: &mut Molecule, flags: CtabParseFlags) -> Result<()> {
+    pub fn update_molecule(
+        &mut self,
+        molecule: &mut Molecule,
+        flags: CtabParseFlags,
+    ) -> Result<()> {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
         for (atom_index, props) in &self.atom_properties {
             if props.alias.is_some() {

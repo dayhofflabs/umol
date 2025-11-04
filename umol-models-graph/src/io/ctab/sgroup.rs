@@ -86,7 +86,7 @@ pub struct SGroupConnectingBond {
 pub enum SGroupBracketStyle {
     #[default]
     Default, // 0 = default brackets
-    Curved,  // 1 = curved (parenthetic) brackets
+    Curved, // 1 = curved (parenthetic) brackets
 }
 
 /// SGroup data type

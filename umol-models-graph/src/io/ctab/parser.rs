@@ -90,10 +90,7 @@ pub fn ctab_block<'inp, 'fl>(
 fn counts_block<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = Counts, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
-    map_parser(
-        terminated(is_not("\r\n"), line_ending),
-        counts_input(flags),
-    )
+    map_parser(terminated(is_not("\r\n"), line_ending), counts_input(flags))
 }
 
 /// Parse atom block (basic atoms only)

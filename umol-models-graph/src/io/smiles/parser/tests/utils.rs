@@ -1,10 +1,13 @@
 //! Utilities for SMILES parser tests.
 
+use std::collections::HashMap;
+
 use regex::Regex;
 use umol_data::Element;
 
-use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
-use crate::io::ir::{BondDir, BondOrder, Molecule, Ring};
+use crate::simple_ir::builder::{AtomData, BondData, MoleculeBuilder};
+use crate::simple_ir::{BondDir, BondOrder, Molecule, Ring};
+use crate::span::Span;
 
 fn parse_atom_token(tok: &str) -> (Element, bool, Option<u32>, Option<u32>) {
     // Asterisk denotes aromatic variant of the organic subset: C*, N*, O*, P*, S*, B*, ...
@@ -23,7 +26,16 @@ fn parse_atom_token(tok: &str) -> (Element, bool, Option<u32>, Option<u32>) {
     (el, aromatic, start, end)
 }
 
-fn parse_bond_token(tok: &str) -> (usize, usize, BondOrder, Option<BondDir>, Option<u32>, Option<u32>) {
+fn parse_bond_token(
+    tok: &str,
+) -> (
+    usize,
+    usize,
+    BondOrder,
+    Option<BondDir>,
+    Option<u32>,
+    Option<u32>,
+) {
     // Token forms:
     //   i-j
     //   i-j:<spec> where spec in -,=,#,$,:,/,\
@@ -84,7 +96,6 @@ pub fn build_from_graph(spec: &str) -> Molecule {
     // map of insertion index to atom id is identity by construction; still collect ids
     let mut ids: Vec<u32> = Vec::with_capacity(atoms.len());
     // Keep a map from atom span_start -> span_end for bond defaulting
-    use std::collections::HashMap;
     let mut atom_span_map: HashMap<u32, u32> = HashMap::new();
 
     for tok in atoms {
@@ -92,7 +103,9 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         if end.is_none() {
             if let Some(s) = start {
                 // Default width: aromatic tokens are 1 byte; aliphatic Cl/Br are 2; others 1
-                let w: u32 = if arom { 1 } else {
+                let w: u32 = if arom {
+                    1
+                } else {
                     match el {
                         Element::Cl | Element::Br => 2,
                         _ => 1,
@@ -111,10 +124,11 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             class: None,
             chirality: None,
             unknown_symbol: false,
-            span_start: start,
-            span_end: end,
+            span: Span::from_bytes_opt(start, end),
         });
-        if let (Some(s), Some(e)) = (start, end) { atom_span_map.insert(s, e); }
+        if let (Some(s), Some(e)) = (start, end) {
+            atom_span_map.insert(s, e);
+        }
         ids.push(id);
     }
     for etok in edges {
@@ -130,8 +144,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             BondData {
                 order,
                 dir,
-                span_start,
-                span_end,
+                span: Span::from_bytes_opt(span_start, span_end),
             },
         );
     }
@@ -169,18 +182,68 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                     // parse start
                     let mut num = String::new();
                     while let Some(c) = chars.peek() {
-                        if c.is_ascii_digit() { num.push(*c); chars.next(); } else { break; }
+                        if c.is_ascii_digit() {
+                            num.push(*c);
+                            chars.next();
+                        } else {
+                            break;
+                        }
                     }
-                    if !num.is_empty() { open_start = Some(num.parse::<u32>().expect("open start")); }
+                    if !num.is_empty() {
+                        open_start = Some(num.parse::<u32>().expect("open start"));
+                    }
                     // optional ..end
-                    if chars.peek() == Some(&'.') { chars.next(); if chars.peek() == Some(&'.') { chars.next(); let mut num2 = String::new(); while let Some(c) = chars.peek() { if c.is_ascii_digit() { num2.push(*c); chars.next(); } else { break; } } if !num2.is_empty() { open_end = Some(num2.parse::<u32>().expect("open end")); } } }
+                    if chars.peek() == Some(&'.') {
+                        chars.next();
+                        if chars.peek() == Some(&'.') {
+                            chars.next();
+                            let mut num2 = String::new();
+                            while let Some(c) = chars.peek() {
+                                if c.is_ascii_digit() {
+                                    num2.push(*c);
+                                    chars.next();
+                                } else {
+                                    break;
+                                }
+                            }
+                            if !num2.is_empty() {
+                                open_end = Some(num2.parse::<u32>().expect("open end"));
+                            }
+                        }
+                    }
                 }
                 if chars.peek() == Some(&'-') {
                     chars.next();
                     let mut num = String::new();
-                    while let Some(c) = chars.peek() { if c.is_ascii_digit() { num.push(*c); chars.next(); } else { break; } }
-                    if !num.is_empty() { close_start = Some(num.parse::<u32>().expect("close start")); }
-                    if chars.peek() == Some(&'.') { chars.next(); if chars.peek() == Some(&'.') { chars.next(); let mut num2 = String::new(); while let Some(c) = chars.peek() { if c.is_ascii_digit() { num2.push(*c); chars.next(); } else { break; } } if !num2.is_empty() { close_end = Some(num2.parse::<u32>().expect("close end")); } } }
+                    while let Some(c) = chars.peek() {
+                        if c.is_ascii_digit() {
+                            num.push(*c);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    if !num.is_empty() {
+                        close_start = Some(num.parse::<u32>().expect("close start"));
+                    }
+                    if chars.peek() == Some(&'.') {
+                        chars.next();
+                        if chars.peek() == Some(&'.') {
+                            chars.next();
+                            let mut num2 = String::new();
+                            while let Some(c) = chars.peek() {
+                                if c.is_ascii_digit() {
+                                    num2.push(*c);
+                                    chars.next();
+                                } else {
+                                    break;
+                                }
+                            }
+                            if !num2.is_empty() {
+                                close_end = Some(num2.parse::<u32>().expect("close end"));
+                            }
+                        }
+                    }
                 }
                 // Parse right: a-b (either side may be empty)
                 let (a_opt, b_opt) = if right.is_empty() {
@@ -204,19 +267,27 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                 let atom_a = a_opt.map(|ai| ids[ai]);
                 let atom_b = b_opt.map(|bi| ids[bi]);
                 // Default ends if positions are provided without ends
-                if open_end.is_none() { if let Some(s) = open_start { open_end = Some(s + 1); } }
-                if close_end.is_none() { if let Some(s) = close_start { close_end = Some(s + 1); } }
+                if open_end.is_none() {
+                    if let Some(s) = open_start {
+                        open_end = Some(s + 1);
+                    }
+                }
+                if close_end.is_none() {
+                    if let Some(s) = close_start {
+                        close_end = Some(s + 1);
+                    }
+                }
                 rings.push(Ring {
                     ring_idx,
+                    start_atom: atom_a,
+                    end_atom: atom_b,
                     open_start,
                     close_start,
-                    atom_a,
-                    atom_b,
                     open_end,
                     close_end,
                 });
             }
-            mol.ring_events = rings;
+            mol.rings = rings;
         }
     }
 

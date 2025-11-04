@@ -117,8 +117,8 @@ impl BondStereo {
 /// Single bond wedging specified in MOL V2000 files.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondDir {
-    Wedge,  // MOL code 1 (Up / Begin Wedge)
-    Dash,   // MOL code 6 (Down / Begin Dash)
+    Wedge, // MOL code 1 (Up / Begin Wedge)
+    Dash,  // MOL code 6 (Down / Begin Dash)
     #[default]
     Either, // MOL code 4 (Either)
 }
@@ -132,8 +132,8 @@ impl BondDir {
 /// Bond topology (chain, ring, either), if specified.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondTopology {
-    Chain,  // MOL code 2
-    Ring,   // MOL code 1
+    Chain, // MOL code 2
+    Ring,  // MOL code 1
     #[default]
     Either, // MOL code 0 (default/unspecified)
 }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RGroupOccurrence {
     Exactly(u8),
-    Range(u8, u8),   // Inclusive
+    Range(u8, u8), // Inclusive
     GreaterThan(u8),
     FewerThan(u8),
 }

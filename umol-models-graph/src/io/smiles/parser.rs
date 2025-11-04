@@ -3,10 +3,11 @@
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
-use crate::io::ir::builder::{AtomData, BondData, MoleculeBuilder};
-use crate::io::ir::{BondDir, BondOrder, Chirality, Molecule};
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, Severity, Span};
+use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, Severity};
+use crate::simple_ir::builder::{AtomData, BondData, MoleculeBuilder};
+use crate::simple_ir::{BondDir, BondOrder, Chirality, Molecule};
+use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -61,7 +62,7 @@ impl ParseError {
     pub fn as_diagnostic(&self, input: &str) -> Diagnostic {
         let discriminant: ParseErrorDiscriminants = self.into();
         let code: Code = discriminant.into();
-        let span = Span::new(0, input.len());
+        let span = Span::bytes(0, input.len() as u32);
         let message = "Parse error";
         // FIX: Use correct category
         Diagnostic {
@@ -163,10 +164,10 @@ pub fn parse_smiles_with<'inp, 'conf>(
                 return Err(ParseError::InvalidWhitespace { pos: start + k });
             }
         }
-        return parse_smiles_to_ir(&input[start..end], &flags).map(|o| o.ir);
+        return parse_smiles_to_sir(&input[start..end], &flags).map(|o| o.ir);
     }
 
-    parse_smiles_to_ir(input, &flags).map(|o| o.ir)
+    parse_smiles_to_sir(input, &flags).map(|o| o.ir)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -264,7 +265,15 @@ fn process_ring_closure(
                 open_end: token_end,
                 open_aromatic: last_aromatic,
             });
-            let (start, end, aid) = if no_meta { (None, None, None) } else { (Some(pos as u32), Some(token_end as u32), Some(last_atom_idx)) };
+            let (start, end, aid) = if no_meta {
+                (None, None, None)
+            } else {
+                (
+                    Some(pos as u32),
+                    Some(token_end as u32),
+                    Some(last_atom_idx),
+                )
+            };
             builder.on_ring_open(idx as u32, start, end, aid);
         }
         Some(open) => {
@@ -310,18 +319,25 @@ fn process_ring_closure(
             if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
                 final_order = BondOrder::Aromatic;
             }
-            let (bs, be) = if no_meta { (None, None) } else { (Some(open.open_pos as u32), Some(open.open_end as u32)) };
+            let (bs, be) = if no_meta {
+                (None, None)
+            } else {
+                (Some(open.open_pos as u32), Some(open.open_end as u32))
+            };
             builder.on_bond(
                 a,
                 b,
                 BondData {
                     order: final_order,
                     dir: final_dir,
-                    span_start: bs,
-                    span_end: be,
+                    span: Span::from_bytes_opt(bs, be),
                 },
             );
-            let (start, end, aid) = if no_meta { (None, None, None) } else { (Some(pos as u32), Some(token_end as u32), Some(b)) };
+            let (start, end, aid) = if no_meta {
+                (None, None, None)
+            } else {
+                (Some(pos as u32), Some(token_end as u32), Some(b))
+            };
             builder.on_ring_close(idx as u32, start, end, aid);
         }
     }
@@ -392,44 +408,44 @@ fn parse_organic_aromatic_element(input: &[u8], i: usize) -> Option<(Element, us
 }
 
 #[inline]
-fn parse_bracket_aliphatic_element(inner: &[u8], i: usize) -> Option<(Element, usize)> {
+fn parse_bracket_aliphatic_element(input: &[u8], i: usize) -> Option<(Element, usize)> {
     // Only allow uppercase-starting symbols for aliphatic branch
-    let n = inner.len();
-    if i >= n || !inner[i].is_ascii_uppercase() {
+    let n = input.len();
+    if i >= n || !input[i].is_ascii_uppercase() {
         return None;
     }
-    if i + 1 < n && inner[i + 1].is_ascii_lowercase() {
-        if let Some(e) = Element::from_symbol_bytes(&inner[i..i + 2]) {
+    if i + 1 < n && input[i + 1].is_ascii_lowercase() {
+        if let Some(e) = Element::from_symbol_bytes(&input[i..i + 2]) {
             return Some((e, 2));
         }
     }
-    if let Some(e) = Element::from_symbol_bytes(&inner[i..i + 1]) {
+    if let Some(e) = Element::from_symbol_bytes(&input[i..i + 1]) {
         return Some((e, 1));
     }
     None
 }
 
 #[inline]
-fn parse_bracket_aromatic_element(inner: &[u8], i: usize) -> Option<(Element, usize)> {
-    let n = inner.len();
+fn parse_bracket_aromatic_element(input: &[u8], i: usize) -> Option<(Element, usize)> {
+    let n = input.len();
     if i >= n {
         return None;
     }
-    match inner[i] {
+    match input[i] {
         b'b' => Some((Element::B, 1)),
         b'c' => Some((Element::C, 1)),
         b'n' => Some((Element::N, 1)),
         b'o' => Some((Element::O, 1)),
         b'p' => Some((Element::P, 1)),
         b's' => {
-            if i + 1 < n && inner[i + 1] == b'e' {
+            if i + 1 < n && input[i + 1] == b'e' {
                 Some((Element::Se, 2))
             } else {
                 Some((Element::S, 1))
             }
         }
         b'a' => {
-            if i + 1 < n && inner[i + 1] == b's' {
+            if i + 1 < n && input[i + 1] == b's' {
                 Some((Element::As, 2))
             } else {
                 None
@@ -454,14 +470,14 @@ fn parse_u32(input: &[u8], mut i: usize, max_digits: usize) -> (u32, usize, usiz
 }
 
 #[inline]
-fn parse_charge(inner: &[u8], i: usize, sign_char: u8) -> (i32, usize) {
-    let n = inner.len();
+fn parse_charge(input: &[u8], i: usize, sign_char: u8) -> (i32, usize) {
+    let n = input.len();
     let sign = if sign_char == b'+' { 1 } else { -1 };
     let j = i + 1;
-    if j < n && inner[j] == sign_char {
+    if j < n && input[j] == sign_char {
         return (2 * sign, j + 1);
     }
-    let (mut val, j2, cnt) = parse_u32(inner, j, 2);
+    let (mut val, j2, cnt) = parse_u32(input, j, 2);
     if cnt == 0 {
         val = 1;
     }
@@ -469,35 +485,35 @@ fn parse_charge(inner: &[u8], i: usize, sign_char: u8) -> (i32, usize) {
 }
 
 #[inline]
-fn parse_class_index(inner: &[u8], i: usize, pos_base: usize) -> Result<(u32, usize), ParseError> {
-    let n = inner.len();
-    if i + 1 >= n || !inner[i + 1].is_ascii_digit() {
+fn parse_class_index(input: &[u8], i: usize, pos_base: usize) -> Result<(u32, usize), ParseError> {
+    let n = input.len();
+    if i + 1 >= n || !input[i + 1].is_ascii_digit() {
         return Err(ParseError::MissingClassIndex {
             pos: pos_in_bracket(pos_base, i),
         });
     }
-    let (v, j, _) = parse_u32(inner, i + 1, 10);
+    let (v, j, _) = parse_u32(input, i + 1, 10);
     Ok((v, j))
 }
 
 #[inline]
 fn parse_chirality(
-    inner: &[u8],
+    input: &[u8],
     i: usize,
     pos_base: usize,
 ) -> Result<(Option<Chirality>, usize), ParseError> {
-    let n = inner.len();
+    let n = input.len();
     let k = i;
-    if k + 1 < n && inner[k + 1] == b'@' {
+    if k + 1 < n && input[k + 1] == b'@' {
         return Ok((Some(Chirality::CounterClockwise), k + 2));
     }
-    if k + 2 < n && inner[k + 1] == b'T' && inner[k + 2] == b'H' {
-        if k + 3 >= n || !inner[k + 3].is_ascii_digit() {
+    if k + 2 < n && input[k + 1] == b'T' && input[k + 2] == b'H' {
+        if k + 3 >= n || !input[k + 3].is_ascii_digit() {
             return Err(ParseError::MissingChiralityIndex {
                 pos: pos_in_bracket(pos_base, k),
             });
         }
-        let v = (inner[k + 3] - b'0') as u32;
+        let v = (input[k + 3] - b'0') as u32;
         if v == 1 || v == 2 {
             return Ok((Some(Chirality::Tetrahedral { arr: v }), k + 4));
         }
@@ -505,13 +521,13 @@ fn parse_chirality(
             pos: pos_in_bracket(pos_base, k),
         });
     }
-    if k + 2 < n && inner[k + 1] == b'A' && inner[k + 2] == b'L' {
-        if k + 3 >= n || !inner[k + 3].is_ascii_digit() {
+    if k + 2 < n && input[k + 1] == b'A' && input[k + 2] == b'L' {
+        if k + 3 >= n || !input[k + 3].is_ascii_digit() {
             return Err(ParseError::MissingChiralityIndex {
                 pos: pos_in_bracket(pos_base, k),
             });
         }
-        let v = (inner[k + 3] - b'0') as u32;
+        let v = (input[k + 3] - b'0') as u32;
         if v == 1 || v == 2 {
             return Ok((Some(Chirality::Allenal { arr: v }), k + 4));
         }
@@ -519,13 +535,13 @@ fn parse_chirality(
             pos: pos_in_bracket(pos_base, k),
         });
     }
-    if k + 2 < n && inner[k + 1] == b'S' && inner[k + 2] == b'P' {
-        if k + 3 >= n || !inner[k + 3].is_ascii_digit() {
+    if k + 2 < n && input[k + 1] == b'S' && input[k + 2] == b'P' {
+        if k + 3 >= n || !input[k + 3].is_ascii_digit() {
             return Err(ParseError::MissingChiralityIndex {
                 pos: pos_in_bracket(pos_base, k),
             });
         }
-        let v = (inner[k + 3] - b'0') as u32;
+        let v = (input[k + 3] - b'0') as u32;
         if (1..=3).contains(&v) {
             return Ok((Some(Chirality::SquarePlanar { arr: v }), k + 4));
         }
@@ -533,8 +549,8 @@ fn parse_chirality(
             pos: pos_in_bracket(pos_base, k),
         });
     }
-    if k + 2 < n && inner[k + 1] == b'T' && inner[k + 2] == b'B' {
-        let (v, j, cnt) = parse_u32(inner, k + 3, 2);
+    if k + 2 < n && input[k + 1] == b'T' && input[k + 2] == b'B' {
+        let (v, j, cnt) = parse_u32(input, k + 3, 2);
         if cnt == 0 {
             return Err(ParseError::MissingChiralityIndex {
                 pos: pos_in_bracket(pos_base, k),
@@ -547,8 +563,8 @@ fn parse_chirality(
             pos: pos_in_bracket(pos_base, k),
         });
     }
-    if k + 2 < n && inner[k + 1] == b'O' && inner[k + 2] == b'H' {
-        let (v, j, cnt) = parse_u32(inner, k + 3, 2);
+    if k + 2 < n && input[k + 1] == b'O' && input[k + 2] == b'H' {
+        let (v, j, cnt) = parse_u32(input, k + 3, 2);
         if cnt == 0 {
             return Err(ParseError::MissingChiralityIndex {
                 pos: pos_in_bracket(pos_base, k),
@@ -583,22 +599,41 @@ fn attach_atom(
 ) {
     if let Some(last) = last_atom_idx {
         if let Some((order, dir, pos)) = pending_bond.take() {
-            let (s, e) = if include_metadata { (Some(pos as u32), Some((pos as u32)+1)) } else { (None, None) };
-            builder.on_bond(last, curr_atom_idx, BondData { order, dir, span_start: s, span_end: e });
+            let (s, e) = if include_metadata {
+                (Some(pos as u32), Some((pos as u32) + 1))
+            } else {
+                (None, None)
+            };
+            builder.on_bond(
+                last,
+                curr_atom_idx,
+                BondData {
+                    order,
+                    dir,
+                    span: Span::from_bytes_opt(s, e),
+                },
+            );
         } else if last_aromatic && curr_aromatic {
-            let (s, e) = if include_metadata { (Some(curr_atom_start), Some(curr_atom_end)) } else { (None, None) };
+            let (s, e) = if include_metadata {
+                (Some(curr_atom_start), Some(curr_atom_end))
+            } else {
+                (None, None)
+            };
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order: BondOrder::Aromatic,
                     dir: None,
-                    span_start: s,
-                    span_end: e,
+                    span: Span::from_bytes_opt(s, e),
                 },
             );
         } else {
-            let (s, e) = if include_metadata { (Some(curr_atom_start), Some(curr_atom_end)) } else { (None, None) };
+            let (s, e) = if include_metadata {
+                (Some(curr_atom_start), Some(curr_atom_end))
+            } else {
+                (None, None)
+            };
             builder.on_bond_single_fast(last, curr_atom_idx, s, e);
         };
     }
@@ -620,7 +655,7 @@ fn parse_bond(b: u8) -> (BondOrder, Option<BondDir>) {
 
 #[inline]
 fn parse_bracket(
-    inner: &[u8],
+    input: &[u8],
     pos_offset: usize,
 ) -> Result<
     (
@@ -635,18 +670,18 @@ fn parse_bracket(
     ),
     ParseError,
 > {
-    let n = inner.len();
+    let n = input.len();
     let mut i = 0usize;
 
     // 1) Optional isotope (one or more digits)
     let mut isotope: Option<u32> = None;
     let start_digits = i;
-    while i < n && inner[i].is_ascii_digit() {
+    while i < n && input[i].is_ascii_digit() {
         i += 1;
     }
     if i > start_digits {
         let mut v: u32 = 0;
-        for &b in &inner[start_digits..i] {
+        for &b in &input[start_digits..i] {
             v = v.saturating_mul(10).saturating_add((b - b'0') as u32);
         }
         isotope = Some(v);
@@ -656,16 +691,16 @@ fn parse_bracket(
     let element: Option<Element>;
     let mut aromatic = false;
     let mut unknown_symbol = false;
-    if i < n && inner[i] == b'*' {
+    if i < n && input[i] == b'*' {
         element = None;
         unknown_symbol = true;
         i += 1;
-    } else if i < n && inner[i].is_ascii_alphabetic() {
-        if let Some((e, consumed)) = parse_bracket_aliphatic_element(inner, i) {
+    } else if i < n && input[i].is_ascii_alphabetic() {
+        if let Some((e, consumed)) = parse_bracket_aliphatic_element(input, i) {
             element = Some(e);
             i += consumed;
             aromatic = false;
-        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(inner, i) {
+        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(input, i) {
             element = Some(e);
             i += consumed;
             aromatic = true;
@@ -688,7 +723,7 @@ fn parse_bracket(
     let mut chir: Option<Chirality> = None;
 
     while i < n {
-        let b0 = inner[i];
+        let b0 = input[i];
         match b0 {
             b'H' => {
                 if element == Some(Element::H) {
@@ -702,8 +737,8 @@ fn parse_bracket(
                     });
                 }
                 let mut val: u32 = 1; // default H
-                if i + 1 < n && inner[i + 1].is_ascii_digit() {
-                    val = (inner[i + 1] - b'0') as u32;
+                if i + 1 < n && input[i + 1].is_ascii_digit() {
+                    val = (input[i + 1] - b'0') as u32;
                     i += 1;
                 }
                 hcount = Some(val);
@@ -715,7 +750,7 @@ fn parse_bracket(
                         pos: pos_offset + 1 + i,
                     });
                 }
-                let (val, j2) = parse_charge(inner, i, b0);
+                let (val, j2) = parse_charge(input, i, b0);
                 charge = Some(val);
                 i = j2;
             }
@@ -725,7 +760,7 @@ fn parse_bracket(
                         pos: pos_offset + 1 + i,
                     });
                 }
-                let (v, j2) = parse_class_index(inner, i, pos_offset)?;
+                let (v, j2) = parse_class_index(input, i, pos_offset)?;
                 class_num = Some(v);
                 i = j2;
             }
@@ -735,7 +770,7 @@ fn parse_bracket(
                         pos: pos_offset + 1 + i,
                     });
                 }
-                let (chir_opt, j2) = parse_chirality(inner, i, pos_offset)?;
+                let (chir_opt, j2) = parse_chirality(input, i, pos_offset)?;
                 chir = chir_opt;
                 i = j2;
             }
@@ -812,7 +847,7 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
     n
 }
 
-pub fn parse_smiles_to_ir<'inp, 'fl>(
+pub fn parse_smiles_to_sir<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl SmilesParseFlags,
 ) -> Result<ParseOutput, ParseError> {
@@ -1044,7 +1079,11 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 Some(e) => (e, aromatic),
                 None => (Element::C, false),
             };
-            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((j) as u32)) };
+            let (s, e) = if no_meta {
+                (None, None)
+            } else {
+                (Some(i as u32), Some((j) as u32))
+            };
             let atom = AtomData {
                 element,
                 isotope: iso_opt,
@@ -1055,11 +1094,10 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 implicit_h: false,
                 chirality: chir_opt,
                 unknown_symbol: unknown,
-                span_start: s,
-                span_end: e,
+                span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
-            
+
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1085,9 +1123,13 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
-                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+2) as u32)) };
-                let curr = builder.on_atom_fast(Element::Cl, true, false, s, e);
-                
+                let (s, e) = if no_meta {
+                    (None, None)
+                } else {
+                    (Some(i as u32), Some((i + 2) as u32))
+                };
+                let curr = builder.on_atom_fast(Element::Cl, false, s, e);
+
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1096,8 +1138,8 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
-                (i+2) as u32,
-                !no_meta,
+                    (i + 2) as u32,
+                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1111,9 +1153,13 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+1) as u32)) };
-            let curr = builder.on_atom_fast(Element::C, true, false, s, e);
-            
+            let (s, e) = if no_meta {
+                (None, None)
+            } else {
+                (Some(i as u32), Some((i + 1) as u32))
+            };
+            let curr = builder.on_atom_fast(Element::C, false, s, e);
+
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1122,7 +1168,7 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 last_aromatic,
                 false,
                 i as u32,
-                (i+1) as u32,
+                (i + 1) as u32,
                 !no_meta,
             );
             last_atom_idx = Some(curr);
@@ -1139,9 +1185,13 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
-                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+2) as u32)) };
-                let curr = builder.on_atom_fast(Element::Br, true, false, s, e);
-                
+                let (s, e) = if no_meta {
+                    (None, None)
+                } else {
+                    (Some(i as u32), Some((i + 2) as u32))
+                };
+                let curr = builder.on_atom_fast(Element::Br, false, s, e);
+
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1150,8 +1200,8 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
-                (i+2) as u32,
-                !no_meta,
+                    (i + 2) as u32,
+                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1165,9 +1215,13 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 i += 2;
                 continue;
             }
-            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+1) as u32)) };
-            let curr = builder.on_atom_fast(Element::B, true, false, s, e);
-            
+            let (s, e) = if no_meta {
+                (None, None)
+            } else {
+                (Some(i as u32), Some((i + 1) as u32))
+            };
+            let curr = builder.on_atom_fast(Element::B, false, s, e);
+
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1176,7 +1230,7 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 last_aromatic,
                 false,
                 i as u32,
-                (i+1) as u32,
+                (i + 1) as u32,
                 !no_meta,
             );
             last_atom_idx = Some(curr);
@@ -1194,9 +1248,13 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
         // Elements
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
-                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+consumed) as u32)) };
-                let curr = builder.on_atom_fast(element, true, false, s, e);
-                
+                let (s, e) = if no_meta {
+                    (None, None)
+                } else {
+                    (Some(i as u32), Some((i + consumed) as u32))
+                };
+                let curr = builder.on_atom_fast(element, false, s, e);
+
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1205,8 +1263,8 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                     last_aromatic,
                     false,
                     i as u32,
-                (i+consumed) as u32,
-                !no_meta,
+                    (i + consumed) as u32,
+                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -1221,9 +1279,13 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
-                let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+consumed) as u32)) };
-                let curr = builder.on_atom_fast(element, true, true, s, e);
-                
+                let (s, e) = if no_meta {
+                    (None, None)
+                } else {
+                    (Some(i as u32), Some((i + consumed) as u32))
+                };
+                let curr = builder.on_atom_fast(element, true, s, e);
+
                 attach_atom(
                     &mut builder,
                     last_atom_idx,
@@ -1232,8 +1294,8 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                     last_aromatic,
                     true,
                     i as u32,
-                (i+consumed) as u32,
-                !no_meta,
+                    (i + consumed) as u32,
+                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = true;
@@ -1250,7 +1312,11 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
             return Err(ParseError::InvalidElement { pos: i });
         }
         if b0 == b'*' {
-            let (s, e) = if no_meta { (None, None) } else { (Some(i as u32), Some((i+1) as u32)) };
+            let (s, e) = if no_meta {
+                (None, None)
+            } else {
+                (Some(i as u32), Some((i + 1) as u32))
+            };
             let atom = AtomData {
                 element: Element::C,
                 isotope: Some(0),
@@ -1261,11 +1327,10 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 implicit_h: false,
                 chirality: None,
                 unknown_symbol: true,
-                span_start: s,
-                span_end: e,
+                span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
-            
+
             attach_atom(
                 &mut builder,
                 last_atom_idx,
@@ -1274,7 +1339,7 @@ pub fn parse_smiles_to_ir<'inp, 'fl>(
                 last_aromatic,
                 false,
                 i as u32,
-                (i+1) as u32,
+                (i + 1) as u32,
                 !no_meta,
             );
             last_atom_idx = Some(curr);

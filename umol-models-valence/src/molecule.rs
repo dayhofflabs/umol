@@ -48,10 +48,7 @@ impl Molecule {
     }
 
     // TODO: Review naming
-    pub fn bond_atoms(
-        &self,
-        index: BondIndex,
-    ) -> Option<(&Atom, &Atom)> {
+    pub fn bond_atoms(&self, index: BondIndex) -> Option<(&Atom, &Atom)> {
         self.data.edge_endpoints(index).map(|(a, b)| {
             (
                 self.data.node_weight(a).unwrap(),
@@ -61,10 +58,7 @@ impl Molecule {
     }
 
     // TODO: Review naming
-    pub fn bond_atom_indices(
-        &self,
-        index: BondIndex,
-    ) -> Option<(AtomIndex, AtomIndex)> {
+    pub fn bond_atom_indices(&self, index: BondIndex) -> Option<(AtomIndex, AtomIndex)> {
         self.data.edge_endpoints(index)
     }
 
@@ -100,6 +94,51 @@ impl Molecule {
         self.data.neighbors(index)
     }
     // TODO: Add methods for converting some atoms/bonds to builders
+
+    // In-place mutation
+
+    /// Add a new atom node and return its index
+    pub fn add_atom(&mut self, atom: Atom) -> AtomIndex {
+        self.data.add_node(atom)
+    }
+
+    /// Remove an atom node, returning the removed atom if present. Incident edges are removed by the graph.
+    pub fn remove_atom(&mut self, index: AtomIndex) -> Option<Atom> {
+        self.data.remove_node(index)
+    }
+
+    /// Replace an existing atom with a new typed atom, returning the old atom if present
+    pub fn replace_atom(&mut self, index: AtomIndex, atom: Atom) -> Option<Atom> {
+        if let Some(slot) = self.data.node_weight_mut(index) {
+            let old = std::mem::replace(slot, atom);
+            Some(old)
+        } else {
+            None
+        }
+    }
+
+    /// Add a new bond edge between two atoms, returning its index if both atoms exist
+    pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: Bond) -> Option<BondIndex> {
+        if !self.data.contains_node(a) || !self.data.contains_node(b) {
+            return None;
+        }
+        Some(self.data.add_edge(a, b, bond))
+    }
+
+    /// Remove a bond edge, returning the removed bond if present
+    pub fn remove_bond(&mut self, index: BondIndex) -> Option<Bond> {
+        self.data.remove_edge(index)
+    }
+
+    /// Replace an existing bond with a new typed bond, returning the old bond if present
+    pub fn replace_bond(&mut self, index: BondIndex, bond: Bond) -> Option<Bond> {
+        if let Some(slot) = self.data.edge_weight_mut(index) {
+            let old = std::mem::replace(slot, bond);
+            Some(old)
+        } else {
+            None
+        }
+    }
 }
 
 impl Display for Molecule {

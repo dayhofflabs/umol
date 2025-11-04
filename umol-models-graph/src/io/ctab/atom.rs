@@ -143,8 +143,8 @@ pub type Point3D = nalgebra::Point3<f64>;
 /// Tetrahedral chirality specified in MOL files.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AtomStereoParity {
-    Odd,    // sss = 1, RDKit `CHI_TETRAHEDRAL_CW` (Clockwise / R)
-    Even,   // sss = 2, RDKit `CHI_TETRAHEDRAL_CCW` (Counter-Clockwise / S)
+    Odd,  // sss = 1, RDKit `CHI_TETRAHEDRAL_CW` (Clockwise / R)
+    Even, // sss = 2, RDKit `CHI_TETRAHEDRAL_CCW` (Counter-Clockwise / S)
     #[default]
     Either, // sss = 3, RDKit `CHI_UNSPECIFIED`
 }

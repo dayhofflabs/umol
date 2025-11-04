@@ -235,7 +235,10 @@ fn test_apply_atom_value_molecule_invalid(
 }
 
 #[rstest]
-fn test_apply_charge_molecule(mut molecule_single_atom: Molecule, parse_flags_lenient: CtabParseFlags) {
+fn test_apply_charge_molecule(
+    mut molecule_single_atom: Molecule,
+    parse_flags_lenient: CtabParseFlags,
+) {
     let mut acc = MoleculeProperties::new();
 
     let charge_entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
@@ -889,7 +892,10 @@ fn test_apply_ring_bond_count_entries_conflict(
 #[rstest]
 #[case(1)]
 #[case(5)]
-fn test_apply_ring_bond_count_entries_invalid(#[case] code: i8, parse_flags_strict: CtabParseFlags) {
+fn test_apply_ring_bond_count_entries_invalid(
+    #[case] code: i8,
+    parse_flags_strict: CtabParseFlags,
+) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
@@ -949,7 +955,10 @@ fn test_apply_substitution_count_entries_conflict(
 #[rstest]
 #[case(-3)]
 #[case(7)]
-fn test_apply_substitution_count_entries_invalid(#[case] code: i8, parse_flags_strict: CtabParseFlags) {
+fn test_apply_substitution_count_entries_invalid(
+    #[case] code: i8,
+    parse_flags_strict: CtabParseFlags,
+) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
@@ -984,7 +993,10 @@ fn test_apply_unsaturated_atom_entries(
 
 #[rstest]
 #[case(2)]
-fn test_apply_unsaturated_atom_entries_invalid(#[case] code: u8, parse_flags_strict: CtabParseFlags) {
+fn test_apply_unsaturated_atom_entries_invalid(
+    #[case] code: u8,
+    parse_flags_strict: CtabParseFlags,
+) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry {
         atom_index: 0,
@@ -1069,8 +1081,7 @@ fn test_apply_atom_list_entry_conflict(
     parse_flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
-    moleculelike_single_atom.atom_mut(0).unwrap().symbol =
-        AtomSymbol::RGroup(RGroup::new(Some(1)));
+    moleculelike_single_atom.atom_mut(0).unwrap().symbol = AtomSymbol::RGroup(RGroup::new(Some(1)));
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
         atom_index: 0,
         elements: vec![e!(N), e!(O)],

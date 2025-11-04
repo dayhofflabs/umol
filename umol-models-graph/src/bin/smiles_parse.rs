@@ -25,11 +25,13 @@ fn main() {
         };
         // Allow SMILES [tab or space] name
         let smiles = line.split_whitespace().next().unwrap_or("");
-        if smiles.is_empty() { continue; }
+        if smiles.is_empty() {
+            continue;
+        }
         n += 1;
-        let _ = parse_smiles(smiles.as_bytes()).map(|_| { ok += 1; });
+        let _ = parse_smiles(smiles.as_bytes()).map(|_| {
+            ok += 1;
+        });
     }
     eprintln!("parsed: {} lines (ok: {})", n, ok);
 }
-
-

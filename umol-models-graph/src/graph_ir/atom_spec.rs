@@ -1,0 +1,395 @@
+//! Atom spec definitions for GraphIR.
+
+use std::fmt;
+use std::str::FromStr;
+
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use umol::error::DataError;
+use umol::{Error, Result};
+use umol_data::Element;
+
+/// AtomSpec is a generalization of the atomic valence state for modeling
+/// covalent and dative bonding by molecular graphs.
+/// Does not uniquely define an atomic term symbol for quantum chemical calculations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AtomSpec {
+    element: Element,
+    charge: i32,
+    lone_pairs: u32,
+    donated_pairs: u32,
+    accepted_pairs: u32,
+    unpaired_e: u32,
+    multiplicity: u32,
+    implicit_h: u32,
+    valence: u32,
+}
+
+impl AtomSpec {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        element: Element,
+        charge: i32,
+        lone_pairs: u32,
+        donated_pairs: u32,
+        accepted_pairs: u32,
+        unpaired_e: u32,
+        multiplicity: u32,
+        implicit_h: u32,
+        valence: u32,
+    ) -> Self {
+        debug_assert!(
+            multiplicity >= 1 && multiplicity <= unpaired_e + 1,
+            "Multiplicity must be between 1 and unpaired electrons + 1"
+        );
+        debug_assert!(
+            (unpaired_e + 1 - multiplicity).is_multiple_of(2),
+            "Multiplicity must be even"
+        );
+        debug_assert!(
+            donated_pairs <= lone_pairs,
+            "Donated pairs must be less than or equal to lone pairs"
+        );
+        debug_assert!(
+            (element.valence_electrons() as i32 - charge) >= 0,
+            "Charge must be less than or equal to valence electrons"
+        );
+        debug_assert!(
+            implicit_h <= element.max_implicit_hydrogens() as u32,
+            "Implicit hydrogens must be less than or equal to max implicit hydrogens"
+        );
+        debug_assert!(
+            implicit_h <= valence,
+            "Implicit hydrogens must be less than or equal to valence"
+        );
+        debug_assert!(
+            valence <= element.max_valence() as u32,
+            "Valence must be less than or equal to max valence"
+        );
+        Self {
+            element,
+            charge,
+            lone_pairs,
+            donated_pairs,
+            accepted_pairs,
+            unpaired_e,
+            multiplicity,
+            implicit_h,
+            valence,
+        }
+    }
+
+    pub fn element(&self) -> Element {
+        self.element
+    }
+
+    pub fn charge(&self) -> i32 {
+        self.charge
+    }
+
+    pub fn lone_pairs(&self) -> u32 {
+        self.lone_pairs
+    }
+
+    pub fn donated_pairs(&self) -> u32 {
+        self.donated_pairs
+    }
+
+    pub fn accepted_pairs(&self) -> u32 {
+        self.accepted_pairs
+    }
+
+    pub fn unpaired_e(&self) -> u32 {
+        self.unpaired_e
+    }
+
+    pub fn electron_count(&self) -> u32 {
+        2 * self.lone_pairs + self.unpaired_e
+    }
+
+    pub fn multiplicity(&self) -> u32 {
+        self.multiplicity
+    }
+
+    pub fn implicit_h(&self) -> u32 {
+        self.implicit_h
+    }
+
+    pub fn valence(&self) -> u32 {
+        self.valence
+    }
+}
+
+impl fmt::Display for AtomSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}", self.element)?;
+        match self.charge {
+            0 => (),
+            1 => write!(f, "+")?,
+            -1 => write!(f, "-")?,
+            c if c < 0 => write!(f, "-{}", -c)?,
+            c if c > 0 => write!(f, "+{}", c)?,
+            _ => unreachable!(),
+        };
+        if self.lone_pairs > 0 {
+            write!(f, "/")?;
+            if self.lone_pairs > 1 {
+                write!(f, "{}", self.lone_pairs)?;
+            }
+        }
+        if self.donated_pairs > 0 {
+            write!(f, ">")?;
+            if self.donated_pairs > 1 {
+                write!(f, "{}", self.donated_pairs)?;
+            }
+        }
+        if self.accepted_pairs > 0 {
+            write!(f, "<")?;
+            if self.accepted_pairs > 1 {
+                write!(f, "{}", self.accepted_pairs)?;
+            }
+        }
+        if self.unpaired_e > 0 {
+            write!(f, "^")?;
+            if self.unpaired_e > 1 {
+                write!(f, "{}", self.unpaired_e)?;
+            }
+        }
+        if self.multiplicity != self.unpaired_e + 1 {
+            write!(f, "*{}", self.multiplicity)?;
+        }
+
+        if self.implicit_h > 0 {
+            write!(f, "H{}", self.implicit_h)?;
+        }
+
+        if self.valence > 0 {
+            write!(f, "v")?;
+            if self.valence > 1 {
+                write!(f, "{}", self.valence)?;
+            }
+        }
+        write!(f, "]")
+    }
+}
+
+impl TryFrom<&str> for AtomSpec {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self> {
+        if s.is_empty() {
+            return Err(DataError::InvalidAtomSpec("Empty atom spec".into()).into());
+        }
+
+        let val_state_pattern = Regex::new(r"^\[([A-Z][a-z]?)((?:[-+/<>*Hv^]\d*)*)]$").unwrap();
+        if !val_state_pattern.is_match(s) {
+            return Err(DataError::InvalidAtomSpec(s.to_string()).into());
+        }
+
+        let caps = val_state_pattern.captures(s).unwrap();
+        let element = caps[1].parse::<Element>()?;
+        let properties = caps.get(2);
+        if properties.is_none() {
+            return Ok(AtomSpec::new(element, 0, 0, 0, 0, 0, 1, 0, 0));
+        }
+        let properties = properties.unwrap().as_str();
+
+        let property_pattern = Regex::new(r"([-+/<>*Hv^])(\d*)").unwrap();
+        let mut pos_charge: Option<i32> = None;
+        let mut neg_charge: Option<i32> = None;
+        let mut lone_pairs: Option<u32> = None;
+        let mut donated: Option<u32> = None;
+        let mut accepted: Option<u32> = None;
+        let mut unpaired: Option<u32> = None;
+        let mut multiplicity: Option<u32> = None;
+        let mut implicit_h: Option<u32> = None;
+        let mut valence: Option<u32> = None;
+
+        for cap in property_pattern.captures_iter(properties) {
+            let property = &cap[1];
+            let value = &cap[2];
+            match property {
+                "+" => {
+                    if pos_charge.is_some() || neg_charge.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate charge definition".to_string(),
+                        )
+                        .into());
+                    } else {
+                        pos_charge = if value.is_empty() {
+                            Some(1)
+                        } else {
+                            value.parse::<i32>().ok()
+                        };
+                    }
+                }
+                "-" => {
+                    if neg_charge.is_some() || pos_charge.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate charge definition".to_string(),
+                        )
+                        .into());
+                    } else {
+                        neg_charge = if value.is_empty() {
+                            Some(-1)
+                        } else {
+                            value.parse::<i32>().ok().map(|v| -v)
+                        };
+                    }
+                }
+                "/" => {
+                    if lone_pairs.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate lone pair definition".to_string(),
+                        )
+                        .into());
+                    } else {
+                        lone_pairs = if value.is_empty() {
+                            Some(1)
+                        } else {
+                            value.parse::<u32>().ok()
+                        };
+                    }
+                }
+                ">" => {
+                    if donated.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate donated pair definition".to_string(),
+                        )
+                        .into());
+                    } else {
+                        donated = if value.is_empty() {
+                            Some(1)
+                        } else {
+                            value.parse::<u32>().ok()
+                        };
+                    }
+                }
+                "<" => {
+                    if accepted.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate accepted pair definition".to_string(),
+                        )
+                        .into());
+                    } else {
+                        accepted = if value.is_empty() {
+                            Some(1)
+                        } else {
+                            value.parse::<u32>().ok()
+                        };
+                    }
+                }
+                "^" => {
+                    if unpaired.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate unpaired electron specification".to_string(),
+                        )
+                        .into());
+                    } else {
+                        unpaired = if value.is_empty() {
+                            Some(1)
+                        } else {
+                            value.parse::<u32>().ok()
+                        };
+                    }
+                }
+                "*" => {
+                    multiplicity = if multiplicity.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate multiplicity".to_string(),
+                        )
+                        .into());
+                    } else if value.is_empty() {
+                        Some(1)
+                    } else {
+                        value.parse::<u32>().ok()
+                    }
+                }
+                "H" => {
+                    if implicit_h.is_some() {
+                        return Err(DataError::InvalidAtomSpec(
+                            "Duplicate implicit hydrogen specification".to_string(),
+                        )
+                        .into());
+                    } else {
+                        implicit_h = if value.is_empty() {
+                            Some(1)
+                        } else {
+                            value.parse::<u32>().ok()
+                        };
+                    }
+                }
+                "v" => {
+                    valence = if valence.is_some() {
+                        return Err(
+                            DataError::InvalidAtomSpec("Duplicate valence".to_string()).into()
+                        );
+                    } else if value.is_empty() {
+                        Some(0)
+                    } else {
+                        value.parse::<u32>().ok()
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let charge = pos_charge.unwrap_or(neg_charge.unwrap_or(0));
+        let lone_pairs = lone_pairs.unwrap_or(0);
+        let donated = donated.unwrap_or(0);
+        let accepted = accepted.unwrap_or(0);
+        let unpaired = unpaired.unwrap_or(0);
+        let multiplicity = multiplicity.unwrap_or(unpaired + 1);
+        let implicit_h = implicit_h.unwrap_or(0);
+        let valence = valence.unwrap_or(0);
+
+        if multiplicity == 0
+            || multiplicity > unpaired + 1
+            || (unpaired + 1 - multiplicity) % 2 != 0
+        {
+            return Err(DataError::InvalidAtomMultiplicity(format!("{}", multiplicity)).into());
+        }
+        if donated > lone_pairs {
+            return Err(DataError::InvalidAtomDonatedPairs(format!("{}", donated)).into());
+        }
+        if (element.valence_electrons() as i32 - charge) < 0 {
+            return Err(DataError::InvalidAtomCharge(format!("{}", charge)).into());
+        }
+        if implicit_h > element.max_implicit_hydrogens() as u32 {
+            return Err(DataError::InvalidAtomImplicitHydrogens(format!("{}", implicit_h)).into());
+        }
+        if implicit_h > valence {
+            return Err(DataError::InvalidAtomImplicitHydrogens(format!("{}", valence)).into());
+        }
+        if valence > element.max_valence() as u32 {
+            return Err(DataError::InvalidAtomValence(format!("{}", valence)).into());
+        }
+
+        Ok(AtomSpec::new(
+            element,
+            charge,
+            lone_pairs,
+            donated,
+            accepted,
+            unpaired,
+            multiplicity,
+            implicit_h,
+            valence,
+        ))
+    }
+}
+
+impl FromStr for AtomSpec {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::try_from(s)
+    }
+}
+
+#[macro_export]
+macro_rules! a {
+    ($s:expr) => {
+        $s.parse::<$crate::graph_ir::AtomSpec>().unwrap()
+    };
+}

@@ -80,39 +80,43 @@ impl fmt::Display for SmilesParseFlags {
 bitflags! {
     /// Configuration for SMILES checking
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct SmilesCheckFlags: u32 {
+    pub struct SmilesLintFlags: u32 {
+
+        // Lint categories
         const TOPOLOGY = 1;
         const VALENCE = 2;
         const AROMATICITY = 4;
         const STEREO = 8;
-        const STRICT = 16; // convert warnings to errors
 
-    // Presets
-    const NONE = 0;
-    const ALL = (Self::TOPOLOGY.bits() | Self::VALENCE.bits() | Self::AROMATICITY.bits() |
-                 Self::STEREO.bits());
+        // Strict mode: convert warnings to errors
+        const STRICT = 65536;
+
+        // Presets
+        const NONE = 0;
+        const ALL = (Self::TOPOLOGY.bits() | Self::VALENCE.bits() | Self::AROMATICITY.bits() |
+                    Self::STEREO.bits());
     }
 }
 
-impl fmt::Display for SmilesCheckFlags {
+impl fmt::Display for SmilesLintFlags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut parts = Vec::new();
 
-        if *self == SmilesCheckFlags::NONE {
+        if *self == SmilesLintFlags::NONE {
             parts.push("NONE");
-        } else if *self == SmilesCheckFlags::ALL {
+        } else if *self == SmilesLintFlags::ALL {
             parts.push("ALL");
         } else {
-            if self.contains(SmilesCheckFlags::TOPOLOGY) {
+            if self.contains(SmilesLintFlags::TOPOLOGY) {
                 parts.push("TOPOLOGY");
             }
-            if self.contains(SmilesCheckFlags::VALENCE) {
+            if self.contains(SmilesLintFlags::VALENCE) {
                 parts.push("VALENCE");
             }
-            if self.contains(SmilesCheckFlags::AROMATICITY) {
+            if self.contains(SmilesLintFlags::AROMATICITY) {
                 parts.push("AROMATICITY");
             }
-            if self.contains(SmilesCheckFlags::STEREO) {
+            if self.contains(SmilesLintFlags::STEREO) {
                 parts.push("STEREO");
             }
         }
@@ -121,7 +125,7 @@ impl fmt::Display for SmilesCheckFlags {
     }
 }
 
-impl Default for SmilesCheckFlags {
+impl Default for SmilesLintFlags {
     fn default() -> Self {
         Self::ALL
     }
@@ -132,14 +136,15 @@ impl Default for SmilesCheckFlags {
 pub struct SmilesLintConfig {
     pub enabled: Vec<&'static str>,
     pub disabled: Vec<&'static str>,
+    pub enable_gir: bool,
 }
 
 impl fmt::Display for SmilesLintConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "SmilesLintConfig(enabled: {:?}, disabled: {:?})",
-            self.enabled, self.disabled
+            "SmilesLintConfig(enabled: {:?}, disabled: {:?}, enable_gir: {})",
+            self.enabled, self.disabled, self.enable_gir
         )
     }
 }
@@ -148,7 +153,7 @@ impl fmt::Display for SmilesLintConfig {
 #[derive(Debug, Clone, Default)]
 pub struct SmilesIoConfig {
     pub parse_flags: SmilesParseFlags,
-    pub check_flags: SmilesCheckFlags,
+    pub lint_flags: SmilesLintFlags,
     pub lint_config: SmilesLintConfig,
 }
 
@@ -156,7 +161,7 @@ impl SmilesIoConfig {
     pub fn with_parse_flags(flags: SmilesParseFlags) -> Self {
         Self {
             parse_flags: flags,
-            check_flags: SmilesCheckFlags::default(),
+            lint_flags: SmilesLintFlags::default(),
             lint_config: SmilesLintConfig::default(),
         }
     }
@@ -174,8 +179,8 @@ impl fmt::Display for SmilesIoConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "SmilesIoConfig(SmilesParseFlags: {}, SmilesCheckFlags: {}, SmilesLintConfig: {})",
-            self.parse_flags, self.check_flags, self.lint_config
+            "SmilesIoConfig(SmilesParseFlags: {}, SmilesLintFlags: {}, SmilesLintConfig: {})",
+            self.parse_flags, self.lint_flags, self.lint_config
         )
     }
 }

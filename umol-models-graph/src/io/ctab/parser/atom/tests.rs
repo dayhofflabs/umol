@@ -4,10 +4,10 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
-use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::atom::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity,
 };
+use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::query::QueryAtom;
 
 #[rstest]

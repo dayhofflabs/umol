@@ -168,7 +168,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         v
     };
 
-    let bracket_inputs= [
+    let bracket_inputs = [
         ("brkt_C_50", make_repeat(b"[C]", 50)),
         // ("brkt_c_50", make_repeat(b"[c]", 50)),
         // ("brkt_wild_50", make_repeat(b"[*]", 50)),
@@ -379,7 +379,6 @@ fn opensmiles_parsing(c: &mut Criterion) {
         });
     }
     group_whitespace.finish();
-
 }
 
 criterion_group!(benches, opensmiles_parsing);

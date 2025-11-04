@@ -3,6 +3,10 @@
 use std::fmt;
 
 use strum::{AsRefStr, EnumIter, IntoEnumIterator};
+use umol_data::Element;
+
+use crate::simple_ir::{BondDir, BondOrder, BondStereo, BondSymbol, Chirality};
+use crate::span::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, AsRefStr)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -165,18 +169,6 @@ impl Category {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub code: Code,
@@ -212,6 +204,7 @@ impl DiagnosticList {
     pub fn iter(&self) -> impl Iterator<Item = &Diagnostic> {
         self.diagnostics.iter()
     }
+
     pub fn into_vec(self) -> Vec<Diagnostic> {
         self.diagnostics
     }
@@ -225,6 +218,15 @@ impl DiagnosticList {
             .iter()
             .any(|d| d.severity == Severity::Error)
     }
+
+    pub fn upgrade_warnings(&mut self) {
+        for d in &mut self.diagnostics {
+            if d.severity == Severity::Warning {
+                d.severity = Severity::Error;
+            }
+        }
+    }
+
     pub fn errors(&self) -> impl Iterator<Item = &Diagnostic> {
         self.diagnostics
             .iter()
@@ -247,15 +249,131 @@ impl IntoIterator for DiagnosticList {
 
 impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (start, end) = self.span.bytes_range();
         write!(
             f,
             "{} [{}:{}] @{}..{}",
             self.message,
             self.category.as_ref(),
             self.code.as_str(),
-            self.span.start,
-            self.span.end,
+            start,
+            end,
         )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Edit {
+    SetAtomCharge {
+        atom: usize,
+        charge: i32,
+    },
+    SetAtomExplicitHCount {
+        atom: usize,
+        count: u32,
+    },
+    SetAtomImplicitHCount {
+        atom: usize,
+        count: u32,
+    },
+    SetAtomImplicitH {
+        atom: usize,
+        implicit: bool,
+    },
+    SetAtomAromaticFlag {
+        atom: usize,
+        aromatic: Option<bool>,
+    },
+    SetAtomChirality {
+        atom: usize,
+        chirality: Option<Chirality>,
+    },
+    SetAtomClass {
+        atom: usize,
+        class: Option<u32>,
+    },
+    SetAtomUnpairedECount {
+        atom: usize,
+        count: u32,
+    },
+    SetBondOrder {
+        bond: usize,
+        order: BondOrder,
+    },
+    SetBondSymbol {
+        bond: usize,
+        symbol: BondSymbol,
+    },
+    SetBondDirection {
+        bond: usize,
+        direction: Option<BondDir>,
+    },
+    SetBondStereo {
+        bond: usize,
+        stereo: Option<BondStereo>,
+    },
+    AddAtom {
+        atom: usize,
+        element: Element,
+    },
+    RemoveAtom {
+        atom: usize,
+    },
+    AddBond {
+        bond: usize,
+        atoms: (usize, usize),
+        order: BondOrder,
+    },
+    RemoveBond {
+        bond: usize,
+    },
+    RetargetBond {
+        bond: usize,
+        atoms: (usize, usize),
+    },
+    SetBondRing {
+        bond: usize,
+        ring: Option<u32>,
+    },
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct EditList {
+    pub edits: Vec<Edit>,
+}
+
+impl EditList {
+    pub fn new() -> Self {
+        Self { edits: Vec::new() }
+    }
+
+    pub fn push(&mut self, edit: Edit) {
+        self.edits.push(edit);
+    }
+
+    pub fn extend<I: IntoIterator<Item = Edit>>(&mut self, edits: I) {
+        self.edits.extend(edits);
+    }
+
+    pub fn append_list(&mut self, other: &mut EditList) {
+        self.edits.append(&mut other.edits);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Edit> {
+        self.edits.iter()
+    }
+
+    pub fn into_vec(self) -> Vec<Edit> {
+        self.edits
+    }
+}
+
+impl IntoIterator for EditList {
+    type Item = Edit;
+    type IntoIter = std::vec::IntoIter<Edit>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.edits.into_iter()
     }
 }
 
@@ -269,10 +387,13 @@ mod tests {
             code: Code::InvalidToken,
             severity: Severity::Error,
             category: Category::Lexical,
-            span: Span::new(0, 10),
+            span: Span::bytes(0, 10),
             message: "Invalid token",
             details: None,
         };
-        assert_eq!(d.to_string(), "Invalid token [LEXICAL:INVALID_TOKEN] @0..10");
+        assert_eq!(
+            d.to_string(),
+            "Invalid token [LEXICAL:INVALID_TOKEN] @0..10"
+        );
     }
 }

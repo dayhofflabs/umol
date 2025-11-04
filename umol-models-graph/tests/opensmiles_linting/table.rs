@@ -1,11 +1,15 @@
 //! Tests for OpenSMILES (UMOL) linting codes
 
 use rstest::*;
-use umol_models_graph::io::smiles::diagnostics::DiagnosticList;
-use umol_models_graph::io::smiles::linter::lint_smiles;
+use umol_models_graph::io::smiles::linter::{lint_smiles, LintOutput};
 
-fn codes(report: &DiagnosticList) -> Vec<&'static str> {
-    report.diagnostics.iter().map(|d| d.code.0).collect()
+fn codes(report: &LintOutput) -> Vec<&'static str> {
+    report
+        .diagnostics
+        .diagnostics
+        .iter()
+        .map(|d| d.code.as_str())
+        .collect()
 }
 
 #[rstest]
