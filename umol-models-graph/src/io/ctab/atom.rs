@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 
-use nalgebra;
 use serde::{Deserialize, Serialize};
 use umol_data::{Element, NamedIsotope};
 
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
+use crate::position::Point3D;
 
 /// Atom
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -134,9 +134,6 @@ impl AtomSymbol {
         !matches!(self, AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_))
     }
 }
-
-/// 3D coordinate type
-pub type Point3D = nalgebra::Point3<f64>;
 
 // Atom properties specified in the atom block
 

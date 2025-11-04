@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use regex::Regex;
 use umol_data::Element;
 
-use crate::simple_ir::builder::{AtomData, BondData, MoleculeBuilder};
-use crate::simple_ir::{BondDir, BondOrder, Molecule, Ring};
+use crate::simple_ir::{AtomData, BondData, BondDir, BondOrder, Molecule, MoleculeBuilder, Ring};
 use crate::span::Span;
 
 fn parse_atom_token(tok: &str) -> (Element, bool, Option<u32>, Option<u32>) {
@@ -277,14 +276,14 @@ pub fn build_from_graph(spec: &str) -> Molecule {
                         close_end = Some(s + 1);
                     }
                 }
+                let open_span = Span::from_bytes_opt(open_start, open_end);
+                let close_span = Span::from_bytes_opt(close_start, close_end);
                 rings.push(Ring {
                     ring_idx,
                     start_atom: atom_a,
                     end_atom: atom_b,
-                    open_start,
-                    close_start,
-                    open_end,
-                    close_end,
+                    open_span,
+                    close_span,
                 });
             }
             mol.rings = rings;

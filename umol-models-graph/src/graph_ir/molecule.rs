@@ -173,7 +173,7 @@ impl fmt::Display for Molecule {
 
 pub struct MoleculeBuilder {
     atom_builders: HashMap<usize, AtomBuilder>,
-    bond_builders: HashMap<(usize, usize), BondBuilder>,
+    bond_builders: Vec<(usize, usize, BondBuilder)>,
 }
 
 impl Default for MoleculeBuilder {
@@ -186,14 +186,14 @@ impl MoleculeBuilder {
     pub fn new() -> Self {
         Self {
             atom_builders: HashMap::new(),
-            bond_builders: HashMap::new(),
+            bond_builders: Vec::new(),
         }
     }
 
     pub fn with_capacity(atom_capacity: usize, bond_capacity: usize) -> Self {
         Self {
             atom_builders: HashMap::with_capacity(atom_capacity),
-            bond_builders: HashMap::with_capacity(bond_capacity),
+            bond_builders: Vec::with_capacity(bond_capacity),
         }
     }
 
@@ -268,62 +268,42 @@ impl MoleculeBuilder {
         idx2: usize,
         bond: B,
     ) -> Result<(usize, usize, &mut BondBuilder)> {
-        if idx1 == idx2 {
-            return Err(DataError::LoopBond(idx1).into());
-        }
         if !self.atom_builders.contains_key(&idx1) {
             return Err(DataError::MissingAtomIndex(idx1).into());
         }
         if !self.atom_builders.contains_key(&idx2) {
             return Err(DataError::MissingAtomIndex(idx2).into());
         }
+
         let builder = bond.into();
-        if self.bond_builders.contains_key(&(idx1, idx2)) {
-            return Err(DataError::DuplicateBondIndex(idx1, idx2).into());
-        }
-        self.bond_builders.insert((idx1, idx2), builder);
-        Ok((
-            idx1,
-            idx2,
-            self.bond_builders.get_mut(&(idx1, idx2)).unwrap(),
-        ))
+        self.bond_builders.push((idx1, idx2, builder));
+        let (_, _, inserted) = self
+            .bond_builders
+            .last_mut()
+            .expect("bond_builders should contain the just-inserted bond");
+        Ok((idx1, idx2, inserted))
     }
 
     pub fn add_bonds<B: Into<BondBuilder>>(
         &mut self,
         bonds: impl IntoIterator<Item = (usize, usize, B)>,
     ) -> Result<impl Iterator<Item = (usize, usize)>> {
-        let canonical_bond_key = |idx1: usize, idx2: usize| (idx1.min(idx2), idx1.max(idx2));
-
         let staged_bonds: Vec<(usize, usize, BondBuilder)> = bonds
             .into_iter()
             .map(|(idx1, idx2, bond)| (idx1, idx2, bond.into()))
             .collect();
-        let mut seen_keys = HashSet::with_capacity(staged_bonds.len());
         for (idx1, idx2, _) in &staged_bonds {
-            if idx1 == idx2 {
-                return Err(DataError::LoopBond(*idx1).into());
-            }
             if !self.atom_builders.contains_key(idx1) {
                 return Err(DataError::MissingAtomIndex(*idx1).into());
             }
             if !self.atom_builders.contains_key(idx2) {
                 return Err(DataError::MissingAtomIndex(*idx2).into());
             }
-
-            let key = canonical_bond_key(*idx1, *idx2);
-            if !seen_keys.insert(key) {
-                return Err(DataError::DuplicateBondIndex(*idx1, *idx2).into());
-            }
-            if self.bond_builders.contains_key(&key) {
-                return Err(DataError::DuplicateBondIndex(*idx1, *idx2).into());
-            }
         }
 
         let mut indices = Vec::with_capacity(staged_bonds.len());
         for (idx1, idx2, builder) in staged_bonds {
-            let key = canonical_bond_key(idx1, idx2);
-            self.bond_builders.insert(key, builder);
+            self.bond_builders.push((idx1, idx2, builder));
             indices.push((idx1, idx2));
         }
 
@@ -346,13 +326,13 @@ impl MoleculeBuilder {
     ) -> Result<Molecule> {
         let mut atom_builders = self.atom_builders;
         let bond_builders = self.bond_builders;
-        let mut built_bonds = HashMap::with_capacity(bond_builders.len());
+        let mut built_bonds = Vec::with_capacity(bond_builders.len());
         let mut observed_valence: HashMap<usize, u32> = HashMap::with_capacity(atom_builders.len());
 
-        for (key @ (idx1, idx2), bond_builder) in bond_builders {
+        for (idx1, idx2, bond_builder) in bond_builders {
             let bond = bond_builder.build_with(bond_matcher)?;
             let valence = u32::from(bond.order().value());
-            built_bonds.insert(key, bond);
+            built_bonds.push((idx1, idx2, bond));
             observed_valence
                 .entry(idx1)
                 .and_modify(|v| *v = v.saturating_add(valence))
@@ -384,7 +364,7 @@ impl MoleculeBuilder {
             atom_indices.insert(idx, node_index);
         }
 
-        for ((idx1, idx2), bond) in built_bonds {
+        for (idx1, idx2, bond) in built_bonds {
             let node1 = *atom_indices
                 .get(&idx1)
                 .expect("Node index map missing mapping for idx1");

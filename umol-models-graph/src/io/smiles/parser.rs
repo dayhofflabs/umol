@@ -5,8 +5,9 @@ use umol_data::Element;
 
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
 use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, Severity};
-use crate::simple_ir::builder::{AtomData, BondData, MoleculeBuilder};
-use crate::simple_ir::{BondDir, BondOrder, Chirality, Molecule};
+use crate::simple_ir::{
+    AtomData, BondData, BondDir, BondOrder, Chirality, Molecule, MoleculeBuilder,
+};
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]

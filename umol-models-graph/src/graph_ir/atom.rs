@@ -10,7 +10,8 @@ use umol_data::Element;
 use super::atom_matcher::{AtomMatcher, DEFAULT_ATOM_MATCHER};
 use super::atom_spec::AtomSpec;
 use super::atom_validator::{AtomValidator, DEFAULT_ATOM_VALIDATOR};
-use crate::simple_ir::{Chirality, Point3D};
+use crate::position::Point3D;
+use crate::simple_ir::Chirality;
 use crate::span::Span;
 
 /// Valence atom type including strict typing.

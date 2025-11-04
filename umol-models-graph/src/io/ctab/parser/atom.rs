@@ -18,11 +18,12 @@ use super::utils::{
     fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt,
     fixed_width_padding_n, to_string,
 };
-use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol, Point3D};
+use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol};
 use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::parser::utils::fixed_width_partial;
 use crate::io::ctab::query::QueryAtom;
 use crate::io::ctab::rgroup::RGroup;
+use crate::position::Point3D;
 
 /// Parse atom symbol (Element and NamedIsotope only).
 ///

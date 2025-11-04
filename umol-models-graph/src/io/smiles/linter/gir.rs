@@ -1,22 +1,19 @@
-// GIR linting logic operating on GraphIR molecules.
+// Linting operations on GraphIR molecules.
 
-use std::collections::HashMap;
-
-use super::{LintOutput, SmilesModels};
-use crate::graph_ir::molecule::{AtomIndex, BondIndex};
-use crate::graph_ir::Molecule as GraphMolecule;
+use super::LintOutput;
+use crate::graph_ir::{AtomIndex, BondIndex, Molecule};
 use crate::io::smiles::config::{SmilesLintConfig, SmilesLintFlags};
 use crate::io::smiles::diagnostics::{
     Category, Code, Diagnostic, DiagnosticList, EditList, Severity,
 };
-use crate::simple_ir;
 use crate::span::Span;
+use crate::valence::ValenceModel;
 
 pub(crate) fn lint_gir(
-    gir: &GraphMolecule,
+    gir: &Molecule,
     lint_flags: &SmilesLintFlags,
     _lint_config: &SmilesLintConfig,
-    models: &SmilesModels,
+    valence_model: &ValenceModel,
 ) -> LintOutput {
     let mut diagnostics = DiagnosticList::new();
     let edits = EditList::new();
@@ -26,7 +23,7 @@ pub(crate) fn lint_gir(
     }
 
     if lint_flags.contains(SmilesLintFlags::VALENCE) {
-        lint_gir_valence(gir, models, &mut diagnostics);
+        lint_gir_valence(gir, valence_model, &mut diagnostics);
     }
 
     if lint_flags.contains(SmilesLintFlags::AROMATICITY) {
@@ -40,7 +37,7 @@ pub(crate) fn lint_gir(
     LintOutput { diagnostics, edits }
 }
 
-fn lint_gir_topology(gir: &GraphMolecule, diagnostics: &mut DiagnosticList) {
+fn lint_gir_topology(gir: &Molecule, diagnostics: &mut DiagnosticList) {
     for bond_idx in gir.bond_indices() {
         let Some((a_idx, b_idx)) = gir.bond_atom_indices(bond_idx) else {
             continue;
@@ -53,7 +50,7 @@ fn lint_gir_topology(gir: &GraphMolecule, diagnostics: &mut DiagnosticList) {
                 severity: Severity::Error,
                 span: bond_span_gir(gir, bond_idx),
                 message: "Self-loop bond",
-                details: Some(format!("atom_id={}", display_atom(a_idx))),
+                details: Some(format!("atom={}", a_idx.index())),
             });
             continue;
         }
@@ -68,8 +65,7 @@ fn lint_gir_topology(gir: &GraphMolecule, diagnostics: &mut DiagnosticList) {
             continue;
         }
 
-        let bonds_display: Vec<usize> =
-            bonds_between.iter().map(|idx| display_bond(*idx)).collect();
+        let bonds_display: Vec<usize> = bonds_between.iter().map(|idx| idx.index()).collect();
 
         diagnostics.push(Diagnostic {
             code: Code::ParallelEdges,
@@ -79,15 +75,19 @@ fn lint_gir_topology(gir: &GraphMolecule, diagnostics: &mut DiagnosticList) {
             message: "Multiple bonds between the same atom pair",
             details: Some(format!(
                 "atom1={} atom2={} bonds={:?}",
-                display_atom(a_idx),
-                display_atom(b_idx),
+                a_idx.index(),
+                b_idx.index(),
                 bonds_display
             )),
         });
     }
 }
 
-fn lint_gir_valence(gir: &GraphMolecule, models: &SmilesModels, diagnostics: &mut DiagnosticList) {
+fn lint_gir_valence(
+    gir: &Molecule,
+    valence_model: &ValenceModel,
+    diagnostics: &mut DiagnosticList,
+) {
     for atom_idx in gir.atom_indices() {
         let atom = match gir.atom(atom_idx) {
             Some(atom) => atom,
@@ -103,7 +103,7 @@ fn lint_gir_valence(gir: &GraphMolecule, models: &SmilesModels, diagnostics: &mu
         let implicit_h = atom.implicit_h();
         let effective_valence = bond_sum + implicit_h;
 
-        if let Some(states) = models.valence.states_for(atom.element()) {
+        if let Some(states) = valence_model.states_for(atom.element()) {
             if !states
                 .iter()
                 .any(|&state| u32::from(state) == effective_valence)
@@ -115,8 +115,8 @@ fn lint_gir_valence(gir: &GraphMolecule, models: &SmilesModels, diagnostics: &mu
                     span: atom_span_gir(gir, atom_idx),
                     message: "Observed valence is not permitted for this element",
                     details: Some(format!(
-                        "atom_id={} element={:?} valence={} allowed={:?}",
-                        display_atom(atom_idx),
+                        "atom={} element={:?} valence={} allowed={:?}",
+                        atom_idx.index(),
                         atom.element(),
                         effective_valence,
                         states
@@ -127,7 +127,7 @@ fn lint_gir_valence(gir: &GraphMolecule, models: &SmilesModels, diagnostics: &mu
     }
 }
 
-fn lint_gir_aromaticity(gir: &GraphMolecule, diagnostics: &mut DiagnosticList) {
+fn lint_gir_aromaticity(gir: &Molecule, diagnostics: &mut DiagnosticList) {
     for atom_idx in gir.atom_indices() {
         let atom = match gir.atom(atom_idx) {
             Some(atom) => atom,
@@ -143,112 +143,25 @@ fn lint_gir_aromaticity(gir: &GraphMolecule, diagnostics: &mut DiagnosticList) {
                     severity: Severity::Warning,
                     span: atom_span_gir(gir, atom_idx),
                     message: "Aromatic atom does not participate in a ring",
-                    details: Some(format!(
-                        "atom_id={} degree={}",
-                        display_atom(atom_idx),
-                        degree
-                    )),
+                    details: Some(format!("atom={} degree={}", atom_idx.index(), degree)),
                 });
             }
         }
     }
 }
 
-fn lint_gir_stereo(_gir: &GraphMolecule, _diagnostics: &mut DiagnosticList) {
+fn lint_gir_stereo(_gir: &Molecule, _diagnostics: &mut DiagnosticList) {
     // Stereo validation for GIR will be implemented in a dedicated pass.
 }
 
-fn atom_span_gir(gir: &GraphMolecule, idx: AtomIndex) -> Span {
+fn atom_span_gir(gir: &Molecule, idx: AtomIndex) -> Span {
     gir.atom(idx)
         .and_then(|atom| atom.span())
         .unwrap_or_else(|| Span::bytes(0, 0))
 }
 
-fn bond_span_gir(gir: &GraphMolecule, idx: BondIndex) -> Span {
+fn bond_span_gir(gir: &Molecule, idx: BondIndex) -> Span {
     gir.bond(idx)
         .and_then(|bond| bond.span())
         .unwrap_or_else(|| Span::bytes(0, 0))
-}
-
-fn display_atom(idx: AtomIndex) -> usize {
-    idx.index() + 1
-}
-
-fn display_bond(idx: BondIndex) -> usize {
-    idx.index() + 1
-}
-
-fn atom_span(sir: &simple_ir::Molecule, idx: usize) -> Span {
-    sir.atoms
-        .get(idx)
-        .and_then(|atom| atom.span)
-        .unwrap_or_else(|| Span::bytes(0, 0))
-}
-
-fn bond_span(sir: &simple_ir::Molecule, idx: usize) -> Span {
-    sir.bonds
-        .get(idx)
-        .and_then(|bond| bond.span)
-        .unwrap_or_else(|| Span::bytes(0, 0))
-}
-
-fn canonical_pair(a: usize, b: usize) -> (usize, usize) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
-}
-
-pub(crate) fn lint_topology_from_sir(sir: &simple_ir::Molecule, diagnostics: &mut DiagnosticList) {
-    let mut parallel_edges: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
-
-    for (bond_idx, bond) in sir.bonds.iter().enumerate() {
-        let Some(start) = usize::try_from(bond.start_atom).ok() else {
-            continue;
-        };
-        let Some(end) = usize::try_from(bond.end_atom).ok() else {
-            continue;
-        };
-
-        if start == end {
-            diagnostics.push(Diagnostic {
-                code: Code::SelfLoopRing,
-                category: Category::Topology,
-                severity: Severity::Error,
-                span: bond_span(sir, bond_idx),
-                message: "Self-loop bond",
-                details: Some(format!("atom_id={}", start + 1)),
-            });
-            continue;
-        }
-
-        parallel_edges
-            .entry(canonical_pair(start, end))
-            .or_default()
-            .push(bond_idx);
-    }
-
-    for ((a, b), bond_indices) in parallel_edges.into_iter() {
-        if bond_indices.len() < 2 {
-            continue;
-        }
-
-        let span = bond_span(sir, bond_indices[0]);
-        let bonds_display: Vec<usize> = bond_indices.iter().map(|idx| idx + 1).collect();
-
-        diagnostics.push(Diagnostic {
-            code: Code::ParallelEdges,
-            category: Category::Topology,
-            severity: Severity::Error,
-            span,
-            message: "Multiple bonds between the same atom pair",
-            details: Some(format!(
-                "atom1={} atom2={} bonds={:?}",
-                a + 1,
-                b + 1,
-                bonds_display
-            )),
-        });
-    }
 }
