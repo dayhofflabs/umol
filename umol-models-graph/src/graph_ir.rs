@@ -10,6 +10,7 @@ pub mod bond_matcher;
 pub mod bond_spec;
 pub mod bond_spec_registry;
 pub mod convert;
+pub mod diagnostics;
 pub mod molecule;
 
 pub use atom::{Atom, AtomBuilder};
