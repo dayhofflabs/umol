@@ -3,8 +3,11 @@
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
+use crate::diagnostics::{Category, Diagnostic, DiagnosticKind, Severity};
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use crate::io::smiles::diagnostics::{Category, Code, Diagnostic, Severity};
+use crate::io::smiles::diagnostics::{
+    Lexical as SmilesLexical, Numeric as SmilesNumeric, Syntactic as SmilesSyntactic,
+};
 use crate::simple_ir::{
     AtomData, BondData, BondDir, BondOrder, Chirality, Molecule, MoleculeBuilder,
 };
@@ -59,59 +62,73 @@ impl ParseError {
     pub fn as_str(&self) -> &str {
         self.as_ref()
     }
+}
 
-    pub fn as_diagnostic(&self, input: &str) -> Diagnostic {
-        let discriminant: ParseErrorDiscriminants = self.into();
-        let code: Code = discriminant.into();
-        let span = Span::bytes(0, input.len() as u32);
-        let message = "Parse error";
-        // FIX: Use correct category
-        Diagnostic {
-            code,
-            severity: Severity::Error,
-            category: Category::Lexical,
-            span,
-            message,
-            details: None,
-        }
+impl From<ParseError> for Diagnostic {
+    fn from(error: ParseError) -> Self {
+        Diagnostic::from_kind(error.into())
     }
 }
 
-impl From<ParseErrorDiscriminants> for Code {
+impl From<ParseErrorDiscriminants> for DiagnosticKind {
     fn from(discriminant: ParseErrorDiscriminants) -> Self {
         match discriminant {
-            ParseErrorDiscriminants::InvalidWhitespace => Code::InvalidWhitespace,
-            ParseErrorDiscriminants::InvalidComment => Code::InvalidComment,
-            ParseErrorDiscriminants::UnterminatedBlockComment => Code::UnterminatedBlockComment,
-            ParseErrorDiscriminants::InvalidElement => Code::InvalidElement,
-            ParseErrorDiscriminants::InvalidToken => Code::InvalidToken,
-            ParseErrorDiscriminants::UnbalancedOpenParen => Code::UnbalancedOpenParen,
-            ParseErrorDiscriminants::UnbalancedCloseParen => Code::UnbalancedCloseParen,
-            ParseErrorDiscriminants::EmptyBranch => Code::EmptyBranch,
-            ParseErrorDiscriminants::EmptyGroup => Code::EmptyGroup,
-            ParseErrorDiscriminants::NonfinalGroup => Code::NonfinalGroup,
-            ParseErrorDiscriminants::LeadingBond => Code::LeadingBond,
-            ParseErrorDiscriminants::TrailingBond => Code::TrailingBond,
-            ParseErrorDiscriminants::ConsecutiveBonds => Code::ConsecutiveBonds,
-            ParseErrorDiscriminants::LeadingRing => Code::LeadingRing,
-            ParseErrorDiscriminants::UnbalancedRingIndex => Code::UnbalancedRingIndex,
-            ParseErrorDiscriminants::InvalidRingIndex => Code::InvalidRingIndex,
-            ParseErrorDiscriminants::MismatchedRingBondDirs => Code::MismatchedRingBondDirs,
-            ParseErrorDiscriminants::MismatchedRingBondOrders => Code::MismatchedRingBondOrders,
-            ParseErrorDiscriminants::LeadingDot => Code::LeadingDot,
-            ParseErrorDiscriminants::TrailingDot => Code::TrailingDot,
-            ParseErrorDiscriminants::ConsecutiveDots => Code::ConsecutiveDots,
-            ParseErrorDiscriminants::DotBeforeRing => Code::DotBeforeRing,
-            ParseErrorDiscriminants::EmptyBracket => Code::EmptyBracket,
-            ParseErrorDiscriminants::UnbalancedOpenBracket => Code::UnbalancedOpenBracket,
-            ParseErrorDiscriminants::UnbalancedCloseBracket => Code::UnbalancedCloseBracket,
-            ParseErrorDiscriminants::StrayBracketField => Code::StrayBracketField,
-            ParseErrorDiscriminants::DuplicateBracketField => Code::DuplicateBracketField,
-            ParseErrorDiscriminants::MissingClassIndex => Code::MissingClassIndex,
-            ParseErrorDiscriminants::MissingChiralityIndex => Code::MissingChiralityIndex,
-            ParseErrorDiscriminants::ChiralityOutOfRange => Code::ChiralityOutOfRange,
-            ParseErrorDiscriminants::BracketHwithHcount => Code::BracketHwithHcount,
-            ParseErrorDiscriminants::InvalidBracket => Code::InvalidBracket,
+            ParseErrorDiscriminants::InvalidWhitespace => SmilesLexical::InvalidWhitespace.into(),
+            ParseErrorDiscriminants::InvalidComment => SmilesLexical::InvalidComment.into(),
+            ParseErrorDiscriminants::UnterminatedBlockComment => {
+                SmilesLexical::UnterminatedBlockComment.into()
+            }
+            ParseErrorDiscriminants::InvalidElement => SmilesLexical::InvalidElement.into(),
+            ParseErrorDiscriminants::InvalidToken => SmilesLexical::InvalidToken.into(),
+            ParseErrorDiscriminants::UnbalancedOpenParen => {
+                SmilesSyntactic::UnbalancedOpenParen.into()
+            }
+            ParseErrorDiscriminants::UnbalancedCloseParen => {
+                SmilesSyntactic::UnbalancedCloseParen.into()
+            }
+            ParseErrorDiscriminants::EmptyBranch => SmilesSyntactic::EmptyBranch.into(),
+            ParseErrorDiscriminants::EmptyGroup => SmilesSyntactic::EmptyGroup.into(),
+            ParseErrorDiscriminants::NonfinalGroup => SmilesSyntactic::NonfinalGroup.into(),
+            ParseErrorDiscriminants::LeadingBond => SmilesSyntactic::LeadingBond.into(),
+            ParseErrorDiscriminants::TrailingBond => SmilesSyntactic::TrailingBond.into(),
+            ParseErrorDiscriminants::ConsecutiveBonds => SmilesSyntactic::ConsecutiveBonds.into(),
+            ParseErrorDiscriminants::LeadingRing => SmilesSyntactic::LeadingRing.into(),
+            ParseErrorDiscriminants::UnbalancedRingIndex => {
+                SmilesSyntactic::UnbalancedRingIndex.into()
+            }
+            ParseErrorDiscriminants::InvalidRingIndex => SmilesSyntactic::InvalidRingIndex.into(),
+            ParseErrorDiscriminants::MismatchedRingBondDirs => {
+                SmilesSyntactic::MismatchedRingBondDirs.into()
+            }
+            ParseErrorDiscriminants::MismatchedRingBondOrders => {
+                SmilesSyntactic::MismatchedRingBondOrders.into()
+            }
+            ParseErrorDiscriminants::LeadingDot => SmilesSyntactic::LeadingDot.into(),
+            ParseErrorDiscriminants::TrailingDot => SmilesSyntactic::TrailingDot.into(),
+            ParseErrorDiscriminants::ConsecutiveDots => SmilesSyntactic::ConsecutiveDots.into(),
+            ParseErrorDiscriminants::DotBeforeRing => SmilesSyntactic::DotBeforeRing.into(),
+            ParseErrorDiscriminants::EmptyBracket => SmilesSyntactic::EmptyBracket.into(),
+            ParseErrorDiscriminants::UnbalancedOpenBracket => {
+                SmilesSyntactic::UnbalancedOpenBracket.into()
+            }
+            ParseErrorDiscriminants::UnbalancedCloseBracket => {
+                SmilesSyntactic::UnbalancedCloseBracket.into()
+            }
+            ParseErrorDiscriminants::StrayBracketField => SmilesSyntactic::StrayBracketField.into(),
+            ParseErrorDiscriminants::DuplicateBracketField => {
+                SmilesSyntactic::DuplicateBracketField.into()
+            }
+            ParseErrorDiscriminants::MissingClassIndex => SmilesSyntactic::MissingClassIndex.into(),
+            ParseErrorDiscriminants::MissingChiralityIndex => {
+                SmilesSyntactic::MissingChiralityIndex.into()
+            }
+            ParseErrorDiscriminants::BracketHwithHcount => {
+                SmilesSyntactic::BracketHwithHcount.into()
+            }
+            ParseErrorDiscriminants::InvalidBracket => SmilesSyntactic::InvalidBracket.into(),
+            ParseErrorDiscriminants::ChiralityOutOfRange => {
+                SmilesNumeric::ChiralityOutOfRange.into()
+            }
         }
     }
 }
