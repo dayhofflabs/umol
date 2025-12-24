@@ -214,6 +214,7 @@ impl BondOrder {
             BondOrder::Triple => "#",
             BondOrder::Quadruple => "$",
             BondOrder::Aromatic => ":",
+            // TODO: Update if extended bond orders are added.
             BondOrder::Unknown => "?",
         }
     }

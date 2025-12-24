@@ -1,19 +1,16 @@
 //! SMILES parser
 
-use strum::{AsRefStr, EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{Display, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
-use crate::diagnostics::{Category, Diagnostic, DiagnosticKind, Severity};
+use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use crate::io::smiles::diagnostics::{
-    Lexical as SmilesLexical, Numeric as SmilesNumeric, Syntactic as SmilesSyntactic,
-};
 use crate::simple_ir::{
     AtomData, BondData, BondDir, BondOrder, Chirality, Molecule, MoleculeBuilder,
 };
 use crate::span::Span;
 
-#[derive(Debug, Clone, PartialEq, EnumIter, AsRefStr, EnumDiscriminants)]
+#[derive(Debug, Clone, PartialEq, Display, EnumIter)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum ParseError {
     InvalidWhitespace { pos: usize },
@@ -59,77 +56,149 @@ impl ParseError {
     pub fn all() -> impl Iterator<Item = ParseError> {
         ParseError::iter()
     }
-    pub fn as_str(&self) -> &str {
-        self.as_ref()
-    }
 }
-
 impl From<ParseError> for Diagnostic {
     fn from(error: ParseError) -> Self {
-        Diagnostic::from_kind(error.into())
-    }
-}
+        use DiagnosticKind::*;
+        use ParseError::*;
 
-impl From<ParseErrorDiscriminants> for DiagnosticKind {
-    fn from(discriminant: ParseErrorDiscriminants) -> Self {
-        match discriminant {
-            ParseErrorDiscriminants::InvalidWhitespace => SmilesLexical::InvalidWhitespace.into(),
-            ParseErrorDiscriminants::InvalidComment => SmilesLexical::InvalidComment.into(),
-            ParseErrorDiscriminants::UnterminatedBlockComment => {
-                SmilesLexical::UnterminatedBlockComment.into()
-            }
-            ParseErrorDiscriminants::InvalidElement => SmilesLexical::InvalidElement.into(),
-            ParseErrorDiscriminants::InvalidToken => SmilesLexical::InvalidToken.into(),
-            ParseErrorDiscriminants::UnbalancedOpenParen => {
-                SmilesSyntactic::UnbalancedOpenParen.into()
-            }
-            ParseErrorDiscriminants::UnbalancedCloseParen => {
-                SmilesSyntactic::UnbalancedCloseParen.into()
-            }
-            ParseErrorDiscriminants::EmptyBranch => SmilesSyntactic::EmptyBranch.into(),
-            ParseErrorDiscriminants::EmptyGroup => SmilesSyntactic::EmptyGroup.into(),
-            ParseErrorDiscriminants::NonfinalGroup => SmilesSyntactic::NonfinalGroup.into(),
-            ParseErrorDiscriminants::LeadingBond => SmilesSyntactic::LeadingBond.into(),
-            ParseErrorDiscriminants::TrailingBond => SmilesSyntactic::TrailingBond.into(),
-            ParseErrorDiscriminants::ConsecutiveBonds => SmilesSyntactic::ConsecutiveBonds.into(),
-            ParseErrorDiscriminants::LeadingRing => SmilesSyntactic::LeadingRing.into(),
-            ParseErrorDiscriminants::UnbalancedRingIndex => {
-                SmilesSyntactic::UnbalancedRingIndex.into()
-            }
-            ParseErrorDiscriminants::InvalidRingIndex => SmilesSyntactic::InvalidRingIndex.into(),
-            ParseErrorDiscriminants::MismatchedRingBondDirs => {
-                SmilesSyntactic::MismatchedRingBondDirs.into()
-            }
-            ParseErrorDiscriminants::MismatchedRingBondOrders => {
-                SmilesSyntactic::MismatchedRingBondOrders.into()
-            }
-            ParseErrorDiscriminants::LeadingDot => SmilesSyntactic::LeadingDot.into(),
-            ParseErrorDiscriminants::TrailingDot => SmilesSyntactic::TrailingDot.into(),
-            ParseErrorDiscriminants::ConsecutiveDots => SmilesSyntactic::ConsecutiveDots.into(),
-            ParseErrorDiscriminants::DotBeforeRing => SmilesSyntactic::DotBeforeRing.into(),
-            ParseErrorDiscriminants::EmptyBracket => SmilesSyntactic::EmptyBracket.into(),
-            ParseErrorDiscriminants::UnbalancedOpenBracket => {
-                SmilesSyntactic::UnbalancedOpenBracket.into()
-            }
-            ParseErrorDiscriminants::UnbalancedCloseBracket => {
-                SmilesSyntactic::UnbalancedCloseBracket.into()
-            }
-            ParseErrorDiscriminants::StrayBracketField => SmilesSyntactic::StrayBracketField.into(),
-            ParseErrorDiscriminants::DuplicateBracketField => {
-                SmilesSyntactic::DuplicateBracketField.into()
-            }
-            ParseErrorDiscriminants::MissingClassIndex => SmilesSyntactic::MissingClassIndex.into(),
-            ParseErrorDiscriminants::MissingChiralityIndex => {
-                SmilesSyntactic::MissingChiralityIndex.into()
-            }
-            ParseErrorDiscriminants::BracketHwithHcount => {
-                SmilesSyntactic::BracketHwithHcount.into()
-            }
-            ParseErrorDiscriminants::InvalidBracket => SmilesSyntactic::InvalidBracket.into(),
-            ParseErrorDiscriminants::ChiralityOutOfRange => {
-                SmilesNumeric::ChiralityOutOfRange.into()
-            }
-        }
+        let (kind, span) = match error {
+            InvalidWhitespace { pos } => (
+                SmilesInvalidWhitespace,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            InvalidComment { pos } => (
+                SmilesInvalidComment,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            UnterminatedBlockComment { pos } => (
+                SmilesUnterminatedBlockComment,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            InvalidElement { pos } => (
+                SmilesInvalidElement,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            InvalidToken { pos } => (
+                SmilesInvalidToken,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+
+            UnbalancedOpenParen { pos } => (
+                SmilesUnbalancedOpenParen,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            UnbalancedCloseParen { pos } => (
+                SmilesUnbalancedCloseParen,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            EmptyBranch { pos } => (
+                SmilesEmptyBranch,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            EmptyGroup { pos } => (
+                SmilesEmptyGroup,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            NonfinalGroup { pos } => (
+                SmilesNonfinalGroup,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+
+            LeadingBond { pos } => (
+                SmilesLeadingBond,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            TrailingBond { pos } => (
+                SmilesTrailingBond,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            ConsecutiveBonds { pos } => (
+                SmilesConsecutiveBonds,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+
+            LeadingRing { pos } => (
+                SmilesLeadingRing,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            UnbalancedRingIndex { open_pos } => (
+                SmilesUnbalancedRingIndex,
+                Span::from_bytes_opt(Some(open_pos as u32), Some(open_pos as u32 + 1)),
+            ),
+            InvalidRingIndex { pos } => (
+                SmilesInvalidRingIndex,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            MismatchedRingBondDirs { pos, .. } => (
+                SmilesMismatchedRingBondDirs,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            MismatchedRingBondOrders { pos, .. } => (
+                SmilesMismatchedRingBondOrders,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+
+            LeadingDot { pos } => (
+                SmilesLeadingDot,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            TrailingDot { pos } => (
+                SmilesTrailingDot,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            ConsecutiveDots { pos } => (
+                SmilesConsecutiveDots,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            DotBeforeRing { pos } => (
+                SmilesDotBeforeRing,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+
+            EmptyBracket { pos } => (
+                SmilesEmptyBracket,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            UnbalancedOpenBracket { pos } => (
+                SmilesUnbalancedOpenBracket,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            UnbalancedCloseBracket { pos } => (
+                SmilesUnbalancedCloseBracket,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            StrayBracketField { pos } => (
+                SmilesStrayBracketField,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            DuplicateBracketField { pos } => (
+                SmilesDuplicateBracketField,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            MissingClassIndex { pos } => (
+                SmilesMissingClassIndex,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            MissingChiralityIndex { pos } => (
+                SmilesMissingChiralityIndex,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            ChiralityOutOfRange { pos } => (
+                SmilesChiralityOutOfRange,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            BracketHwithHcount { pos } => (
+                SmilesBracketHwithHcount,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            InvalidBracket { pos } => (
+                SmilesInvalidBracket,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+        };
+
+        Diagnostic::new(kind, Severity::Error, span, None)
     }
 }
 
@@ -139,13 +208,13 @@ pub struct ParseOutput {
     pub ir: Molecule,
 }
 
-// Public entrypoint for strict OpenSMILES
+// Public entrypoint for default OpenSMILES parser
 pub fn parse_smiles<'inp>(input: &'inp [u8]) -> Result<Molecule, ParseError> {
     let config = SmilesIoConfig::strict_opensmiles();
     parse_smiles_with(input, &config)
 }
 
-// Public entrypoint for configuration-aware parser
+// Public entrypoint for configurable SMILES parser
 pub fn parse_smiles_with<'inp, 'conf>(
     input: &'inp [u8],
     config: &'conf SmilesIoConfig,

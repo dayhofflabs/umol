@@ -1,7 +1,7 @@
 // Linting operations on GraphIR molecules.
 
 use super::LintOutput;
-use crate::diagnostics::{Diagnostic, DiagnosticList, Severity};
+use crate::diagnostics::{Diagnostic, DiagnosticKind, DiagnosticList, Severity};
 use crate::edits::EditList;
 use crate::graph_ir::{AtomIndex, BondIndex, Molecule};
 use crate::io::smiles::config::{SmilesLintConfig, SmilesLintFlags};
@@ -43,14 +43,12 @@ fn lint_gir_topology(molecule: &Molecule, diagnostics: &mut DiagnosticList) {
         };
 
         if a_idx == b_idx {
-            diagnostics.push(Diagnostic {
-                code: Code::SelfLoopRing,
-                category: Category::Topology,
-                severity: Severity::Error,
-                span: bond_span_gir(molecule, bond_idx),
-                message: "Self-loop bond",
-                details: Some(format!("atom={}", a_idx.index())),
-            });
+            diagnostics.push(Diagnostic::new(
+                DiagnosticKind::GraphTopologySelfLoopRing,
+                Severity::Error,
+                Some(bond_span_by_idx(molecule, bond_idx)),
+                Some(format!("atom={}", a_idx.index())),
+            ));
             continue;
         }
 
@@ -66,19 +64,17 @@ fn lint_gir_topology(molecule: &Molecule, diagnostics: &mut DiagnosticList) {
 
         let bonds_display: Vec<usize> = bonds_between.iter().map(|idx| idx.index()).collect();
 
-        diagnostics.push(Diagnostic {
-            code: Code::ParallelEdges,
-            category: Category::Topology,
-            severity: Severity::Error,
-            span: bond_span_gir(molecule, bond_idx),
-            message: "Multiple bonds between the same atom pair",
-            details: Some(format!(
+        diagnostics.push(Diagnostic::new(
+            DiagnosticKind::GraphTopologyParallelEdges,
+            Severity::Error,
+            Some(bond_span_by_idx(molecule, bond_idx)),
+            Some(format!(
                 "atom1={} atom2={} bonds={:?}",
                 a_idx.index(),
                 b_idx.index(),
                 bonds_display
             )),
-        });
+        ));
     }
 }
 
@@ -107,20 +103,18 @@ fn lint_gir_valence(
                 .iter()
                 .any(|&state| u32::from(state) == effective_valence)
             {
-                diagnostics.push(Diagnostic {
-                    code: Code::ValenceOutOfElementRange,
-                    category: Category::Valence,
-                    severity: Severity::Error,
-                    span: atom_span_gir(molecule, atom_idx),
-                    message: "Observed valence is not permitted for this element",
-                    details: Some(format!(
+                diagnostics.push(Diagnostic::new(
+                    DiagnosticKind::GraphValenceOutOfElementRange,
+                    Severity::Error,
+                    Some(atom_span_by_idx(molecule, atom_idx)),
+                    Some(format!(
                         "atom={} element={:?} valence={} allowed={:?}",
                         atom_idx.index(),
                         atom.element(),
                         effective_valence,
                         states
                     )),
-                });
+                ));
             }
         }
     }
@@ -136,14 +130,12 @@ fn lint_gir_aromaticity(molecule: &Molecule, diagnostics: &mut DiagnosticList) {
         if atom.aromatic() == Some(true) {
             let degree = molecule.atom_neighbor_indices(atom_idx).count();
             if degree < 2 {
-                diagnostics.push(Diagnostic {
-                    code: Code::AromaticAtomNotInRing,
-                    category: Category::Aromaticity,
-                    severity: Severity::Warning,
-                    span: atom_span_gir(molecule, atom_idx),
-                    message: "Aromatic atom does not participate in a ring",
-                    details: Some(format!("atom={} degree={}", atom_idx.index(), degree)),
-                });
+                diagnostics.push(Diagnostic::new(
+                    DiagnosticKind::GraphAromaticityAromaticAtomNotInRing,
+                    Severity::Warning,
+                    Some(atom_span_by_idx(molecule, atom_idx)),
+                    Some(format!("atom={} degree={}", atom_idx.index(), degree)),
+                ));
             }
         }
     }
@@ -153,14 +145,14 @@ fn lint_gir_stereo(_molecule: &Molecule, _diagnostics: &mut DiagnosticList) {
     // Stereo validation for GIR will be implemented in a dedicated pass.
 }
 
-fn atom_span_gir(molecule: &Molecule, idx: AtomIndex) -> Span {
+fn atom_span_by_idx(molecule: &Molecule, idx: AtomIndex) -> Span {
     molecule
         .atom(idx)
         .and_then(|atom| atom.span())
         .unwrap_or_else(|| Span::bytes(0, 0))
 }
 
-fn bond_span_gir(molecule: &Molecule, idx: BondIndex) -> Span {
+fn bond_span_by_idx(molecule: &Molecule, idx: BondIndex) -> Span {
     molecule
         .bond(idx)
         .and_then(|bond| bond.span())

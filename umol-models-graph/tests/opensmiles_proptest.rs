@@ -16,6 +16,21 @@ fn smilesish() -> impl Strategy<Value = Vec<u8>> {
     proptest::collection::vec(select(ALPHABET.to_vec()), 0..256)
 }
 
+// TODO: Add more fine-grained property tests
+// - Chains of arbitrary length are allowed (single atom, multiple atoms, different bond orders, brackets)
+// - Branches of arbitrary length are allowed
+// - Groups of arbitrary length are allowed
+// - Rings of arbitrary length are allowed
+// - Arbitrary number of components is allowed
+// - Arbitrary number of branches is allowed
+// - Arbitrary number of groups is allowed
+// - Arbitrary number of rings is allowed
+// - Arbitrary nesting of branches is allowed
+// - Arbitrary nesting of rings is allowed
+// - Arbitrary nesting of branches and rings is allowed
+// - Arbitrary number of chiral centers is allowed
+// - Arbitrary number of stereogenic bonds is allowed
+
 proptest! {
     #![proptest_config(Config {
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("proptest-regressions"))),
@@ -32,7 +47,7 @@ proptest! {
         }).expect("parse_smiles panicked");
     }
 
-    // Error spans must point within the input bounds (M6 strict)
+    // Error spans must point within the input bounds
     #[test]
     fn error_positions_within_bounds(input in smilesish()) {
         let res = parse_smiles(&input);

@@ -5,12 +5,11 @@ mod gir;
 use serde::{Deserialize, Serialize};
 
 use self::gir::lint_gir;
-use crate::diagnostics::{Diagnostic, DiagnosticList, Severity};
+use crate::diagnostics::{Diagnostic, DiagnosticKind, DiagnosticList};
 use crate::edits::EditList;
 use crate::graph_ir::convert::sir_to_gir;
 use crate::io::smiles::config::SmilesIoConfig;
 use crate::io::smiles::parser::parse_smiles_to_sir;
-use crate::span::Span;
 use crate::valence::ValenceModel;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,21 +40,16 @@ pub fn lint_smiles_with(
                     &io_config.lint_config,
                     valence_model,
                 ),
-                Err(err) => LintOutput::new(Diagnostic {
-                    diagnostics: DiagnosticList::from(Diagnostic {
-                        code: Code::InternalError,
-                        category: Category::Internal,
-                        severity: Severity::Error,
-                        span: Span::bytes(0, 0),
-                        message: "GraphIR conversion failed",
-                        details: Some(err.to_string()),
-                    }),
+                Err(_e) => LintOutput {
+                    diagnostics: DiagnosticList::from(Diagnostic::from_kind(
+                        DiagnosticKind::GraphConversionUnknown,
+                    )),
                     edits: EditList::new(),
-                }),
+                },
             }
         }
         Err(e) => LintOutput {
-            diagnostics: DiagnosticList::from(e.as_diagnostic("")),
+            diagnostics: DiagnosticList::from(e.into()),
             edits: EditList::new(),
         },
     }

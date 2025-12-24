@@ -912,6 +912,40 @@ fn wildcard_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 }
 
 #[rstest]
+#[case::exclamation(b"C!C", ParseError::InvalidToken { pos: 1 })]
+#[case::tilde(b"C~C", ParseError::InvalidToken { pos: 1 })]
+#[case::underscore(b"C_C", ParseError::InvalidToken { pos: 1 })]
+#[case::comma(b"C,C", ParseError::InvalidToken { pos: 1 })]
+#[case::semicolon(b"C;C", ParseError::InvalidToken { pos: 1 })]
+#[case::less_than(b"C<C", ParseError::InvalidToken { pos: 1 })]
+#[case::greater_than(b"C>C", ParseError::InvalidToken { pos: 1 })]
+#[case::question(b"C?C", ParseError::InvalidToken { pos: 1 })]
+#[case::caret(b"C^C", ParseError::InvalidToken { pos: 1 })]
+#[case::backtick(b"C`C", ParseError::InvalidToken { pos: 1 })]
+#[case::left_brace(b"C{C", ParseError::InvalidToken { pos: 1 })]
+#[case::right_brace(b"C}C", ParseError::InvalidToken { pos: 1 })]
+#[case::pipe(b"C|C", ParseError::InvalidToken { pos: 1 })]
+#[case::double_quote(b"C\"C", ParseError::InvalidToken { pos: 1 })]
+#[case::single_quote(b"C'C", ParseError::InvalidToken { pos: 1 })]
+#[case::nul(b"C\x00C", ParseError::InvalidToken { pos: 1 })]
+#[case::soh(b"C\x01C", ParseError::InvalidToken { pos: 1 })]
+#[case::del(b"C\x7FC", ParseError::InvalidToken { pos: 1 })]
+#[case::high_byte(b"C\x80C", ParseError::InvalidToken { pos: 1 })]
+#[case::utf8_2byte(b"C\xC3\xA9C", ParseError::InvalidToken { pos: 1 })]
+#[case::utf8_3byte(b"C\xE2\x82\xACCC", ParseError::InvalidToken { pos: 1 })]
+#[case::en_dash(b"C\xE2\x80\x93C", ParseError::InvalidToken { pos: 1 })]
+#[case::em_dash(b"C\xE2\x80\x94C", ParseError::InvalidToken { pos: 1 })]
+#[case::cyrillic_es(b"\xD0\xA1C", ParseError::InvalidToken { pos: 0 })]
+#[case::greek_omicron(b"C\xCE\xBFC", ParseError::InvalidToken { pos: 1 })]
+#[case::greek_capital_omicron(b"C\xCE\x9FC", ParseError::InvalidToken { pos: 1 })]
+fn token_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let res = parse_smiles(input);
+    assert!(res.is_err(), "{:?} should have failed", input);
+    let err = res.unwrap_err();
+    assert_eq!(err, expected);
+}
+
+#[rstest]
 #[case::bracketed_organic_atoms(b"[CH3][CH3]", 2, 1)]
 #[case::minus_one_charge(b"[CH3-1]", 1, 0)]
 #[case::hcount_one(b"C[13CH1](C)C", 4, 3)]

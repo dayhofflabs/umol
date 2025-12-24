@@ -1,7 +1,6 @@
 //! SMILES format parser, linter, and writer.
 
 pub mod config;
-pub mod diagnostics;
 pub mod linter;
 pub mod parser;
 

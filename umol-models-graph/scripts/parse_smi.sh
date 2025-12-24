@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR=/Users/dr/Source/rust/umol
 CRATE_DIR="$ROOT_DIR/umol-models-graph"
+# TODO: Find better location for input data
 INPUT_DEFAULT="$ROOT_DIR/materials/formats/opensmiles/examples/ZINC.FL.smi"
 
 INPUT_PATH="${1:-$INPUT_DEFAULT}"
