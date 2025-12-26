@@ -822,12 +822,12 @@ impl MoleculeProperties {
 
         // Validate and apply S-groups
         self.validate_sgroup_data()?;
-        self.apply_sgroup_to_extended(molecule)?;
+        self.apply_sgroup(molecule)?;
 
         Ok(())
     }
 
-    fn apply_sgroup_to_extended(&mut self, molecule: &mut ExtendedMolecule) -> Result<()> {
+    fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<()> {
         for (sgroup_index, props) in std::mem::take(&mut self.sgroup_properties) {
             let group_type = props.group_type.ok_or_else(|| {
                 SemanticError::Generic(format!("S-group {} has no type", sgroup_index))
