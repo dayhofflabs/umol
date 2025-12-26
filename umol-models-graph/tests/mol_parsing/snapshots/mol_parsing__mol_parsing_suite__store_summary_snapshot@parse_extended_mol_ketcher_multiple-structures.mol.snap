@@ -1,0 +1,7 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 49
+bond_count: 53
+sum_formula: C36N3O6PS

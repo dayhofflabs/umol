@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::io::ctab::sgroup::SGroupType;
+use crate::simple_ir::SGroupType;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Context {

@@ -1,0 +1,7 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 60
+bond_count: 70
+sum_formula: C47IrN6O6

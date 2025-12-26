@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use umol_models_graph::io::mol::parser::{parse_mol, parse_mol_moleculelike};
+use umol_models_graph::io::mol::parser::{parse_mol, parse_extended_mol};
 
 #[derive(Debug)]
 struct ClassificationStats {
     molecule: usize,
-    moleculelike: usize,
+    extended_molecule: usize,
     invalid: usize,
     total: usize,
 }
@@ -16,7 +16,7 @@ impl ClassificationStats {
     fn new() -> Self {
         Self {
             molecule: 0,
-            moleculelike: 0,
+            extended_molecule: 0,
             invalid: 0,
             total: 0,
         }
@@ -27,8 +27,8 @@ impl ClassificationStats {
         self.total += 1;
     }
 
-    fn add_moleculelike(&mut self) {
-        self.moleculelike += 1;
+    fn add_extended_molecule(&mut self) {
+        self.extended_molecule += 1;
         self.total += 1;
     }
 
@@ -50,7 +50,7 @@ impl ClassificationStats {
         if self.total == 0 {
             0.0
         } else {
-            ((self.molecule + self.moleculelike) as f64 / self.total as f64) * 100.0
+            ((self.molecule + self.extended_molecule) as f64 / self.total as f64) * 100.0
         }
     }
 }
@@ -58,7 +58,7 @@ impl ClassificationStats {
 #[derive(Debug, Clone, Copy)]
 enum FileClassification {
     Molecule,     // Works with parse_mol (basic parser)
-    MoleculeLike, // Works with parse_mol_moleculelike but not parse_mol
+    ExtendedMolecule, // Works with parse_extended_mol but not parse_mol
     Invalid,      // Doesn't work with either
 }
 
@@ -66,15 +66,15 @@ fn classify_mol_file(file_path: &Path) -> Result<FileClassification, Box<dyn std
     let mol_bytes = fs::read(file_path)?;
 
     // Categorize based on parser results
-    match (parse_mol(&mol_bytes), parse_mol_moleculelike(&mol_bytes)) {
+    match (parse_mol(&mol_bytes), parse_extended_mol(&mol_bytes)) {
         (Ok(_), Ok(_)) => Ok(FileClassification::Molecule),
-        (Err(_), Ok(_)) => Ok(FileClassification::MoleculeLike),
+        (Err(_), Ok(_)) => Ok(FileClassification::ExtendedMolecule),
         (Ok(_), Err(_)) | (Err(_), Err(_)) => Ok(FileClassification::Invalid),
     }
 }
 
 fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let categories = ["molecule", "moleculelike", "invalid"];
+    let categories = ["molecule", "extended_molecule", "invalid"];
 
     for category in categories {
         let category_path = Path::new(data_path).join(category);
@@ -164,7 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(classification) => {
                     match classification {
                         FileClassification::Molecule => stats.add_molecule(),
-                        FileClassification::MoleculeLike => stats.add_moleculelike(),
+                        FileClassification::ExtendedMolecule => stats.add_extended_molecule(),
                         FileClassification::Invalid => stats.add_invalid(),
                     }
 
@@ -172,7 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if should_sort {
                         let category = match classification {
                             FileClassification::Molecule => "molecule",
-                            FileClassification::MoleculeLike => "moleculelike",
+                            FileClassification::ExtendedMolecule => "extended_molecule",
                             FileClassification::Invalid => "invalid",
                         };
 
@@ -215,10 +215,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("Classification based on parser compatibility:");
     println!("- **Molecule**: Files that parse successfully with `parse_mol` (basic parser)");
-    println!("- **MoleculeLike**: Files that require `parse_mol_moleculelike` (extended features)");
+    println!("- **ExtendedMolecule**: Files that require `parse_extended_mol` (extended features)");
     println!("- **Invalid**: Files that fail both parsers");
     println!();
-    println!("| Source | Total | Molecule | MoleculeLike | Invalid | Valid % |");
+    println!("| Source | Total | Molecule | ExtendedMolecule | Invalid | Valid % |");
     println!("| --- | --- | --- | --- | --- | --- |");
 
     // Sort sources alphabetically for consistent output
@@ -226,7 +226,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     sources.sort_by_key(|(name, _)| name.as_str());
 
     let mut total_molecule = 0;
-    let mut total_moleculelike = 0;
+    let mut total_extended_molecule = 0;
     let mut total_invalid = 0;
     let mut grand_total = 0;
 
@@ -236,13 +236,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             source,
             stats.total,
             stats.molecule,
-            stats.moleculelike,
+            stats.extended_molecule,
             stats.invalid,
             stats.valid_percentage()
         );
 
         total_molecule += stats.molecule;
-        total_moleculelike += stats.moleculelike;
+        total_extended_molecule += stats.extended_molecule;
         total_invalid += stats.invalid;
         grand_total += stats.total;
     }
@@ -251,12 +251,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let overall_valid_percentage = if grand_total == 0 {
         0.0
     } else {
-        ((total_molecule + total_moleculelike) as f64 / grand_total as f64) * 100.0
+        ((total_molecule + total_extended_molecule) as f64 / grand_total as f64) * 100.0
     };
 
     println!(
         "| **Total** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
-        grand_total, total_molecule, total_moleculelike, total_invalid, overall_valid_percentage
+        grand_total, total_molecule, total_extended_molecule, total_invalid, overall_valid_percentage
     );
 
     println!();

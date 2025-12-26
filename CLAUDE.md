@@ -14,7 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Code Style Guidelines
 - Use Rust 2021 edition
 - Follow standard Rust naming conventions (snake_case for functions/variables, CamelCase for types)
-- Organize imports by external crates first, then internal modules
+- Put all imports at the top of file. Organize imports by external crates first, then internal modules.
+  Exception: tests
 - Don't use mod.rs modules, instead use the named modules one level up
   (core.rs instead of core/mod.rs).
 - Use thiserror for error handling with descriptive error messages
@@ -24,7 +25,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use criterion for benchmarking.
 - Use strong typing with enums for domain concepts
 - Validate input values and return Result<T> instead of panicking.
-  Use error and result types from the umol crate.
+- Use the following import Conventions
+   1. Internal symbols (same project, any crate): import fully qualified, rename with crate/module prefix only if ambiguous.
+   2. Types/Structs/Enums from external crates: import directly, use unqualified, rename with the crate prefix in case of naming clashes
+   3. Functions/Constants from external crates: import parent module, call qualified (`io::stdin()`)
+   4. Enum variants: import enum, do not import variants directly. Exceptions: In large match blocks or tests.
+- Write comments for an external reader, do not refer to aspects of editing or refactoring history
+- Refrain from comment ornamentation. Do not introduce separator lines or headings like ========== in comments.
+  If the file is so long that it warrants headings, it should be split into multiple files instead.
 
 ## Project Architecture
 - Four-domain semantic model:

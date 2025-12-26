@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::bond_matcher::{BondMatcher, DEFAULT_BOND_MATCHER};
 use super::bond_spec::{BondDonation, BondOrder, BondSpec};
 use super::error::GraphError;
-use crate::simple_ir::{BondDir, BondStereo, BondSymbol};
+use crate::simple_ir::{self as sir, BondDir, BondStereo};
 use crate::span::Span;
 
 type Result<T> = std::result::Result<T, GraphError>;
@@ -17,7 +17,7 @@ type Result<T> = std::result::Result<T, GraphError>;
 pub struct Bond {
     order: BondOrder,
     donation: BondDonation,
-    symbol: Option<BondSymbol>,
+    sir_order: Option<sir::BondOrder>,
     direction: Option<BondDir>,
     stereo: Option<BondStereo>,
     ring: Option<u32>,
@@ -33,8 +33,8 @@ impl Bond {
         self.donation
     }
 
-    pub fn symbol(&self) -> Option<BondSymbol> {
-        self.symbol
+    pub fn sir_order(&self) -> Option<sir::BondOrder> {
+        self.sir_order
     }
 
     pub fn direction(&self) -> Option<BondDir> {
@@ -61,7 +61,7 @@ impl Bond {
         BondBuilder {
             order: self.order,
             donation: Some(self.donation),
-            symbol: self.symbol,
+            sir_order: self.sir_order,
             direction: self.direction,
             stereo: self.stereo,
             ring: self.ring,
@@ -91,7 +91,7 @@ impl From<Bond> for BondBuilder {
 pub struct BondBuilder {
     order: BondOrder,
     donation: Option<BondDonation>,
-    symbol: Option<BondSymbol>,
+    sir_order: Option<sir::BondOrder>,
     direction: Option<BondDir>,
     stereo: Option<BondStereo>,
     ring: Option<u32>,
@@ -103,7 +103,7 @@ impl BondBuilder {
         Self {
             order,
             donation: None,
-            symbol: None,
+            sir_order: None,
             direction: None,
             stereo: None,
             ring: None,
@@ -115,7 +115,7 @@ impl BondBuilder {
         Self {
             order: bond_spec.order(),
             donation: Some(bond_spec.donation()),
-            symbol: None,
+            sir_order: None,
             direction: None,
             stereo: None,
             ring: None,
@@ -131,8 +131,8 @@ impl BondBuilder {
         self.donation
     }
 
-    pub fn symbol(&self) -> Option<BondSymbol> {
-        self.symbol
+    pub fn sir_order(&self) -> Option<sir::BondOrder> {
+        self.sir_order
     }
 
     pub fn direction(&self) -> Option<BondDir> {
@@ -165,8 +165,8 @@ impl BondBuilder {
         self
     }
 
-    pub fn set_symbol(&mut self, symbol: BondSymbol) -> &mut Self {
-        self.symbol = Some(symbol);
+    pub fn set_sir_order(&mut self, order: sir::BondOrder) -> &mut Self {
+        self.sir_order = Some(order);
         self
     }
 
@@ -220,7 +220,7 @@ impl BondBuilder {
         Ok(Bond {
             order: bond_spec.order(),
             donation: bond_spec.donation(),
-            symbol: self.symbol,
+            sir_order: self.sir_order,
             direction: self.direction,
             stereo: self.stereo,
             ring: self.ring,

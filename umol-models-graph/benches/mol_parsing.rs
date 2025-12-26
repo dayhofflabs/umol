@@ -6,7 +6,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use nom::Parser;
 use umol_models_graph::io::ctab::config::CtabParseFlags;
 use umol_models_graph::io::ctab::parser::{
-    atom_input, atomlike_input, basic_property_input, bond_input, bondlike_input, counts_input,
+    atom_input, extended_atom_input, basic_property_input, bond_input, extended_bond_input, counts_input,
     legacy_atom_list_input, property_input,
 };
 
@@ -83,7 +83,7 @@ fn mol_parsing(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/atomlike");
+        let mut group = c.benchmark_group("mol_parsing/extended_atom");
 
         let test_cases = [
             (
@@ -124,7 +124,7 @@ fn mol_parsing(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| {
-                    atomlike_input(&CtabParseFlags::LENIENT).parse(std::hint::black_box(input))
+                    extended_atom_input(&CtabParseFlags::LENIENT).parse(std::hint::black_box(input))
                 })
             });
         }
@@ -152,7 +152,7 @@ fn mol_parsing(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/bondlike");
+        let mut group = c.benchmark_group("mol_parsing/extended_bond");
         let test_cases = [
             ("len21", &b"  1  2  1  0     2  1"[..]),
             ("len21_invalid", &b"  1  2  1  0     4  1"[..]),
@@ -166,7 +166,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| bondlike_input(&CtabParseFlags::LENIENT).parse(black_box(input)))
+                b.iter(|| extended_bond_input(&CtabParseFlags::LENIENT).parse(black_box(input)))
             });
         }
         group.finish();

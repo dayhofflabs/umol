@@ -6,7 +6,7 @@ use umol_data::Element;
 
 use super::*;
 use crate::io::ctab::config::CtabParseFlags;
-use crate::io::ctab::sgroup::{SGroupMultiplierOp, SGroupMultiplierTerm};
+use crate::simple_ir::{SGroupMultiplierOp, SGroupMultiplierTerm};
 
 #[rstest]
 #[case(b"  1 F    3   9   7   8  ", "exclusion flag false",

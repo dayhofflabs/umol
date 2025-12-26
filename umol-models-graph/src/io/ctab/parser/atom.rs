@@ -18,16 +18,14 @@ use super::utils::{
     fixed_width_float, fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt,
     fixed_width_padding_n, to_string,
 };
-use crate::io::ctab::atom::{Atom, AtomLike, AtomList, AtomSymbol};
 use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::parser::utils::fixed_width_partial;
-use crate::io::ctab::query::QueryAtom;
-use crate::io::ctab::rgroup::RGroup;
 use crate::position::Point3D;
+use crate::simple_ir::{AtomList, AtomSymbol, ExtendedAtom, QueryAtom, RGroup};
 
 /// Parse atom symbol (Element and NamedIsotope only).
 ///
-/// Returns error for atom-like symbols (L, A, Q, *, LP, R#).
+/// Returns error for extended atom symbols (L, A, Q, *, LP, R#).
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
 fn atom_symbol<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
@@ -60,7 +58,7 @@ fn atom_symbol<'inp, 'fl>(
     }
 }
 
-/// Parse atom-like symbol (all atom types allowed in MOL specification).
+/// Parse extended atom symbol (all atom types allowed in MOL specification).
 ///
 /// --------------------------------------------------------------------------------
 /// | Symbol      | Type          | Parser* | Notes                                |
@@ -82,7 +80,7 @@ fn atom_symbol<'inp, 'fl>(
 /// If `allow_extended_queries` is true, allow extended queries (AH, QH, XH, MH).
 /// If `allow_subatoms` is true, allow subatoms (LP).
 ///
-fn atomlike_symbol<'inp, 'fl>(
+fn extended_atom_symbol<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = AtomSymbol, Error = error::Error<&'inp [u8]>> {
     let allow_named_isotopes = flags.contains(CtabParseFlags::NAMED_ISOTOPES);
@@ -152,7 +150,7 @@ fn atomlike_symbol<'inp, 'fl>(
 fn atom_input69<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+) -> IResult<&'inp [u8], ExtendedAtom, error::Error<&'inp [u8]>> {
     let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
@@ -189,19 +187,18 @@ fn atom_input69<'inp, 'fl>(
             terminated(atom_map_num, padding3),
         ),
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity, valence, atom_map_num)| {
-            let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
+            let (element, isotope) = convert_atom_symbol_mass_diff(symbol.clone(), mass_diff);
             let (charge, radical) = charge_radical;
-            Atom {
-                element,
-                charge,
-                radical,
-                isotope_mass,
+            ExtendedAtom {
+                symbol: AtomSymbol::Element(element),
+                position: Some(Point3D::new(x, y, z)),
+                charge: if charge == 0 { None } else { Some(charge) },
+                isotope,
+                radical: radical,
                 stereo_parity,
-                hydrogen_count: None,
                 valence,
                 atom_map_num,
-                position: Some(Point3D::new(x, y, z)),
-                properties: std::collections::HashMap::new(),
+                ..Default::default()
             }
         },
     )
@@ -217,7 +214,7 @@ fn atom_input69<'inp, 'fl>(
 fn atom_input51<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+) -> IResult<&'inp [u8], ExtendedAtom, error::Error<&'inp [u8]>> {
     let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
@@ -250,19 +247,17 @@ fn atom_input51<'inp, 'fl>(
             valence,
         ),
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity, valence)| {
-            let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
+            let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            Atom {
-                element,
-                charge,
-                radical,
-                isotope_mass,
-                stereo_parity,
-                hydrogen_count: None,
-                valence,
-                atom_map_num: None,
+            ExtendedAtom {
+                symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
-                properties: std::collections::HashMap::new(),
+                charge: if charge == 0 { None } else { Some(charge) },
+                isotope,
+                radical: radical,
+                stereo_parity,
+                valence,
+                ..Default::default()
             }
         },
     )
@@ -279,7 +274,7 @@ fn atom_input51<'inp, 'fl>(
 fn atom_input42<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+) -> IResult<&'inp [u8], ExtendedAtom, error::Error<&'inp [u8]>> {
     let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
@@ -310,19 +305,16 @@ fn atom_input42<'inp, 'fl>(
             terminated(stereo_parity, padding1),
         ),
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity)| {
-            let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
+            let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            Atom {
-                element,
-                charge,
-                radical,
-                isotope_mass,
-                stereo_parity,
-                hydrogen_count: None,
-                valence: None,
-                atom_map_num: None,
+            ExtendedAtom {
+                symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
-                properties: std::collections::HashMap::new(),
+                charge: if charge == 0 { None } else { Some(charge) },
+                isotope,
+                radical: radical,
+                stereo_parity,
+                ..Default::default()
             }
         },
     )
@@ -337,7 +329,7 @@ fn atom_input42<'inp, 'fl>(
 fn atom_input39<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+) -> IResult<&'inp [u8], ExtendedAtom, error::Error<&'inp [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -359,19 +351,15 @@ fn atom_input39<'inp, 'fl>(
             charge_radical,
         ),
         |(x, y, z, symbol, mass_diff, charge_radical)| {
-            let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
+            let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, radical) = charge_radical;
-            Atom {
-                element,
-                charge,
-                radical,
-                isotope_mass,
-                stereo_parity: None,
-                hydrogen_count: None,
-                valence: None,
-                atom_map_num: None,
+            ExtendedAtom {
+                symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
-                properties: std::collections::HashMap::new(),
+                charge: if charge == 0 { None } else { Some(charge) },
+                isotope,
+                radical: radical,
+                ..Default::default()
             }
         },
     )
@@ -387,7 +375,7 @@ fn atom_input39<'inp, 'fl>(
 fn atom_input36<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+) -> IResult<&'inp [u8], ExtendedAtom, error::Error<&'inp [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -399,18 +387,12 @@ fn atom_input36<'inp, 'fl>(
     map(
         (x, y, z, preceded(tag(" "), symbol), mass_diff),
         |(x, y, z, symbol, mass_diff)| {
-            let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-            Atom {
-                element,
-                charge: 0,
-                radical: None,
-                isotope_mass,
-                stereo_parity: None,
-                hydrogen_count: None,
-                valence: None,
-                atom_map_num: None,
+            let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
+            ExtendedAtom {
+                symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
-                properties: std::collections::HashMap::new(),
+                isotope,
+                ..Default::default()
             }
         },
     )
@@ -427,7 +409,7 @@ fn atom_input36<'inp, 'fl>(
 fn atom_input34<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], Atom, error::Error<&'inp [u8]>> {
+) -> IResult<&'inp [u8], ExtendedAtom, error::Error<&'inp [u8]>> {
     let x = fixed_width_float::<f64>(10, 4);
     let y = fixed_width_float::<f64>(10, 4);
     let z = fixed_width_float::<f64>(10, 4);
@@ -436,18 +418,12 @@ fn atom_input34<'inp, 'fl>(
     map(
         (x, y, z, preceded(tag(" "), symbol)),
         |(x, y, z, symbol)| {
-            let (element, isotope_mass) = convert_atom_symbol_mass_diff(symbol, None);
-            Atom {
-                element,
-                charge: 0,
-                radical: None,
-                isotope_mass,
-                stereo_parity: None,
-                hydrogen_count: None,
-                valence: None,
-                atom_map_num: None,
+            let (element, isotope) = convert_atom_symbol_mass_diff(symbol, None);
+            ExtendedAtom {
+                symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
-                properties: std::collections::HashMap::new(),
+                isotope,
+                ..Default::default()
             }
         },
     )
@@ -455,7 +431,7 @@ fn atom_input34<'inp, 'fl>(
 }
 
 /// Parse atom input (optimized for performance)
-/// Fails immediately on atomlike symbols. For parsing all atom types, see atomlike_input.
+/// Fails immediately on extended atom symbols. For parsing all atom types, see extended_atom_input.
 ///
 /// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
 ///
@@ -474,7 +450,8 @@ fn atom_input34<'inp, 'fl>(
 ///
 pub fn atom_input<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = Atom, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+) -> impl Parser<&'inp [u8], Output = ExtendedAtom, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
     move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         let len = input.len();
@@ -492,7 +469,7 @@ pub fn atom_input<'inp, 'fl>(
     }
 }
 
-/// Parse atom and atom-like input
+/// Parse atom and extended atom input
 /// Allows all atom types. For faster parsing of basic molecules, see atom_input.
 ///
 /// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
@@ -518,19 +495,21 @@ pub fn atom_input<'inp, 'fl>(
 /// | nnn   | inversion          | 0..=2        | Reaction                                  |
 /// | eee   | exact change       | 0, 1         | Reaction                                  |
 /// -----------------------------------------------------------------------------------------
-pub fn atomlike_input<'inp, 'fl>(
+pub fn extended_atom_input<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = AtomLike, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+) -> impl Parser<&'inp [u8], Output = ExtendedAtom, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
     move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-        terminated(atomlike_input_inner(flags), space0).parse(input)
+        terminated(extended_atom_input_inner(flags), space0).parse(input)
     }
 }
 
-// Internal parser for atomlike_input
-fn atomlike_input_inner<'inp, 'fl>(
+// Internal parser for extended_atom_input
+fn extended_atom_input_inner<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = AtomLike, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+) -> impl Parser<&'inp [u8], Output = ExtendedAtom, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
     let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     move |input: &'inp [u8]| {
         // x, y, z coordinates
@@ -539,7 +518,7 @@ fn atomlike_input_inner<'inp, 'fl>(
         let (i, z) = fixed_width_float::<f64>(10, 4).parse(i)?;
 
         // Atom symbol
-        let (i, atom_symbol) = preceded(tag(" "), atomlike_symbol(flags)).parse(i)?;
+        let (i, atom_symbol) = preceded(tag(" "), extended_atom_symbol(flags)).parse(i)?;
 
         // Mass difference
         let (i, mass_diff) = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
@@ -630,26 +609,20 @@ fn atomlike_input_inner<'inp, 'fl>(
 
         Ok((
             i,
-            AtomLike {
+            ExtendedAtom {
                 symbol: atom_symbol,
-                charge,
-                radical,
-                isotope_mass,
+                position: Some(Point3D::new(x, y, z)),
+                charge: if charge == 0 { None } else { Some(charge) },
+                isotope: isotope_mass,
+                radical: radical,
+                hydrogens: hydrogen_count.flatten(),
                 stereo_parity: stereo_parity.flatten(),
-                hydrogen_count: hydrogen_count.flatten(),
                 stereo_care: stereo_care.flatten(),
                 valence: valence.flatten(),
                 atom_map_num: atom_map_num.flatten(),
                 inversion_retention: inversion_flag.flatten(),
                 exact_change: exact_change_flag.flatten(),
-                attachment_point: None,
-                attachment_order: None,
-                ring_bond_count: None,
-                substitution_count: None,
-                unsaturated: None,
-                link_atom: None,
-                position: Some(Point3D::new(x, y, z)),
-                properties: std::collections::HashMap::new(),
+                ..Default::default()
             },
         ))
     }

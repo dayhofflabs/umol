@@ -1,0 +1,7 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 24
+bond_count: 26
+sum_formula: C10H2N6O5P

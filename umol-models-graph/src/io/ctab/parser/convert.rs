@@ -1,13 +1,15 @@
 //! Convert numerical codes used in MOL files to enums
+//!
+//! All functions return simple_ir types.
 
 use umol_data::{Element, Isotope};
 
 use crate::io::ctfile::error::SemanticError;
-use crate::io::ctab::atom::{
-    AtomExactChange, AtomInversionRetention, AtomRadical, AtomStereoCare, AtomStereoParity,
-    AtomSymbol, AttachmentPointType, RingBondCount, SubstitutionCount, UnsaturatedAtom,
+use crate::simple_ir::{
+    AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity, AtomSymbol,
+    AttachmentPointType, BondDir, BondOrder, BondReactingCenter, BondStereo, BondTopology,
+    AtomRadical, RingBondCount, SubstitutionCount, UnsaturatedAtom,
 };
-use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 
 type Result<T> = std::result::Result<T, SemanticError>;
 
@@ -23,7 +25,7 @@ pub(crate) fn convert_atom_mass_diff_code(code: i8) -> Option<i8> {
 /// Convert atom symbol and mass difference to element and isotope mass
 /// 'ss' field: atom symbol, 'dd' field: mass difference
 /// Processes elements and named isotopes.
-/// Returns error for atomlike symbols (L, A, Q, *, LP, R#)
+/// Returns error for extended atom symbols (L, A, Q, *, LP, R#)
 pub(crate) fn convert_atom_symbol_mass_diff(
     symbol: AtomSymbol,
     mass_diff: Option<i8>,
@@ -81,7 +83,7 @@ pub(crate) fn convert_atom_stereo_parity_code(
     use_defaults: bool,
 ) -> Result<Option<AtomStereoParity>> {
     match code {
-        0 if use_defaults => Ok(Some(AtomStereoParity::default())),
+        0 if use_defaults => Ok(Some(AtomStereoParity::Either)),
         0 => Ok(None),
         1 => Ok(Some(AtomStereoParity::Odd)),
         2 => Ok(Some(AtomStereoParity::Even)),
@@ -153,12 +155,12 @@ pub(crate) fn convert_atom_exact_change_flag_code(code: u8) -> Result<Option<Ato
 
 /// Convert bond type code (basic molecules only)
 /// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic)
-pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
+pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondOrder> {
     match code {
-        1 => Ok(BondType::Single),
-        2 => Ok(BondType::Double),
-        3 => Ok(BondType::Triple),
-        4 => Ok(BondType::Aromatic),
+        1 => Ok(BondOrder::Single),
+        2 => Ok(BondOrder::Double),
+        3 => Ok(BondOrder::Triple),
+        4 => Ok(BondOrder::Aromatic),
         _ => Err(SemanticError::Generic(format!("Invalid bond type code '{}'", code))),
     }
 }
@@ -167,31 +169,31 @@ pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
 /// 'ttt' field - bond type (1=Single, 2=Double, 3=Triple, 4=Aromatic,
 /// allow_queries: 5=SingleOrDouble, 6=SingleOrAromatic, 7=DoubleOrAromatic, 8=Any,
 /// extended_range: 9=Quadruple, 10=Quintuple, 11=Sextuple, 0=Zero)
-pub(crate) fn convert_bondlike_type_code(
+pub(crate) fn convert_extended_bond_type_code(
     code: u8,
     extended_range: bool,
     allow_queries: bool,
-) -> Result<BondType> {
+) -> Result<BondOrder> {
     match code {
-        1 => Ok(BondType::Single),
-        2 => Ok(BondType::Double),
-        3 => Ok(BondType::Triple),
-        4 => Ok(BondType::Aromatic),
+        1 => Ok(BondOrder::Single),
+        2 => Ok(BondOrder::Double),
+        3 => Ok(BondOrder::Triple),
+        4 => Ok(BondOrder::Aromatic),
         _ => {
             if allow_queries && (5..=8).contains(&code) {
                 match code {
-                    5 => Ok(BondType::SingleOrDouble),
-                    6 => Ok(BondType::SingleOrAromatic),
-                    7 => Ok(BondType::DoubleOrAromatic),
-                    8 => Ok(BondType::Any),
+                    5 => Ok(BondOrder::SingleOrDouble),
+                    6 => Ok(BondOrder::SingleOrAromatic),
+                    7 => Ok(BondOrder::DoubleOrAromatic),
+                    8 => Ok(BondOrder::Any),
                     _ => unreachable!(),
                 }
             } else if extended_range && (code == 0 || (9..=11).contains(&code)) {
                 match code {
-                    0 => Ok(BondType::Zero),
-                    9 => Ok(BondType::Quadruple),
-                    10 => Ok(BondType::Quintuple),
-                    11 => Ok(BondType::Sextuple),
+                    0 => Ok(BondOrder::Zero),
+                    9 => Ok(BondOrder::Quadruple),
+                    10 => Ok(BondOrder::Quintuple),
+                    11 => Ok(BondOrder::Sextuple),
                     _ => unreachable!(),
                 }
             } else {
@@ -213,9 +215,9 @@ pub(crate) fn convert_bond_stereo_dir_code(
     match code {
         0 if use_defaults => Ok((Some(BondStereo::default()), Some(BondDir::default()))),
         0 => Ok((None, None)),
-        1 => Ok((Some(BondStereo::Cis), Some(BondDir::Wedge))),
+        1 => Ok((Some(BondStereo::Cis), Some(BondDir::Up))),
         3 | 4 => Ok((Some(BondStereo::Either), Some(BondDir::Either))),
-        6 => Ok((Some(BondStereo::Trans), Some(BondDir::Dash))),
+        6 => Ok((Some(BondStereo::Trans), Some(BondDir::Down))),
         _ => Err(SemanticError::Generic(format!(
             "Invalid bond stereo/direction code '{}'",
             code
@@ -645,11 +647,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(1, BondType::Single)]
-    #[case(2, BondType::Double)]
-    #[case(3, BondType::Triple)]
-    #[case(4, BondType::Aromatic)]
-    fn test_convert_bond_type_code(#[case] code: u8, #[case] expected: BondType) {
+    #[case(1, BondOrder::Single)]
+    #[case(2, BondOrder::Double)]
+    #[case(3, BondOrder::Triple)]
+    #[case(4, BondOrder::Aromatic)]
+    fn test_convert_bond_type_code(#[case] code: u8, #[case] expected: BondOrder) {
         assert_eq!(convert_bond_type_code(code).unwrap(), expected);
     }
 
@@ -666,13 +668,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(1u8, BondType::Single)]
-    #[case(2u8, BondType::Double)]
-    #[case(3u8, BondType::Triple)]
-    #[case(4u8, BondType::Aromatic)]
-    fn test_convert_bondlike_type_code(#[case] code: u8, #[case] expected: BondType) {
+    #[case(1u8, BondOrder::Single)]
+    #[case(2u8, BondOrder::Double)]
+    #[case(3u8, BondOrder::Triple)]
+    #[case(4u8, BondOrder::Aromatic)]
+    fn test_convert_extended_bond_type_code(#[case] code: u8, #[case] expected: BondOrder) {
         assert_eq!(
-            convert_bondlike_type_code(code, false, false).unwrap(),
+            convert_extended_bond_type_code(code, false, false).unwrap(),
             expected
         );
     }
@@ -681,45 +683,45 @@ mod tests {
     #[case(0u8, "zero-order bond")]
     #[case(9u8, "extended bond type")]
     #[case(12u8, "bond order outside range")]
-    fn test_convert_bondlike_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
+    fn test_convert_extended_bond_type_code_invalid(#[case] code: u8, #[case] desc: &str) {
         assert!(
-            convert_bondlike_type_code(code, false, false).is_err(),
+            convert_extended_bond_type_code(code, false, false).is_err(),
             "{} should have failed",
             desc
         );
     }
 
     #[rstest]
-    #[case(0u8, BondType::Zero)]
-    #[case(1u8, BondType::Single)]
-    #[case(9u8, BondType::Quadruple)]
-    #[case(10u8, BondType::Quintuple)]
-    #[case(11u8, BondType::Sextuple)]
-    fn test_convert_bondlike_type_code_extended(#[case] code: u8, #[case] expected: BondType) {
+    #[case(0u8, BondOrder::Zero)]
+    #[case(1u8, BondOrder::Single)]
+    #[case(9u8, BondOrder::Quadruple)]
+    #[case(10u8, BondOrder::Quintuple)]
+    #[case(11u8, BondOrder::Sextuple)]
+    fn test_convert_extended_bond_type_code_extended(#[case] code: u8, #[case] expected: BondOrder) {
         assert_eq!(
-            convert_bondlike_type_code(code, true, false).unwrap(),
+            convert_extended_bond_type_code(code, true, false).unwrap(),
             expected
         );
     }
 
     #[rstest]
-    #[case(5u8, BondType::SingleOrDouble)]
-    #[case(6u8, BondType::SingleOrAromatic)]
-    #[case(7u8, BondType::DoubleOrAromatic)]
-    #[case(8u8, BondType::Any)]
-    fn test_convert_bondlike_type_code_queries(#[case] code: u8, #[case] expected: BondType) {
+    #[case(5u8, BondOrder::SingleOrDouble)]
+    #[case(6u8, BondOrder::SingleOrAromatic)]
+    #[case(7u8, BondOrder::DoubleOrAromatic)]
+    #[case(8u8, BondOrder::Any)]
+    fn test_convert_extended_bond_type_code_queries(#[case] code: u8, #[case] expected: BondOrder) {
         assert_eq!(
-            convert_bondlike_type_code(code, false, true).unwrap(),
+            convert_extended_bond_type_code(code, false, true).unwrap(),
             expected
         );
     }
 
     #[rstest]
     #[case(0, (Some(BondStereo::Either), Some(BondDir::Either)), (None, None))]
-    #[case(1, (Some(BondStereo::Cis), Some(BondDir::Wedge)), (Some(BondStereo::Cis), Some(BondDir::Wedge)))]
+    #[case(1, (Some(BondStereo::Cis), Some(BondDir::Up)), (Some(BondStereo::Cis), Some(BondDir::Up)))]
     #[case(3, (Some(BondStereo::Either), Some(BondDir::Either)), (Some(BondStereo::Either), Some(BondDir::Either)))]
     #[case(4, (Some(BondStereo::Either), Some(BondDir::Either)), (Some(BondStereo::Either), Some(BondDir::Either)))]
-    #[case(6, (Some(BondStereo::Trans), Some(BondDir::Dash)), (Some(BondStereo::Trans), Some(BondDir::Dash)))]
+    #[case(6, (Some(BondStereo::Trans), Some(BondDir::Down)), (Some(BondStereo::Trans), Some(BondDir::Down)))]
     fn test_convert_bond_stereo_dir_code(
         #[case] code: u8,
         #[case] expected_default: (Option<BondStereo>, Option<BondDir>),

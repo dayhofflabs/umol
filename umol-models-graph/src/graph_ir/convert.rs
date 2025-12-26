@@ -2,13 +2,12 @@
 
 use umol_data::Element;
 
-use crate::graph_ir::AtomIndex;
 use super::atom_matcher::STRICT_ATOM_MATCHER;
 use super::atom_validator::STRICT_ATOM_VALIDATOR;
 use super::bond_matcher::STRICT_BOND_MATCHER;
 use super::error::GraphError;
-use super::{BondBuilder, BondDonation, BondOrder, Molecule, MoleculeBuilder};
-use crate::simple_ir::{self as sir, AtomSymbol, BondSymbol};
+use super::{AtomIndex, BondBuilder, BondDonation, BondOrder, Molecule, MoleculeBuilder};
+use crate::simple_ir::{self as sir, AtomSymbol};
 
 type Result<T> = std::result::Result<T, GraphError>;
 
@@ -32,7 +31,7 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
         let (builder_idx, atom_builder) = builder.create_atom(element);
 
         if let Some(charge) = atom.charge {
-            atom_builder.set_charge(charge);
+            atom_builder.set_charge(charge.into());
         }
 
         atom_builder.set_span_opt(atom.span);
@@ -42,11 +41,11 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
         }
 
         if let Some(h) = atom.hydrogens {
-            atom_builder.set_implicit_h(h);
+            atom_builder.set_implicit_h(h.into());
         }
 
-        if let Some(unpaired) = atom.unpaired_e {
-            atom_builder.set_unpaired_e(unpaired);
+        if let Some(radical) = atom.radical {
+            atom_builder.set_unpaired_e(radical.to_unpaired_e().into());
         }
 
         if let Some(aromatic) = atom.aromatic {
@@ -89,11 +88,11 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
             .get(b)
             .ok_or_else(|| GraphError::AtomNotFound(AtomIndex::new(b)))?;
 
-        let order = convert_bond_order(bond.symbol, idx)?;
+        let order = convert_bond_order(bond.order, idx)?;
 
         let mut bond_builder = BondBuilder::new(order);
         bond_builder.set_donation(BondDonation::Shared);
-        bond_builder.set_symbol(bond.symbol);
+        bond_builder.set_sir_order(bond.order);
         bond_builder.set_direction(bond.direction);
         bond_builder.set_stereo(bond.stereo);
         bond_builder.set_ring(bond.ring);
@@ -108,27 +107,24 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
     )
 }
 
-fn convert_bond_order(symbol: BondSymbol, bond_idx: usize) -> Result<BondOrder> {
-    let order = match symbol {
-        BondSymbol::Bond(order) => order,
-        _ => {
-            return Err(GraphError::ConversionFailed(format!(
-                "bond {} uses unsupported symbol {:?}",
-                bond_idx, symbol
-            )))
-        }
-    };
-
-    let bond_order = match order {
+fn convert_bond_order(sir_order: sir::BondOrder, bond_idx: usize) -> Result<BondOrder> {
+    let bond_order = match sir_order {
         sir::BondOrder::Zero => BondOrder::Zero,
         sir::BondOrder::Single => BondOrder::Single,
         sir::BondOrder::Double => BondOrder::Double,
         sir::BondOrder::Triple => BondOrder::Triple,
         sir::BondOrder::Quadruple => BondOrder::Quadruple,
-        sir::BondOrder::Aromatic | sir::BondOrder::Unknown => {
+        sir::BondOrder::Aromatic
+        | sir::BondOrder::Unknown
+        | sir::BondOrder::Quintuple
+        | sir::BondOrder::Sextuple
+        | sir::BondOrder::SingleOrDouble
+        | sir::BondOrder::SingleOrAromatic
+        | sir::BondOrder::DoubleOrAromatic
+        | sir::BondOrder::Any => {
             return Err(GraphError::ConversionFailed(format!(
                 "unsupported bond order {:?} at bond {}",
-                order, bond_idx
+                sir_order, bond_idx
             )))
         }
     };
@@ -162,13 +158,13 @@ mod tests {
         sir.bonds.push(sir::Bond {
             start_atom: 0,
             end_atom: 1,
-            symbol: BondSymbol::Bond(sir::BondOrder::Single),
+            order: sir::BondOrder::Single,
             ..Default::default()
         });
         sir.bonds.push(sir::Bond {
             start_atom: 0,
             end_atom: 2,
-            symbol: BondSymbol::Bond(sir::BondOrder::Single),
+            order: sir::BondOrder::Single,
             ..Default::default()
         });
 
@@ -207,7 +203,7 @@ mod tests {
         sir.bonds.push(sir::Bond {
             start_atom: 0,
             end_atom: 1,
-            symbol: BondSymbol::Bond(sir::BondOrder::Aromatic),
+            order: sir::BondOrder::Aromatic,
             ..Default::default()
         });
 

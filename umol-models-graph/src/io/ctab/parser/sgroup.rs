@@ -8,7 +8,7 @@ use nom::sequence::separated_pair;
 use nom::{error, AsChar, Err, Parser};
 
 use crate::io::ctab::parser::utils::{fixed_width_partial, to_string};
-use crate::io::ctab::sgroup::{
+use crate::simple_ir::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierOp,
     SGroupMultiplierTerm, SGroupSubtype, SGroupType,

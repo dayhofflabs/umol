@@ -12,9 +12,9 @@ use nom::Parser;
 use serde::{Deserialize, Serialize};
 
 use crate::io::ctab::config::MolIoConfig;
-use crate::io::ctab::parser::ctab_block;
+use crate::io::ctab::parser::extended_ctab_block;
 use crate::io::ctfile::error::ParseError;
-use crate::io::mol::parser::{header, MolFileLike};
+use crate::io::mol::parser::{header, ExtendedMolFile};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SdfFile {
@@ -29,12 +29,12 @@ impl SdfFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SdfCompound {
-    pub mol_file: MolFileLike,
+    pub mol_file: ExtendedMolFile,
     pub data_fields: IndexMap<String, String>,
 }
 
 impl SdfCompound {
-    pub fn new(mol_file: MolFileLike, data_fields: IndexMap<String, String>) -> Self {
+    pub fn new(mol_file: ExtendedMolFile, data_fields: IndexMap<String, String>) -> Self {
         Self {
             mol_file,
             data_fields,
@@ -120,13 +120,13 @@ pub fn parse_sdf_compound<'inp>(
     let config = MolIoConfig::lenient();
     let flags = config.parse_flags;
 
-    let (remaining, _header) = header::header()
+    let (remaining, header) = header::header()
         .parse(input)
         .map_err(|e| ParseError::from_nom(e, current_line, input))?;
     current_line += 3;
 
-    let (remaining, molecule) = ctab_block(remaining, &flags, current_line)?;
-    
+    let (remaining, molecule) = extended_ctab_block(remaining, &flags, current_line)?;
+
     // Recalculate current_line after ctab_block
     let consumed_by_mol = input.len() - remaining.len();
     current_line += input[..consumed_by_mol].lines_with_terminator().count() as u32 - 3;
@@ -141,7 +141,7 @@ pub fn parse_sdf_compound<'inp>(
 
     Ok((
         remaining,
-        SdfCompound::new(MolFileLike::new(_header, molecule), data_fields),
+        SdfCompound::new(ExtendedMolFile::new(header, molecule), data_fields),
     ))
 }
 

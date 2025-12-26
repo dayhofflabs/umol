@@ -1,0 +1,7 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 37
+bond_count: 34
+sum_formula: C34+1

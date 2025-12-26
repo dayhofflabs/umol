@@ -1,10 +1,6 @@
 //! CTab format parser (used in MOL and SDF formats).
+//!
+//! Produces SimpleIR types directly.
 
-pub mod atom;
-pub mod bond;
 pub mod config;
-pub mod molecule;
 pub mod parser;
-pub mod query;
-pub mod rgroup;
-pub mod sgroup;

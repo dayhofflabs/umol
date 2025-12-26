@@ -2,6 +2,8 @@
 //!
 //! This module provides the main entry points for parsing Connection Table (CTAB) format,
 //! which is the core molecular structure representation used in MOL, SDF, and other formats.
+//!
+//! Produces SimpleIR types directly.
 
 use bstr::{join, ByteSlice};
 use nom::bytes::complete::{is_not, tag};
@@ -11,18 +13,16 @@ use nom::sequence::terminated;
 use nom::Parser;
 
 use crate::io::ctfile::error::{ParseError, SemanticError};
+use crate::simple_ir::{ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule as SirMolecule};
 
 use self::accumulator::MoleculeProperties;
-pub use self::atom::{atom_input, atomlike_input};
-pub use self::bond::{bond_input, bondlike_input};
+pub use self::atom::{atom_input, extended_atom_input};
+pub use self::bond::{bond_input, extended_bond_input};
 pub use self::counts::{counts_input, Counts};
 pub use self::properties::{
     atom_alias_input, basic_property_input, legacy_atom_list_input, property_input, PropertyEntries,
 };
-use super::atom::{Atom, AtomLike};
-use super::bond::{Bond, BondLike};
 use super::config::CtabParseFlags;
-use super::molecule::{Molecule, MoleculeLike};
 
 mod accumulator;
 mod atom;
@@ -36,14 +36,14 @@ mod utils;
 
 /// Parse CTAB block (basic parser, optimized for performance, basic molecules only)
 ///
-/// Parses from the counts line through M END, returning a Molecule.
+/// Parses from the counts line through M END, returning a SimpleIR Molecule.
 /// This parser is optimized for basic molecules without query features.
 /// It will fail if the CTAB contains query atoms, query bonds, or other advanced features.
-pub fn basic_ctab_block<'inp, 'fl>(
+pub fn ctab_block<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> std::result::Result<(&'inp [u8], Molecule), ParseError> {
+) -> std::result::Result<(&'inp [u8], SirMolecule), ParseError> {
     let (remaining, counts) = counts_block(flags)
         .parse(input)
         .map_err(|e| ParseError::from_nom(e, current_line, input))?;
@@ -63,21 +63,23 @@ pub fn basic_ctab_block<'inp, 'fl>(
 
     let (remaining, _) = end_block(current_line)(remaining)?;
 
-    let molecule = build_molecule(atoms, bonds, properties)
+    let extended = build_molecule(atoms, bonds, properties)
         .map_err(|e| ParseError::Generic { line: current_line, col: 0, message: e.to_string() })?;
-    Ok((remaining, molecule))
+    // Convert to basic Molecule by stripping extended fields
+    let basic = extended.to_basic();
+    Ok((remaining, basic))
 }
 
 /// Parse CTAB block (general parser, handles all features including queries)
 ///
-/// Parses from the counts line through M END, returning a complete Molecule.
+/// Parses from the counts line through M END, returning a SimpleIR ExtendedMolecule.
 /// This parser handles all CTAB features including query atoms, query bonds,
 /// R-groups, S-groups, and all property lines.
-pub fn ctab_block<'inp, 'fl>(
+pub fn extended_ctab_block<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> std::result::Result<(&'inp [u8], MoleculeLike), ParseError> {
+) -> std::result::Result<(&'inp [u8], ExtendedMolecule), ParseError> {
     let legacy_features = flags.contains(CtabParseFlags::LEGACY_FEATURES);
     let (remaining, counts) = counts_block(flags)
         .parse(input)
@@ -86,10 +88,10 @@ pub fn ctab_block<'inp, 'fl>(
     let bond_count = counts.bond_count as usize;
     current_line += 1;
 
-    let (remaining, atoms) = atomlike_block(atom_count, flags, current_line)(remaining)?;
+    let (remaining, atoms) = extended_atom_block(atom_count, flags, current_line)(remaining)?;
     current_line += atom_count as u32;
 
-    let (remaining, bonds) = bondlike_block(bond_count, flags, current_line)(remaining)?;
+    let (remaining, bonds) = extended_bond_block(bond_count, flags, current_line)(remaining)?;
     current_line += bond_count as u32;
 
     let (remaining, legacy_properties) = if legacy_features {
@@ -102,9 +104,9 @@ pub fn ctab_block<'inp, 'fl>(
     let (remaining, _) = end_block(current_line)(remaining)?;
 
     let properties = properties.into_iter().chain(legacy_properties).collect();
-    let molecule = build_moleculelike(atoms, bonds, properties)
+    let extended = build_extended_molecule(atoms, bonds, properties)
         .map_err(|e| ParseError::Generic { line: current_line, col: 0, message: e.to_string() })?;
-    Ok((remaining, molecule))
+    Ok((remaining, extended))
 }
 
 /// Parse counts block
@@ -119,7 +121,9 @@ fn atom_block<'inp, 'fl>(
     atom_count: usize,
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<Atom>), ParseError> + use<'inp, 'fl> {
+) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<ExtendedAtom>), ParseError>
+       + use<'inp, 'fl>
+{
     move |input: &'inp [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
         let mut lines_iter = input.lines_with_terminator();
@@ -143,12 +147,14 @@ fn atom_block<'inp, 'fl>(
     }
 }
 
-/// Parse atom-like block
-fn atomlike_block<'inp, 'fl>(
+/// Parse extended atom block
+fn extended_atom_block<'inp, 'fl>(
     atom_count: usize,
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<AtomLike>), ParseError> + use<'inp, 'fl> {
+) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<ExtendedAtom>), ParseError>
+       + use<'inp, 'fl>
+{
     move |input: &'inp [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
         let mut lines_iter = input.lines_with_terminator();
@@ -159,7 +165,7 @@ fn atomlike_block<'inp, 'fl>(
                 ParseError::generic(current_line, 0, "Unexpected EOF in atom block")
             })?;
 
-            let (_, atom) = all_consuming(atomlike_input(flags))
+            let (_, atom) = all_consuming(extended_atom_input(flags))
                 .parse(line)
                 .map_err(|e| ParseError::from_nom(e, current_line, line))?;
             atoms.push(atom);
@@ -177,8 +183,9 @@ fn bond_block<'inp, 'fl>(
     bond_count: usize,
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, Bond)>), ParseError>
-       + use<'inp, 'fl> {
+) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, ExtendedBond)>), ParseError>
+       + use<'inp, 'fl>
+{
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
         let mut lines_iter = input.lines_with_terminator();
@@ -202,13 +209,14 @@ fn bond_block<'inp, 'fl>(
     }
 }
 
-/// Parse bond-like block
-fn bondlike_block<'inp, 'fl>(
+/// Parse extended bond block
+fn extended_bond_block<'inp, 'fl>(
     bond_count: usize,
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, BondLike)>), ParseError>
-       + use<'inp, 'fl> {
+) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, ExtendedBond)>), ParseError>
+       + use<'inp, 'fl>
+{
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
         let mut lines_iter = input.lines_with_terminator();
@@ -219,7 +227,7 @@ fn bondlike_block<'inp, 'fl>(
                 ParseError::generic(current_line, 0, "Unexpected EOF in bond block")
             })?;
 
-            let (_, (atom1, atom2, bond)) = all_consuming(bondlike_input(flags))
+            let (_, (atom1, atom2, bond)) = all_consuming(extended_bond_input(flags))
                 .parse(line)
                 .map_err(|e| ParseError::from_nom(e, current_line, line))?;
             bonds.push((atom1, atom2, bond));
@@ -372,53 +380,65 @@ fn end_block<'inp>(
     }
 }
 
-/// Build molecule
+/// Build CTAB molecule (internal, not converted to SimpleIR yet)
 fn build_molecule(
-    atoms: Vec<Atom>,
-    bonds: Vec<(usize, usize, Bond)>,
+    atoms: Vec<ExtendedAtom>,
+    bonds: Vec<(usize, usize, ExtendedBond)>,
     properties: Vec<PropertyEntries>,
-) -> std::result::Result<Molecule, SemanticError> {
-    let mut molecule = Molecule::new();
+) -> std::result::Result<ExtendedMolecule, SemanticError> {
+    // Build bonds with proper atom indices
+    let bonds: Vec<ExtendedBond> = bonds
+        .into_iter()
+        .map(|(idx1, idx2, mut bond)| {
+            bond.start_atom = idx1 as u32;
+            bond.end_atom = idx2 as u32;
+            bond
+        })
+        .collect();
 
-    for atom in atoms {
-        molecule.add_atom(atom);
-    }
-
-    for (idx1, idx2, bond) in bonds {
-        molecule.add_bond(idx1, idx2, bond);
-    }
+    let mut molecule = ExtendedMolecule {
+        atoms,
+        bonds,
+        ..Default::default()
+    };
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
         acc.add_entry(entry, CtabParseFlags::BASIC)?;
     }
-    acc.update_molecule(&mut molecule, CtabParseFlags::BASIC)?;
+    acc.update_extended_molecule(&mut molecule, CtabParseFlags::BASIC)?;
 
     Ok(molecule)
 }
 
-/// Build molecule-like structure
-fn build_moleculelike(
-    atoms: Vec<AtomLike>,
-    bonds: Vec<(usize, usize, BondLike)>,
+/// Build extended molecule
+fn build_extended_molecule(
+    atoms: Vec<ExtendedAtom>,
+    bonds: Vec<(usize, usize, ExtendedBond)>,
     properties: Vec<PropertyEntries>,
-) -> std::result::Result<MoleculeLike, SemanticError> {
-    let mut molecule = MoleculeLike::new();
+) -> std::result::Result<ExtendedMolecule, SemanticError> {
+    // Build bonds with proper atom indices
+    let bonds: Vec<ExtendedBond> = bonds
+        .into_iter()
+        .map(|(idx1, idx2, mut bond)| {
+            bond.start_atom = idx1 as u32;
+            bond.end_atom = idx2 as u32;
+            bond
+        })
+        .collect();
 
-    for atom in atoms {
-        molecule.add_atom(atom);
-    }
-
-    for (idx1, idx2, bond) in bonds {
-        molecule.add_bond(idx1, idx2, bond);
-    }
+    let mut molecule = ExtendedMolecule {
+        atoms,
+        bonds,
+        ..Default::default()
+    };
 
     let mut acc = MoleculeProperties::new();
     for entry in properties {
         acc.add_entry(entry, CtabParseFlags::LENIENT)?;
     }
 
-    acc.update_moleculelike(&mut molecule, CtabParseFlags::LENIENT)?;
+    acc.update_extended_molecule(&mut molecule, CtabParseFlags::LENIENT)?;
 
     Ok(molecule)
 }

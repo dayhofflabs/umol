@@ -21,10 +21,10 @@ use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier, sgroup_subscript,
 };
-use crate::io::ctab::rgroup::RGroupOccurrence;
-use crate::io::ctab::sgroup::{
-    SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
-    SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype, SGroupType,
+use crate::simple_ir::{
+    RGroupOccurrence, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
+    SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier,
+    SGroupSubtype, SGroupType,
 };
 
 #[derive(Debug, Clone, PartialEq)]

@@ -3,34 +3,34 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
-use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
 use crate::io::ctab::config::CtabParseFlags;
+use crate::simple_ir::{BondDir, BondOrder, BondReactingCenter, BondStereo, BondTopology};
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
-#[case(b"  2  5  1  0  0  0  0", "len 21 single unknown", 1, 4, BondType::Single, None, None)]
-#[case(b"  2  5  2  1  0  0  0", "len 21 double cis", 1, 4, BondType::Double, Some(BondStereo::Cis), None)]
-#[case(b"  2  5  2  6  0  0  0", "len 21 double trans", 1, 4, BondType::Double, Some(BondStereo::Trans), None)]
-#[case(b"  2  5  2  4  0  0  0", "len 21 double either", 1, 4, BondType::Double, Some(BondStereo::Either), None)]
-#[case(b"  2  5  2  0  0  0  0", "len 21 double none", 1, 4, BondType::Double, None, None)]
-#[case(b"  2  5  3  0  0  0  0", "len 21 triple", 1, 4, BondType::Triple, None, None)]
-#[case(b"  2  5  4  0  0  0  0", "len 21 aromatic", 1, 4, BondType::Aromatic, None, None)]
-#[case(b"  2  5  3  1  0  0  0", "len 21 triple ignored stereo", 1, 4, BondType::Triple, None, None)]
-#[case(b"  2  5  3  1         ", "len 21 triple empty fields", 1, 4, BondType::Triple, None, None)]
-#[case(b"  1  2  1  0  0  0", "len 18 single", 0, 1, BondType::Single, None, None)]
-#[case(b"  1  3  1  1", "len 12 single wedge", 0, 2, BondType::Single, None, Some(BondDir::Wedge))]
-#[case(b"  1  3  2  1", "len 12 double cis", 0, 2, BondType::Double, Some(BondStereo::Cis), None)]
-#[case(b"  2  5  2  0", "len 12 double none", 1, 4, BondType::Double, None, None)]
-#[case(b"  2  4  1  6", "len 12 single dash", 1, 3, BondType::Single, None, Some(BondDir::Dash))]
-#[case(b"  2  5  3   ", "len 12 triple empty fields", 1, 4, BondType::Triple, None, None)]
-#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", 0, 1, BondType::Single, None, Some(BondDir::Wedge))]
+#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", 0, 1, BondOrder::Single, None, Some(BondDir::Up))]
+#[case(b"  2  5  1  0  0  0  0", "len 21 single unknown", 1, 4, BondOrder::Single, None, None)]
+#[case(b"  2  5  2  1  0  0  0", "len 21 double cis", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
+#[case(b"  2  5  2  6  0  0  0", "len 21 double trans", 1, 4, BondOrder::Double, Some(BondStereo::Trans), None)]
+#[case(b"  2  5  2  4  0  0  0", "len 21 double either", 1, 4, BondOrder::Double, Some(BondStereo::Either), None)]
+#[case(b"  2  5  2  0  0  0  0", "len 21 double none", 1, 4, BondOrder::Double, None, None)]
+#[case(b"  2  5  3  0  0  0  0", "len 21 triple", 1, 4, BondOrder::Triple, None, None)]
+#[case(b"  2  5  4  0  0  0  0", "len 21 aromatic", 1, 4, BondOrder::Aromatic, None, None)]
+#[case(b"  2  5  3  1  0  0  0", "len 21 triple ignored stereo", 1, 4, BondOrder::Triple, None, None)]
+#[case(b"  2  5  3  1         ", "len 21 triple empty fields", 1, 4, BondOrder::Triple, None, None)]
+#[case(b"  1  2  1  0  0  0", "len 18 single", 0, 1, BondOrder::Single, None, None)]
+#[case(b"  1  3  1  1", "len 12 single wedge", 0, 2, BondOrder::Single, None, Some(BondDir::Up))]
+#[case(b"  1  3  2  1", "len 12 double cis", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
+#[case(b"  2  5  2  0", "len 12 double none", 1, 4, BondOrder::Double, None, None)]
+#[case(b"  2  4  1  6", "len 12 single dash", 1, 3, BondOrder::Single, None, Some(BondDir::Down))]
+#[case(b"  2  5  3   ", "len 12 triple empty fields", 1, 4, BondOrder::Triple, None, None)]
+#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", 0, 1, BondOrder::Single, None, Some(BondDir::Up))]
 fn test_bond_input12(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
     #[case] atom2: usize,
-    #[case] bond_type: BondType,
+    #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
@@ -49,9 +49,9 @@ fn test_bond_input12(
         desc, a2, atom2
     );
     assert_eq!(
-        bond.bond_type, bond_type,
+        bond.order, bond_type,
         "{} has returned bond type {:?}, expected {:?}",
-        desc, bond.bond_type, bond_type,
+        desc, bond.order, bond_type,
     );
     assert_eq!(
         bond.stereo, stereo,
@@ -59,9 +59,9 @@ fn test_bond_input12(
         desc, bond.stereo, stereo
     );
     assert_eq!(
-        bond.dir, dir,
+        bond.direction, dir,
         "{} has returned dir {:?}, expected {:?}",
-        desc, bond.dir, dir
+        desc, bond.direction, dir
     );
 }
 
@@ -88,16 +88,16 @@ fn test_bond_input12_invalid(
 }
 
 #[rstest]
-#[case(b"  1  2  1", "single", 0, 1, BondType::Single)]
-#[case(b"  2  5  2", "double", 1, 4, BondType::Double)]
-#[case(b"  2  5  3", "triple", 1, 4, BondType::Triple)]
-#[case(b"  2  5  4", "aromatic", 1, 4, BondType::Aromatic)]
+#[case(b"  1  2  1", "single", 0, 1, BondOrder::Single)]
+#[case(b"  2  5  2", "double", 1, 4, BondOrder::Double)]
+#[case(b"  2  5  3", "triple", 1, 4, BondOrder::Triple)]
+#[case(b"  2  5  4", "aromatic", 1, 4, BondOrder::Aromatic)]
 fn test_bond_input9(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
     #[case] atom2: usize,
-    #[case] bond_type: BondType,
+    #[case] bond_type: BondOrder,
 ) {
     let result = bond_input9(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -114,9 +114,9 @@ fn test_bond_input9(
         desc, a2, atom2
     );
     assert_eq!(
-        bond.bond_type, bond_type,
+        bond.order, bond_type,
         "{} has returned bond type {:?}, expected {:?}",
-        desc, bond.bond_type, bond_type,
+        desc, bond.order, bond_type,
     );
     assert_eq!(
         bond.stereo, None,
@@ -145,18 +145,18 @@ fn test_bond_input9_invalid(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None)]
-#[case(b"  1  2  1 ", "len 10 padded", 0, 1, BondType::Single, None, None)]
-#[case(b"  1  3  2  1", "len 12", 0, 2, BondType::Double, Some(BondStereo::Cis), None)]
-#[case(b"  1  3  1  6 ", "len 13 padded", 0, 2, BondType::Single, None, Some(BondDir::Dash))]
-#[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondType::Single, None, None)]
-#[case(b"  2  5  2  1  0  0  0", "len to 21", 1, 4, BondType::Double, Some(BondStereo::Cis), None)]
+#[case(b"  1  2  1", "len 9", 0, 1, BondOrder::Single, None, None)]
+#[case(b"  1  2  1 ", "len 10 padded", 0, 1, BondOrder::Single, None, None)]
+#[case(b"  1  3  2  1", "len 12", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
+#[case(b"  1  3  1  6 ", "len 13 padded", 0, 2, BondOrder::Single, None, Some(BondDir::Down))]
+#[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondOrder::Single, None, None)]
+#[case(b"  2  5  2  1  0  0  0", "len to 21", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
     #[case] atom2: usize,
-    #[case] bond_type: BondType,
+    #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
 ) {
@@ -176,9 +176,9 @@ fn test_bond_input(
         desc, a2, atom2
     );
     assert_eq!(
-        bond.bond_type, bond_type,
+        bond.order, bond_type,
         "{} has returned bond type {:?}, expected {:?}",
-        desc, bond.bond_type, bond_type,
+        desc, bond.order, bond_type,
     );
     assert_eq!(
         bond.stereo, stereo,
@@ -186,9 +186,9 @@ fn test_bond_input(
         desc, bond.stereo, stereo
     );
     assert_eq!(
-        bond.dir, dir,
+        bond.direction, dir,
         "{} has returned dir {:?}, expected {:?}",
-        desc, bond.dir, dir
+        desc, bond.direction, dir
     );
 }
 
@@ -235,32 +235,32 @@ fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1  2  1", "len 9", 0, 1, BondType::Single, None, None, None, None)]
-#[case(b"  1  2  0", "len 9, zero bond", 0, 1, BondType::Zero, None, None, None, None)]
-#[case(b"  1  2  9", "len 9, quadruple bond", 0, 1, BondType::Quadruple, None, None, None, None)]
-#[case(b"  1  2  2  3", "len 12 double either", 0, 1, BondType::Double, Some(BondStereo::Either), None, None, None)]
-#[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondType::Single, None, Some(BondDir::Dash), None, None)]
-#[case(b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
-#[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondType::Single, None, Some(BondDir::Either), Some(BondTopology::Either), None)]
-#[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondType::Single, None,
+#[case(b"  1  2  1", "len 9", 0, 1, BondOrder::Single, None, None, None, None)]
+#[case(b"  1  2  0", "len 9, zero bond", 0, 1, BondOrder::Zero, None, None, None, None)]
+#[case(b"  1  2  9", "len 9, quadruple bond", 0, 1, BondOrder::Quadruple, None, None, None, None)]
+#[case(b"  1  2  2  3", "len 12 double either", 0, 1, BondOrder::Double, Some(BondStereo::Either), None, None, None)]
+#[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondOrder::Single, None, Some(BondDir::Down), None, None)]
+#[case(b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
+#[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondOrder::Single, None, Some(BondDir::Either), Some(BondTopology::Either), None)]
+#[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondOrder::Single, None,
        Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
-#[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondType::Single, None,
+#[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondOrder::Single, None,
        Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
-#[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondType::Single, None,
+#[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondOrder::Single, None,
        Some(BondDir::Either), Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
-#[case(b"  1  2  8  0XXX  1", "non-strict padding", 0, 1, BondType::Any, None, None, Some(BondTopology::Ring), None)]
-fn test_bondlike_input(
+#[case(b"  1  2  8  0XXX  1", "non-strict padding", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
+fn test_extended_bond_input(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
     #[case] atom2: usize,
-    #[case] bond_type: BondType,
+    #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
     #[case] dir: Option<BondDir>,
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {
-    let mut parser = bondlike_input(&CtabParseFlags::LENIENT);
+    let mut parser = extended_bond_input(&CtabParseFlags::LENIENT);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
@@ -276,9 +276,9 @@ fn test_bondlike_input(
         desc, a2, atom2
     );
     assert_eq!(
-        bond.bond_type, bond_type,
+        bond.order, bond_type,
         "{} has returned bond type {:?}, expected {:?}",
-        desc, bond.bond_type, bond_type,
+        desc, bond.order, bond_type,
     );
     assert_eq!(
         bond.stereo, stereo,
@@ -286,9 +286,9 @@ fn test_bondlike_input(
         desc, bond.stereo, stereo
     );
     assert_eq!(
-        bond.dir, dir,
+        bond.direction, dir,
         "{} has returned dir {:?}, expected {:?}",
-        desc, bond.dir, dir
+        desc, bond.direction, dir
     );
     assert_eq!(
         bond.topology, topology,
@@ -308,12 +308,12 @@ fn test_bondlike_input(
 #[case(b"  1  2  0", "Bond type below range", error::ErrorKind::MapRes)]
 #[case(b"  2  5  2  0  0  4  0", "Invalid topology", error::ErrorKind::MapRes)]
 #[case(b"  1  2  8  0XXX  1", "non-strict padding", error::ErrorKind::MapRes)]
-fn test_bondlike_input_invalid(
+fn test_extended_bond_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let mut parser = bondlike_input(&CtabParseFlags::STRICT);
+    let mut parser = extended_bond_input(&CtabParseFlags::STRICT);
     let result = parser.parse(input);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -326,16 +326,16 @@ fn test_bondlike_input_invalid(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1  2  0", "len 9, zero bond", 0, 1, BondType::Zero)]
-#[case(b"  1  2  9", "len 9, quadruple bond", 0, 1, BondType::Quadruple)]
+#[case(b"  1  2  0", "len 9, zero bond", 0, 1, BondOrder::Zero)]
+#[case(b"  1  2  9", "len 9, quadruple bond", 0, 1, BondOrder::Quadruple)]
 fn test_bond_input_extended(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] atom1: usize,
     #[case] atom2: usize,
-    #[case] bond_type: BondType,
+    #[case] bond_type: BondOrder,
 ) {
-    let result = bondlike_input(&CtabParseFlags::EXTENDED).parse(input);
+    let result = extended_bond_input(&CtabParseFlags::EXTENDED).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, (a1, a2, bond)) = result.unwrap();
     assert!(remaining.is_empty(), "{} should consume all input", desc);
@@ -351,8 +351,8 @@ fn test_bond_input_extended(
         desc, a2, atom2
     );
     assert_eq!(
-        bond.bond_type, bond_type,
+        bond.order, bond_type,
         "{} has returned bond type {:?}, expected {:?}",
-        desc, bond.bond_type, bond_type,
+        desc, bond.order, bond_type,
     );
 }

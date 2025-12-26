@@ -20,7 +20,7 @@ fn generate_conformance_tests() {
     // Discover what actually exists in the organized data directories
     let data_path = "tests/mol_parsing/data";
 
-    for category in ["molecule", "moleculelike", "invalid"] {
+    for category in ["molecule", "extended_molecule", "invalid"] {
         let category_path = format!("{}/{}", data_path, category);
 
         if let Ok(entries) = fs::read_dir(&category_path) {
@@ -53,20 +53,20 @@ fn test_parse_mol_{}_{source_ident}(
                         mol_should_succeed = mol_should_succeed
                     ));
 
-                    // Generate tests for parse_mol_moleculelike
-                    let moleculelike_should_succeed = category != "invalid";
+                    // Generate tests for parse_extended_mol
+                    let extended_molecule_should_succeed = category != "invalid";
                     generated_code.push_str(&format!(
                         r#"#[rstest]
-fn test_parse_mol_moleculelike_{}_{source_ident}(
+fn test_parse_extended_mol_{}_{source_ident}(
     #[files("{source_path}/*.mol")] file_path: PathBuf,
 ) {{
-    run_parse_mol_moleculelike_test(&file_path, {moleculelike_should_succeed});
+    run_parse_extended_mol_test(&file_path, {extended_molecule_should_succeed});
 }}
 
 "#,
                         category,
                         source_path = source_path,
-                        moleculelike_should_succeed = moleculelike_should_succeed
+                        extended_molecule_should_succeed = extended_molecule_should_succeed
                     ));
                 }
             }

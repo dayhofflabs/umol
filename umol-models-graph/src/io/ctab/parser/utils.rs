@@ -18,7 +18,7 @@ use nom::{error, Err, Parser};
 use num::{Float, Integer};
 use umol_data::Element;
 
-use crate::io::ctab::rgroup::RGroupOccurrence;
+use crate::simple_ir::RGroupOccurrence;
 
 pub(crate) trait Contains<T: PartialOrd> {
     fn contains(&self, value: &T) -> bool;

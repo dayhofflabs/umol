@@ -9,21 +9,17 @@ type Result<T> = std::result::Result<T, SemanticError>;
 
 use super::context::Context;
 use super::convert::{
-    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_bondlike_type_code,
+    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_extended_bond_type_code,
     convert_radical_type_code, convert_ring_bond_count_code, convert_substitution_count_code,
     convert_unsaturated_atom_code,
 };
-use crate::io::ctab::atom::{
-    AtomLike, AtomList, AtomRadical, AtomSymbol, AttachmentPointType, LinkAtom, RingBondCount,
-    SubstitutionCount, UnsaturatedAtom,
-};
 use crate::io::ctab::config::CtabParseFlags;
-use crate::io::ctab::molecule::{Molecule, MoleculeLike};
 use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry};
-use crate::io::ctab::rgroup::{RGroup, RGroupOccurrence};
-use crate::io::ctab::sgroup::{
-    SGroup, SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData,
-    SGroupDataDisplay, SGroupMultiplier, SGroupSubtype, SGroupType,
+use crate::simple_ir::{
+    AtomList, AtomSymbol, AtomRadical, AttachmentPointType, ExtendedMolecule, LinkAtom, RGroup,
+    RGroupOccurrence, RingBondCount, SGroup, SGroupBracketCoords, SGroupConnectingBond,
+    SGroupConnectivity, SGroupData, SGroupDataDisplay, SGroupMultiplier, SGroupSubtype,
+    SGroupType, SubstitutionCount, UnsaturatedAtom,
 };
 
 // Accumulator for properties of a single atom
@@ -612,531 +608,6 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    /// Apply all properties to Molecule
-    pub fn update_molecule(
-        &mut self,
-        molecule: &mut Molecule,
-        flags: CtabParseFlags,
-    ) -> Result<()> {
-        let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
-        for (atom_index, props) in &self.atom_properties {
-            if props.alias.is_some() {
-                self.apply_atom_alias(*atom_index, props, molecule)?;
-            }
-            if props.value.is_some() {
-                self.apply_atom_value(*atom_index, props, molecule)?;
-            }
-            if props.charge.is_some() {
-                self.apply_atom_charge(*atom_index, props, molecule)?;
-            }
-            if props.radical.is_some() {
-                self.apply_atom_radical(*atom_index, props, molecule)?;
-            }
-            if props.isotope_mass.is_some() {
-                self.apply_atom_isotope(*atom_index, props, molecule, extended_isotopes)?;
-            }
-            if props.hydrogen_count.is_some() {
-                self.apply_atom_hydrogen_count(*atom_index, props, molecule)?;
-            }
-        }
-        for (bond_index, props) in &self.bond_properties {
-            if props.order_override.is_some() {
-                self.apply_atom_zero_order_bond(*bond_index, props, molecule)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Apply all properties to MoleculeLike
-    pub fn update_moleculelike(
-        &mut self,
-        molecule: &mut MoleculeLike,
-        flags: CtabParseFlags,
-    ) -> Result<()> {
-        let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
-        for (&atom_index, props) in &self.atom_properties {
-            let atom = molecule
-                .atom_mut(atom_index)
-                .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
-
-            if props.alias.is_some() {
-                self.apply_atomlike_alias(props, atom)?;
-            }
-            if props.value.is_some() {
-                self.apply_atomlike_value(props, atom)?;
-            }
-            if props.charge.is_some() {
-                self.apply_atomlike_charge(props, atom)?;
-            }
-            if props.radical.is_some() {
-                self.apply_atomlike_radical(props, atom)?;
-            }
-            if props.isotope_mass.is_some() {
-                self.apply_atomlike_isotope(props, atom, extended_isotopes)?;
-            }
-            if props.hydrogen_count.is_some() {
-                self.apply_atomlike_hydrogen_count(props, atom)?;
-            }
-            if props.ring_bond_count.is_some() {
-                self.apply_ring_bond_count(props, atom)?;
-            }
-            if props.substitution_count.is_some() {
-                self.apply_substitution_count(props, atom)?;
-            }
-            if props.unsaturated.is_some() {
-                self.apply_unsaturated_atom(props, atom)?;
-            }
-            if props.link_atom.is_some() {
-                self.apply_link_atom(props, atom)?;
-            }
-            if props.atom_list_elements.is_some() {
-                self.apply_atom_list(props, atom)?;
-            }
-            if props.attachment_point.is_some() {
-                self.apply_attachment_point(props, atom)?;
-            }
-            if props.attachment_order.is_some() {
-                self.apply_attachment_order(props, atom)?;
-            }
-            if props.rgroup_label.is_some() {
-                self.apply_rgroup_label(props, atom)?;
-            }
-        }
-        for (rgroup_label, props) in &self.rgroup_properties {
-            self.apply_rgroup_logic(*rgroup_label, props, molecule)?;
-        }
-        self.validate_sgroup_data()?;
-        self.apply_sgroup(molecule)?;
-        self.apply_atomlike_zero_order_bonds(molecule)?;
-        Ok(())
-    }
-
-    fn apply_atomlike_alias(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        let alias = props.alias.as_ref().unwrap();
-        if let Some(existing_alias) = atom.properties.get("molFileAlias") {
-            if existing_alias != alias {
-                return Err(SemanticError::Generic(format!(
-                    "Atom alias conflict: existing '{}' vs new '{}'",
-                    existing_alias, alias
-                ))
-                .into());
-            }
-        }
-        atom.properties
-            .insert("molFileAlias".to_string(), alias.clone());
-        Ok(())
-    }
-
-    fn apply_atom_alias(
-        &self,
-        atom_index: usize,
-        props: &AtomProperties,
-        molecule: &mut Molecule,
-    ) -> Result<()> {
-        let alias = props.alias.as_ref().unwrap();
-        let atom = molecule
-            .atom_mut(atom_index)
-            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
-        if let Some(existing_alias) = atom.properties.get("molFileAlias") {
-            if existing_alias != alias {
-                return Err(SemanticError::Generic(format!(
-                    "Atom alias conflict for atom {}: existing '{}' vs new '{}'",
-                    atom_index, existing_alias, alias
-                ))
-                .into());
-            }
-        }
-        atom.properties
-            .insert("molFileAlias".to_string(), alias.clone());
-        Ok(())
-    }
-
-    fn apply_atomlike_value(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        let value = props.value.as_ref().unwrap();
-        if let Some(existing_value) = atom.properties.get("molFileValue") {
-            if existing_value != value {
-                return Err(SemanticError::Generic(format!(
-                    "Atom value conflict: existing '{}' vs new '{}'",
-                    existing_value, value
-                ))
-                .into());
-            }
-        }
-        atom.properties
-            .insert("molFileValue".to_string(), value.clone());
-        Ok(())
-    }
-
-    fn apply_atom_value(
-        &self,
-        atom_index: usize,
-        props: &AtomProperties,
-        molecule: &mut Molecule,
-    ) -> Result<()> {
-        let value = props.value.as_ref().unwrap();
-        let atom = molecule
-            .atom_mut(atom_index)
-            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
-        if let Some(existing_value) = atom.properties.get("molFileValue") {
-            if existing_value != value {
-                return Err(SemanticError::Generic(format!(
-                    "Atom value conflict for atom {}: existing '{}' vs new '{}'",
-                    atom_index, existing_value, value
-                ))
-                .into());
-            }
-        }
-        atom.properties
-            .insert("molFileValue".to_string(), value.clone());
-        Ok(())
-    }
-
-    fn apply_atomlike_charge(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        let charge = props.charge.unwrap();
-        atom.charge = charge;
-        atom.radical = None;
-        Ok(())
-    }
-
-    fn apply_atom_charge(
-        &self,
-        atom_index: usize,
-        props: &AtomProperties,
-        molecule: &mut Molecule,
-    ) -> Result<()> {
-        let charge = props.charge.unwrap();
-        let atom = molecule
-            .atom_mut(atom_index)
-            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
-        atom.charge = charge;
-        atom.radical = None;
-        Ok(())
-    }
-
-    fn apply_atomlike_radical(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        atom.radical = props.radical;
-        atom.charge = 0;
-        Ok(())
-    }
-
-    fn apply_atom_radical(
-        &self,
-        atom_index: usize,
-        props: &AtomProperties,
-        molecule: &mut Molecule,
-    ) -> Result<()> {
-        let atom = molecule
-            .atom_mut(atom_index)
-            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
-        atom.radical = props.radical;
-        atom.charge = 0;
-        Ok(())
-    }
-
-    fn apply_atomlike_isotope(
-        &self,
-        props: &AtomProperties,
-        atom: &mut AtomLike,
-        extended_isotopes: bool,
-    ) -> Result<()> {
-        let element = match &atom.symbol {
-            AtomSymbol::Element(element) => *element,
-            AtomSymbol::NamedIsotope(isotope) => isotope.element(),
-            _ => {
-                return Err(SemanticError::Generic(format!(
-                    "Cannot set isotope for atom: {:?}",
-                    atom.symbol
-                )))
-            }
-        };
-        let mass = convert_atom_isotope_mass_number(
-            element,
-            props.isotope_mass.unwrap(),
-            extended_isotopes,
-        )?;
-        if let Some(existing) = atom.isotope_mass {
-            if let Some(mass) = mass {
-                if existing != mass {
-                    return Err(SemanticError::Generic(format!(
-                        "Isotope conflict: existing '{}' vs new '{}'",
-                        existing, mass
-                    ))
-                    .into());
-                }
-            }
-        }
-        atom.isotope_mass = mass;
-        Ok(())
-    }
-
-    fn apply_atom_isotope(
-        &self,
-        atom_index: usize,
-        props: &AtomProperties,
-        molecule: &mut Molecule,
-        extended_isotopes: bool,
-    ) -> Result<()> {
-        let atom = molecule
-            .atom_mut(atom_index)
-            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
-        let mass = convert_atom_isotope_mass_number(
-            atom.element,
-            props.isotope_mass.unwrap(),
-            extended_isotopes,
-        )?;
-        if let Some(existing) = atom.isotope_mass {
-            if let Some(mass) = mass {
-                if existing != mass {
-                    return Err(SemanticError::Generic(format!(
-                        "Isotope conflict for atom {}: existing '{}' vs new '{}'",
-                        atom_index, existing, mass
-                    ))
-                    .into());
-                }
-            }
-        }
-        atom.isotope_mass = mass;
-        Ok(())
-    }
-
-    fn apply_atomlike_hydrogen_count(
-        &self,
-        props: &AtomProperties,
-        atom: &mut AtomLike,
-    ) -> Result<()> {
-        let hydrogen_count = props.hydrogen_count.unwrap();
-        atom.hydrogen_count = Some(hydrogen_count);
-        Ok(())
-    }
-
-    fn apply_atom_hydrogen_count(
-        &self,
-        atom_index: usize,
-        props: &AtomProperties,
-        molecule: &mut Molecule,
-    ) -> Result<()> {
-        let hydrogen_count = props.hydrogen_count.unwrap();
-        let atom = molecule
-            .atom_mut(atom_index)
-            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
-        atom.hydrogen_count = Some(hydrogen_count);
-        Ok(())
-    }
-
-    fn apply_ring_bond_count(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if let Some(existing) = atom.ring_bond_count {
-            if Some(existing) != props.ring_bond_count {
-                return Err(SemanticError::Generic(format!(
-                    "Ring bond count conflict: existing {:?} vs new {:?}",
-                    existing, props.ring_bond_count
-                ))
-                .into());
-            }
-        }
-        atom.ring_bond_count = props.ring_bond_count;
-        Ok(())
-    }
-
-    fn apply_substitution_count(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if let Some(existing) = atom.substitution_count {
-            if Some(existing) != props.substitution_count {
-                return Err(SemanticError::Generic(format!(
-                    "Substitution count conflict: existing {:?} vs new {:?}",
-                    existing, props.substitution_count
-                ))
-                .into());
-            }
-        }
-        atom.substitution_count = props.substitution_count;
-        Ok(())
-    }
-
-    fn apply_unsaturated_atom(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        atom.unsaturated = props.unsaturated;
-        Ok(())
-    }
-
-    fn apply_link_atom(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if atom.link_atom.is_some() {
-            return Err(SemanticError::Generic("Link atom conflict".to_string()));
-        }
-        atom.link_atom = props.link_atom;
-        Ok(())
-    }
-
-    fn apply_atom_list(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if !matches!(
-            atom.symbol,
-            AtomSymbol::Element(_) | AtomSymbol::AtomList(_)
-        ) {
-            return Err(SemanticError::Generic(format!(
-                "Atom list can only be applied to an element or atom list, not {:?}",
-                atom.symbol
-            ))
-            .into());
-        }
-        atom.symbol = AtomSymbol::AtomList(AtomList {
-            elements: props.atom_list_elements.clone().unwrap(),
-            exclusion: props.atom_list_exclusion.unwrap(),
-        });
-        Ok(())
-    }
-
-    fn apply_attachment_point(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if atom.attachment_point.is_some() {
-            return Err(SemanticError::Generic("Attachment point conflict".to_string()));
-        }
-        atom.attachment_point = props.attachment_point;
-        Ok(())
-    }
-
-    fn apply_attachment_order(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if atom.attachment_order.is_some() {
-            return Err(SemanticError::Generic("Attachment order conflict".to_string()));
-        }
-        atom.attachment_order = props.attachment_order.clone();
-        Ok(())
-    }
-
-    fn apply_rgroup_label(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
-        if let Some(new_label) = props.rgroup_label {
-            match &mut atom.symbol {
-                AtomSymbol::Element(_) => {
-                    // Convert element to R-group with the label
-                    atom.symbol = AtomSymbol::RGroup(RGroup::new(Some(new_label)));
-                }
-                AtomSymbol::RGroup(rgroup) => {
-                    // Verify existing label matches or is None
-                    if let Some(existing_label) = rgroup.label {
-                        if existing_label != new_label {
-                            return Err(SemanticError::Generic(format!(
-                                "R-group label conflict: existing '{}' vs new '{}'",
-                                existing_label, new_label
-                            ))
-                            .into());
-                        }
-                    } else {
-                        rgroup.label = Some(new_label);
-                    }
-                }
-                _ => {
-                    return Err(SemanticError::Generic(format!(
-                        "R-group label can only be applied to an element or R-group, not {:?}",
-                        atom.symbol
-                    ))
-                    .into());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_rgroup_logic(
-        &self,
-        rgroup_label: usize,
-        props: &RGroupProperties,
-        molecule: &mut MoleculeLike,
-    ) -> Result<()> {
-        for i in 0..molecule.atom_count() {
-            if let Some(atom) = molecule.atom_mut(i) {
-                if let AtomSymbol::RGroup(rgroup) = &mut atom.symbol {
-                    if rgroup.label == Some(rgroup_label as u32) {
-                        rgroup.dependent_label = props.dependent_label;
-                        if let Some(rgroup_or_h) = props.rgroup_or_h {
-                            rgroup.rgroup_or_h = rgroup_or_h;
-                        }
-                        if let Some(occurrence) = &props.occurrence {
-                            rgroup.occurrence = occurrence.clone();
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_atomlike_zero_order_bonds(&self, molecule: &mut MoleculeLike) -> Result<()> {
-        for (bond_index, props) in &self.bond_properties {
-            if let Some(bond) = molecule.bond_mut(*bond_index) {
-                bond.bond_type =
-                    convert_bondlike_type_code(props.order_override.unwrap(), true, true)?;
-            } else {
-                return Err(SemanticError::Generic(format!(
-                    "Zero-order bond for undefined bond {}",
-                    bond_index
-                ))
-                .into());
-            }
-        }
-        Ok(())
-    }
-
-    fn apply_atom_zero_order_bond(
-        &self,
-        bond_index: usize,
-        props: &BondProperties,
-        molecule: &mut Molecule,
-    ) -> Result<()> {
-        let bond = molecule
-            .bond_mut(bond_index)
-            .ok_or(SemanticError::Generic(format!("Missing bond index: {}", bond_index)))?;
-        bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true, true)?;
-        Ok(())
-    }
-
-    fn apply_sgroup(&self, molecule: &mut MoleculeLike) -> Result<()> {
-        for (sgroup_index, props) in &self.sgroup_properties {
-            let sgroup_type = props.group_type.ok_or_else(|| {
-                SemanticError::Generic(format!("S-group {} has no type", sgroup_index))
-            })?;
-            let mut sgroup = SGroup::new(sgroup_type);
-            sgroup.label = props.label.or(Some(*sgroup_index as u32));
-            sgroup.group_subtype = props.group_subtype;
-            sgroup.connectivity = props.connectivity;
-            if let Some(expansion) = props.expansion {
-                sgroup.expansion = expansion;
-            }
-            if let Some(atom_indices) = &props.atom_indices {
-                sgroup.atom_indices = atom_indices.clone();
-            }
-            if let Some(bond_indices) = &props.bond_indices {
-                sgroup.bond_indices = bond_indices.clone();
-            }
-            if let Some(parent_atom_indices) = &props.parent_atom_indices {
-                sgroup.parent_atom_indices = Some(parent_atom_indices.clone());
-            }
-            if let Some(subscript) = &props.subscript {
-                sgroup.subscript = Some(subscript.clone());
-            }
-            if let Some(multiplier) = &props.multiplier {
-                sgroup.multiplier = Some(*multiplier);
-            }
-            if let Some(correspondence) = &props.correspondence {
-                sgroup.correspondence = Some(correspondence.clone());
-            }
-            if let Some(bracket_coords) = &props.bracket_coords {
-                sgroup.bracket_coords = Some(*bracket_coords);
-            }
-            if let Some(connecting_bond) = &props.connecting_bond {
-                sgroup.connecting_bond = Some(*connecting_bond);
-            }
-            if let Some(hierarchy_parent) = &props.hierarchy_parent {
-                sgroup.hierarchy_parent = Some(*hierarchy_parent);
-            }
-            if let Some(component_number) = &props.component_number {
-                sgroup.component_number = Some(*component_number);
-            }
-            if !props.data.is_empty() {
-                sgroup.data = props.data.clone();
-            }
-            if let Some(display) = &props.display {
-                sgroup.display = Some(*display);
-            }
-            molecule.add_sgroup(*sgroup_index, sgroup);
-        }
-        Ok(())
-    }
-
     fn validate_sgroup_data(&mut self) -> Result<()> {
         if self.context.current_sgroup_index.is_some() {
             let sgroup_index = self.context.current_sgroup_index.unwrap();
@@ -1201,34 +672,211 @@ impl MoleculeProperties {
         }
 
         self.context.current_data_content = None;
+        Ok(())
+    }
 
-        // TODO: Check attachment points are valid
-        // From RDKit C++ code
-        //     const RWMol *mol, std::pair<const int, SubstanceGroup> &sgroup) {
-        //     bool res = true;
-        //     int nAtoms = static_cast<int>(mol->getNumAtoms());
-        //     std::vector<SubstanceGroup::AttachPoint> &attachPoints umol-models-graph/benches/parsing_bench.rs=
-        //         sgroup.second.getAttachPoints();
-        //     for (auto &attachPoint : attachPoints) {
-        //         if (attachPoint.lvIdx == nAtoms) {
-        //         const std::vector<unsigned int> &bonds = sgroup.second.getBonds();
-        //         if (bonds.size() == 1) {
-        //             const auto bond = mol->getBondWithIdx(bonds.front());
-        //             if (bond->getBeginAtomIdx() == attachPoint.aIdx ||
-        //                 bond->getEndAtomIdx() == attachPoint.aIdx) {
-        //             attachPoint.lvIdx = bond->getOtherAtomIdx(attachPoint.aIdx);
-        //             }
-        //         }
-        //         }
-        //         if (attachPoint.lvIdx == nAtoms) {
-        //         BOOST_LOG(rdWarningLog)
-        //             << "Could not infer missing lvIdx on malformed SAP line for SGroup "
-        //             << sgroup.first << std::endl;
-        //         res = false;
-        //         }
-        //     }
-        //     return res;
+    /// Apply all properties to ExtendedMolecule (SimpleIR type)
+    pub fn update_extended_molecule(
+        &mut self,
+        molecule: &mut ExtendedMolecule,
+        flags: CtabParseFlags,
+    ) -> Result<()> {
+        let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
 
+        // Apply atom properties
+        for (&atom_idx, props) in &self.atom_properties {
+            let Some(atom) = molecule.atoms.get_mut(atom_idx) else {
+                return Err(SemanticError::Generic(format!(
+                    "Missing atom index: {}",
+                    atom_idx
+                )));
+            };
+
+            // Apply alias
+            if let Some(ref alias) = props.alias {
+                atom.properties
+                    .insert("molFileAlias".to_string(), alias.clone());
+            }
+
+            // Apply value
+            if let Some(ref value) = props.value {
+                atom.properties
+                    .insert("molFileValue".to_string(), value.clone());
+            }
+
+            // Apply charge
+            if let Some(charge) = props.charge {
+                atom.charge = Some(charge);
+                atom.radical = None; // charge overrides radical from atom block
+            }
+
+            // Apply radical
+            if let Some(ref radical) = props.radical {
+                atom.radical = Some(radical.clone());
+                atom.charge = None; // radical overrides charge from atom block
+            }
+
+            // Apply isotope
+            if let Some(isotope) = props.isotope_mass {
+                // Validate isotope for elements, apply directly for named isotopes
+                match atom.symbol {
+                    AtomSymbol::Element(element) => {
+                        let validated =
+                            convert_atom_isotope_mass_number(element, isotope, extended_isotopes)?;
+                        atom.isotope = validated;
+                    }
+                    AtomSymbol::NamedIsotope(named) => {
+                        // For named isotopes (D, T), validate against the element
+                        let validated = convert_atom_isotope_mass_number(
+                            named.element(),
+                            isotope,
+                            extended_isotopes,
+                        )?;
+                        atom.isotope = validated;
+                    }
+                    _ => {
+                        // For other symbol types (queries, etc.), just set the isotope
+                        atom.isotope = Some(isotope);
+                    }
+                }
+            }
+
+            // Apply hydrogen count
+            if let Some(h_count) = props.hydrogen_count {
+                atom.hydrogens = Some(h_count);
+            }
+
+            // Apply ring bond count
+            if let Some(ref rbc) = props.ring_bond_count {
+                atom.ring_bond_count = Some(rbc.clone());
+            }
+
+            // Apply substitution count
+            if let Some(ref sub) = props.substitution_count {
+                atom.substitution_count = Some(sub.clone());
+            }
+
+            // Apply unsaturated
+            if props.unsaturated.is_some() {
+                atom.unsaturated = Some(UnsaturatedAtom);
+            }
+
+            // Apply link atom
+            if let Some(ref link) = props.link_atom {
+                atom.link_atom = Some(link.clone());
+            }
+
+            // Apply atom list
+            if let Some(ref elements) = props.atom_list_elements {
+                let exclusion = props.atom_list_exclusion.unwrap_or(false);
+                atom.symbol = AtomSymbol::AtomList(AtomList {
+                    elements: elements.clone(),
+                    exclusion,
+                });
+            }
+
+            // Apply attachment point
+            if let Some(ref ap) = props.attachment_point {
+                atom.attachment_point = Some(ap.clone());
+            }
+
+            // Apply attachment order
+            if let Some(ref ao) = props.attachment_order {
+                atom.attachment_order = Some(ao.clone());
+            }
+
+            // Apply R-group label
+            if let Some(rgroup_label) = props.rgroup_label {
+                // Set the symbol to RGroup with a minimal RGroup struct
+                // The full RGroup details are handled separately via rgroup_properties
+                atom.symbol = AtomSymbol::RGroup(RGroup {
+                    label: Some(rgroup_label),
+                    dependent_label: None,
+                    rgroup_or_h: false,
+                    occurrence: vec![],
+                });
+            }
+        }
+
+        // Apply bond properties (zero order bonds)
+        for (&bond_idx, props) in &self.bond_properties {
+            if let Some(order_code) = props.order_override {
+                let extended = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+                let queries = flags.contains(CtabParseFlags::QUERIES);
+                if let Some(bond) = molecule.bonds.get_mut(bond_idx) {
+                    bond.order = convert_extended_bond_type_code(order_code, extended, queries)?;
+                }
+            }
+        }
+
+        // Apply R-group logic
+        for (&rgroup_label, props) in &self.rgroup_properties {
+            let rgroup = RGroup {
+                label: Some(rgroup_label as u32),
+                dependent_label: props.dependent_label,
+                rgroup_or_h: props.rgroup_or_h.unwrap_or(false),
+                occurrence: props.occurrence.clone().unwrap_or_default(),
+            };
+            molecule.rgroups.insert(rgroup_label, rgroup);
+        }
+
+        // Validate and apply S-groups
+        self.validate_sgroup_data()?;
+        self.apply_sgroup_to_extended(molecule)?;
+
+        Ok(())
+    }
+
+    fn apply_sgroup_to_extended(&mut self, molecule: &mut ExtendedMolecule) -> Result<()> {
+        for (sgroup_index, props) in std::mem::take(&mut self.sgroup_properties) {
+            let group_type = props.group_type.ok_or_else(|| {
+                SemanticError::Generic(format!("S-group {} has no type", sgroup_index))
+            })?;
+            let mut sgroup = SGroup::new(group_type);
+            sgroup.label = props.label.or(Some(sgroup_index as u32));
+            sgroup.group_subtype = props.group_subtype;
+            sgroup.connectivity = props.connectivity;
+            if let Some(expansion) = props.expansion {
+                sgroup.expansion = expansion;
+            }
+            if let Some(atom_indices) = props.atom_indices {
+                sgroup.atom_indices = atom_indices;
+            }
+            if let Some(bond_indices) = props.bond_indices {
+                sgroup.bond_indices = bond_indices;
+            }
+            if let Some(parent_atom_indices) = props.parent_atom_indices {
+                sgroup.parent_atom_indices = Some(parent_atom_indices);
+            }
+            if let Some(subscript) = props.subscript {
+                sgroup.subscript = Some(subscript);
+            }
+            if let Some(multiplier) = props.multiplier {
+                sgroup.multiplier = Some(multiplier);
+            }
+            if let Some(correspondence) = props.correspondence {
+                sgroup.correspondence = Some(correspondence);
+            }
+            if let Some(bracket_coords) = props.bracket_coords {
+                sgroup.bracket_coords = Some(bracket_coords);
+            }
+            if let Some(connecting_bond) = props.connecting_bond {
+                sgroup.connecting_bond = Some(connecting_bond);
+            }
+            if let Some(hierarchy_parent) = props.hierarchy_parent {
+                sgroup.hierarchy_parent = Some(hierarchy_parent);
+            }
+            if let Some(component_number) = props.component_number {
+                sgroup.component_number = Some(component_number);
+            }
+            if !props.data.is_empty() {
+                sgroup.data = props.data;
+            }
+            if let Some(display) = props.display {
+                sgroup.display = Some(display);
+            }
+            molecule.sgroups.insert(sgroup_index, sgroup);
+        }
         Ok(())
     }
 }

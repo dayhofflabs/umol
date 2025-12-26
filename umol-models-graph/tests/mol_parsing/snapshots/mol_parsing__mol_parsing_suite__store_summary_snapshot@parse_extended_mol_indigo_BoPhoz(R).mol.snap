@@ -1,0 +1,7 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: summary
+---
+atom_count: 45
+bond_count: 58
+sum_formula: C37H4FeNP2

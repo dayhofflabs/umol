@@ -26,7 +26,6 @@ struct CompoundSummary {
     sum_formula: String,
     atom_count: usize,
     bond_count: usize,
-    graph6: String,
     data_fields: IndexMap<String, String>,
 }
 
@@ -75,7 +74,6 @@ fn run_test_sdf(path: &Path, mode: TestMode) {
                     sum_formula: molecule.sum_formula(),
                     atom_count: molecule.atom_count(),
                     bond_count: molecule.bond_count(),
-                    graph6: molecule.graph6(),
                     data_fields: compound.data_fields.clone(),
                 });
             }

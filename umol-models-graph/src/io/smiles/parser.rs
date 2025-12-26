@@ -364,9 +364,9 @@ fn parse_u32(input: &[u8], mut i: usize, max_digits: usize) -> (u32, usize, usiz
 }
 
 #[inline]
-fn parse_charge(input: &[u8], i: usize, sign_char: u8) -> (i32, usize) {
+fn parse_charge(input: &[u8], i: usize, sign_char: u8) -> (i8, usize) {
     let n = input.len();
-    let sign = if sign_char == b'+' { 1 } else { -1 };
+    let sign: i8 = if sign_char == b'+' { 1 } else { -1 };
     let j = i + 1;
     if j < n && input[j] == sign_char {
         return (2 * sign, j + 1);
@@ -375,7 +375,7 @@ fn parse_charge(input: &[u8], i: usize, sign_char: u8) -> (i32, usize) {
     if cnt == 0 {
         val = 1;
     }
-    (val as i32 * sign, j2)
+    (val as i8 * sign, j2)
 }
 
 #[inline]
@@ -556,9 +556,9 @@ fn parse_bracket(
         Option<Element>,
         bool,
         Option<u32>,
-        Option<i32>,
+        Option<i8>,
         Option<u32>,
-        Option<u32>,
+        Option<u8>,
         Option<Chirality>,
         bool,
     ),
@@ -611,9 +611,9 @@ fn parse_bracket(
     }
 
     // 3) Tail fields in any order
-    let mut charge: Option<i32> = None;
+    let mut charge: Option<i8> = None;
     let mut class_num: Option<u32> = None;
-    let mut hcount: Option<u32> = None;
+    let mut hcount: Option<u8> = None;
     let mut chir: Option<Chirality> = None;
 
     while i < n {
@@ -630,9 +630,9 @@ fn parse_bracket(
                         pos: pos_offset + 1 + i,
                     });
                 }
-                let mut val: u32 = 1; // default H
+                let mut val: u8 = 1; // default H
                 if i + 1 < n && input[i + 1].is_ascii_digit() {
-                    val = (input[i + 1] - b'0') as u32;
+                    val = input[i + 1] - b'0';
                     i += 1;
                 }
                 hcount = Some(val);

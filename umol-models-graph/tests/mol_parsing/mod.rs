@@ -3,24 +3,22 @@ use std::path::{Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::ctab::molecule::{Molecule, MoleculeLike};
-use umol_models_graph::io::mol::parser::{parse_mol, parse_mol_moleculelike};
+use umol_models_graph::io::mol::parser::{parse_mol, parse_extended_mol};
+use umol_models_graph::simple_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Serialize)]
 struct MoleculeSummary {
     atom_count: usize,
     bond_count: usize,
     sum_formula: String,
-    graph6: String,
 }
 
-impl From<&MoleculeLike> for MoleculeSummary {
-    fn from(molecule: &MoleculeLike) -> Self {
+impl From<&ExtendedMolecule> for MoleculeSummary {
+    fn from(molecule: &ExtendedMolecule) -> Self {
         Self {
             atom_count: molecule.atom_count(),
             bond_count: molecule.bond_count(),
             sum_formula: molecule.sum_formula(),
-            graph6: molecule.graph6(),
         }
     }
 }
@@ -31,7 +29,6 @@ impl From<&Molecule> for MoleculeSummary {
             atom_count: molecule.atom_count(),
             bond_count: molecule.bond_count(),
             sum_formula: molecule.sum_formula(),
-            graph6: molecule.graph6(),
         }
     }
 }
@@ -44,9 +41,9 @@ fn store_summary_snapshot(summary: MoleculeSummary) {
     });
 }
 
-fn test_parse_mol_moleculelike(path: &Path, expected_success: bool) {
+fn test_parse_extended_mol(path: &Path, expected_success: bool) {
     let mol_bytes = std::fs::read(path).unwrap();
-    let result = parse_mol_moleculelike(&mol_bytes);
+    let result = parse_extended_mol(&mol_bytes);
 
     if expected_success {
         if let Err(e) = &result {
@@ -118,12 +115,12 @@ fn run_parse_mol_test(file_path: &Path, expected_success: bool) {
     test_parse_mol(file_path, expected_success);
 }
 
-fn run_parse_mol_moleculelike_test(file_path: &Path, expected_success: bool) {
+fn run_parse_extended_mol_test(file_path: &Path, expected_success: bool) {
     let (source, filename) = extract_source_and_filename(file_path);
     let mut settings = insta::Settings::clone_current();
-    settings.set_snapshot_suffix(format!("parse_mol_moleculelike_{}_{}", source, filename));
+    settings.set_snapshot_suffix(format!("parse_extended_mol_{}_{}", source, filename));
     let _guard = settings.bind_to_scope();
-    test_parse_mol_moleculelike(file_path, expected_success);
+    test_parse_extended_mol(file_path, expected_success);
 }
 
 // AUTO-GENERATED TESTS - managed by build.rs

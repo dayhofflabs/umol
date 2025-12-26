@@ -4,7 +4,7 @@ use umol_data::Element;
 
 use self::utils::build_from_graph;
 use super::*;
-use crate::simple_ir::{AtomSymbol, BondDir, BondSymbol, Chirality};
+use crate::simple_ir::{AtomSymbol, BondDir, BondOrder, Chirality};
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -531,8 +531,8 @@ fn bracket(
     #[case] aromatic: bool,
     #[case] isotope: Option<u32>,
     #[case] chirality: Option<Chirality>,
-    #[case] hcount: Option<u32>,
-    #[case] charge: Option<i32>,
+    #[case] hcount: Option<u8>,
+    #[case] charge: Option<i8>,
     #[case] class_: Option<u32>,
 ) {
     let res = parse_smiles(input);
@@ -624,7 +624,7 @@ fn bracket_bonds(
     let mol = res.unwrap();
     if let Some(bond1) = mol.bonds.first() {
         if let Some(expected_order) = expected_order {
-            assert_eq!(bond1.symbol, BondSymbol::Bond(expected_order));
+            assert_eq!(bond1.order, expected_order);
         }
         assert_eq!(bond1.direction, expected_dir);
     }

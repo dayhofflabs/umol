@@ -1,19 +1,18 @@
 //! MOL file parser
 
-use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use serde::{Deserialize, Serialize};
 
 use crate::io::ctab::config::{CtabParseFlags, MolIoConfig};
-use crate::io::ctab::molecule::{Molecule, MoleculeLike};
-use crate::io::ctab::parser::{basic_ctab_block, ctab_block};
+use crate::io::ctab::parser::{ctab_block, extended_ctab_block};
 use crate::io::ctfile::error::ParseError;
 use crate::io::mol::parser::header::Header;
 use crate::io::utils::normalize_whitespace;
+use crate::simple_ir::{ExtendedMolecule, Molecule};
 
 pub mod header;
 use nom::Parser;
 
-/// Complete MOL file structure
+/// Complete MOL file structure (basic molecules)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MolFile {
     pub header: Header,
@@ -27,54 +26,48 @@ impl MolFile {
     }
 }
 
-/// Complete MOL file structure (includes header information)
+/// Extended MOL file structure (includes query features, S-groups, R-groups)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MolFileLike {
+pub struct ExtendedMolFile {
     pub header: Header,
-    pub molecule: MoleculeLike,
+    pub molecule: ExtendedMolecule,
 }
 
-impl MolFileLike {
-    /// Create a new MOL file
-    pub fn new(header: Header, molecule: MoleculeLike) -> Self {
+impl ExtendedMolFile {
+    /// Create a new extended MOL file
+    pub fn new(header: Header, molecule: ExtendedMolecule) -> Self {
         Self { header, molecule }
     }
 }
 
-/// Check if molecule contains advanced features
+/// Check if extended molecule contains advanced features
 ///
 /// Returns true if the molecule contains any features that are not supported
 /// in the basic MOL format, including:
 /// - Query atom symbols (atom lists, R-groups, etc.)
 /// - Query bond types (SingleOrDouble, Any, Zero, etc.)
-/// - Query-specific properties (ring bond count, topology, etc.)
-pub fn has_advanced_features(molecule: &MoleculeLike) -> bool {
-    // Check atoms for advanced features
-    for node_idx in molecule.graph.node_indices() {
-        if let Some(atomlike) = molecule.graph.node_weight(node_idx) {
-            // Advanced atom features
-            if atomlike.symbol.is_atomlike()
-                || atomlike.attachment_point.is_some()
-                || atomlike.attachment_order.is_some()
-                || atomlike.ring_bond_count.is_some()
-                || atomlike.substitution_count.is_some()
-                || atomlike.unsaturated.is_some()
-                || atomlike.link_atom.is_some()
-            {
-                return true;
-            }
+/// - S-groups, R-groups
+pub fn has_advanced_features(molecule: &ExtendedMolecule) -> bool {
+    use crate::simple_ir::AtomSymbol;
+
+    // Check atoms for query features
+    for atom in &molecule.atoms {
+        match &atom.symbol {
+            AtomSymbol::Query(_)
+            | AtomSymbol::AtomList(_)
+            | AtomSymbol::RGroup(_)
+            | AtomSymbol::LonePair
+            | AtomSymbol::Variable(_)
+            | AtomSymbol::Pseudoatom(_)
+            | AtomSymbol::Unknown => return true,
+            AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {}
         }
     }
 
-    // Advanced bond features
-    for edge_ref in molecule.graph.edge_references() {
-        if let Some(bond) = molecule.graph.edge_weight(edge_ref.id()) {
-            if bond.bond_type.is_bondlike()
-                || bond.topology.is_some_and(|t| !t.is_default())
-                || bond.reacting_center.is_some_and(|r| !r.is_default())
-            {
-                return true;
-            }
+    // Check bonds for query features
+    for bond in &molecule.bonds {
+        if bond.order.is_query() || bond.order.is_extended() {
+            return true;
         }
     }
 
@@ -83,14 +76,19 @@ pub fn has_advanced_features(molecule: &MoleculeLike) -> bool {
         return true;
     }
 
+    // R-groups
+    if !molecule.rgroups.is_empty() {
+        return true;
+    }
+
     false
 }
 
-/// Parse a MOL string into a Molecule
+/// Parse a MOL string into an ExtendedMolecule
 ///
 /// This is the main parsing function that handles both basic and query molecules.
-pub fn parse_mol_moleculelike_str(input: &str) -> std::result::Result<MoleculeLike, ParseError> {
-    parse_mol_moleculelike(input.as_bytes())
+pub fn parse_extended_mol_str(input: &str) -> std::result::Result<ExtendedMolecule, ParseError> {
+    parse_extended_mol(input.as_bytes())
 }
 
 /// Parse a MOL string into a Molecule (optimized, basic molecules only)
@@ -101,11 +99,11 @@ pub fn parse_mol_str(input: &str) -> std::result::Result<Molecule, ParseError> {
     parse_mol(input.as_bytes())
 }
 
-/// Parse MOL bytes into a Molecule
+/// Parse MOL bytes into an ExtendedMolecule
 ///
 /// This is the primary parsing function that handles both basic and query molecules.
 /// Stops parsing at M  END and ignores trailing input.
-pub fn parse_mol_moleculelike(input: &[u8]) -> std::result::Result<MoleculeLike, ParseError> {
+pub fn parse_extended_mol(input: &[u8]) -> std::result::Result<ExtendedMolecule, ParseError> {
     let config = MolIoConfig::lenient();
     let flags = config.parse_flags;
 
@@ -119,7 +117,7 @@ pub fn parse_mol_moleculelike(input: &[u8]) -> std::result::Result<MoleculeLike,
         .parse(&bytes)
         .map_err(|e| ParseError::from_nom(e, 0, &bytes))?;
 
-    let (_, molecule) = ctab_block(remaining, &flags, 3)?;
+    let (_, molecule) = extended_ctab_block(remaining, &flags, 3)?;
 
     Ok(molecule)
 }
@@ -137,7 +135,7 @@ pub fn parse_mol(input: &[u8]) -> std::result::Result<Molecule, ParseError> {
         .parse(input)
         .map_err(|e| ParseError::from_nom(e, 0, input))?;
 
-    let (_, molecule) = basic_ctab_block(remaining, &flags, 3)?;
+    let (_, molecule) = ctab_block(remaining, &flags, 3)?;
 
     Ok(molecule)
 }
