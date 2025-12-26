@@ -1,6 +1,5 @@
 use pretty_assertions::assert_eq;
 use rstest::*;
-use umol::error::{DataError, Error, ValidationError};
 use umol_data::{e, Element, NamedIsotope};
 
 use super::*;
@@ -501,8 +500,8 @@ fn test_atom_alias_entry_invalid(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-        _ => panic!("Expected MissingAtomIndex error"),
+        SemanticError::Generic(msg) => assert!(msg.contains("Missing atom index: 5")),
+        _ => panic!("Expected Missing atom index error"),
     }
 }
 
@@ -522,11 +521,11 @@ fn test_atom_alias_entry_conflict(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+        SemanticError::Generic(msg) => {
             assert!(msg.contains("Atom alias conflict"));
             assert!(msg.contains("existing 'existing' vs new 'new'"));
         }
-        _ => panic!("Expected InvalidComponent error"),
+        _ => panic!("Expected SemanticError::Generic"),
     }
 }
 
@@ -569,8 +568,8 @@ fn test_apply_atom_value_entry_invalid(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-        _ => panic!("Expected MissingAtomIndex error"),
+        SemanticError::Generic(msg) => assert!(msg.contains("Missing atom index: 5")),
+        _ => panic!("Expected Missing atom index error"),
     }
 }
 
@@ -590,11 +589,11 @@ fn test_apply_atom_value_conflict(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+        SemanticError::Generic(msg) => {
             assert!(msg.contains("Atom value conflict"));
             assert!(msg.contains("existing 'existing' vs new 'new'"));
         }
-        _ => panic!("Expected InvalidComponent error"),
+        _ => panic!("Expected SemanticError::Generic"),
     }
 }
 
@@ -659,8 +658,8 @@ fn test_apply_charge_entries_invalid(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Data(DataError::MissingAtomIndex(idx)) => assert_eq!(idx, 5),
-        _ => panic!("Expected MissingAtomIndex error"),
+        SemanticError::Generic(msg) => assert!(msg.contains("Missing atom index: 5")),
+        _ => panic!("Expected Missing atom index error"),
     }
 }
 
@@ -716,10 +715,10 @@ fn test_apply_radical_entries_invalid(parse_flags_strict: CtabParseFlags) {
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+        SemanticError::Generic(msg) => {
             assert!(msg.contains("Invalid radical type"));
         }
-        _ => panic!("Expected InvalidComponent error"),
+        _ => panic!("Expected SemanticError::Generic"),
     }
 }
 
@@ -793,10 +792,10 @@ fn test_apply_isotope_entries_conflict(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+        SemanticError::Generic(msg) => {
             assert!(msg.contains("Isotope conflict: existing"));
         }
-        _ => panic!("Expected InvalidComponent error"),
+        _ => panic!("Expected SemanticError::Generic"),
     }
 }
 
@@ -815,10 +814,10 @@ fn test_apply_isotope_entries_invalid(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Data(DataError::InvalidIsotope(msg)) => {
+        SemanticError::Generic(msg) => {
             assert!(msg.contains("Invalid isotope mass number 40 for element C"));
         }
-        _ => panic!("Expected InvalidIsotope error"),
+        _ => panic!("Expected SemanticError::Generic"),
     }
 }
 
@@ -882,10 +881,10 @@ fn test_apply_ring_bond_count_entries_conflict(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+        SemanticError::Generic(msg) => {
             assert!(msg.contains("Ring bond count conflict: existing"));
         }
-        _ => panic!("Expected InvalidComponent error"),
+        _ => panic!("Expected SemanticError::Generic"),
     }
 }
 
@@ -945,10 +944,10 @@ fn test_apply_substitution_count_entries_conflict(
     assert!(result.is_err());
 
     match result.unwrap_err() {
-        Error::Validation(ValidationError::InvalidComponent(msg)) => {
+        SemanticError::Generic(msg) => {
             assert!(msg.contains("Substitution count conflict: existing"));
         }
-        _ => panic!("Expected InvalidComponent error"),
+        _ => panic!("Expected SemanticError::Generic"),
     }
 }
 

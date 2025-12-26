@@ -5,9 +5,11 @@ use std::str::FromStr;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use umol::error::DataError;
-use umol::{Error, Result};
 use umol_data::Element;
+
+use super::error::GraphError;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 /// AtomSpec is a generalization of the atomic valence state for modeling
 /// covalent and dative bonding by molecular graphs.
@@ -174,20 +176,22 @@ impl fmt::Display for AtomSpec {
 }
 
 impl TryFrom<&str> for AtomSpec {
-    type Error = Error;
+    type Error = GraphError;
 
     fn try_from(s: &str) -> Result<Self> {
         if s.is_empty() {
-            return Err(DataError::InvalidAtomSpec("Empty atom spec".into()).into());
+            return Err(GraphError::InvalidAtomSpec("Empty atom spec".into()));
         }
 
         let val_state_pattern = Regex::new(r"^\[([A-Z][a-z]?)((?:[-+/<>*Hv^]\d*)*)]$").unwrap();
         if !val_state_pattern.is_match(s) {
-            return Err(DataError::InvalidAtomSpec(s.to_string()).into());
+            return Err(GraphError::InvalidAtomSpec(s.to_string()));
         }
 
         let caps = val_state_pattern.captures(s).unwrap();
-        let element = caps[1].parse::<Element>()?;
+        let element = caps[1]
+            .parse::<Element>()
+            .map_err(|e| GraphError::InvalidAtomSpec(format!("Invalid element: {}", e)))?;
         let properties = caps.get(2);
         if properties.is_none() {
             return Ok(AtomSpec::new(element, 0, 0, 0, 0, 0, 1, 0, 0));
@@ -211,7 +215,7 @@ impl TryFrom<&str> for AtomSpec {
             match property {
                 "+" => {
                     if pos_charge.is_some() || neg_charge.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate charge definition".to_string(),
                         )
                         .into());
@@ -225,7 +229,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "-" => {
                     if neg_charge.is_some() || pos_charge.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate charge definition".to_string(),
                         )
                         .into());
@@ -239,7 +243,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "/" => {
                     if lone_pairs.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate lone pair definition".to_string(),
                         )
                         .into());
@@ -253,7 +257,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 ">" => {
                     if donated.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate donated pair definition".to_string(),
                         )
                         .into());
@@ -267,7 +271,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "<" => {
                     if accepted.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate accepted pair definition".to_string(),
                         )
                         .into());
@@ -281,7 +285,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "^" => {
                     if unpaired.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate unpaired electron specification".to_string(),
                         )
                         .into());
@@ -295,7 +299,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "*" => {
                     multiplicity = if multiplicity.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate multiplicity".to_string(),
                         )
                         .into());
@@ -307,7 +311,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "H" => {
                     if implicit_h.is_some() {
-                        return Err(DataError::InvalidAtomSpec(
+                        return Err(GraphError::InvalidAtomSpec(
                             "Duplicate implicit hydrogen specification".to_string(),
                         )
                         .into());
@@ -322,7 +326,7 @@ impl TryFrom<&str> for AtomSpec {
                 "v" => {
                     valence = if valence.is_some() {
                         return Err(
-                            DataError::InvalidAtomSpec("Duplicate valence".to_string()).into()
+                            GraphError::InvalidAtomSpec("Duplicate valence".to_string()).into()
                         );
                     } else if value.is_empty() {
                         Some(0)
@@ -347,22 +351,40 @@ impl TryFrom<&str> for AtomSpec {
             || multiplicity > unpaired + 1
             || (unpaired + 1 - multiplicity) % 2 != 0
         {
-            return Err(DataError::InvalidAtomMultiplicity(format!("{}", multiplicity)).into());
+            return Err(GraphError::InvalidAtomSpec(format!(
+                "Invalid multiplicity: {}",
+                multiplicity
+            )));
         }
         if donated > lone_pairs {
-            return Err(DataError::InvalidAtomDonatedPairs(format!("{}", donated)).into());
+            return Err(GraphError::InvalidAtomSpec(format!(
+                "Invalid donated pairs: {}",
+                donated
+            )));
         }
         if (element.valence_electrons() as i32 - charge) < 0 {
-            return Err(DataError::InvalidAtomCharge(format!("{}", charge)).into());
+            return Err(GraphError::InvalidAtomSpec(format!(
+                "Invalid charge: {}",
+                charge
+            )));
         }
         if implicit_h > element.max_implicit_hydrogens() as u32 {
-            return Err(DataError::InvalidAtomImplicitHydrogens(format!("{}", implicit_h)).into());
+            return Err(GraphError::InvalidAtomSpec(format!(
+                "Invalid implicit hydrogens: {}",
+                implicit_h
+            )));
         }
         if implicit_h > valence {
-            return Err(DataError::InvalidAtomImplicitHydrogens(format!("{}", valence)).into());
+            return Err(GraphError::InvalidAtomSpec(format!(
+                "Invalid valence (H): {}",
+                valence
+            )));
         }
         if valence > element.max_valence() as u32 {
-            return Err(DataError::InvalidAtomValence(format!("{}", valence)).into());
+            return Err(GraphError::InvalidAtomSpec(format!(
+                "Invalid valence: {}",
+                valence
+            )));
         }
 
         Ok(AtomSpec::new(
@@ -380,7 +402,7 @@ impl TryFrom<&str> for AtomSpec {
 }
 
 impl FromStr for AtomSpec {
-    type Err = Error;
+    type Err = GraphError;
 
     fn from_str(s: &str) -> Result<Self> {
         Self::try_from(s)

@@ -3,13 +3,14 @@
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use umol::error::DataError;
-use umol::Result;
 
 use super::bond_matcher::{BondMatcher, DEFAULT_BOND_MATCHER};
 use super::bond_spec::{BondDonation, BondOrder, BondSpec};
+use super::error::GraphError;
 use crate::simple_ir::{BondDir, BondStereo, BondSymbol};
 use crate::span::Span;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 /// Valence bond type including strict typing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -53,7 +54,7 @@ impl Bond {
     }
 
     pub fn span_bytes(&self) -> Option<(u32, u32)> {
-        self.span.map(|s| s.bytes_range())
+        self.span.and_then(|s| s.bytes_range())
     }
 
     pub fn to_builder(self) -> BondBuilder {
@@ -151,7 +152,7 @@ impl BondBuilder {
     }
 
     pub fn span_bytes(&self) -> Option<(u32, u32)> {
-        self.span.map(|s| s.bytes_range())
+        self.span.and_then(|s| s.bytes_range())
     }
 
     pub fn set_order(&mut self, order: BondOrder) -> &mut Self {
@@ -211,9 +212,9 @@ impl BondBuilder {
     pub fn build_with(self, matcher: &BondMatcher) -> Result<Bond> {
         let bond_specs = matcher.find(&self)?;
         if bond_specs.is_empty() {
-            return Err(DataError::NoBondSpec(format!("{:?}", self)).into());
+            return Err(GraphError::InvalidBondSpec(format!("{:?}", self)));
         } else if bond_specs.len() > 1 {
-            return Err(DataError::MultipleBondSpecs(format!("{:?}", self)).into());
+            return Err(GraphError::InvalidBondSpec(format!("{:?}", self)));
         }
         let bond_spec = bond_specs.first().unwrap();
         Ok(Bond {

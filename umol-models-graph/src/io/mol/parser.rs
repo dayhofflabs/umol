@@ -1,19 +1,17 @@
 //! MOL file parser
 
-use nom::combinator::{complete, map};
-use nom::{error, Parser};
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use serde::{Deserialize, Serialize};
 
 use crate::io::ctab::config::{CtabParseFlags, MolIoConfig};
 use crate::io::ctab::molecule::{Molecule, MoleculeLike};
 use crate::io::ctab::parser::{basic_ctab_block, ctab_block};
+use crate::io::ctfile::error::ParseError;
 use crate::io::mol::parser::header::Header;
 use crate::io::utils::normalize_whitespace;
 
 pub mod header;
-use umol::error::DataError;
-use umol::Result;
+use nom::Parser;
 
 /// Complete MOL file structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,27 +39,6 @@ impl MolFileLike {
     pub fn new(header: Header, molecule: MoleculeLike) -> Self {
         Self { header, molecule }
     }
-}
-
-/// Parse complete MOL file (header + CTAB block)
-pub(crate) fn mol_file<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = MolFile, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
-    map(
-        (header::header(), basic_ctab_block(flags)),
-        |(header, molecule)| MolFile::new(header, molecule),
-    )
-}
-
-/// Parse complete MOL file (header + CTAB block)
-pub(crate) fn mol_file_moleculelike<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = MolFileLike, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
-{
-    map(
-        (header::header(), ctab_block(flags)),
-        |(header, molecule)| MolFileLike::new(header, molecule),
-    )
 }
 
 /// Check if molecule contains advanced features
@@ -112,7 +89,7 @@ pub fn has_advanced_features(molecule: &MoleculeLike) -> bool {
 /// Parse a MOL string into a Molecule
 ///
 /// This is the main parsing function that handles both basic and query molecules.
-pub fn parse_mol_moleculelike_str(input: &str) -> Result<MoleculeLike> {
+pub fn parse_mol_moleculelike_str(input: &str) -> std::result::Result<MoleculeLike, ParseError> {
     parse_mol_moleculelike(input.as_bytes())
 }
 
@@ -120,7 +97,7 @@ pub fn parse_mol_moleculelike_str(input: &str) -> Result<MoleculeLike> {
 ///
 /// This is the high-performance parsing function for basic molecules.
 /// It will fail if the MOL file contains query features.
-pub fn parse_mol_str(input: &str) -> Result<Molecule> {
+pub fn parse_mol_str(input: &str) -> std::result::Result<Molecule, ParseError> {
     parse_mol(input.as_bytes())
 }
 
@@ -128,28 +105,23 @@ pub fn parse_mol_str(input: &str) -> Result<Molecule> {
 ///
 /// This is the primary parsing function that handles both basic and query molecules.
 /// Stops parsing at M  END and ignores trailing input.
-pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
-    // TODO: add configuration options
+pub fn parse_mol_moleculelike(input: &[u8]) -> std::result::Result<MoleculeLike, ParseError> {
     let config = MolIoConfig::lenient();
     let flags = config.parse_flags;
-    let result: Result<MoleculeLike>;
-    if !flags.contains(CtabParseFlags::UNICODE) {
-        result = complete(mol_file_moleculelike(&flags))
-            .parse(input)
-            .map(|(_, mol_file)| mol_file.molecule)
-            .map_err(|e| {
-                DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
-            });
+
+    let bytes = if flags.contains(CtabParseFlags::UNICODE) {
+        normalize_whitespace(input).into_owned()
     } else {
-        let normalized = normalize_whitespace(input);
-        result = complete(mol_file_moleculelike(&flags))
-            .parse(&normalized)
-            .map(|(_, mol_file)| mol_file.molecule)
-            .map_err(|e| {
-                DataError::InvalidMolFormat(format!("MOL file parsing failed: {:?}", e)).into()
-            });
+        input.to_vec()
     };
-    result
+
+    let (remaining, _header) = header::header()
+        .parse(&bytes)
+        .map_err(|e| ParseError::from_nom(e, 0, &bytes))?;
+
+    let (_, molecule) = ctab_block(remaining, &flags, 3)?;
+
+    Ok(molecule)
 }
 
 /// Parse MOL bytes into a Molecule (optimized, basic molecules only)
@@ -157,14 +129,17 @@ pub fn parse_mol_moleculelike(input: &[u8]) -> Result<MoleculeLike> {
 /// This is the optimized parsing function for basic molecules.
 /// It will fail if the MOL file contains query features.
 /// Stops parsing at M  END and ignores trailing input.
-pub fn parse_mol(input: &[u8]) -> Result<Molecule> {
+pub fn parse_mol(input: &[u8]) -> std::result::Result<Molecule, ParseError> {
     let config = MolIoConfig::basic();
     let flags = config.parse_flags;
-    let result = complete(mol_file(&flags))
+
+    let (remaining, _header) = header::header()
         .parse(input)
-        .map(|(_, mol_file)| mol_file.molecule)
-        .map_err(|e| DataError::InvalidMolFormat(format!("MOL parsing failed: {:?}", e)).into());
-    result
+        .map_err(|e| ParseError::from_nom(e, 0, input))?;
+
+    let (_, molecule) = basic_ctab_block(remaining, &flags, 3)?;
+
+    Ok(molecule)
 }
 
 #[cfg(test)]

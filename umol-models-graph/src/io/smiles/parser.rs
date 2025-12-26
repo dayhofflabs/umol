@@ -1,206 +1,13 @@
 //! SMILES parser
 
-use strum::{Display, EnumIter, IntoEnumIterator};
 use umol_data::Element;
 
-use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
+use super::error::ParseError;
 use crate::simple_ir::{
     AtomData, BondData, BondDir, BondOrder, Chirality, Molecule, MoleculeBuilder,
 };
 use crate::span::Span;
-
-#[derive(Debug, Clone, PartialEq, Display, EnumIter)]
-#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
-pub enum ParseError {
-    InvalidWhitespace { pos: usize },
-    InvalidComment { pos: usize },
-    UnterminatedBlockComment { pos: usize },
-    InvalidElement { pos: usize },
-    InvalidToken { pos: usize },
-
-    UnbalancedOpenParen { pos: usize },
-    UnbalancedCloseParen { pos: usize },
-    EmptyBranch { pos: usize },
-    EmptyGroup { pos: usize },
-    NonfinalGroup { pos: usize },
-
-    LeadingBond { pos: usize },
-    TrailingBond { pos: usize },
-    ConsecutiveBonds { pos: usize },
-
-    LeadingRing { pos: usize },
-    UnbalancedRingIndex { open_pos: usize },
-    InvalidRingIndex { pos: usize },
-    MismatchedRingBondDirs { pos: usize, open_pos: usize },
-    MismatchedRingBondOrders { pos: usize, open_pos: usize },
-
-    LeadingDot { pos: usize },
-    TrailingDot { pos: usize },
-    ConsecutiveDots { pos: usize },
-    DotBeforeRing { pos: usize },
-
-    EmptyBracket { pos: usize },
-    UnbalancedOpenBracket { pos: usize },
-    UnbalancedCloseBracket { pos: usize },
-    StrayBracketField { pos: usize },
-    DuplicateBracketField { pos: usize },
-    MissingClassIndex { pos: usize },
-    MissingChiralityIndex { pos: usize },
-    ChiralityOutOfRange { pos: usize },
-    BracketHwithHcount { pos: usize },
-    InvalidBracket { pos: usize },
-}
-
-impl ParseError {
-    pub fn all() -> impl Iterator<Item = ParseError> {
-        ParseError::iter()
-    }
-}
-impl From<ParseError> for Diagnostic {
-    fn from(error: ParseError) -> Self {
-        use DiagnosticKind::*;
-        use ParseError::*;
-
-        let (kind, span) = match error {
-            InvalidWhitespace { pos } => (
-                SmilesInvalidWhitespace,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            InvalidComment { pos } => (
-                SmilesInvalidComment,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            UnterminatedBlockComment { pos } => (
-                SmilesUnterminatedBlockComment,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            InvalidElement { pos } => (
-                SmilesInvalidElement,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            InvalidToken { pos } => (
-                SmilesInvalidToken,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-
-            UnbalancedOpenParen { pos } => (
-                SmilesUnbalancedOpenParen,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            UnbalancedCloseParen { pos } => (
-                SmilesUnbalancedCloseParen,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            EmptyBranch { pos } => (
-                SmilesEmptyBranch,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            EmptyGroup { pos } => (
-                SmilesEmptyGroup,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            NonfinalGroup { pos } => (
-                SmilesNonfinalGroup,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-
-            LeadingBond { pos } => (
-                SmilesLeadingBond,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            TrailingBond { pos } => (
-                SmilesTrailingBond,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            ConsecutiveBonds { pos } => (
-                SmilesConsecutiveBonds,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-
-            LeadingRing { pos } => (
-                SmilesLeadingRing,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            UnbalancedRingIndex { open_pos } => (
-                SmilesUnbalancedRingIndex,
-                Span::from_bytes_opt(Some(open_pos as u32), Some(open_pos as u32 + 1)),
-            ),
-            InvalidRingIndex { pos } => (
-                SmilesInvalidRingIndex,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            MismatchedRingBondDirs { pos, .. } => (
-                SmilesMismatchedRingBondDirs,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            MismatchedRingBondOrders { pos, .. } => (
-                SmilesMismatchedRingBondOrders,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-
-            LeadingDot { pos } => (
-                SmilesLeadingDot,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            TrailingDot { pos } => (
-                SmilesTrailingDot,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            ConsecutiveDots { pos } => (
-                SmilesConsecutiveDots,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            DotBeforeRing { pos } => (
-                SmilesDotBeforeRing,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-
-            EmptyBracket { pos } => (
-                SmilesEmptyBracket,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            UnbalancedOpenBracket { pos } => (
-                SmilesUnbalancedOpenBracket,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            UnbalancedCloseBracket { pos } => (
-                SmilesUnbalancedCloseBracket,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            StrayBracketField { pos } => (
-                SmilesStrayBracketField,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            DuplicateBracketField { pos } => (
-                SmilesDuplicateBracketField,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            MissingClassIndex { pos } => (
-                SmilesMissingClassIndex,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            MissingChiralityIndex { pos } => (
-                SmilesMissingChiralityIndex,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            ChiralityOutOfRange { pos } => (
-                SmilesChiralityOutOfRange,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            BracketHwithHcount { pos } => (
-                SmilesBracketHwithHcount,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            InvalidBracket { pos } => (
-                SmilesInvalidBracket,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-        };
-
-        Diagnostic::new(kind, Severity::Error, span, None)
-    }
-}
 
 // Parse stage output
 #[derive(Debug, Default, Clone)]
@@ -209,7 +16,7 @@ pub struct ParseOutput {
 }
 
 // Public entrypoint for default OpenSMILES parser
-pub fn parse_smiles<'inp>(input: &'inp [u8]) -> Result<Molecule, ParseError> {
+pub fn parse_smiles<'inp>(input: &'inp [u8]) -> std::result::Result<Molecule, ParseError> {
     let config = SmilesIoConfig::strict_opensmiles();
     parse_smiles_with(input, &config)
 }
@@ -218,7 +25,7 @@ pub fn parse_smiles<'inp>(input: &'inp [u8]) -> Result<Molecule, ParseError> {
 pub fn parse_smiles_with<'inp, 'conf>(
     input: &'inp [u8],
     config: &'conf SmilesIoConfig,
-) -> Result<Molecule, ParseError> {
+) -> std::result::Result<Molecule, ParseError> {
     let flags = config.parse_flags;
     let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
     let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
@@ -937,7 +744,7 @@ fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
 pub fn parse_smiles_to_sir<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl SmilesParseFlags,
-) -> Result<ParseOutput, ParseError> {
+) -> std::result::Result<ParseOutput, ParseError> {
     let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
     let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
     let no_meta = flags.contains(SmilesParseFlags::NO_METADATA);

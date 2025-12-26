@@ -1,11 +1,13 @@
 //! Bond matcher infrastructure copied from `umol-models-valence`.
 
 use once_cell::sync::Lazy;
-use umol::Result;
 
 use super::bond::BondBuilder;
 use super::bond_spec::{BondDonation, BondSpec};
 use super::bond_spec_registry::BondSpecRegistry;
+use super::error::GraphError;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 pub struct BondMatcher {
     matcher: Box<dyn Fn(&BondBuilder) -> Result<Vec<BondSpec>> + Send + Sync>,

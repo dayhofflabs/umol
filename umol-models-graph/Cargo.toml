@@ -25,6 +25,7 @@ toml = "0.9.0"
 slog = "2.7.0"
 smallvec = "1.15.1"
 strum = { version = "0.27.2", features = ["derive"] }
+thiserror = "2.0"
 umol = { path = "../umol" }
 umol-data = { path = "../umol-data" }
 umol-models-valence = { path = "../umol-models-valence" }

@@ -262,14 +262,20 @@ pub enum ParseError {
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("Parse failed at line {0} ('{1}'): {2}")]
-    Failed(usize, String, String),
+    #[error("Format error: {0}")]
+    Format(#[from] Box<dyn std::error::Error + Send + Sync>),
 
     #[error("Invalid: {0}")]
     Invalid(String),
 
     #[error("Incomplete: {0}")]
     Incomplete(String),
+}
+
+impl From<String> for ParseError {
+    fn from(s: String) -> Self {
+        ParseError::Invalid(s)
+    }
 }
 
 /// umol result type

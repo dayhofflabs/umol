@@ -54,7 +54,7 @@ fn test_atom_block() {
 ";
     let atom_count = 2;
     let flags = CtabParseFlags::LENIENT;
-    let result = atom_block(atom_count, &flags).parse(atom_data);
+    let result = atom_block(atom_count, &flags, 0)(atom_data);
     assert!(result.is_ok(), "Atom block should parse successfully");
 
     let (remaining, atoms) = result.unwrap();
@@ -71,7 +71,7 @@ fn test_atomlike_block() {
 ";
     let atom_count = 2;
     let flags = CtabParseFlags::LENIENT;
-    let result = atomlike_block(atom_count, &flags).parse(atom_data);
+    let result = atomlike_block(atom_count, &flags, 0)(atom_data);
     assert!(result.is_ok(), "Atom block should parse successfully");
 
     let (remaining, atoms) = result.unwrap();
@@ -86,7 +86,7 @@ fn test_bond_block() {
     let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
     let bond_count = 2;
     let flags = CtabParseFlags::LENIENT;
-    let result = bond_block(bond_count, &flags).parse(bond_data);
+    let result = bond_block(bond_count, &flags, 0)(bond_data);
     assert!(result.is_ok(), "Bond block should parse successfully");
 
     let (remaining, bonds) = result.unwrap();
@@ -101,7 +101,7 @@ fn test_bondlike_block() {
     let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
     let bond_count = 2;
     let flags = CtabParseFlags::LENIENT;
-    let result = bondlike_block(bond_count, &flags).parse(bond_data);
+    let result = bondlike_block(bond_count, &flags, 0)(bond_data);
     assert!(result.is_ok(), "Bond block should parse successfully");
 
     let (remaining, bonds) = result.unwrap();
@@ -115,7 +115,7 @@ fn test_bondlike_block() {
 fn test_legacy_atom_list_block() {
     let atom_list_data = b"  1 F    3   9   7   8  ";
     let flags = CtabParseFlags::LENIENT;
-    let result = legacy_atom_list_block(&flags).parse(atom_list_data);
+    let result = legacy_atom_list_block(&flags, 0)(atom_list_data);
     assert!(
         result.is_ok(),
         "Legacy atom list block should parse successfully"
@@ -131,7 +131,7 @@ fn test_legacy_atom_list_block() {
 fn test_basic_properties_block_missing_newline() {
     let ctab_data = b"M  END";
     let flags = CtabParseFlags::LENIENT;
-    let result = basic_properties_block(&flags).parse(ctab_data);
+    let result = basic_properties_block(&flags, 0)(ctab_data);
     assert!(
         result.is_ok(),
         "CTAB block without terminating newline should parse successfully"
@@ -152,7 +152,7 @@ M  ALS   1  2 F Cl  Br
 M  END
 ";
     let flags = CtabParseFlags::BASIC;
-    let result = basic_ctab_block(&flags).parse(ctab_data);
+    let result = basic_ctab_block(ctab_data, &flags, 0);
     assert!(
         result.is_err(),
         "Basic parser should fail on query features"
@@ -168,7 +168,7 @@ fn test_ctab_block_truncated_lines() {
 M  END
 ";
     let flags = CtabParseFlags::LENIENT;
-    let result = ctab_block(&flags).parse(ctab_data);
+    let result = ctab_block(ctab_data, &flags, 0);
     assert!(
         result.is_ok(),
         "CTAB block with truncated lines should parse successfully"
@@ -187,7 +187,7 @@ fn test_ctab_block_insufficient_atoms() {
 M  END
 ";
     let flags = CtabParseFlags::LENIENT;
-    let result = ctab_block(&flags).parse(ctab_data);
+    let result = ctab_block(ctab_data, &flags, 0);
     assert!(result.is_err(), "Should fail with insufficient atoms");
 }
 
@@ -200,7 +200,7 @@ fn test_ctab_block_insufficient_bonds() {
 M  END
 ";
     let flags = CtabParseFlags::LENIENT;
-    let result = ctab_block(&flags).parse(ctab_data);
+    let result = ctab_block(ctab_data, &flags, 0);
     assert!(result.is_err(), "Should fail with insufficient bonds");
 }
 
@@ -214,7 +214,7 @@ M  ALS   1  2 F Cl  Br
 M  END
 ";
     let flags = CtabParseFlags::LENIENT;
-    let result = ctab_block(&flags).parse(ctab_data);
+    let result = ctab_block(ctab_data, &flags, 0);
     assert!(
         result.is_ok(),
         "CTAB block with query features should parse successfully"
@@ -249,7 +249,7 @@ fn test_ctab_block_termination(
     data.extend_from_slice(ending);
 
     let flags = CtabParseFlags::LENIENT;
-    let result = ctab_block(&flags).parse(&data);
+    let result = ctab_block(&data, &flags, 0);
     assert!(result.is_ok(), "{} case should parse successfully", name);
 
     let (remaining, molecule) = result.unwrap();
@@ -288,7 +288,7 @@ fn test_ctab_block_missing_m_end(
     data.extend_from_slice(ending);
 
     let flags = CtabParseFlags::LENIENT;
-    let result = ctab_block(&flags).parse(&data);
+    let result = ctab_block(&data, &flags, 0);
     assert!(result.is_ok(), "{} case should parse successfully", name);
 
     let (remaining, molecule) = result.unwrap();
@@ -322,7 +322,7 @@ fn test_ctab_block_missing_m_end_legacy(
     data.extend_from_slice(ending);
 
     let flags = CtabParseFlags::LENIENT | CtabParseFlags::LEGACY_FEATURES;
-    let result = ctab_block(&flags).parse(&data);
+    let result = ctab_block(&data, &flags, 0);
     assert!(result.is_ok(), "{} case should parse successfully", name);
 
     let (remaining, molecule) = result.unwrap();
@@ -346,7 +346,7 @@ fn test_ctab_block_m_end_no_newline(
     data.extend_from_slice(m_end_no_newline);
 
     let flags = CtabParseFlags::LENIENT;
-    let result = ctab_block(&flags).parse(&data);
+    let result = ctab_block(&data, &flags, 0);
     assert!(
         result.is_ok(),
         "M END without newline should parse successfully"

@@ -8,17 +8,18 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
-use umol::error::DataError;
-use umol::Result;
 
 use super::atom::{Atom, AtomBuilder};
 use super::atom_matcher::{AtomMatcher, STRICT_ATOM_MATCHER};
 use super::atom_validator::{AtomValidator, STRICT_ATOM_VALIDATOR};
 use super::bond::{Bond, BondBuilder};
 use super::bond_matcher::{BondMatcher, STRICT_BOND_MATCHER};
+use super::error::GraphError;
 
 pub type AtomIndex = NodeIndex<usize>;
 pub type BondIndex = EdgeIndex<usize>;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 #[derive(Debug, Clone)]
 pub struct Molecule {
@@ -229,7 +230,7 @@ impl MoleculeBuilder {
     ) -> Result<(usize, &mut AtomBuilder)> {
         let builder = atom.into();
         if self.atom_builders.contains_key(&idx) {
-            return Err(DataError::DuplicateAtomIndex(idx).into());
+            return Err(GraphError::DuplicateAtom(NodeIndex::new(idx)));
         }
         self.atom_builders.insert(idx, builder);
         Ok((idx, self.atom_builders.get_mut(&idx).unwrap()))
@@ -246,10 +247,10 @@ impl MoleculeBuilder {
         let mut seen_indices = HashSet::with_capacity(staged_atoms.len());
         for (idx, _) in &staged_atoms {
             if !seen_indices.insert(*idx) {
-                return Err(DataError::DuplicateAtomIndex(*idx).into());
+                return Err(GraphError::DuplicateAtom(NodeIndex::new(*idx)));
             }
             if self.atom_builders.contains_key(idx) {
-                return Err(DataError::DuplicateAtomIndex(*idx).into());
+                return Err(GraphError::DuplicateAtom(NodeIndex::new(*idx)));
             }
         }
 
@@ -269,10 +270,10 @@ impl MoleculeBuilder {
         bond: B,
     ) -> Result<(usize, usize, &mut BondBuilder)> {
         if !self.atom_builders.contains_key(&idx1) {
-            return Err(DataError::MissingAtomIndex(idx1).into());
+            return Err(GraphError::AtomNotFound(NodeIndex::new(idx1)));
         }
         if !self.atom_builders.contains_key(&idx2) {
-            return Err(DataError::MissingAtomIndex(idx2).into());
+            return Err(GraphError::AtomNotFound(NodeIndex::new(idx2)));
         }
 
         let builder = bond.into();
@@ -294,10 +295,10 @@ impl MoleculeBuilder {
             .collect();
         for (idx1, idx2, _) in &staged_bonds {
             if !self.atom_builders.contains_key(idx1) {
-                return Err(DataError::MissingAtomIndex(*idx1).into());
+                return Err(GraphError::AtomNotFound(NodeIndex::new(*idx1)));
             }
             if !self.atom_builders.contains_key(idx2) {
-                return Err(DataError::MissingAtomIndex(*idx2).into());
+                return Err(GraphError::AtomNotFound(NodeIndex::new(*idx2)));
             }
         }
 

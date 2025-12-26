@@ -4,17 +4,17 @@ use bstr::ByteSlice;
 use indexmap::IndexMap;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_until};
-use nom::character::complete::{line_ending, multispace0, not_line_ending};
-use nom::combinator::{all_consuming, complete, eof, map, opt, peek, rest, value};
+use nom::character::complete::{line_ending, not_line_ending};
+use nom::combinator::{eof, map, opt, peek, value};
 use nom::multi::{many1, many_till};
 use nom::sequence::{delimited, terminated};
-use nom::{error, Parser};
+use nom::Parser;
 use serde::{Deserialize, Serialize};
-use umol::error::DataError;
-use umol::Result;
 
-use crate::io::ctab::config::{CtabParseFlags, MolIoConfig};
-use crate::io::mol::parser::{mol_file_moleculelike, MolFileLike};
+use crate::io::ctab::config::MolIoConfig;
+use crate::io::ctab::parser::ctab_block;
+use crate::io::ctfile::error::ParseError;
+use crate::io::mol::parser::{header, MolFileLike};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SdfFile {
@@ -44,7 +44,7 @@ impl SdfCompound {
 
 /// Parse data field header: `> <Field Name>`
 pub(crate) fn data_header<'inp>(
-) -> impl Parser<&'inp [u8], Output = String, Error = error::Error<&'inp [u8]>> {
+) -> impl Parser<&'inp [u8], Output = String, Error = nom::error::Error<&'inp [u8]>> {
     map(
         delimited(
             (tag(">"), many1(tag(" "))), // Allow multiple spaces after >
@@ -57,16 +57,16 @@ pub(crate) fn data_header<'inp>(
 
 /// Parse multi-line data value until blank line
 pub(crate) fn data_value<'inp>(
-) -> impl Parser<&'inp [u8], Output = String, Error = error::Error<&'inp [u8]>> {
+) -> impl Parser<&'inp [u8], Output = String, Error = nom::error::Error<&'inp [u8]>> {
     map(
         many_till(
-            terminated(not_line_ending::<&[u8], error::Error<&[u8]>>, line_ending),
+            terminated(not_line_ending::<&[u8], nom::error::Error<&[u8]>>, line_ending),
             alt((
                 peek(line_ending), // blank line
                 eof,
             )),
         ),
-        |(lines, _)| {
+        |(lines, _): (Vec<&[u8]>, _)| {
             lines
                 .iter()
                 .map(|line| line.to_str_lossy())
@@ -78,19 +78,19 @@ pub(crate) fn data_value<'inp>(
 
 /// Parse complete data field (header + value)
 pub(crate) fn data_field<'inp>(
-) -> impl Parser<&'inp [u8], Output = (String, String), Error = error::Error<&'inp [u8]>> {
+) -> impl Parser<&'inp [u8], Output = (String, String), Error = nom::error::Error<&'inp [u8]>> {
     (terminated(data_header(), line_ending), data_value())
 }
 
 /// Parse SDF record delimiter
 pub(crate) fn sdf_delimiter<'inp>(
-) -> impl Parser<&'inp [u8], Output = (), Error = error::Error<&'inp [u8]>> {
+) -> impl Parser<&'inp [u8], Output = (), Error = nom::error::Error<&'inp [u8]>> {
     value((), (tag("$$$$"), opt(line_ending)))
 }
 
 /// Parse multiple data fields
 pub(crate) fn data_block<'inp>(
-) -> impl Parser<&'inp [u8], Output = IndexMap<String, String>, Error = error::Error<&'inp [u8]>> {
+) -> impl Parser<&'inp [u8], Output = IndexMap<String, String>, Error = nom::error::Error<&'inp [u8]>> {
     map(
         many_till(
             alt((
@@ -103,7 +103,7 @@ pub(crate) fn data_block<'inp>(
             )),
             peek(alt((tag("$$$$"), eof))),
         ),
-        |(fields, _)| {
+        |(fields, _): (Vec<(String, String)>, _)| {
             fields
                 .into_iter()
                 .filter(|(name, _)| !name.is_empty())
@@ -112,42 +112,60 @@ pub(crate) fn data_block<'inp>(
     )
 }
 
-/// Parse single SDF compound (MOL + data + $$$$)
-pub(crate) fn sdf_compound<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = SdfCompound, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
-{
-    move |input: &'inp [u8]| {
-        let (remaining, mol_input) =
-            alt((take_until(">"), take_until("$$$$"), rest)).parse(input)?;
-
-        let (_, mol_file) = mol_file_moleculelike(flags)
-            .parse(mol_input)
-            .map_err(|_| nom::Err::Error(error::Error::new(input, error::ErrorKind::Verify)))?;
-
-        let (remaining, data_fields) = data_block().parse(remaining)?;
-        let (remaining, _) = sdf_delimiter().parse(remaining)?;
-
-        Ok((remaining, SdfCompound::new(mol_file, data_fields)))
-    }
-}
-
-/// Parse complete SDF file (multiple compounds)
-pub(crate) fn sdf_file<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = SdfFile, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
-    map(many1(sdf_compound(flags)), SdfFile::new)
-}
-
-/// Public API function to parse SDF files
-pub fn parse_sdf(input: &[u8]) -> Result<SdfFile> {
+/// Parse single SDF compound
+pub fn parse_sdf_compound<'inp>(
+    input: &'inp [u8],
+    mut current_line: u32,
+) -> std::result::Result<(&'inp [u8], SdfCompound), ParseError> {
     let config = MolIoConfig::lenient();
     let flags = config.parse_flags;
-    let result = all_consuming(complete(terminated(sdf_file(&flags), multispace0)))
+
+    let (remaining, _header) = header::header()
         .parse(input)
-        .map(|(_, sdf_file)| sdf_file)
-        .map_err(|e| DataError::InvalidSdfFormat(format!("SDF parsing failed: {:?}", e)).into());
-    result
+        .map_err(|e| ParseError::from_nom(e, current_line, input))?;
+    current_line += 3;
+
+    let (remaining, molecule) = ctab_block(remaining, &flags, current_line)?;
+    
+    // Recalculate current_line after ctab_block
+    let consumed_by_mol = input.len() - remaining.len();
+    current_line += input[..consumed_by_mol].lines_with_terminator().count() as u32 - 3;
+
+    let (remaining, data_fields) = data_block()
+        .parse(remaining)
+        .map_err(|e| ParseError::from_nom(e, current_line, remaining))?;
+
+    let (remaining, _) = opt(sdf_delimiter())
+        .parse(remaining)
+        .map_err(|e| ParseError::from_nom(e, current_line, remaining))?;
+
+    Ok((
+        remaining,
+        SdfCompound::new(MolFileLike::new(_header, molecule), data_fields),
+    ))
+}
+
+/// Parse SDF from bytes
+pub fn parse_sdf(input: &[u8]) -> std::result::Result<SdfFile, ParseError> {
+    let mut compounds = Vec::new();
+    let mut current_line = 0;
+    let mut remaining = input;
+
+    while !remaining.trim_ascii().is_empty() {
+        let (rem, compound) = parse_sdf_compound(remaining, current_line)?;
+        compounds.push(compound);
+
+        let consumed = remaining.len() - rem.len();
+        current_line += remaining[..consumed].lines_with_terminator().count() as u32;
+        remaining = rem;
+    }
+
+    Ok(SdfFile::new(compounds))
+}
+
+/// Parse SDF from string
+pub fn parse_sdf_str(input: &str) -> std::result::Result<SdfFile, ParseError> {
+    parse_sdf(input.as_bytes())
 }
 
 #[cfg(test)]

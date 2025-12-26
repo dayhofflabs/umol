@@ -88,7 +88,7 @@ fn test_parse_mol_query() {
     let error = result.unwrap_err();
     let error_string = format!("{}", error);
     assert!(
-        error_string.contains("MOL parsing failed") || error_string.contains("MOL parsing failed"),
+        error_string.contains("Format error") || error_string.contains("Parse error"),
         "Error should mention parsing failure: {}",
         error_string
     );

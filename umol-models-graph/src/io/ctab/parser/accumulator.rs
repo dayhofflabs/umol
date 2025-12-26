@@ -2,9 +2,10 @@
 
 use std::collections::BTreeMap;
 
-use umol::error::{DataError, ValidationError};
-use umol::Result;
+use crate::io::ctfile::error::SemanticError;
 use umol_data::Element;
+
+type Result<T> = std::result::Result<T, SemanticError>;
 
 use super::context::Context;
 use super::convert::{
@@ -176,7 +177,7 @@ impl MoleculeProperties {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     if props.link_atom.is_some() {
-                        return Err(ValidationError::InvalidComponent(format!(
+                        return Err(SemanticError::Generic(format!(
                             "Duplicate link atom property for atom {}",
                             entry.atom_index
                         ))
@@ -198,7 +199,7 @@ impl MoleculeProperties {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     if props.attachment_point.is_some() {
-                        return Err(ValidationError::InvalidComponent(format!(
+                        return Err(SemanticError::Generic(format!(
                             "Duplicate attachment point property for atom {}",
                             entry.atom_index
                         ))
@@ -229,7 +230,7 @@ impl MoleculeProperties {
             PropertyEntries::SGroupTypeEntries(entries) => {
                 for entry in entries {
                     if self.sgroup_properties.contains_key(&entry.sgroup_index) {
-                        return Err(ValidationError::InvalidComponent(format!(
+                        return Err(SemanticError::Generic(format!(
                             "Duplicate S-group type for index {}",
                             entry.sgroup_index
                         ))
@@ -248,7 +249,7 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            DataError::InvalidFragment(format!(
+                            SemanticError::Generic(format!(
                                 "S-group subtype for undefined S-group {}",
                                 entry.sgroup_index
                             ))
@@ -262,7 +263,7 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            DataError::InvalidFragment(format!(
+                            SemanticError::Generic(format!(
                                 "S-group label for undefined S-group {}",
                                 entry.sgroup_index
                             ))
@@ -276,7 +277,7 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            DataError::InvalidFragment(format!(
+                            SemanticError::Generic(format!(
                                 "S-group connectivity for undefined S-group {}",
                                 entry.sgroup_index
                             ))
@@ -290,7 +291,7 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            DataError::InvalidFragment(format!(
+                            SemanticError::Generic(format!(
                                 "S-group expansion for undefined S-group {}",
                                 entry.sgroup_index
                             ))
@@ -303,7 +304,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group atom list for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -315,7 +316,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group bond list for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -327,7 +328,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group parent atom list for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -339,7 +340,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group subscript for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -349,7 +350,7 @@ impl MoleculeProperties {
                     .sgroup_types
                     .get(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group subscript for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -358,14 +359,14 @@ impl MoleculeProperties {
                 if !sgroup_accepts_subscript(*sgroup_type)
                     && !sgroup_accepts_multiplier(*sgroup_type)
                 {
-                    return Err(DataError::InvalidFragment(format!(
+                    return Err(SemanticError::Generic(format!(
                         "S-group subscript and multiplier not allowed for S-group type {:?}",
                         sgroup_type,
                     ))
                     .into());
                 } else if sgroup_accepts_subscript(*sgroup_type) {
                     if entry.subscript.is_none() {
-                        return Err(DataError::InvalidFragment(format!(
+                        return Err(SemanticError::Generic(format!(
                             "No subscript found for S-group type {:?}",
                             sgroup_type,
                         ))
@@ -374,7 +375,7 @@ impl MoleculeProperties {
                     props.subscript = entry.subscript;
                 } else if sgroup_accepts_multiplier(*sgroup_type) {
                     if entry.multiplier.is_none() {
-                        return Err(DataError::InvalidFragment(format!(
+                        return Err(SemanticError::Generic(format!(
                             "No multiplier found for S-group type {:?}",
                             sgroup_type,
                         ))
@@ -382,7 +383,7 @@ impl MoleculeProperties {
                     }
                     props.multiplier = entry.multiplier;
                 } else {
-                    return Err(DataError::InvalidFragment(format!(
+                    return Err(SemanticError::Generic(format!(
                         "S-group type {:?} cannot have a subscript and a multiplier",
                         sgroup_type,
                     ))
@@ -394,7 +395,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group correspondence for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -406,7 +407,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group display info for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -421,7 +422,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group connecting bond for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -436,7 +437,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group data description for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -460,7 +461,7 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        DataError::InvalidFragment(format!(
+                        SemanticError::Generic(format!(
                             "S-group data description for undefined S-group {}",
                             entry.sgroup_index
                         ))
@@ -479,15 +480,14 @@ impl MoleculeProperties {
                     data_content,
                 } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(DataError::InvalidFragment(
+                        return Err(SemanticError::Generic(
                             "SCD entry found without SDT context".to_string(),
-                        )
-                        .into());
+                        ));
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
                     if sgroup_index != context_sgroup {
-                        return Err(DataError::InvalidFragment(format!(
+                        return Err(SemanticError::Generic(format!(
                             "SCD sgroup_index {} doesn't match context sgroup {}",
                             sgroup_index, context_sgroup
                         ))
@@ -513,7 +513,7 @@ impl MoleculeProperties {
                 } => {
                     if let Some(context_sgroup) = self.context.current_sgroup_index {
                         if sgroup_index != context_sgroup {
-                            return Err(DataError::InvalidFragment(format!(
+                            return Err(SemanticError::Generic(format!(
                                 "SED sgroup_index {} doesn't match context sgroup {}",
                                 sgroup_index, context_sgroup
                             ))
@@ -540,15 +540,14 @@ impl MoleculeProperties {
 
                 SGroupDataEntry::EndBlank { sgroup_index } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(DataError::InvalidFragment(
+                        return Err(SemanticError::Generic(
                             "Blank SED entry found without SDT context".to_string(),
-                        )
-                        .into());
+                        ));
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
                     if sgroup_index != context_sgroup {
-                        return Err(DataError::InvalidFragment(format!(
+                        return Err(SemanticError::Generic(format!(
                             "Blank SED sgroup_index {} doesn't match context sgroup {}",
                             sgroup_index, context_sgroup
                         ))
@@ -564,7 +563,7 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            DataError::InvalidFragment(format!(
+                            SemanticError::Generic(format!(
                                 "S-group hierarchy for undefined S-group {}",
                                 entry.sgroup_index
                             ))
@@ -578,7 +577,7 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            DataError::InvalidFragment(format!(
+                            SemanticError::Generic(format!(
                                 "S-group component for undefined S-group {}",
                                 entry.sgroup_index
                             ))
@@ -658,7 +657,7 @@ impl MoleculeProperties {
         for (&atom_index, props) in &self.atom_properties {
             let atom = molecule
                 .atom_mut(atom_index)
-                .ok_or(DataError::MissingAtomIndex(atom_index))?;
+                .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
 
             if props.alias.is_some() {
                 self.apply_atomlike_alias(props, atom)?;
@@ -716,7 +715,7 @@ impl MoleculeProperties {
         let alias = props.alias.as_ref().unwrap();
         if let Some(existing_alias) = atom.properties.get("molFileAlias") {
             if existing_alias != alias {
-                return Err(ValidationError::InvalidComponent(format!(
+                return Err(SemanticError::Generic(format!(
                     "Atom alias conflict: existing '{}' vs new '{}'",
                     existing_alias, alias
                 ))
@@ -737,10 +736,10 @@ impl MoleculeProperties {
         let alias = props.alias.as_ref().unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or(DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
         if let Some(existing_alias) = atom.properties.get("molFileAlias") {
             if existing_alias != alias {
-                return Err(ValidationError::InvalidComponent(format!(
+                return Err(SemanticError::Generic(format!(
                     "Atom alias conflict for atom {}: existing '{}' vs new '{}'",
                     atom_index, existing_alias, alias
                 ))
@@ -756,7 +755,7 @@ impl MoleculeProperties {
         let value = props.value.as_ref().unwrap();
         if let Some(existing_value) = atom.properties.get("molFileValue") {
             if existing_value != value {
-                return Err(ValidationError::InvalidComponent(format!(
+                return Err(SemanticError::Generic(format!(
                     "Atom value conflict: existing '{}' vs new '{}'",
                     existing_value, value
                 ))
@@ -777,10 +776,10 @@ impl MoleculeProperties {
         let value = props.value.as_ref().unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or(DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
         if let Some(existing_value) = atom.properties.get("molFileValue") {
             if existing_value != value {
-                return Err(ValidationError::InvalidComponent(format!(
+                return Err(SemanticError::Generic(format!(
                     "Atom value conflict for atom {}: existing '{}' vs new '{}'",
                     atom_index, existing_value, value
                 ))
@@ -808,7 +807,7 @@ impl MoleculeProperties {
         let charge = props.charge.unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or(DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
         atom.charge = charge;
         atom.radical = None;
         Ok(())
@@ -828,7 +827,7 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or(DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
         atom.radical = props.radical;
         atom.charge = 0;
         Ok(())
@@ -841,14 +840,15 @@ impl MoleculeProperties {
         extended_isotopes: bool,
     ) -> Result<()> {
         let element = match &atom.symbol {
-            AtomSymbol::Element(element) => Ok::<_, umol::Error>(*element),
-            AtomSymbol::NamedIsotope(isotope) => Ok::<_, umol::Error>(isotope.element()),
-            _ => Err(ValidationError::InvalidComponent(format!(
-                "Cannot set isotope for atom: {:?}",
-                atom.symbol
-            ))
-            .into()),
-        }?;
+            AtomSymbol::Element(element) => *element,
+            AtomSymbol::NamedIsotope(isotope) => isotope.element(),
+            _ => {
+                return Err(SemanticError::Generic(format!(
+                    "Cannot set isotope for atom: {:?}",
+                    atom.symbol
+                )))
+            }
+        };
         let mass = convert_atom_isotope_mass_number(
             element,
             props.isotope_mass.unwrap(),
@@ -857,7 +857,7 @@ impl MoleculeProperties {
         if let Some(existing) = atom.isotope_mass {
             if let Some(mass) = mass {
                 if existing != mass {
-                    return Err(ValidationError::InvalidComponent(format!(
+                    return Err(SemanticError::Generic(format!(
                         "Isotope conflict: existing '{}' vs new '{}'",
                         existing, mass
                     ))
@@ -878,7 +878,7 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or(DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
         let mass = convert_atom_isotope_mass_number(
             atom.element,
             props.isotope_mass.unwrap(),
@@ -887,7 +887,7 @@ impl MoleculeProperties {
         if let Some(existing) = atom.isotope_mass {
             if let Some(mass) = mass {
                 if existing != mass {
-                    return Err(ValidationError::InvalidComponent(format!(
+                    return Err(SemanticError::Generic(format!(
                         "Isotope conflict for atom {}: existing '{}' vs new '{}'",
                         atom_index, existing, mass
                     ))
@@ -918,7 +918,7 @@ impl MoleculeProperties {
         let hydrogen_count = props.hydrogen_count.unwrap();
         let atom = molecule
             .atom_mut(atom_index)
-            .ok_or(DataError::MissingAtomIndex(atom_index))?;
+            .ok_or(SemanticError::Generic(format!("Missing atom index: {}", atom_index)))?;
         atom.hydrogen_count = Some(hydrogen_count);
         Ok(())
     }
@@ -926,7 +926,7 @@ impl MoleculeProperties {
     fn apply_ring_bond_count(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if let Some(existing) = atom.ring_bond_count {
             if Some(existing) != props.ring_bond_count {
-                return Err(ValidationError::InvalidComponent(format!(
+                return Err(SemanticError::Generic(format!(
                     "Ring bond count conflict: existing {:?} vs new {:?}",
                     existing, props.ring_bond_count
                 ))
@@ -940,7 +940,7 @@ impl MoleculeProperties {
     fn apply_substitution_count(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if let Some(existing) = atom.substitution_count {
             if Some(existing) != props.substitution_count {
-                return Err(ValidationError::InvalidComponent(format!(
+                return Err(SemanticError::Generic(format!(
                     "Substitution count conflict: existing {:?} vs new {:?}",
                     existing, props.substitution_count
                 ))
@@ -958,7 +958,7 @@ impl MoleculeProperties {
 
     fn apply_link_atom(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if atom.link_atom.is_some() {
-            return Err(ValidationError::InvalidComponent("Link atom conflict".to_string()).into());
+            return Err(SemanticError::Generic("Link atom conflict".to_string()));
         }
         atom.link_atom = props.link_atom;
         Ok(())
@@ -969,7 +969,7 @@ impl MoleculeProperties {
             atom.symbol,
             AtomSymbol::Element(_) | AtomSymbol::AtomList(_)
         ) {
-            return Err(ValidationError::InvalidComponent(format!(
+            return Err(SemanticError::Generic(format!(
                 "Atom list can only be applied to an element or atom list, not {:?}",
                 atom.symbol
             ))
@@ -984,9 +984,7 @@ impl MoleculeProperties {
 
     fn apply_attachment_point(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if atom.attachment_point.is_some() {
-            return Err(
-                ValidationError::InvalidComponent("Attachment point conflict".to_string()).into(),
-            );
+            return Err(SemanticError::Generic("Attachment point conflict".to_string()));
         }
         atom.attachment_point = props.attachment_point;
         Ok(())
@@ -994,9 +992,7 @@ impl MoleculeProperties {
 
     fn apply_attachment_order(&self, props: &AtomProperties, atom: &mut AtomLike) -> Result<()> {
         if atom.attachment_order.is_some() {
-            return Err(
-                ValidationError::InvalidComponent("Attachment order conflict".to_string()).into(),
-            );
+            return Err(SemanticError::Generic("Attachment order conflict".to_string()));
         }
         atom.attachment_order = props.attachment_order.clone();
         Ok(())
@@ -1013,7 +1009,7 @@ impl MoleculeProperties {
                     // Verify existing label matches or is None
                     if let Some(existing_label) = rgroup.label {
                         if existing_label != new_label {
-                            return Err(ValidationError::InvalidComponent(format!(
+                            return Err(SemanticError::Generic(format!(
                                 "R-group label conflict: existing '{}' vs new '{}'",
                                 existing_label, new_label
                             ))
@@ -1024,7 +1020,7 @@ impl MoleculeProperties {
                     }
                 }
                 _ => {
-                    return Err(ValidationError::InvalidComponent(format!(
+                    return Err(SemanticError::Generic(format!(
                         "R-group label can only be applied to an element or R-group, not {:?}",
                         atom.symbol
                     ))
@@ -1065,7 +1061,7 @@ impl MoleculeProperties {
                 bond.bond_type =
                     convert_bondlike_type_code(props.order_override.unwrap(), true, true)?;
             } else {
-                return Err(DataError::InvalidFragment(format!(
+                return Err(SemanticError::Generic(format!(
                     "Zero-order bond for undefined bond {}",
                     bond_index
                 ))
@@ -1083,7 +1079,7 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let bond = molecule
             .bond_mut(bond_index)
-            .ok_or(DataError::MissingBondIndex(bond_index))?;
+            .ok_or(SemanticError::Generic(format!("Missing bond index: {}", bond_index)))?;
         bond.bond_type = convert_bondlike_type_code(props.order_override.unwrap(), true, true)?;
         Ok(())
     }
@@ -1091,7 +1087,7 @@ impl MoleculeProperties {
     fn apply_sgroup(&self, molecule: &mut MoleculeLike) -> Result<()> {
         for (sgroup_index, props) in &self.sgroup_properties {
             let sgroup_type = props.group_type.ok_or_else(|| {
-                DataError::InvalidFragment(format!("S-group {} has no type", sgroup_index))
+                SemanticError::Generic(format!("S-group {} has no type", sgroup_index))
             })?;
             let mut sgroup = SGroup::new(sgroup_type);
             sgroup.label = props.label.or(Some(*sgroup_index as u32));
@@ -1157,7 +1153,7 @@ impl MoleculeProperties {
         sed_content: Option<String>,
     ) -> Result<()> {
         let data_field = self.context.current_data_field.as_ref().ok_or_else(|| {
-            DataError::InvalidFragment(
+            SemanticError::Generic(
                 "No data field context when finalizing S-group data".to_string(),
             )
         })?;
@@ -1166,7 +1162,7 @@ impl MoleculeProperties {
             .sgroup_properties
             .get_mut(&sgroup_index)
             .ok_or_else(|| {
-                DataError::InvalidFragment(format!(
+                SemanticError::Generic(format!(
                     "S-group data content for undefined S-group {}",
                     sgroup_index
                 ))

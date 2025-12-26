@@ -8,8 +8,9 @@ use map_macro::hash_map;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use umol::error::DataError;
-use umol::{Error, Result};
+use crate::graph_ir::error::GraphError;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum BondOrder {
@@ -85,24 +86,25 @@ impl BondOrder {
 }
 
 impl TryFrom<&str> for BondOrder {
-    type Error = Error;
+    type Error = GraphError;
 
     fn try_from(symbol: &str) -> Result<Self> {
         Self::from_symbol(symbol)
-            .ok_or_else(|| DataError::InvalidBondOrder(symbol.to_string()).into())
+            .ok_or_else(|| GraphError::InvalidBondSpec(format!("Invalid bond order symbol: {}", symbol)))
     }
 }
 
 impl TryFrom<u8> for BondOrder {
-    type Error = Error;
+    type Error = GraphError;
 
     fn try_from(value: u8) -> Result<Self> {
-        Self::from_value(value).ok_or_else(|| DataError::InvalidBondOrder(value.to_string()).into())
+        Self::from_value(value)
+            .ok_or_else(|| GraphError::InvalidBondSpec(format!("Invalid bond order value: {}", value)))
     }
 }
 
 impl FromStr for BondOrder {
-    type Err = Error;
+    type Err = GraphError;
 
     fn from_str(s: &str) -> Result<Self> {
         Self::try_from(s)
@@ -183,16 +185,16 @@ impl fmt::Display for BondDonation {
 }
 
 impl TryFrom<&str> for BondDonation {
-    type Error = Error;
+    type Error = GraphError;
 
     fn try_from(symbol: &str) -> Result<Self> {
         Self::from_symbol(symbol)
-            .ok_or_else(|| DataError::InvalidBondDonation(symbol.to_string()).into())
+            .ok_or_else(|| GraphError::InvalidBondSpec(format!("Invalid bond donation symbol: {}", symbol)))
     }
 }
 
 impl FromStr for BondDonation {
-    type Err = Error;
+    type Err = GraphError;
 
     fn from_str(s: &str) -> Result<Self> {
         Self::try_from(s)
@@ -274,15 +276,15 @@ impl fmt::Display for BondSpec {
 }
 
 impl TryFrom<&str> for BondSpec {
-    type Error = Error;
+    type Error = GraphError;
 
     fn try_from(s: &str) -> Result<Self> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidBondSpec(s.to_string()).into())
+        Self::from_symbol(s).ok_or_else(|| GraphError::InvalidBondSpec(format!("Invalid bond spec symbol: {}", s)))
     }
 }
 
 impl FromStr for BondSpec {
-    type Err = Error;
+    type Err = GraphError;
 
     fn from_str(s: &str) -> Result<Self> {
         Self::try_from(s)

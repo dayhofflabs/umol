@@ -1,13 +1,15 @@
 //! Convert numerical codes used in MOL files to enums
 
-use umol::error::{DataError, ParseError, Result, ValidationError};
 use umol_data::{Element, Isotope};
 
+use crate::io::ctfile::error::SemanticError;
 use crate::io::ctab::atom::{
     AtomExactChange, AtomInversionRetention, AtomRadical, AtomStereoCare, AtomStereoParity,
     AtomSymbol, AttachmentPointType, RingBondCount, SubstitutionCount, UnsaturatedAtom,
 };
 use crate::io::ctab::bond::{BondDir, BondReactingCenter, BondStereo, BondTopology, BondType};
+
+type Result<T> = std::result::Result<T, SemanticError>;
 
 /// Convert atom mass difference code (atom block)
 /// 'dd' field: mass difference (-3..=4), None if 0 or value outside of this range
@@ -64,11 +66,10 @@ pub(crate) fn convert_atom_isotope_mass_number(
     if extended_isotopes || Isotope::is_catalogued(element, mass_number) {
         Ok(Some(mass_number))
     } else {
-        Err(DataError::InvalidIsotope(format!(
+        Err(SemanticError::Generic(format!(
             "Invalid isotope mass number {} for element {}",
             mass_number, element
-        ))
-        .into())
+        )))
     }
 }
 
@@ -85,7 +86,7 @@ pub(crate) fn convert_atom_stereo_parity_code(
         1 => Ok(Some(AtomStereoParity::Odd)),
         2 => Ok(Some(AtomStereoParity::Even)),
         3 => Ok(Some(AtomStereoParity::Either)),
-        _ => Err(ParseError::Invalid(format!("Invalid stereo parity code '{}'", code)).into()),
+        _ => Err(SemanticError::InvalidStereoParity(code)),
     }
 }
 
@@ -100,7 +101,7 @@ pub(crate) fn convert_atom_hydrogen_count_code(
         0 => Ok(None),
         1..=5 => Ok(Some(code - 1)),
         6..=13 if extended_range => Ok(Some(code - 1)),
-        _ => Err(ParseError::Invalid(format!("Invalid hydrogen count code '{}'", code)).into()),
+        _ => Err(SemanticError::InvalidValenceCode(code)),
     }
 }
 
@@ -111,7 +112,7 @@ pub(crate) fn convert_atom_stereo_care_code(code: u8) -> Result<Option<AtomStere
     match code {
         0 => Ok(None),
         1 => Ok(Some(AtomStereoCare::Care)),
-        _ => Err(ParseError::Invalid(format!("Invalid stereo care code '{}'", code)).into()),
+        _ => Err(SemanticError::Generic(format!("Invalid stereo care code '{}'", code))),
     }
 }
 
@@ -123,7 +124,7 @@ pub(crate) fn convert_atom_valence_code(code: u8) -> Result<Option<u8>> {
         0 => Ok(None),             // default/unspecified valence
         v @ 1..=14 => Ok(Some(v)), // explicit valences
         15 => Ok(Some(0)),         // explicit zero valence
-        _ => Err(ParseError::Invalid(format!("Invalid valence code '{}'", code)).into()),
+        _ => Err(SemanticError::InvalidValenceCode(code)),
     }
 }
 
@@ -135,7 +136,7 @@ pub(crate) fn convert_atom_inversion_flag_code(code: u8) -> Result<Option<AtomIn
         0 => Ok(None),
         1 => Ok(Some(AtomInversionRetention::Inverted)),
         2 => Ok(Some(AtomInversionRetention::Retained)),
-        _ => Err(ParseError::Invalid(format!("Invalid inversion flag code '{}'", code)).into()),
+        _ => Err(SemanticError::Generic(format!("Invalid inversion flag code '{}'", code))),
     }
 }
 
@@ -146,7 +147,7 @@ pub(crate) fn convert_atom_exact_change_flag_code(code: u8) -> Result<Option<Ato
     match code {
         0 => Ok(None),
         1 => Ok(Some(AtomExactChange::Match)),
-        _ => Err(ParseError::Invalid(format!("Invalid exact change flag code '{}'", code)).into()),
+        _ => Err(SemanticError::Generic(format!("Invalid exact change flag code '{}'", code))),
     }
 }
 
@@ -158,7 +159,7 @@ pub(crate) fn convert_bond_type_code(code: u8) -> Result<BondType> {
         2 => Ok(BondType::Double),
         3 => Ok(BondType::Triple),
         4 => Ok(BondType::Aromatic),
-        _ => Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into()),
+        _ => Err(SemanticError::Generic(format!("Invalid bond type code '{}'", code))),
     }
 }
 
@@ -194,7 +195,7 @@ pub(crate) fn convert_bondlike_type_code(
                     _ => unreachable!(),
                 }
             } else {
-                Err(ParseError::Invalid(format!("Invalid bond type code '{}'", code)).into())
+                Err(SemanticError::Generic(format!("Invalid bond type code '{}'", code)))
             }
         }
     }
@@ -215,9 +216,10 @@ pub(crate) fn convert_bond_stereo_dir_code(
         1 => Ok((Some(BondStereo::Cis), Some(BondDir::Wedge))),
         3 | 4 => Ok((Some(BondStereo::Either), Some(BondDir::Either))),
         6 => Ok((Some(BondStereo::Trans), Some(BondDir::Dash))),
-        _ => Err(
-            ParseError::Invalid(format!("Invalid bond stereo/direction code '{}'", code)).into(),
-        ),
+        _ => Err(SemanticError::Generic(format!(
+            "Invalid bond stereo/direction code '{}'",
+            code
+        ))),
     }
 }
 
@@ -233,7 +235,7 @@ pub(crate) fn convert_bond_topology_code(
         0 => Ok(None),
         1 => Ok(Some(BondTopology::Ring)),
         2 => Ok(Some(BondTopology::Chain)),
-        _ => Err(ParseError::Invalid(format!("Invalid bond topology code '{}'", code)).into()),
+        _ => Err(SemanticError::Generic(format!("Invalid bond topology code '{}'", code))),
     }
 }
 
@@ -258,9 +260,10 @@ pub(crate) fn convert_bond_reacting_center_code(
         return Ok(Some(BondReactingCenter::NOT_CENTER));
     }
     if !(-1..=15).contains(&code) {
-        return Err(
-            ParseError::Invalid(format!("Invalid reacting center code \'{}\'", code)).into(),
-        );
+        return Err(SemanticError::Generic(format!(
+            "Invalid reacting center code '{}'",
+            code
+        )));
     }
 
     // Positive codes can be partially combined:
@@ -279,11 +282,10 @@ pub(crate) fn convert_bond_reacting_center_code(
     if code & 2 != 0 {
         // 2 = no change
         if code != 2 && !extended_range {
-            return Err(ParseError::Invalid(format!(
-                "Invalid reacting center code combination \'{}\'",
+            return Err(SemanticError::Generic(format!(
+                "Invalid reacting center code combination '{}'",
                 code
-            ))
-            .into());
+            )));
         }
         flags |= BondReactingCenter::NO_CHANGE;
     } else {
@@ -312,11 +314,7 @@ pub(crate) fn convert_radical_type_code(code: u8) -> Result<Option<AtomRadical>>
         1 => Ok(Some(AtomRadical::Singlet)),
         2 => Ok(Some(AtomRadical::Doublet)),
         3 => Ok(Some(AtomRadical::Triplet)),
-        _ => Err(ValidationError::InvalidComponent(format!(
-            "Invalid radical type code '{}'",
-            code
-        ))
-        .into()),
+        _ => Err(SemanticError::Generic(format!("Invalid radical type code '{}'", code))),
     }
 }
 
@@ -330,11 +328,7 @@ pub(crate) fn convert_ring_bond_count_code(code: i8) -> Result<Option<RingBondCo
         2 => Ok(Some(RingBondCount::R2)),
         3 => Ok(Some(RingBondCount::R3)),
         4 => Ok(Some(RingBondCount::R4Plus)),
-        _ => Err(ValidationError::InvalidComponent(format!(
-            "Invalid ring bond count code '{}'",
-            code
-        ))
-        .into()),
+        _ => Err(SemanticError::Generic(format!("Invalid ring bond count code '{}'", code))),
     }
 }
 
@@ -363,20 +357,18 @@ pub(crate) fn convert_substitution_count_code(
                     8 => Ok(Some(SubstitutionCount::S8)),
                     9 => Ok(Some(SubstitutionCount::S9)),
                     10 => Ok(Some(SubstitutionCount::S10)),
-                    _ => Err(ValidationError::InvalidComponent(format!(
+                    _ => Err(SemanticError::Generic(format!(
                         "Invalid substitution count code '{}'",
                         code
-                    ))
-                    .into()),
+                    ))),
                 }
             } else if code == 6 {
                 Ok(Some(SubstitutionCount::S6Plus))
             } else {
-                Err(ValidationError::InvalidComponent(format!(
+                Err(SemanticError::Generic(format!(
                     "Invalid substitution count code '{}'",
                     code
-                ))
-                .into())
+                )))
             }
         }
     }
@@ -388,11 +380,10 @@ pub(crate) fn convert_unsaturated_atom_code(code: u8) -> Result<Option<Unsaturat
     match code {
         0 => Ok(None),
         1 => Ok(Some(UnsaturatedAtom)),
-        _ => Err(ValidationError::InvalidComponent(format!(
+        _ => Err(SemanticError::Generic(format!(
             "Invalid unsaturated atom code '{}'",
             code
-        ))
-        .into()),
+        ))),
     }
 }
 
@@ -404,11 +395,10 @@ pub(crate) fn convert_attachment_point_code(code: u8) -> Result<Option<Attachmen
         1 => Ok(Some(AttachmentPointType::First)),
         2 => Ok(Some(AttachmentPointType::Second)),
         3 => Ok(Some(AttachmentPointType::Both)),
-        _ => Err(ValidationError::InvalidComponent(format!(
+        _ => Err(SemanticError::Generic(format!(
             "Invalid attachment point code '{}'",
             code
-        ))
-        .into()),
+        ))),
     }
 }
 

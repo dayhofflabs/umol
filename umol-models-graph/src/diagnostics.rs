@@ -179,6 +179,25 @@ pub enum DiagnosticKind {
     #[strum(message = "Prefer aromatic form")]
     SmilesPreferAromaticForm,
 
+    #[strum(message = "Invalid counts line")]
+    CtfileInvalidCountsLine,
+    #[strum(message = "Invalid atom line")]
+    CtfileInvalidAtomLine,
+    #[strum(message = "Invalid bond line")]
+    CtfileInvalidBondLine,
+    #[strum(message = "Invalid property line")]
+    CtfileInvalidPropertyLine,
+    #[strum(message = "Invalid Sgroup line")]
+    CtfileInvalidSgroupLine,
+    #[strum(message = "Invalid header block")]
+    CtfileInvalidHeader,
+    #[strum(message = "Invalid SDF data header")]
+    CtfileInvalidSdfDataHeader,
+    #[strum(message = "Invalid SDF data value")]
+    CtfileInvalidSdfDataValue,
+    #[strum(message = "Missing record delimiter")]
+    CtfileMissingDelimiter,
+
     #[strum(message = "GraphIR conversion failed")]
     GraphConversionUnknown,
 
@@ -327,7 +346,16 @@ impl DiagnosticKind {
             | SmilesAvoidAdjacentRingClosures
             | SmilesPreferBondSymbolAtRingOpen
             | SmilesAvoidRingClosureAcrossDot
-            | SmilesPreferAromaticForm => Syntactic,
+            | SmilesPreferAromaticForm
+            | CtfileInvalidCountsLine
+            | CtfileInvalidAtomLine
+            | CtfileInvalidBondLine
+            | CtfileInvalidPropertyLine
+            | CtfileInvalidSgroupLine
+            | CtfileInvalidHeader
+            | CtfileInvalidSdfDataHeader
+            | CtfileInvalidSdfDataValue
+            | CtfileMissingDelimiter => Syntactic,
 
             GraphConversionUnknown
             | GraphTopologySelfLoopRing
@@ -422,10 +450,7 @@ impl Diagnostic {
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let span_str = match self.span {
-            Some(span) => {
-                let (start, end) = span.bytes_range();
-                format!(" @{}..{}", start, end)
-            }
+            Some(span) => format!(" {}", span),
             None => "".to_string(),
         };
 

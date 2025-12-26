@@ -1,10 +1,10 @@
 //! Atom validator infrastructure copied from `umol-models-valence`.
 
 use once_cell::sync::Lazy;
-use umol::error::DataError;
-use umol::Result;
-
 use super::atom::Atom;
+use super::error::GraphError;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 pub struct AtomValidator {
     #[allow(clippy::type_complexity)]
@@ -25,47 +25,42 @@ impl AtomValidator {
 
             let charge = atom.charge();
             if charge < min_charge || charge > max_charge {
-                return Err(DataError::InvalidAtomCharge(format!(
-                    "Charge {} is out of bounds for element {}",
-                    charge, element
-                ))
-                .into());
+                return Err(GraphError::ValenceViolation(
+                    element,
+                    format!("Charge {} is out of bounds", charge),
+                ));
             }
 
             let unpaired = atom.unpaired_e();
             if unpaired > u32::from(element.max_unpaired_electrons()) {
-                return Err(DataError::InvalidAtomUnpairedElectrons(format!(
-                    "Unpaired electrons {} exceed max for element {}",
-                    unpaired, element
-                ))
-                .into());
+                return Err(GraphError::ValenceViolation(
+                    element,
+                    format!("Unpaired electrons {} exceed max", unpaired),
+                ));
             }
 
             let multiplicity = atom.multiplicity();
             if multiplicity > u32::from(element.max_unpaired_electrons()) + 1 {
-                return Err(DataError::InvalidAtomMultiplicity(format!(
-                    "Multiplicity {} exceeds max for element {}",
-                    multiplicity, element
-                ))
-                .into());
+                return Err(GraphError::ValenceViolation(
+                    element,
+                    format!("Multiplicity {} exceeds max", multiplicity),
+                ));
             }
 
             let implicit_h = atom.implicit_h();
             if implicit_h > u32::from(element.max_implicit_hydrogens()) {
-                return Err(DataError::InvalidAtomImplicitHydrogens(format!(
-                    "Implicit hydrogens {} exceed max for element {}",
-                    implicit_h, element
-                ))
-                .into());
+                return Err(GraphError::ValenceViolation(
+                    element,
+                    format!("Implicit hydrogens {} exceed max", implicit_h),
+                ));
             }
 
             let valence = atom.valence();
             if valence > u32::from(element.max_valence()) {
-                return Err(DataError::InvalidAtomValence(format!(
-                    "Valence {} exceeds max for element {}",
-                    valence, element
-                ))
-                .into());
+                return Err(GraphError::ValenceViolation(
+                    element,
+                    format!("Valence {} exceeds max", valence),
+                ));
             }
 
             Ok(())

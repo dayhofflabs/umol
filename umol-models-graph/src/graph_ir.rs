@@ -11,6 +11,7 @@ pub mod bond_spec;
 pub mod bond_spec_registry;
 pub mod convert;
 pub mod diagnostics;
+pub mod error;
 pub mod molecule;
 
 pub use atom::{Atom, AtomBuilder};
@@ -32,4 +33,5 @@ pub use bond_matcher::{
 pub use bond_spec::{BondDonation, BondOrder, BondSpec};
 pub use bond_spec_registry::BondSpecRegistry;
 pub use convert::sir_to_gir;
+pub use error::GraphError;
 pub use molecule::{AtomIndex, BondIndex, Molecule, MoleculeBuilder};

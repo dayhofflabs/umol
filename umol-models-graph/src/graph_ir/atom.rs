@@ -3,16 +3,17 @@
 use std::fmt::{self, Display};
 
 use serde::{Deserialize, Serialize};
-use umol::error::DataError;
-use umol::Result;
 use umol_data::Element;
 
 use super::atom_matcher::{AtomMatcher, DEFAULT_ATOM_MATCHER};
 use super::atom_spec::AtomSpec;
 use super::atom_validator::{AtomValidator, DEFAULT_ATOM_VALIDATOR};
+use super::error::GraphError;
 use crate::position::Point3D;
 use crate::simple_ir::Chirality;
 use crate::span::Span;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 /// Valence atom type including strict typing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -96,7 +97,7 @@ impl Atom {
     }
 
     pub fn span_bytes(&self) -> Option<(u32, u32)> {
-        self.span.map(|s| s.bytes_range())
+        self.span.and_then(|s| s.bytes_range())
     }
 
     pub fn to_builder(self) -> AtomBuilder {
@@ -268,7 +269,7 @@ impl AtomBuilder {
     }
 
     pub fn span_bytes(&self) -> Option<(u32, u32)> {
-        self.span.map(|s| s.bytes_range())
+        self.span.and_then(|s| s.bytes_range())
     }
 
     pub fn set_element(&mut self, element: Element) -> &mut Self {
@@ -398,9 +399,9 @@ impl AtomBuilder {
     pub fn build_with(self, validator: &AtomValidator, matcher: &AtomMatcher) -> Result<Atom> {
         let atom_specs = matcher.find(&self)?;
         if atom_specs.is_empty() {
-            return Err(DataError::NoAtomSpec(format!("{:?}", self)).into());
+            return Err(GraphError::InvalidAtomSpec(format!("{:?}", self)));
         } else if atom_specs.len() > 1 {
-            return Err(DataError::MultipleAtomSpecs(format!(
+            return Err(GraphError::InvalidAtomSpec(format!(
                 "{:?}: {}",
                 self,
                 atom_specs
@@ -408,8 +409,7 @@ impl AtomBuilder {
                     .map(|s| s.to_string())
                     .collect::<Vec<String>>()
                     .join(", ")
-            ))
-            .into());
+            )));
         }
         let atom_spec = atom_specs.first().unwrap();
         let atom = Atom {

@@ -1,11 +1,13 @@
 //! Atom matcher infrastructure copied from `umol-models-valence`.
 
 use once_cell::sync::Lazy;
-use umol::Result;
 
 use super::atom::AtomBuilder;
 use super::atom_spec::AtomSpec;
 use super::atom_spec_registry::AtomSpecRegistry;
+use super::error::GraphError;
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 /// Matchers for atom typing. Default matcher uses the `AtomSpecRegistry` but custom
 /// matchers can be used.

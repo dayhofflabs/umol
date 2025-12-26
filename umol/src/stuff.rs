@@ -5,6 +5,7 @@
 use crate::{AsEntity, AsModel, Entity, Model, Result};
 
 /// Stuff combines entities with their model representations.
+/// TODO: Rename to Item, Object, or Instance.
 pub trait Stuff {
     /// Associated entity type
     type Entity: Entity;

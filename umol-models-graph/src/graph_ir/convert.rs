@@ -1,14 +1,16 @@
 //! Conversions between SimpleIR and GraphIR.
 
-use umol::error::DataError;
-use umol::Result;
 use umol_data::Element;
 
+use crate::graph_ir::AtomIndex;
 use super::atom_matcher::STRICT_ATOM_MATCHER;
 use super::atom_validator::STRICT_ATOM_VALIDATOR;
 use super::bond_matcher::STRICT_BOND_MATCHER;
+use super::error::GraphError;
 use super::{BondBuilder, BondDonation, BondOrder, Molecule, MoleculeBuilder};
 use crate::simple_ir::{self as sir, AtomSymbol, BondSymbol};
+
+type Result<T> = std::result::Result<T, GraphError>;
 
 /// Convert a SimpleIR molecule into a strictly validated GraphIR molecule.
 pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
@@ -20,11 +22,10 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
             AtomSymbol::Element(el) => (el, None),
             AtomSymbol::NamedIsotope(named) => (Element::from(named), Some(named.mass_number())),
             _ => {
-                return Err(DataError::InvalidAtom(format!(
+                return Err(GraphError::ConversionFailed(format!(
                     "SimpleIR atom {} is not supported in GraphIR",
                     idx
-                ))
-                .into())
+                )))
             }
         };
 
@@ -69,13 +70,13 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
 
     for (idx, bond) in src.bonds.iter().enumerate() {
         let a = usize::try_from(bond.start_atom).map_err(|_| {
-            DataError::InvalidBond(format!(
+            GraphError::ConversionFailed(format!(
                 "bond {} references invalid start atom index {}",
                 idx, bond.start_atom
             ))
         })?;
         let b = usize::try_from(bond.end_atom).map_err(|_| {
-            DataError::InvalidBond(format!(
+            GraphError::ConversionFailed(format!(
                 "bond {} references invalid end atom index {}",
                 idx, bond.end_atom
             ))
@@ -83,10 +84,10 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
 
         let &a_idx = atom_indices
             .get(a)
-            .ok_or_else(|| DataError::MissingAtomIndex(a))?;
+            .ok_or_else(|| GraphError::AtomNotFound(AtomIndex::new(a)))?;
         let &b_idx = atom_indices
             .get(b)
-            .ok_or_else(|| DataError::MissingAtomIndex(b))?;
+            .ok_or_else(|| GraphError::AtomNotFound(AtomIndex::new(b)))?;
 
         let order = convert_bond_order(bond.symbol, idx)?;
 
@@ -111,11 +112,10 @@ fn convert_bond_order(symbol: BondSymbol, bond_idx: usize) -> Result<BondOrder> 
     let order = match symbol {
         BondSymbol::Bond(order) => order,
         _ => {
-            return Err(DataError::InvalidBond(format!(
+            return Err(GraphError::ConversionFailed(format!(
                 "bond {} uses unsupported symbol {:?}",
                 bond_idx, symbol
-            ))
-            .into())
+            )))
         }
     };
 
@@ -126,11 +126,10 @@ fn convert_bond_order(symbol: BondSymbol, bond_idx: usize) -> Result<BondOrder> 
         sir::BondOrder::Triple => BondOrder::Triple,
         sir::BondOrder::Quadruple => BondOrder::Quadruple,
         sir::BondOrder::Aromatic | sir::BondOrder::Unknown => {
-            return Err(DataError::InvalidBondOrder(format!(
+            return Err(GraphError::ConversionFailed(format!(
                 "unsupported bond order {:?} at bond {}",
                 order, bond_idx
-            ))
-            .into())
+            )))
         }
     };
 

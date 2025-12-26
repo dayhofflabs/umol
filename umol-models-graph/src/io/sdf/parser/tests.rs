@@ -65,7 +65,7 @@ fn test_data_block() {
     let input = b"> <FIELD1>\nValue1\n\n> <FIELD2>\nValue2\n\n$$$$\n";
     let result = data_block().parse(input);
     assert!(result.is_ok());
-    let (remaining, fields) = result.unwrap();
+    let (remaining, fields): (&[u8], IndexMap<String, String>) = result.unwrap();
     assert_eq!(fields.len(), 2);
     assert_eq!(fields.get("FIELD1"), Some(&"Value1".to_string()));
     assert_eq!(fields.get("FIELD2"), Some(&"Value2".to_string()));
