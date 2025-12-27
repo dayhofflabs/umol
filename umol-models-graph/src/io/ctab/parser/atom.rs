@@ -19,9 +19,10 @@ use super::utils::{
     fixed_width_padding_n, to_string,
 };
 use crate::io::ctab::config::CtabParseFlags;
-use crate::io::ctab::parser::utils::fixed_width_partial;
+use crate::io::ctab::parser::rgroup::rgroup_symbol;
+use super::utils::fixed_width_partial;
 use crate::position::Point3D;
-use crate::simple_ir::{AtomList, AtomSymbol, ExtendedAtom, QueryAtom, RGroup};
+use crate::table_ir::{AtomList, AtomSymbol, ExtendedAtom, GenericAtom, RGroup};
 
 /// Parse atom symbol (Element and NamedIsotope only).
 ///
@@ -63,15 +64,15 @@ fn atom_symbol<'inp, 'fl>(
 /// --------------------------------------------------------------------------------
 /// | Symbol      | Type          | Parser* | Notes                                |
 /// --------------------------------------------------------------------------------
-/// | H-Og        | Element       | B, A    |                                      |
-/// | D, T        | Named Isotope | B, A    | Heavy H isotopes as extension        |
-/// | L           | Atom List     | A       | Query molecules                      |
-/// | *,A,Q,X,M   | Query Atom    | A       | Query molecules, rarely in oligomers |
-/// | AH,QH,XH,MH | Query Atom    | A       | Query molecules, CXSMILES extension  |
-/// | LP          | Lone Pair     | A       | Rarely used                          |
-/// | R#          | R Group       | A       | Query molecules                      |
+/// | H-Og        | Element       | B, E    |                                      |
+/// | D, T        | Named Isotope | B, E    | Heavy H isotopes as extension        |
+/// | L           | Atom List     | E       | Query molecules                      |
+/// | *,A,Q,X,M   | Query Atom    | E       | Query molecules, rarely in oligomers |
+/// | AH,QH,XH,MH | Query Atom    | E       | Query molecules, CXSMILES extension  |
+/// | LP          | Lone Pair     | E       | Rarely used                          |
+/// | R#          | R Group       | E       | Query molecules                      |
 /// --------------------------------------------------------------------------------
-/// | *Parsers: B: basic, A: all                                                   |
+/// | *Parsers: B: basic, E: extended                                               |
 /// --------------------------------------------------------------------------------
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
@@ -103,7 +104,7 @@ fn extended_atom_symbol<'inp, 'fl>(
                     }
                 }
                 if allow_rgroups {
-                    if let Some(rgroup) = RGroup::from_symbol_bytes(s) {
+                    if let Ok((_, rgroup)) = rgroup_symbol(s) {
                         return Ok((&b""[..], AtomSymbol::RGroup(rgroup)));
                     }
                 }
@@ -113,18 +114,18 @@ fn extended_atom_symbol<'inp, 'fl>(
                 if allow_queries {
                     match s {
                         b"A" | b"Q" | b"*" | b"X" | b"M" => {
-                            if let Some(query) = QueryAtom::from_symbol_bytes(s) {
-                                return Ok((&b""[..], AtomSymbol::Query(query)));
+                            if let Some(query) = GenericAtom::from_symbol_bytes(s) {
+                                return Ok((&b""[..], AtomSymbol::GenericAtom(query)));
                             }
                         }
                         b"AH" | b"QH" | b"XH" | b"MH" => {
                             if allow_extended_queries {
-                                if let Some(query) = QueryAtom::from_symbol_bytes(s) {
-                                    return Ok((&b""[..], AtomSymbol::Query(query)));
+                                if let Some(query) = GenericAtom::from_symbol_bytes(s) {
+                                    return Ok((&b""[..], AtomSymbol::GenericAtom(query)));
                                 }
                             }
                         }
-                        b"L" => return Ok((&b""[..], AtomSymbol::AtomList(AtomList::default()))),
+                        b"L" => return Ok((&b""[..], AtomSymbol::AtomList(AtomList::empty()))),
                         _ => {}
                     }
                 }
@@ -188,17 +189,31 @@ fn atom_input69<'inp, 'fl>(
         ),
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity, valence, atom_map_num)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol.clone(), mass_diff);
-            let (charge, radical) = charge_radical;
+            let (charge, unpaired_e) = charge_radical;
             ExtendedAtom {
                 symbol: AtomSymbol::Element(element),
-                position: Some(Point3D::new(x, y, z)),
                 charge: if charge == 0 { None } else { Some(charge) },
-                isotope,
-                radical: radical,
+                isotope_mass: isotope,
+                unpaired_e,
+                hydrogens: None,
+                implicit_h: false,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                span: None,
                 stereo_parity,
+                stereo_care: None,
                 valence,
                 atom_map_num,
-                ..Default::default()
+                inversion_retention: None,
+                exact_change: None,
+                attachment_point: None,
+                attachment_order: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                properties: std::collections::HashMap::new(),
             }
         },
     )
@@ -248,13 +263,13 @@ fn atom_input51<'inp, 'fl>(
         ),
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity, valence)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-            let (charge, radical) = charge_radical;
+            let (charge, unpaired_e) = charge_radical;
             ExtendedAtom {
                 symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
                 charge: if charge == 0 { None } else { Some(charge) },
-                isotope,
-                radical: radical,
+                isotope_mass: isotope,
+                unpaired_e,
                 stereo_parity,
                 valence,
                 ..Default::default()
@@ -306,15 +321,26 @@ fn atom_input42<'inp, 'fl>(
         ),
         |(x, y, z, symbol, mass_diff, charge_radical, stereo_parity)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-            let (charge, radical) = charge_radical;
+            let (charge, unpaired_e) = charge_radical;
             ExtendedAtom {
                 symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
                 charge: if charge == 0 { None } else { Some(charge) },
-                isotope,
-                radical: radical,
+                isotope_mass: isotope,
+                unpaired_e,
                 stereo_parity,
-                ..Default::default()
+                stereo_care: None,
+                valence: None,
+                atom_map_num: None,
+                inversion_retention: None,
+                exact_change: None,
+                attachment_point: None,
+                attachment_order: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                properties: std::collections::HashMap::new(),
             }
         },
     )
@@ -352,14 +378,32 @@ fn atom_input39<'inp, 'fl>(
         ),
         |(x, y, z, symbol, mass_diff, charge_radical)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-            let (charge, radical) = charge_radical;
+            let (charge, unpaired_e) = charge_radical;
             ExtendedAtom {
                 symbol: AtomSymbol::Element(element),
                 position: Some(Point3D::new(x, y, z)),
                 charge: if charge == 0 { None } else { Some(charge) },
-                isotope,
-                radical: radical,
-                ..Default::default()
+                isotope_mass: isotope,
+                unpaired_e,
+                hydrogens: None,
+                implicit_h: false,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                span: None,
+                stereo_parity: None,
+                stereo_care: None,
+                valence: None,
+                atom_map_num: None,
+                inversion_retention: None,
+                exact_change: None,
+                attachment_point: None,
+                attachment_order: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                properties: std::collections::HashMap::new(),
             }
         },
     )
@@ -390,9 +434,28 @@ fn atom_input36<'inp, 'fl>(
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             ExtendedAtom {
                 symbol: AtomSymbol::Element(element),
-                position: Some(Point3D::new(x, y, z)),
-                isotope,
-                ..Default::default()
+                charge: None,
+                isotope_mass: isotope,
+                unpaired_e: None,
+                hydrogens: None,
+                implicit_h: false,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                span: None,
+                stereo_parity: None,
+                stereo_care: None,
+                valence: None,
+                atom_map_num: None,
+                inversion_retention: None,
+                exact_change: None,
+                attachment_point: None,
+                attachment_order: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                properties: std::collections::HashMap::new(),
             }
         },
     )
@@ -421,9 +484,28 @@ fn atom_input34<'inp, 'fl>(
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, None);
             ExtendedAtom {
                 symbol: AtomSymbol::Element(element),
-                position: Some(Point3D::new(x, y, z)),
-                isotope,
-                ..Default::default()
+                charge: None,
+                isotope_mass: isotope,
+                unpaired_e: None,
+                hydrogens: None,
+                implicit_h: false,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                span: None,
+                stereo_parity: None,
+                stereo_care: None,
+                valence: None,
+                atom_map_num: None,
+                inversion_retention: None,
+                exact_change: None,
+                attachment_point: None,
+                attachment_order: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                properties: std::collections::HashMap::new(),
             }
         },
     )
@@ -527,7 +609,7 @@ fn extended_atom_input_inner<'inp, 'fl>(
         .parse(i)?;
 
         // Charge/radical
-        let (i, (charge, radical)) = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
+        let (i, (charge, unpaired_e)) = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
             convert_atom_charge_code(opt.unwrap_or(0))
         })
         .parse(i)?;
@@ -611,10 +693,9 @@ fn extended_atom_input_inner<'inp, 'fl>(
             i,
             ExtendedAtom {
                 symbol: atom_symbol,
-                position: Some(Point3D::new(x, y, z)),
                 charge: if charge == 0 { None } else { Some(charge) },
-                isotope: isotope_mass,
-                radical: radical,
+                isotope_mass,
+                unpaired_e,
                 hydrogens: hydrogen_count.flatten(),
                 stereo_parity: stereo_parity.flatten(),
                 stereo_care: stereo_care.flatten(),
@@ -622,7 +703,18 @@ fn extended_atom_input_inner<'inp, 'fl>(
                 atom_map_num: atom_map_num.flatten(),
                 inversion_retention: inversion_flag.flatten(),
                 exact_change: exact_change_flag.flatten(),
-                ..Default::default()
+                implicit_h: false,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                span: None,
+                ring_bond_count: None,
+                substitution_count: None,
+                unsaturated: None,
+                link_atom: None,
+                attachment_point: None,
+                attachment_order: None,
+                properties: std::collections::HashMap::new(),
             },
         ))
     }

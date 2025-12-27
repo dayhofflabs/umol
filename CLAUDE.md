@@ -26,13 +26,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use strong typing with enums for domain concepts
 - Validate input values and return Result<T> instead of panicking.
 - Use the following import Conventions
-   1. Internal symbols (same project, any crate): import fully qualified, rename with crate/module prefix only if ambiguous.
+   1. Internal symbols (same project, any crate): should be imported and used unqualified, rename with crate/module prefix only if ambiguous.
    2. Types/Structs/Enums from external crates: import directly, use unqualified, rename with the crate prefix in case of naming clashes
    3. Functions/Constants from external crates: import parent module, call qualified (`io::stdin()`)
    4. Enum variants: import enum, do not import variants directly. Exceptions: In large match blocks or tests.
 - Write comments for an external reader, do not refer to aspects of editing or refactoring history
 - Refrain from comment ornamentation. Do not introduce separator lines or headings like ========== in comments.
   If the file is so long that it warrants headings, it should be split into multiple files instead.
+- Avoid aliasing of types defined in the codebase. Aliasing of core language or library types is ok if it serves
+  semantic clarity.
 
 ## Project Architecture
 - Four-domain semantic model:

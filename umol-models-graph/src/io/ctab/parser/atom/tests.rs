@@ -5,8 +5,9 @@ use rstest::*;
 
 use super::*;
 use crate::io::ctab::config::CtabParseFlags;
-use crate::simple_ir::{
+use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity, QueryAtom,
+    RGroupOccurrence,
 };
 
 #[rstest]
@@ -133,7 +134,7 @@ fn test_extended_atom_symbol_extended(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0", "basic valid",
+#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0", "valid",
        Element::C, Some(10), Some(1), Some(4), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0", "mass diff lower bound",
        Element::C, Some(9), Some(1), Some(4), None, 1.2345, 2.3456, 3.4567)]
@@ -247,7 +248,7 @@ fn test_atom_input69_invalid(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4", "basic valid", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
+#[case(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4", "valid", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4", "mass diff lower bound", Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4", "mass diff upper bound", Element::C, Some(16), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4", "mass diff out-of-range low", Element::C, None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
@@ -395,7 +396,7 @@ fn test_atom_input51_empty_fields(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C   0  3  1", "basic valid", Element::C, None, Some(1), Some(AtomStereoParity::Odd), 1.2345, 2.3456, 3.4567)]
+#[case(b"    1.2345    2.3456    3.4567 C   0  3  1", "valid", Element::C, None, Some(1), Some(AtomStereoParity::Odd), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C   0  3   0  ", "blank stereo parity", Element::C, None, Some(1), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 D  -2  3  0", "named isotope", Element::H, Some(2), Some(1), None, 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0", "non-strict padding", Element::C, Some(10), Some(1), None, 1.2345, 2.3456, 3.4567)]
@@ -654,7 +655,7 @@ fn test_atom_input39_empty_fields(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C  -2", "basic valid", Element::C, Some(10), 1.2345, 2.3456, 3.4567)]
+#[case(b"    1.2345    2.3456    3.4567 C  -2", "valid", Element::C, Some(10), 1.2345, 2.3456, 3.4567)]
 #[case(b"    1.2345    2.3456    3.4567 C  -4", "mass diff out-of-range low", Element::C, None, 1.2345, 2.3456, 3.4567)]
 fn test_atom_input36(
     #[case] input: &[u8],
@@ -752,7 +753,7 @@ fn test_atom_input36_empty_fields(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"    1.2345    2.3456    3.4567 C  ", "basic valid", Element::C, None, 1.2345, 2.3456, 3.4567)]
+#[case(b"    1.2345    2.3456    3.4567 C  ", "valid", Element::C, None, 1.2345, 2.3456, 3.4567)]
 fn test_atom_input34(
     #[case] input: &[u8],
     #[case] desc: &str,

@@ -5,7 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use map_macro::hash_map;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use crate::graph_ir::error::GraphError;
@@ -23,7 +23,7 @@ pub enum BondOrder {
 
 pub const MAX_BOND_ORDER: u8 = 4;
 
-static BOND_DATA: Lazy<HashMap<BondOrder, (u8, &'static [&'static str; 5])>> = Lazy::new(|| {
+static BOND_DATA: LazyLock<HashMap<BondOrder, (u8, &'static [&'static str; 5])>> = LazyLock::new(|| {
     hash_map! {
         BondOrder::Zero => (0, &[".", "·", "0", "N", "none"]),
         BondOrder::Single => (1, &["-", "–", "1", "S", "single"]),
@@ -33,14 +33,14 @@ static BOND_DATA: Lazy<HashMap<BondOrder, (u8, &'static [&'static str; 5])>> = L
     }
 });
 
-static SYMBOL_TO_BOND: Lazy<HashMap<&'static str, BondOrder>> = Lazy::new(|| {
+static SYMBOL_TO_BOND: LazyLock<HashMap<&'static str, BondOrder>> = LazyLock::new(|| {
     BOND_DATA
         .iter()
         .flat_map(|(order, (_, symbols))| symbols.iter().map(|symbol| (*symbol, *order)))
         .collect()
 });
 
-static VALUE_TO_BOND: Lazy<HashMap<u8, BondOrder>> = Lazy::new(|| {
+static VALUE_TO_BOND: LazyLock<HashMap<u8, BondOrder>> = LazyLock::new(|| {
     BOND_DATA
         .iter()
         .map(|(order, (value, _))| (*value, *order))

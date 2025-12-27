@@ -17,8 +17,8 @@ use crate::io::ctab::parser::properties::{
     SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
     ZeroAtomChargeEntry, ZeroBondOrderEntry,
 };
-use crate::simple_ir::{
-    AtomList, AtomRadical, AtomSymbol, AttachmentPointType, BondOrder, ExtendedAtom, ExtendedBond,
+use crate::table_ir::{
+    AtomList, AtomSymbol, AttachmentPointType, BondOrder, ExtendedAtom, ExtendedBond,
     ExtendedMolecule, LinkAtom, RGroup, RGroupOccurrence, RingBondCount, SGroupBracketCoords,
     SGroupConnectingBond, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
     SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier,
@@ -27,7 +27,7 @@ use crate::simple_ir::{
 
 #[fixture]
 fn single_atom() -> ExtendedMolecule {
-    let mut molecule = ExtendedMolecule::default();
+    let mut molecule = ExtendedMolecule::empty();
     molecule.atoms.push(ExtendedAtom {
         symbol: AtomSymbol::Element(e!(C)),
         ..Default::default()
@@ -43,7 +43,7 @@ fn with_properties(mut single_atom: ExtendedMolecule) -> ExtendedMolecule {
         atom.properties
             .insert("molFileValue".to_string(), "existing".to_string());
         atom.charge = Some(1);
-        atom.radical = Some(AtomRadical::Doublet);
+        atom.unpaired_e = Some(1); // Doublet: 1 unpaired electron
         atom.isotope = Some(13);
         atom.ring_bond_count = Some(RingBondCount::R2);
         atom.substitution_count = Some(SubstitutionCount::S2);
@@ -66,7 +66,7 @@ fn with_unlabeled_rgroup(mut single_atom: ExtendedMolecule) -> ExtendedMolecule 
 
 #[fixture]
 fn with_bond() -> ExtendedMolecule {
-    let mut molecule = ExtendedMolecule::default();
+    let mut molecule = ExtendedMolecule::empty();
     molecule.atoms.push(ExtendedAtom {
         symbol: AtomSymbol::Element(e!(C)),
         ..Default::default()
@@ -229,7 +229,7 @@ fn test_apply_charge(mut single_atom: ExtendedMolecule, flags_lenient: CtabParse
 
     let atom = &single_atom.atoms[0];
     assert_eq!(atom.charge, Some(-1));
-    assert_eq!(atom.radical, None);
+    assert_eq!(atom.unpaired_e, None);
 }
 
 #[rstest]
@@ -292,18 +292,18 @@ fn test_apply_charge_overwrite(mut with_properties: ExtendedMolecule, flags_leni
 
     let atom = &with_properties.atoms[0];
     assert_eq!(atom.charge, Some(-2));
-    assert_eq!(atom.radical, None);
+    assert_eq!(atom.unpaired_e, None);
 }
 
 #[rstest]
 #[case(0, None)]
-#[case(1, Some(AtomRadical::Singlet))]
-#[case(2, Some(AtomRadical::Doublet))]
-#[case(3, Some(AtomRadical::Triplet))]
+#[case(1, Some(0))] // Singlet: 0 unpaired electrons
+#[case(2, Some(1))] // Doublet: 1 unpaired electron
+#[case(3, Some(2))] // Triplet: 2 unpaired electrons
 fn test_apply_radical(
     mut single_atom: ExtendedMolecule,
     #[case] radical_type: u8,
-    #[case] expected: Option<AtomRadical>,
+    #[case] expected: Option<u8>,
     flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
@@ -314,7 +314,7 @@ fn test_apply_radical(
     acc.add_entry(entry, flags_lenient).unwrap();
     acc.update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
-    assert_eq!(single_atom.atoms[0].radical, expected);
+    assert_eq!(single_atom.atoms[0].unpaired_e, expected);
 }
 
 #[rstest]
@@ -343,7 +343,7 @@ fn test_apply_radical_overwrite(
         .unwrap();
 
     let atom = &with_properties.atoms[0];
-    assert_eq!(atom.radical, Some(AtomRadical::Singlet));
+    assert_eq!(atom.unpaired_e, Some(0)); // Singlet: 0 unpaired electrons
     assert_eq!(atom.charge, None);
 }
 
@@ -699,7 +699,7 @@ fn test_apply_rgroup_logic(mut with_rgroup: ExtendedMolecule, flags_lenient: Cta
     acc.update_extended_molecule(&mut with_rgroup, flags_lenient)
         .unwrap();
 
-    let rgroup = with_rgroup.rgroups.get(&1).unwrap();
+    let rgroup = with_rgroup.rgroups().get(&1).unwrap();
     assert_eq!(rgroup.dependent_label, Some(2));
     assert!(rgroup.rgroup_or_h);
     assert_eq!(rgroup.occurrence.len(), 1);
@@ -725,7 +725,7 @@ fn test_apply_rgroup_logic_multiple_occurrences(
     acc.update_extended_molecule(&mut with_rgroup, flags_lenient)
         .unwrap();
 
-    let rgroup = with_rgroup.rgroups.get(&1).unwrap();
+    let rgroup = with_rgroup.rgroups().get(&1).unwrap();
     assert_eq!(rgroup.occurrence.len(), 2);
     assert_eq!(rgroup.occurrence[0], RGroupOccurrence::Exactly(1));
     assert_eq!(rgroup.occurrence[1], RGroupOccurrence::GreaterThan(5));
@@ -784,8 +784,8 @@ fn test_apply_sgroup_type(mut single_atom: ExtendedMolecule, flags_lenient: Ctab
     acc.update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    assert_eq!(single_atom.sgroups.len(), 1);
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    assert_eq!(single_atom.sgroups().len(), 1);
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.group_type, SGroupType::Superatom);
 }
 
@@ -823,7 +823,7 @@ fn test_apply_sgroup_subtype(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.group_subtype, Some(SGroupSubtype::Alternating));
 }
 
@@ -855,7 +855,7 @@ fn test_apply_sgroup_label(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.label, Some(123));
 }
 
@@ -876,7 +876,7 @@ fn test_apply_sgroup_connectivity(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.connectivity, Some(SGroupConnectivity::HeadToTail));
 }
 
@@ -895,7 +895,7 @@ fn test_apply_sgroup_expansion(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert!(sgroup.expansion);
 }
 
@@ -916,7 +916,7 @@ fn test_apply_sgroup_atom_list(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.atom_indices, vec![0, 1]);
 }
 
@@ -937,7 +937,7 @@ fn test_apply_sgroup_bond_list(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.bond_indices, vec![0, 1]);
 }
 
@@ -958,7 +958,7 @@ fn test_apply_sgroup_parent_atom(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.parent_atom_indices, Some(vec![0, 1]));
 }
 
@@ -980,7 +980,7 @@ fn test_apply_sgroup_subscript(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.subscript, Some("Ph".to_string()));
     assert_eq!(sgroup.multiplier, None);
 }
@@ -1005,7 +1005,7 @@ fn test_apply_sgroup_multiplier(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.subscript, None);
     assert_eq!(
         sgroup.multiplier,
@@ -1032,7 +1032,7 @@ fn test_apply_sgroup_correspondence(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.correspondence, Some(vec![0, 1]));
 }
 
@@ -1053,7 +1053,7 @@ fn test_apply_sgroup_display_info(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(
         sgroup.bracket_coords,
         Some(SGroupBracketCoords {
@@ -1081,7 +1081,7 @@ fn test_apply_sgroup_connecting_bond(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(
         sgroup.connecting_bond,
         Some(SGroupConnectingBond {
@@ -1101,7 +1101,7 @@ fn test_apply_sgroup_data_description(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     let data = sgroup.data.get("test").unwrap();
     assert_eq!(data.field_type, SGroupDataType::Text);
     assert_eq!(data.field_units, None);
@@ -1132,7 +1132,7 @@ fn test_apply_sgroup_data_entry(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     let data = sgroup.data.get("test").unwrap();
     assert_eq!(data.data_content, Some(vec!["content".to_string()]));
 }
@@ -1160,8 +1160,10 @@ fn test_apply_sgroup_data_display(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
-    let display = sgroup.display.as_ref().unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
+    let ctfile_data = single_atom.ctfile_data.as_ref().unwrap();
+    let ctfile_sgroup_data = ctfile_data.sgroup_data.get(&0).unwrap();
+    let display = ctfile_sgroup_data.display.as_ref().unwrap();
     assert_eq!(display.coords, (10.0, 20.0));
     assert_eq!(display.display_type, SGroupDataDisplayType::Detached);
     assert_eq!(
@@ -1198,8 +1200,8 @@ fn test_apply_sgroup_hierarchy(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    assert_eq!(single_atom.sgroups.len(), 2);
-    let child_sgroup = single_atom.sgroups.get(&0).unwrap();
+    assert_eq!(single_atom.sgroups().len(), 2);
+    let child_sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(child_sgroup.hierarchy_parent, Some(1));
 }
 
@@ -1220,7 +1222,7 @@ fn test_apply_sgroup_component(
         .update_extended_molecule(&mut single_atom, flags_lenient)
         .unwrap();
 
-    let sgroup = single_atom.sgroups.get(&0).unwrap();
+    let sgroup = single_atom.sgroups().get(&0).unwrap();
     assert_eq!(sgroup.component_number, Some(42));
 }
 

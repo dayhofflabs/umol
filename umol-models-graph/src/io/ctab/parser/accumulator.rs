@@ -15,20 +15,20 @@ use super::convert::{
 };
 use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry};
-use crate::simple_ir::{
-    AtomList, AtomSymbol, AtomRadical, AttachmentPointType, ExtendedMolecule, LinkAtom, RGroup,
-    RGroupOccurrence, RingBondCount, SGroup, SGroupBracketCoords, SGroupConnectingBond,
-    SGroupConnectivity, SGroupData, SGroupDataDisplay, SGroupMultiplier, SGroupSubtype,
-    SGroupType, SubstitutionCount, UnsaturatedAtom,
+use crate::table_ir::{
+    AtomList, AtomSymbol, AttachmentPointType, CtfileData, ExtendedMolecule,
+    LinkAtom, RGroup, RGroupOccurrence, RingBondCount, SGroup, SGroupBracketCoords,
+    SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay, SGroupMultiplier,
+    SGroupSubtype, SGroupType, SubstitutionCount, UnsaturatedAtom,
 };
 
 // Accumulator for properties of a single atom
 #[derive(Debug, Default)]
-pub struct AtomProperties {
+pub(super) struct AtomProperties {
     pub alias: Option<String>,
     pub value: Option<String>,
     pub charge: Option<i8>,
-    pub radical: Option<AtomRadical>,
+    pub unpaired_e: Option<u8>,
     pub isotope_mass: Option<u32>,
     pub hydrogen_count: Option<u8>,
     pub ring_bond_count: Option<RingBondCount>,
@@ -44,13 +44,13 @@ pub struct AtomProperties {
 
 // Accumulator for properties of a single bond
 #[derive(Debug, Default)]
-pub struct BondProperties {
+pub(super) struct BondProperties {
     pub order_override: Option<u8>,
 }
 
 // Accumulator for properties of a single R-Group
 #[derive(Debug, Default)]
-pub struct RGroupProperties {
+pub(super) struct RGroupProperties {
     pub dependent_label: Option<u32>,
     pub rgroup_or_h: Option<bool>,
     pub occurrence: Option<Vec<RGroupOccurrence>>,
@@ -58,7 +58,7 @@ pub struct RGroupProperties {
 
 // Accumulator for properties of a single S-Group
 #[derive(Debug, Default)]
-pub struct SGroupProperties {
+pub(super) struct SGroupProperties {
     pub group_type: Option<SGroupType>,
     pub group_subtype: Option<SGroupSubtype>,
     pub label: Option<u32>,
@@ -79,7 +79,7 @@ pub struct SGroupProperties {
 }
 
 impl SGroupProperties {
-    pub fn new(sgroup_type: SGroupType) -> Self {
+    pub(crate) fn new(sgroup_type: SGroupType) -> Self {
         Self {
             group_type: Some(sgroup_type),
             ..Default::default()
@@ -102,7 +102,7 @@ fn sgroup_accepts_multiplier(sgroup_type: SGroupType) -> bool {
 
 /// Accumulator for molecular properties
 #[derive(Debug)]
-pub struct MoleculeProperties {
+pub(super) struct MoleculeProperties {
     context: Context,
     pub atom_properties: BTreeMap<usize, AtomProperties>,
     pub bond_properties: BTreeMap<usize, BondProperties>,
@@ -111,7 +111,7 @@ pub struct MoleculeProperties {
 }
 
 impl MoleculeProperties {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             context: Context::new(),
             atom_properties: BTreeMap::new(),
@@ -121,7 +121,7 @@ impl MoleculeProperties {
         }
     }
 
-    pub fn add_entry(&mut self, entry: PropertyEntries, flags: CtabParseFlags) -> Result<()> {
+    pub(crate) fn add_entry(&mut self, entry: PropertyEntries, flags: CtabParseFlags) -> Result<()> {
         let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
         match entry {
             PropertyEntries::AtomAliasEntry(e) => {
@@ -141,7 +141,7 @@ impl MoleculeProperties {
             PropertyEntries::RadicalEntries(entries) => {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
-                    props.radical = convert_radical_type_code(entry.radical_type)?;
+                    props.unpaired_e = convert_radical_type_code(entry.radical_type)?;
                 }
             }
             PropertyEntries::IsotopeEntries(entries) => {
@@ -173,11 +173,9 @@ impl MoleculeProperties {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     if props.link_atom.is_some() {
-                        return Err(SemanticError::Generic(format!(
-                            "Duplicate link atom property for atom {}",
-                            entry.atom_index
-                        ))
-                        .into());
+                        return Err(SemanticError::DuplicateProperty(
+                            format!("link atom for atom {}", entry.atom_index)
+                        ).into());
                     }
                     props.link_atom = Some(LinkAtom {
                         repeat_count: entry.repeat_count,
@@ -195,11 +193,9 @@ impl MoleculeProperties {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     if props.attachment_point.is_some() {
-                        return Err(SemanticError::Generic(format!(
-                            "Duplicate attachment point property for atom {}",
-                            entry.atom_index
-                        ))
-                        .into());
+                        return Err(SemanticError::DuplicateProperty(
+                            format!("attachment point for atom {}", entry.atom_index)
+                        ).into());
                     }
                     props.attachment_point = convert_attachment_point_code(entry.attachment_type)?;
                 }
@@ -226,11 +222,9 @@ impl MoleculeProperties {
             PropertyEntries::SGroupTypeEntries(entries) => {
                 for entry in entries {
                     if self.sgroup_properties.contains_key(&entry.sgroup_index) {
-                        return Err(SemanticError::Generic(format!(
-                            "Duplicate S-group type for index {}",
-                            entry.sgroup_index
-                        ))
-                        .into());
+                        return Err(SemanticError::DuplicateProperty(
+                            format!("S-group type for index {}", entry.sgroup_index)
+                        ).into());
                     }
                     let props = SGroupProperties::new(entry.sgroup_type);
                     self.sgroup_properties.insert(entry.sgroup_index, props);
@@ -244,11 +238,9 @@ impl MoleculeProperties {
                     let props = self
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| {
-                            SemanticError::Generic(format!(
-                                "S-group subtype for undefined S-group {}",
-                                entry.sgroup_index
-                            ))
+                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "subtype",
                         })?;
                     props.group_subtype = Some(entry.sgroup_subtype);
                 }
@@ -258,11 +250,9 @@ impl MoleculeProperties {
                     let props = self
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| {
-                            SemanticError::Generic(format!(
-                                "S-group label for undefined S-group {}",
-                                entry.sgroup_index
-                            ))
+                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "label",
                         })?;
                     props.label = Some(entry.label);
                 }
@@ -272,11 +262,9 @@ impl MoleculeProperties {
                     let props = self
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| {
-                            SemanticError::Generic(format!(
-                                "S-group connectivity for undefined S-group {}",
-                                entry.sgroup_index
-                            ))
+                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "connectivity",
                         })?;
                     props.connectivity = Some(entry.connectivity);
                 }
@@ -286,11 +274,9 @@ impl MoleculeProperties {
                     let props = self
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| {
-                            SemanticError::Generic(format!(
-                                "S-group expansion for undefined S-group {}",
-                                entry.sgroup_index
-                            ))
+                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "expansion",
                         })?;
                     props.expansion = Some(true);
                 }
@@ -300,10 +286,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group atom list for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "atom list",
+                        }
                     })?;
                 props.atom_indices = Some(entry.atom_indices);
             }
@@ -312,10 +298,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group bond list for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "bond list",
+                        }
                     })?;
                 props.bond_indices = Some(entry.bond_indices);
             }
@@ -324,10 +310,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group parent atom list for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "parent atom list",
+                        }
                     })?;
                 props.parent_atom_indices = Some(entry.atom_indices);
             }
@@ -336,54 +322,50 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group subscript for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "subscript",
+                        }
                     })?;
                 let sgroup_type = self
                     .context
                     .sgroup_types
                     .get(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group subscript for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "subscript",
+                        }
                     })?;
 
                 if !sgroup_accepts_subscript(*sgroup_type)
                     && !sgroup_accepts_multiplier(*sgroup_type)
                 {
-                    return Err(SemanticError::Generic(format!(
-                        "S-group subscript and multiplier not allowed for S-group type {:?}",
-                        sgroup_type,
-                    ))
-                    .into());
+                    return Err(SemanticError::SGroupTypeConstraint {
+                        sgroup_type: *sgroup_type,
+                        message: "subscript and multiplier not allowed",
+                    }.into());
                 } else if sgroup_accepts_subscript(*sgroup_type) {
                     if entry.subscript.is_none() {
-                        return Err(SemanticError::Generic(format!(
-                            "No subscript found for S-group type {:?}",
-                            sgroup_type,
-                        ))
-                        .into());
+                        return Err(SemanticError::SGroupTypeConstraint {
+                            sgroup_type: *sgroup_type,
+                            message: "subscript required",
+                        }.into());
                     }
                     props.subscript = entry.subscript;
                 } else if sgroup_accepts_multiplier(*sgroup_type) {
                     if entry.multiplier.is_none() {
-                        return Err(SemanticError::Generic(format!(
-                            "No multiplier found for S-group type {:?}",
-                            sgroup_type,
-                        ))
-                        .into());
+                        return Err(SemanticError::SGroupTypeConstraint {
+                            sgroup_type: *sgroup_type,
+                            message: "multiplier required",
+                        }.into());
                     }
                     props.multiplier = entry.multiplier;
                 } else {
-                    return Err(SemanticError::Generic(format!(
-                        "S-group type {:?} cannot have a subscript and a multiplier",
-                        sgroup_type,
-                    ))
-                    .into());
+                    return Err(SemanticError::SGroupTypeConstraint {
+                        sgroup_type: *sgroup_type,
+                        message: "cannot have both subscript and multiplier",
+                    }.into());
                 }
             }
             PropertyEntries::SGroupCorrespondenceEntry(entry) => {
@@ -391,10 +373,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group correspondence for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "correspondence",
+                        }
                     })?;
                 props.correspondence = Some(entry.bond_indices);
             }
@@ -403,10 +385,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group display info for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "display info",
+                        }
                     })?;
                 props.bracket_coords = Some(SGroupBracketCoords {
                     bracket1: (entry.bracket_coords[0], entry.bracket_coords[1]),
@@ -418,10 +400,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group connecting bond for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "connecting bond",
+                        }
                     })?;
                 props.connecting_bond = Some(SGroupConnectingBond {
                     bond_index: entry.bond_index,
@@ -433,10 +415,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group data description for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "data description",
+                        }
                     })?;
                 props.data.insert(
                     entry.field_name.clone(),
@@ -457,10 +439,10 @@ impl MoleculeProperties {
                     .sgroup_properties
                     .get_mut(&entry.sgroup_index)
                     .ok_or_else(|| {
-                        SemanticError::Generic(format!(
-                            "S-group data description for undefined S-group {}",
-                            entry.sgroup_index
-                        ))
+                        SemanticError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "data description",
+                        }
                     })?;
                 props.display = Some(SGroupDataDisplay {
                     coords: entry.coords,
@@ -476,18 +458,15 @@ impl MoleculeProperties {
                     data_content,
                 } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(SemanticError::Generic(
-                            "SCD entry found without SDT context".to_string(),
-                        ));
+                        return Err(SemanticError::MissingSGroupDataContext);
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
                     if sgroup_index != context_sgroup {
-                        return Err(SemanticError::Generic(format!(
-                            "SCD sgroup_index {} doesn't match context sgroup {}",
-                            sgroup_index, context_sgroup
-                        ))
-                        .into());
+                        return Err(SemanticError::SGroupIndexMismatch {
+                            expected: context_sgroup,
+                            actual: sgroup_index,
+                        }.into());
                     }
 
                     if self.context.current_data_content.is_none() {
@@ -509,11 +488,10 @@ impl MoleculeProperties {
                 } => {
                     if let Some(context_sgroup) = self.context.current_sgroup_index {
                         if sgroup_index != context_sgroup {
-                            return Err(SemanticError::Generic(format!(
-                                "SED sgroup_index {} doesn't match context sgroup {}",
-                                sgroup_index, context_sgroup
-                            ))
-                            .into());
+                            return Err(SemanticError::SGroupIndexMismatch {
+                                expected: context_sgroup,
+                                actual: sgroup_index,
+                            }.into());
                         }
 
                         if self.context.current_data_content.is_none() {
@@ -536,18 +514,15 @@ impl MoleculeProperties {
 
                 SGroupDataEntry::EndBlank { sgroup_index } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(SemanticError::Generic(
-                            "Blank SED entry found without SDT context".to_string(),
-                        ));
+                        return Err(SemanticError::MissingSGroupDataContext);
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
                     if sgroup_index != context_sgroup {
-                        return Err(SemanticError::Generic(format!(
-                            "Blank SED sgroup_index {} doesn't match context sgroup {}",
-                            sgroup_index, context_sgroup
-                        ))
-                        .into());
+                        return Err(SemanticError::SGroupIndexMismatch {
+                            expected: context_sgroup,
+                            actual: sgroup_index,
+                        }.into());
                     }
 
                     self.finalize_sgroup_data(sgroup_index, None)?;
@@ -559,10 +534,10 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            SemanticError::Generic(format!(
-                                "S-group hierarchy for undefined S-group {}",
-                                entry.sgroup_index
-                            ))
+                            SemanticError::UndefinedSGroup {
+                                index: entry.sgroup_index,
+                                property: "hierarchy",
+                            }
                         })?;
                     props.hierarchy_parent = Some(entry.parent_sgroup_index);
                 }
@@ -573,10 +548,10 @@ impl MoleculeProperties {
                         .sgroup_properties
                         .get_mut(&entry.sgroup_index)
                         .ok_or_else(|| {
-                            SemanticError::Generic(format!(
-                                "S-group component for undefined S-group {}",
-                                entry.sgroup_index
-                            ))
+                            SemanticError::UndefinedSGroup {
+                                index: entry.sgroup_index,
+                                property: "component",
+                            }
                         })?;
                     props.component_number = Some(entry.component_number);
                 }
@@ -624,19 +599,17 @@ impl MoleculeProperties {
         sed_content: Option<String>,
     ) -> Result<()> {
         let data_field = self.context.current_data_field.as_ref().ok_or_else(|| {
-            SemanticError::Generic(
-                "No data field context when finalizing S-group data".to_string(),
-            )
+            SemanticError::MissingSGroupDataContext
         })?;
 
         let props = self
             .sgroup_properties
             .get_mut(&sgroup_index)
             .ok_or_else(|| {
-                SemanticError::Generic(format!(
-                    "S-group data content for undefined S-group {}",
-                    sgroup_index
-                ))
+                SemanticError::UndefinedSGroup {
+                    index: sgroup_index,
+                    property: "data content",
+                }
             })?;
 
         let has_sed_content = sed_content.is_some();
@@ -675,8 +648,8 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    /// Apply all properties to ExtendedMolecule (SimpleIR type)
-    pub fn update_extended_molecule(
+    /// Apply all properties to ExtendedMolecule (TableIR type)
+    pub(crate) fn update_extended_molecule(
         &mut self,
         molecule: &mut ExtendedMolecule,
         flags: CtabParseFlags,
@@ -686,10 +659,7 @@ impl MoleculeProperties {
         // Apply atom properties
         for (&atom_idx, props) in &self.atom_properties {
             let Some(atom) = molecule.atoms.get_mut(atom_idx) else {
-                return Err(SemanticError::Generic(format!(
-                    "Missing atom index: {}",
-                    atom_idx
-                )));
+                return Err(SemanticError::IndexOutOfBounds(atom_idx));
             };
 
             // Apply alias
@@ -707,12 +677,12 @@ impl MoleculeProperties {
             // Apply charge
             if let Some(charge) = props.charge {
                 atom.charge = Some(charge);
-                atom.radical = None; // charge overrides radical from atom block
+                atom.unpaired_e = None; // charge overrides radical from atom block
             }
 
-            // Apply radical
-            if let Some(ref radical) = props.radical {
-                atom.radical = Some(radical.clone());
+            // Apply radical (unpaired electrons)
+            if let Some(unpaired_e) = props.unpaired_e {
+                atom.unpaired_e = Some(unpaired_e);
                 atom.charge = None; // radical overrides charge from atom block
             }
 
@@ -723,7 +693,7 @@ impl MoleculeProperties {
                     AtomSymbol::Element(element) => {
                         let validated =
                             convert_atom_isotope_mass_number(element, isotope, extended_isotopes)?;
-                        atom.isotope = validated;
+                        atom.isotope_mass = validated;
                     }
                     AtomSymbol::NamedIsotope(named) => {
                         // For named isotopes (D, T), validate against the element
@@ -732,7 +702,7 @@ impl MoleculeProperties {
                             isotope,
                             extended_isotopes,
                         )?;
-                        atom.isotope = validated;
+                        atom.isotope_mass = validated;
                     }
                     _ => {
                         // For other symbol types (queries, etc.), just set the isotope
@@ -809,15 +779,26 @@ impl MoleculeProperties {
             }
         }
 
+        // Initialize ctfile_data if we have any CTFile-specific data
+        let has_ctfile_data = !self.rgroup_properties.is_empty()
+            || !self.sgroup_properties.is_empty();
+        if has_ctfile_data {
+            if molecule.ctfile_data.is_none() {
+                molecule.ctfile_data = Some(CtfileData::default());
+            }
+        }
+
         // Apply R-group logic
-        for (&rgroup_label, props) in &self.rgroup_properties {
-            let rgroup = RGroup {
-                label: Some(rgroup_label as u32),
-                dependent_label: props.dependent_label,
-                rgroup_or_h: props.rgroup_or_h.unwrap_or(false),
-                occurrence: props.occurrence.clone().unwrap_or_default(),
-            };
-            molecule.rgroups.insert(rgroup_label, rgroup);
+        if let Some(ref mut ctfile_data) = molecule.ctfile_data {
+            for (&rgroup_label, props) in &self.rgroup_properties {
+                let rgroup = RGroup {
+                    label: Some(rgroup_label as u32),
+                    dependent_label: props.dependent_label,
+                    rgroup_or_h: props.rgroup_or_h.unwrap_or(false),
+                    occurrence: props.occurrence.clone().unwrap_or_default(),
+                };
+                ctfile_data.rgroups.insert(rgroup_label, rgroup);
+            }
         }
 
         // Validate and apply S-groups
@@ -830,7 +811,7 @@ impl MoleculeProperties {
     fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<()> {
         for (sgroup_index, props) in std::mem::take(&mut self.sgroup_properties) {
             let group_type = props.group_type.ok_or_else(|| {
-                SemanticError::Generic(format!("S-group {} has no type", sgroup_index))
+                SemanticError::SGroupMissingType(sgroup_index)
             })?;
             let mut sgroup = SGroup::new(group_type);
             sgroup.label = props.label.or(Some(sgroup_index as u32));
@@ -851,14 +832,8 @@ impl MoleculeProperties {
             if let Some(subscript) = props.subscript {
                 sgroup.subscript = Some(subscript);
             }
-            if let Some(multiplier) = props.multiplier {
-                sgroup.multiplier = Some(multiplier);
-            }
             if let Some(correspondence) = props.correspondence {
                 sgroup.correspondence = Some(correspondence);
-            }
-            if let Some(bracket_coords) = props.bracket_coords {
-                sgroup.bracket_coords = Some(bracket_coords);
             }
             if let Some(connecting_bond) = props.connecting_bond {
                 sgroup.connecting_bond = Some(connecting_bond);
@@ -872,10 +847,21 @@ impl MoleculeProperties {
             if !props.data.is_empty() {
                 sgroup.data = props.data;
             }
+            if let Some(multiplier) = props.multiplier {
+                sgroup.multiplier = Some(multiplier);
+            }
+            if let Some(bracket_coords) = props.bracket_coords {
+                sgroup.bracket_coords = Some(bracket_coords);
+            }
             if let Some(display) = props.display {
                 sgroup.display = Some(display);
             }
-            molecule.sgroups.insert(sgroup_index, sgroup);
+            
+            // Store in ctfile_data
+            if molecule.ctfile_data.is_none() {
+                molecule.ctfile_data = Some(CtfileData::default());
+            }
+            molecule.ctfile_data.as_mut().unwrap().sgroups.insert(sgroup_index, sgroup);
         }
         Ok(())
     }

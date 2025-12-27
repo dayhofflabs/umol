@@ -1,65 +1,27 @@
 //! Diagnostics for atom/bond-based molecule models
 
-use std::fmt::{self, Display};
+use std::fmt;
 
-use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, EnumMessage, IntoEnumIterator};
 
 use crate::span::Span;
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    Default,
-    PartialEq,
-    Eq,
-    Display,
-    EnumIter,
-    EnumMessage,
-    Serialize,
-    Deserialize,
-)]
+#[derive(Debug, Copy, Clone, PartialEq, Display, EnumIter, EnumMessage)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum Severity {
-    #[default]
     Error,
     Warning,
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    Default,
-    PartialEq,
-    Eq,
-    Display,
-    EnumIter,
-    Serialize,
-    Deserialize,
-)]
+#[derive(Debug, Copy, Clone, PartialEq, Display, EnumIter)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum Category {
-    #[default]
     Lexical,
     Syntactic,
     Semantic,
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    Display,
-    EnumIter,
-    EnumMessage,
-    Serialize,
-    Deserialize,
-    Default,
-)]
+#[derive(Debug, Copy, Clone, PartialEq, Display, EnumIter, EnumMessage)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum DiagnosticKind {
     #[strum(message = "Invalid whitespace")]
@@ -197,87 +159,87 @@ pub enum DiagnosticKind {
     CtfileInvalidSdfDataValue,
     #[strum(message = "Missing record delimiter")]
     CtfileMissingDelimiter,
+    #[strum(message = "Unexpected end of file")]
+    CtfileUnexpectedEof,
+    #[strum(message = "Incomplete input")]
+    CtfileIncomplete,
 
     #[strum(message = "GraphIR conversion failed")]
-    GraphConversionUnknown,
+    GraphConversionFailed,
 
     #[strum(message = "Self-loop ring")]
-    GraphTopologySelfLoopRing,
+    GraphSelfLoopRing,
     #[strum(message = "Parallel edges")]
-    GraphTopologyParallelEdges,
+    GraphParallelEdges,
     #[strum(message = "Unknown topology error")]
-    GraphTopologyUnknown,
+    GraphTopologyError,
 
     #[strum(message = "Out of element range")]
-    GraphValenceOutOfElementRange,
+    GraphOutOfElementRange,
     #[strum(message = "H count out of element range")]
-    GraphValenceHcountOutOfElementRange,
+    GraphHcountOutOfElementRange,
     #[strum(message = "Charge out of element range")]
-    GraphValenceChargeOutOfElementRange,
+    GraphChargeOutOfElementRange,
     #[strum(message = "H count mismatch")]
-    GraphValenceHcountMismatch,
+    GraphHcountMismatch,
     #[strum(message = "No match")]
-    GraphValenceNoMatch,
+    GraphNoMatch,
     #[strum(message = "Ambiguous match")]
-    GraphValenceAmbiguousMatch,
+    GraphAmbiguousMatch,
     #[strum(message = "No known valence states")]
-    GraphValenceNoKnownValenceStates,
+    GraphNoKnownValenceStates,
     #[strum(message = "Valence unknown bond order")]
-    GraphValenceUnknownBondOrder,
+    GraphUnknownBondOrder,
     #[strum(message = "Missing bracket H")]
-    GraphValenceMissingBracketH,
+    GraphMissingBracketH,
     #[strum(message = "Unknown valence error")]
-    GraphValenceUnknown,
+    GraphValenceError,
 
     #[strum(message = "Aromatic atom not in ring")]
-    GraphAromaticityAromaticAtomNotInRing,
+    GraphAromaticAtomNotInRing,
     #[strum(message = "Aromatic bond not in ring")]
-    GraphAromaticityAromaticBondNotInRing,
+    GraphAromaticBondNotInRing,
     #[strum(message = "No matching aromatic atom config")]
-    GraphAromaticityNoMatchingAromaticAtomConfig,
+    GraphNoMatchingAromaticAtomConfig,
     #[strum(message = "Invalid aromatic atom")]
-    GraphAromaticityInvalidAromaticAtom,
+    GraphInvalidAromaticAtom,
     #[strum(message = "Invalid aromatic bond atom")]
-    GraphAromaticityInvalidAromaticBondAtom,
+    GraphInvalidAromaticBondAtom,
     #[strum(message = "Aromatic bond order mismatch")]
-    GraphAromaticityAromaticBondOrderMismatch,
+    GraphAromaticBondOrderMismatch,
     #[strum(message = "Kekule inconsistent")]
-    GraphAromaticityKekuleInconsistent,
-    #[strum(message = "Huckel fail")]
-    GraphAromaticityHuckelFail,
+    GraphKekuleInconsistent,
+    #[strum(message = "Huckel failed")]
+    GraphHuckelFailed,
     #[strum(message = "Unknown aromaticity error")]
-    GraphAromaticityUnknown,
+    GraphAromaticityError,
 
     #[strum(message = "Avoid mixed aromaticity")]
-    GraphAromaticityWarningAvoidMixedAromaticity,
+    GraphAvoidMixedAromaticity,
     #[strum(message = "Avoid inconsistent aromaticity")]
-    GraphAromaticityWarningAvoidInconsistentAromaticity,
+    GraphAvoidInconsistentAromaticity,
     #[strum(message = "Huckel inconsistent")]
-    GraphAromaticityWarningHuckelInconsistent,
+    GraphHuckelInconsistent,
     #[strum(message = "Unknown aromaticity warning")]
-    GraphAromaticityWarningUnknown,
+    GraphAromaticityWarning,
 
     #[strum(message = "Double conflict")]
     GraphStereoDoubleConflict,
     #[strum(message = "Double insufficient")]
     GraphStereoDoubleInsufficient,
     #[strum(message = "Unknown stereo error")]
-    GraphStereoUnknown,
+    GraphStereoError,
 
     #[strum(message = "Avoid unnecessary stereo descriptor")]
-    GraphStereoWarningAvoidUnnecessaryStereoDescriptor,
+    GraphAvoidUnnecessaryStereoDescriptor,
     #[strum(message = "Unsupported central chirality element")]
-    GraphStereoWarningUnsupportedCentralChiralityElement,
+    GraphUnsupportedCentralChiralityElement,
     #[strum(message = "Chirality substituent mismatch")]
-    GraphStereoWarningChiralitySubstituentMismatch,
+    GraphChiralitySubstituentMismatch,
     #[strum(message = "Non chiral annotated")]
-    GraphStereoWarningNonChiralAnnotated,
+    GraphNonChiralAnnotated,
     #[strum(message = "Unknown stereo warning")]
-    GraphStereoWarningUnknown,
-
-    #[default]
-    #[strum(message = "Unknown diagnostic")]
-    Unknown,
+    GraphStereoWarning,
 }
 
 impl DiagnosticKind {
@@ -286,7 +248,6 @@ impl DiagnosticKind {
     }
 
     pub fn category(&self) -> Category {
-        use Category::*;
         use DiagnosticKind::*;
 
         match self {
@@ -294,7 +255,7 @@ impl DiagnosticKind {
             | SmilesInvalidComment
             | SmilesUnterminatedBlockComment
             | SmilesInvalidElement
-            | SmilesInvalidToken => Lexical,
+            | SmilesInvalidToken => Category::Lexical,
 
             SmilesUnbalancedOpenParen
             | SmilesUnbalancedCloseParen
@@ -355,44 +316,155 @@ impl DiagnosticKind {
             | CtfileInvalidHeader
             | CtfileInvalidSdfDataHeader
             | CtfileInvalidSdfDataValue
-            | CtfileMissingDelimiter => Syntactic,
+            | CtfileMissingDelimiter
+            | CtfileUnexpectedEof
+            | CtfileIncomplete => Category::Syntactic,
 
-            GraphConversionUnknown
-            | GraphTopologySelfLoopRing
-            | GraphTopologyParallelEdges
-            | GraphTopologyUnknown
-            | GraphValenceOutOfElementRange
-            | GraphValenceHcountOutOfElementRange
-            | GraphValenceChargeOutOfElementRange
-            | GraphValenceHcountMismatch
-            | GraphValenceNoMatch
-            | GraphValenceAmbiguousMatch
-            | GraphValenceNoKnownValenceStates
-            | GraphValenceUnknownBondOrder
-            | GraphValenceMissingBracketH
-            | GraphValenceUnknown
-            | GraphAromaticityAromaticAtomNotInRing
-            | GraphAromaticityAromaticBondNotInRing
-            | GraphAromaticityNoMatchingAromaticAtomConfig
-            | GraphAromaticityInvalidAromaticAtom
-            | GraphAromaticityInvalidAromaticBondAtom
-            | GraphAromaticityAromaticBondOrderMismatch
-            | GraphAromaticityKekuleInconsistent
-            | GraphAromaticityHuckelFail
-            | GraphAromaticityUnknown
-            | GraphAromaticityWarningAvoidMixedAromaticity
-            | GraphAromaticityWarningAvoidInconsistentAromaticity
-            | GraphAromaticityWarningHuckelInconsistent
-            | GraphAromaticityWarningUnknown
+            GraphConversionFailed
+            | GraphSelfLoopRing
+            | GraphParallelEdges
+            | GraphTopologyError
+            | GraphOutOfElementRange
+            | GraphHcountOutOfElementRange
+            | GraphChargeOutOfElementRange
+            | GraphHcountMismatch
+            | GraphNoMatch
+            | GraphAmbiguousMatch
+            | GraphNoKnownValenceStates
+            | GraphUnknownBondOrder
+            | GraphMissingBracketH
+            | GraphValenceError
+            | GraphAromaticAtomNotInRing
+            | GraphAromaticBondNotInRing
+            | GraphNoMatchingAromaticAtomConfig
+            | GraphInvalidAromaticAtom
+            | GraphInvalidAromaticBondAtom
+            | GraphAromaticBondOrderMismatch
+            | GraphKekuleInconsistent
+            | GraphHuckelFailed
+            | GraphAromaticityError
+            | GraphAvoidMixedAromaticity
+            | GraphAvoidInconsistentAromaticity
+            | GraphHuckelInconsistent
+            | GraphAromaticityWarning
             | GraphStereoDoubleConflict
             | GraphStereoDoubleInsufficient
-            | GraphStereoUnknown
-            | GraphStereoWarningAvoidUnnecessaryStereoDescriptor
-            | GraphStereoWarningUnsupportedCentralChiralityElement
-            | GraphStereoWarningChiralitySubstituentMismatch
-            | GraphStereoWarningNonChiralAnnotated
-            | GraphStereoWarningUnknown
-            | Unknown => Semantic,
+            | GraphStereoError
+            | GraphAvoidUnnecessaryStereoDescriptor
+            | GraphUnsupportedCentralChiralityElement
+            | GraphChiralitySubstituentMismatch
+            | GraphNonChiralAnnotated
+            | GraphStereoWarning => Category::Semantic,
+        }
+    }
+
+    pub fn default_severity(&self) -> Severity {
+        use DiagnosticKind::*;
+
+        match self {
+            SmilesInvalidWhitespace
+            | SmilesInvalidComment
+            | SmilesUnterminatedBlockComment
+            | SmilesInvalidElement
+            | SmilesInvalidToken
+            | SmilesUnbalancedOpenParen
+            | SmilesUnbalancedCloseParen
+            | SmilesEmptyBranch
+            | SmilesEmptyGroup
+            | SmilesNonfinalGroup
+            | SmilesLeadingBond
+            | SmilesTrailingBond
+            | SmilesConsecutiveBonds
+            | SmilesLeadingRing
+            | SmilesUnbalancedRingIndex
+            | SmilesInvalidRingIndex
+            | SmilesMismatchedRingBondDirs
+            | SmilesMismatchedRingBondOrders
+            | SmilesLeadingDot
+            | SmilesTrailingDot
+            | SmilesConsecutiveDots
+            | SmilesDotBeforeRing
+            | SmilesEmptyBracket
+            | SmilesUnbalancedOpenBracket
+            | SmilesUnbalancedCloseBracket
+            | SmilesStrayBracketField
+            | SmilesDuplicateBracketField
+            | SmilesMissingClassIndex
+            | SmilesMissingChiralityIndex
+            | SmilesChiralityOutOfRange
+            | SmilesBracketHwithHcount
+            | SmilesInvalidBracket
+            | SmilesClassOutOfRange
+            | SmilesHcountOutOfRange
+            | SmilesChargeOutOfRange
+            | SmilesIsotopeOutOfRange
+            | SmilesIsotopeUncatalogued
+            | CtfileInvalidCountsLine
+            | CtfileInvalidAtomLine
+            | CtfileInvalidBondLine
+            | CtfileInvalidPropertyLine
+            | CtfileInvalidSgroupLine
+            | CtfileInvalidHeader
+            | CtfileInvalidSdfDataHeader
+            | CtfileInvalidSdfDataValue
+            | CtfileMissingDelimiter
+            | CtfileUnexpectedEof
+            | CtfileIncomplete
+            | GraphConversionFailed
+            | GraphSelfLoopRing
+            | GraphParallelEdges
+            | GraphTopologyError
+            | GraphOutOfElementRange
+            | GraphHcountOutOfElementRange
+            | GraphChargeOutOfElementRange
+            | GraphHcountMismatch
+            | GraphNoMatch
+            | GraphAmbiguousMatch
+            | GraphNoKnownValenceStates
+            | GraphUnknownBondOrder
+            | GraphMissingBracketH
+            | GraphValenceError
+            | GraphAromaticAtomNotInRing
+            | GraphAromaticBondNotInRing
+            | GraphNoMatchingAromaticAtomConfig
+            | GraphInvalidAromaticAtom
+            | GraphInvalidAromaticBondAtom
+            | GraphAromaticBondOrderMismatch
+            | GraphKekuleInconsistent
+            | GraphHuckelFailed
+            | GraphAromaticityError
+            | GraphStereoDoubleConflict
+            | GraphStereoDoubleInsufficient
+            | GraphStereoError => Severity::Error,
+
+            SmilesPreferBareOrganicAtom
+            | SmilesPreferImplicitH
+            | SmilesPreferBracketFieldOrder
+            | SmilesPreferSimpleChargeSign
+            | SmilesPreferSimpleHcount
+            | SmilesAvoidExplicitSingleBond
+            | SmilesAvoidExplicitAromaticBond
+            | SmilesAvoidUnnecessaryGroup
+            | SmilesAvoidRedundantNestedParens
+            | SmilesPreferBranchesBeforeRingBonds
+            | SmilesPreferFirstRingOne
+            | SmilesPreferConsecutiveRingNumbering
+            | SmilesAvoidReusedRingIndices
+            | SmilesPreferSingleDigitRingIndex
+            | SmilesPreferSingleRingClosure
+            | SmilesAvoidAdjacentRingClosures
+            | SmilesPreferBondSymbolAtRingOpen
+            | SmilesAvoidRingClosureAcrossDot
+            | SmilesPreferAromaticForm
+            | GraphAvoidMixedAromaticity
+            | GraphAvoidInconsistentAromaticity
+            | GraphHuckelInconsistent
+            | GraphAromaticityWarning
+            | GraphAvoidUnnecessaryStereoDescriptor
+            | GraphUnsupportedCentralChiralityElement
+            | GraphChiralitySubstituentMismatch
+            | GraphNonChiralAnnotated
+            | GraphStereoWarning => Severity::Warning,
         }
     }
 
@@ -401,7 +473,7 @@ impl DiagnosticKind {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Diagnostic {
     pub kind: DiagnosticKind,
     pub category: Category,
@@ -411,7 +483,16 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn new(
+    pub fn from_kind(kind: DiagnosticKind) -> Self {
+        Self {
+            kind,
+            category: kind.category(),
+            severity: kind.default_severity(),
+            span: None,
+            details: None,
+        }
+    }
+    pub fn from_kind_and_severity(
         kind: DiagnosticKind,
         severity: Severity,
         span: Option<Span>,
@@ -426,18 +507,6 @@ impl Diagnostic {
         }
     }
 
-    pub fn from_kind(kind: DiagnosticKind) -> Self {
-        Self {
-            kind,
-            category: kind.category(),
-            ..Default::default()
-        }
-    }
-
-    pub fn severity(&self) -> Severity {
-        self.severity
-    }
-
     pub fn message(&self) -> &'static str {
         self.kind.message()
     }
@@ -447,7 +516,7 @@ impl Diagnostic {
     }
 }
 
-impl Display for Diagnostic {
+impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let span_str = match self.span {
             Some(span) => format!(" {}", span),
@@ -458,19 +527,20 @@ impl Display for Diagnostic {
             f,
             "{} [{}:{}]{}",
             self.message(),
-            self.severity(),
+            self.severity,
             self.category,
             span_str,
         )
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DiagnosticList {
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl DiagnosticList {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             diagnostics: Vec::new(),
@@ -500,18 +570,18 @@ impl DiagnosticList {
     pub fn has_errors(&self) -> bool {
         self.diagnostics
             .iter()
-            .any(|d| d.severity() == Severity::Error)
+            .any(|d| d.severity == Severity::Error)
     }
 
     pub fn errors(&self) -> impl Iterator<Item = &Diagnostic> {
         self.diagnostics
             .iter()
-            .filter(|d| d.severity() == Severity::Error)
+            .filter(|d| d.severity == Severity::Error)
     }
     pub fn warnings(&self) -> impl Iterator<Item = &Diagnostic> {
         self.diagnostics
             .iter()
-            .filter(|d| d.severity() == Severity::Warning)
+            .filter(|d| d.severity == Severity::Warning)
     }
 }
 
@@ -523,7 +593,7 @@ impl IntoIterator for DiagnosticList {
     }
 }
 
-impl Display for DiagnosticList {
+impl fmt::Display for DiagnosticList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for diagnostic in &self.diagnostics {
             writeln!(f, "- {}", diagnostic)?;

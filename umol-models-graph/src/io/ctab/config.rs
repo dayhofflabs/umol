@@ -6,7 +6,7 @@ use bitflags::bitflags;
 
 bitflags! {
     /// Flags for parsing CTab-based formats
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct CtabParseFlags: u32 {
         // Core chemical features (bits 0-7)
         const NAMED_ISOTOPES = 1;         // D, T recognition

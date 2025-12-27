@@ -1,11 +1,12 @@
 //! SMILES parsing configuration
+
 use std::fmt;
 
 use bitflags::bitflags;
 
 bitflags! {
     /// Flags for parsing SMILES strings
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct SmilesParseFlags: u32 {
         // Extensions (lex/syntax only)
         const EXTENDED_WS = 1;       // allow ASCII inter-token whitespace
@@ -79,7 +80,7 @@ impl fmt::Display for SmilesParseFlags {
 
 bitflags! {
     /// Configuration for SMILES checking
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct SmilesLintFlags: u32 {
 
         // Lint categories

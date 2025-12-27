@@ -5,8 +5,9 @@ use std::collections::HashMap;
 use regex::Regex;
 use umol_data::Element;
 
-use crate::simple_ir::{AtomData, BondData, BondDir, BondOrder, Molecule, MoleculeBuilder, Ring};
+use super::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::span::Span;
+use crate::table_ir::{BondDirection, BondOrder, Molecule, Ring};
 
 fn parse_atom_token(tok: &str) -> (Element, bool, Option<u32>, Option<u32>) {
     // Asterisk denotes aromatic variant of the organic subset: C*, N*, O*, P*, S*, B*, ...
@@ -31,7 +32,7 @@ fn parse_bond_token(
     usize,
     usize,
     BondOrder,
-    Option<BondDir>,
+    Option<BondDirection>,
     Option<u32>,
     Option<u32>,
 ) {
@@ -62,8 +63,8 @@ fn parse_bond_token(
         "#" => (BondOrder::Triple, None),
         "$" => (BondOrder::Quadruple, None),
         ":" => (BondOrder::Aromatic, None),
-        "/" => (BondOrder::Single, Some(BondDir::Up)),
-        "\\" => (BondOrder::Single, Some(BondDir::Down)),
+        "/" => (BondOrder::Single, Some(BondDirection::Up)),
+        "\\" => (BondOrder::Single, Some(BondDirection::Down)),
         other => panic!("unknown bond spec: {}", other),
     };
     (i, j, order, dir, span_start, span_end)
@@ -122,7 +123,6 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             hydrogen_count: None,
             class: None,
             chirality: None,
-            unknown_symbol: false,
             span: Span::from_bytes_opt(start, end),
         });
         if let (Some(s), Some(e)) = (start, end) {
@@ -142,13 +142,13 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             ids[j],
             BondData {
                 order,
-                dir,
+                direction: dir,
                 span: Span::from_bytes_opt(span_start, span_end),
             },
         );
     }
     let mut mols = b.finish();
-    let mut mol = mols.pop().unwrap_or_default();
+    let mut mol = mols.pop().unwrap_or_else(|| Molecule::empty());
 
     if let Some(rings_src) = rings_s {
         let ring_tokens: Vec<_> = rings_src.split_whitespace().collect();

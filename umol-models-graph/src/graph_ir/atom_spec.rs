@@ -53,11 +53,11 @@ impl AtomSpec {
             "Donated pairs must be less than or equal to lone pairs"
         );
         debug_assert!(
-            (element.valence_electrons() as i32 - charge) >= 0,
+            (element.valence_e() as i32 - charge) >= 0,
             "Charge must be less than or equal to valence electrons"
         );
         debug_assert!(
-            implicit_h <= element.max_implicit_hydrogens() as u32,
+            implicit_h <= element.max_implicit_h() as u32,
             "Implicit hydrogens must be less than or equal to max implicit hydrogens"
         );
         debug_assert!(
@@ -362,13 +362,13 @@ impl TryFrom<&str> for AtomSpec {
                 donated
             )));
         }
-        if (element.valence_electrons() as i32 - charge) < 0 {
+        if (element.valence_e() as i32 - charge) < 0 {
             return Err(GraphError::InvalidAtomSpec(format!(
                 "Invalid charge: {}",
                 charge
             )));
         }
-        if implicit_h > element.max_implicit_hydrogens() as u32 {
+        if implicit_h > element.max_implicit_h() as u32 {
             return Err(GraphError::InvalidAtomSpec(format!(
                 "Invalid implicit hydrogens: {}",
                 implicit_h

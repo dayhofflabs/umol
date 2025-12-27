@@ -1,12 +1,16 @@
-use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use serde::{Deserialize, Serialize};
+//! Valence models for graph-based molecular models.
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::path::Path;
+
 use thiserror::Error;
 use umol_data::Element;
+
+use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
+use crate::span::Span;
 
 #[derive(Debug, Error)]
 pub enum ValenceError {
@@ -53,15 +57,14 @@ impl From<ValenceError> for umol::Error {
 
 type Result<T> = std::result::Result<T, ValenceError>;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ValencePolicy {
-    #[default]
     Ignore,
     Warn,
     Error,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ValenceConfig {
     pub enabled: bool,
     pub check_brackets: bool,
@@ -72,7 +75,7 @@ pub struct ValenceConfig {
     pub ambiguous_match_policy: ValencePolicy,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ValenceModel {
     states: HashMap<Element, Vec<u8>>,
     pub patterns: ValencePatternTable,
@@ -82,7 +85,7 @@ impl ValenceModel {
     pub fn simple_organic() -> Self {
         Self {
             states: HashMap::new(),
-            patterns: ValencePatternTable::default(),
+            patterns: ValencePatternTable::new(),
         }
     }
     pub fn states_for(&self, e: Element) -> Option<&[u8]> {
@@ -115,7 +118,7 @@ impl ValenceModel {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ValencePattern {
     pub element: Option<Element>,
     pub bond_sum: Option<u8>,
@@ -124,7 +127,15 @@ pub struct ValencePattern {
     pub unpaired: Option<u8>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ValencePatternTable {
     pub patterns: Vec<ValencePattern>,
+}
+
+impl ValencePatternTable {
+    pub fn new() -> Self {
+        Self {
+            patterns: Vec::new(),
+        }
+    }
 }

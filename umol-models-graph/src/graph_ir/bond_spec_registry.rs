@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use map_macro::hash_map;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use super::bond_spec::{BondOrder, BondSpec};
 
@@ -15,7 +15,7 @@ impl BondSpecRegistry {
     }
 }
 
-static BOND_SPEC_DATA: Lazy<HashMap<BondOrder, Vec<BondSpec>>> = Lazy::new(|| {
+static BOND_SPEC_DATA: LazyLock<HashMap<BondOrder, Vec<BondSpec>>> = LazyLock::new(|| {
     fn spec(s: &str) -> BondSpec {
         s.parse::<BondSpec>().unwrap()
     }

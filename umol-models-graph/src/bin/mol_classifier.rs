@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use umol_models_graph::io::mol::parser::{parse_mol, parse_extended_mol};
+use umol_models_graph::io::mol::parser::{parse_extended_mol, parse_mol};
 
 #[derive(Debug)]
 struct ClassificationStats {
@@ -57,9 +57,9 @@ impl ClassificationStats {
 
 #[derive(Debug, Clone, Copy)]
 enum FileClassification {
-    Molecule,     // Works with parse_mol (basic parser)
+    Molecule,         // Works with parse_mol (basic parser)
     ExtendedMolecule, // Works with parse_extended_mol but not parse_mol
-    Invalid,      // Doesn't work with either
+    Invalid,          // Doesn't work with either
 }
 
 fn classify_mol_file(file_path: &Path) -> Result<FileClassification, Box<dyn std::error::Error>> {
@@ -256,7 +256,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "| **Total** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
-        grand_total, total_molecule, total_extended_molecule, total_invalid, overall_valid_percentage
+        grand_total,
+        total_molecule,
+        total_extended_molecule,
+        total_invalid,
+        overall_valid_percentage
     );
 
     println!();

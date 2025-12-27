@@ -1,6 +1,6 @@
 //! Atom matcher infrastructure copied from `umol-models-valence`.
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use super::atom::AtomBuilder;
 use super::atom_spec::AtomSpec;
@@ -106,7 +106,7 @@ impl Default for AtomMatcher {
     }
 }
 
-pub static DEFAULT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::default);
-pub static STRICT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::strict);
-pub static LENIENT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::lenient);
-pub static ALWAYS_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::always);
+pub static DEFAULT_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::default);
+pub static STRICT_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::strict);
+pub static LENIENT_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::lenient);
+pub static ALWAYS_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::always);

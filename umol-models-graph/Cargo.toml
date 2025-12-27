@@ -17,7 +17,6 @@ nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
 nom = { version = "8.0.0" }
 num = "0.4.3"
 num-traits = "0.2.19"
-once_cell = "1.21.3"
 petgraph = { version = "0.8.2", features = ["stable_graph", "serde-1"] }
 regex = "1.11.2"
 serde = { version = "1.0.221", features = ["derive"] }

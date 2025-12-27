@@ -4,11 +4,11 @@ use rstest::*;
 
 use super::*;
 use crate::io::ctab::config::CtabParseFlags;
-use crate::simple_ir::{BondDir, BondOrder, BondReactingCenter, BondStereo, BondTopology};
+use crate::table_ir::{BondDirection, BondOrder, BondReactingCenter, BondStereo, BondTopology};
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", 0, 1, BondOrder::Single, None, Some(BondDir::Up))]
+#[case(b"  1  2  1  1  0  0  0", "len 21 single wedge", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
 #[case(b"  2  5  1  0  0  0  0", "len 21 single unknown", 1, 4, BondOrder::Single, None, None)]
 #[case(b"  2  5  2  1  0  0  0", "len 21 double cis", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case(b"  2  5  2  6  0  0  0", "len 21 double trans", 1, 4, BondOrder::Double, Some(BondStereo::Trans), None)]
@@ -19,12 +19,12 @@ use crate::simple_ir::{BondDir, BondOrder, BondReactingCenter, BondStereo, BondT
 #[case(b"  2  5  3  1  0  0  0", "len 21 triple ignored stereo", 1, 4, BondOrder::Triple, None, None)]
 #[case(b"  2  5  3  1         ", "len 21 triple empty fields", 1, 4, BondOrder::Triple, None, None)]
 #[case(b"  1  2  1  0  0  0", "len 18 single", 0, 1, BondOrder::Single, None, None)]
-#[case(b"  1  3  1  1", "len 12 single wedge", 0, 2, BondOrder::Single, None, Some(BondDir::Up))]
+#[case(b"  1  3  1  1", "len 12 single wedge", 0, 2, BondOrder::Single, None, Some(BondDirection::Up))]
 #[case(b"  1  3  2  1", "len 12 double cis", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case(b"  2  5  2  0", "len 12 double none", 1, 4, BondOrder::Double, None, None)]
-#[case(b"  2  4  1  6", "len 12 single dash", 1, 3, BondOrder::Single, None, Some(BondDir::Down))]
+#[case(b"  2  4  1  6", "len 12 single dash", 1, 3, BondOrder::Single, None, Some(BondDirection::Down))]
 #[case(b"  2  5  3   ", "len 12 triple empty fields", 1, 4, BondOrder::Triple, None, None)]
-#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", 0, 1, BondOrder::Single, None, Some(BondDir::Up))]
+#[case(b"  1  2  1  1  0  0XXX", "non-strict padding", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
 fn test_bond_input12(
     #[case] input: &[u8],
     #[case] desc: &str,
@@ -32,7 +32,7 @@ fn test_bond_input12(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] dir: Option<BondDir>,
+    #[case] dir: Option<BondDirection>,
 ) {
     let result = bond_input12(input, &CtabParseFlags::BASIC);
     assert!(result.is_ok(), "{} should have succeeded", desc);
@@ -148,7 +148,7 @@ fn test_bond_input9_invalid(
 #[case(b"  1  2  1", "len 9", 0, 1, BondOrder::Single, None, None)]
 #[case(b"  1  2  1 ", "len 10 padded", 0, 1, BondOrder::Single, None, None)]
 #[case(b"  1  3  2  1", "len 12", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
-#[case(b"  1  3  1  6 ", "len 13 padded", 0, 2, BondOrder::Single, None, Some(BondDir::Down))]
+#[case(b"  1  3  1  6 ", "len 13 padded", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
 #[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondOrder::Single, None, None)]
 #[case(b"  2  5  2  1  0  0  0", "len to 21", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 fn test_bond_input(
@@ -158,7 +158,7 @@ fn test_bond_input(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] dir: Option<BondDir>,
+    #[case] dir: Option<BondDirection>,
 ) {
     let mut parser = bond_input(&CtabParseFlags::BASIC);
     let result = parser.parse(input);
@@ -239,15 +239,15 @@ fn test_bond_input_whitespace_padded(#[case] input: &[u8], #[case] desc: &str) {
 #[case(b"  1  2  0", "len 9, zero bond", 0, 1, BondOrder::Zero, None, None, None, None)]
 #[case(b"  1  2  9", "len 9, quadruple bond", 0, 1, BondOrder::Quadruple, None, None, None, None)]
 #[case(b"  1  2  2  3", "len 12 double either", 0, 1, BondOrder::Double, Some(BondStereo::Either), None, None, None)]
-#[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondOrder::Single, None, Some(BondDir::Down), None, None)]
+#[case(b"  1  2  1  6  ", "len 13 single dash padded", 0, 1, BondOrder::Single, None, Some(BondDirection::Down), None, None)]
 #[case(b"  1  2  8  0     1", "len 18 any bond, ring", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
-#[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondOrder::Single, None, Some(BondDir::Either), Some(BondTopology::Either), None)]
+#[case(b"  1  2  1  0  0  0", "len 18", 0, 1, BondOrder::Single, None, Some(BondDirection::Either), Some(BondTopology::Either), None)]
 #[case(b"  1  2  1  0     2  1", "len 21 full, chain, center", 0, 1, BondOrder::Single, None,
-       Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
+       Some(BondDirection::Either), Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
 #[case(b"  1  2  1  0     2 -1", "len 21 full, not center", 0, 1, BondOrder::Single, None,
-       Some(BondDir::Either), Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
+       Some(BondDirection::Either), Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
 #[case(b"  1  2  1            ", "len 21 only mandatory fields", 0, 1, BondOrder::Single, None,
-       Some(BondDir::Either), Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
+       Some(BondDirection::Either), Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
 #[case(b"  1  2  8  0XXX  1", "non-strict padding", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
 fn test_extended_bond_input(
     #[case] input: &[u8],
@@ -256,7 +256,7 @@ fn test_extended_bond_input(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] dir: Option<BondDir>,
+    #[case] dir: Option<BondDirection>,
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {

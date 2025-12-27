@@ -1,6 +1,6 @@
 //! Bond matcher infrastructure copied from `umol-models-valence`.
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use super::bond::BondBuilder;
 use super::bond_spec::{BondDonation, BondSpec};
@@ -64,7 +64,7 @@ impl Default for BondMatcher {
     }
 }
 
-pub static DEFAULT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::default);
-pub static STRICT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::strict);
-pub static LENIENT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::lenient);
-pub static ALWAYS_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::always);
+pub static DEFAULT_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::default);
+pub static STRICT_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::strict);
+pub static LENIENT_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::lenient);
+pub static ALWAYS_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::always);

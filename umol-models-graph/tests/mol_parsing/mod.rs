@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::mol::parser::{parse_mol, parse_extended_mol};
-use umol_models_graph::simple_ir::{ExtendedMolecule, Molecule};
+use umol_models_graph::io::mol::parser::{parse_extended_mol, parse_mol};
+use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Serialize)]
 struct MoleculeSummary {

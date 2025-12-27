@@ -1,8 +1,8 @@
 //! Registry of default atom specs for GraphIR atom typing.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
-use once_cell::sync::Lazy;
 use umol_data::{e, Element};
 
 use super::atom_spec::AtomSpec;
@@ -26,7 +26,7 @@ impl AtomSpecRegistry {
     }
 }
 
-static ATOM_SPEC_DATA: Lazy<HashMap<Element, HashMap<i32, Vec<AtomSpec>>>> = Lazy::new(|| {
+static ATOM_SPEC_DATA: LazyLock<HashMap<Element, HashMap<i32, Vec<AtomSpec>>>> = LazyLock::new(|| {
     fn spec(s: &str) -> AtomSpec {
         s.parse::<AtomSpec>().unwrap()
     }

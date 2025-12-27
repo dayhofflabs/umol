@@ -2,8 +2,6 @@
 //!
 //! This module provides the main entry points for parsing Connection Table (CTAB) format,
 //! which is the core molecular structure representation used in MOL, SDF, and other formats.
-//!
-//! Produces SimpleIR types directly.
 
 use bstr::{join, ByteSlice};
 use nom::bytes::complete::{is_not, tag};
@@ -12,17 +10,18 @@ use nom::combinator::{all_consuming, map_parser, opt};
 use nom::sequence::terminated;
 use nom::Parser;
 
-use crate::io::ctfile::error::{ParseError, SemanticError};
-use crate::simple_ir::{ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule as SirMolecule};
-
+// NOTE: atoms, bond, counts, properties parsers are re-exported for benchmarks
 use self::accumulator::MoleculeProperties;
 pub use self::atom::{atom_input, extended_atom_input};
 pub use self::bond::{bond_input, extended_bond_input};
-pub use self::counts::{counts_input, Counts};
-pub use self::properties::{
-    atom_alias_input, basic_property_input, legacy_atom_list_input, property_input, PropertyEntries,
-};
+pub use self::counts::counts_input;
+use self::counts::Counts;
+use self::properties::{atom_alias_input, PropertyEntries};
+pub use self::properties::{extended_property_input, legacy_atom_list_input, property_input};
 use super::config::CtabParseFlags;
+use crate::io::ctfile::error::{ParseError, SemanticError};
+use crate::table_ir::bond::Bond;
+use crate::table_ir::{ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
 
 mod accumulator;
 mod atom;
@@ -31,22 +30,22 @@ mod context;
 mod convert;
 mod counts;
 mod properties;
+mod rgroup;
 mod sgroup;
 mod utils;
 
 /// Parse CTAB block (basic parser, optimized for performance, basic molecules only)
 ///
-/// Parses from the counts line through M END, returning a SimpleIR Molecule.
 /// This parser is optimized for basic molecules without query features.
 /// It will fail if the CTAB contains query atoms, query bonds, or other advanced features.
 pub fn ctab_block<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> std::result::Result<(&'inp [u8], SirMolecule), ParseError> {
+) -> std::result::Result<(&'inp [u8], Molecule), ParseError> {
     let (remaining, counts) = counts_block(flags)
         .parse(input)
-        .map_err(|e| ParseError::from_nom(e, current_line, input))?;
+        .map_err(|e| ParseError::counts_from_nom(e, current_line))?;
     let atom_count = counts.atom_count as usize;
     let bond_count = counts.bond_count as usize;
     current_line += 1;
@@ -57,22 +56,24 @@ pub fn ctab_block<'inp, 'fl>(
     let (remaining, bonds) = bond_block(bond_count, flags, current_line)(remaining)?;
     current_line += bond_count as u32;
 
-    let (remaining, properties) = basic_properties_block(flags, current_line)(remaining)?;
+    let (remaining, properties) = properties_block(flags, current_line)(remaining)?;
     // current_line update is handled inside basic_properties_block if needed,
     // but here we just need to get to M END.
 
     let (remaining, _) = end_block(current_line)(remaining)?;
 
-    let extended = build_molecule(atoms, bonds, properties)
-        .map_err(|e| ParseError::Generic { line: current_line, col: 0, message: e.to_string() })?;
+    let extended = build_molecule(atoms, bonds, properties).map_err(|e| ParseError::Generic {
+        line: current_line,
+        col: 0,
+        message: e.to_string(),
+    })?;
     // Convert to basic Molecule by stripping extended fields
-    let basic = extended.to_basic();
+    let basic = extended.to_molecule();
     Ok((remaining, basic))
 }
 
 /// Parse CTAB block (general parser, handles all features including queries)
 ///
-/// Parses from the counts line through M END, returning a SimpleIR ExtendedMolecule.
 /// This parser handles all CTAB features including query atoms, query bonds,
 /// R-groups, S-groups, and all property lines.
 pub fn extended_ctab_block<'inp, 'fl>(
@@ -83,7 +84,7 @@ pub fn extended_ctab_block<'inp, 'fl>(
     let legacy_features = flags.contains(CtabParseFlags::LEGACY_FEATURES);
     let (remaining, counts) = counts_block(flags)
         .parse(input)
-        .map_err(|e| ParseError::from_nom(e, current_line, input))?;
+        .map_err(|e| ParseError::counts_from_nom(e, current_line))?;
     let atom_count = counts.atom_count as usize;
     let bond_count = counts.bond_count as usize;
     current_line += 1;
@@ -100,19 +101,24 @@ pub fn extended_ctab_block<'inp, 'fl>(
         (remaining, Vec::new())
     };
 
-    let (remaining, properties) = properties_block(flags, current_line)(remaining)?;
+    let (remaining, properties) = extended_properties_block(flags, current_line)(remaining)?;
     let (remaining, _) = end_block(current_line)(remaining)?;
 
     let properties = properties.into_iter().chain(legacy_properties).collect();
-    let extended = build_extended_molecule(atoms, bonds, properties)
-        .map_err(|e| ParseError::Generic { line: current_line, col: 0, message: e.to_string() })?;
+    let extended =
+        build_extended_molecule(atoms, bonds, properties).map_err(|e| ParseError::Generic {
+            line: current_line,
+            col: 0,
+            message: e.to_string(),
+        })?;
     Ok((remaining, extended))
 }
 
 /// Parse counts block
 fn counts_block<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = Counts, Error = nom::error::Error<&'inp [u8]>> + use<'inp, 'fl> {
+) -> impl Parser<&'inp [u8], Output = Counts, Error = nom::error::Error<&'inp [u8]>> + use<'inp, 'fl>
+{
     map_parser(terminated(is_not("\r\n"), line_ending), counts_input(flags))
 }
 
@@ -122,21 +128,21 @@ fn atom_block<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
 ) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<ExtendedAtom>), ParseError>
-       + use<'inp, 'fl>
-{
+       + use<'inp, 'fl> {
     move |input: &'inp [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
 
         for _ in 0..atom_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                ParseError::generic(current_line, 0, "Unexpected EOF in atom block")
+            let line = lines_iter.next().ok_or_else(|| ParseError::UnexpectedEof {
+                line: current_line,
+                block: "atom",
             })?;
 
             let (_, atom) = all_consuming(atom_input(flags))
                 .parse(line)
-                .map_err(|e| ParseError::from_nom(e, current_line, line))?;
+                .map_err(|e| ParseError::atom_from_nom(e, current_line, line))?;
             atoms.push(atom);
             consumed += line.len();
             current_line += 1;
@@ -153,21 +159,21 @@ fn extended_atom_block<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
 ) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<ExtendedAtom>), ParseError>
-       + use<'inp, 'fl>
-{
+       + use<'inp, 'fl> {
     move |input: &'inp [u8]| {
         let mut atoms = Vec::with_capacity(atom_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
 
         for _ in 0..atom_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                ParseError::generic(current_line, 0, "Unexpected EOF in atom block")
+            let line = lines_iter.next().ok_or_else(|| ParseError::UnexpectedEof {
+                line: current_line,
+                block: "atom",
             })?;
 
             let (_, atom) = all_consuming(extended_atom_input(flags))
                 .parse(line)
-                .map_err(|e| ParseError::from_nom(e, current_line, line))?;
+                .map_err(|e| ParseError::atom_from_nom(e, current_line, line))?;
             atoms.push(atom);
             consumed += line.len();
             current_line += 1;
@@ -183,22 +189,22 @@ fn bond_block<'inp, 'fl>(
     bond_count: usize,
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, ExtendedBond)>), ParseError>
-       + use<'inp, 'fl>
-{
+) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, Bond)>), ParseError>
+       + use<'inp, 'fl> {
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
 
         for _ in 0..bond_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                ParseError::generic(current_line, 0, "Unexpected EOF in bond block")
+            let line = lines_iter.next().ok_or_else(|| ParseError::UnexpectedEof {
+                line: current_line,
+                block: "bond",
             })?;
 
             let (_, (atom1, atom2, bond)) = all_consuming(bond_input(flags))
                 .parse(line)
-                .map_err(|e| ParseError::from_nom(e, current_line, line))?;
+                .map_err(|e| ParseError::bond_from_nom(e, current_line, line))?;
             bonds.push((atom1, atom2, bond));
             consumed += line.len();
             current_line += 1;
@@ -214,22 +220,25 @@ fn extended_bond_block<'inp, 'fl>(
     bond_count: usize,
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
-) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, ExtendedBond)>), ParseError>
-       + use<'inp, 'fl>
-{
+) -> impl FnMut(
+    &'inp [u8],
+) -> std::result::Result<(&'inp [u8], Vec<(usize, usize, ExtendedBond)>), ParseError>
+       + use<'inp, 'fl> {
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count);
         let mut lines_iter = input.lines_with_terminator();
         let mut consumed = 0;
 
         for _bond_idx in 0..bond_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                ParseError::generic(current_line, 0, "Unexpected EOF in bond block")
+            let line = lines_iter.next().ok_or_else(|| ParseError::UnexpectedEof {
+                line: current_line,
+                block: "bond",
             })?;
 
-            let (_, (atom1, atom2, bond)) = all_consuming(extended_bond_input(flags))
-                .parse(line)
-                .map_err(|e| ParseError::from_nom(e, current_line, line))?;
+            let (_, (atom1, atom2, bond)) =
+                all_consuming(extended_bond_input(flags))
+                    .parse(line)
+                    .map_err(|e| ParseError::bond_from_nom(e, current_line, line))?;
             bonds.push((atom1, atom2, bond));
             consumed += line.len();
             current_line += 1;
@@ -266,7 +275,7 @@ fn legacy_atom_list_block<'inp, 'fl>(
 }
 
 /// Parse properties block (basic properties only)
-fn basic_properties_block<'inp, 'fl>(
+fn properties_block<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
     mut current_line: u32,
 ) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<PropertyEntries>), ParseError>
@@ -300,7 +309,7 @@ fn basic_properties_block<'inp, 'fl>(
                     break; // Incomplete atom alias
                 }
             } else {
-                match all_consuming(basic_property_input(flags)).parse(line) {
+                match all_consuming(property_input(flags)).parse(line) {
                     Ok((_, property)) => {
                         properties.push(property);
                         consumed += line.len();
@@ -321,8 +330,8 @@ fn basic_properties_block<'inp, 'fl>(
     }
 }
 
-/// Parse properties block
-fn properties_block<'inp, 'fl>(
+/// Parse extended properties block
+fn extended_properties_block<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
     _current_line: u32,
 ) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], Vec<PropertyEntries>), ParseError>
@@ -354,7 +363,9 @@ fn properties_block<'inp, 'fl>(
                 } else {
                     break; // Incomplete atom alias
                 }
-            } else if let Ok((_, property)) = all_consuming(property_input(flags)).parse(line) {
+            } else if let Ok((_, property)) =
+                all_consuming(extended_property_input(flags)).parse(line)
+            {
                 properties.push(property);
                 consumed += line.len();
             } else {
@@ -368,6 +379,7 @@ fn properties_block<'inp, 'fl>(
 }
 
 /// Parse end block (M END line)
+/// Accepts "M  END" followed by optional whitespace, or nothing.
 fn end_block<'inp>(
     current_line: u32,
 ) -> impl FnMut(&'inp [u8]) -> std::result::Result<(&'inp [u8], ()), ParseError> {
@@ -380,18 +392,16 @@ fn end_block<'inp>(
     }
 }
 
-/// Build CTAB molecule (internal, not converted to SimpleIR yet)
+/// Build Molecule
 fn build_molecule(
     atoms: Vec<ExtendedAtom>,
     bonds: Vec<(usize, usize, ExtendedBond)>,
     properties: Vec<PropertyEntries>,
 ) -> std::result::Result<ExtendedMolecule, SemanticError> {
-    // Build bonds with proper atom indices
     let bonds: Vec<ExtendedBond> = bonds
         .into_iter()
         .map(|(idx1, idx2, mut bond)| {
-            bond.start_atom = idx1 as u32;
-            bond.end_atom = idx2 as u32;
+            bond.set_atoms(idx1 as u32, idx2 as u32);
             bond
         })
         .collect();
@@ -417,12 +427,10 @@ fn build_extended_molecule(
     bonds: Vec<(usize, usize, ExtendedBond)>,
     properties: Vec<PropertyEntries>,
 ) -> std::result::Result<ExtendedMolecule, SemanticError> {
-    // Build bonds with proper atom indices
     let bonds: Vec<ExtendedBond> = bonds
         .into_iter()
         .map(|(idx1, idx2, mut bond)| {
-            bond.start_atom = idx1 as u32;
-            bond.end_atom = idx2 as u32;
+            bond.set_atoms(idx1 as u32, idx2 as u32);
             bond
         })
         .collect();

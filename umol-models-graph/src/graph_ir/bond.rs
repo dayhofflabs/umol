@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::bond_matcher::{BondMatcher, DEFAULT_BOND_MATCHER};
 use super::bond_spec::{BondDonation, BondOrder, BondSpec};
 use super::error::GraphError;
-use crate::simple_ir::{self as sir, BondDir, BondStereo};
+use crate::table_ir::{self as sir, BondDirection, BondStereo};
 use crate::span::Span;
 
 type Result<T> = std::result::Result<T, GraphError>;
@@ -18,7 +18,7 @@ pub struct Bond {
     order: BondOrder,
     donation: BondDonation,
     sir_order: Option<sir::BondOrder>,
-    direction: Option<BondDir>,
+    direction: Option<BondDirection>,
     stereo: Option<BondStereo>,
     ring: Option<u32>,
     span: Option<Span>,
@@ -37,7 +37,7 @@ impl Bond {
         self.sir_order
     }
 
-    pub fn direction(&self) -> Option<BondDir> {
+    pub fn direction(&self) -> Option<BondDirection> {
         self.direction
     }
 
@@ -92,7 +92,7 @@ pub struct BondBuilder {
     order: BondOrder,
     donation: Option<BondDonation>,
     sir_order: Option<sir::BondOrder>,
-    direction: Option<BondDir>,
+    direction: Option<BondDirection>,
     stereo: Option<BondStereo>,
     ring: Option<u32>,
     span: Option<Span>,
@@ -135,7 +135,7 @@ impl BondBuilder {
         self.sir_order
     }
 
-    pub fn direction(&self) -> Option<BondDir> {
+    pub fn direction(&self) -> Option<BondDirection> {
         self.direction
     }
 
@@ -170,7 +170,7 @@ impl BondBuilder {
         self
     }
 
-    pub fn set_direction(&mut self, direction: Option<BondDir>) -> &mut Self {
+    pub fn set_direction(&mut self, direction: Option<BondDirection>) -> &mut Self {
         self.direction = direction;
         self
     }

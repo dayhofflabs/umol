@@ -89,11 +89,11 @@ impl AtomSpec {
             "Donated pairs must be less than or equal to lone pairs"
         );
         debug_assert!(
-            (element.valence_electrons() as i8 - charge) >= 0,
+            (element.valence_e() as i8 - charge) >= 0,
             "Charge must be less than or equal to valence electrons"
         );
         debug_assert!(
-            implicit_hydrogens <= element.max_implicit_hydrogens(),
+            implicit_hydrogens <= element.max_implicit_h(),
             "Implicit hydrogens must be less than or equal to max implicit hydrogens"
         );
         debug_assert!(
@@ -394,10 +394,10 @@ impl TryFrom<&str> for AtomSpec {
         if donated > lone_pairs {
             return Err(DataError::InvalidAtomDonatedPairs(format!("{}", donated)).into());
         }
-        if (element.valence_electrons() as i8 - charge) < 0 {
+        if (element.valence_e() as i8 - charge) < 0 {
             return Err(DataError::InvalidAtomCharge(format!("{}", charge)).into());
         }
-        if implicit_hydrogens > element.max_implicit_hydrogens() {
+        if implicit_hydrogens > element.max_implicit_h() {
             return Err(
                 DataError::InvalidAtomImplicitHydrogens(format!("{}", implicit_hydrogens)).into(),
             );

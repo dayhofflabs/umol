@@ -1,6 +1,6 @@
 //! Atom validator infrastructure copied from `umol-models-valence`.
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use super::atom::Atom;
 use super::error::GraphError;
 
@@ -32,7 +32,7 @@ impl AtomValidator {
             }
 
             let unpaired = atom.unpaired_e();
-            if unpaired > u32::from(element.max_unpaired_electrons()) {
+            if unpaired > u32::from(element.max_unpaired_e()) {
                 return Err(GraphError::ValenceViolation(
                     element,
                     format!("Unpaired electrons {} exceed max", unpaired),
@@ -40,7 +40,7 @@ impl AtomValidator {
             }
 
             let multiplicity = atom.multiplicity();
-            if multiplicity > u32::from(element.max_unpaired_electrons()) + 1 {
+            if multiplicity > u32::from(element.max_unpaired_e()) + 1 {
                 return Err(GraphError::ValenceViolation(
                     element,
                     format!("Multiplicity {} exceeds max", multiplicity),
@@ -48,7 +48,7 @@ impl AtomValidator {
             }
 
             let implicit_h = atom.implicit_h();
-            if implicit_h > u32::from(element.max_implicit_hydrogens()) {
+            if implicit_h > u32::from(element.max_implicit_h()) {
                 return Err(GraphError::ValenceViolation(
                     element,
                     format!("Implicit hydrogens {} exceed max", implicit_h),
@@ -97,7 +97,7 @@ impl Default for AtomValidator {
     }
 }
 
-pub static DEFAULT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::default);
-pub static STRICT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::strict);
-pub static LENIENT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::lenient);
-pub static ALWAYS_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::always);
+pub static DEFAULT_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::default);
+pub static STRICT_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::strict);
+pub static LENIENT_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::lenient);
+pub static ALWAYS_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::always);

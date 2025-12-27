@@ -18,9 +18,9 @@ use nom::{error, Err, Parser};
 use num::{Float, Integer};
 use umol_data::Element;
 
-use crate::simple_ir::RGroupOccurrence;
+use crate::table_ir::RGroupOccurrence;
 
-pub(crate) trait Contains<T: PartialOrd> {
+pub(super) trait Contains<T: PartialOrd> {
     fn contains(&self, value: &T) -> bool;
 }
 
@@ -36,7 +36,7 @@ impl<T: PartialOrd> Contains<T> for RangeInclusive<T> {
     }
 }
 
-pub(crate) trait IntParser: Sized + Copy + PartialOrd + Debug + Default + Integer {
+pub(super) trait IntParser: Sized + Copy + PartialOrd + Debug + Default + Integer {
     fn nom_parser<'a>() -> impl Parser<&'a [u8], Output = Self, Error = error::Error<&'a [u8]>>;
 }
 
@@ -77,12 +77,12 @@ impl IntParser for usize {
 }
 
 /// Verify that a slice contains only whitespace or zeroes
-pub(crate) fn is_all_whitespace_or_zeroes(input: &[u8]) -> bool {
+pub(super) fn is_all_whitespace_or_zeroes(input: &[u8]) -> bool {
     input.trim_ascii().find_not_byteset(b"0").is_none()
 }
 
 /// Convert byte slice to string, trimming leading and trailing whitespace
-pub(crate) fn to_string(bytes: &[u8]) -> Result<String, error::Error<&[u8]>> {
+pub(super) fn to_string(bytes: &[u8]) -> Result<String, error::Error<&[u8]>> {
     Ok(bytes.trim_ascii().to_str_lossy().into_owned())
 }
 
@@ -97,7 +97,7 @@ pub(crate) fn to_string(bytes: &[u8]) -> Result<String, error::Error<&[u8]>> {
 ///
 /// If `partial_ok` is true, the parser will succeed with `None` if the field is present but
 /// consists only of whitespace. Otherwise, it will return an error.
-pub(crate) fn fixed_width_partial<'a, O, P>(
+pub(super) fn fixed_width_partial<'a, O, P>(
     width: usize,
     mut inner: P,
     partial_ok: bool,
@@ -136,7 +136,7 @@ where
 
 /// Parse an optional fixed-width field. If the field is present but consists only of whitespace,
 /// it succeeds with `None`. Otherwise, it runs the `inner` parser. Partial fields are not allowed.
-pub(crate) fn fixed_width_opt<'a, O, P>(
+pub(super) fn fixed_width_opt<'a, O, P>(
     width: usize,
     inner: P,
 ) -> impl Parser<&'a [u8], Output = Option<O>, Error = error::Error<&'a [u8]>>
@@ -147,7 +147,7 @@ where
 }
 
 /// Parse a fixed-width field as an integer type. Interprets empty/whitespace field as default.
-pub(crate) fn fixed_width_int<'a, T>(
+pub(super) fn fixed_width_int<'a, T>(
     width: usize,
 ) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
 where
@@ -160,7 +160,7 @@ where
 }
 
 /// Parse a fixed-width field as an integer type, applying range bounds.
-pub(crate) fn fixed_width_int_in_range<'a, T, R>(
+pub(super) fn fixed_width_int_in_range<'a, T, R>(
     width: usize,
     range: R,
 ) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
@@ -178,7 +178,7 @@ where
 }
 
 /// Parse a fixed-width field as optional integer type. If range check fails, return None.
-pub(crate) fn fixed_width_int_in_range_opt<'a, T, R>(
+pub(super) fn fixed_width_int_in_range_opt<'a, T, R>(
     width: usize,
     range: R,
 ) -> impl Parser<&'a [u8], Output = Option<T>, Error = error::Error<&'a [u8]>>
@@ -193,7 +193,7 @@ where
 }
 
 /// Parse a fixed-width field as an integer type, subtracting one.
-pub(crate) fn fixed_width_int_minus1<'a, T>(
+pub(super) fn fixed_width_int_minus1<'a, T>(
     width: usize,
 ) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
 where
@@ -206,7 +206,7 @@ where
 }
 
 /// Parse a fixed-width field as integer, allow partial fields
-pub(crate) fn fixed_width_int_partial<'a, T>(
+pub(super) fn fixed_width_int_partial<'a, T>(
     width: usize,
 ) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
 where
@@ -219,7 +219,7 @@ where
 }
 
 /// Parse a fixed-width field as float with Fortran semantics (Fw.d).
-pub(crate) fn fixed_width_float<'a, T>(
+pub(super) fn fixed_width_float<'a, T>(
     width: usize,
     precision: usize,
 ) -> impl Parser<&'a [u8], Output = T, Error = error::Error<&'a [u8]>>
@@ -253,7 +253,7 @@ where
 }
 
 /// Parse a fixed-width field as element symbol
-pub(crate) fn fixed_width_element_partial<'a>(
+pub(super) fn fixed_width_element_partial<'a>(
     width: usize,
 ) -> impl Parser<&'a [u8], Output = Option<Element>, Error = error::Error<&'a [u8]>> {
     fixed_width_partial(
@@ -265,7 +265,7 @@ pub(crate) fn fixed_width_element_partial<'a>(
 
 /// Padding field of fixed width `width`
 /// If `strict_padding` is true, require strict padding (only whitespace or zeroes).
-pub(crate) fn fixed_width_padding<'a>(
+pub(super) fn fixed_width_padding<'a>(
     width: usize,
     strict_padding: bool,
 ) -> impl Parser<&'a [u8], Output = (), Error = error::Error<&'a [u8]>> {
@@ -284,7 +284,7 @@ pub(crate) fn fixed_width_padding<'a>(
 
 /// Multiple fixed-width padding fields of width `width`
 /// If `strict_padding` is true, require strict padding (only whitespace or zeroes).
-pub(crate) fn fixed_width_padding_n<'a>(
+pub(super) fn fixed_width_padding_n<'a>(
     count: usize,
     width: usize,
     strict_padding: bool,
@@ -302,7 +302,7 @@ pub(crate) fn fixed_width_padding_n<'a>(
 }
 
 /// Parse a fixed-width field as a string, allow partial fields
-pub(crate) fn fixed_width_str_partial<'a>(
+pub(super) fn fixed_width_str_partial<'a>(
     width: usize,
 ) -> impl Parser<&'a [u8], Output = Option<String>, Error = error::Error<&'a [u8]>> {
     map(fixed_width_partial(width, rest, true), move |opt| {
@@ -311,7 +311,7 @@ pub(crate) fn fixed_width_str_partial<'a>(
 }
 
 /// Parse a single RGroup occurrence.
-pub(crate) fn rgroup_occurrence<'a>(
+pub(super) fn rgroup_occurrence<'a>(
 ) -> impl Parser<&'a [u8], Output = RGroupOccurrence, Error = error::Error<&'a [u8]>> {
     alt((
         map((nom_u8, tag("-"), nom_u8), |(n, _, m)| {
@@ -326,7 +326,7 @@ pub(crate) fn rgroup_occurrence<'a>(
 }
 
 /// Parse a comma-separated list of RGroup occurrences.
-pub(crate) fn rgroup_occurrences<'a>(
+pub(super) fn rgroup_occurrences<'a>(
 ) -> impl Parser<&'a [u8], Output = Vec<RGroupOccurrence>, Error = error::Error<&'a [u8]>> {
     delimited(
         space0,

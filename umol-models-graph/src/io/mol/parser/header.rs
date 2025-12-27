@@ -27,13 +27,13 @@ impl Header {
 }
 
 /// Parse a single line from the MOL header
-pub fn header_input<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>>
+pub(super) fn header_input<'a>() -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>>
 {
     map(not_line_ending, |s: &[u8]| s.to_str_lossy().into_owned())
 }
 
 /// Parse the 3-line MOL file header (title, program info, comment)
-pub fn header<'a>() -> impl Parser<&'a [u8], Output = Header, Error = error::Error<&'a [u8]>> {
+pub(crate) fn header<'a>() -> impl Parser<&'a [u8], Output = Header, Error = error::Error<&'a [u8]>> {
     map(
         (
             terminated(header_input(), line_ending),

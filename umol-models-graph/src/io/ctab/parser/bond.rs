@@ -1,6 +1,6 @@
 //! Bond block parser for CTab files.
 //!
-//! Parses bond blocks from CTFile format and produces SimpleIR types directly.
+//! Parses bond blocks from CTFile format and produces TableIR types directly.
 
 use bstr::ByteSlice;
 use nom::character::complete::space0;
@@ -9,27 +9,29 @@ use nom::sequence::terminated;
 use nom::{error, Err, IResult, Parser};
 
 use super::convert::{
-    convert_bond_reacting_center_code, convert_bond_stereo_dir_code, convert_bond_topology_code,
+    convert_bond_reacting_center_code, convert_bond_stereo_direction_code, convert_bond_topology_code,
     convert_bond_type_code, convert_extended_bond_type_code,
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_n};
 use crate::io::ctab::config::CtabParseFlags;
-use crate::simple_ir::{BondOrder, ExtendedBond};
+use crate::table_ir::bond::Bond;
+use crate::table_ir::bond::BondOrder;
+use crate::table_ir::bond::ExtendedBond;
 
 /// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
 fn bond_input12<'inp, 'fl>(
     input: &'inp [u8],
     flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], (usize, usize, ExtendedBond)> {
+) -> IResult<&'inp [u8], (usize, usize, Bond)> {
     let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
     let first_atom = fixed_width_int_minus1::<usize>(3);
     let second_atom = fixed_width_int_minus1::<usize>(3);
     let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
         convert_bond_type_code(code)
     });
-    let stereo_dir = map_res(fixed_width_int::<u8>(3), |code| {
-        convert_bond_stereo_dir_code(code, false)
+    let stereo_direction = map_res(fixed_width_int::<u8>(3), |code| {
+        convert_bond_stereo_direction_code(code, false)
     });
     let n = input.len().saturating_sub(12) / 3;
     let padding1 = fixed_width_padding_n(n, 3, strict_padding);
@@ -39,10 +41,10 @@ fn bond_input12<'inp, 'fl>(
             first_atom,
             second_atom,
             bond_type,
-            terminated(stereo_dir, padding1),
+            terminated(stereo_direction, padding1),
         ),
         |(first_atom, second_atom, order, (stereo, dir))| {
-            let mut bond = ExtendedBond::with_order(order);
+            let mut bond = Bond::with_order(order);
             match order {
                 BondOrder::Single => bond.direction = dir,
                 BondOrder::Double => bond.stereo = stereo,
@@ -59,14 +61,14 @@ fn bond_input12<'inp, 'fl>(
 fn bond_input9<'inp, 'fl>(
     input: &'inp [u8],
     _flags: &'fl CtabParseFlags,
-) -> IResult<&'inp [u8], (usize, usize, ExtendedBond)> {
+) -> IResult<&'inp [u8], (usize, usize, Bond)> {
     map(
         (
             fixed_width_int_minus1::<usize>(3),
             fixed_width_int_minus1::<usize>(3),
             map_res(fixed_width_int::<u8>(3), convert_bond_type_code),
         ),
-        |(first_atom, second_atom, order)| (first_atom, second_atom, ExtendedBond::with_order(order)),
+        |(first_atom, second_atom, order)| (first_atom, second_atom, Bond::with_order(order)),
     )
     .parse(input)
 }
@@ -90,7 +92,7 @@ fn bond_input9<'inp, 'fl>(
 /// --------------------------------------------------------------
 pub fn bond_input<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = error::Error<&'inp [u8]>>
+) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = error::Error<&'inp [u8]>>
        + use<'inp, 'fl>
 {
     move |input: &'inp [u8]| {
@@ -126,10 +128,10 @@ fn extended_bond_input_inner<'inp, 'fl>(
         .parse(i)?;
 
         // Stereo/dir
-        let (i, stereo_dir) = cond(
+        let (i, stereo_direction) = cond(
             i.len() >= 3,
             map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_stereo_dir_code(code, true)
+                convert_bond_stereo_direction_code(code, true)
             }),
         )
         .parse(i)?;
@@ -158,10 +160,10 @@ fn extended_bond_input_inner<'inp, 'fl>(
         .parse(i)?;
 
         let mut bond = ExtendedBond::with_order(order);
-        if let Some((stereo_val, dir_val)) = stereo_dir {
+        if let Some((stereo_val, direction)) = stereo_direction {
             match order {
                 BondOrder::Single => {
-                    bond.direction = dir_val;
+                    bond.direction = direction;
                 }
                 BondOrder::Double => {
                     bond.stereo = stereo_val;

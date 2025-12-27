@@ -21,7 +21,7 @@ use crate::io::ctab::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier, sgroup_subscript,
 };
-use crate::simple_ir::{
+use crate::table_ir::{
     RGroupOccurrence, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
     SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier,
     SGroupSubtype, SGroupType,
@@ -351,7 +351,7 @@ pub fn legacy_atom_list_input<'inp, 'fl>(
     }
 }
 
-/// Wrapper for atom_alias_entry (needed for basic_property_block and property_block)
+/// Wrapper for atom_alias_entry (used in property_block and extended_property_block)
 pub fn atom_alias_input<'a>(
 ) -> impl Parser<&'a [u8], Output = PropertyEntries, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
@@ -366,7 +366,7 @@ pub fn atom_alias_input<'a>(
 }
 
 /// Parse property line (basic properties only)
-pub fn basic_property_input<'inp, 'fl>(
+pub fn property_input<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
 {
@@ -455,8 +455,8 @@ pub fn basic_property_input<'inp, 'fl>(
     }
 }
 
-/// Parse property line
-pub fn property_input<'inp, 'fl>(
+/// Parse extended property line
+pub fn extended_property_input<'inp, 'fl>(
     flags: &'fl CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl>
 {
@@ -642,7 +642,7 @@ pub fn property_input<'inp, 'fl>(
 /// A  aaa
 /// x..
 /// aaa: atom index, x..: alias string (can contain spaces)
-pub fn atom_alias_entry<'a>(
+pub(super) fn atom_alias_entry<'a>(
 ) -> impl Parser<&'a [u8], Output = AtomAliasEntry, Error = error::Error<&'a [u8]>> {
     map_res(
         (

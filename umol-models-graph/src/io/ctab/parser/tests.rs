@@ -4,7 +4,7 @@ use rstest::{fixture, rstest};
 use umol_data::Element;
 
 use super::*;
-use crate::simple_ir::{AtomSymbol, BondOrder};
+use crate::table_ir::{AtomSymbol, BondOrder};
 
 #[fixture]
 fn header_atoms_only() -> &'static [u8] {
@@ -127,10 +127,10 @@ fn test_legacy_atom_list_block() {
 }
 
 #[test]
-fn test_basic_properties_block_missing_newline() {
+fn test_properties_block_missing_newline() {
     let ctab_data = b"M  END";
     let flags = CtabParseFlags::LENIENT;
-    let result = basic_properties_block(&flags, 0)(ctab_data);
+    let result = properties_block(&flags, 0)(ctab_data);
     assert!(
         result.is_ok(),
         "CTAB block without terminating newline should parse successfully"
@@ -154,7 +154,7 @@ M  END
     let result = ctab_block(ctab_data, &flags, 0);
     assert!(
         result.is_err(),
-        "Basic parser should fail on query features"
+        "ctab_block parser should fail on query features"
     );
 }
 
@@ -225,8 +225,8 @@ M  END
 }
 
 #[rstest]
-#[case("basic", vec![], m_end())]
-#[case("no_m_end", vec![], b"")]
+#[case("empty", vec![], b"")]
+#[case("no_extended_features", vec![], m_end())]
 #[case("with_properties", vec![properties()], m_end())]
 fn test_extended_ctab_block_termination(
     #[case] name: &str,

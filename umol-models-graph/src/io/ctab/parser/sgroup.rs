@@ -8,14 +8,14 @@ use nom::sequence::separated_pair;
 use nom::{error, AsChar, Err, Parser};
 
 use crate::io::ctab::parser::utils::{fixed_width_partial, to_string};
-use crate::simple_ir::{
+use crate::table_ir::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierOp,
     SGroupMultiplierTerm, SGroupSubtype, SGroupType,
 };
 
 /// Parse SGroup type string
-pub fn sgroup_type<'a>(
+pub(super) fn sgroup_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupType, Error = error::Error<&'a [u8]>> {
     map_res(take(3usize), move |s: &[u8]| match s {
         b"SUP" => Ok(SGroupType::Superatom),
@@ -38,7 +38,7 @@ pub fn sgroup_type<'a>(
 }
 
 /// Parse SGroup subtype string
-pub fn sgroup_subtype<'a>(
+pub(super) fn sgroup_subtype<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupSubtype, Error = error::Error<&'a [u8]>> {
     map_res(take(3usize), move |s: &[u8]| match s {
         b"ALT" => Ok(SGroupSubtype::Alternating),
@@ -49,7 +49,7 @@ pub fn sgroup_subtype<'a>(
 }
 
 /// Parse SGroup connectivity string
-pub fn sgroup_connectivity<'a>(
+pub(super) fn sgroup_connectivity<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupConnectivity, Error = error::Error<&'a [u8]>> {
     move |input: &'a [u8]| {
         fixed_width_partial(
@@ -76,7 +76,7 @@ pub fn sgroup_connectivity<'a>(
 }
 
 /// Parse SGroup multiplier string
-pub fn sgroup_multiplier<'a>(
+pub(super) fn sgroup_multiplier<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupMultiplier, Error = error::Error<&'a [u8]>> {
     alt((
         map(
@@ -137,13 +137,13 @@ fn sgroup_multiplier_op<'a>(
 }
 
 /// Parse SGroup subscript string
-pub fn sgroup_subscript<'a>(
+pub(super) fn sgroup_subscript<'a>(
 ) -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
     map_res(rest, move |s: &[u8]| to_string(s))
 }
 
 // Parse SGroup data type string
-pub fn sgroup_data_type<'a>(
+pub(super) fn sgroup_data_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = error::Error<&'a [u8]>> {
     map_res(fixed_width_partial(2usize, rest, true), move |s| {
         if let Some(s) = s {
@@ -161,7 +161,7 @@ pub fn sgroup_data_type<'a>(
 }
 
 // Parse SGroup data display type string
-pub fn sgroup_data_display_type<'a>(
+pub(super) fn sgroup_data_display_type<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayType, Error = error::Error<&'a [u8]>> {
     map_res(take(1usize), move |s: &[u8]| match s {
         b"A" => Ok(SGroupDataDisplayType::Attached),
@@ -171,7 +171,7 @@ pub fn sgroup_data_display_type<'a>(
 }
 
 // Parse SGroup data display placement string
-pub fn sgroup_data_display_placement<'a>(
+pub(super) fn sgroup_data_display_placement<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayPlacement, Error = error::Error<&'a [u8]>> {
     map_res(take(1usize), move |s: &[u8]| match s {
         b"A" => Ok(SGroupDataDisplayPlacement::Absolute),
@@ -181,7 +181,7 @@ pub fn sgroup_data_display_placement<'a>(
 }
 
 // Parse SGroup data display units string
-pub fn sgroup_data_display_units<'a>(
+pub(super) fn sgroup_data_display_units<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayUnits, Error = error::Error<&'a [u8]>> {
     map_res(take(1usize), move |s: &[u8]| match s {
         b" " => Ok(SGroupDataDisplayUnits::None),
@@ -191,7 +191,7 @@ pub fn sgroup_data_display_units<'a>(
 }
 
 // Parse SGroup data display chars string
-pub fn sgroup_data_display_chars<'a>(
+pub(super) fn sgroup_data_display_chars<'a>(
 ) -> impl Parser<&'a [u8], Output = SGroupDataDisplayChars, Error = error::Error<&'a [u8]>> {
     map_parser(take(3usize), move |s: &'a [u8]| {
         let s = s.trim_ascii();

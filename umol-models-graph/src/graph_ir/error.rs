@@ -21,7 +21,7 @@ pub enum GraphError {
     InvalidBondSpec(String),
     #[error("Valence violation for element {0:?}: {1}")]
     ValenceViolation(Element, String),
-    #[error("Conversion from SimpleIR to GraphIR failed: {0}")]
+    #[error("Conversion from TableIR to GraphIR failed: {0}")]
     ConversionFailed(String),
     #[error("Unsupported element in GraphIR: {0:?}")]
     UnsupportedElement(Element),

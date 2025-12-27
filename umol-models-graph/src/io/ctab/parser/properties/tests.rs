@@ -6,7 +6,7 @@ use umol_data::Element;
 
 use super::*;
 use crate::io::ctab::config::CtabParseFlags;
-use crate::simple_ir::{SGroupMultiplierOp, SGroupMultiplierTerm};
+use crate::table_ir::{SGroupMultiplierOp, SGroupMultiplierTerm};
 
 #[rstest]
 #[case(b"  1 F    3   9   7   8  ", "exclusion flag false",
@@ -67,12 +67,12 @@ fn test_legacy_atom_list_input_invalid(
 #[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
-fn test_basic_property_input(
+fn test_property_input(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let (remaining, result) = all_consuming(basic_property_input(&CtabParseFlags::BASIC))
+    let (remaining, result) = all_consuming(property_input(&CtabParseFlags::BASIC))
         .parse(input)
         .unwrap();
     assert!(
@@ -85,26 +85,26 @@ fn test_basic_property_input(
 
 #[rustfmt::skip]
 #[rstest]
-#[case(b"M  RBC  1   1   2", "RBC query property not supported in basic parser")]
-#[case(b"M  SUB  1   1   3", "SUB query property not supported in basic parser")]
-#[case(b"M  UNS  1   1   1", "UNS query property not supported in basic parser")]
-#[case(b"M  LIN  1   1   2   5   7", "LIN query property not supported in basic parser")]
-#[case(b"M  ALS  1  3FC   N   O   ", "ALS query property not supported in basic parser")]
-#[case(b"M  APO  1   1   1", "APO query property not supported in basic parser")]
-#[case(b"M  AAL  1 1   2   1", "AAL query property not supported in basic parser")]
-#[case(b"M  RGP   1   1   2", "RGP RGroup property not supported in basic parser")]
-#[case(b"M  LOG   1   1   0   0  >2", "LOG RGroup property not supported in basic parser")]
-#[case(b"M  SCN  1   1 HH ", "SCN SGroup property not supported in basic parser")]
-#[case(b"M  SDS EXP  1   1", "SDS SGroup property not supported in basic parser")]
-#[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property not supported in basic parser")]
-#[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property not supported in basic parser")]
-#[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property not supported in basic parser")]
-#[case(b"M  SDT   1 pH   ", "SDT SGroup property not supported in basic parser")]
-#[case(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", "SDD SGroup property not supported in basic parser")]
-#[case(b"M  SCD   1   1   0", "SCD SGroup property not supported in basic parser")]
-#[case(b"M  SED   1   1   0", "SED SGroup property not supported in basic parser")]
-#[case(b"M  SPL   1   1   0", "SPL SGroup property not supported in basic parser")]
-#[case(b"M  SNC   1   1   0", "SNC SGroup property not supported in basic parser")]
+#[case(b"M  RBC  1   1   2", "RBC query property not supported in property parser")]
+#[case(b"M  SUB  1   1   3", "SUB query property not supported in property parser")]
+#[case(b"M  UNS  1   1   1", "UNS query property not supported in property parser")]
+#[case(b"M  LIN  1   1   2   5   7", "LIN query property not supported in property parser")]
+#[case(b"M  ALS  1  3FC   N   O   ", "ALS query property not supported in property parser")]
+#[case(b"M  APO  1   1   1", "APO query property not supported in property parser")]
+#[case(b"M  AAL  1 1   2   1", "AAL query property not supported in property parser")]
+#[case(b"M  RGP   1   1   2", "RGP RGroup property not supported in property parser")]
+#[case(b"M  LOG   1   1   0   0  >2", "LOG RGroup property not supported in property parser")]
+#[case(b"M  SCN  1   1 HH ", "SCN SGroup property not supported in property parser")]
+#[case(b"M  SDS EXP  1   1", "SDS SGroup property not supported in property parser")]
+#[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property not supported in property parser")]
+#[case(b"M  SDI   3  4    4.4700   -3.1700    4.4700   -5.7500", "SDI SGroup property not supported in property parser")]
+#[case(b"M  SBV   1  11    0.6400    0.9700", "SBV SGroup property not supported in property parser")]
+#[case(b"M  SDT   1 pH   ", "SDT SGroup property not supported in property parser")]
+#[case(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", "SDD SGroup property not supported in property parser")]
+#[case(b"M  SCD   1   1   0", "SCD SGroup property not supported in property parser")]
+#[case(b"M  SED   1   1   0", "SED SGroup property not supported in property parser")]
+#[case(b"M  SPL   1   1   0", "SPL SGroup property not supported in property parser")]
+#[case(b"M  SNC   1   1   0", "SNC SGroup property not supported in property parser")]
 #[case(b"M  STY  1   1 SUP", "STY SGroup property, requires allow_sgroups")]
 #[case(b"M  SST  1   1 ALT", "SST SGroup property, requires allow_sgroups")]
 #[case(b"M  SLB  1   1  19", "SLB SGroup property, requires allow_sgroups")]
@@ -114,8 +114,8 @@ fn test_basic_property_input(
 #[case(b"M  ZBO  1   1   0", "ZBO bond property, requires allow_clark_extensions")]
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property, requires allow_clark_extensions")]
 #[case(b"M  HYD  1   1   1", "HYD atom property, requires allow_clark_extensions")]
-fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc: &str) {
-    let result = all_consuming(basic_property_input(&CtabParseFlags::STRICT)).parse(input);
+fn test_property_input_invalid(#[case] input: &[u8], #[case] desc: &str) {
+    let result = all_consuming(property_input(&CtabParseFlags::STRICT)).parse(input);
     assert!(result.is_err(), "{}", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == error::ErrorKind::Tag),
@@ -128,9 +128,9 @@ fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc
 #[rstest]
 #[case(b"A    1\nCF3", "A atom alias property", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 #[case(b"V    1 *", "V atom value property", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
-#[case(b"M  CHG  1   1  -1", "CHG basic property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case(b"M  RAD  1   1   2", "RAD basic property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
-#[case(b"M  ISO  1   1  13", "ISO basic property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
+#[case(b"M  CHG  1   1  -1", "CHG property", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
+#[case(b"M  RAD  1   1   2", "RAD property", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
+#[case(b"M  ISO  1   1  13", "ISO property", PropertyEntries::IsotopeEntries(vec![IsotopeEntry { atom_index: 0, mass: 13 }]))]
 #[case(b"M  RBC  1   1   2", "RBC query property", PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry { atom_index: 0, ring_bond_count: 2 }]))]
 #[case(b"M  SUB  1   1   3", "SUB query property", PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry { atom_index: 0, substitution_count: 3 }]))]
 #[case(b"M  UNS  1   1   1", "UNS query property", PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry { atom_index: 0, unsaturated: 1 }]))]
@@ -169,12 +169,12 @@ fn test_basic_property_input_invalid_property(#[case] input: &[u8], #[case] desc
 #[case(b"M  ZBO  1   1   0", "ZBO bond property", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
 #[case(b"M  ZCH  1   1  -1", "ZCH atom property", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case(b"M  HYD  1   1   1", "HYD atom property", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
-fn test_property_input(
+fn test_extended_property_input(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected: PropertyEntries,
 ) {
-    let result = all_consuming(property_input(&CtabParseFlags::LENIENT)).parse(input);
+    let result = all_consuming(extended_property_input(&CtabParseFlags::LENIENT)).parse(input);
     assert!(result.is_ok(), "{} should have succeeded", desc);
     let (remaining, result) = result.unwrap();
     assert!(
@@ -197,12 +197,12 @@ fn test_property_input(
 #[case(b"M  STY  1   1 SUP", "STY SGroup property, requires allow_sgroups", error::ErrorKind::Tag)]
 #[case(b"M  CRS   1  3  10   9   4", "CRS SGroup property, requires allow_advanced_sgroups", error::ErrorKind::Tag)]
 #[case(b"M  ZBO  1   1   0", "ZBO bond property, requires allow_clark_extensions", error::ErrorKind::Tag)]
-fn test_property_input_invalid(
+fn test_extended_property_input_invalid(
     #[case] input: &[u8],
     #[case] desc: &str,
     #[case] expected_kind: error::ErrorKind,
 ) {
-    let result = all_consuming(property_input(&CtabParseFlags::STRICT)).parse(input);
+    let result = all_consuming(extended_property_input(&CtabParseFlags::STRICT)).parse(input);
     assert!(result.is_err(), "{} should have failed", desc);
     assert!(
         matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),

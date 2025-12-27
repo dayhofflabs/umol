@@ -8,7 +8,7 @@ use crate::io::smiles::config::{SmilesLintConfig, SmilesLintFlags};
 use crate::span::Span;
 use crate::valence::ValenceModel;
 
-pub(crate) fn lint_gir(
+pub(super) fn lint_gir(
     molecule: &Molecule,
     lint_flags: &SmilesLintFlags,
     _lint_config: &SmilesLintConfig,

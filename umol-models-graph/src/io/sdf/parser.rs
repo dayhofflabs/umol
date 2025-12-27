@@ -43,7 +43,7 @@ impl SdfCompound {
 }
 
 /// Parse data field header: `> <Field Name>`
-pub(crate) fn data_header<'inp>(
+fn data_header<'inp>(
 ) -> impl Parser<&'inp [u8], Output = String, Error = nom::error::Error<&'inp [u8]>> {
     map(
         delimited(
@@ -56,7 +56,7 @@ pub(crate) fn data_header<'inp>(
 }
 
 /// Parse multi-line data value until blank line
-pub(crate) fn data_value<'inp>(
+fn data_value<'inp>(
 ) -> impl Parser<&'inp [u8], Output = String, Error = nom::error::Error<&'inp [u8]>> {
     map(
         many_till(
@@ -77,19 +77,19 @@ pub(crate) fn data_value<'inp>(
 }
 
 /// Parse complete data field (header + value)
-pub(crate) fn data_field<'inp>(
+fn data_field<'inp>(
 ) -> impl Parser<&'inp [u8], Output = (String, String), Error = nom::error::Error<&'inp [u8]>> {
     (terminated(data_header(), line_ending), data_value())
 }
 
 /// Parse SDF record delimiter
-pub(crate) fn sdf_delimiter<'inp>(
+fn sdf_delimiter<'inp>(
 ) -> impl Parser<&'inp [u8], Output = (), Error = nom::error::Error<&'inp [u8]>> {
     value((), (tag("$$$$"), opt(line_ending)))
 }
 
 /// Parse multiple data fields
-pub(crate) fn data_block<'inp>(
+fn data_block<'inp>(
 ) -> impl Parser<&'inp [u8], Output = IndexMap<String, String>, Error = nom::error::Error<&'inp [u8]>> {
     map(
         many_till(
@@ -122,7 +122,7 @@ pub fn parse_sdf_compound<'inp>(
 
     let (remaining, header) = header::header()
         .parse(input)
-        .map_err(|e| ParseError::from_nom(e, current_line, input))?;
+        .map_err(|e| ParseError::header_from_nom(e, current_line))?;
     current_line += 3;
 
     let (remaining, molecule) = extended_ctab_block(remaining, &flags, current_line)?;
@@ -133,11 +133,11 @@ pub fn parse_sdf_compound<'inp>(
 
     let (remaining, data_fields) = data_block()
         .parse(remaining)
-        .map_err(|e| ParseError::from_nom(e, current_line, remaining))?;
+        .map_err(|e| ParseError::sdf_data_from_nom(e, current_line))?;
 
     let (remaining, _) = opt(sdf_delimiter())
         .parse(remaining)
-        .map_err(|e| ParseError::from_nom(e, current_line, remaining))?;
+        .map_err(|e| ParseError::delimiter_from_nom(e, current_line))?;
 
     Ok((
         remaining,

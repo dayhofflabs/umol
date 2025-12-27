@@ -10,7 +10,7 @@ use super::atom_spec::AtomSpec;
 use super::atom_validator::{AtomValidator, DEFAULT_ATOM_VALIDATOR};
 use super::error::GraphError;
 use crate::position::Point3D;
-use crate::simple_ir::Chirality;
+use crate::table_ir::Chirality;
 use crate::span::Span;
 
 type Result<T> = std::result::Result<T, GraphError>;

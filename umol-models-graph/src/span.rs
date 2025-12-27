@@ -1,18 +1,13 @@
-use serde::{Deserialize, Serialize};
+//! Span type for TableIR.
 
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Span type for TableIR.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Span {
-    Bytes {
-        start: u32,
-        end: u32,
-    },
-    Line {
-        line: u32,
-        col: u32,
-        len: u32,
-    },
+    Bytes { start: u32, end: u32 },
+    Line { line: u32, col: u32, len: u32 },
+    None,
 }
 
 impl Span {
@@ -32,23 +27,7 @@ impl Span {
         match *self {
             Span::Bytes { start, end } => Some((start, end)),
             Span::Line { .. } => None,
-        }
-    }
-
-    pub fn with_start(self, start: u32) -> Self {
-        match self {
-            Span::Bytes { end, .. } => Span::bytes(start, end),
-            Span::Line { line, len, .. } => Span::line(line, start, len),
-        }
-    }
-
-    pub fn with_end(self, end: u32) -> Self {
-        match self {
-            Span::Bytes { start, .. } => Span::bytes(start, end),
-            Span::Line { line, col, .. } => {
-                let len = end.saturating_sub(col);
-                Span::line(line, col, len)
-            }
+            Span::None => None,
         }
     }
 }
@@ -58,6 +37,7 @@ impl fmt::Display for Span {
         match self {
             Span::Bytes { start, end } => write!(f, "@{}..{}", start, end),
             Span::Line { line, col, len } => write!(f, "@{}:{}+{}", line, col, len),
+            Span::None => write!(f, "none"),
         }
     }
 }

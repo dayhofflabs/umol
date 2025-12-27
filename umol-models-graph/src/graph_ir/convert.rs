@@ -1,4 +1,4 @@
-//! Conversions between SimpleIR and GraphIR.
+//! Conversions between TableIR and GraphIR.
 
 use umol_data::Element;
 
@@ -7,11 +7,11 @@ use super::atom_validator::STRICT_ATOM_VALIDATOR;
 use super::bond_matcher::STRICT_BOND_MATCHER;
 use super::error::GraphError;
 use super::{AtomIndex, BondBuilder, BondDonation, BondOrder, Molecule, MoleculeBuilder};
-use crate::simple_ir::{self as sir, AtomSymbol};
+use crate::table_ir::{self as sir, AtomSymbol};
 
 type Result<T> = std::result::Result<T, GraphError>;
 
-/// Convert a SimpleIR molecule into a strictly validated GraphIR molecule.
+/// Convert a TableIR molecule into a strictly validated GraphIR molecule.
 pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
     let mut builder = MoleculeBuilder::with_capacity(src.atoms.len(), src.bonds.len());
     let mut atom_indices = Vec::with_capacity(src.atoms.len());
@@ -22,7 +22,7 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
             AtomSymbol::NamedIsotope(named) => (Element::from(named), Some(named.mass_number())),
             _ => {
                 return Err(GraphError::ConversionFailed(format!(
-                    "SimpleIR atom {} is not supported in GraphIR",
+                    "TableIR atom {} is not supported in GraphIR",
                     idx
                 )))
             }
@@ -68,16 +68,16 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
     }
 
     for (idx, bond) in src.bonds.iter().enumerate() {
-        let a = usize::try_from(bond.start_atom).map_err(|_| {
+        let a = usize::try_from(bond.start_atom()).map_err(|_| {
             GraphError::ConversionFailed(format!(
                 "bond {} references invalid start atom index {}",
-                idx, bond.start_atom
+                idx, bond.start_atom()
             ))
         })?;
-        let b = usize::try_from(bond.end_atom).map_err(|_| {
+        let b = usize::try_from(bond.end_atom()).map_err(|_| {
             GraphError::ConversionFailed(format!(
                 "bond {} references invalid end atom index {}",
-                idx, bond.end_atom
+                idx, bond.end_atom()
             ))
         })?;
 
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn convert_water() {
-        let mut sir = sir::Molecule::default();
+        let mut sir = sir::Molecule::empty();
 
         sir.atoms.push(sir::Atom {
             symbol: AtomSymbol::Element(Element::O),
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn convert_rejects_non_element_atoms() {
-        let mut sir = sir::Molecule::default();
+        let mut sir = sir::Molecule::empty();
         sir.atoms.push(sir::Atom::default());
 
         let result = sir_to_gir(&sir);
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn convert_rejects_aromatic_bonds() {
-        let mut sir = sir::Molecule::default();
+        let mut sir = sir::Molecule::empty();
         sir.atoms.push(sir::Atom {
             symbol: AtomSymbol::Element(Element::C),
             ..Default::default()
