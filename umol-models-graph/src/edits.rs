@@ -1,97 +1,24 @@
 //! Edit definitions for GraphIR.
 
-use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumDiscriminants, EnumIter};
+use std::fmt;
 
-#[derive(
-    Debug, Default, Clone, PartialEq, Serialize, Deserialize, EnumDiscriminants, EnumIter, AsRefStr,
-)]
+use strum::{Display, EnumDiscriminants, EnumIter};
+
+#[derive(Clone, Debug, Display, PartialEq, EnumDiscriminants, EnumIter)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum Edit {
-    #[default]
+    #[strum(message = "No operation")]
     NoOp,
 }
-// SetAtomCharge {
-//     atom: usize,
-//     charge: i32,
-// },
-//     SetAtomExplicitHCount {
-//         atom: usize,
-//         count: u32,
-//     },
-//     SetAtomImplicitHCount {
-//         atom: usize,
-//         count: u32,
-//     },
-//     SetAtomImplicitH {
-//         atom: usize,
-//         implicit: bool,
-//     },
-//     SetAtomAromaticFlag {
-//         atom: usize,
-//         aromatic: Option<bool>,
-//     },
-//     SetAtomChirality {
-//         atom: usize,
-//         chirality: Option<Chirality>,
-//     },
-//     SetAtomClass {
-//         atom: usize,
-//         class: Option<u32>,
-//     },
-//     SetAtomUnpairedECount {
-//         atom: usize,
-//         count: u32,
-//     },
-//     SetBondOrder {
-//         bond: usize,
-//         order: BondOrder,
-//     },
-//     SetBondSymbol {
-//         bond: usize,
-//         symbol: BondSymbol,
-//     },
-//     SetBondDirection {
-//         bond: usize,
-//         direction: Option<BondDir>,
-//     },
-//     SetBondStereo {
-//         bond: usize,
-//         stereo: Option<BondStereo>,
-//     },
-//     AddAtom {
-//         atom: usize,
-//         element: Element,
-//     },
-//     RemoveAtom {
-//         atom: usize,
-//     },
-//     AddBond {
-//         bond: usize,
-//         atoms: (usize, usize),
-//         order: BondOrder,
-//     },
-//     RemoveBond {
-//         bond: usize,
-//     },
-//     RetargetBond {
-//         bond: usize,
-//         atoms: (usize, usize),
-//     },
-//     SetBondRing {
-//         bond: usize,
-//         ring: Option<u32>,
-//     },
-// }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct EditList {
     pub edits: Vec<Edit>,
 }
 
 impl EditList {
     pub fn new() -> Self {
-        Self { edits: Vec::new() }
+        Self::default()
     }
 
     pub fn push(&mut self, edit: Edit) {
@@ -121,5 +48,14 @@ impl IntoIterator for EditList {
 
     fn into_iter(self) -> Self::IntoIter {
         self.edits.into_iter()
+    }
+}
+
+impl fmt::Display for EditList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for edit in &self.edits {
+            writeln!(f, "- {}", edit)?;
+        }
+        Ok(())
     }
 }

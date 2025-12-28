@@ -6,14 +6,14 @@ use strum::{Display, EnumIter, EnumMessage, IntoEnumIterator};
 
 use crate::span::Span;
 
-#[derive(Debug, Copy, Clone, PartialEq, Display, EnumIter, EnumMessage)]
+#[derive(Copy, Clone, Debug, Display, PartialEq, EnumIter, EnumMessage)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum Severity {
     Error,
     Warning,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Display, EnumIter)]
+#[derive(Copy, Clone, Debug, Display, PartialEq, EnumIter)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum Category {
     Lexical,
@@ -21,7 +21,7 @@ pub enum Category {
     Semantic,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Display, EnumIter, EnumMessage)]
+#[derive(Copy, Clone, Debug, Display, PartialEq, EnumIter, EnumMessage)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum DiagnosticKind {
     #[strum(message = "Invalid whitespace")]
@@ -534,17 +534,14 @@ impl fmt::Display for Diagnostic {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DiagnosticList {
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl DiagnosticList {
-    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self {
-            diagnostics: Vec::new(),
-        }
+        Self::default()
     }
     pub fn push(&mut self, d: Diagnostic) {
         self.diagnostics.push(d);

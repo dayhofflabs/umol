@@ -3,21 +3,21 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io;
-use std::io::Read;
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use toml::de::Error as TomlError;
 use umol_data::Element;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::span::Span;
 
 #[derive(Debug, Error)]
 pub enum ValenceError {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("TOML parse error: {0}")]
-    Toml(#[from] toml::de::Error),
+    Toml(#[from] TomlError),
     #[error("No matching valence pattern for {0}")]
     NoMatch(String),
     #[error("Ambiguous valence pattern match for {0}")]
@@ -28,10 +28,10 @@ impl From<ValenceError> for Diagnostic {
     fn from(error: ValenceError) -> Self {
         use DiagnosticKind::*;
         let (kind, details) = match error {
-            ValenceError::Io(ref e) => (Unknown, Some(e.to_string())),
-            ValenceError::Toml(ref e) => (Unknown, Some(e.to_string())),
-            ValenceError::NoMatch(ref s) => (GraphValenceNoMatch, Some(s.clone())),
-            ValenceError::AmbiguousMatch(ref s) => (GraphValenceAmbiguousMatch, Some(s.clone())),
+            ValenceError::Io(ref e) => (GraphValenceError, Some(e.to_string())),
+            ValenceError::Toml(ref e) => (GraphValenceError, Some(e.to_string())),
+            ValenceError::NoMatch(ref s) => (GraphNoMatch, Some(s.clone())),
+            ValenceError::AmbiguousMatch(ref s) => (GraphAmbiguousMatch, Some(s.clone())),
         };
         Diagnostic {
             kind,
@@ -106,7 +106,7 @@ impl ValenceModel {
             patterns: table,
         }
     }
-    pub fn from_patterns_reader<R: Read>(mut r: R) -> Result<Self> {
+    pub fn from_patterns_reader<R: io::Read>(mut r: R) -> Result<Self> {
         let mut buf = String::new();
         r.read_to_string(&mut buf)?;
         let table: ValencePatternTable = toml::from_str(&buf)?;
@@ -118,7 +118,7 @@ impl ValenceModel {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ValencePattern {
     pub element: Option<Element>,
     pub bond_sum: Option<u8>,
@@ -127,15 +127,13 @@ pub struct ValencePattern {
     pub unpaired: Option<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ValencePatternTable {
     pub patterns: Vec<ValencePattern>,
 }
 
 impl ValencePatternTable {
     pub fn new() -> Self {
-        Self {
-            patterns: Vec::new(),
-        }
+        Self::default()
     }
 }
