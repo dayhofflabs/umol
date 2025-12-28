@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_data::Element;
@@ -442,6 +444,7 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 }
 
 #[rustfmt::skip]
+
 #[rstest]
 #[case::atom_c(b"[C]", Element::C, false, None, None, None, None, None)]
 #[case::atom_h(b"[H]", Element::H, false, None, None, None, None, None)]
