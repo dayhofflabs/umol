@@ -1,10 +1,15 @@
+//! Error types for CTFile parsing
+
+use nom::error::{Error as NomError, ErrorKind as NomErrorKind, ParseError as NomParseError};
 use nom::Err;
 use thiserror::Error;
+use umol_data::Element;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::span::Span;
+use crate::table_ir::SGroupType;
 
-#[derive(Debug, Error, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
     #[error("Invalid header block at line {line}")]
     InvalidHeader { line: u32 },
@@ -14,6 +19,8 @@ pub enum ParseError {
     InvalidAtomLine { line: u32, col: u32 },
     #[error("Invalid bond line at line {line}, col {col}")]
     InvalidBondLine { line: u32, col: u32 },
+    #[error("Invalid legacy atom list line at line {line}, col {col}")]
+    InvalidLegacyAtomListLine { line: u32, col: u32 },
     #[error("Invalid property line at line {line}, col {col}")]
     InvalidPropertyLine { line: u32, col: u32 },
     #[error("Invalid Sgroup line at line {line}, col {col}")]
@@ -24,16 +31,67 @@ pub enum ParseError {
     InvalidSdfDataValue { line: u32 },
     #[error("Missing record delimiter at line {line}")]
     MissingDelimiter { line: u32 },
+    #[error("Missing M  END tag at line {line}")]
+    MissingMEndTag { line: u32 },
     #[error("Unexpected end of file in {block} block at line {line}")]
     UnexpectedEof { line: u32, block: &'static str },
     #[error("Incomplete input at line {line}")]
     Incomplete { line: u32 },
+    #[error("Nom parser error: {0:?}")]
+    NomError(NomErrorKind),
     #[error("Parse error at line {line}, col {col}: {message}")]
     Generic {
         line: u32,
         col: u32,
         message: String,
     },
+    #[error("Invalid charge code: {0}")]
+    InvalidChargeCode(u8),
+    #[error("Invalid valence code: {0}")]
+    InvalidValenceCode(u8),
+    #[error("Invalid stereo parity code: {0}")]
+    InvalidStereoParity(u8),
+    #[error("Property mismatch: {0}")]
+    PropertyMismatch(String),
+    #[error("Inconsistent Sgroups: {0}")]
+    InconsistentSgroups(String),
+    #[error("Index out of bounds: {0}")]
+    IndexOutOfBounds(usize),
+    #[error("Incomplete structure: {0}")]
+    IncompleteStructure(String),
+    #[error("Duplicate property: {0}")]
+    DuplicateProperty(String),
+    #[error("Invalid {field} code: {value}")]
+    InvalidCode { field: &'static str, value: i32 },
+    #[error("Invalid isotope mass {mass} for element {element}")]
+    InvalidIsotopeMass { mass: u32, element: Element },
+    #[error("Undefined S-group {index}: {property}")]
+    UndefinedSGroup {
+        index: usize,
+        property: &'static str,
+    },
+    #[error("S-group {0} has no type")]
+    SGroupMissingType(usize),
+    #[error("S-group type {sgroup_type:?}: {message}")]
+    SGroupTypeConstraint {
+        sgroup_type: SGroupType,
+        message: &'static str,
+    },
+    #[error("Missing S-group data context")]
+    MissingSGroupDataContext,
+    #[error("S-group index mismatch: expected {expected}, got {actual}")]
+    SGroupIndexMismatch { expected: usize, actual: usize },
+}
+
+/// TODO: Use LineSpan wrapper to track column offset
+impl<I> NomParseError<I> for ParseError {
+    fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
+        ParseError::NomError(kind)
+    }
+
+    fn append(_input: I, _kind: NomErrorKind, other: Self) -> Self {
+        other
+    }
 }
 
 impl ParseError {
@@ -45,7 +103,7 @@ impl ParseError {
         }
     }
 
-    pub fn from_nom(e: Err<nom::error::Error<&[u8]>>, line: u32, line_input: &[u8]) -> Self {
+    pub fn from_nom(e: Err<NomError<&[u8]>>, line: u32, line_input: &[u8]) -> Self {
         match e {
             Err::Error(err) | Err::Failure(err) => {
                 let col = (err.input.as_ptr() as usize) - (line_input.as_ptr() as usize);
@@ -56,7 +114,7 @@ impl ParseError {
     }
 
     /// Create InvalidCountsLine from a nom error
-    pub fn counts_from_nom(e: Err<nom::error::Error<&[u8]>>, line: u32) -> Self {
+    pub fn counts_from_nom(e: Err<NomError<&[u8]>>, line: u32) -> Self {
         match e {
             Err::Incomplete(_) => ParseError::Incomplete { line },
             _ => ParseError::InvalidCountsLine { line },
@@ -64,29 +122,53 @@ impl ParseError {
     }
 
     /// Create InvalidAtomLine from a nom error
-    pub fn atom_from_nom(e: Err<nom::error::Error<&[u8]>>, line: u32, line_input: &[u8]) -> Self {
+    pub fn atom_from_nom(e: Err<NomError<&[u8]>>, line: u32, line_input: &[u8]) -> Self {
         match e {
             Err::Error(err) | Err::Failure(err) => {
                 let col = (err.input.as_ptr() as usize) - (line_input.as_ptr() as usize);
-                ParseError::InvalidAtomLine { line, col: col as u32 }
+                ParseError::InvalidAtomLine {
+                    line,
+                    col: col as u32,
+                }
             }
             Err::Incomplete(_) => ParseError::Incomplete { line },
         }
     }
 
     /// Create InvalidBondLine from a nom error
-    pub fn bond_from_nom(e: Err<nom::error::Error<&[u8]>>, line: u32, line_input: &[u8]) -> Self {
+    pub fn bond_from_nom(e: Err<NomError<&[u8]>>, line: u32, line_input: &[u8]) -> Self {
         match e {
             Err::Error(err) | Err::Failure(err) => {
                 let col = (err.input.as_ptr() as usize) - (line_input.as_ptr() as usize);
-                ParseError::InvalidBondLine { line, col: col as u32 }
+                ParseError::InvalidBondLine {
+                    line,
+                    col: col as u32,
+                }
+            }
+            Err::Incomplete(_) => ParseError::Incomplete { line },
+        }
+    }
+
+    /// Create InvalidLegacyAtomListLine from a nom error
+    pub fn legacy_atom_list_from_nom(
+        e: Err<NomError<&[u8]>>,
+        line: u32,
+        line_input: &[u8],
+    ) -> Self {
+        match e {
+            Err::Error(err) | Err::Failure(err) => {
+                let col = (err.input.as_ptr() as usize) - (line_input.as_ptr() as usize);
+                ParseError::InvalidLegacyAtomListLine {
+                    line,
+                    col: col as u32,
+                }
             }
             Err::Incomplete(_) => ParseError::Incomplete { line },
         }
     }
 
     /// Create InvalidHeader from a nom error
-    pub fn header_from_nom(e: Err<nom::error::Error<&[u8]>>, line: u32) -> Self {
+    pub fn header_from_nom(e: Err<NomError<&[u8]>>, line: u32) -> Self {
         match e {
             Err::Incomplete(_) => ParseError::Incomplete { line },
             _ => ParseError::InvalidHeader { line },
@@ -94,7 +176,7 @@ impl ParseError {
     }
 
     /// Create InvalidSdfDataHeader from a nom error
-    pub fn sdf_data_from_nom(e: Err<nom::error::Error<&[u8]>>, line: u32) -> Self {
+    pub fn sdf_data_from_nom(e: Err<NomError<&[u8]>>, line: u32) -> Self {
         match e {
             Err::Incomplete(_) => ParseError::Incomplete { line },
             _ => ParseError::InvalidSdfDataHeader { line },
@@ -102,13 +184,20 @@ impl ParseError {
     }
 
     /// Create MissingDelimiter from a nom error
-    pub fn delimiter_from_nom(e: Err<nom::error::Error<&[u8]>>, line: u32) -> Self {
+    pub fn delimiter_from_nom(e: Err<NomError<&[u8]>>, line: u32) -> Self {
         match e {
             Err::Incomplete(_) => ParseError::Incomplete { line },
             _ => ParseError::MissingDelimiter { line },
         }
     }
 
+    /// Create MissingMEndTag from a nom error
+    pub fn m_end_from_nom(e: Err<NomError<&[u8]>>, line: u32) -> Self {
+        match e {
+            Err::Incomplete(_) => ParseError::Incomplete { line },
+            _ => ParseError::MissingMEndTag { line },
+        }
+    }
 }
 
 impl From<ParseError> for Diagnostic {
@@ -131,6 +220,11 @@ impl From<ParseError> for Diagnostic {
             ),
             ParseError::InvalidBondLine { line, col } => (
                 DiagnosticKind::CtfileInvalidBondLine,
+                Span::line(line, col, 1),
+                None,
+            ),
+            ParseError::InvalidLegacyAtomListLine { line, col } => (
+                DiagnosticKind::CtfileInvalidLegacyAtomListLine,
                 Span::line(line, col, 1),
                 None,
             ),
@@ -159,6 +253,11 @@ impl From<ParseError> for Diagnostic {
                 Span::line(line, 0, 0),
                 None,
             ),
+            ParseError::MissingMEndTag { line } => (
+                DiagnosticKind::CtfileMissingMEndTag,
+                Span::line(line, 0, 0),
+                None,
+            ),
             ParseError::UnexpectedEof { line, block } => (
                 DiagnosticKind::CtfileUnexpectedEof,
                 Span::line(line, 0, 0),
@@ -169,10 +268,90 @@ impl From<ParseError> for Diagnostic {
                 Span::line(line, 0, 0),
                 None,
             ),
+            ParseError::NomError(kind) => (
+                DiagnosticKind::CtfileParserError,
+                Span::None,
+                Some(format!("nom error: {:?}", kind)),
+            ),
             ParseError::Generic { line, col, message } => (
-                DiagnosticKind::Unknown,
+                DiagnosticKind::CtfileInvalidPropertyLine,
                 Span::line(line, col, 1),
                 Some(message),
+            ),
+            ParseError::InvalidChargeCode(_) => (
+                DiagnosticKind::CtfileInvalidPropertyLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::InvalidValenceCode(_) => (
+                DiagnosticKind::CtfileInvalidPropertyLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::InvalidStereoParity(_) => (
+                DiagnosticKind::CtfileInvalidAtomLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::PropertyMismatch(s) => (
+                DiagnosticKind::CtfileInvalidPropertyLine,
+                Span::None,
+                Some(s.clone()),
+            ),
+            ParseError::InconsistentSgroups(s) => (
+                DiagnosticKind::CtfileInvalidSgroupLine,
+                Span::None,
+                Some(s.clone()),
+            ),
+            ParseError::IndexOutOfBounds(_) => (
+                DiagnosticKind::CtfileInvalidPropertyLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::IncompleteStructure(s) => (
+                DiagnosticKind::CtfileInvalidCountsLine,
+                Span::None,
+                Some(s.clone()),
+            ),
+            ParseError::DuplicateProperty(s) => (
+                DiagnosticKind::CtfileInvalidPropertyLine,
+                Span::None,
+                Some(s.clone()),
+            ),
+            ParseError::InvalidCode { .. } => (
+                DiagnosticKind::CtfileInvalidPropertyLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::InvalidIsotopeMass { .. } => (
+                DiagnosticKind::CtfileInvalidPropertyLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::UndefinedSGroup { .. } => (
+                DiagnosticKind::CtfileInvalidSgroupLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::SGroupMissingType(_) => (
+                DiagnosticKind::CtfileInvalidSgroupLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::SGroupTypeConstraint { .. } => (
+                DiagnosticKind::CtfileInvalidSgroupLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::MissingSGroupDataContext => (
+                DiagnosticKind::CtfileInvalidSgroupLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::SGroupIndexMismatch { .. } => (
+                DiagnosticKind::CtfileInvalidSgroupLine,
+                Span::None,
+                Some(error.to_string()),
             ),
         };
         Diagnostic {
@@ -182,124 +361,5 @@ impl From<ParseError> for Diagnostic {
             span: Some(span),
             details,
         }
-    }
-}
-
-impl From<ParseError> for umol::error::ParseError {
-    fn from(error: ParseError) -> Self {
-        umol::error::ParseError::Format(Box::new(error))
-    }
-}
-
-impl From<ParseError> for umol::Error {
-    fn from(error: ParseError) -> Self {
-        umol::Error::Parse(error.into())
-    }
-}
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum SemanticError {
-    #[error("Invalid charge code: {0}")]
-    InvalidChargeCode(u8),
-    #[error("Invalid valence code: {0}")]
-    InvalidValenceCode(u8),
-    #[error("Invalid stereo parity code: {0}")]
-    InvalidStereoParity(u8),
-    #[error("Property mismatch: {0}")]
-    PropertyMismatch(String),
-    #[error("Inconsistent Sgroups: {0}")]
-    InconsistentSgroups(String),
-    #[error("Index out of bounds: {0}")]
-    IndexOutOfBounds(usize),
-    #[error("Incomplete structure: {0}")]
-    IncompleteStructure(String),
-    #[error("Duplicate property: {0}")]
-    DuplicateProperty(String),
-    #[error("Invalid {field} code: {value}")]
-    InvalidCode { field: &'static str, value: i32 },
-    #[error("Invalid isotope mass {mass} for element {element}")]
-    InvalidIsotopeMass {
-        mass: u32,
-        element: umol_data::Element,
-    },
-    #[error("Undefined S-group {index}: {property}")]
-    UndefinedSGroup {
-        index: usize,
-        property: &'static str,
-    },
-    #[error("S-group {0} has no type")]
-    SGroupMissingType(usize),
-    #[error("S-group type {sgroup_type:?}: {message}")]
-    SGroupTypeConstraint {
-        sgroup_type: crate::table_ir::SGroupType,
-        message: &'static str,
-    },
-    #[error("Missing S-group data context")]
-    MissingSGroupDataContext,
-    #[error("S-group index mismatch: expected {expected}, got {actual}")]
-    SGroupIndexMismatch { expected: usize, actual: usize },
-}
-
-impl From<SemanticError> for Diagnostic {
-    fn from(error: SemanticError) -> Self {
-        use DiagnosticKind::*;
-        let (kind, details) = match &error {
-            SemanticError::InvalidChargeCode(_) => {
-                (CtfileInvalidPropertyLine, Some(error.to_string()))
-            }
-            SemanticError::InvalidValenceCode(_) => {
-                (CtfileInvalidPropertyLine, Some(error.to_string()))
-            }
-            SemanticError::InvalidStereoParity(_) => {
-                (CtfileInvalidAtomLine, Some(error.to_string()))
-            }
-            SemanticError::PropertyMismatch(s) => (CtfileInvalidPropertyLine, Some(s.clone())),
-            SemanticError::InconsistentSgroups(s) => (CtfileInvalidSgroupLine, Some(s.clone())),
-            SemanticError::IndexOutOfBounds(_) => {
-                (CtfileInvalidPropertyLine, Some(error.to_string()))
-            }
-            SemanticError::IncompleteStructure(s) => (CtfileInvalidCountsLine, Some(s.clone())),
-            SemanticError::DuplicateProperty(s) => (CtfileInvalidPropertyLine, Some(s.clone())),
-            SemanticError::InvalidCode { .. } => {
-                (CtfileInvalidPropertyLine, Some(error.to_string()))
-            }
-            SemanticError::InvalidIsotopeMass { .. } => {
-                (CtfileInvalidPropertyLine, Some(error.to_string()))
-            }
-            SemanticError::UndefinedSGroup { .. } => {
-                (CtfileInvalidSgroupLine, Some(error.to_string()))
-            }
-            SemanticError::SGroupMissingType(_) => {
-                (CtfileInvalidSgroupLine, Some(error.to_string()))
-            }
-            SemanticError::SGroupTypeConstraint { .. } => {
-                (CtfileInvalidSgroupLine, Some(error.to_string()))
-            }
-            SemanticError::MissingSGroupDataContext => {
-                (CtfileInvalidSgroupLine, Some(error.to_string()))
-            }
-            SemanticError::SGroupIndexMismatch { .. } => {
-                (CtfileInvalidSgroupLine, Some(error.to_string()))
-            }
-        };
-        Diagnostic {
-            kind,
-            category: kind.category(),
-            severity: Severity::Error,
-            span: None,
-            details,
-        }
-    }
-}
-
-impl From<SemanticError> for umol::error::ParseError {
-    fn from(error: SemanticError) -> Self {
-        umol::error::ParseError::Format(Box::new(error))
-    }
-}
-
-impl From<SemanticError> for umol::Error {
-    fn from(error: SemanticError) -> Self {
-        umol::Error::Parse(error.into())
     }
 }

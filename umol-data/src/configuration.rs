@@ -5,7 +5,7 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 
 use map_macro::hash_map;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use crate::{e, occ, Element, Occupation, MAX_UNPAIRED_ELECTRONS};
 
@@ -152,7 +152,7 @@ static MADELUNG_ORDER: [(u8, u8, u8, bool); 19] = [
     (7, 0, 2, false), (5, 3, 14, false), (6, 2, 10, false), (7, 1, 6, true)];
 
 /// Atomic ground state exceptions
-static GROUND_STATE_EXCEPTIONS: Lazy<HashMap<Element, GroundState>> = Lazy::new(|| {
+static GROUND_STATE_EXCEPTIONS: LazyLock<HashMap<Element, GroundState>> = LazyLock::new(|| {
     hash_map! {
         Element::Cr => GroundState(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5))),
         Element::Cu => GroundState(Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10))),

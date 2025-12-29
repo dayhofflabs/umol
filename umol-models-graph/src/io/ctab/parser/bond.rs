@@ -9,32 +9,31 @@ use nom::sequence::terminated;
 use nom::{error, Err, IResult, Parser};
 
 use super::convert::{
-    convert_bond_reacting_center_code, convert_bond_stereo_direction_code, convert_bond_topology_code,
-    convert_bond_type_code, convert_extended_bond_type_code,
+    convert_bond_reacting_center_code, convert_bond_stereo_direction_code,
+    convert_bond_topology_code, convert_bond_type_code, convert_extended_bond_type_code,
 };
 use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_n};
 use crate::io::ctab::config::CtabParseFlags;
-use crate::table_ir::bond::Bond;
-use crate::table_ir::bond::BondOrder;
-use crate::table_ir::bond::ExtendedBond;
+use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
 
 /// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input12<'inp, 'fl>(
+fn bond_input12<'inp>(
     input: &'inp [u8],
-    flags: &'fl CtabParseFlags,
+    flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (usize, usize, Bond)> {
-    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
+    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
     let first_atom = fixed_width_int_minus1::<usize>(3);
     let second_atom = fixed_width_int_minus1::<usize>(3);
     let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
-        convert_bond_type_code(code)
+        convert_bond_type_code(code, extended_range)
     });
     let stereo_direction = map_res(fixed_width_int::<u8>(3), |code| {
         convert_bond_stereo_direction_code(code, false)
     });
     let n = input.len().saturating_sub(12) / 3;
-    let padding1 = fixed_width_padding_n(n, 3, strict_padding);
+    let padding1 = fixed_width_padding_n(n, 3, skip_padding);
 
     map(
         (
@@ -58,16 +57,18 @@ fn bond_input12<'inp, 'fl>(
 
 /// Parse  bond inputs with 9 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input9<'inp, 'fl>(
+fn bond_input9<'inp>(
     input: &'inp [u8],
-    _flags: &'fl CtabParseFlags,
+    flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (usize, usize, Bond)> {
+    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+    let first_atom = fixed_width_int_minus1::<usize>(3);
+    let second_atom = fixed_width_int_minus1::<usize>(3);
+    let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
+        convert_bond_type_code(code, extended_range)
+    });
     map(
-        (
-            fixed_width_int_minus1::<usize>(3),
-            fixed_width_int_minus1::<usize>(3),
-            map_res(fixed_width_int::<u8>(3), convert_bond_type_code),
-        ),
+        (first_atom, second_atom, bond_type),
         |(first_atom, second_atom, order)| (first_atom, second_atom, Bond::with_order(order)),
     )
     .parse(input)
@@ -90,10 +91,10 @@ fn bond_input9<'inp, 'fl>(
 /// | rrr   | bond topology        | 0..=2      | Query          |
 /// | ccc   | bond reacting center | 0..=3      | Reaction,Query |
 /// --------------------------------------------------------------
-pub fn bond_input<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = error::Error<&'inp [u8]>>
-       + use<'inp, 'fl>
+///
+pub fn bond_input<'inp>(
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = error::Error<&'inp [u8]>> + use<'inp>
 {
     move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
@@ -108,22 +109,20 @@ pub fn bond_input<'inp, 'fl>(
     }
 }
 
-fn extended_bond_input_inner<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
+fn extended_bond_input_inner<'inp>(
+    flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = error::Error<&'inp [u8]>>
-       + use<'inp, 'fl>
-{
-    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
-    // Bond type - allow zero-order/high-order bonds and queries based on flags
+       + use<'inp> {
+    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-    let allow_queries = flags.contains(CtabParseFlags::QUERIES);
+    let allow_wildcards = flags.contains(CtabParseFlags::WILDCARDS);
     move |input: &'inp [u8]| {
         // Atom indices
         let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
         let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
 
         let (i, order) = map_res(fixed_width_int::<u8>(3), move |code| {
-            convert_extended_bond_type_code(code, extended_range, allow_queries)
+            convert_extended_bond_type_code(code, extended_range, allow_wildcards)
         })
         .parse(i)?;
 
@@ -139,7 +138,7 @@ fn extended_bond_input_inner<'inp, 'fl>(
         // Ignore xxx field
         let (i, _) = cond(
             !i.is_empty(),
-            fixed_width_padding_n((i.len() / 3).min(1), 3, strict_padding),
+            fixed_width_padding_n((i.len() / 3).min(1), 3, skip_padding),
         )
         .parse(i)?;
 
@@ -178,11 +177,10 @@ fn extended_bond_input_inner<'inp, 'fl>(
     }
 }
 
-pub fn extended_bond_input<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
+pub fn extended_bond_input<'inp>(
+    flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = error::Error<&'inp [u8]>>
-       + use<'inp, 'fl>
-{
+       + use<'inp> {
     move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         terminated(extended_bond_input_inner(flags), space0).parse(input)

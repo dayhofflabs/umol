@@ -98,8 +98,8 @@ proptest! {
         if let Ok(mol) = parse_smiles(&input) {
             let n = mol.atoms.len() as u32;
             for b in &mol.bonds {
-                let sa = b.start_atom;
-                let ea = b.end_atom;
+                let sa = b.start_atom();
+                let ea = b.end_atom();
                 // Molecule uses 1-based atom indices in bonds
                 prop_assert!(sa >= 1 && sa <= n && ea >= 1 && ea <= n, "bond endpoints out of bounds: {}-{} / n={}", sa, ea, n);
                 prop_assert!(sa != ea, "self-loop bond unexpectedly present");

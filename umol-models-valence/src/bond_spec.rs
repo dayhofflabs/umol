@@ -28,9 +28,9 @@
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use map_macro::hash_map;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use umol::error::DataError;
@@ -48,18 +48,19 @@ pub enum BondOrder {
 pub const MAX_BOND_ORDER: u8 = 4;
 
 // Static data for bond orders
-static BOND_DATA: Lazy<HashMap<BondOrder, (u8, &'static [&'static str; 5])>> = Lazy::new(|| {
-    hash_map! {
-        BondOrder::Zero => (0, &[".", "·", "0", "N", "none"]),
-        BondOrder::Single => (1, &["-", "–", "1", "S", "single"]),
-        BondOrder::Double => (2, &["=", "⹀", "2", "D", "double"]),
-        BondOrder::Triple => (3, &["#", "≡", "3", "T", "triple"]),
-        BondOrder::Quadruple => (4, &["$", "⩸", "4", "Q", "quadruple"]),
-    }
-});
+static BOND_DATA: LazyLock<HashMap<BondOrder, (u8, &'static [&'static str; 5])>> =
+    LazyLock::new(|| {
+        hash_map! {
+            BondOrder::Zero => (0, &[".", "·", "0", "N", "none"]),
+            BondOrder::Single => (1, &["-", "–", "1", "S", "single"]),
+            BondOrder::Double => (2, &["=", "⹀", "2", "D", "double"]),
+            BondOrder::Triple => (3, &["#", "≡", "3", "T", "triple"]),
+            BondOrder::Quadruple => (4, &["$", "⩸", "4", "Q", "quadruple"]),
+        }
+    });
 
 // Map from symbol to bond order
-static SYMBOL_TO_BOND: Lazy<HashMap<&'static str, BondOrder>> = Lazy::new(|| {
+static SYMBOL_TO_BOND: LazyLock<HashMap<&'static str, BondOrder>> = LazyLock::new(|| {
     BOND_DATA
         .iter()
         .flat_map(|(order, (_, symbols))| symbols.iter().map(|symbol| (*symbol, *order)))
@@ -67,7 +68,7 @@ static SYMBOL_TO_BOND: Lazy<HashMap<&'static str, BondOrder>> = Lazy::new(|| {
 });
 
 // Map from value to bond order
-static VALUE_TO_BOND: Lazy<HashMap<u8, BondOrder>> = Lazy::new(|| {
+static VALUE_TO_BOND: LazyLock<HashMap<u8, BondOrder>> = LazyLock::new(|| {
     BOND_DATA
         .iter()
         .map(|(order, (value, _))| (*value, *order))

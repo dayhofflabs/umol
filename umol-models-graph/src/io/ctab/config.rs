@@ -8,39 +8,89 @@ bitflags! {
     /// Flags for parsing CTab-based formats
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct CtabParseFlags: u32 {
-        // Core chemical features (bits 0-7)
-        const NAMED_ISOTOPES = 1;         // D, T recognition
-        const PSEUDOATOMS = 2;            // General pseudoatoms (Ala)
-        const QUERIES = 4;                // RBC, SUB, UNS, LIN, ALS
-        const EXTENDED_QUERIES = 8;       // AH, QH, XH, MH (CXSMILES)
-        const ELECTRONS = 16;             // LP (lone pairs)
-        const RGROUPS = 32;               // APO, AAL, RGP, LOG
-        const SGROUPS = 64;               // STY, SST, SLB, SAL, SBL, SMT, SCN
-        const ADVANCED_SGROUPS = 128;     // SDS, SPA, CRS, SDI, SBV, SDT, SDD, SCD, SED, SPL, SNC
-        const EXTENDED_RANGE = 256;       // Extended range of values (bond orders etc.)
-        const EXTENDED_ISOTOPES = 512;    // Extended isotopes (no catalog check)
-        const CLARK_EXTENSIONS = 1024;    // ZBO, ZCH, HYD
-        const LEGACY_FEATURES = 2048;     // Legacy atom list, missing V2000 tag
+        // Parser capabilities
+        const WILDCARDS = 1;                // A, Q, *, X, M (CTFile, SMILES)
+        const CHEMAXON_WILDCARDS = 1 << 1;  // AH, QH, XH, MH (CXSMILES)
+        const ELECTRONS = 1 << 2;           // LP (lone pairs)
+        const RGROUPS = 1 << 3;             // APO, AAL, RGP, LOG
+        const SGROUPS = 1 << 4;             // STY, SST, SLB, SAL, SBL, SMT, SCN,
+                                            // SDS, SPA, CRS, SDI, SBV, SDT, SDD, SCD, SED, SPL, SNC
+        const QUERY_BONDS = 1 << 5;         // Bond types 5-8
+        const QUERY_PROPERTIES = 1 << 6;    // RBC, SUB, UNS, LIN, ALS, APO, AAL
+        const LEGACY_ATOM_LISTS = 1 << 7;    // Legacy atom lists
+        // const RESERVED_1 = 1 << 8;
+        // const RESERVED_2 = 1 << 9;
 
-        // Reserved for extensions (bits 10-15)
-        // const RESERVED_1 = 4096;
-        // const RESERVED_2 = 8192;
-        // const RESERVED_3 = 16384;
-        // const RESERVED_4 = 32768;
+        // Data validation strictness
+        const EXTENDED_RANGE = 1 << 10;     // Extended range of values (bond orders, H counts)
+        const EXTENDED_ISOTOPES = 1 << 11;  // Extended isotopes (no catalog check)
+        // const RESERVED_3 = 1 << 12;
+        // const RESERVED_4 = 1 << 13;
 
-        // Ergonomic features (bits 16-23)
-        const UNICODE = 65536;            // Unicode whitespace handling
-        const STRICT_PADDING = 131072;    // Extra field validation
-        const DEBUG = 262144;             // Debug output during parsing
+        // Format extensions
+        const NAMED_ISOTOPES = 1 << 14;     // D, T recognition
+        const PSEUDOATOMS = 1 << 15;        // General pseudoatoms (Ala)
+        const CLARK_EXTENSIONS = 1 << 16;   // ZBO, ZCH, HYD
+        // const RESERVED_5 = 1 << 17;
+        // const RESERVED_6 = 1 << 18;
+        // const RESERVED_7 = 1 << 19;
+        // const RESERVED_8 = 1 << 20;
+        // const RESERVED_9 = 1 << 21;
+
+        // Input validation strictness
+        const UNICODE = 1 << 22;            // Allow Unicode whitespace
+        const SKIP_PADDING = 1 << 23;       // Skip validation of unused (padding) fields
+        const NO_V2000_END_TAGS = 1 << 24;  // V2000 tag and M  END tag may be omitted
+        // const RESERVED_10 = 1 << 25;
+
+        // Parser behavior
+        const IGNORE_POSITIONS = 1 << 26;   // Ignore position data
+        // const RESERVED_11 = 1 << 27;
+        // const RESERVED_12 = 1 << 28;
+        // const RESERVED_13 = 1 << 29;
+        // const RESERVED_14 = 1 << 30;
+        const DEBUG = 1 << 31;              // Debug output during parsing
 
         // Presets
         const MINIMAL = 0;
-        const BASIC = Self::MINIMAL .bits() | Self::NAMED_ISOTOPES.bits() | Self::SGROUPS.bits() | Self::CLARK_EXTENSIONS.bits();
-        const EXTENDED = (Self::BASIC.bits() | Self::QUERIES.bits() | Self::RGROUPS.bits() | Self::ELECTRONS.bits() |
-                         Self::PSEUDOATOMS.bits() | Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits());
-        const FULL = Self::EXTENDED.bits() | Self::ADVANCED_SGROUPS.bits() | Self::EXTENDED_QUERIES.bits();
-        const STRICT = Self::MINIMAL.bits() | Self::STRICT_PADDING.bits();
-        const LENIENT = Self::FULL.bits() | Self::UNICODE.bits();
+
+        // Maximum capabilities for basic parser
+        const BASIC_MAX = Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() |
+            Self::NAMED_ISOTOPES.bits() | Self::CLARK_EXTENSIONS.bits() | Self::UNICODE.bits() |
+            Self::SKIP_PADDING.bits() | Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
+
+        // Maximum capabilities for extended parser (everything)
+        const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits() | Self::CHEMAXON_WILDCARDS.bits() |
+            Self::ELECTRONS.bits() | Self::PSEUDOATOMS.bits() | Self::RGROUPS.bits() | Self::SGROUPS.bits() |
+            Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits() | Self::LEGACY_ATOM_LISTS.bits();
+
+        // Default for basic parser
+        const BASIC = Self::NAMED_ISOTOPES.bits() | Self::SKIP_PADDING.bits();
+
+        // Default for extended parser
+        const EXTENDED = Self::BASIC.bits() | Self::WILDCARDS.bits() | Self::ELECTRONS.bits() |
+            Self::RGROUPS.bits() | Self::SGROUPS.bits() | Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits();
+
+        // Strict parser
+        const STRICT = Self::EXTENDED.bits() & !Self::SKIP_PADDING.bits();
+
+        // Lenient parser
+        const LENIENT = Self::EXTENDED.bits() | Self::CHEMAXON_WILDCARDS.bits() | Self::LEGACY_ATOM_LISTS.bits() |
+            Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() | Self::NAMED_ISOTOPES.bits() |
+            Self::CLARK_EXTENSIONS.bits() | Self::UNICODE.bits() | Self::SKIP_PADDING.bits() |
+            Self::NO_V2000_END_TAGS.bits();
+
+        // Graph-only parser
+        const GRAPH_ONLY = Self::BASIC.bits() | Self::EXTENDED_RANGE.bits() |
+            Self::EXTENDED_ISOTOPES.bits() | Self::IGNORE_POSITIONS.bits();
+
+        // Smiles-compatible parser
+        const SMILES_COMPAT = Self::BASIC.bits() | Self::EXTENDED_ISOTOPES.bits() |
+            Self::IGNORE_POSITIONS.bits();
+
+        // Smarts-compatible parser
+        const SMARTS_COMPAT = Self::SMILES_COMPAT.bits() | Self::WILDCARDS.bits() |
+            Self::QUERY_PROPERTIES.bits() | Self::QUERY_BONDS.bits();
     }
 }
 
@@ -50,43 +100,81 @@ impl fmt::Display for CtabParseFlags {
 
         if *self == CtabParseFlags::MINIMAL {
             parts.push("MINIMAL");
+        } else if *self == CtabParseFlags::BASIC_MAX {
+            parts.push("BASIC_MAX");
+        } else if *self == CtabParseFlags::EXTENDED_MAX {
+            parts.push("EXTENDED_MAX");
         } else if *self == CtabParseFlags::BASIC {
             parts.push("BASIC");
         } else if *self == CtabParseFlags::EXTENDED {
             parts.push("EXTENDED");
-        } else if *self == CtabParseFlags::FULL {
-            parts.push("FULL");
+        } else if *self == CtabParseFlags::STRICT {
+            parts.push("STRICT");
+        } else if *self == CtabParseFlags::LENIENT {
+            parts.push("LENIENT");
+        } else if *self == CtabParseFlags::GRAPH_ONLY {
+            parts.push("GRAPH_ONLY");
+        } else if *self == CtabParseFlags::SMILES_COMPAT {
+            parts.push("SMILES_COMPAT");
+        } else if *self == CtabParseFlags::SMARTS_COMPAT {
+            parts.push("SMARTS_COMPAT");
         } else {
             // Show individual flags
             if self.contains(CtabParseFlags::NAMED_ISOTOPES) {
                 parts.push("NAMED_ISOTOPES");
             }
-            if self.contains(CtabParseFlags::RGROUPS) {
-                parts.push("RGROUPS");
+            if self.contains(CtabParseFlags::WILDCARDS) {
+                parts.push("WILDCARDS");
             }
-            if self.contains(CtabParseFlags::QUERIES) {
-                parts.push("QUERIES");
-            }
-            if self.contains(CtabParseFlags::EXTENDED_QUERIES) {
-                parts.push("EXTENDED_QUERIES");
+            if self.contains(CtabParseFlags::CHEMAXON_WILDCARDS) {
+                parts.push("CHEMAXON_WILDCARDS");
             }
             if self.contains(CtabParseFlags::ELECTRONS) {
                 parts.push("ELECTRONS");
             }
-            if self.contains(CtabParseFlags::PSEUDOATOMS) {
-                parts.push("PSEUDOATOMS");
+            if self.contains(CtabParseFlags::RGROUPS) {
+                parts.push("RGROUPS");
+            }
+            if self.contains(CtabParseFlags::SGROUPS) {
+                parts.push("SGROUPS");
+            }
+            if self.contains(CtabParseFlags::QUERY_BONDS) {
+                parts.push("QUERY_BONDS");
+            }
+            if self.contains(CtabParseFlags::QUERY_PROPERTIES) {
+                parts.push("QUERY_PROPERTIES");
+            }
+            if self.contains(CtabParseFlags::LEGACY_ATOM_LISTS) {
+                parts.push("LEGACY_ATOM_LISTS");
+            }
+            if self.contains(CtabParseFlags::EXTENDED_RANGE) {
+                parts.push("EXTENDED_RANGE");
+            }
+            if self.contains(CtabParseFlags::EXTENDED_ISOTOPES) {
+                parts.push("EXTENDED_ISOTOPES");
+            }
+            if self.contains(CtabParseFlags::NAMED_ISOTOPES) {
+                parts.push("NAMED_ISOTOPES");
+            }
+            if self.contains(CtabParseFlags::CLARK_EXTENSIONS) {
+                parts.push("CLARK_EXTENSIONS");
             }
             if self.contains(CtabParseFlags::UNICODE) {
                 parts.push("UNICODE");
             }
-            if self.contains(CtabParseFlags::STRICT_PADDING) {
-                parts.push("STRICT_PADDING");
+            if self.contains(CtabParseFlags::SKIP_PADDING) {
+                parts.push("SKIP_PADDING");
             }
-            if self.contains(CtabParseFlags::LEGACY_FEATURES) {
-                parts.push("LEGACY_FEATURES");
+            if self.contains(CtabParseFlags::NO_V2000_END_TAGS) {
+                parts.push("NO_V2000_END_TAGS");
+            }
+            if self.contains(CtabParseFlags::IGNORE_POSITIONS) {
+                parts.push("IGNORE_POSITIONS");
+            }
+            if self.contains(CtabParseFlags::DEBUG) {
+                parts.push("DEBUG");
             }
         }
-
         write!(f, "{}", parts.join(" | "))
     }
 }
@@ -108,6 +196,30 @@ impl MolIoConfig {
         Self { parse_flags: flags }
     }
 
+    pub fn basic_max() -> Self {
+        Self::with_parse_flags(CtabParseFlags::BASIC_MAX)
+    }
+
+    pub fn extended_max() -> Self {
+        Self::with_parse_flags(CtabParseFlags::EXTENDED_MAX)
+    }
+
+    pub fn basic_strict() -> Self {
+        Self::with_parse_flags(CtabParseFlags::BASIC | CtabParseFlags::STRICT)
+    }
+
+    pub fn extended_strict() -> Self {
+        Self::with_parse_flags(CtabParseFlags::EXTENDED | CtabParseFlags::STRICT)
+    }
+
+    pub fn basic_lenient() -> Self {
+        Self::with_parse_flags(CtabParseFlags::LENIENT | CtabParseFlags::STRICT)
+    }
+
+    pub fn extended_lenient() -> Self {
+        Self::with_parse_flags(CtabParseFlags::EXTENDED | CtabParseFlags::LENIENT)
+    }
+
     pub fn minimal() -> Self {
         Self::with_parse_flags(CtabParseFlags::MINIMAL)
     }
@@ -118,10 +230,6 @@ impl MolIoConfig {
 
     pub fn extended() -> Self {
         Self::with_parse_flags(CtabParseFlags::EXTENDED)
-    }
-
-    pub fn full() -> Self {
-        Self::with_parse_flags(CtabParseFlags::FULL)
     }
 
     pub fn strict() -> Self {

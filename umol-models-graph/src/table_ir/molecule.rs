@@ -20,6 +20,7 @@ use super::sgroup::SGroup;
 use super::source::SourceFormat;
 use super::topology::{Fragment, Link, Ring};
 use super::utils::{element_symbol_key, format_sum_formula};
+use crate::position::Point3D;
 
 /// Basic molecule IR
 #[derive(Clone, Debug, PartialEq)]
@@ -29,6 +30,7 @@ pub struct Molecule {
     pub rings: Vec<Ring>,
 
     pub source_format: SourceFormat,
+    pub positions: Option<Vec<Point3D>>,
 }
 
 impl Molecule {
@@ -38,6 +40,7 @@ impl Molecule {
             bonds: Vec::new(),
             rings: Vec::new(),
             source_format: SourceFormat::UNKNOWN,
+            positions: None,
         }
     }
 
@@ -84,6 +87,7 @@ pub struct ExtendedMolecule {
     pub bonds: Vec<ExtendedBond>,
     pub rings: Vec<Ring>,
     pub source_format: SourceFormat,
+    pub positions: Option<Vec<Point3D>>,
 
     // Additional structure
     pub fragments: Vec<Fragment>,
@@ -105,6 +109,7 @@ impl ExtendedMolecule {
             bonds: Vec::new(),
             rings: Vec::new(),
             source_format: SourceFormat::UNKNOWN,
+            positions: None,
             fragments: Vec::new(),
             links: Vec::new(),
             electrons: None,
@@ -168,6 +173,7 @@ impl ExtendedMolecule {
                 .collect::<Result<Vec<_>, _>>()?,
             rings: self.rings.clone(),
             source_format: self.source_format,
+            positions: self.positions.clone(),
         })
     }
 
@@ -219,6 +225,7 @@ impl From<Molecule> for ExtendedMolecule {
             bonds: mol.bonds.into_iter().map(ExtendedBond::from).collect(),
             rings: mol.rings,
             source_format: mol.source_format,
+            positions: mol.positions,
             fragments: Vec::new(),
             links: Vec::new(),
             electrons: None,

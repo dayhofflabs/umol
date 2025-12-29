@@ -1,6 +1,7 @@
 //! MOL file parser
 
-use serde::{Deserialize, Serialize};
+use nom::combinator::map;
+use nom::error::Error as NomError;
 
 use crate::io::ctab::config::{CtabParseFlags, MolIoConfig};
 use crate::io::ctab::parser::{ctab_block, extended_ctab_block};
@@ -13,7 +14,7 @@ pub mod header;
 use nom::Parser;
 
 /// Complete MOL file structure (basic molecules)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MolFile {
     pub header: Header,
     pub molecule: Molecule,
@@ -26,8 +27,19 @@ impl MolFile {
     }
 }
 
+/// Parse complete MOL file (header + CTAB block)
+pub(crate) fn mol_file<'inp>(
+    flags: CtabParseFlags,
+    line_num: u32,
+) -> impl Parser<&'inp [u8], Output = MolFile, Error = ParseError> + use<'inp> {
+    map(
+        (header::header(), ctab_block(flags, line_num)),
+        |(header, molecule)| MolFile::new(header, molecule),
+    )
+}
+
 /// Extended MOL file structure (includes query features, S-groups, R-groups)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ExtendedMolFile {
     pub header: Header,
     pub molecule: ExtendedMolecule,
@@ -42,10 +54,10 @@ impl ExtendedMolFile {
 
 /// Check if extended molecule actually contains extended features
 ///
-/// Returns true if the extended molecule contains any features that
+/// Return true if the extended molecule contains any features that
 /// are not supported in the basic MOL format, including:
-/// - Query atom symbols (atom lists, R-groups, etc.)
-/// - Query bond types (SingleOrDouble, Any, Zero, etc.)
+/// - Extended atom symbols (atom lists, R-groups, etc.)
+/// - Extended bond types (SingleOrDouble, Any, Zero, etc.)
 /// - S-groups, R-groups
 pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     use crate::table_ir::AtomSymbol;
@@ -53,13 +65,11 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     // Check atoms for query features
     for atom in &molecule.atoms {
         match &atom.symbol {
-            AtomSymbol::Query(_)
+            AtomSymbol::WildcardAtom(_)
             | AtomSymbol::AtomList(_)
             | AtomSymbol::RGroup(_)
             | AtomSymbol::LonePair
-            | AtomSymbol::Variable(_)
-            | AtomSymbol::Pseudoatom(_)
-            | AtomSymbol::Unknown => return true,
+            | AtomSymbol::Pseudoatom(_) => return true,
             AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {}
         }
     }
@@ -84,60 +94,80 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     false
 }
 
-/// Parse MOL bytes into a Molecule (optimized, basic molecules only)
-///
-/// This is the optimized parsing function for basic molecules.
-/// It will fail if the MOL file contains query features.
-/// Stops parsing at M  END and ignores trailing input.
-pub fn parse_mol(input: &[u8]) -> std::result::Result<Molecule, ParseError> {
-    let config = MolIoConfig::basic();
+/// Parse MOL bytes into a Molecule with options (optimized, basic molecules only)
+pub fn parse_mol_bytes_with(input: &[u8], config: &MolIoConfig) -> Result<Molecule, ParseError> {
     let flags = config.parse_flags;
 
-    let (remaining, _header) = header::header()
-        .parse(input)
-        .map_err(|e| ParseError::header_from_nom(e, 0))?;
+    // let (remaining, _header) = header::header()
+    //     .parse(input)
+    //     .map_err(|e| ParseError::header_from_nom(e, 0))?;
 
-    let (_, molecule) = ctab_block(remaining, &flags, 3)?;
+    // let (_, molecule) = ctab_block(remaining, &flags, 3)?;
+
+    Ok(molecule)
+}
+
+/// Parse MOL bytes into a Molecule (optimized, basic molecules only)
+///
+/// Optimized parsing function for basic molecules.
+/// Fails if the MOL file contains extended features.
+/// Stops parsing at M  END and ignores trailing input.
+pub fn parse_mol_bytes(input: &[u8]) -> Result<Molecule, ParseError> {
+    let config = MolIoConfig::basic();
+    parse_mol_bytes_with(input, &config)
+}
+
+/// Parse MOL string into a Molecule with options (optimized, basic molecules only)
+pub fn parse_mol_with(input: &str, config: &MolIoConfig) -> Result<Molecule, ParseError> {
+    parse_mol_bytes_with(input.as_bytes(), config)
+}
+
+/// Parse MOL string into a Molecule (optimized, basic molecules only)
+///
+/// Optimized parsing function for basic molecules.
+/// Fails if the MOL file contains extended features.
+pub fn parse_mol(input: &str) -> Result<Molecule, ParseError> {
+    parse_mol_bytes(input.as_bytes())
+}
+
+/// Parse MOL bytes into an ExtendedMolecule
+///
+/// Generic parsing function that handles both basic and extended molecules.
+/// Stops parsing at M  END and ignores trailing input.
+pub fn parse_extended_mol_bytes_with(
+    input: &[u8],
+    config: &MolIoConfig,
+) -> Result<ExtendedMolecule, ParseError> {
+    let config = MolIoConfig::extended();
+    let flags = config.parse_flags;
 
     Ok(molecule)
 }
 
 /// Parse MOL bytes into an ExtendedMolecule
 ///
-/// This is the primary parsing function that handles both basic and query molecules.
+/// Generic parsing function that handles both basic and extended molecules.
 /// Stops parsing at M  END and ignores trailing input.
-pub fn parse_extended_mol(input: &[u8]) -> std::result::Result<ExtendedMolecule, ParseError> {
-    let config = MolIoConfig::lenient();
-    let flags = config.parse_flags;
-
-    let bytes = if flags.contains(CtabParseFlags::UNICODE) {
-        normalize_whitespace(input).into_owned()
-    } else {
-        input.to_vec()
-    };
-
-    let (remaining, _header) = header::header()
-        .parse(&bytes)
-        .map_err(|e| ParseError::header_from_nom(e, 0))?;
-
-    let (_, molecule) = extended_ctab_block(remaining, &flags, 3)?;
-
-    Ok(molecule)
+pub fn parse_extended_mol_bytes(input: &[u8]) -> Result<ExtendedMolecule, ParseError> {
+    let config = MolIoConfig::extended();
+    parse_extended_mol_bytes_with(input, &config)
 }
 
-/// Parse a MOL string into a Molecule (optimized, basic molecules only)
+/// Parse MOL string into an ExtendedMolecule with options
 ///
-/// This is the high-performance parsing function for basic molecules.
-/// It will fail if the MOL file contains query features.
-pub fn parse_mol_str(input: &str) -> std::result::Result<Molecule, ParseError> {
-    parse_mol(input.as_bytes())
+/// Generic parsing function that handles both basic and extended molecules.
+pub fn parse_extended_mol_with(
+    input: &str,
+    config: &MolIoConfig,
+) -> Result<ExtendedMolecule, ParseError> {
+    parse_extended_mol_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse a MOL string into an ExtendedMolecule
+/// Parse MOL string into an ExtendedMolecule
 ///
-/// This is the main parsing function that handles both basic and query molecules.
-pub fn parse_extended_mol_str(input: &str) -> std::result::Result<ExtendedMolecule, ParseError> {
-    parse_extended_mol(input.as_bytes())
+/// Generic parsing function that handles both basic and extended molecules.
+pub fn parse_extended_mol(input: &str) -> Result<ExtendedMolecule, ParseError> {
+    parse_extended_mol_bytes(input.as_bytes())
 }
 
 #[cfg(test)]

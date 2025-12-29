@@ -60,9 +60,7 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
             atom_builder.set_class_num(class_num);
         }
 
-        if let Some(position) = atom.position.clone() {
-            atom_builder.set_position(position);
-        }
+        // Position is now stored in Molecule, not in Atom
 
         atom_indices.push(builder_idx);
     }

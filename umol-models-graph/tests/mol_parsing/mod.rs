@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::mol::parser::{parse_extended_mol, parse_mol};
+use umol_models_graph::io::mol::parser::{parse_extended_mol_bytes, parse_mol_bytes};
 use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Serialize)]
@@ -43,7 +43,7 @@ fn store_summary_snapshot(summary: MoleculeSummary) {
 
 fn test_parse_extended_mol(path: &Path, expected_success: bool) {
     let mol_bytes = std::fs::read(path).unwrap();
-    let result = parse_extended_mol(&mol_bytes);
+    let result = parse_extended_mol_bytes(&mol_bytes);
 
     if expected_success {
         if let Err(e) = &result {
@@ -69,7 +69,7 @@ fn test_parse_extended_mol(path: &Path, expected_success: bool) {
 
 fn test_parse_mol(path: &Path, expected_success: bool) {
     let mol_bytes = std::fs::read(path).unwrap();
-    let result = parse_mol(&mol_bytes);
+    let result = parse_mol_bytes(&mol_bytes);
 
     if expected_success {
         if let Err(ref e) = result {

@@ -17,6 +17,11 @@ fn header_atoms_bonds() -> &'static [u8] {
 }
 
 #[fixture]
+fn header_atoms_bonds_legacy() -> &'static [u8] {
+    b"  2  1  1  0  0  0  0  0  0  0999 V2000\n"
+}
+
+#[fixture]
 fn atoms() -> &'static [u8] {
     b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n"
 }
@@ -51,16 +56,15 @@ fn test_atom_block() {
     let atom_data = b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
     0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
 ";
-    let atom_count = 2;
-    let flags = CtabParseFlags::LENIENT;
-    let result = atom_block(atom_count, &flags, 0)(atom_data);
+    let flags = CtabParseFlags::BASIC;
+    let result = atom_block(2, 0, flags).parse(atom_data);
     assert!(result.is_ok(), "Atom block should parse successfully");
 
-    let (remaining, atoms) = result.unwrap();
+    let (remaining, (atoms, _, _)) = result.unwrap();
     assert_eq!(remaining, b"", "All input should be consumed");
     assert_eq!(atoms.len(), 2, "Should have 2 atoms");
-    assert_eq!(atoms[0].symbol, AtomSymbol::Element(Element::C));
-    assert_eq!(atoms[1].symbol, AtomSymbol::Element(Element::O));
+    assert_eq!(atoms[0].element, Element::C);
+    assert_eq!(atoms[1].element, Element::O);
 }
 
 #[test]
@@ -68,12 +72,11 @@ fn test_extended_atom_block() {
     let atom_data = b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
     0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
 ";
-    let atom_count = 2;
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_atom_block(atom_count, &flags, 0)(atom_data);
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_atom_block(2, 0, flags).parse(atom_data);
     assert!(result.is_ok(), "Atom block should parse successfully");
 
-    let (remaining, atoms) = result.unwrap();
+    let (remaining, (atoms, _, _)) = result.unwrap();
     assert_eq!(remaining, b"", "All input should be consumed");
     assert_eq!(atoms.len(), 2, "Should have 2 atoms");
     assert_eq!(atoms[0].symbol, AtomSymbol::Element(Element::C));
@@ -83,12 +86,11 @@ fn test_extended_atom_block() {
 #[test]
 fn test_bond_block() {
     let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
-    let bond_count = 2;
-    let flags = CtabParseFlags::LENIENT;
-    let result = bond_block(bond_count, &flags, 0)(bond_data);
+    let flags = CtabParseFlags::BASIC;
+    let result = bond_block(2, 0, flags).parse(bond_data);
     assert!(result.is_ok(), "Bond block should parse successfully");
 
-    let (remaining, bonds) = result.unwrap();
+    let (remaining, (bonds, _)) = result.unwrap();
     assert_eq!(remaining, b"", "All input should be consumed");
     assert_eq!(bonds.len(), 2, "Should have 2 bonds");
     assert_eq!(bonds[0].2.order, BondOrder::Single);
@@ -98,12 +100,11 @@ fn test_bond_block() {
 #[test]
 fn test_extended_bond_block() {
     let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
-    let bond_count = 2;
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_bond_block(bond_count, &flags, 0)(bond_data);
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_bond_block(2, 0, flags).parse(bond_data);
     assert!(result.is_ok(), "Bond block should parse successfully");
 
-    let (remaining, bonds) = result.unwrap();
+    let (remaining, (bonds, _)) = result.unwrap();
     assert_eq!(remaining, b"", "All input should be consumed");
     assert_eq!(bonds.len(), 2, "Should have 2 bonds");
     assert_eq!(bonds[0].2.order, BondOrder::Single);
@@ -114,35 +115,65 @@ fn test_extended_bond_block() {
 fn test_legacy_atom_list_block() {
     let atom_list_data = b"  1 F    3   9   7   8  ";
     let flags = CtabParseFlags::LENIENT;
-    let result = legacy_atom_list_block(&flags, 0)(atom_list_data);
+    let result = legacy_atom_list_block(1, 0, flags).parse(atom_list_data);
     assert!(
         result.is_ok(),
         "Legacy atom list block should parse successfully"
     );
 
-    let (remaining, atom_list) = result.unwrap();
+    let (remaining, (atom_list, _)) = result.unwrap();
     assert_eq!(remaining, b"", "All input should be consumed");
     assert_eq!(atom_list.len(), 1, "Should have 1 atom list");
     assert!(matches!(atom_list[0], PropertyEntries::AtomListEntry(_)));
 }
 
 #[test]
-fn test_properties_block_missing_newline() {
-    let ctab_data = b"M  END";
-    let flags = CtabParseFlags::LENIENT;
-    let result = properties_block(&flags, 0)(ctab_data);
+fn test_properties_block() {
+    let ctab_data = b"M  CHG  1   2  -1\nM  END";
+    let flags = CtabParseFlags::BASIC;
+    let result = properties_block(0, flags).parse(ctab_data);
     assert!(
         result.is_ok(),
-        "CTAB block without terminating newline should parse successfully"
+        "Properties block should parse successfully in BASIC mode"
     );
 
-    let (remaining, property_entries) = result.unwrap();
+    let (remaining, (property_entries, _)) = result.unwrap();
+    assert_eq!(remaining, b"M  END", "All input should be consumed");
+    assert_eq!(property_entries.len(), 1, "Should have 1 property entry");
+    assert!(matches!(
+        property_entries[0],
+        PropertyEntries::ChargeEntries(_)
+    ));
+}
+
+#[test]
+fn test_extended_properties_block() {
+    let ctab_data = b"M  ALS   1  2 F Cl  Br\nM  END";
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_properties_block(0, flags).parse(ctab_data);
+    assert!(
+        result.is_ok(),
+        "Extended properties block should parse successfully in EXTENDED mode"
+    );
+}
+
+#[test]
+fn test_properties_block_missing_newline() {
+    let ctab_data = b"M  END";
+    let flags = CtabParseFlags::BASIC;
+    let result = properties_block(0, flags).parse(ctab_data);
+    assert!(
+        result.is_ok(),
+        "Properties block should parse with terminating newline in LENIENT mode"
+    );
+
+    let (remaining, (property_entries, _)) = result.unwrap();
     assert_eq!(remaining, b"M  END", "Should leave M  END for next parser");
     assert_eq!(property_entries.len(), 0, "Should have 0 property entries");
 }
 
 #[test]
-fn test_ctab_block_fails_on_query() {
+fn test_ctab_block_error_extended_features() {
     let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0
     1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
@@ -151,7 +182,7 @@ M  ALS   1  2 F Cl  Br
 M  END
 ";
     let flags = CtabParseFlags::BASIC;
-    let result = ctab_block(ctab_data, &flags, 0);
+    let result = ctab_block(0, flags).parse(ctab_data);
     assert!(
         result.is_err(),
         "ctab_block parser should fail on query features"
@@ -167,7 +198,7 @@ fn test_extended_ctab_block_truncated_lines() {
 M  END
 ";
     let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(ctab_data, &flags, 0);
+    let result = extended_ctab_block(0, flags).parse(ctab_data);
     assert!(
         result.is_ok(),
         "CTAB block with truncated lines should parse successfully"
@@ -185,8 +216,8 @@ fn test_extended_ctab_block_insufficient_atoms() {
     0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
 M  END
 ";
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(ctab_data, &flags, 0);
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_ctab_block(0, flags).parse(ctab_data);
     assert!(result.is_err(), "Should fail with insufficient atoms");
 }
 
@@ -198,13 +229,13 @@ fn test_extended_ctab_block_insufficient_bonds() {
   1  2  1  0  0  0  0
 M  END
 ";
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(ctab_data, &flags, 0);
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_ctab_block(0, flags).parse(ctab_data);
     assert!(result.is_err(), "Should fail with insufficient bonds");
 }
 
 #[test]
-fn test_extended_ctab_block_query_features() {
+fn test_extended_ctab_block() {
     let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0
     1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
@@ -212,8 +243,8 @@ fn test_extended_ctab_block_query_features() {
 M  ALS   1  2 F Cl  Br
 M  END
 ";
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(ctab_data, &flags, 0);
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_ctab_block(0, flags).parse(ctab_data);
     assert!(
         result.is_ok(),
         "CTAB block with query features should parse successfully"
@@ -225,74 +256,69 @@ M  END
 }
 
 #[rstest]
-#[case("empty", vec![], b"")]
-#[case("no_extended_features", vec![], m_end())]
-#[case("with_properties", vec![properties()], m_end())]
 fn test_extended_ctab_block_termination(
-    #[case] name: &str,
-    #[case] extra_blocks: Vec<&[u8]>,
-    #[case] ending: &[u8],
     header_atoms_bonds: &[u8],
     atoms: &[u8],
     bonds: &[u8],
+    m_end: &[u8],
 ) {
     let mut data = Vec::new();
     data.extend_from_slice(header_atoms_bonds);
     data.extend_from_slice(atoms);
     data.extend_from_slice(bonds);
+    data.extend_from_slice(m_end);
 
-    for block in extra_blocks {
-        data.extend_from_slice(block);
-    }
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_ctab_block(0, flags).parse(&data);
+    assert!(result.is_ok(), "Should parse successfully");
 
-    data.extend_from_slice(ending);
+    let (remaining, molecule) = result.unwrap();
+    assert!(remaining.is_empty(), "All input should be consumed");
+    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
+    assert_eq!(molecule.bond_count(), 1, "Should have 1 bond");
+}
 
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(&data, &flags, 0);
-    assert!(result.is_ok(), "{} case should parse successfully", name);
+#[rstest]
+fn test_extended_ctab_block_termination_with_properties(
+    header_atoms_bonds: &[u8],
+    atoms: &[u8],
+    bonds: &[u8],
+    properties: &[u8],
+    m_end: &[u8],
+) {
+    let mut data = Vec::new();
+    data.extend_from_slice(header_atoms_bonds);
+    data.extend_from_slice(atoms);
+    data.extend_from_slice(bonds);
+    data.extend_from_slice(properties);
+    data.extend_from_slice(m_end);
+
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_ctab_block(0, flags).parse(&data);
+    assert!(result.is_ok(), "Should parse successfully");
 
     let (remaining, molecule) = result.unwrap();
     assert!(remaining.is_empty(), "All input should be consumed");
     assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
     assert_eq!(molecule.bond_count(), 1, "Should have 1 bond");
 
-    // Check charge property is applied correctly
-    if name == "with_properties" {
-        let atom2 = &molecule.atoms[1];
-        assert_eq!(
-            atom2.charge,
-            Some(-1),
-            "Oxygen should have -1 charge from M CHG"
-        );
-    }
+    let atom2 = &molecule.atoms[1];
+    assert_eq!(
+        atom2.charge,
+        Some(-1),
+        "Oxygen should have -1 charge from M CHG"
+    );
 }
 
 #[rstest]
-#[case("atoms_only_newline", header_atoms_only(), vec![atoms()], b"")]
-#[case("atoms_only_no_newline", header_atoms_only(), vec![atoms()], b"")]
-fn test_extended_ctab_block_missing_m_end(
-    #[case] name: &str,
-    #[case] header: &[u8],
-    #[case] blocks: Vec<&[u8]>,
-    #[case] ending: &[u8],
-) {
+fn test_extended_ctab_block_missing_m_end(header_atoms_only: &[u8], atoms: &[u8]) {
     let mut data = Vec::new();
-    data.extend_from_slice(header);
-
-    for block in blocks {
-        data.extend_from_slice(block);
-    }
-
-    // Remove final newline for "no_newline" cases
-    if name.ends_with("no_newline") && data.ends_with(b"\n") {
-        data.pop();
-    }
-
-    data.extend_from_slice(ending);
+    data.extend_from_slice(header_atoms_only);
+    data.extend_from_slice(atoms);
 
     let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(&data, &flags, 0);
-    assert!(result.is_ok(), "{} case should parse successfully", name);
+    let result = extended_ctab_block(0, flags).parse(&data);
+    assert!(result.is_ok(), "Should parse successfully");
 
     let (remaining, molecule) = result.unwrap();
     assert!(remaining.is_empty(), "All input should be consumed");
@@ -300,33 +326,68 @@ fn test_extended_ctab_block_missing_m_end(
 }
 
 #[rstest]
-#[case("legacy_list_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list()], b"")]
-#[case("legacy_list_no_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list()], b"")]
-#[case("properties_with_legacy_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list(), properties()], b"")]
-#[case("properties_with_legacy_no_newline", header_atoms_bonds(), vec![atoms(), bonds(), legacy_atom_list(), properties()], b"")]
+fn test_extended_ctab_block_missing_m_end_no_newline(header_atoms_only: &[u8], atoms: &[u8]) {
+    let mut data = Vec::new();
+    data.extend_from_slice(header_atoms_only);
+    data.extend_from_slice(atoms);
+
+    // Remove trailing newline
+    if data.ends_with(b"\n") {
+        data.pop();
+    }
+
+    let flags = CtabParseFlags::LENIENT;
+    let result = extended_ctab_block(0, flags).parse(&data);
+    assert!(result.is_ok(), "Should parse successfully");
+
+    let (remaining, molecule) = result.unwrap();
+    assert!(remaining.is_empty(), "All input should be consumed");
+    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
+}
+
+#[rstest]
+#[case::legacy_list(vec![atoms(), bonds(), legacy_atom_list()])]
+#[case::properties_with_legacy(vec![atoms(), bonds(), legacy_atom_list(), properties()])]
 fn test_extended_ctab_block_missing_m_end_legacy(
-    #[case] name: &str,
-    #[case] header: &[u8],
     #[case] blocks: Vec<&[u8]>,
-    #[case] ending: &[u8],
+    header_atoms_bonds_legacy: &[u8],
 ) {
     let mut data = Vec::new();
-    data.extend_from_slice(header);
+    data.extend_from_slice(header_atoms_bonds_legacy);
 
     for block in blocks {
         data.extend_from_slice(block);
     }
 
-    // Remove final newline for "no_newline" cases
-    if name.ends_with("no_newline") && data.ends_with(b"\n") {
+    let result = extended_ctab_block(0, CtabParseFlags::LENIENT).parse(&data);
+    assert!(result.is_ok(), "Should parse successfully");
+
+    let (remaining, molecule) = result.unwrap();
+    assert!(remaining.is_empty(), "All input should be consumed");
+    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
+}
+
+#[rstest]
+#[case::legacy_list(vec![atoms(), bonds(), legacy_atom_list()])]
+#[case::properties_with_legacy(vec![atoms(), bonds(), legacy_atom_list(), properties()])]
+fn test_extended_ctab_block_missing_m_end_legacy_no_newline(
+    #[case] blocks: Vec<&[u8]>,
+    header_atoms_bonds_legacy: &[u8],
+) {
+    let mut data = Vec::new();
+    data.extend_from_slice(header_atoms_bonds_legacy);
+
+    for block in blocks {
+        data.extend_from_slice(block);
+    }
+
+    // Remove trailing newline
+    if data.ends_with(b"\n") {
         data.pop();
     }
 
-    data.extend_from_slice(ending);
-
-    let flags = CtabParseFlags::LENIENT | CtabParseFlags::LEGACY_FEATURES;
-    let result = extended_ctab_block(&data, &flags, 0);
-    assert!(result.is_ok(), "{} case should parse successfully", name);
+    let result = extended_ctab_block(0, CtabParseFlags::LENIENT).parse(&data);
+    assert!(result.is_ok(), "Should parse successfully");
 
     let (remaining, molecule) = result.unwrap();
     assert!(remaining.is_empty(), "All input should be consumed");
@@ -348,8 +409,8 @@ fn test_extended_ctab_block_m_end_no_newline(
     data.extend_from_slice(properties);
     data.extend_from_slice(m_end_no_newline);
 
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(&data, &flags, 0);
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_ctab_block(0, flags).parse(&data);
     assert!(
         result.is_ok(),
         "M END without newline should parse successfully"

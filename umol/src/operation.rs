@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn test_conversion_operation_preserves_entity() {
         let source_model = SourceModel {
-            data: SourceData { value: 42 },
+            data: SourceData { value: 12 },
         };
 
         let entity = TestEntity {

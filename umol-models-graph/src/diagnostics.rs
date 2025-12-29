@@ -1,6 +1,7 @@
 //! Diagnostics for atom/bond-based molecule models
 
 use std::fmt;
+use std::vec::IntoIter;
 
 use strum::{Display, EnumIter, EnumMessage, IntoEnumIterator};
 
@@ -34,7 +35,6 @@ pub enum DiagnosticKind {
     SmilesInvalidElement,
     #[strum(message = "Invalid token")]
     SmilesInvalidToken,
-
     #[strum(message = "Unbalanced open parenthesis")]
     SmilesUnbalancedOpenParen,
     #[strum(message = "Unbalanced close parenthesis")]
@@ -89,7 +89,6 @@ pub enum DiagnosticKind {
     SmilesBracketHwithHcount,
     #[strum(message = "Invalid bracket")]
     SmilesInvalidBracket,
-
     #[strum(message = "Class out of range")]
     SmilesClassOutOfRange,
     #[strum(message = "Hcount out of range")]
@@ -98,10 +97,8 @@ pub enum DiagnosticKind {
     SmilesChargeOutOfRange,
     #[strum(message = "Isotope out of range")]
     SmilesIsotopeOutOfRange,
-
     #[strum(message = "Isotope uncatalogued")]
     SmilesIsotopeUncatalogued,
-
     #[strum(message = "Prefer bare organic atom")]
     SmilesPreferBareOrganicAtom,
     #[strum(message = "Prefer implicit H")]
@@ -140,13 +137,14 @@ pub enum DiagnosticKind {
     SmilesAvoidRingClosureAcrossDot,
     #[strum(message = "Prefer aromatic form")]
     SmilesPreferAromaticForm,
-
     #[strum(message = "Invalid counts line")]
     CtfileInvalidCountsLine,
     #[strum(message = "Invalid atom line")]
     CtfileInvalidAtomLine,
     #[strum(message = "Invalid bond line")]
     CtfileInvalidBondLine,
+    #[strum(message = "Invalid legacy atom list line")]
+    CtfileInvalidLegacyAtomListLine,
     #[strum(message = "Invalid property line")]
     CtfileInvalidPropertyLine,
     #[strum(message = "Invalid Sgroup line")]
@@ -159,21 +157,22 @@ pub enum DiagnosticKind {
     CtfileInvalidSdfDataValue,
     #[strum(message = "Missing record delimiter")]
     CtfileMissingDelimiter,
+    #[strum(message = "Missing M  END tag")]
+    CtfileMissingMEndTag,
     #[strum(message = "Unexpected end of file")]
     CtfileUnexpectedEof,
     #[strum(message = "Incomplete input")]
     CtfileIncomplete,
-
+    #[strum(message = "Unknown parser error")]
+    CtfileParserError,
     #[strum(message = "GraphIR conversion failed")]
     GraphConversionFailed,
-
     #[strum(message = "Self-loop ring")]
     GraphSelfLoopRing,
     #[strum(message = "Parallel edges")]
     GraphParallelEdges,
     #[strum(message = "Unknown topology error")]
     GraphTopologyError,
-
     #[strum(message = "Out of element range")]
     GraphOutOfElementRange,
     #[strum(message = "H count out of element range")]
@@ -194,7 +193,6 @@ pub enum DiagnosticKind {
     GraphMissingBracketH,
     #[strum(message = "Unknown valence error")]
     GraphValenceError,
-
     #[strum(message = "Aromatic atom not in ring")]
     GraphAromaticAtomNotInRing,
     #[strum(message = "Aromatic bond not in ring")]
@@ -213,7 +211,6 @@ pub enum DiagnosticKind {
     GraphHuckelFailed,
     #[strum(message = "Unknown aromaticity error")]
     GraphAromaticityError,
-
     #[strum(message = "Avoid mixed aromaticity")]
     GraphAvoidMixedAromaticity,
     #[strum(message = "Avoid inconsistent aromaticity")]
@@ -222,14 +219,12 @@ pub enum DiagnosticKind {
     GraphHuckelInconsistent,
     #[strum(message = "Unknown aromaticity warning")]
     GraphAromaticityWarning,
-
     #[strum(message = "Double conflict")]
     GraphStereoDoubleConflict,
     #[strum(message = "Double insufficient")]
     GraphStereoDoubleInsufficient,
     #[strum(message = "Unknown stereo error")]
     GraphStereoError,
-
     #[strum(message = "Avoid unnecessary stereo descriptor")]
     GraphAvoidUnnecessaryStereoDescriptor,
     #[strum(message = "Unsupported central chirality element")]
@@ -311,14 +306,17 @@ impl DiagnosticKind {
             | CtfileInvalidCountsLine
             | CtfileInvalidAtomLine
             | CtfileInvalidBondLine
+            | CtfileInvalidLegacyAtomListLine
             | CtfileInvalidPropertyLine
             | CtfileInvalidSgroupLine
             | CtfileInvalidHeader
             | CtfileInvalidSdfDataHeader
             | CtfileInvalidSdfDataValue
             | CtfileMissingDelimiter
+            | CtfileMissingMEndTag
             | CtfileUnexpectedEof
-            | CtfileIncomplete => Category::Syntactic,
+            | CtfileIncomplete
+            | CtfileParserError => Category::Syntactic,
 
             GraphConversionFailed
             | GraphSelfLoopRing
@@ -402,14 +400,17 @@ impl DiagnosticKind {
             | CtfileInvalidCountsLine
             | CtfileInvalidAtomLine
             | CtfileInvalidBondLine
+            | CtfileInvalidLegacyAtomListLine
             | CtfileInvalidPropertyLine
             | CtfileInvalidSgroupLine
             | CtfileInvalidHeader
             | CtfileInvalidSdfDataHeader
             | CtfileInvalidSdfDataValue
             | CtfileMissingDelimiter
+            | CtfileMissingMEndTag
             | CtfileUnexpectedEof
             | CtfileIncomplete
+            | CtfileParserError
             | GraphConversionFailed
             | GraphSelfLoopRing
             | GraphParallelEdges
@@ -584,7 +585,7 @@ impl DiagnosticList {
 
 impl IntoIterator for DiagnosticList {
     type Item = Diagnostic;
-    type IntoIter = std::vec::IntoIter<Diagnostic>;
+    type IntoIter = IntoIter<Self::Item>;
     fn into_iter(self) -> Self::IntoIter {
         self.diagnostics.into_iter()
     }

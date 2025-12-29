@@ -4,8 +4,9 @@ use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::space0;
 use nom::combinator::{map, opt, value};
+use nom::error::Error as NomError;
 use nom::sequence::{delimited, preceded, terminated};
-use nom::{error, Parser};
+use nom::Parser;
 
 use super::utils::{fixed_width_int, fixed_width_padding_n};
 use crate::io::ctab::config::CtabParseFlags;
@@ -26,55 +27,52 @@ use crate::io::ctab::config::CtabParseFlags;
 /// | vvvvvvv | version stamp              | V2000      | Generic |
 /// ---------------------------------------------------------------
 ///
-pub fn counts_input<'inp, 'fl>(
-    flags: &'fl CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = Counts, Error = error::Error<&'inp [u8]>> + use<'inp, 'fl> {
-    let strict_padding = flags.contains(CtabParseFlags::STRICT_PADDING);
-    let legacy_features = flags.contains(CtabParseFlags::LEGACY_FEATURES);
+pub fn counts_input<'inp>(
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = Counts, Error = NomError<&'inp [u8]>> + use<'inp> {
+    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
     terminated(
-        move |input: &'inp [u8]| {
-            map(
-                (
-                    fixed_width_int::<i32>(3),
-                    fixed_width_int::<i32>(3),
-                    fixed_width_int::<i32>(3),
-                    preceded(take(3usize), fixed_width_int::<i32>(3)),
-                    fixed_width_int::<i32>(3),
-                    delimited(
-                        fixed_width_padding_n(4, 3, strict_padding),
-                        fixed_width_int::<i32>(3),
-                        version(legacy_features),
-                    ),
+        map(
+            (
+                fixed_width_int::<u32>(3),
+                fixed_width_int::<u32>(3),
+                fixed_width_int::<u32>(3),
+                preceded(take(3usize), fixed_width_int::<u32>(3)),
+                fixed_width_int::<u32>(3),
+                delimited(
+                    fixed_width_padding_n(4, 3, skip_padding),
+                    fixed_width_int::<u32>(3),
+                    version(no_v2000_end_tags),
                 ),
-                |(
-                    atom_count,
-                    bond_count,
-                    atom_list_count,
-                    chiral_flag,
-                    stext_entry_count,
-                    properties_lines,
-                )| Counts {
-                    atom_count,
-                    bond_count,
-                    atom_list_count,
-                    chiral_flag,
-                    stext_entry_count,
-                    properties_lines,
-                },
-            )
-            .parse(input)
-        },
+            ),
+            |(
+                atom_count,
+                bond_count,
+                atom_list_count,
+                chiral_flag,
+                stext_entry_count,
+                properties_lines,
+            )| Counts {
+                atom_count,
+                bond_count,
+                atom_list_count,
+                chiral_flag,
+                stext_entry_count,
+                properties_lines,
+            },
+        ),
         space0,
     )
 }
 
 /// Parse version stamp
 fn version<'inp>(
-    legacy_features: bool,
-) -> impl Parser<&'inp [u8], Output = (), Error = error::Error<&'inp [u8]>> {
+    no_v2000_end_tags: bool,
+) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
         let v2000 = alt((tag(" V2000"), tag("V2000 ")));
-        if legacy_features {
+        if no_v2000_end_tags {
             value((), opt(v2000)).parse(input)
         } else {
             value((), v2000).parse(input)
@@ -84,24 +82,25 @@ fn version<'inp>(
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Counts {
-    pub atom_count: i32,      // 'aaa' - number of atoms (max 255)
-    pub bond_count: i32,      // 'bbb' - number of bonds (max 255)
-    pub atom_list_count: i32, // 'lll' - number of atom lists (max 30)
+    pub atom_count: u32,      // 'aaa' - number of atoms (max 255)
+    pub bond_count: u32,      // 'bbb' - number of bonds (max 255)
+    pub atom_list_count: u32, // 'lll' - number of atom lists (max 30)
     // fff is obsolete, skipping
-    pub chiral_flag: i32,       // 'ccc' - chiral flag (0=not chiral, 1=chiral)
-    pub stext_entry_count: i32, // 'sss' - number of stext entries
+    pub chiral_flag: u32,       // 'ccc' - chiral flag (0=not chiral, 1=chiral)
+    pub stext_entry_count: u32, // 'sss' - number of stext entries
     // xxx is obsolete, skipping
     // rrr is obsolete, skipping
     // ppp is obsolete, skipping
     // iii is obsolete, skipping
-    pub properties_lines: i32, // 'mmm' - number of additional properties lines
+    pub properties_lines: u32, // 'mmm' - number of additional properties lines
                                // 'vvvvvv' - version stamp (V2000), fixed string, skipping
 }
 
 #[cfg(test)]
 mod tests {
     use nom::combinator::all_consuming;
-    use nom::{error, Err};
+    use nom::error::ErrorKind as NomErrorKind;
+    use nom::Err;
     use rstest::*;
 
     use super::*;
@@ -114,7 +113,7 @@ mod tests {
     #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded",
       Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
     fn test_counts_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: Counts) {
-        let res = all_consuming(counts_input(&CtabParseFlags::LENIENT)).parse(input);
+        let res = all_consuming(counts_input(CtabParseFlags::STRICT)).parse(input);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(
@@ -126,16 +125,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b" 28 34  0  0  0  0  0  0  0  0  0", "missing V2000 tag",
+    #[case(b" 28 34  0  0  0  0  0  0  0  0  0", "no V2000 tag",
       Counts {atom_count: 28, bond_count: 34, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
     #[case(b"                                                                     ", "len 69, blank",
       Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
-    fn test_counts_input_legacy(
+    fn test_counts_input_no_v2000_tag(
         #[case] input: &[u8],
         #[case] desc: &str,
         #[case] expected: Counts,
     ) {
-        let res = all_consuming(counts_input(&CtabParseFlags::LEGACY_FEATURES)).parse(input);
+        let res = all_consuming(counts_input(CtabParseFlags::NO_V2000_END_TAGS)).parse(input);
         assert!(res.is_ok(), "{} should have succeeded", desc);
         let (remaining, counts) = res.unwrap();
         assert!(
@@ -148,16 +147,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", error::ErrorKind::Tag)]
-    #[case(b"  4  2  0     0  0            ", "too short", error::ErrorKind::Tag)]
-    #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", error::ErrorKind::Eof)]
-    #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", error::ErrorKind::Digit)]
+    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", NomErrorKind::Tag)]
+    #[case(b"  4  2  0     0  0            ", "too short", NomErrorKind::Tag)]
+    #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", NomErrorKind::Eof)]
+    #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", NomErrorKind::Digit)]
     fn test_counts_input_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
-        let res = counts_input(&CtabParseFlags::STRICT).parse(input);
+        let res = counts_input(CtabParseFlags::STRICT).parse(input);
         assert!(res.is_err(), "{} should have failed", desc);
         assert!(
             matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),

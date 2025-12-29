@@ -1,13 +1,15 @@
 //! Auxiliary parsers for SGroup properties.
 
+use bstr::ByteSlice;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take, take_while_m_n};
 use nom::character::complete::{space0, u32 as nom_u32};
 use nom::combinator::{map, map_parser, map_res, rest, value};
+use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::separated_pair;
-use nom::{error, AsChar, Err, Parser};
+use nom::{AsChar, Err, Parser};
 
-use crate::io::ctab::parser::utils::{fixed_width_partial, to_string};
+use crate::io::ctab::parser::utils::fixed_width_partial;
 use crate::table_ir::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierOp,
@@ -16,7 +18,7 @@ use crate::table_ir::{
 
 /// Parse SGroup type string
 pub(super) fn sgroup_type<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupType, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupType, Error = NomError<&'a [u8]>> {
     map_res(take(3usize), move |s: &[u8]| match s {
         b"SUP" => Ok(SGroupType::Superatom),
         b"MUL" => Ok(SGroupType::MultipleGroup),
@@ -33,24 +35,24 @@ pub(super) fn sgroup_type<'a>(
         b"DAT" => Ok(SGroupType::Data),
         b"ANY" => Ok(SGroupType::AnyPolymer),
         b"GEN" => Ok(SGroupType::Generic),
-        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+        _ => Err(NomError::new(s, NomErrorKind::MapRes)),
     })
 }
 
 /// Parse SGroup subtype string
 pub(super) fn sgroup_subtype<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupSubtype, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupSubtype, Error = NomError<&'a [u8]>> {
     map_res(take(3usize), move |s: &[u8]| match s {
         b"ALT" => Ok(SGroupSubtype::Alternating),
         b"RAN" => Ok(SGroupSubtype::Random),
         b"BLO" => Ok(SGroupSubtype::Block),
-        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+        _ => Err(NomError::new(s, NomErrorKind::MapRes)),
     })
 }
 
 /// Parse SGroup connectivity string
 pub(super) fn sgroup_connectivity<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupConnectivity, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupConnectivity, Error = NomError<&'a [u8]>> {
     move |input: &'a [u8]| {
         fixed_width_partial(
             3usize,
@@ -60,7 +62,7 @@ pub(super) fn sgroup_connectivity<'a>(
                     b"HH" => Ok(SGroupConnectivity::HeadToHead),
                     b"HT" => Ok(SGroupConnectivity::HeadToTail),
                     b"EU" => Ok(SGroupConnectivity::EitherUnknown),
-                    _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+                    _ => Err(NomError::new(s, NomErrorKind::MapRes)),
                 }
             }),
             true,
@@ -69,7 +71,7 @@ pub(super) fn sgroup_connectivity<'a>(
         .and_then(|(remaining, opt)| {
             Ok((
                 remaining,
-                opt.ok_or_else(|| Err::Error(error::Error::new(input, error::ErrorKind::MapRes)))?,
+                opt.ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?,
             ))
         })
     }
@@ -77,7 +79,7 @@ pub(super) fn sgroup_connectivity<'a>(
 
 /// Parse SGroup multiplier string
 pub(super) fn sgroup_multiplier<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupMultiplier, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupMultiplier, Error = NomError<&'a [u8]>> {
     alt((
         map(
             separated_pair(
@@ -107,13 +109,13 @@ pub(super) fn sgroup_multiplier<'a>(
 
 /// Parse an integer multiplier
 fn sgroup_multiplier_integer<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = NomError<&'a [u8]>> {
     map(nom_u32, SGroupMultiplierTerm::Integer)
 }
 
 /// Parse a single-character variable multiplier
 fn sgroup_multiplier_variable<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = NomError<&'a [u8]>> {
     map(take_while_m_n(1, 1, AsChar::is_alpha), |s: &[u8]| {
         SGroupMultiplierTerm::Variable(s[0] as char)
     })
@@ -121,13 +123,13 @@ fn sgroup_multiplier_variable<'a>(
 
 /// Parse a single multiplier term (variable or integer)
 fn sgroup_multiplier_term<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierTerm, Error = NomError<&'a [u8]>> {
     alt((sgroup_multiplier_integer(), sgroup_multiplier_variable()))
 }
 
 /// Parse arithmetic operator
 fn sgroup_multiplier_op<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupMultiplierOp, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupMultiplierOp, Error = NomError<&'a [u8]>> {
     alt((
         value(SGroupMultiplierOp::Add, tag("+")),
         value(SGroupMultiplierOp::Sub, tag("-")),
@@ -138,13 +140,13 @@ fn sgroup_multiplier_op<'a>(
 
 /// Parse SGroup subscript string
 pub(super) fn sgroup_subscript<'a>(
-) -> impl Parser<&'a [u8], Output = String, Error = error::Error<&'a [u8]>> {
-    map_res(rest, move |s: &[u8]| to_string(s))
+) -> impl Parser<&'a [u8], Output = String, Error = NomError<&'a [u8]>> {
+    map(rest, move |s: &[u8]| s.to_str_lossy().into_owned())
 }
 
 // Parse SGroup data type string
 pub(super) fn sgroup_data_type<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupDataType, Error = NomError<&'a [u8]>> {
     map_res(fixed_width_partial(2usize, rest, true), move |s| {
         if let Some(s) = s {
             let s = s.trim_ascii();
@@ -152,7 +154,7 @@ pub(super) fn sgroup_data_type<'a>(
                 b"T" | b"" => Ok(SGroupDataType::Text),
                 b"F" => Ok(SGroupDataType::Formatted),
                 b"N" => Ok(SGroupDataType::Numeric),
-                _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+                _ => Err(NomError::new(s, NomErrorKind::MapRes)),
             }
         } else {
             Ok(SGroupDataType::Text)
@@ -162,37 +164,37 @@ pub(super) fn sgroup_data_type<'a>(
 
 // Parse SGroup data display type string
 pub(super) fn sgroup_data_display_type<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupDataDisplayType, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupDataDisplayType, Error = NomError<&'a [u8]>> {
     map_res(take(1usize), move |s: &[u8]| match s {
         b"A" => Ok(SGroupDataDisplayType::Attached),
         b"D" => Ok(SGroupDataDisplayType::Detached),
-        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+        _ => Err(NomError::new(s, NomErrorKind::MapRes)),
     })
 }
 
 // Parse SGroup data display placement string
 pub(super) fn sgroup_data_display_placement<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupDataDisplayPlacement, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupDataDisplayPlacement, Error = NomError<&'a [u8]>> {
     map_res(take(1usize), move |s: &[u8]| match s {
         b"A" => Ok(SGroupDataDisplayPlacement::Absolute),
         b"R" => Ok(SGroupDataDisplayPlacement::Relative),
-        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+        _ => Err(NomError::new(s, NomErrorKind::MapRes)),
     })
 }
 
 // Parse SGroup data display units string
 pub(super) fn sgroup_data_display_units<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupDataDisplayUnits, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupDataDisplayUnits, Error = NomError<&'a [u8]>> {
     map_res(take(1usize), move |s: &[u8]| match s {
         b" " => Ok(SGroupDataDisplayUnits::None),
         b"U" => Ok(SGroupDataDisplayUnits::DisplayUnits),
-        _ => Err(error::Error::new(s, error::ErrorKind::MapRes)),
+        _ => Err(NomError::new(s, NomErrorKind::MapRes)),
     })
 }
 
 // Parse SGroup data display chars string
 pub(super) fn sgroup_data_display_chars<'a>(
-) -> impl Parser<&'a [u8], Output = SGroupDataDisplayChars, Error = error::Error<&'a [u8]>> {
+) -> impl Parser<&'a [u8], Output = SGroupDataDisplayChars, Error = NomError<&'a [u8]>> {
     map_parser(take(3usize), move |s: &'a [u8]| {
         let s = s.trim_ascii();
         alt((
@@ -234,12 +236,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"XYZ", "unknown type", error::ErrorKind::MapRes)]
-    #[case(b"SU", "too short", error::ErrorKind::Eof)]
+    #[case(b"XYZ", "unknown type", NomErrorKind::MapRes)]
+    #[case(b"SU", "too short", NomErrorKind::Eof)]
     fn test_sgroup_type_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_type().parse(input);
         assert!(result.is_err());
@@ -263,12 +265,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"XYZ", "unknown subtype", error::ErrorKind::MapRes)]
-    #[case(b"SU", "too short", error::ErrorKind::Eof)]
+    #[case(b"XYZ", "unknown subtype", NomErrorKind::MapRes)]
+    #[case(b"SU", "too short", NomErrorKind::Eof)]
     fn test_sgroup_subtype_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_subtype().parse(input);
         assert!(result.is_err());
@@ -293,11 +295,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"XY ", "unknown connectivity", error::ErrorKind::MapRes)]
+    #[case(b"XY ", "unknown connectivity", NomErrorKind::MapRes)]
     fn test_sgroup_connectivity_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_connectivity().parse(input);
         assert!(result.is_err());
@@ -329,11 +331,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"@", "invalid symbol", error::ErrorKind::TakeWhileMN)]
+    #[case(b"@", "invalid symbol", NomErrorKind::TakeWhileMN)]
     fn test_sgroup_multiplier_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_multiplier().parse(input);
         assert!(result.is_err());
@@ -358,11 +360,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown data type", error::ErrorKind::MapRes)]
+    #[case(b"X", "unknown data type", NomErrorKind::MapRes)]
     fn test_sgroup_data_type_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_data_type().parse(input);
         assert!(result.is_err());
@@ -388,11 +390,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown display type", error::ErrorKind::MapRes)]
+    #[case(b"X", "unknown display type", NomErrorKind::MapRes)]
     fn test_sgroup_data_display_type_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_data_display_type().parse(input);
         assert!(result.is_err());
@@ -418,11 +420,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown display placement", error::ErrorKind::MapRes)]
+    #[case(b"X", "unknown display placement", NomErrorKind::MapRes)]
     fn test_sgroup_data_display_placement_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_data_display_placement().parse(input);
         assert!(result.is_err());
@@ -448,11 +450,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown display units", error::ErrorKind::MapRes)]
+    #[case(b"X", "unknown display units", NomErrorKind::MapRes)]
     fn test_sgroup_data_display_units_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_data_display_units().parse(input);
         assert!(result.is_err());
@@ -478,11 +480,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(b"X", "unknown display chars", error::ErrorKind::Eof)]
+    #[case(b"X", "unknown display chars", NomErrorKind::Eof)]
     fn test_sgroup_data_display_chars_invalid(
         #[case] input: &[u8],
         #[case] desc: &str,
-        #[case] expected_kind: error::ErrorKind,
+        #[case] expected_kind: NomErrorKind,
     ) {
         let result = sgroup_data_display_chars().parse(input);
         assert!(result.is_err());

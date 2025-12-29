@@ -45,7 +45,7 @@ impl AtomPair {
 }
 
 // Basic Bond IR
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Bond {
     pub atoms: AtomPair,
     pub order: BondOrder,
@@ -150,9 +150,11 @@ impl BondOrder {
 
 /// Single bond direction/wedging
 /// In MOL files: Up=Wedge (code 1), Down=Dash (code 6)
+/// The wedge (pointed) end of the stereo bond is at the first atom
 /// In SMILES: Up=/, Down=\
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondDirection {
+    NotStereo, // MOL: Not stereo (code 0)
     Up,     // MOL: Wedge (code 1), SMILES: /
     Down,   // MOL: Dash (code 6), SMILES: \
     Either, // MOL code 4 (Either)
@@ -161,6 +163,7 @@ pub enum BondDirection {
 /// Double-bond stereochemistry (E/Z) annotation in IR
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondStereo {
+    Unknown,
     Cis,
     Trans,
     Either,
@@ -508,7 +511,7 @@ mod tests {
             span: None,
         };
 
-        let extended: ExtendedBond = bond.into();
+        let extended: ExtendedBond = bond.clone().into();
         let bond2: Bond = extended.try_into().unwrap();
 
         assert_eq!(bond.start_atom(), bond2.start_atom());

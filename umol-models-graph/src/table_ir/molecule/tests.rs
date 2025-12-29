@@ -26,6 +26,7 @@ fn test_molecule_with_atoms_and_bonds() {
         bonds: vec![Bond::new(0, 1, BondOrder::Single)],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
     };
     assert_eq!(mol.atom_count(), 2);
     assert_eq!(mol.bond_count(), 1);
@@ -44,6 +45,7 @@ fn test_molecule_atom_count() {
         bonds: vec![],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
     };
     assert_eq!(mol.atom_count(), 3);
 }
@@ -62,6 +64,7 @@ fn test_molecule_bond_count() {
         ],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
     };
     assert_eq!(mol.bond_count(), 2);
 }
@@ -73,6 +76,7 @@ fn test_molecule_sum_formula_simple() {
         bonds: vec![],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
     };
     assert_eq!(mol.sum_formula(), "C");
 }
@@ -90,6 +94,7 @@ fn test_molecule_sum_formula_with_hydrogen() {
         bonds: vec![],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
     };
     assert_eq!(mol.sum_formula(), "CH4");
 }
@@ -103,6 +108,7 @@ fn test_molecule_sum_formula_with_charge() {
         bonds: vec![],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
     };
     let formula = mol.sum_formula();
     assert_eq!(formula, "C+");
@@ -120,6 +126,7 @@ fn test_molecule_sum_formula_multiple_elements() {
         bonds: vec![],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
     };
     let formula = mol.sum_formula();
     assert_eq!(formula, "C2NO");
@@ -147,6 +154,7 @@ fn test_extended_molecule_direct_construction() {
         bonds: vec![ExtendedBond::new(0, 0, BondOrder::Single)],
         rings: vec![],
         source_format: SourceFormat::SMILES,
+        positions: None,
         fragments: vec![],
         links: vec![],
         electrons: Some(0),
@@ -171,6 +179,7 @@ fn test_extended_molecule_from_molecule() {
         bonds: vec![Bond::new(0, 1, BondOrder::Double)],
         rings: vec![],
         source_format: SourceFormat::MOL,
+        positions: None,
     };
 
     let ext = ExtendedMolecule::from(mol);

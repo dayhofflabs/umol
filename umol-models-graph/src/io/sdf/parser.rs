@@ -9,14 +9,12 @@ use nom::combinator::{eof, map, opt, peek, value};
 use nom::multi::{many1, many_till};
 use nom::sequence::{delimited, terminated};
 use nom::Parser;
-use serde::{Deserialize, Serialize};
-
 use crate::io::ctab::config::MolIoConfig;
 use crate::io::ctab::parser::extended_ctab_block;
 use crate::io::ctfile::error::ParseError;
 use crate::io::mol::parser::{header, ExtendedMolFile};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SdfFile {
     pub compounds: Vec<SdfCompound>,
 }
@@ -27,7 +25,7 @@ impl SdfFile {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SdfCompound {
     pub mol_file: ExtendedMolFile,
     pub data_fields: IndexMap<String, String>,
@@ -116,7 +114,7 @@ fn data_block<'inp>(
 pub fn parse_sdf_compound<'inp>(
     input: &'inp [u8],
     mut current_line: u32,
-) -> std::result::Result<(&'inp [u8], SdfCompound), ParseError> {
+) -> Result<(&'inp [u8], SdfCompound), ParseError> {
     let config = MolIoConfig::lenient();
     let flags = config.parse_flags;
 
@@ -125,7 +123,7 @@ pub fn parse_sdf_compound<'inp>(
         .map_err(|e| ParseError::header_from_nom(e, current_line))?;
     current_line += 3;
 
-    let (remaining, molecule) = extended_ctab_block(remaining, &flags, current_line)?;
+    let (remaining, molecule) = extended_ctab_block(current_line, &flags).parse(remaining)?;
 
     // Recalculate current_line after ctab_block
     let consumed_by_mol = input.len() - remaining.len();
@@ -146,7 +144,7 @@ pub fn parse_sdf_compound<'inp>(
 }
 
 /// Parse SDF from bytes
-pub fn parse_sdf(input: &[u8]) -> std::result::Result<SdfFile, ParseError> {
+pub fn parse_sdf_bytes(input: &[u8]) -> Result<SdfFile, ParseError> {
     let mut compounds = Vec::new();
     let mut current_line = 0;
     let mut remaining = input;
@@ -164,8 +162,8 @@ pub fn parse_sdf(input: &[u8]) -> std::result::Result<SdfFile, ParseError> {
 }
 
 /// Parse SDF from string
-pub fn parse_sdf_str(input: &str) -> std::result::Result<SdfFile, ParseError> {
-    parse_sdf(input.as_bytes())
+pub fn parse_sdf(input: &str) -> Result<SdfFile, ParseError> {
+    parse_sdf_bytes(input.as_bytes())
 }
 
 #[cfg(test)]

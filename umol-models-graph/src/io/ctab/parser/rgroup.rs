@@ -6,7 +6,7 @@ use nom::character::complete::u32 as nom_u32;
 use nom::combinator::{map, opt, value};
 use nom::{error, IResult, Parser};
 
-use crate::table_ir::{RGroup, RGroupOccurrence};
+use crate::table_ir::RGroup;
 
 /// Parse RGroup symbol from byte slice.
 ///

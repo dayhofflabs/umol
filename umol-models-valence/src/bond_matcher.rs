@@ -1,6 +1,9 @@
 //! Bond matchers
 
-use once_cell::sync::Lazy;
+#![allow(clippy::type_complexity)]
+
+use std::sync::LazyLock;
+
 use umol::Result;
 
 use crate::{BondBuilder, BondDonation, BondSpec, BondSpecRegistry};
@@ -60,10 +63,10 @@ impl Default for BondMatcher {
     }
 }
 
-pub static DEFAULT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::default);
-pub static STRICT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::strict);
-pub static LENIENT_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::lenient);
-pub static ALWAYS_BOND_MATCHER: Lazy<BondMatcher> = Lazy::new(BondMatcher::always);
+pub static DEFAULT_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::default);
+pub static STRICT_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::strict);
+pub static LENIENT_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::lenient);
+pub static ALWAYS_BOND_MATCHER: LazyLock<BondMatcher> = LazyLock::new(BondMatcher::always);
 
 #[cfg(test)]
 mod tests {

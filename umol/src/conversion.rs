@@ -137,24 +137,24 @@ mod tests {
     #[test]
     fn test_basic_conversion() {
         let source = SourceModel {
-            data: SourceData { value: 42 },
+            data: SourceData { value: 12 },
         };
 
         let target = source.convert_to().unwrap();
-        assert_eq!(target.data.value, 42);
+        assert_eq!(target.data.value, 12);
         assert!(!target.data.processed); // Should use default params
     }
 
     #[test]
     fn test_conversion_with_metadata() {
         let source = SourceModel {
-            data: SourceData { value: 42 },
+            data: SourceData { value: 12 },
         };
 
         let params = ConversionParams { process: true };
         let (target, metadata) = source.convert_to_with_metadata(&params).unwrap();
 
-        assert_eq!(target.data.value, 42);
+        assert_eq!(target.data.value, 12);
         assert!(target.data.processed);
         assert_eq!(
             metadata.attributes.get("conversion_type"),
@@ -166,7 +166,7 @@ mod tests {
     fn test_conversion_chain() {
         // Test that we can chain conversions through the convenience implementation
         let source = SourceModel {
-            data: SourceData { value: 42 },
+            data: SourceData { value: 12 },
         };
 
         let target1 = source.convert_to().unwrap();
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_metadata_attributes() {
         let source = SourceModel {
-            data: SourceData { value: 42 },
+            data: SourceData { value: 12 },
         };
 
         let params = ConversionParams { process: true };

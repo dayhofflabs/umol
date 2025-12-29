@@ -5,13 +5,7 @@ use indexmap::IndexMap;
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::sdf::parser::parse_sdf;
-
-#[allow(dead_code)]
-enum TestMode {
-    Summary,
-    Full,
-}
+use umol_models_graph::io::sdf::parser::parse_sdf_bytes;
 
 #[derive(Serialize)]
 struct SdfSummary<'a> {
@@ -29,19 +23,6 @@ struct CompoundSummary {
     data_fields: IndexMap<String, String>,
 }
 
-#[derive(Serialize)]
-struct SdfFullSnapshot<'a> {
-    category: &'a str,
-    filename: &'a str,
-    compounds: Vec<CompoundFull>,
-}
-
-#[derive(Serialize)]
-struct CompoundFull {
-    mol_data: serde_yaml::Value,
-    data_fields: IndexMap<String, String>,
-}
-
 fn get_category(path: &Path) -> &str {
     path.parent()
         .unwrap()
@@ -53,62 +34,37 @@ fn get_category(path: &Path) -> &str {
         .unwrap()
 }
 
-fn run_test_sdf(path: &Path, mode: TestMode) {
+fn run_test_sdf(path: &Path) {
     let path_str = path.to_str().unwrap();
     let category = get_category(path);
     let sdf_bytes = fs::read(path).unwrap();
 
-    let sdf_file = match parse_sdf(&sdf_bytes) {
+    let sdf_file = match parse_sdf_bytes(&sdf_bytes) {
         Ok(sdf) => sdf,
         Err(e) => panic!("Failed to parse SDF file {}: {}", path_str, e),
     };
 
-    match mode {
-        TestMode::Summary => {
-            let mut compound_summaries = Vec::new();
+    let mut compound_summaries = Vec::new();
 
-            for compound in &sdf_file.compounds {
-                let molecule = &compound.mol_file.molecule;
+    for compound in &sdf_file.compounds {
+        let molecule = &compound.mol_file.molecule;
 
-                compound_summaries.push(CompoundSummary {
-                    sum_formula: molecule.sum_formula(),
-                    atom_count: molecule.atom_count(),
-                    bond_count: molecule.bond_count(),
-                    data_fields: compound.data_fields.clone(),
-                });
-            }
-
-            let summary = SdfSummary {
-                category,
-                filename: path.file_name().unwrap().to_str().unwrap(),
-                compound_count: sdf_file.compounds.len(),
-                compounds: compound_summaries,
-            };
-
-            store_summary_snapshot(summary);
-        }
-        TestMode::Full => {
-            let mut compound_fulls = Vec::new();
-
-            for compound in &sdf_file.compounds {
-                let molecule = &compound.mol_file.molecule;
-
-                compound_fulls.push(CompoundFull {
-                    mol_data: serde_yaml::to_value(&molecule)
-                        .expect("Failed to serialize molecule"),
-                    data_fields: compound.data_fields.clone(),
-                });
-            }
-
-            let full_snapshot = SdfFullSnapshot {
-                category,
-                filename: path.file_name().unwrap().to_str().unwrap(),
-                compounds: compound_fulls,
-            };
-
-            store_full_snapshot(full_snapshot);
-        }
+        compound_summaries.push(CompoundSummary {
+            sum_formula: molecule.sum_formula(),
+            atom_count: molecule.atom_count(),
+            bond_count: molecule.bond_count(),
+            data_fields: compound.data_fields.clone(),
+        });
     }
+
+    let summary = SdfSummary {
+        category,
+        filename: path.file_name().unwrap().to_str().unwrap(),
+        compound_count: sdf_file.compounds.len(),
+        compounds: compound_summaries,
+    };
+
+    store_summary_snapshot(summary);
 }
 
 fn store_summary_snapshot(summary: SdfSummary) {
@@ -119,20 +75,13 @@ fn store_summary_snapshot(summary: SdfSummary) {
     });
 }
 
-fn store_full_snapshot(snapshot: SdfFullSnapshot) {
-    let mut settings = Settings::clone_current();
-    settings.set_snapshot_path(Path::new("snapshots").join("full"));
-    settings.bind(|| {
-        assert_yaml_snapshot!(snapshot);
-    });
-}
 
 #[allow(dead_code)]
 fn run_test_invalid_sdf(path: &Path) {
     let path_str = path.to_str().unwrap();
     let sdf_bytes = fs::read(path).unwrap();
 
-    let result = parse_sdf(&sdf_bytes);
+    let result = parse_sdf_bytes(&sdf_bytes);
     assert!(
         result.is_err(),
         "Invalid SDF file {} should fail to parse",
@@ -159,5 +108,5 @@ macro_rules! set_snapshot_suffix {
 #[rstest]
 fn test_summary(#[files("tests/sdf_parsing/data/*.sdf")] file_path: PathBuf) {
     set_snapshot_suffix!("{}", file_path.file_name().unwrap().to_str().unwrap());
-    run_test_sdf(&file_path, TestMode::Summary);
+    run_test_sdf(&file_path);
 }

@@ -1,9 +1,9 @@
 //! Registry of default bond specs for bond spec matching
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use map_macro::hash_map;
-use once_cell::sync::Lazy;
 
 use crate::{b, BondOrder, BondSpec};
 
@@ -17,7 +17,7 @@ impl BondSpecRegistry {
 }
 
 // Bond specs for bond typing
-static BOND_SPEC_DATA: Lazy<HashMap<BondOrder, Vec<BondSpec>>> = Lazy::new(|| {
+static BOND_SPEC_DATA: LazyLock<HashMap<BondOrder, Vec<BondSpec>>> = LazyLock::new(|| {
     hash_map! {
         BondOrder::Zero => vec![b!(".")],
         BondOrder::Single => vec![b!("-"), b!("->"), b!("-<")],

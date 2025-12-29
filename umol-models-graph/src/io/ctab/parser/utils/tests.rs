@@ -1,52 +1,40 @@
 use nom::character::complete::space0;
 use nom::combinator::all_consuming;
+use nom::error::ErrorKind as NomErrorKind;
 use nom::sequence::delimited;
-use nom::{error, Err};
+use nom::Err;
 use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
 
 #[rstest]
-#[case(b"", true)]
-#[case(b"   ", true)]
-#[case(b"  0", true)]
-#[case(b" 0 ", true)]
-#[case(b"0  ", true)]
-#[case(b" 00", true)]
-#[case(b"00 ", true)]
-#[case(b"000", true)]
-#[case(b"0", true)]
-#[case(b"00", true)]
-#[case(b"0 0", false)]
-#[case(b"  1", false)]
-#[case(b"", true)]
-#[case(b"   ", true)]
-#[case(b"  0", true)]
-#[case(b" 0 ", true)]
-#[case(b"0  ", true)]
-#[case(b" 00", true)]
-#[case(b"00 ", true)]
-#[case(b"000", true)]
-#[case(b"0", true)]
-#[case(b"00", true)]
-#[case(b"0 0", false)]
-#[case(b"  1", false)]
+#[case::empty(b"", true)]
+#[case::whitespace(b"   ", true)]
+#[case::zero(b"  0", true)]
+#[case::zero_pos2(b" 0 ", true)]
+#[case::zero_pos1(b"0  ", true)]
+#[case::two_zeros(b" 00", true)]
+#[case::two_zeros_pos1(b"00 ", true)]
+#[case::three_zeros(b"000", true)]
+#[case::zero_width1(b"0", true)]
+#[case::two_zeros_width1(b"00", true)]
+#[case::two_zeros_separated(b"0 0", false)]
+#[case::one(b"  1", false)]
 fn test_is_whitespace_or_zeroes(#[case] input: &[u8], #[case] expected: bool) {
     assert_eq!(is_all_whitespace_or_zeroes(input), expected);
 }
 
 #[rstest]
-#[case(b"", None)]
-#[case(b"  ", None)]
-#[case(b"   ", None)]
-#[case(b"42", Some(42))]
-#[case(b" 42", Some(42))]
-#[case(b"42 ", Some(42))]
-#[case(b"042", Some(42))]
+#[case::empty(b"", None)]
+#[case::blank_width2(b"  ", None)]
+#[case::blank_width3(b"   ", None)]
+#[case::number(b"12", Some(12))]
+#[case::number_pos2(b" 12", Some(12))]
+#[case::number_pos1(b"12 ", Some(12))]
+#[case::number_zero_padded(b"012", Some(12))]
 fn test_fixed_width_partial(#[case] input: &[u8], #[case] expected_val: Option<i32>) {
     let mut parser = fixed_width_partial(3, delimited(space0, nom_i32, space0), true);
-
     let result = parser.parse(input);
     assert!(
         result.is_ok(),
@@ -65,313 +53,324 @@ fn test_fixed_width_partial(#[case] input: &[u8], #[case] expected_val: Option<i
 }
 
 #[rstest]
-#[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
-#[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
-fn test_fixed_width_partial_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
+#[case::non_numeric_input(b"abc", NomErrorKind::Digit)]
+#[case::trailing_characters(b"1a ", NomErrorKind::Eof)]
+fn test_fixed_width_partial_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let mut parser = fixed_width_partial(3, delimited(space0, nom_i32, space0), true);
     let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for '{}', expected {:?}, got {:?}",
-        String::from_utf8_lossy(input),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
 #[rstest]
-#[case(b"", None)]
-#[case(b"  ", None)]
-#[case(b"   ", None)]
-#[case(b" 42", Some(42))]
+#[case::empty(b"", None)]
+#[case::blank_width2(b"  ", None)]
+#[case::blank_width3(b"   ", None)]
+#[case::number(b" 12", Some(12))]
 fn test_fixed_width_opt(#[case] input: &[u8], #[case] expected_val: Option<i32>) {
     let mut parser = fixed_width_opt(3, delimited(space0, nom_i32, space0));
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
-        "Test for '{}' should have succeeded but failed with {:?}",
-        String::from_utf8_lossy(input),
+        "{:?} should have succeeded but failed with {:?}",
+        input_str,
         result
     );
     let (remaining, value) = result.unwrap();
     assert_eq!(
-        value,
-        expected_val,
-        "Mismatched value for '{}'",
-        String::from_utf8_lossy(input)
+        value, expected_val,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected_val
     );
     assert!(remaining.is_empty(), "remaining should be empty");
 }
 
 #[rstest]
-#[case(b" abc ", "non-numeric input", error::ErrorKind::Digit)]
-#[case(b" 1", "too few characters", error::ErrorKind::Eof)]
-#[case(b"1", "too few characters", error::ErrorKind::Eof)]
-fn test_fixed_width_opt_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
+#[case::non_numeric_input(b" abc ", NomErrorKind::Digit)]
+#[case::two_characters(b" 1", NomErrorKind::Eof)]
+#[case::one_character(b"1", NomErrorKind::Eof)]
+fn test_fixed_width_opt_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let mut parser = fixed_width_opt(5, delimited(space0, nom_i32, space0));
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     assert!(
         result.is_err(),
-        "{} should have failed with {:?}",
-        desc,
-        result.clone().unwrap_err().map(|e| e.code),
-    );
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for '{}', expected {:?}, got {:?}",
-        String::from_utf8_lossy(input),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
         expected_kind,
-        result
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
 #[rstest]
-#[case(b"123", 123i32)]
-#[case(b"-98", -98i32)]
-#[case(b"  8", 8i32)]
-#[case(b"   ", 0i32)]
+#[case::positive(b"123", 123i32)]
+#[case::negative(b"-98", -98i32)]
+#[case::padded(b"  8", 8i32)]
+#[case::blank(b"   ", 0i32)]
 fn test_fixed_width_int(#[case] input: &[u8], #[case] expected: i32) {
     let mut parser = all_consuming(fixed_width_int::<i32>(3));
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
-        "Test for '{}' should have succeeded",
-        String::from_utf8_lossy(input)
-    );
-    let (remaining, result) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(result, expected);
-}
-
-#[rstest]
-#[case(b"1234", "too many characters", error::ErrorKind::Eof)]
-#[case(b"12", "too few characters", error::ErrorKind::Eof)]
-#[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
-#[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
-fn test_fixed_width_int_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
-    let mut parser = all_consuming(fixed_width_int::<i32>(3));
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
-    );
-}
-
-#[rstest]
-#[case(b"100", 100i8)]
-#[case(b" -9", -9i8)]
-#[case(b"8  ", 8i8)]
-#[case(b" 1 ", 1i8)]
-fn test_fixed_width_int_in_range(#[case] input: &[u8], #[case] expected: i8) {
-    let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, -10i8..=110i8));
-    let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded",
-        String::from_utf8_lossy(input)
-    );
-    let (remaining, result) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(result, expected);
-}
-
-#[rstest]
-#[case(b"   ", "blank field not in range", error::ErrorKind::Verify)]
-#[case(b"11 ", "value is out of range", error::ErrorKind::Verify)]
-#[case(b"1234", "too many characters", error::ErrorKind::Verify)]
-#[case(b"8", "too few characters", error::ErrorKind::Eof)]
-#[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
-#[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
-fn test_fixed_width_int_in_range_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
-    let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, 1i8..=10i8));
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
-    );
-}
-
-#[rstest]
-#[case(b"100", 100u8)]
-#[case(b"  9", 9u8)]
-#[case(b"8  ", 8u8)]
-#[case(b" 1 ", 1u8)]
-fn test_fixed_width_int_in_range_inclusive(#[case] input: &[u8], #[case] expected: u8) {
-    let mut parser = all_consuming(fixed_width_int_in_range::<u8, _>(3, 0u8..=100u8));
-    let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "Test for '{}' should have succeeded",
-        String::from_utf8_lossy(input)
-    );
-    let (remaining, result) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(result, expected);
-}
-
-#[rstest]
-#[case(b"  5", Some(5i32))]
-#[case(b" 10", Some(10i32))]
-#[case(b"  0", Some(0i32))]
-#[case(b" 11", None)]
-#[case(b" -1", None)]
-#[case(b"   ", None)]
-#[case(b"  ", None)]
-#[case(b"", None)]
-fn test_fixed_width_int_in_range_opt(#[case] input: &[u8], #[case] expected: Option<i32>) {
-    let mut parser = all_consuming(fixed_width_int_in_range_opt::<i32, _>(3, 0..=10));
-    let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "Test for '{}' should have succeeded but failed with {:?}",
-        String::from_utf8_lossy(input),
+        "{:?} should have succeeded but failed with {:?}",
+        input_str,
         result
     );
     let (remaining, value) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(value, expected);
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
+    );
 }
 
 #[rstest]
-#[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
-#[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
+#[case::four_characters(b"1234", NomErrorKind::Eof)]
+#[case::two_characters(b"12", NomErrorKind::Eof)]
+#[case::non_numeric_input(b"abc", NomErrorKind::Digit)]
+#[case::trailing_characters(b"1a ", NomErrorKind::Eof)]
+fn test_fixed_width_int_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let mut parser = all_consuming(fixed_width_int::<i32>(3));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rstest]
+#[case::positive(b"100", 100i8)]
+#[case::negative(b" -9", -9i8)]
+#[case::padded_right(b"8  ", 8i8)]
+#[case::padded_both_sides(b" 1 ", 1i8)]
+fn test_fixed_width_int_in_range(#[case] input: &[u8], #[case] expected: i8) {
+    let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, -10i8..=110i8));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(
+        result.is_ok(),
+        "{:?} should have succeeded but failed with {:?}",
+        input_str,
+        result
+    );
+    let (remaining, value) = result.unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
+    );
+}
+
+#[rstest]
+#[case::blank_not_in_range(b"   ", NomErrorKind::Verify)]
+#[case::out_of_range(b"11 ", NomErrorKind::Verify)]
+#[case::four_characters(b"1234", NomErrorKind::Verify)]
+#[case::one_character(b"8", NomErrorKind::Eof)]
+#[case::non_numeric_input(b"abc", NomErrorKind::Digit)]
+#[case::trailing_characters(b"1a ", NomErrorKind::Eof)]
+fn test_fixed_width_int_in_range_invalid(
+    #[case] input: &[u8],
+    #[case] expected_kind: NomErrorKind,
+) {
+    let mut parser = all_consuming(fixed_width_int_in_range::<i8, _>(3, 1i8..=10i8));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rstest]
+#[case::positive(b"100", 100u8)]
+#[case::padded_left(b"  9", 9u8)]
+#[case::padded_right(b"8  ", 8u8)]
+#[case::padded_both_sides(b" 1 ", 1u8)]
+fn test_fixed_width_int_in_range_inclusive(#[case] input: &[u8], #[case] expected: u8) {
+    let mut parser = all_consuming(fixed_width_int_in_range::<u8, _>(3, 0u8..=100u8));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(
+        result.is_ok(),
+        "{:?} should have succeeded but failed with {:?}",
+        input_str,
+        result
+    );
+    let (remaining, value) = result.unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
+    );
+}
+
+#[rstest]
+#[case::padded_left_one_digit(b"  5", Some(5i32))]
+#[case::padded_left_two_digits(b" 10", Some(10i32))]
+#[case::padded_left_zero(b"  0", Some(0i32))]
+#[case::two_digits_out_of_range(b" 11", None)]
+#[case::negative_out_of_range(b" -1", None)]
+#[case::blank(b"   ", None)]
+#[case::blank_width2(b"  ", None)]
+fn test_fixed_width_int_in_range_opt(#[case] input: &[u8], #[case] expected: Option<i32>) {
+    let mut parser = all_consuming(fixed_width_int_in_range_opt::<i32, _>(3, 0..=10));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(
+        result.is_ok(),
+        "{:?} should have succeeded but failed with {:?}",
+        input_str,
+        result
+    );
+    let (remaining, value) = result.unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
+    );
+}
+
+#[rstest]
+#[case::non_numeric_input(b"abc", NomErrorKind::Digit)]
+#[case::trailing_characters(b"1a ", NomErrorKind::Eof)]
 fn test_fixed_width_int_in_range_opt_invalid(
     #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
+    #[case] expected_kind: NomErrorKind,
 ) {
     let mut parser = all_consuming(fixed_width_int_in_range_opt::<i32, _>(3, 0..=10));
     let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
         expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
 #[rstest]
-#[case(b"  1", 0usize)]
-#[case(b"123", 122usize)]
+#[case::padded_left(b"  1", 0usize)]
+#[case::three_digits(b"123", 122usize)]
 fn test_fixed_width_int_minus1(#[case] input: &[u8], #[case] expected: usize) {
     let mut parser = all_consuming(fixed_width_int_minus1::<usize>(3));
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
-        "Test for '{}' should have succeeded",
-        String::from_utf8_lossy(input)
+        "{:?} should have succeeded but failed with {:?}",
+        input_str,
+        result
     );
-    let (remaining, result) = result.unwrap();
+    let (remaining, value) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(result, expected);
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
+    );
 }
 
 #[rstest]
-#[case(b"  0", "value too small", error::ErrorKind::Verify)]
-fn test_fixed_width_int_minus1_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
+#[case::value_too_small(b"  0", NomErrorKind::Verify)]
+fn test_fixed_width_int_minus1_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let mut parser = all_consuming(fixed_width_int_minus1::<usize>(3));
     let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
         expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
 #[rstest]
-#[case(b"123", 123i32)]
-#[case(b"12", 12i32)]
-#[case(b"1", 1i32)]
-#[case(b"", 0i32)]
-#[case(b"12 ", 12i32)]
-#[case(b"1  ", 1i32)]
-#[case(b" 12", 12i32)]
-#[case(b"  1", 1i32)]
-#[case(b" 1 ", 1i32)]
-#[case(b"   ", 0i32)]
-#[case(b"  ", 0i32)]
-#[case(b" ", 0i32)]
-#[case(b" -1", -1i32)]
+#[case::three_digits(b"123", 123i32)]
+#[case::two_digits(b"12", 12i32)]
+#[case::one_digit(b"1", 1i32)]
+#[case::empty(b"", 0i32)]
+#[case::two_digits_padded_right(b"12 ", 12i32)]
+#[case::one_digit_padded_right(b"1  ", 1i32)]
+#[case::two_digits_padded_left(b" 12", 12i32)]
+#[case::one_digit_padded_left(b"  1", 1i32)]
+#[case::two_digits_padded_both_sides(b" 1 ", 1i32)]
+#[case::blank_width3(b"   ", 0i32)]
+#[case::blank_width2(b"  ", 0i32)]
+#[case::blank_width1(b" ", 0i32)]
+#[case::negative(b" -1", -1i32)]
 fn test_fixed_width_int_partial(#[case] input: &[u8], #[case] expected: i32) {
     let mut parser = all_consuming(fixed_width_int_partial::<i32>(3));
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
-        "Test for '{}' should have succeeded but failed with {:?}",
-        String::from_utf8_lossy(input),
+        "{:?} should have succeeded but failed with {:?}",
+        input_str,
         result
     );
-    let (remaining, result) = result.unwrap();
+    let (remaining, value) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(result, expected);
-}
-
-#[rstest]
-#[case(b"1234", "too many characters", error::ErrorKind::Eof)]
-#[case(b"abc", "non-numeric input", error::ErrorKind::Digit)]
-#[case(b"1a ", "trailing characters", error::ErrorKind::Eof)]
-fn test_fixed_width_int_partial_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
-    let mut parser = all_consuming(fixed_width_int_partial::<i32>(3));
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
     );
 }
 
 #[rstest]
-#[case(b"  1.2345  ", 1.2345)]
-#[case(b"    -1.234", -1.234)]
-#[case(b"1.0       ", 1.0)]
-#[case(b"1.        ", 1.0)]
-#[case(b" .1       ", 0.1)]
-#[case(b"1.23456   ", 1.23456)]
-#[case(b"   1234567", 123.4567)]
-#[case(b"  -1234567", -123.4567)]
-#[case(b"       123", 0.0123)]
-#[case(b"          ", 0.0)]
+#[case::too_many_characters(b"1234", NomErrorKind::Eof)]
+#[case::non_numeric_input(b"abc", NomErrorKind::Digit)]
+#[case::trailing_characters(b"1a ", NomErrorKind::Eof)]
+fn test_fixed_width_int_partial_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let mut parser = all_consuming(fixed_width_int_partial::<i32>(3));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rstest]
+#[case::padded_both_sides(b"  1.2345  ", 1.2345)]
+#[case::negative(b"    -1.234", -1.234)]
+#[case::dot_zero_padded_right(b"1.0       ", 1.0)]
+#[case::no_fractional_part_padded_right(b"1.        ", 1.0)]
+#[case::no_integer_part_padded_both_sides(b" .1       ", 0.1)]
+#[case::padded_right(b"1.23456   ", 1.23456)]
+#[case::integer_padded_left(b"   1234567", 123.4567)]
+#[case::negative_padded_left(b"  -1234567", -123.4567)]
+#[case::blank(b"          ", 0.0)]
 fn test_fixed_width_float(#[case] input: &[u8], #[case] expected: f64) {
     let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
     let result = parser.parse(input);
@@ -380,102 +379,95 @@ fn test_fixed_width_float(#[case] input: &[u8], #[case] expected: f64) {
 }
 
 #[rstest]
-#[case(b"1.23a     ", "trailing characters", error::ErrorKind::Eof)]
-#[case(b"1.2.3     ", "invalid decimal point", error::ErrorKind::Eof)]
-#[case(b"          a", "trailing characters", error::ErrorKind::Eof)]
-fn test_fixed_width_float_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
+#[case::trailing_characters(b"1.23a     ", NomErrorKind::Eof)]
+#[case::invalid_decimal_point(b"1.2.3     ", NomErrorKind::Eof)]
+#[case::trailing_characters_after_blank(b"          a", NomErrorKind::Eof)]
+fn test_fixed_width_float_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
     let result = parser.parse(input);
-    assert!(result.is_err(), "{} should have failed", desc);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
         expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
 #[rstest]
-#[case(b"   C", Some(Element::C))]
-#[case(b"  C ", Some(Element::C))]
-#[case(b" C  ", Some(Element::C))]
-#[case(b"C   ", Some(Element::C))]
-#[case(b"Cu  ", Some(Element::Cu))]
-#[case(b" Cu ", Some(Element::Cu))]
-#[case(b"  Cu", Some(Element::Cu))]
-#[case(b" Cu ", Some(Element::Cu))]
-#[case(b"Cu  ", Some(Element::Cu))]
+#[case::one_character(b"   C", Some(Element::C))]
+#[case::one_character_pos3(b"  C ", Some(Element::C))]
+#[case::one_character_pos2(b" C  ", Some(Element::C))]
+#[case::one_character_pos1(b"C   ", Some(Element::C))]
+#[case::two_characters_pos1(b"Cu  ", Some(Element::Cu))]
+#[case::two_characters_pos2(b" Cu ", Some(Element::Cu))]
+#[case::two_characters_pos3(b"  Cu", Some(Element::Cu))]
 fn test_fixed_width_element_partial(#[case] input: &[u8], #[case] expected: Option<Element>) {
     let mut parser = all_consuming(fixed_width_element_partial(4));
     let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded",
-        String::from_utf8_lossy(input)
-    );
-    let (remaining, result) = result.unwrap();
+    let input_str = input.to_str_lossy();
+    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    let (remaining, value) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(result, expected);
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
+    );
 }
 
 #[rstest]
-#[case(b"Cu   ", "trailing characters", error::ErrorKind::Eof)]
-#[case(b" X  ", "invalid element symbol", error::ErrorKind::MapOpt)]
+#[case::trailing_characters(b"Cu   ", NomErrorKind::Eof)]
+#[case::invalid_element_symbol(b" X  ", NomErrorKind::MapOpt)]
 fn test_fixed_width_element_partial_invalid(
     #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
+    #[case] expected_kind: NomErrorKind,
 ) {
     let mut parser = all_consuming(fixed_width_element_partial(4));
     let result = parser.parse(input);
-    assert!(
-        result.is_err(),
-        "{} should have failed",
-        String::from_utf8_lossy(input)
-    );
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {:?}",
-        desc,
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
         expected_kind,
-        result.clone().unwrap_err().map(|e| e.code),
+        result.clone().unwrap_err().map(|e| e.code)
     );
 }
 
 #[rstest]
-#[case(b"", 3, true, false)]
-#[case(b"   ", 3, true, true)]
-#[case(b"  0", 3, true, true)]
-#[case(b" 0 ", 3, true, true)]
-#[case(b"0  ", 3, true, true)]
-#[case(b" 00", 3, true, true)]
-#[case(b"00 ", 3, true, true)]
-#[case(b"000", 3, true, true)]
-#[case(b"0", 3, true, false)]
-#[case(b"00", 3, true, false)]
-#[case(b"0 0", 3, true, false)]
-#[case(b"  1", 3, true, false)]
-#[case(b"000", 3, false, true)]
-#[case(b"0 0", 3, false, true)]
-#[case(b"  1", 3, false, true)]
+#[case::empty(b"", 3, false, false)]
+#[case::blank(b"   ", 3, false, true)]
+#[case::zero(b"  0", 3, false, true)]
+#[case::zero_pos2(b" 0 ", 3, false, true)]
+#[case::zero_pos1(b"0  ", 3, false, true)]
+#[case::two_zeros(b" 00", 3, false, true)]
+#[case::two_zeros_pos1(b"00 ", 3, false, true)]
+#[case::three_zeros(b"000", 3, false, true)]
+#[case::zero_width1(b"0", 3, false, false)]
+#[case::two_zeros_width2(b"00", 3, false, false)]
+#[case::two_zeros_separated(b"0 0", 3, false, false)]
+#[case::one(b"  1", 3, false, false)]
+#[case::three_zeros_skip_padding(b"000", 3, true, true)]
+#[case::two_zeros_separated_skip_padding(b"0 0", 3, true, true)]
+#[case::one_skip_padding(b"  1", 3, true, true)]
 fn test_fixed_width_padding(
     #[case] input: &[u8],
     #[case] width: usize,
-    #[case] strict_padding: bool,
+    #[case] skip_padding: bool,
     #[case] expected_success: bool,
 ) {
-    let mut parser = all_consuming(fixed_width_padding(width, strict_padding));
+    let mut parser = all_consuming(fixed_width_padding(width, skip_padding));
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     assert_eq!(
         result.is_ok(),
         expected_success,
         "{:?}: should have {}",
-        input,
+        input_str,
         if expected_success {
             "succeeded"
         } else {
@@ -489,50 +481,60 @@ fn test_fixed_width_padding(
 }
 
 #[rstest]
-#[case(b"", 0, 0, true, true)]
-#[case(b"   ", 1, 3, true, true)]
-#[case(b"  0", 1, 3, true, true)]
-#[case(b" 0 ", 1, 3, true, true)]
-#[case(b"0  ", 1, 3, true, true)]
-#[case(b" 00", 1, 3, true, true)]
-#[case(b"00 ", 1, 3, true, true)]
-#[case(b"000", 1, 3, true, true)]
-#[case(b"000000", 2, 3, true, true)]
-#[case(b"   000", 2, 3, true, true)]
-#[case(b"0 0000", 2, 3, true, false)]
-#[case(b"  1", 1, 3, true, false)]
-#[case(b"0 0000", 2, 3, false, true)]
-#[case(b"  1", 1, 3, false, true)]
-#[case(b"000001", 2, 3, true, false)]
+#[case::empty(b"", 0, 0, false, true)]
+#[case::blank(b"   ", 1, 3, false, true)]
+#[case::zero(b"  0", 1, 3, false, true)]
+#[case::zero_pos2(b" 0 ", 1, 3, false, true)]
+#[case::zero_pos1(b"0  ", 1, 3, false, true)]
+#[case::two_zeros(b" 00", 1, 3, false, true)]
+#[case::two_zeros_pos1(b"00 ", 1, 3, false, true)]
+#[case::three_zeros(b"000", 1, 3, false, true)]
+#[case::two_fields_zeros(b"000000", 2, 3, false, true)]
+#[case::blank_field_zero(b"   000", 2, 3, false, true)]
+#[case::zeros_separated(b"0 0000", 2, 3, false, false)]
+#[case::one(b"  1", 1, 3, false, false)]
+#[case::zeros_separated_skip_padding(b"0 0000", 2, 3, true, true)]
+#[case::one_skip_padding(b"  1", 1, 3, true, true)]
+#[case::one_zero_padded_left(b"000001", 2, 3, false, false)]
 fn test_fixed_width_padding_n(
     #[case] input: &[u8],
     #[case] count: usize,
     #[case] width: usize,
-    #[case] strict_padding: bool,
+    #[case] skip_padding: bool,
     #[case] expected_success: bool,
 ) {
-    let mut parser = all_consuming(fixed_width_padding_n(count, width, strict_padding));
+    let mut parser = all_consuming(fixed_width_padding_n(count, width, skip_padding));
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     assert_eq!(
         result.is_ok(),
         expected_success,
-        "{:?}: should have succeeded",
-        input
+        "{:?}: should have {}",
+        input_str,
+        if expected_success {
+            "succeeded"
+        } else {
+            "failed"
+        }
     );
     if expected_success {
         let (remaining, _) = result.unwrap();
-        assert!(remaining.is_empty(), "remaining should be empty");
+        assert!(
+            remaining.is_empty(),
+            "remaining should be empty for {:?}",
+            input_str
+        );
     }
 }
 
 #[rstest]
-#[case(b"abcd", 4, Some("abcd".to_string()))]
-#[case(b"abc ", 4, Some("abc".to_string()))]
-#[case(b"abc", 4, Some("abc".to_string()))]
-#[case(b" abc", 4, Some("abc".to_string()))]
-#[case(b" ab ", 4, Some("ab".to_string()))]
-#[case(b"", 4, None)]
-#[case(b"   ", 4, None)]
+#[case::full_field(b"abcd", 4, Some("abcd".to_string()))]
+#[case::padded_right(b"abc ", 4, Some("abc".to_string()))]
+#[case::too_short(b"abc", 4, Some("abc".to_string()))]
+#[case::padded_left(b" abc", 4, Some("abc".to_string()))]
+#[case::padded_both_sides(b" ab ", 4, Some("ab".to_string()))]
+#[case::empty(b"", 4, None)]
+#[case::blank(b"   ", 4, None)]
 fn test_fixed_width_str_partial(
     #[case] input: &[u8],
     #[case] width: usize,
@@ -540,24 +542,60 @@ fn test_fixed_width_str_partial(
 ) {
     let mut parser = all_consuming(fixed_width_str_partial(width));
     let result = parser.parse(input);
-    assert!(
-        result.is_ok(),
-        "{} should have succeeded",
-        String::from_utf8_lossy(input)
-    );
+    let input_str = input.to_str_lossy();
+    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
 }
 
 #[rstest]
-#[case(b"", vec![RGroupOccurrence::GreaterThan(0)])]
-#[case(b"1", vec![RGroupOccurrence::Exactly(1)])]
-#[case(b"1,2", vec![RGroupOccurrence::Exactly(1), RGroupOccurrence::Exactly(2)])]
-#[case(b">1", vec![RGroupOccurrence::GreaterThan(1)])]
-#[case(b"<2", vec![RGroupOccurrence::FewerThan(2)])]
-#[case(b"1-3", vec![RGroupOccurrence::Range(1, 3)])]
-#[case(b"0,>0", vec![RGroupOccurrence::Exactly(0), RGroupOccurrence::GreaterThan(0)])]
+#[case::zero(b"    0.0000    0.0000    0.0000", false, Point3D::zero())]
+#[case::nonzero(b"    1.2345   -2.3456    3.4567", false, Point3D::new(1.2345, -2.3456, 3.4567))]
+#[case::tens(b"   10.0000  -20.0000   30.0000", false, Point3D::new(10.0, -20.0, 30.0))]
+#[case::hundreds(b"  123.4567 -234.5678  345.6789", false, Point3D::new(123.4567, -234.5678, 345.6789))]
+#[case::short_zero(b"       0.0       0.0       0.0", false, Point3D::zero())]
+#[case::no_integer_part(b"        .0        .0        .0", false, Point3D::zero())]
+#[case::nonzero_ignored(b"    1.2345   -2.3456    3.4567", true, Point3D::zero())]
+fn test_position30(
+    #[case] input: &[u8],
+    #[case] ignore_positions: bool,
+    #[case] expected: Point3D,
+) {
+    let mut parser = all_consuming(position30(ignore_positions));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(
+        result.is_ok(),
+        "{:?} should have succeeded",
+        input_str
+    );
+    let (remaining, pos) = result.unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(pos, expected);
+}
+
+#[rstest]
+#[case::too_short(b"    0.0000    0.0000    0.000")]
+#[case::too_long(b"    0.0000    0.0000    0.00000")]
+#[case::invalid_x(b"    x.0000    0.0000    0.0000")]
+#[case::invalid_y(b"    0.0000    y.0000    0.0000")]
+#[case::invalid_z(b"    0.0000    0.0000    z.0000")]
+fn test_position30_invalid(#[case] input: &[u8]) {
+    let mut parser = all_consuming(position30(false));
+    let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+}
+
+#[rstest]
+#[case::empty(b"", vec![RGroupOccurrence::GreaterThan(0)])]
+#[case::one(b"1", vec![RGroupOccurrence::Exactly(1)])]
+#[case::two(b"1,2", vec![RGroupOccurrence::Exactly(1), RGroupOccurrence::Exactly(2)])]
+#[case::greater_than(b">1", vec![RGroupOccurrence::GreaterThan(1)])]
+#[case::fewer_than(b"<2", vec![RGroupOccurrence::FewerThan(2)])]
+#[case::range(b"1-3", vec![RGroupOccurrence::Range(1, 3)])]
+#[case::exactly_greater_than(b"0,>0", vec![RGroupOccurrence::Exactly(0), RGroupOccurrence::GreaterThan(0)])]
 fn test_rgroup_occurrences(#[case] input: &[u8], #[case] expected: Vec<RGroupOccurrence>) {
     let mut parser = all_consuming(rgroup_occurrences());
     let result = parser.parse(input);
@@ -577,24 +615,17 @@ fn test_rgroup_occurrences(#[case] input: &[u8], #[case] expected: Vec<RGroupOcc
 }
 
 #[rstest]
-#[case(b"a", "invalid character", error::ErrorKind::Eof)]
-#[case(b"-3", "negative value", error::ErrorKind::Eof)]
-fn test_rgroup_occurrences_invalid(
-    #[case] input: &[u8],
-    #[case] desc: &str,
-    #[case] expected_kind: error::ErrorKind,
-) {
+#[case::invalid_character(b"a", NomErrorKind::Eof)]
+#[case::negative_value(b"-3", NomErrorKind::Eof)]
+fn test_rgroup_occurrences_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let mut parser = all_consuming(rgroup_occurrences());
     let result = parser.parse(input);
-    assert!(
-        result.is_err(),
-        "{}: should have failed",
-        String::from_utf8_lossy(input)
-    );
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Mismatched error kind for {}, expected {:?}, got {}",
-        desc,
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code),
     );

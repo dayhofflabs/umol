@@ -1,11 +1,9 @@
-use strum::EnumIter;
 use thiserror::Error;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::span::Span;
 
-#[derive(Debug, Clone, PartialEq, EnumIter, Error)]
-#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
     #[error("Invalid whitespace at position {pos}")]
     InvalidWhitespace { pos: usize },
@@ -17,7 +15,6 @@ pub enum ParseError {
     InvalidElement { pos: usize },
     #[error("Invalid token at position {pos}")]
     InvalidToken { pos: usize },
-
     #[error("Unbalanced open parenthesis at position {pos}")]
     UnbalancedOpenParen { pos: usize },
     #[error("Unbalanced close parenthesis at position {pos}")]
@@ -28,14 +25,12 @@ pub enum ParseError {
     EmptyGroup { pos: usize },
     #[error("Nonfinal group at position {pos}")]
     NonfinalGroup { pos: usize },
-
     #[error("Leading bond at position {pos}")]
     LeadingBond { pos: usize },
     #[error("Trailing bond at position {pos}")]
     TrailingBond { pos: usize },
     #[error("Consecutive bonds at position {pos}")]
     ConsecutiveBonds { pos: usize },
-
     #[error("Leading ring at position {pos}")]
     LeadingRing { pos: usize },
     #[error("Unbalanced ring index opening at position {open_pos}")]
@@ -46,7 +41,6 @@ pub enum ParseError {
     MismatchedRingBondDirs { pos: usize, open_pos: usize },
     #[error("Mismatched ring bond orders at position {pos}")]
     MismatchedRingBondOrders { pos: usize, open_pos: usize },
-
     #[error("Leading dot at position {pos}")]
     LeadingDot { pos: usize },
     #[error("Trailing dot at position {pos}")]
@@ -55,7 +49,6 @@ pub enum ParseError {
     ConsecutiveDots { pos: usize },
     #[error("Dot before ring at position {pos}")]
     DotBeforeRing { pos: usize },
-
     #[error("Empty bracket at position {pos}")]
     EmptyBracket { pos: usize },
     #[error("Unbalanced open bracket at position {pos}")]
@@ -76,12 +69,6 @@ pub enum ParseError {
     BracketHwithHcount { pos: usize },
     #[error("Invalid bracket at position {pos}")]
     InvalidBracket { pos: usize },
-}
-
-impl ParseError {
-    pub fn all() -> impl Iterator<Item = ParseError> {
-        <ParseError as strum::IntoEnumIterator>::iter()
-    }
 }
 
 impl From<ParseError> for Diagnostic {
@@ -234,16 +221,3 @@ impl From<ParseError> for Diagnostic {
         }
     }
 }
-
-impl From<ParseError> for umol::error::ParseError {
-    fn from(error: ParseError) -> Self {
-        umol::error::ParseError::Format(Box::new(error))
-    }
-}
-
-impl From<ParseError> for umol::Error {
-    fn from(error: ParseError) -> Self {
-        umol::Error::Parse(error.into())
-    }
-}
-

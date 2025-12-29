@@ -1,6 +1,6 @@
 use std::{env, fs, process};
 
-use umol_models_graph::io::mol::parser::{parse_extended_mol, parse_mol};
+use umol_models_graph::io::mol::parser::{parse_extended_mol_bytes, parse_mol_bytes};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -31,7 +31,7 @@ fn main() {
 
     // Test with basic parser (parse_mol)
     println!("=== BASIC PARSER (parse_mol) ===");
-    match parse_mol(&mol_bytes) {
+    match parse_mol_bytes(&mol_bytes) {
         Ok(molecule) => {
             println!("✅ SUCCESS");
             println!("   Atoms: {}", molecule.atom_count());
@@ -47,7 +47,7 @@ fn main() {
 
     // Test with extended parser (parse_extended_mol)
     println!("=== EXTENDED PARSER (parse_extended_mol) ===");
-    match parse_extended_mol(&mol_bytes) {
+    match parse_extended_mol_bytes(&mol_bytes) {
         Ok(extended_molecule) => {
             println!("✅ SUCCESS");
             println!("   Atoms: {}", extended_molecule.atom_count());
@@ -62,8 +62,8 @@ fn main() {
     println!();
 
     // Summary
-    let basic_ok = parse_mol(&mol_bytes).is_ok();
-    let extended_ok = parse_extended_mol(&mol_bytes).is_ok();
+    let basic_ok = parse_mol_bytes(&mol_bytes).is_ok();
+    let extended_ok = parse_extended_mol_bytes(&mol_bytes).is_ok();
 
     println!("=== CLASSIFICATION ===");
     match (basic_ok, extended_ok) {

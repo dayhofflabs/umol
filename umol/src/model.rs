@@ -87,20 +87,20 @@ mod tests {
 
     #[test]
     fn test_atom_count_serialization() {
-        let model = AtomCount::new(42);
+        let model = AtomCount::new(12);
 
         // Serialize to JSON
         let json = serde_json::to_string(&model).unwrap();
-        assert_eq!(json, r#"{"data":{"count":42}}"#);
+        assert_eq!(json, r#"{"data":{"count":12}}"#);
 
         // Deserialize from JSON
         let deserialized: AtomCount = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.data.count, 42);
+        assert_eq!(deserialized.data.count, 12);
     }
 
     #[test]
     fn test_atom_count_capabilities() {
-        let model = AtomCount::new(42);
+        let model = AtomCount::new(12);
         let caps = model.capabilities();
         assert!(caps.contains(&Capability::local("atom_count", 1)));
     }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use umol_models_graph::io::mol::parser::{parse_extended_mol, parse_mol};
+use umol_models_graph::io::mol::parser::{parse_extended_mol_bytes, parse_mol_bytes};
 
 #[derive(Debug)]
 struct ClassificationStats {
@@ -66,7 +66,7 @@ fn classify_mol_file(file_path: &Path) -> Result<FileClassification, Box<dyn std
     let mol_bytes = fs::read(file_path)?;
 
     // Categorize based on parser results
-    match (parse_mol(&mol_bytes), parse_extended_mol(&mol_bytes)) {
+    match (parse_mol_bytes(&mol_bytes), parse_extended_mol_bytes(&mol_bytes)) {
         (Ok(_), Ok(_)) => Ok(FileClassification::Molecule),
         (Err(_), Ok(_)) => Ok(FileClassification::ExtendedMolecule),
         (Ok(_), Err(_)) | (Err(_), Err(_)) => Ok(FileClassification::Invalid),

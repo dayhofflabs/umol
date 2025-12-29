@@ -10,9 +10,7 @@ keywords = ["chemistry", "cheminformatics", "molecular parsing"]
 [dependencies]
 atoi = "2.0.0"
 bitvec = { version = "1.0.1", features = ["serde"] }
-float-cmp = "0.10.0"
 map-macro = "0.3.0"
-once_cell = "1.21.3"
 phf = { version = "0.13.1", features = ["macros"] }
 regex = "1.11.2"
 serde = { version = "1.0.221", features = ["derive"] }
@@ -23,6 +21,7 @@ umol = { path = "../umol" }
 rstest = "0.26.1"
 pretty_assertions = "1.4.1"
 criterion = "0.7.0"
+float-cmp = "0.10.0"
 
 [lib]
 bench = false

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::{env, fs};
 
-use umol_models_graph::io::mol::parser::parse_extended_mol;
+use umol_models_graph::io::mol::parser::parse_extended_mol_bytes;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -57,7 +57,7 @@ fn collect_mol_files(
                 *files_tested += 1;
 
                 if let Ok(content) = fs::read(&path) {
-                    match parse_extended_mol(&content) {
+                    match parse_extended_mol_bytes(&content) {
                         Ok(_) => {
                             // This shouldn't happen for invalid files
                             let error_type = "UNEXPECTED_SUCCESS".to_string();

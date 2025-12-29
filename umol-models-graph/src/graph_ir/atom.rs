@@ -30,7 +30,7 @@ pub struct Atom {
     aromatic: Option<bool>,
     chirality: Option<Chirality>,
     class_num: Option<u32>,
-    isotope: Option<u32>,
+    isotope_mass: Option<u32>,
     position: Option<Point3D>,
     span: Option<Span>,
 }
@@ -112,7 +112,7 @@ impl Atom {
             valence: Some(self.valence),
             implicit_h: Some(self.implicit_h),
             position: self.position,
-            isotope: self.isotope,
+            isotope: self.isotope_mass,
             aromatic: self.aromatic,
             chirality: self.chirality,
             class_num: self.class_num,
@@ -160,7 +160,7 @@ pub struct AtomBuilder {
     unpaired_e: Option<u32>,
     implicit_h: Option<u32>,
     position: Option<Point3D>,
-    isotope: Option<u32>,
+    isotope_mass: Option<u32>,
     aromatic: Option<bool>,
     chirality: Option<Chirality>,
     class_num: Option<u32>,
@@ -323,7 +323,7 @@ impl AtomBuilder {
     }
 
     pub fn set_isotope(&mut self, isotope: u32) -> &mut Self {
-        self.isotope = Some(isotope);
+        self.isotope_mass = Some(isotope);
         self
     }
 
@@ -429,7 +429,7 @@ impl AtomBuilder {
             unpaired_e: self.unpaired_e.unwrap_or_else(|| atom_spec.unpaired_e()),
             implicit_h: self.implicit_h.unwrap_or_else(|| atom_spec.implicit_h()),
             position: self.position,
-            isotope: self.isotope,
+            isotope: self.isotope_mass,
             aromatic: self.aromatic,
             chirality: self.chirality,
             class_num: self.class_num,

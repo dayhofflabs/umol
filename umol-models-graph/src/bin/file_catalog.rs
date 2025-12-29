@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use umol_models_graph::io::mol::parser::parse_extended_mol;
+use umol_models_graph::io::mol::parser::parse_extended_mol_bytes;
 
 #[derive(Debug, Clone)]
 struct FileAnalysis {
@@ -28,7 +28,7 @@ fn analyze_file(path: &PathBuf) -> Option<FileAnalysis> {
         .unwrap()
         .to_path_buf();
 
-    match parse_extended_mol(&content) {
+    match parse_extended_mol_bytes(&content) {
         Err(e) => {
             let error_str = format!("{:?}", e);
             let error_type = error_str.split('(').next().unwrap_or("Unknown").to_string();

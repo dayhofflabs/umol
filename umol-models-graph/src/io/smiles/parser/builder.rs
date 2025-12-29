@@ -62,10 +62,13 @@ impl MoleculeBuilder {
             isotope_mass: a.isotope,
             hydrogens: a.hydrogen_count,
             implicit_h: a.implicit_h,
+            valence: None,
             unpaired_e: None,
             aromatic: Some(a.aromatic),
             chirality: a.chirality,
             class: a.class,
+            alias: None,
+            value: None,
             span,
         };
 

@@ -1,25 +1,27 @@
 //! Accumulator for molecular properties from a CTAB file
 
 use std::collections::BTreeMap;
+use std::mem;
 
-use crate::io::ctfile::error::SemanticError;
 use umol_data::Element;
 
-type Result<T> = std::result::Result<T, SemanticError>;
+use crate::io::ctfile::error::ParseError;
+
+type Result<T> = std::result::Result<T, ParseError>;
 
 use super::context::Context;
 use super::convert::{
-    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_extended_bond_type_code,
-    convert_radical_type_code, convert_ring_bond_count_code, convert_substitution_count_code,
-    convert_unsaturated_atom_code,
+    convert_atom_isotope_mass_number, convert_attachment_point_code,
+    convert_extended_bond_type_code, convert_radical_type_code, convert_ring_bond_count_code,
+    convert_substitution_count_code, convert_unsaturated_atom_code,
 };
 use crate::io::ctab::config::CtabParseFlags;
 use crate::io::ctab::parser::properties::{PropertyEntries, SGroupDataEntry};
 use crate::table_ir::{
-    AtomList, AtomSymbol, AttachmentPointType, CtfileData, ExtendedMolecule,
-    LinkAtom, RGroup, RGroupOccurrence, RingBondCount, SGroup, SGroupBracketCoords,
-    SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay, SGroupMultiplier,
-    SGroupSubtype, SGroupType, SubstitutionCount, UnsaturatedAtom,
+    AtomList, AtomSymbol, AttachmentPointType, CtfileData, ExtendedMolecule, LinkAtom, RGroup,
+    RGroupOccurrence, RingBondCount, SGroup, SGroupBracketCoords, SGroupConnectingBond,
+    SGroupConnectivity, SGroupData, SGroupDataDisplay, SGroupMultiplier, SGroupSubtype, SGroupType,
+    SubstitutionCount, UnsaturatedAtom,
 };
 
 // Accumulator for properties of a single atom
@@ -82,7 +84,22 @@ impl SGroupProperties {
     pub(crate) fn new(sgroup_type: SGroupType) -> Self {
         Self {
             group_type: Some(sgroup_type),
-            ..Default::default()
+            group_subtype: None,
+            label: None,
+            connectivity: None,
+            expansion: None,
+            atom_indices: None,
+            bond_indices: None,
+            parent_atom_indices: None,
+            multiplier: None,
+            subscript: None,
+            correspondence: None,
+            bracket_coords: None,
+            connecting_bond: None,
+            hierarchy_parent: None,
+            component_number: None,
+            data: BTreeMap::new(),
+            display: None,
         }
     }
 }
@@ -121,7 +138,11 @@ impl MoleculeProperties {
         }
     }
 
-    pub(crate) fn add_entry(&mut self, entry: PropertyEntries, flags: CtabParseFlags) -> Result<()> {
+    pub(crate) fn add_entry(
+        &mut self,
+        entry: PropertyEntries,
+        flags: CtabParseFlags,
+    ) -> Result<()> {
         let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
         match entry {
             PropertyEntries::AtomAliasEntry(e) => {
@@ -173,9 +194,10 @@ impl MoleculeProperties {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     if props.link_atom.is_some() {
-                        return Err(SemanticError::DuplicateProperty(
-                            format!("link atom for atom {}", entry.atom_index)
-                        ).into());
+                        return Err(ParseError::DuplicateProperty(format!(
+                            "link atom for atom {}",
+                            entry.atom_index
+                        )));
                     }
                     props.link_atom = Some(LinkAtom {
                         repeat_count: entry.repeat_count,
@@ -193,9 +215,10 @@ impl MoleculeProperties {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     if props.attachment_point.is_some() {
-                        return Err(SemanticError::DuplicateProperty(
-                            format!("attachment point for atom {}", entry.atom_index)
-                        ).into());
+                        return Err(ParseError::DuplicateProperty(format!(
+                            "attachment point for atom {}",
+                            entry.atom_index
+                        )));
                     }
                     props.attachment_point = convert_attachment_point_code(entry.attachment_type)?;
                 }
@@ -222,9 +245,10 @@ impl MoleculeProperties {
             PropertyEntries::SGroupTypeEntries(entries) => {
                 for entry in entries {
                     if self.sgroup_properties.contains_key(&entry.sgroup_index) {
-                        return Err(SemanticError::DuplicateProperty(
-                            format!("S-group type for index {}", entry.sgroup_index)
-                        ).into());
+                        return Err(ParseError::DuplicateProperty(format!(
+                            "S-group type for index {}",
+                            entry.sgroup_index
+                        )));
                     }
                     let props = SGroupProperties::new(entry.sgroup_type);
                     self.sgroup_properties.insert(entry.sgroup_index, props);
@@ -235,191 +259,159 @@ impl MoleculeProperties {
             }
             PropertyEntries::SGroupSubtypeEntries(entries) => {
                 for entry in entries {
-                    let props = self
-                        .sgroup_properties
-                        .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                    let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                        ParseError::UndefinedSGroup {
                             index: entry.sgroup_index,
                             property: "subtype",
-                        })?;
+                        },
+                    )?;
                     props.group_subtype = Some(entry.sgroup_subtype);
                 }
             }
             PropertyEntries::SGroupLabelEntries(entries) => {
                 for entry in entries {
-                    let props = self
-                        .sgroup_properties
-                        .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                    let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                        ParseError::UndefinedSGroup {
                             index: entry.sgroup_index,
                             property: "label",
-                        })?;
+                        },
+                    )?;
                     props.label = Some(entry.label);
                 }
             }
             PropertyEntries::SGroupConnectivityEntries(entries) => {
                 for entry in entries {
-                    let props = self
-                        .sgroup_properties
-                        .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                    let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                        ParseError::UndefinedSGroup {
                             index: entry.sgroup_index,
                             property: "connectivity",
-                        })?;
+                        },
+                    )?;
                     props.connectivity = Some(entry.connectivity);
                 }
             }
             PropertyEntries::SGroupExpansionEntries(entries) => {
                 for entry in entries {
-                    let props = self
-                        .sgroup_properties
-                        .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| SemanticError::UndefinedSGroup {
+                    let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                        ParseError::UndefinedSGroup {
                             index: entry.sgroup_index,
                             property: "expansion",
-                        })?;
+                        },
+                    )?;
                     props.expansion = Some(true);
                 }
             }
             PropertyEntries::SGroupAtomListEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "atom list",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "atom list",
+                    },
+                )?;
                 props.atom_indices = Some(entry.atom_indices);
             }
             PropertyEntries::SGroupBondListEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "bond list",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "bond list",
+                    },
+                )?;
                 props.bond_indices = Some(entry.bond_indices);
             }
             PropertyEntries::SGroupParentAtomEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "parent atom list",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "parent atom list",
+                    },
+                )?;
                 props.parent_atom_indices = Some(entry.atom_indices);
             }
             PropertyEntries::SGroupSubscriptEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "subscript",
-                        }
-                    })?;
-                let sgroup_type = self
-                    .context
-                    .sgroup_types
-                    .get(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "subscript",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "subscript",
+                    },
+                )?;
+                let sgroup_type = self.context.sgroup_types.get(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "subscript",
+                    },
+                )?;
 
                 if !sgroup_accepts_subscript(*sgroup_type)
                     && !sgroup_accepts_multiplier(*sgroup_type)
                 {
-                    return Err(SemanticError::SGroupTypeConstraint {
+                    return Err(ParseError::SGroupTypeConstraint {
                         sgroup_type: *sgroup_type,
                         message: "subscript and multiplier not allowed",
-                    }.into());
+                    });
                 } else if sgroup_accepts_subscript(*sgroup_type) {
                     if entry.subscript.is_none() {
-                        return Err(SemanticError::SGroupTypeConstraint {
+                        return Err(ParseError::SGroupTypeConstraint {
                             sgroup_type: *sgroup_type,
                             message: "subscript required",
-                        }.into());
+                        });
                     }
                     props.subscript = entry.subscript;
                 } else if sgroup_accepts_multiplier(*sgroup_type) {
                     if entry.multiplier.is_none() {
-                        return Err(SemanticError::SGroupTypeConstraint {
+                        return Err(ParseError::SGroupTypeConstraint {
                             sgroup_type: *sgroup_type,
                             message: "multiplier required",
-                        }.into());
+                        });
                     }
                     props.multiplier = entry.multiplier;
                 } else {
-                    return Err(SemanticError::SGroupTypeConstraint {
+                    return Err(ParseError::SGroupTypeConstraint {
                         sgroup_type: *sgroup_type,
                         message: "cannot have both subscript and multiplier",
-                    }.into());
+                    });
                 }
             }
             PropertyEntries::SGroupCorrespondenceEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "correspondence",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "correspondence",
+                    },
+                )?;
                 props.correspondence = Some(entry.bond_indices);
             }
             PropertyEntries::SGroupDisplayInfoEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "display info",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "display info",
+                    },
+                )?;
                 props.bracket_coords = Some(SGroupBracketCoords {
                     bracket1: (entry.bracket_coords[0], entry.bracket_coords[1]),
                     bracket2: (entry.bracket_coords[2], entry.bracket_coords[3]),
                 });
             }
             PropertyEntries::SGroupConnectingBondEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "connecting bond",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "connecting bond",
+                    },
+                )?;
                 props.connecting_bond = Some(SGroupConnectingBond {
                     bond_index: entry.bond_index,
                     bond_vector: entry.bond_vector,
                 });
             }
             PropertyEntries::SGroupDataDescriptionEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "data description",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "data description",
+                    },
+                )?;
                 props.data.insert(
                     entry.field_name.clone(),
                     SGroupData {
@@ -435,15 +427,12 @@ impl MoleculeProperties {
                 self.context.current_data_field = Some(entry.field_name);
             }
             PropertyEntries::SGroupDataDisplayEntry(entry) => {
-                let props = self
-                    .sgroup_properties
-                    .get_mut(&entry.sgroup_index)
-                    .ok_or_else(|| {
-                        SemanticError::UndefinedSGroup {
-                            index: entry.sgroup_index,
-                            property: "data description",
-                        }
-                    })?;
+                let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                    ParseError::UndefinedSGroup {
+                        index: entry.sgroup_index,
+                        property: "data description",
+                    },
+                )?;
                 props.display = Some(SGroupDataDisplay {
                     coords: entry.coords,
                     display_type: entry.display_type,
@@ -458,15 +447,15 @@ impl MoleculeProperties {
                     data_content,
                 } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(SemanticError::MissingSGroupDataContext);
+                        return Err(ParseError::MissingSGroupDataContext);
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
                     if sgroup_index != context_sgroup {
-                        return Err(SemanticError::SGroupIndexMismatch {
+                        return Err(ParseError::SGroupIndexMismatch {
                             expected: context_sgroup,
                             actual: sgroup_index,
-                        }.into());
+                        });
                     }
 
                     if self.context.current_data_content.is_none() {
@@ -488,10 +477,10 @@ impl MoleculeProperties {
                 } => {
                     if let Some(context_sgroup) = self.context.current_sgroup_index {
                         if sgroup_index != context_sgroup {
-                            return Err(SemanticError::SGroupIndexMismatch {
+                            return Err(ParseError::SGroupIndexMismatch {
                                 expected: context_sgroup,
                                 actual: sgroup_index,
-                            }.into());
+                            });
                         }
 
                         if self.context.current_data_content.is_none() {
@@ -514,15 +503,15 @@ impl MoleculeProperties {
 
                 SGroupDataEntry::EndBlank { sgroup_index } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(SemanticError::MissingSGroupDataContext);
+                        return Err(ParseError::MissingSGroupDataContext);
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
                     if sgroup_index != context_sgroup {
-                        return Err(SemanticError::SGroupIndexMismatch {
+                        return Err(ParseError::SGroupIndexMismatch {
                             expected: context_sgroup,
                             actual: sgroup_index,
-                        }.into());
+                        });
                     }
 
                     self.finalize_sgroup_data(sgroup_index, None)?;
@@ -530,29 +519,23 @@ impl MoleculeProperties {
             },
             PropertyEntries::SGroupHierarchyEntries(entries) => {
                 for entry in entries {
-                    let props = self
-                        .sgroup_properties
-                        .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| {
-                            SemanticError::UndefinedSGroup {
-                                index: entry.sgroup_index,
-                                property: "hierarchy",
-                            }
-                        })?;
+                    let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                        ParseError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "hierarchy",
+                        },
+                    )?;
                     props.hierarchy_parent = Some(entry.parent_sgroup_index);
                 }
             }
             PropertyEntries::SGroupComponentEntries(entries) => {
                 for entry in entries {
-                    let props = self
-                        .sgroup_properties
-                        .get_mut(&entry.sgroup_index)
-                        .ok_or_else(|| {
-                            SemanticError::UndefinedSGroup {
-                                index: entry.sgroup_index,
-                                property: "component",
-                            }
-                        })?;
+                    let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
+                        ParseError::UndefinedSGroup {
+                            index: entry.sgroup_index,
+                            property: "component",
+                        },
+                    )?;
                     props.component_number = Some(entry.component_number);
                 }
             }
@@ -598,19 +581,19 @@ impl MoleculeProperties {
         sgroup_index: usize,
         sed_content: Option<String>,
     ) -> Result<()> {
-        let data_field = self.context.current_data_field.as_ref().ok_or_else(|| {
-            SemanticError::MissingSGroupDataContext
-        })?;
+        let data_field = self
+            .context
+            .current_data_field
+            .as_ref()
+            .ok_or(ParseError::MissingSGroupDataContext)?;
 
-        let props = self
-            .sgroup_properties
-            .get_mut(&sgroup_index)
-            .ok_or_else(|| {
-                SemanticError::UndefinedSGroup {
+        let props =
+            self.sgroup_properties
+                .get_mut(&sgroup_index)
+                .ok_or(ParseError::UndefinedSGroup {
                     index: sgroup_index,
                     property: "data content",
-                }
-            })?;
+                })?;
 
         let has_sed_content = sed_content.is_some();
 
@@ -649,6 +632,72 @@ impl MoleculeProperties {
     }
 
     /// Apply all properties to ExtendedMolecule (TableIR type)
+    pub(crate) fn update_molecule(
+        &mut self,
+        molecule: &mut crate::table_ir::Molecule,
+        flags: CtabParseFlags,
+    ) -> Result<()> {
+        let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
+
+        // Apply atom properties (only basic ones compatible with Atom)
+        for (&atom_idx, props) in &self.atom_properties {
+            let Some(atom) = molecule.atoms.get_mut(atom_idx) else {
+                return Err(ParseError::IndexOutOfBounds(atom_idx));
+            };
+
+            // Apply alias
+            if let Some(ref alias) = props.alias {
+                atom.alias = Some(alias.clone());
+            }
+
+            // Apply value
+            if let Some(ref value) = props.value {
+                atom.value = Some(value.clone());
+            }
+
+            // Apply charge
+            if let Some(charge) = props.charge {
+                atom.charge = Some(charge);
+                atom.unpaired_e = None; // charge overrides radical from atom block
+            }
+
+            // Apply radical (unpaired electrons)
+            if let Some(unpaired_e) = props.unpaired_e {
+                atom.unpaired_e = Some(unpaired_e);
+                atom.charge = None; // radical overrides charge from atom block
+            }
+
+            // Apply isotope
+            if let Some(isotope) = props.isotope_mass {
+                let validated = convert_atom_isotope_mass_number(
+                    atom.element,
+                    isotope,
+                    extended_isotopes,
+                )?;
+                atom.isotope_mass = validated;
+            }
+
+            // Apply hydrogen count
+            if let Some(h_count) = props.hydrogen_count {
+                atom.hydrogens = Some(h_count);
+            }
+        }
+
+        // Apply bond properties (zero order bonds)
+        for (&bond_idx, props) in &self.bond_properties {
+            if let Some(order_code) = props.order_override {
+                let extended = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+                let queries = flags.contains(CtabParseFlags::WILDCARDS);
+                let Some(bond) = molecule.bonds.get_mut(bond_idx) else {
+                    return Err(ParseError::IndexOutOfBounds(bond_idx));
+                };
+                bond.order = convert_extended_bond_type_code(order_code, extended, queries)?;
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn update_extended_molecule(
         &mut self,
         molecule: &mut ExtendedMolecule,
@@ -659,19 +708,17 @@ impl MoleculeProperties {
         // Apply atom properties
         for (&atom_idx, props) in &self.atom_properties {
             let Some(atom) = molecule.atoms.get_mut(atom_idx) else {
-                return Err(SemanticError::IndexOutOfBounds(atom_idx));
+                return Err(ParseError::IndexOutOfBounds(atom_idx));
             };
 
             // Apply alias
             if let Some(ref alias) = props.alias {
-                atom.properties
-                    .insert("molFileAlias".to_string(), alias.clone());
+                atom.alias = Some(alias.clone());
             }
 
             // Apply value
             if let Some(ref value) = props.value {
-                atom.properties
-                    .insert("molFileValue".to_string(), value.clone());
+                atom.value = Some(value.clone());
             }
 
             // Apply charge
@@ -706,7 +753,7 @@ impl MoleculeProperties {
                     }
                     _ => {
                         // For other symbol types (queries, etc.), just set the isotope
-                        atom.isotope = Some(isotope);
+                        atom.isotope_mass = Some(isotope);
                     }
                 }
             }
@@ -717,28 +764,60 @@ impl MoleculeProperties {
             }
 
             // Apply ring bond count
-            if let Some(ref rbc) = props.ring_bond_count {
-                atom.ring_bond_count = Some(rbc.clone());
+            if let Some(rbc) = props.ring_bond_count {
+                if atom.ring_bond_count.is_some() {
+                    return Err(ParseError::DuplicateProperty(
+                        format!("Ring bond count conflict: existing value for atom {}", atom_idx),
+                    ));
+                }
+                atom.ring_bond_count = Some(rbc);
             }
 
             // Apply substitution count
-            if let Some(ref sub) = props.substitution_count {
-                atom.substitution_count = Some(sub.clone());
+            if let Some(sub) = props.substitution_count {
+                if atom.substitution_count.is_some() {
+                    return Err(ParseError::DuplicateProperty(
+                        format!("Substitution count conflict: existing value for atom {}", atom_idx),
+                    ));
+                }
+                atom.substitution_count = Some(sub);
             }
 
             // Apply unsaturated
             if props.unsaturated.is_some() {
+                if atom.unsaturated.is_some() {
+                    return Err(ParseError::DuplicateProperty(
+                        format!("Unsaturated conflict: existing value for atom {}", atom_idx),
+                    ));
+                }
                 atom.unsaturated = Some(UnsaturatedAtom);
             }
 
             // Apply link atom
-            if let Some(ref link) = props.link_atom {
-                atom.link_atom = Some(link.clone());
+            if let Some(link) = props.link_atom {
+                if atom.link_atom.is_some() {
+                    return Err(ParseError::DuplicateProperty(
+                        format!("Link atom conflict: existing value for atom {}", atom_idx),
+                    ));
+                }
+                atom.link_atom = Some(link);
             }
 
             // Apply atom list
             if let Some(ref elements) = props.atom_list_elements {
                 let exclusion = props.atom_list_exclusion.unwrap_or(false);
+                // Allow overwriting Element, NamedIsotope, or empty AtomList (L placeholder)
+                let can_set = match &atom.symbol {
+                    AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => true,
+                    AtomSymbol::AtomList(list) => list.elements.is_empty(),
+                    _ => false,
+                };
+                if !can_set {
+                    return Err(ParseError::DuplicateProperty(format!(
+                        "Atom list conflict: existing symbol for atom {}",
+                        atom_idx
+                    )));
+                }
                 atom.symbol = AtomSymbol::AtomList(AtomList {
                     elements: elements.clone(),
                     exclusion,
@@ -746,8 +825,8 @@ impl MoleculeProperties {
             }
 
             // Apply attachment point
-            if let Some(ref ap) = props.attachment_point {
-                atom.attachment_point = Some(ap.clone());
+            if let Some(ap) = props.attachment_point {
+                atom.attachment_point = Some(ap);
             }
 
             // Apply attachment order
@@ -757,6 +836,22 @@ impl MoleculeProperties {
 
             // Apply R-group label
             if let Some(rgroup_label) = props.rgroup_label {
+                // Check for conflicts: can't set RGroup label on AtomList
+                if matches!(atom.symbol, AtomSymbol::AtomList(_)) {
+                    return Err(ParseError::DuplicateProperty(
+                        format!("RGroup label conflict: atom {} already has AtomList", atom_idx),
+                    ));
+                }
+                // Check for conflicts: can't change existing RGroup label (but can overwrite None)
+                if let AtomSymbol::RGroup(existing_rgroup) = &atom.symbol {
+                    if let Some(existing_label) = existing_rgroup.label {
+                        if existing_label != rgroup_label {
+                            return Err(ParseError::DuplicateProperty(
+                                format!("RGroup label conflict: atom {} already has RGroup label {}, cannot set {}", atom_idx, existing_label, rgroup_label),
+                            ));
+                        }
+                    }
+                }
                 // Set the symbol to RGroup with a minimal RGroup struct
                 // The full RGroup details are handled separately via rgroup_properties
                 atom.symbol = AtomSymbol::RGroup(RGroup {
@@ -772,20 +867,19 @@ impl MoleculeProperties {
         for (&bond_idx, props) in &self.bond_properties {
             if let Some(order_code) = props.order_override {
                 let extended = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-                let queries = flags.contains(CtabParseFlags::QUERIES);
-                if let Some(bond) = molecule.bonds.get_mut(bond_idx) {
-                    bond.order = convert_extended_bond_type_code(order_code, extended, queries)?;
-                }
+                let queries = flags.contains(CtabParseFlags::WILDCARDS);
+                let Some(bond) = molecule.bonds.get_mut(bond_idx) else {
+                    return Err(ParseError::IndexOutOfBounds(bond_idx));
+                };
+                bond.order = convert_extended_bond_type_code(order_code, extended, queries)?;
             }
         }
 
         // Initialize ctfile_data if we have any CTFile-specific data
-        let has_ctfile_data = !self.rgroup_properties.is_empty()
-            || !self.sgroup_properties.is_empty();
-        if has_ctfile_data {
-            if molecule.ctfile_data.is_none() {
-                molecule.ctfile_data = Some(CtfileData::default());
-            }
+        if (!self.rgroup_properties.is_empty() || !self.sgroup_properties.is_empty())
+            && molecule.ctfile_data.is_none()
+        {
+            molecule.ctfile_data = Some(CtfileData::default());
         }
 
         // Apply R-group logic
@@ -809,10 +903,10 @@ impl MoleculeProperties {
     }
 
     fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<()> {
-        for (sgroup_index, props) in std::mem::take(&mut self.sgroup_properties) {
-            let group_type = props.group_type.ok_or_else(|| {
-                SemanticError::SGroupMissingType(sgroup_index)
-            })?;
+        for (sgroup_index, props) in mem::take(&mut self.sgroup_properties) {
+            let group_type = props
+                .group_type
+                .ok_or(ParseError::SGroupMissingType(sgroup_index))?;
             let mut sgroup = SGroup::new(group_type);
             sgroup.label = props.label.or(Some(sgroup_index as u32));
             sgroup.group_subtype = props.group_subtype;
@@ -856,12 +950,17 @@ impl MoleculeProperties {
             if let Some(display) = props.display {
                 sgroup.display = Some(display);
             }
-            
+
             // Store in ctfile_data
             if molecule.ctfile_data.is_none() {
                 molecule.ctfile_data = Some(CtfileData::default());
             }
-            molecule.ctfile_data.as_mut().unwrap().sgroups.insert(sgroup_index, sgroup);
+            molecule
+                .ctfile_data
+                .as_mut()
+                .unwrap()
+                .sgroups
+                .insert(sgroup_index, sgroup);
         }
         Ok(())
     }

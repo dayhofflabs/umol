@@ -1,6 +1,9 @@
 //! Atom matchers
 
-use once_cell::sync::Lazy;
+#![allow(clippy::type_complexity)]
+
+use std::sync::LazyLock;
+
 use umol::Result;
 
 use crate::{AtomBuilder, AtomSpec, AtomSpecRegistry};
@@ -24,7 +27,7 @@ impl AtomMatcher {
             // Get candidate AtomSpecs based on element and potentially charge.
             // Note: We collect into a Vec here because the subsequent filter needs ownership
             // or a stable reference, and the iterators returned by the registry methods
-            // might depend on the Lazy static's internal state.
+            // might depend on the LazyLock static's internal state.
             let candidates = match builder.charge() {
                 Some(charge) => AtomSpecRegistry::by_element_and_charge(element, charge),
                 None => AtomSpecRegistry::by_element(element),
@@ -103,10 +106,10 @@ impl Default for AtomMatcher {
     }
 }
 
-pub static DEFAULT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::default);
-pub static STRICT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::strict);
-pub static LENIENT_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::lenient);
-pub static ALWAYS_ATOM_MATCHER: Lazy<AtomMatcher> = Lazy::new(AtomMatcher::always);
+pub static DEFAULT_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::default);
+pub static STRICT_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::strict);
+pub static LENIENT_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::lenient);
+pub static ALWAYS_ATOM_MATCHER: LazyLock<AtomMatcher> = LazyLock::new(AtomMatcher::always);
 
 #[cfg(test)]
 mod tests {

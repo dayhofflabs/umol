@@ -9,22 +9,43 @@ use super::rgroup::RGroup;
 use crate::span::Span;
 
 /// Basic Atom IR
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Atom {
     pub element: Element,
     pub charge: Option<i8>,
     pub isotope_mass: Option<u32>,
     pub hydrogens: Option<u8>,
     pub implicit_h: bool,
+    pub valence: Option<u8>,
     pub unpaired_e: Option<u8>,
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
+    pub alias: Option<String>,
+    pub value: Option<String>,
     pub span: Option<Span>,
 }
 
 impl Atom {
-    /// Create new aliphatic atom (aromatic flag false)
+    /// Create new atom from element (default for MOL/CTFile, no implicit hydrogens)
+    pub fn from_element(element: Element) -> Self {
+        Self {
+            element,
+            charge: None,
+            isotope_mass: None,
+            hydrogens: None,
+            implicit_h: false,
+            valence: None,
+            unpaired_e: None,
+            aromatic: None,
+            chirality: None,
+            class: None,
+            alias: None,
+            value: None,
+            span: None,
+        }
+    }
+    /// Create new aliphatic atom (aromatic flag false, implicit hydrogens true)
     pub fn aliphatic_atom(element: Element) -> Self {
         Self {
             element,
@@ -32,10 +53,13 @@ impl Atom {
             isotope_mass: None,
             hydrogens: None,
             implicit_h: true,
+            valence: None,
             unpaired_e: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
+            alias: None,
+            value: None,
             span: None,
         }
     }
@@ -48,15 +72,18 @@ impl Atom {
             isotope_mass: None,
             hydrogens: None,
             implicit_h: true,
+            valence: None,
             unpaired_e: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
+            alias: None,
+            value: None,
             span: Some(span),
         }
     }
 
-    /// Create new aromatic atom (aromatic flag true)
+    /// Create new aromatic atom (aromatic flag true, implicit hydrogens true)
     pub fn aromatic_atom(element: Element) -> Self {
         Self {
             element,
@@ -64,10 +91,13 @@ impl Atom {
             isotope_mass: None,
             hydrogens: None,
             implicit_h: true,
+            valence: None,
             unpaired_e: None,
             aromatic: Some(true),
             chirality: None,
             class: None,
+            alias: None,
+            value: None,
             span: None,
         }
     }
@@ -80,10 +110,13 @@ impl Atom {
             isotope_mass: None,
             hydrogens: None,
             implicit_h: true,
+            valence: None,
             unpaired_e: None,
             aromatic: Some(true),
             chirality: None,
             class: None,
+            alias: None,
+            value: None,
             span: Some(span),
         }
     }
@@ -94,7 +127,7 @@ impl Atom {
 pub enum AtomSymbol {
     Element(Element),
     NamedIsotope(NamedIsotope),
-    GenericAtom(GenericAtom),
+    WildcardAtom(WildcardAtom),
     AtomList(AtomList),
     RGroup(RGroup),
     Pseudoatom(String),
@@ -108,9 +141,9 @@ impl AtomSymbol {
     }
 }
 
-/// Generic atom types (SMILES and CXSMILES)
+/// Wildcard atom types (CTFile, SMILES, CXSMILES)
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum GenericAtom {
+pub enum WildcardAtom {
     Any,           // * = any atom
     Heavy,         // A = all except H
     Heteroatom,    // Q = any heteroatom (all except H, C)
@@ -122,37 +155,37 @@ pub enum GenericAtom {
     MetalOrH,      // MH = M or H (CXSMILES extension)
 }
 
-impl GenericAtom {
+impl WildcardAtom {
     pub fn symbol(&self) -> &str {
         match self {
-            GenericAtom::Any => "*",
-            GenericAtom::Heavy => "A",
-            GenericAtom::Heteroatom => "Q",
-            GenericAtom::Halogen => "X",
-            GenericAtom::Metal => "M",
-            GenericAtom::HeavyOrH => "AH",
-            GenericAtom::HeteroatomOrH => "QH",
-            GenericAtom::HalogenOrH => "XH",
-            GenericAtom::MetalOrH => "MH",
+            WildcardAtom::Any => "*",
+            WildcardAtom::Heavy => "A",
+            WildcardAtom::Heteroatom => "Q",
+            WildcardAtom::Halogen => "X",
+            WildcardAtom::Metal => "M",
+            WildcardAtom::HeavyOrH => "AH",
+            WildcardAtom::HeteroatomOrH => "QH",
+            WildcardAtom::HalogenOrH => "XH",
+            WildcardAtom::MetalOrH => "MH",
         }
     }
 
-    pub fn from_symbol_bytes(s: &[u8]) -> Option<GenericAtom> {
+    pub fn from_symbol_bytes(s: &[u8]) -> Option<WildcardAtom> {
         match s {
-            b"*" => Some(GenericAtom::Any),
-            b"A" => Some(GenericAtom::Heavy),
-            b"Q" => Some(GenericAtom::Heteroatom),
-            b"X" => Some(GenericAtom::Halogen),
-            b"M" => Some(GenericAtom::Metal),
-            b"AH" => Some(GenericAtom::HeavyOrH),
-            b"QH" => Some(GenericAtom::HeteroatomOrH),
-            b"XH" => Some(GenericAtom::HalogenOrH),
-            b"MH" => Some(GenericAtom::MetalOrH),
+            b"*" => Some(WildcardAtom::Any),
+            b"A" => Some(WildcardAtom::Heavy),
+            b"Q" => Some(WildcardAtom::Heteroatom),
+            b"X" => Some(WildcardAtom::Halogen),
+            b"M" => Some(WildcardAtom::Metal),
+            b"AH" => Some(WildcardAtom::HeavyOrH),
+            b"QH" => Some(WildcardAtom::HeteroatomOrH),
+            b"XH" => Some(WildcardAtom::HalogenOrH),
+            b"MH" => Some(WildcardAtom::MetalOrH),
             _ => None,
         }
     }
 
-    pub fn from_symbol(s: &str) -> Option<GenericAtom> {
+    pub fn from_symbol(s: &str) -> Option<WildcardAtom> {
         Self::from_symbol_bytes(s.as_bytes())
     }
 }
@@ -196,14 +229,16 @@ pub struct ExtendedAtom {
     pub isotope_mass: Option<u32>,
     pub hydrogens: Option<u8>,
     pub implicit_h: bool,
+    pub valence: Option<u8>,
     pub unpaired_e: Option<u8>,
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
     pub span: Option<Span>,
+    pub alias: Option<String>,
+    pub value: Option<String>,
     pub stereo_parity: Option<AtomStereoParity>,
     pub stereo_care: Option<AtomStereoCare>,
-    pub valence: Option<u8>,
     pub atom_map_num: Option<u32>,
     pub inversion_retention: Option<AtomInversionRetention>,
     pub exact_change: Option<AtomExactChange>,
@@ -218,21 +253,24 @@ pub struct ExtendedAtom {
 // End of TODO
 
 impl ExtendedAtom {
-    pub fn from_element(element: Element) -> Self {
+    /// Create new extended atom from symbol (default for MOL/CTFile, no implicit hydrogens)
+    pub fn from_atom_symbol(symbol: AtomSymbol) -> Self {
         Self {
-            symbol: AtomSymbol::Element(element),
+            symbol,
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: true,
+            implicit_h: false,
             unpaired_e: None,
+            valence: None,
             aromatic: None,
             chirality: None,
             class: None,
             span: None,
+            alias: None,
+            value: None,
             stereo_parity: None,
             stereo_care: None,
-            valence: None,
             atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
@@ -246,11 +284,23 @@ impl ExtendedAtom {
         }
     }
 
+    pub fn from_element(element: Element) -> Self {
+        Self::from_atom_symbol(AtomSymbol::Element(element))
+    }
+
+    pub fn from_named_isotope(isotope: NamedIsotope) -> Self {
+        let element = isotope.element();
+        let mass_number = isotope.mass_number();
+        let mut atom = Self::from_element(element);
+        atom.isotope_mass = Some(mass_number);
+        atom
+    }
+
     /// Check if this atom has extended features that would be lost in conversion to basic Atom.
+    /// Note: alias and value are basic features, not extended.
     pub fn has_extended_features(&self) -> bool {
         self.stereo_parity.is_some()
             || self.stereo_care.is_some()
-            || self.valence.is_some()
             || self.atom_map_num.is_some()
             || self.inversion_retention.is_some()
             || self.exact_change.is_some()
@@ -260,9 +310,16 @@ impl ExtendedAtom {
             || self.substitution_count.is_some()
             || self.unsaturated.is_some()
             || self.link_atom.is_some()
-            || !self.properties.is_empty()
+            || has_extended_properties(&self.properties)
             || self.symbol.is_extended()
     }
+}
+
+/// Check if properties HashMap contains extended properties (excluding basic alias/value).
+fn has_extended_properties(properties: &HashMap<String, String>) -> bool {
+    properties
+        .keys()
+        .any(|k| k != "molFileAlias" && k != "molFileValue")
 }
 
 impl From<Atom> for ExtendedAtom {
@@ -273,14 +330,16 @@ impl From<Atom> for ExtendedAtom {
             isotope_mass: atom.isotope_mass,
             hydrogens: atom.hydrogens,
             implicit_h: atom.implicit_h,
+            valence: atom.valence,
             unpaired_e: atom.unpaired_e,
             aromatic: atom.aromatic,
             chirality: atom.chirality,
             class: atom.class,
             span: atom.span,
+            alias: atom.alias,
+            value: atom.value,
             stereo_parity: None,
             stereo_care: None,
-            valence: None,
             atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
@@ -319,11 +378,14 @@ impl TryFrom<ExtendedAtom> for Atom {
             isotope_mass: extended.isotope_mass,
             hydrogens: extended.hydrogens,
             implicit_h: extended.implicit_h,
+            valence: extended.valence,
             unpaired_e: extended.unpaired_e,
             aromatic: extended.aromatic,
             chirality: extended.chirality,
             class: extended.class,
             span: extended.span,
+            alias: extended.alias,
+            value: extended.value,
         })
     }
 }
@@ -436,7 +498,7 @@ mod tests {
     fn test_extended_atom_from_element() {
         let extended = ExtendedAtom::from_element(Element::N);
         assert_eq!(extended.symbol, AtomSymbol::Element(Element::N));
-        assert!(extended.implicit_h);
+        assert!(!extended.implicit_h);
         assert!(extended.aromatic.is_none());
         assert!(extended.properties.is_empty());
         assert!(!extended.has_extended_features());
@@ -450,11 +512,14 @@ mod tests {
             isotope_mass: Some(13),
             hydrogens: Some(3),
             implicit_h: false,
+            valence: Some(3),
             unpaired_e: Some(1),
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
             span: None,
+            alias: None,
+            value: None,
         };
 
         let extended: ExtendedAtom = atom.into();
@@ -463,6 +528,7 @@ mod tests {
         assert_eq!(extended.isotope_mass, Some(13));
         assert_eq!(extended.hydrogens, Some(3));
         assert!(!extended.implicit_h);
+        assert_eq!(extended.valence, Some(3));
         assert_eq!(extended.unpaired_e, Some(1));
         assert_eq!(extended.aromatic, Some(true));
         assert_eq!(extended.chirality, Some(Chirality::Clockwise));
@@ -478,14 +544,16 @@ mod tests {
             isotope_mass: None,
             hydrogens: Some(1),
             implicit_h: true,
+            valence: Some(1),
             unpaired_e: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
             span: None,
+            alias: None,
+            value: None,
             stereo_parity: None,
             stereo_care: None,
-            valence: None,
             atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
@@ -501,46 +569,32 @@ mod tests {
         let atom: Atom = extended.try_into().unwrap();
         assert_eq!(atom.element, Element::O);
         assert_eq!(atom.charge, Some(-1));
+        assert_eq!(atom.isotope_mass, None);
         assert_eq!(atom.hydrogens, Some(1));
+        assert_eq!(atom.implicit_h, true);
+        assert_eq!(atom.valence, Some(1));
+        assert_eq!(atom.unpaired_e, None);
         assert_eq!(atom.aromatic, Some(false));
     }
 
     #[test]
     fn test_try_from_extended_atom_to_atom_named_isotope() {
-        let extended = ExtendedAtom {
-            symbol: AtomSymbol::NamedIsotope(NamedIsotope::D),
-            charge: None,
-            isotope_mass: None,
-            hydrogens: None,
-            implicit_h: true,
-            unpaired_e: None,
-            aromatic: None,
-            chirality: None,
-            class: None,
-            span: None,
-            stereo_parity: None,
-            stereo_care: None,
-            valence: None,
-            atom_map_num: None,
-            inversion_retention: None,
-            exact_change: None,
-            attachment_point: None,
-            attachment_order: None,
-            ring_bond_count: None,
-            substitution_count: None,
-            unsaturated: None,
-            link_atom: None,
-            properties: HashMap::new(),
-        };
-
+        let named_isotope = NamedIsotope::D;
+        let extended = ExtendedAtom::from_named_isotope(named_isotope);
         let atom: Atom = extended.try_into().unwrap();
         assert_eq!(atom.element, Element::H);
+        assert_eq!(atom.charge, None);
+        assert_eq!(atom.isotope_mass, Some(2));
+        assert!(!atom.implicit_h);
+        assert_eq!(atom.valence, None);
+        assert_eq!(atom.unpaired_e, None);
+        assert_eq!(atom.aromatic, None);
     }
 
     #[test]
     fn test_try_from_extended_atom_to_atom_invalid() {
         let extended = ExtendedAtom {
-            symbol: AtomSymbol::GenericAtom(GenericAtom::Any),
+            symbol: AtomSymbol::WildcardAtom(WildcardAtom::Any),
             charge: None,
             isotope_mass: None,
             hydrogens: None,
@@ -550,6 +604,8 @@ mod tests {
             chirality: None,
             class: None,
             span: None,
+            alias: None,
+            value: None,
             stereo_parity: None,
             stereo_care: None,
             valence: None,
@@ -586,6 +642,8 @@ mod tests {
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
             span: None,
+            alias: None,
+            value: None,
             stereo_parity: None,
             stereo_care: None,
             valence: None,
@@ -617,6 +675,8 @@ mod tests {
             chirality: None,
             class: None,
             span: None,
+            alias: None,
+            value: None,
             stereo_parity: Some(AtomStereoParity::Even),
             stereo_care: None,
             valence: None,
@@ -643,14 +703,17 @@ mod tests {
             isotope_mass: Some(15),
             hydrogens: Some(2),
             implicit_h: false,
+            valence: Some(3),
             unpaired_e: None,
             aromatic: Some(false),
             chirality: Some(Chirality::CounterClockwise),
             class: Some(10),
             span: None,
+            alias: None,
+            value: None,
         };
 
-        let extended: ExtendedAtom = atom.into();
+        let extended: ExtendedAtom = atom.clone().into();
         let atom2: Atom = extended.try_into().unwrap();
 
         assert_eq!(atom.element, atom2.element);
@@ -658,6 +721,7 @@ mod tests {
         assert_eq!(atom.isotope_mass, atom2.isotope_mass);
         assert_eq!(atom.hydrogens, atom2.hydrogens);
         assert_eq!(atom.implicit_h, atom2.implicit_h);
+        assert_eq!(atom.valence, atom2.valence);
         assert_eq!(atom.unpaired_e, atom2.unpaired_e);
         assert_eq!(atom.aromatic, atom2.aromatic);
         assert_eq!(atom.chirality, atom2.chirality);

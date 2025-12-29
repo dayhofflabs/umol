@@ -1,6 +1,9 @@
 //! Atom validators
 
-use once_cell::sync::Lazy;
+#![allow(clippy::type_complexity)]
+
+use std::sync::LazyLock;
+
 use umol::error::DataError;
 use umol::Result;
 
@@ -13,7 +16,6 @@ use crate::AtomBuilder;
 /// Interrelations between properties are not validated here, they are checked as part of the
 /// `AtomType` matching.
 pub struct AtomValidator {
-    #[allow(clippy::type_complexity)]
     validators: Vec<Box<dyn Fn(&AtomBuilder) -> Result<()> + Send + Sync>>,
 }
 
@@ -105,10 +107,10 @@ impl Default for AtomValidator {
     }
 }
 
-pub static DEFAULT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::default);
-pub static STRICT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::strict);
-pub static LENIENT_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::lenient);
-pub static ALWAYS_ATOM_VALIDATOR: Lazy<AtomValidator> = Lazy::new(AtomValidator::always);
+pub static DEFAULT_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::default);
+pub static STRICT_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::strict);
+pub static LENIENT_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::lenient);
+pub static ALWAYS_ATOM_VALIDATOR: LazyLock<AtomValidator> = LazyLock::new(AtomValidator::always);
 
 #[cfg(test)]
 mod tests {
