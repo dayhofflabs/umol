@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 18
-bond_count: 19
-sum_formula: C11NO4S2
-graph6: "QR`@AA?_AC@??@??_?O?@??O??W"

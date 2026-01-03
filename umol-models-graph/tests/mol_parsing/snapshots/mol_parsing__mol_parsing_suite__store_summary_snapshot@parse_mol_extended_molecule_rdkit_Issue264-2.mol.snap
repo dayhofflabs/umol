@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 18
-bond_count: 20
-sum_formula: C14BrN2O
-graph6: QsP@P?OA?G?K?G?A?@??A??G??W

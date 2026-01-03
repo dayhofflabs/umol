@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-assertion_line: 40
-expression: summary
----
-atom_count: 58
-bond_count: 60
-sum_formula: C23H28BrN2O3S+

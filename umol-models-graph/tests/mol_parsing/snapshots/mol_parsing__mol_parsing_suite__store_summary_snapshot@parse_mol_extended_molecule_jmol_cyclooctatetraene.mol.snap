@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 16
-bond_count: 16
-sum_formula: C8H8
-graph6: OD@JA?_C?O?_?_a???K??

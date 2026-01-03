@@ -39,28 +39,26 @@ fn run_test_sdf(path: &Path) {
     let category = get_category(path);
     let sdf_bytes = fs::read(path).unwrap();
 
-    let sdf_file = match parse_sdf_bytes(&sdf_bytes) {
-        Ok(sdf) => sdf,
+    let molecules = match parse_sdf_bytes(&sdf_bytes) {
+        Ok(mols) => mols,
         Err(e) => panic!("Failed to parse SDF file {}: {}", path_str, e),
     };
 
     let mut compound_summaries = Vec::new();
 
-    for compound in &sdf_file.compounds {
-        let molecule = &compound.mol_file.molecule;
-
+    for molecule in &molecules {
         compound_summaries.push(CompoundSummary {
             sum_formula: molecule.sum_formula(),
             atom_count: molecule.atom_count(),
             bond_count: molecule.bond_count(),
-            data_fields: compound.data_fields.clone(),
+            data_fields: molecule.properties.clone(),
         });
     }
 
     let summary = SdfSummary {
         category,
         filename: path.file_name().unwrap().to_str().unwrap(),
-        compound_count: sdf_file.compounds.len(),
+        compound_count: molecules.len(),
         compounds: compound_summaries,
     };
 

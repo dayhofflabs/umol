@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 22
-bond_count: 36
-sum_formula: H11B11
-graph6: "Um[X[@?G?_@?@??_[?C?@G_KE?W?@???_??G??@?"

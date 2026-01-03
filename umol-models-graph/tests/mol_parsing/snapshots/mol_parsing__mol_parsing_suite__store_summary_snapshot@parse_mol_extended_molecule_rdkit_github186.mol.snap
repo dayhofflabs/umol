@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 11
-bond_count: 10
-sum_formula: C5N2O3S
-graph6: "J`S@GP??_C?"

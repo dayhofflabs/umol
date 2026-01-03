@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 195
-bond_count: 207
-sum_formula: C113N2O77P2W

@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 205
-bond_count: 211
-sum_formula: C122H14N33O33S2Se

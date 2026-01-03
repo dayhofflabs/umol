@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 288
-bond_count: 256
-sum_formula: C48N80O104Po16S16Se8Te16+16

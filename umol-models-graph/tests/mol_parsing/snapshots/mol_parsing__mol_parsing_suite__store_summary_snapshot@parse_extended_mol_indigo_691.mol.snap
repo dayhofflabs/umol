@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 236
-bond_count: 247
-sum_formula: C165AsB3Cl2N29O28S7Se

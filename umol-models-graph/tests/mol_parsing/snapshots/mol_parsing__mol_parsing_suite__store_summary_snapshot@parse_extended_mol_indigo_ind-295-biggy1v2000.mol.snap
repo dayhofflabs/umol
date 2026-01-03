@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 89
-bond_count: 93
-sum_formula: C69H5BeLrMgN3NbO2PbSSn+2

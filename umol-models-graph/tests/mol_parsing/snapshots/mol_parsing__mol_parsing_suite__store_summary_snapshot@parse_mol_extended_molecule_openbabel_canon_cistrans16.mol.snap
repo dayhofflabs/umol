@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 17
-bond_count: 18
-sum_formula: C17
-graph6: "Pk_OGC@CGO?@?@??`?G?C?O?"

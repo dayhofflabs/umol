@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 32
-bond_count: 35
-sum_formula: C6Cd2O12Rn6Xe6

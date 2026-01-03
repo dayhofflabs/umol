@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 78
-bond_count: 84
-sum_formula: C45H2N7O20P3S

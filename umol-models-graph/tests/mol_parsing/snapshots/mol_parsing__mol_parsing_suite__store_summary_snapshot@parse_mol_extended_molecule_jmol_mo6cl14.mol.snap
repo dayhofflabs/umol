@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 20
-bond_count: 42
-sum_formula: Cl14Mo6
-graph6: "S|qFAA?GDgX`WBO@k?P?S?B_?G??G??C?"

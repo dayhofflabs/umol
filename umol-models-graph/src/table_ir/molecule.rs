@@ -79,6 +79,11 @@ impl Molecule {
 
         format_sum_formula(c_count, h_count, atom_counts, charge)
     }
+
+    /// Count of SDF/MOL properties
+    pub fn property_count(&self) -> usize {
+        self.properties.len()
+    }
 }
 
 /// Extended molecule IR - includes MDL extensions (SGroups, RGroups, etc.)
@@ -221,6 +226,31 @@ impl ExtendedMolecule {
             self.ctfile_data = Some(CtfileData::default());
         }
         &mut self.ctfile_data.as_mut().unwrap().rgroups
+    }
+
+    /// Count of SDF/MOL properties
+    pub fn property_count(&self) -> usize {
+        self.properties.len()
+    }
+
+    /// Count of extended atoms (non-Element/NamedIsotope: wildcards, atom lists, rgroups, etc.)
+    pub fn extended_atom_count(&self) -> usize {
+        self.atoms.iter().filter(|a| a.symbol.is_extended()).count()
+    }
+
+    /// Count of extended bonds (query or extended bond orders)
+    pub fn extended_bond_count(&self) -> usize {
+        self.bonds.iter().filter(|b| b.has_extended_features()).count()
+    }
+
+    /// Count of RGroups defined in CTFile data
+    pub fn rgroup_count(&self) -> usize {
+        self.rgroups().len()
+    }
+
+    /// Count of SGroups defined in CTFile data
+    pub fn sgroup_count(&self) -> usize {
+        self.sgroups().len()
     }
 }
 

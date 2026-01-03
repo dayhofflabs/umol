@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 78
-bond_count: 80
-sum_formula: C28H42ClN4O3+1

@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 141
-bond_count: 140
-sum_formula: C44H83N7O7

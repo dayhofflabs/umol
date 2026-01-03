@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 112
-bond_count: 136
-sum_formula: C48H16N32O16

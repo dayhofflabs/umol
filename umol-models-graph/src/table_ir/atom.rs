@@ -234,7 +234,6 @@ pub struct ExtendedAtom {
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
-    pub span: Option<Span>,
     pub alias: Option<String>,
     pub value: Option<String>,
     pub stereo_parity: Option<AtomStereoParity>,
@@ -249,6 +248,7 @@ pub struct ExtendedAtom {
     pub unsaturated: Option<UnsaturatedAtom>,
     pub link_atom: Option<LinkAtom>,
     pub properties: HashMap<String, String>,
+    pub span: Option<Span>,
 }
 // End of TODO
 
@@ -266,7 +266,6 @@ impl ExtendedAtom {
             aromatic: None,
             chirality: None,
             class: None,
-            span: None,
             alias: None,
             value: None,
             stereo_parity: None,
@@ -281,6 +280,7 @@ impl ExtendedAtom {
             unsaturated: None,
             link_atom: None,
             properties: HashMap::new(),
+            span: None,
         }
     }
 
@@ -299,7 +299,8 @@ impl ExtendedAtom {
     /// Check if this atom has extended features that would be lost in conversion to basic Atom.
     /// Note: alias and value are basic features, not extended.
     pub fn has_extended_features(&self) -> bool {
-        self.stereo_parity.is_some()
+        self.symbol.is_extended()
+            || self.stereo_parity.is_some()
             || self.stereo_care.is_some()
             || self.atom_map_num.is_some()
             || self.inversion_retention.is_some()
@@ -311,7 +312,6 @@ impl ExtendedAtom {
             || self.unsaturated.is_some()
             || self.link_atom.is_some()
             || has_extended_properties(&self.properties)
-            || self.symbol.is_extended()
     }
 }
 
@@ -335,7 +335,6 @@ impl From<Atom> for ExtendedAtom {
             aromatic: atom.aromatic,
             chirality: atom.chirality,
             class: atom.class,
-            span: atom.span,
             alias: atom.alias,
             value: atom.value,
             stereo_parity: None,
@@ -350,6 +349,7 @@ impl From<Atom> for ExtendedAtom {
             unsaturated: None,
             link_atom: None,
             properties: HashMap::new(),
+            span: atom.span,
         }
     }
 }
@@ -383,9 +383,9 @@ impl TryFrom<ExtendedAtom> for Atom {
             aromatic: extended.aromatic,
             chirality: extended.chirality,
             class: extended.class,
-            span: extended.span,
             alias: extended.alias,
             value: extended.value,
+            span: extended.span,
         })
     }
 }
@@ -517,9 +517,9 @@ mod tests {
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
-            span: None,
             alias: None,
             value: None,
+            span: None,
         };
 
         let extended: ExtendedAtom = atom.into();
@@ -549,7 +549,6 @@ mod tests {
             aromatic: Some(false),
             chirality: None,
             class: None,
-            span: None,
             alias: None,
             value: None,
             stereo_parity: None,
@@ -564,6 +563,7 @@ mod tests {
             unsaturated: None,
             link_atom: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         let atom: Atom = extended.try_into().unwrap();
@@ -603,7 +603,6 @@ mod tests {
             aromatic: None,
             chirality: None,
             class: None,
-            span: None,
             alias: None,
             value: None,
             stereo_parity: None,
@@ -619,6 +618,7 @@ mod tests {
             unsaturated: None,
             link_atom: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         let result: Result<Atom, _> = extended.try_into();
@@ -641,7 +641,6 @@ mod tests {
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
-            span: None,
             alias: None,
             value: None,
             stereo_parity: None,
@@ -657,6 +656,7 @@ mod tests {
             unsaturated: None,
             link_atom: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         assert!(!extended.has_extended_features());
@@ -674,7 +674,6 @@ mod tests {
             aromatic: None,
             chirality: None,
             class: None,
-            span: None,
             alias: None,
             value: None,
             stereo_parity: Some(AtomStereoParity::Even),
@@ -690,6 +689,7 @@ mod tests {
             unsaturated: None,
             link_atom: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         assert!(extended.has_extended_features());
@@ -707,10 +707,10 @@ mod tests {
             unpaired_e: None,
             aromatic: Some(false),
             chirality: Some(Chirality::CounterClockwise),
-            class: Some(10),
             span: None,
             alias: None,
             value: None,
+            class: Some(10),
         };
 
         let extended: ExtendedAtom = atom.clone().into();
@@ -726,6 +726,8 @@ mod tests {
         assert_eq!(atom.aromatic, atom2.aromatic);
         assert_eq!(atom.chirality, atom2.chirality);
         assert_eq!(atom.class, atom2.class);
+        assert_eq!(atom.alias, atom2.alias);
+        assert_eq!(atom.value, atom2.value);
         assert_eq!(atom.span, atom2.span);
     }
 }

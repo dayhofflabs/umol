@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 16
-bond_count: 18
-sum_formula: C16
-graph6: "OhEI?C`@??_A?@?@?@??P"

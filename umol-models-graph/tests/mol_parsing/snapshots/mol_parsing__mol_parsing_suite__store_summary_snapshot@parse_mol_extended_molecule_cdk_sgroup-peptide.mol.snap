@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 17
-bond_count: 16
-sum_formula: C7H2N3O4S
-graph6: Pb_OG?B?_?_@?G??_???B??C

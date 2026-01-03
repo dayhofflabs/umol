@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 265
-bond_count: 276
-sum_formula: C176H13N35O27P2S12+4

@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 15
-bond_count: 15
-sum_formula: C7H8
-graph6: NhEGS@?G?_?_?_?_?O?

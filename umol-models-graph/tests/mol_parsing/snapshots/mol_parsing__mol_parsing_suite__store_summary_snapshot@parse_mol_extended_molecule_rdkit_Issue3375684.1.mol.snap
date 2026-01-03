@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 21
-bond_count: 22
-sum_formula: C14N3O3S
-graph6: ThEH?C@?G?_@?@?G_?_?@??GC????G??G??C

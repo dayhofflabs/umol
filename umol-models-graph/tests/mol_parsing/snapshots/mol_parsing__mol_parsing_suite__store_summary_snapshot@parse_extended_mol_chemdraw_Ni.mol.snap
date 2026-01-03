@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 53
-bond_count: 66
-sum_formula: C36N12Ni5

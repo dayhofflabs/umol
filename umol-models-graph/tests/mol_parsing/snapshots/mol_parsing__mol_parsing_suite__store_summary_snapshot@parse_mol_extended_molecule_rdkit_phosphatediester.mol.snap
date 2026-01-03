@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 16
-bond_count: 15
-sum_formula: C3H8O4P-1
-graph6: OhG_GE?_C??O?_?O?G?A?

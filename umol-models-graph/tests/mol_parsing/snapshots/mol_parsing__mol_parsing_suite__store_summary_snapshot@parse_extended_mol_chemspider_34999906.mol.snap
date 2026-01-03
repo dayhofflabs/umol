@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 404
-bond_count: 415
-sum_formula: C256N65O77S6

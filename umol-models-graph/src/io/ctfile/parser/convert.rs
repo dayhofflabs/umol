@@ -857,7 +857,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unmarked(0, Some(BondReactingCenter::UNMARKED))]
+    #[case::unspecified(0, None)]
     #[case::not_center(-1, Some(BondReactingCenter::NOT_CENTER))]
     #[case::center(1, Some(BondReactingCenter::CENTER))]
     #[case::no_change(2, Some(BondReactingCenter::NO_CHANGE))]

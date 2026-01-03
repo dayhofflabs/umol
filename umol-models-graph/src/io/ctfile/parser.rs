@@ -145,8 +145,14 @@ pub fn extended_ctab_block<'inp>(
 
         let (remaining, _) = end_block(line_offset, flags).parse(remaining)?;
 
-        let extended = build_extended_molecule(atoms, bonds, positions, properties, flags)
-            .map_err(|e| NomErr::Error(e))?;
+        let extended = build_extended_molecule(
+            atoms,
+            bonds,
+            positions,
+            properties,
+            flags,
+        )
+        .map_err(|e| NomErr::Error(e))?;
         Ok((remaining, extended))
     }
 }
@@ -628,7 +634,7 @@ pub fn parse_sdf_bytes_with(
 
 /// Parse SDF bytes into Vec<Molecule>
 pub fn parse_sdf_bytes(input: &[u8]) -> Result<Vec<Molecule>, ParseError> {
-    let config = CtfileIoConfig::basic_max();
+    let config = CtfileIoConfig::basic();
     parse_sdf_bytes_with(input, &config)
 }
 

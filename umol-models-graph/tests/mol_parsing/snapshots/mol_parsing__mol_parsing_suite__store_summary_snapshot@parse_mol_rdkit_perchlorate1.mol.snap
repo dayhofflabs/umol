@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 51
-bond_count: 57
-sum_formula: C39ClN3O7P

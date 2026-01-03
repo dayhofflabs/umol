@@ -1,132 +1,220 @@
+//! MOL file parsing conformance tests.
+//!
+//! This module runs parsing tests against a collection of MOL files from various sources.
+//! Files are organized by parse result category:
+//! - molecule: passes all 4 parsers
+//! - molecule_lenient: needs lenient flags for basic parser
+//! - extended_molecule: needs extended parser
+//! - extended_molecule_lenient: needs lenient flags for extended parser
+//! - invalid: fails all parsers
+
 use std::path::{Path, PathBuf};
 
 use insta::{assert_yaml_snapshot, Settings};
-use rstest::*;
+use rstest::rstest;
 use serde::Serialize;
-use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes, parse_mol_bytes};
+use umol_models_graph::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use umol_models_graph::io::ctfile::parser::{
+    parse_extended_mol_bytes_with, parse_mol_bytes_with,
+};
 use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 
+/// Summary of molecule statistics for snapshot comparison
 #[derive(Serialize)]
 struct MoleculeSummary {
+    sum_formula: String,
     atom_count: usize,
     bond_count: usize,
-    sum_formula: String,
+    property_count: usize,
 }
 
-impl From<&ExtendedMolecule> for MoleculeSummary {
-    fn from(molecule: &ExtendedMolecule) -> Self {
-        Self {
-            atom_count: molecule.atom_count(),
-            bond_count: molecule.bond_count(),
-            sum_formula: molecule.sum_formula(),
-        }
-    }
+/// Extended summary including extended features
+#[derive(Serialize)]
+struct ExtendedMoleculeSummary {
+    sum_formula: String,
+    atom_count: usize,
+    bond_count: usize,
+    extended_atoms: usize,
+    extended_bonds: usize,
+    property_count: usize,
+    rgroup_count: usize,
+    sgroup_count: usize,
+}
+
+/// Error summary for failed parses
+#[derive(Serialize)]
+struct ParseErrorSummary {
+    error_type: String,
+    message: String,
+}
+
+/// Result of a single parser invocation
+#[derive(Serialize)]
+struct ParseResult {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<MoleculeSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extended_summary: Option<ExtendedMoleculeSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<ParseErrorSummary>,
+}
+
+/// Combined results from all 4 parsers for a single file
+#[derive(Serialize)]
+struct FileParseResults {
+    molecule: ParseResult,
+    molecule_lenient: ParseResult,
+    extended_molecule: ParseResult,
+    extended_molecule_lenient: ParseResult,
 }
 
 impl From<&Molecule> for MoleculeSummary {
-    fn from(molecule: &Molecule) -> Self {
+    fn from(mol: &Molecule) -> Self {
         Self {
-            atom_count: molecule.atom_count(),
-            bond_count: molecule.bond_count(),
-            sum_formula: molecule.sum_formula(),
+            sum_formula: mol.sum_formula(),
+            atom_count: mol.atom_count(),
+            bond_count: mol.bond_count(),
+            property_count: mol.property_count(),
         }
     }
 }
 
-fn store_summary_snapshot(summary: MoleculeSummary) {
-    let mut settings = Settings::clone_current();
-    settings.set_snapshot_path(Path::new("snapshots"));
-    settings.bind(|| {
-        assert_yaml_snapshot!(summary);
-    });
-}
-
-fn test_parse_extended_mol(path: &Path, expected_success: bool) {
-    let mol_bytes = std::fs::read(path).unwrap();
-    let result = parse_extended_mol_bytes(&mol_bytes);
-
-    if expected_success {
-        if let Err(e) = &result {
-            eprintln!("Parse error for {}: {:?}", path.display(), e);
+impl From<&ExtendedMolecule> for ExtendedMoleculeSummary {
+    fn from(mol: &ExtendedMolecule) -> Self {
+        Self {
+            sum_formula: mol.sum_formula(),
+            atom_count: mol.atom_count(),
+            bond_count: mol.bond_count(),
+            extended_atoms: mol.extended_atom_count(),
+            extended_bonds: mol.extended_bond_count(),
+            property_count: mol.property_count(),
+            rgroup_count: mol.rgroup_count(),
+            sgroup_count: mol.sgroup_count(),
         }
-        assert!(
-            result.is_ok(),
-            "Expected parsing to succeed, but it failed for file: {} with error: {:?}",
-            path.display(),
-            result.as_ref().err()
-        );
-
-        let summary = MoleculeSummary::from(&result.unwrap());
-        store_summary_snapshot(summary);
-    } else {
-        assert!(
-            result.is_err(),
-            "Expected parsing to fail, but it succeeded for file: {}",
-            path.display()
-        );
     }
 }
 
-fn test_parse_mol(path: &Path, expected_success: bool) {
-    let mol_bytes = std::fs::read(path).unwrap();
-    let result = parse_mol_bytes(&mol_bytes);
-
-    if expected_success {
-        if let Err(ref e) = result {
-            eprintln!("Parse error for {}: {:?}", path.display(), e);
-        }
-        assert!(
-            result.is_ok(),
-            "Expected parsing to succeed, but it failed for file: {} with error: {:?}",
-            path.display(),
-            result.as_ref().err()
-        );
-
-        let summary = MoleculeSummary::from(&result.unwrap());
-        store_summary_snapshot(summary);
-    } else {
-        assert!(
-            result.is_err(),
-            "Expected parsing to fail, but it succeeded for file: {}",
-            path.display()
-        );
+fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
+    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC);
+    match parse_mol_bytes_with(bytes, &config) {
+        Ok(mol) => ParseResult {
+            success: true,
+            summary: Some(MoleculeSummary::from(&mol)),
+            extended_summary: None,
+            error: None,
+        },
+        Err(e) => ParseResult {
+            success: false,
+            summary: None,
+            extended_summary: None,
+            error: Some(ParseErrorSummary {
+                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                message: e.to_string(),
+            }),
+        },
     }
 }
 
-// Helper functions for test organization
-fn extract_source_and_filename(path: &Path) -> (String, String) {
-    let source = path
+fn parse_with_lenient_flags(bytes: &[u8]) -> ParseResult {
+    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX);
+    match parse_mol_bytes_with(bytes, &config) {
+        Ok(mol) => ParseResult {
+            success: true,
+            summary: Some(MoleculeSummary::from(&mol)),
+            extended_summary: None,
+            error: None,
+        },
+        Err(e) => ParseResult {
+            success: false,
+            summary: None,
+            extended_summary: None,
+            error: Some(ParseErrorSummary {
+                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                message: e.to_string(),
+            }),
+        },
+    }
+}
+
+fn parse_extended_with_extended_flags(bytes: &[u8]) -> ParseResult {
+    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::EXTENDED);
+    match parse_extended_mol_bytes_with(bytes, &config) {
+        Ok(mol) => ParseResult {
+            success: true,
+            summary: None,
+            extended_summary: Some(ExtendedMoleculeSummary::from(&mol)),
+            error: None,
+        },
+        Err(e) => ParseResult {
+            success: false,
+            summary: None,
+            extended_summary: None,
+            error: Some(ParseErrorSummary {
+                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                message: e.to_string(),
+            }),
+        },
+    }
+}
+
+fn parse_extended_with_lenient_flags(bytes: &[u8]) -> ParseResult {
+    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::LENIENT);
+    match parse_extended_mol_bytes_with(bytes, &config) {
+        Ok(mol) => ParseResult {
+            success: true,
+            summary: None,
+            extended_summary: Some(ExtendedMoleculeSummary::from(&mol)),
+            error: None,
+        },
+        Err(e) => ParseResult {
+            success: false,
+            summary: None,
+            extended_summary: None,
+            error: Some(ParseErrorSummary {
+                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                message: e.to_string(),
+            }),
+        },
+    }
+}
+
+fn parse_file(path: &Path) -> FileParseResults {
+    let bytes = std::fs::read(path).expect("Failed to read file");
+
+    FileParseResults {
+        molecule: parse_with_basic_flags(&bytes),
+        molecule_lenient: parse_with_lenient_flags(&bytes),
+        extended_molecule: parse_extended_with_extended_flags(&bytes),
+        extended_molecule_lenient: parse_extended_with_lenient_flags(&bytes),
+    }
+}
+
+fn run_conformance_test(file_path: &PathBuf) {
+    let source = file_path
         .parent()
         .unwrap()
         .file_name()
         .unwrap()
         .to_str()
-        .unwrap()
-        .to_string();
-    let filename = path.file_name().unwrap().to_str().unwrap().to_string();
-    (source, filename)
+        .unwrap();
+    let filename = file_path.file_name().unwrap().to_str().unwrap();
+
+    let results = parse_file(file_path);
+
+    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("mol_parsing");
+
+    let mut settings = Settings::clone_current();
+    settings.set_snapshot_path(base.join("snapshots"));
+    settings.set_snapshot_suffix(format!("{}_{}", source, filename));
+    settings.bind(|| {
+        assert_yaml_snapshot!(results);
+    });
 }
 
-fn run_parse_mol_test(file_path: &Path, expected_success: bool) {
-    let (source, filename) = extract_source_and_filename(file_path);
-    let mut settings = insta::Settings::clone_current();
-    settings.set_snapshot_suffix(format!("parse_mol_{}_{}", source, filename));
-    let _guard = settings.bind_to_scope();
-    test_parse_mol(file_path, expected_success);
+#[rstest]
+fn test_conformance(#[files("tests/mol_parsing/data/**/*.mol")] file_path: PathBuf) {
+    run_conformance_test(&file_path);
 }
-
-fn run_parse_extended_mol_test(file_path: &Path, expected_success: bool) {
-    let (source, filename) = extract_source_and_filename(file_path);
-    let mut settings = insta::Settings::clone_current();
-    settings.set_snapshot_suffix(format!("parse_extended_mol_{}_{}", source, filename));
-    let _guard = settings.bind_to_scope();
-    test_parse_extended_mol(file_path, expected_success);
-}
-
-// AUTO-GENERATED TESTS - managed by build.rs
-// To add a new source:
-// 1. Add files to tests/mol_parsing/data_raw/newsource/
-// 2. Run: cargo run --bin mol_classifier -- --sort
-// 3. Tests will be automatically generated based on the organized structure
-
-include!(concat!(env!("OUT_DIR"), "/generated_tests.rs"));

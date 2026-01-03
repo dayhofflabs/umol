@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 117
-bond_count: 140
-sum_formula: C50H18N30O18Pt

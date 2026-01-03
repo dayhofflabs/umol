@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 14
-bond_count: 16
-sum_formula: C11N3
-graph6: Mja?GCDA??_@?@A?_

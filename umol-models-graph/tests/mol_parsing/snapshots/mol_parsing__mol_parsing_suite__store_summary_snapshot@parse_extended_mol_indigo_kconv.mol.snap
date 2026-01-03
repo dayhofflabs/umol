@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 422
-bond_count: 344
-sum_formula: C284H3AcAgAlAmArAsAtAuB2BaBeBiBkBrCaCdCeCfClCmCoCrCsCuDyErEsEuFFeFmFrGaGdGeHeHfHgHoIInIrKKrLaLiLrLuMdMgMnMoN11NaNbNdNeNiNoNpO9OsP4PaPbPdPmPoPrPtPuRaRbReRfRhRnRuS5SbScSeSiSmSnSrTaTbTcTeThTiTlTmUVW3XeYYbZnZr+2

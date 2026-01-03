@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 172
-bond_count: 250
-sum_formula: C140BCl3F4Fe5N2O10P6S-1

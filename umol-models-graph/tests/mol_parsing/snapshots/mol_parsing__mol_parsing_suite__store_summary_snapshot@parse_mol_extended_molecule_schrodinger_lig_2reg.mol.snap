@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 21
-bond_count: 20
-sum_formula: C5H14NO+1
-graph6: T_ABsA?OA?C?G?G?A??_?C??G??O??O??C??

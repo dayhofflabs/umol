@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 19
-bond_count: 19
-sum_formula: C6H8N2O2S
-graph6: RiCGGCACI?@?@??O?G?@??C??G??O?

@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 19
-bond_count: 20
-sum_formula: C11N4O4
-graph6: RST_C?_O?@?P?_?_A??O???O??_??g

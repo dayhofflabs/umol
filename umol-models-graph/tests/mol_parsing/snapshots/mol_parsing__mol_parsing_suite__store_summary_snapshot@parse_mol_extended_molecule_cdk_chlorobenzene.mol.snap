@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 12
-bond_count: 12
-sum_formula: C6H5Cl
-graph6: KhEHC@?@?OA?

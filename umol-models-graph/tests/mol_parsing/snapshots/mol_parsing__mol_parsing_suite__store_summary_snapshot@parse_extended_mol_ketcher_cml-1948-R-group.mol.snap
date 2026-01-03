@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 61
-bond_count: 60
-sum_formula: C52FNOS+2

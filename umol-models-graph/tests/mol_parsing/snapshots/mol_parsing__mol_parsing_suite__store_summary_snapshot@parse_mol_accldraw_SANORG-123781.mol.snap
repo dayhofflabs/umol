@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 297
-bond_count: 293
-sum_formula: C127Na19O134S17

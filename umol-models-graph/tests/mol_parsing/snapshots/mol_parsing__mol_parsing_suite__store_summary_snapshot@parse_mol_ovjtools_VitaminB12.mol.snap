@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 180
-bond_count: 191
-sum_formula: C63H87CoN14O14P-2

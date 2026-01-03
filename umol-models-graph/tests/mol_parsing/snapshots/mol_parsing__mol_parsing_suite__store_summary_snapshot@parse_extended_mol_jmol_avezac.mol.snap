@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 79
-bond_count: 84
-sum_formula: C24H48CaO6

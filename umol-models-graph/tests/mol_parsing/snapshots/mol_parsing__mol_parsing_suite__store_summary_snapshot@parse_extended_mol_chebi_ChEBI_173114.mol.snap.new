@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-assertion_line: 40
-expression: summary
----
-atom_count: 15
-bond_count: 15
-sum_formula: C5HO7P-

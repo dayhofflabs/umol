@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 172
-bond_count: 176
-sum_formula: C100F9GaN30O31S

@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 19
-bond_count: 21
-sum_formula: C15O4
-graph6: RkCgGCG?W?_@?@?G_?G?O?@@?????O

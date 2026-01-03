@@ -155,9 +155,9 @@ impl BondOrder {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondDirection {
     NotStereo, // MOL: Not stereo (code 0)
-    Up,     // MOL: Wedge (code 1), SMILES: /
-    Down,   // MOL: Dash (code 6), SMILES: \
-    Either, // MOL code 4 (Either)
+    Up,        // MOL: Wedge (code 1), SMILES: /
+    Down,      // MOL: Dash (code 6), SMILES: \
+    Either,    // MOL code 4 (Either)
 }
 
 /// Double-bond stereochemistry (E/Z) annotation in IR
@@ -180,10 +180,10 @@ pub struct ExtendedBond {
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
     pub direction: Option<BondDirection>,
-    pub span: Option<Span>,
     pub topology: Option<BondTopology>,
     pub reacting_center: Option<BondReactingCenter>,
     pub properties: HashMap<String, String>,
+    pub span: Option<Span>,
 }
 // End of TODO
 
@@ -195,10 +195,10 @@ impl ExtendedBond {
             ring: None,
             stereo: None,
             direction: None,
-            span: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
+            span: None,
         }
     }
 
@@ -210,10 +210,10 @@ impl ExtendedBond {
             ring: None,
             stereo: None,
             direction: None,
-            span: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
+            span: None,
         }
     }
 
@@ -234,11 +234,11 @@ impl ExtendedBond {
 
     /// Check if this bond has extended features that would be lost in conversion to basic Bond.
     pub fn has_extended_features(&self) -> bool {
-        self.topology.is_some()
-            || self.reacting_center.is_some()
-            || !self.properties.is_empty()
-            || self.order.is_query()
+        self.order.is_query()
             || self.order.is_extended()
+            || self.topology.map_or(false, |t| !t.is_default())
+            || self.reacting_center.map_or(false, |r| !r.is_default())
+            || !self.properties.is_empty()
     }
 }
 
@@ -250,10 +250,10 @@ impl From<Bond> for ExtendedBond {
             ring: bond.ring,
             stereo: bond.stereo,
             direction: bond.direction,
-            span: bond.span,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
+            span: bond.span,
         }
     }
 }
@@ -286,21 +286,35 @@ pub enum BondTopology {
     Either, // MOL code 0 (default/unspecified)
 }
 
+impl BondTopology {
+    /// Returns true if this is the default (Either) topology
+    pub fn is_default(&self) -> bool {
+        matches!(self, BondTopology::Either)
+    }
+}
+
 bitflags::bitflags! {
     /// Bond reacting center (from CTAB reactions) - bitflags
     #[derive(Debug, Clone, Copy, PartialEq)]
-    pub struct BondReactingCenter: i16 {
-        const UNMARKED         = 0b00000000;
-        const CENTER           = 0b00000001;
-        const NOT_CENTER       = 0b00000010;
-        const NO_CHANGE        = 0b00000100;
-        const MADE_BROKEN      = 0b00001000;
-        const ORDER_CHANGED    = 0b00010000;
+    pub struct BondReactingCenter: u8 {
+        const UNMARKED         = 0;
+        const CENTER           = 1;
+        const NOT_CENTER       = 1 << 1;
+        const NO_CHANGE        = 1 << 2;
+        const MADE_BROKEN      = 1 << 3;
+        const ORDER_CHANGED    = 1 << 4;
 
         const MADE_BROKEN_AND_ORDER_CHANGED = Self::MADE_BROKEN.bits() | Self::ORDER_CHANGED.bits();
         const CENTER_AND_MADE_BROKEN = Self::CENTER.bits() | Self::MADE_BROKEN.bits();
         const CENTER_AND_ORDER_CHANGED = Self::CENTER.bits() | Self::ORDER_CHANGED.bits();
         const CENTER_AND_MADE_BROKEN_AND_ORDER_CHANGED = Self::CENTER.bits() | Self::MADE_BROKEN.bits() | Self::ORDER_CHANGED.bits();
+    }
+}
+
+impl BondReactingCenter {
+    /// Returns true if this is the default (UNMARKED) reacting center
+    pub fn is_default(&self) -> bool {
+        self.is_empty() || *self == BondReactingCenter::UNMARKED
     }
 }
 
@@ -421,10 +435,10 @@ mod tests {
             ring: Some(6),
             stereo: Some(BondStereo::Trans),
             direction: Some(BondDirection::Down),
-            span: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         let bond: Bond = extended.try_into().unwrap();
@@ -444,10 +458,10 @@ mod tests {
             ring: None,
             stereo: None,
             direction: None,
-            span: None,
             topology: Some(BondTopology::Ring),
             reacting_center: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         let result: Result<Bond, _> = extended.try_into();
@@ -462,10 +476,10 @@ mod tests {
             ring: Some(5),
             stereo: Some(BondStereo::Cis),
             direction: Some(BondDirection::Up),
-            span: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         assert!(!extended.has_extended_features());
@@ -479,10 +493,10 @@ mod tests {
             ring: None,
             stereo: None,
             direction: None,
-            span: None,
             topology: Some(BondTopology::Chain),
             reacting_center: None,
             properties: HashMap::new(),
+            span: None,
         };
 
         assert!(extended.has_extended_features());

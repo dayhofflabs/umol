@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 21
-bond_count: 24
-sum_formula: C17N2O2
-graph6: ThEGGE@?G?_??@??_@G?W?@???_?C???C?@@

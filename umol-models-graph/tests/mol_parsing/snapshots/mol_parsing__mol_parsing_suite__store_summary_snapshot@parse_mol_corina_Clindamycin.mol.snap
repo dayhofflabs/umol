@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 60
-bond_count: 61
-sum_formula: C18H33ClN2O5S

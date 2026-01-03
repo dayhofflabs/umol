@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 24
-bond_count: 24
-sum_formula: C17Cl4O3-1

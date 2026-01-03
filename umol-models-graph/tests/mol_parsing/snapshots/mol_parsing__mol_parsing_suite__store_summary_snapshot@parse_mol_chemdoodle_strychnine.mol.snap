@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 47
-bond_count: 53
-sum_formula: C21H22N2O2

@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-assertion_line: 40
-expression: summary
----
-atom_count: 25
-bond_count: 28
-sum_formula: C20NO4+

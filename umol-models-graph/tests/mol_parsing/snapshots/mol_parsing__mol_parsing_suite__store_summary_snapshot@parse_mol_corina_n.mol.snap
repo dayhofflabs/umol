@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 80
-bond_count: 83
-sum_formula: C24H39N5O12

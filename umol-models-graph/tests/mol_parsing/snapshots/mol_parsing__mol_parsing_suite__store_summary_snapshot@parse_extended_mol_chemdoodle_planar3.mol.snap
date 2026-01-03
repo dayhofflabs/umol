@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 25
-bond_count: 26
-sum_formula: C16FN3O3S2

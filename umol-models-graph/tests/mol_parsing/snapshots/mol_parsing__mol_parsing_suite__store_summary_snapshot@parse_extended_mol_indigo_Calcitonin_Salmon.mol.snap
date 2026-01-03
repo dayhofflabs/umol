@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 239
-bond_count: 243
-sum_formula: C145N44O48S2

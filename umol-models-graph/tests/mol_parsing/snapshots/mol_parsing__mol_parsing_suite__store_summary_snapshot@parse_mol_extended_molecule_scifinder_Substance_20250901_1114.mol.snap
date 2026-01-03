@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 22
-bond_count: 24
-sum_formula: C15CoO6
-graph6: U????CA?_C?O?__OGC@?_CA?GC?GC??AC??c??E?

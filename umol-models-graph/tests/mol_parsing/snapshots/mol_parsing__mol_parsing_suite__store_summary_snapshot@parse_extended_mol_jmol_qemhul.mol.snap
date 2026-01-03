@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 280
-bond_count: 318
-sum_formula: C144H84Ga4N12O36

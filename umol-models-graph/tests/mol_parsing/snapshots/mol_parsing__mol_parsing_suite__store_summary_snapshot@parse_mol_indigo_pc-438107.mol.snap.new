@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-assertion_line: 40
-expression: summary
----
-atom_count: 42
-bond_count: 45
-sum_formula: C18H9F12O2Si-

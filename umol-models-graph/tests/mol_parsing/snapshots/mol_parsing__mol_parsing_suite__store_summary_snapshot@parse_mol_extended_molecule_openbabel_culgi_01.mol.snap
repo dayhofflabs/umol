@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 16
-bond_count: 16
-sum_formula: C6H6N2O2
-graph6: OhCGOCA?H@?@_?_?G??_?

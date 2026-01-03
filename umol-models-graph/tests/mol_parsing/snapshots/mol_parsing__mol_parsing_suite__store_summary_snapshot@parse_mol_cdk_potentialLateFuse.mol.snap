@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 108
-bond_count: 96
-sum_formula: C58H4N13O19P14-3

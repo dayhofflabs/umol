@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 107
-bond_count: 108
-sum_formula: C40H60N2NiS4+2

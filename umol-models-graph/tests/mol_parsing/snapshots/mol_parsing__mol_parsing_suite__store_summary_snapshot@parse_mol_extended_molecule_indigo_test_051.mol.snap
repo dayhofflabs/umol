@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 7
-bond_count: 7
-sum_formula: C3NO3
-graph6: "F{O`?"

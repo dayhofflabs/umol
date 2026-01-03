@@ -1,80 +1,190 @@
+//! MOL file classifier for conformance test organization.
+//!
+//! Classifies MOL files into categories based on which parser configurations succeed:
+//! - molecule: passes all 4 parsers
+//! - molecule_lenient: needs lenient flags for basic parser  
+//! - extended_molecule: needs extended parser
+//! - extended_molecule_lenient: needs lenient flags for extended parser
+//! - invalid: fails all parsers
+//! - bug: hierarchy violation (indicates parser inconsistency)
+//!
+//! Usage:
+//!   cargo run --bin mol_classifier           # Show classification stats
+//!   cargo run --bin mol_classifier -- --sort # Copy files to data/ directories
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes, parse_mol_bytes};
+use umol_models_graph::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
 
-#[derive(Debug)]
+/// Results from running all 4 parsers on a file
+#[derive(Debug, Clone, Copy)]
+struct ParseResults {
+    mol_basic: bool,
+    mol_lenient: bool,
+    ext_extended: bool,
+    ext_lenient: bool,
+}
+
+impl ParseResults {
+    fn pattern(&self) -> &'static str {
+        match (
+            self.mol_basic,
+            self.mol_lenient,
+            self.ext_extended,
+            self.ext_lenient,
+        ) {
+            (true, true, true, true) => "++++",
+            (false, true, false, true) => "-+-+",
+            (false, false, true, true) => "--++",
+            (false, false, false, true) => "---+",
+            (false, false, false, false) => "----",
+            _ => "bug!",
+        }
+    }
+
+    fn has_hierarchy_violation(&self) -> bool {
+        // mol(basic) → mol(lenient)
+        if self.mol_basic && !self.mol_lenient {
+            return true;
+        }
+        // mol(basic) → extended(extended)
+        if self.mol_basic && !self.ext_extended {
+            return true;
+        }
+        // extended(extended) → extended(lenient)
+        if self.ext_extended && !self.ext_lenient {
+            return true;
+        }
+        false
+    }
+
+    fn violation_description(&self) -> Option<String> {
+        let mut violations = Vec::new();
+        if self.mol_basic && !self.mol_lenient {
+            violations.push("mol(basic) succeeded but mol(lenient) failed");
+        }
+        if self.mol_basic && !self.ext_extended {
+            violations.push("mol(basic) succeeded but extended(extended) failed");
+        }
+        if self.ext_extended && !self.ext_lenient {
+            violations.push("extended(extended) succeeded but extended(lenient) failed");
+        }
+        if violations.is_empty() {
+            None
+        } else {
+            Some(violations.join("; "))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Category {
+    Molecule,
+    MoleculeLenient,
+    ExtendedMolecule,
+    ExtendedMoleculeLenient,
+    Invalid,
+    Bug,
+}
+
+impl Category {
+    fn from_results(results: &ParseResults) -> Self {
+        if results.has_hierarchy_violation() {
+            return Category::Bug;
+        }
+        match results.pattern() {
+            "++++" => Category::Molecule,
+            "-+-+" => Category::MoleculeLenient,
+            "--++" => Category::ExtendedMolecule,
+            "---+" => Category::ExtendedMoleculeLenient,
+            "----" => Category::Invalid,
+            _ => Category::Bug,
+        }
+    }
+
+    fn dir_name(&self) -> &'static str {
+        match self {
+            Category::Molecule => "molecule",
+            Category::MoleculeLenient => "molecule_lenient",
+            Category::ExtendedMolecule => "extended_molecule",
+            Category::ExtendedMoleculeLenient => "extended_molecule_lenient",
+            Category::Invalid => "invalid",
+            Category::Bug => "bug",
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 struct ClassificationStats {
     molecule: usize,
+    molecule_lenient: usize,
     extended_molecule: usize,
+    extended_molecule_lenient: usize,
     invalid: usize,
+    bug: usize,
     total: usize,
 }
 
 impl ClassificationStats {
-    fn new() -> Self {
-        Self {
-            molecule: 0,
-            extended_molecule: 0,
-            invalid: 0,
-            total: 0,
+    fn add(&mut self, category: Category) {
+        match category {
+            Category::Molecule => self.molecule += 1,
+            Category::MoleculeLenient => self.molecule_lenient += 1,
+            Category::ExtendedMolecule => self.extended_molecule += 1,
+            Category::ExtendedMoleculeLenient => self.extended_molecule_lenient += 1,
+            Category::Invalid => self.invalid += 1,
+            Category::Bug => self.bug += 1,
         }
-    }
-
-    fn add_molecule(&mut self) {
-        self.molecule += 1;
         self.total += 1;
     }
 
-    fn add_extended_molecule(&mut self) {
-        self.extended_molecule += 1;
-        self.total += 1;
-    }
-
-    fn add_invalid(&mut self) {
-        self.invalid += 1;
-        self.total += 1;
-    }
-
-    #[allow(dead_code)]
-    fn molecule_percentage(&self) -> f64 {
-        if self.total == 0 {
-            0.0
-        } else {
-            (self.molecule as f64 / self.total as f64) * 100.0
-        }
+    fn valid_count(&self) -> usize {
+        self.molecule + self.molecule_lenient + self.extended_molecule + self.extended_molecule_lenient
     }
 
     fn valid_percentage(&self) -> f64 {
         if self.total == 0 {
             0.0
         } else {
-            ((self.molecule + self.extended_molecule) as f64 / self.total as f64) * 100.0
+            (self.valid_count() as f64 / self.total as f64) * 100.0
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum FileClassification {
-    Molecule,         // Works with parse_mol (basic parser)
-    ExtendedMolecule, // Works with parse_extended_mol but not parse_mol
-    Invalid,          // Doesn't work with either
-}
-
-fn classify_mol_file(file_path: &Path) -> Result<FileClassification, Box<dyn std::error::Error>> {
+fn classify_mol_file(file_path: &Path) -> Result<(Category, ParseResults), Box<dyn std::error::Error>> {
     let mol_bytes = fs::read(file_path)?;
 
-    // Categorize based on parser results
-    match (parse_mol_bytes(&mol_bytes), parse_extended_mol_bytes(&mol_bytes)) {
-        (Ok(_), Ok(_)) => Ok(FileClassification::Molecule),
-        (Err(_), Ok(_)) => Ok(FileClassification::ExtendedMolecule),
-        (Ok(_), Err(_)) | (Err(_), Err(_)) => Ok(FileClassification::Invalid),
-    }
+    // For basic parser: BASIC vs BASIC_MAX (lenient parsing features, no extended atoms/bonds)
+    let mol_basic_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC);
+    let mol_lenient_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX);
+
+    // For extended parser: EXTENDED vs LENIENT (includes all extended features)
+    let ext_extended_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::EXTENDED);
+    let ext_lenient_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::LENIENT);
+
+    let results = ParseResults {
+        mol_basic: parse_mol_bytes_with(&mol_bytes, &mol_basic_config).is_ok(),
+        mol_lenient: parse_mol_bytes_with(&mol_bytes, &mol_lenient_config).is_ok(),
+        ext_extended: parse_extended_mol_bytes_with(&mol_bytes, &ext_extended_config).is_ok(),
+        ext_lenient: parse_extended_mol_bytes_with(&mol_bytes, &ext_lenient_config).is_ok(),
+    };
+
+    let category = Category::from_results(&results);
+    Ok((category, results))
 }
 
 fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let categories = ["molecule", "extended_molecule", "invalid"];
+    let categories = [
+        "molecule",
+        "molecule_lenient",
+        "extended_molecule",
+        "extended_molecule_lenient",
+        "invalid",
+        "bug",
+    ];
 
     for category in categories {
         let category_path = Path::new(data_path).join(category);
@@ -82,12 +192,11 @@ fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn std::error::Error
             continue;
         }
 
-        // Remove all subdirectories (which contain the organized files)
         for entry in fs::read_dir(&category_path)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                println!("Removing organized files in {}", path.display());
+                println!("Removing {}", path.display());
                 if let Err(e) = fs::remove_dir_all(&path) {
                     eprintln!("Warning: Failed to remove {}: {}", path.display(), e);
                 }
@@ -97,31 +206,47 @@ fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
+fn collect_mol_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            files.extend(collect_mol_files(&path)?);
+        } else if path.extension() == Some(std::ffi::OsStr::new("mol")) {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
-    let should_sort = args.len() > 1 && args[1] == "--sort";
+    let should_sort = args.iter().any(|a| a == "--sort");
 
-    let data_raw_path = "tests/mol_parsing/data_raw";
-    let data_path = "tests/mol_parsing/data";
+    // Paths relative to workspace root, prefixed with package dir
+    let base_path = "umol-models-graph";
+    let data_raw_path = format!("{}/tests/mol_parsing/data_raw", base_path);
+    let data_path = format!("{}/tests/mol_parsing/data", base_path);
 
-    if !Path::new(data_raw_path).exists() {
+    if !Path::new(&data_raw_path).exists() {
         eprintln!("Error: {} directory not found", data_raw_path);
         std::process::exit(1);
     }
 
-    // Clean existing files before sorting
     if should_sort {
         println!("Cleaning existing organized files...");
-        clean_existing_files(data_path)?;
+        clean_existing_files(&data_path)?;
     }
 
     let mut source_stats: HashMap<String, ClassificationStats> = HashMap::new();
+    let mut bug_files: Vec<(String, String, ParseResults)> = Vec::new();
     let mut total_files = 0;
     let mut processed_files = 0;
     let mut error_files = 0;
 
-    // Walk through all source directories
-    for entry in fs::read_dir(data_raw_path)? {
+    for entry in fs::read_dir(&data_raw_path)? {
         let entry = entry?;
         let source_path = entry.path();
 
@@ -135,57 +260,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .to_string_lossy()
             .to_string();
 
-        let mut stats = ClassificationStats::new();
-
-        // Find all .mol files in this source directory (recursive)
-        fn collect_mol_files(
-            dir: &Path,
-        ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
-            let mut files = Vec::new();
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?;
-                let path = entry.path();
-
-                if path.is_dir() {
-                    files.extend(collect_mol_files(&path)?);
-                } else if path.extension() == Some(std::ffi::OsStr::new("mol")) {
-                    files.push(path);
-                }
-            }
-            Ok(files)
-        }
-
+        let mut stats = ClassificationStats::default();
         let mol_files = collect_mol_files(&source_path)?;
 
         for path in mol_files {
             total_files += 1;
 
             match classify_mol_file(&path) {
-                Ok(classification) => {
-                    match classification {
-                        FileClassification::Molecule => stats.add_molecule(),
-                        FileClassification::ExtendedMolecule => stats.add_extended_molecule(),
-                        FileClassification::Invalid => stats.add_invalid(),
+                Ok((category, results)) => {
+                    stats.add(category);
+
+                    if category == Category::Bug {
+                        let filename = path.file_name().unwrap().to_string_lossy().to_string();
+                        bug_files.push((source_name.clone(), filename, results));
                     }
 
-                    // Sort files if requested
                     if should_sort {
-                        let category = match classification {
-                            FileClassification::Molecule => "molecule",
-                            FileClassification::ExtendedMolecule => "extended_molecule",
-                            FileClassification::Invalid => "invalid",
-                        };
-
-                        let dest_dir = Path::new(data_path).join(category).join(&source_name);
+                        let dest_dir = Path::new(&data_path)
+                            .join(category.dir_name())
+                            .join(&source_name);
                         let dest_file = dest_dir.join(path.file_name().unwrap());
 
-                        // Create destination directory if it doesn't exist
                         if let Err(e) = fs::create_dir_all(&dest_dir) {
                             eprintln!("Failed to create directory {}: {}", dest_dir.display(), e);
                             continue;
                         }
 
-                        // Copy file to organized location instead of creating symlink
                         if let Err(e) = fs::copy(&path, &dest_file) {
                             eprintln!(
                                 "Failed to copy file from {} to {}: {}",
@@ -210,84 +310,88 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Generate markdown table
-    println!("# MOL File Classification Results");
-    println!();
+    // Print markdown report
+    println!("# MOL File Classification Results\n");
     println!("Classification based on parser compatibility:");
-    println!("- **Molecule**: Files that parse successfully with `parse_mol` (basic parser)");
-    println!("- **ExtendedMolecule**: Files that require `parse_extended_mol` (extended features)");
-    println!("- **Invalid**: Files that fail both parsers");
-    println!();
-    println!("| Source | Total | Molecule | ExtendedMolecule | Invalid | Valid % |");
-    println!("| --- | --- | --- | --- | --- | --- |");
+    println!("- **molecule** (++++): All parsers succeed");
+    println!("- **molecule_lenient** (-+-+): Needs lenient flags for basic parser");
+    println!("- **extended_molecule** (--++): Needs extended parser");
+    println!("- **extended_molecule_lenient** (---+): Needs lenient flags for extended parser");
+    println!("- **invalid** (----): All parsers fail");
+    println!("- **bug**: Parser hierarchy violation\n");
 
-    // Sort sources alphabetically for consistent output
+    println!("| Source | Total | molecule | mol_lenient | ext_mol | ext_lenient | invalid | bug | Valid % |");
+    println!("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+
     let mut sources: Vec<_> = source_stats.iter().collect();
     sources.sort_by_key(|(name, _)| name.as_str());
 
-    let mut total_molecule = 0;
-    let mut total_extended_molecule = 0;
-    let mut total_invalid = 0;
-    let mut grand_total = 0;
+    let mut totals = ClassificationStats::default();
 
-    for (source, stats) in sources {
+    for (source, stats) in &sources {
         println!(
-            "| {} | {} | {} | {} | {} | {:.1}% |",
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {:.1}% |",
             source,
             stats.total,
             stats.molecule,
+            stats.molecule_lenient,
             stats.extended_molecule,
+            stats.extended_molecule_lenient,
             stats.invalid,
+            stats.bug,
             stats.valid_percentage()
         );
 
-        total_molecule += stats.molecule;
-        total_extended_molecule += stats.extended_molecule;
-        total_invalid += stats.invalid;
-        grand_total += stats.total;
+        totals.molecule += stats.molecule;
+        totals.molecule_lenient += stats.molecule_lenient;
+        totals.extended_molecule += stats.extended_molecule;
+        totals.extended_molecule_lenient += stats.extended_molecule_lenient;
+        totals.invalid += stats.invalid;
+        totals.bug += stats.bug;
+        totals.total += stats.total;
     }
 
-    // Add totals row
-    let overall_valid_percentage = if grand_total == 0 {
-        0.0
-    } else {
-        ((total_molecule + total_extended_molecule) as f64 / grand_total as f64) * 100.0
-    };
-
     println!(
-        "| **Total** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
-        grand_total,
-        total_molecule,
-        total_extended_molecule,
-        total_invalid,
-        overall_valid_percentage
+        "| **Total** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
+        totals.total,
+        totals.molecule,
+        totals.molecule_lenient,
+        totals.extended_molecule,
+        totals.extended_molecule_lenient,
+        totals.invalid,
+        totals.bug,
+        totals.valid_percentage()
     );
 
-    println!();
-    println!();
-    println!("**Summary:**");
+    println!("\n\n**Summary:**");
     println!("- Processed: {}/{} files", processed_files, total_files);
     if error_files > 0 {
         println!("- Errors: {} files could not be read", error_files);
     }
-    println!(
-        "- {:.1}% of files are valid (parseable)",
-        overall_valid_percentage
-    );
-    println!(
-        "- {:.1}% of files work with basic parser (`parse_mol`)",
-        (total_molecule as f64 / grand_total as f64) * 100.0
-    );
+    println!("- {:.1}% of files are valid (parseable)", totals.valid_percentage());
+
+    if totals.bug > 0 {
+        println!("\n⚠️  **WARNING: {} files have parser hierarchy violations!**\n", totals.bug);
+        println!("| Source | File | Pattern | Violation |");
+        println!("| --- | --- | --- | --- |");
+        for (source, filename, results) in &bug_files {
+            println!(
+                "| {} | {} | {} | {} |",
+                source,
+                filename,
+                results.pattern(),
+                results.violation_description().unwrap_or_default()
+            );
+        }
+    }
 
     if !should_sort {
-        println!();
-        println!("**Note:** Run with `--sort` flag to create copies in data/ directories:");
+        println!("\n**Note:** Run with `--sort` flag to copy files to data/ directories:");
         println!("```");
         println!("cargo run --bin mol_classifier -- --sort");
         println!("```");
     } else {
-        println!();
-        println!("**Files sorted into data/ directories via copies**");
+        println!("\n**Files sorted into data/ directories**");
     }
 
     Ok(())

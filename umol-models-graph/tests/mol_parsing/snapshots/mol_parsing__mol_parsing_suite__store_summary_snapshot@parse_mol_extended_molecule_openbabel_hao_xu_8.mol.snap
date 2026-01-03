@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 12
-bond_count: 13
-sum_formula: C12
-graph6: KhEI?C@GG?_C

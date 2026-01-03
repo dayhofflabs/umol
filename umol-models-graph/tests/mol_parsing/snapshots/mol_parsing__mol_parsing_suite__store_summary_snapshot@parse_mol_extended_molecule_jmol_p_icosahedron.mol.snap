@@ -1,8 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 12
-bond_count: 30
-sum_formula: F12
-graph6: "K}iYbChD_X_^"

@@ -1,7 +1,0 @@
----
-source: umol-models-graph/tests/mol_parsing/mod.rs
-expression: summary
----
-atom_count: 73
-bond_count: 76
-sum_formula: C34H30FeN4O4-2
