@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 40
+expression: summary
+---
+atom_count: 1
+bond_count: 0
+sum_formula: "-"

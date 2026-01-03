@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 40
+expression: summary
+---
+atom_count: 99
+bond_count: 103
+sum_formula: C40H51N4O4+

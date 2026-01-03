@@ -94,6 +94,15 @@ impl<I> NomParseError<I> for ParseError {
     }
 }
 
+impl From<Err<ParseError>> for ParseError {
+    fn from(e: Err<ParseError>) -> Self {
+        match e {
+            Err::Error(inner) | Err::Failure(inner) => inner,
+            Err::Incomplete(_) => ParseError::Incomplete { line: 0 },
+        }
+    }
+}
+
 impl ParseError {
     pub fn generic(line: u32, col: u32, message: impl Into<String>) -> Self {
         ParseError::Generic {

@@ -1,0 +1,8 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 40
+expression: summary
+---
+atom_count: 4
+bond_count: 3
+sum_formula: C2O2-

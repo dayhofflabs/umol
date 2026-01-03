@@ -1,6 +1,6 @@
 use std::{env, fs, process};
 
-use umol_models_graph::io::mol::parser::{parse_extended_mol_bytes, parse_mol_bytes};
+use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes, parse_mol_bytes};
 
 fn main() {
     let args: Vec<String> = env::args().collect();

@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::sdf::parser::parse_sdf_bytes;
+use umol_models_graph::io::ctfile::parser::parse_sdf_bytes;
 
 #[derive(Serialize)]
 struct SdfSummary<'a> {

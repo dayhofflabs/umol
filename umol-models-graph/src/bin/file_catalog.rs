@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use umol_models_graph::io::mol::parser::parse_extended_mol_bytes;
+use umol_models_graph::io::ctfile::parser::parse_extended_mol_bytes;
 
 #[derive(Debug, Clone)]
 struct FileAnalysis {

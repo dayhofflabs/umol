@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use pretty_assertions::assert_eq;
 use umol_data::Element;
 
@@ -25,8 +26,10 @@ fn test_molecule_with_atoms_and_bonds() {
         ],
         bonds: vec![Bond::new(0, 1, BondOrder::Single)],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.atom_count(), 2);
     assert_eq!(mol.bond_count(), 1);
@@ -44,8 +47,10 @@ fn test_molecule_atom_count() {
         ],
         bonds: vec![],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.atom_count(), 3);
 }
@@ -63,8 +68,10 @@ fn test_molecule_bond_count() {
             Bond::new(1, 2, BondOrder::Double),
         ],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.bond_count(), 2);
 }
@@ -75,8 +82,10 @@ fn test_molecule_sum_formula_simple() {
         atoms: vec![Atom::aliphatic_atom(Element::C)],
         bonds: vec![],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.sum_formula(), "C");
 }
@@ -93,8 +102,10 @@ fn test_molecule_sum_formula_with_hydrogen() {
         ],
         bonds: vec![],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.sum_formula(), "CH4");
 }
@@ -107,8 +118,10 @@ fn test_molecule_sum_formula_with_charge() {
         atoms: vec![atom],
         bonds: vec![],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
     };
     let formula = mol.sum_formula();
     assert_eq!(formula, "C+");
@@ -125,8 +138,10 @@ fn test_molecule_sum_formula_multiple_elements() {
         ],
         bonds: vec![],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
     };
     let formula = mol.sum_formula();
     assert_eq!(formula, "C2NO");
@@ -153,14 +168,14 @@ fn test_extended_molecule_direct_construction() {
         atoms: vec![ExtendedAtom::from_element(Element::C)],
         bonds: vec![ExtendedBond::new(0, 0, BondOrder::Single)],
         rings: vec![],
-        source_format: SourceFormat::SMILES,
         positions: None,
         fragments: vec![],
         links: vec![],
         electrons: Some(0),
-        properties: vec![],
         comments: vec!["test".to_string()],
+        properties: IndexMap::new(),
         ctfile_data: None,
+        source_format: SourceFormat::SMILES,
     };
 
     assert_eq!(ext.atom_count(), 1);
@@ -178,8 +193,10 @@ fn test_extended_molecule_from_molecule() {
         ],
         bonds: vec![Bond::new(0, 1, BondOrder::Double)],
         rings: vec![],
-        source_format: SourceFormat::MOL,
         positions: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::MOL,
     };
 
     let ext = ExtendedMolecule::from(mol);

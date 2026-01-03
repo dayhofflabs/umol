@@ -9,12 +9,12 @@
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
+use indexmap::IndexMap;
 use umol_data::Element;
 
 use super::atom::{Atom, AtomSymbol, ExtendedAtom};
 use super::bond::{Bond, ExtendedBond};
 use super::ctfile_data::CtfileData;
-use super::property::Property;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
@@ -28,9 +28,10 @@ pub struct Molecule {
     pub atoms: Vec<Atom>,
     pub bonds: Vec<Bond>,
     pub rings: Vec<Ring>,
-
-    pub source_format: SourceFormat,
     pub positions: Option<Vec<Point3D>>,
+    pub comments: Vec<String>,
+    pub properties: IndexMap<String, String>,
+    pub source_format: SourceFormat,
 }
 
 impl Molecule {
@@ -39,8 +40,10 @@ impl Molecule {
             atoms: Vec::new(),
             bonds: Vec::new(),
             rings: Vec::new(),
-            source_format: SourceFormat::UNKNOWN,
             positions: None,
+            comments: Vec::new(),
+            properties: IndexMap::new(),
+            source_format: SourceFormat::UNKNOWN,
         }
     }
 
@@ -86,7 +89,6 @@ pub struct ExtendedMolecule {
     pub atoms: Vec<ExtendedAtom>,
     pub bonds: Vec<ExtendedBond>,
     pub rings: Vec<Ring>,
-    pub source_format: SourceFormat,
     pub positions: Option<Vec<Point3D>>,
 
     // Additional structure
@@ -95,11 +97,13 @@ pub struct ExtendedMolecule {
     pub electrons: Option<u32>,
 
     // Properties and metadata
-    pub properties: Vec<Property>,
     pub comments: Vec<String>,
+    pub properties: IndexMap<String, String>,
 
     // Format-specific data for roundtripping (CTFile formats)
     pub ctfile_data: Option<CtfileData>,
+
+    pub source_format: SourceFormat,
 }
 
 impl ExtendedMolecule {
@@ -108,14 +112,14 @@ impl ExtendedMolecule {
             atoms: Vec::new(),
             bonds: Vec::new(),
             rings: Vec::new(),
-            source_format: SourceFormat::UNKNOWN,
             positions: None,
             fragments: Vec::new(),
             links: Vec::new(),
             electrons: None,
-            properties: Vec::new(),
             comments: Vec::new(),
+            properties: IndexMap::new(),
             ctfile_data: None,
+            source_format: SourceFormat::UNKNOWN,
         }
     }
 
@@ -172,8 +176,10 @@ impl ExtendedMolecule {
                 .map(|b| Bond::try_from(b.clone()))
                 .collect::<Result<Vec<_>, _>>()?,
             rings: self.rings.clone(),
-            source_format: self.source_format,
             positions: self.positions.clone(),
+            comments: self.comments.clone(),
+            properties: self.properties.clone(),
+            source_format: self.source_format,
         })
     }
 
@@ -224,14 +230,14 @@ impl From<Molecule> for ExtendedMolecule {
             atoms: mol.atoms.into_iter().map(ExtendedAtom::from).collect(),
             bonds: mol.bonds.into_iter().map(ExtendedBond::from).collect(),
             rings: mol.rings,
-            source_format: mol.source_format,
             positions: mol.positions,
             fragments: Vec::new(),
             links: Vec::new(),
             electrons: None,
-            properties: Vec::new(),
-            comments: Vec::new(),
+            comments: mol.comments,
+            properties: mol.properties,
             ctfile_data: None,
+            source_format: mol.source_format,
         }
     }
 }

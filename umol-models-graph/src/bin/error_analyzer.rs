@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::{env, fs};
 
-use umol_models_graph::io::mol::parser::parse_extended_mol_bytes;
+use umol_models_graph::io::ctfile::parser::parse_extended_mol_bytes;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

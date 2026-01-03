@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use umol_models_graph::io::mol::parser::{parse_extended_mol_bytes, parse_mol_bytes};
+use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes, parse_mol_bytes};
 
 #[derive(Debug)]
 struct ClassificationStats {

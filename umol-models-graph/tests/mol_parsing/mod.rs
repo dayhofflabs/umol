@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::mol::parser::{parse_extended_mol_bytes, parse_mol_bytes};
+use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes, parse_mol_bytes};
 use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Serialize)]

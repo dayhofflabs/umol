@@ -10,26 +10,26 @@ bitflags! {
     pub struct SmilesParseFlags: u32 {
         // Extensions (lex/syntax only)
         const EXTENDED_WS = 1;       // allow ASCII inter-token whitespace
-        const ALLOWS_COMMENTS = 2;   // // line and /* block */ comments
-        const EXPLICIT_EOI = 4;      // explicit end-of-input marker token
+        const ALLOWS_COMMENTS = 1 << 1;   // // line and /* block */ comments
+        const EXPLICIT_EOI = 1 << 2;      // explicit end-of-input marker token
 
         // Reserved for extensions (bits 3-15)
-        // const RESERVED_1 = 8;
-        // const RESERVED_2 = 16;
-        // const RESERVED_3 = 32;
-        // const RESERVED_4 = 64;
-        // const RESERVED_5 = 128;
-        // const RESERVED_6 = 256;
-        // const RESERVED_7 = 512;
-        // const RESERVED_8 = 1024;
-        // const RESERVED_9 = 2048;
-        // const RESERVED_10 = 4096;
-        // const RESERVED_11 = 8192;
-        // const RESERVED_12 = 16384;
-        // const RESERVED_13 = 32768;
+        // const RESERVED_1 = 1 << 3;
+        // const RESERVED_2 = 1 << 4;
+        // const RESERVED_3 = 1 << 5;
+        // const RESERVED_4 = 1 << 6;
+        // const RESERVED_5 = 1 << 7;
+        // const RESERVED_6 = 1 << 8;
+        // const RESERVED_7 = 1 << 9;
+        // const RESERVED_8 = 1 << 10;
+        // const RESERVED_9 = 1 << 11;
+        // const RESERVED_10 = 1 << 12;
+        // const RESERVED_11 = 1 << 13;
+        // const RESERVED_12 = 1 << 14;
+        // const RESERVED_13 = 1 << 15;
 
         // Metadata generation
-        const NO_METADATA = 65536;     // no metadata emitted
+        const NO_METADATA = 1 << 16;     // no metadata emitted
 
         // Dialects
         // Core OpenSMILES behavior: terminator-only WS, no comments
