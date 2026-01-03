@@ -2,6 +2,8 @@
 //!
 //! This module provides the main entry points for parsing Connection Table formats.
 
+use std::borrow::Cow;
+
 use bstr::{join, ByteSlice};
 use indexmap::IndexMap;
 use nom::bytes::complete::{is_not, tag};
@@ -24,6 +26,7 @@ pub use self::properties::{extended_property_input, property_input}; // NOTE: Re
 use self::sdf_data::{sdf_data_block, sdf_delimiter};
 use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::ParseError;
+use crate::io::utils::normalize_whitespace;
 use crate::position::Point3D;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
@@ -444,8 +447,14 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
 pub fn parse_mol_bytes_with(input: &[u8], config: &CtfileIoConfig) -> Result<Molecule, ParseError> {
     let flags = config.parse_flags;
 
+    let data: Cow<'_, [u8]> = if flags.contains(CtabParseFlags::UNICODE) {
+        normalize_whitespace(input)
+    } else {
+        Cow::Borrowed(input)
+    };
+
     let (remaining, comments) = header_block()
-        .parse(input)
+        .parse(&*data)
         .map_err(|e| ParseError::header_from_nom(e, 0))?;
 
     let (_, mut molecule) = ctab_block(3, flags).parse(remaining)?;
@@ -484,8 +493,14 @@ pub fn parse_extended_mol_bytes_with(
 ) -> Result<ExtendedMolecule, ParseError> {
     let flags = config.parse_flags;
 
+    let data: Cow<'_, [u8]> = if flags.contains(CtabParseFlags::UNICODE) {
+        normalize_whitespace(input)
+    } else {
+        Cow::Borrowed(input)
+    };
+
     let (remaining, comments) = header_block()
-        .parse(input)
+        .parse(&*data)
         .map_err(|e| ParseError::header_from_nom(e, 0))?;
 
     let (_, mut molecule) = extended_ctab_block(3, flags).parse(remaining)?;
@@ -589,9 +604,17 @@ pub fn parse_sdf_bytes_with(
     input: &[u8],
     config: &CtfileIoConfig,
 ) -> Result<Vec<Molecule>, ParseError> {
+    let flags = config.parse_flags;
+
+    let data: Cow<'_, [u8]> = if flags.contains(CtabParseFlags::UNICODE) {
+        normalize_whitespace(input)
+    } else {
+        Cow::Borrowed(input)
+    };
+
     let mut molecules = Vec::new();
     let mut line_offset = 0u32;
-    let mut remaining = input;
+    let mut remaining: &[u8] = &data;
 
     while !remaining.trim_ascii().is_empty() {
         let (rem, molecule, lines_consumed) = parse_sdf_molecule(remaining, line_offset, config)?;
@@ -624,9 +647,17 @@ pub fn parse_extended_sdf_bytes_with(
     input: &[u8],
     config: &CtfileIoConfig,
 ) -> Result<Vec<ExtendedMolecule>, ParseError> {
+    let flags = config.parse_flags;
+
+    let data: Cow<'_, [u8]> = if flags.contains(CtabParseFlags::UNICODE) {
+        normalize_whitespace(input)
+    } else {
+        Cow::Borrowed(input)
+    };
+
     let mut molecules = Vec::new();
     let mut line_offset = 0u32;
-    let mut remaining = input;
+    let mut remaining: &[u8] = &data;
 
     while !remaining.trim_ascii().is_empty() {
         let (rem, molecule, lines_consumed) =
@@ -660,18 +691,29 @@ pub fn parse_extended_sdf(input: &str) -> Result<Vec<ExtendedMolecule>, ParseErr
 
 /// Iterator for lazy streaming SDF parsing into Molecule
 pub struct SdfIter<'inp> {
-    remaining: &'inp [u8],
+    data: Cow<'inp, [u8]>,
+    offset: usize,
     line_offset: u32,
     config: CtfileIoConfig,
 }
 
 impl<'inp> SdfIter<'inp> {
     fn new(input: &'inp [u8], config: CtfileIoConfig) -> Self {
+        let data = if config.parse_flags.contains(CtabParseFlags::UNICODE) {
+            normalize_whitespace(input)
+        } else {
+            Cow::Borrowed(input)
+        };
         Self {
-            remaining: input,
+            data,
+            offset: 0,
             line_offset: 0,
             config,
         }
+    }
+
+    fn remaining(&self) -> &[u8] {
+        &self.data[self.offset..]
     }
 }
 
@@ -679,18 +721,19 @@ impl<'inp> Iterator for SdfIter<'inp> {
     type Item = Result<Molecule, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining.trim_ascii().is_empty() {
+        let remaining = self.remaining();
+        if remaining.trim_ascii().is_empty() {
             return None;
         }
 
-        match parse_sdf_molecule(self.remaining, self.line_offset, &self.config) {
+        match parse_sdf_molecule(remaining, self.line_offset, &self.config) {
             Ok((rem, molecule, lines_consumed)) => {
-                self.remaining = rem;
+                self.offset = self.data.len() - rem.len();
                 self.line_offset += lines_consumed;
                 Some(Ok(molecule))
             }
             Err(e) => {
-                self.remaining = &[];
+                self.offset = self.data.len();
                 Some(Err(e))
             }
         }
@@ -699,18 +742,29 @@ impl<'inp> Iterator for SdfIter<'inp> {
 
 /// Iterator for lazy streaming SDF parsing into ExtendedMolecule
 pub struct ExtendedSdfIter<'inp> {
-    remaining: &'inp [u8],
+    data: Cow<'inp, [u8]>,
+    offset: usize,
     line_offset: u32,
     config: CtfileIoConfig,
 }
 
 impl<'inp> ExtendedSdfIter<'inp> {
     fn new(input: &'inp [u8], config: CtfileIoConfig) -> Self {
+        let data = if config.parse_flags.contains(CtabParseFlags::UNICODE) {
+            normalize_whitespace(input)
+        } else {
+            Cow::Borrowed(input)
+        };
         Self {
-            remaining: input,
+            data,
+            offset: 0,
             line_offset: 0,
             config,
         }
+    }
+
+    fn remaining(&self) -> &[u8] {
+        &self.data[self.offset..]
     }
 }
 
@@ -718,18 +772,19 @@ impl<'inp> Iterator for ExtendedSdfIter<'inp> {
     type Item = Result<ExtendedMolecule, ParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining.trim_ascii().is_empty() {
+        let remaining = self.remaining();
+        if remaining.trim_ascii().is_empty() {
             return None;
         }
 
-        match parse_sdf_extended_molecule(self.remaining, self.line_offset, &self.config) {
+        match parse_sdf_extended_molecule(remaining, self.line_offset, &self.config) {
             Ok((rem, molecule, lines_consumed)) => {
-                self.remaining = rem;
+                self.offset = self.data.len() - rem.len();
                 self.line_offset += lines_consumed;
                 Some(Ok(molecule))
             }
             Err(e) => {
-                self.remaining = &[];
+                self.offset = self.data.len();
                 Some(Err(e))
             }
         }
