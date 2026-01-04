@@ -73,12 +73,16 @@ fn test_bond_input12_invalid(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::non_strict_padding(b"  1  2  1  1  0  0XXX", NomErrorKind::Verify)]
+#[case::non_numeric_reacting_center(b"  1  2  1  1  0  0XXX", NomErrorKind::Digit)]
+#[case::non_zero_topology(b"  1  2  1  1  0  1  0", NomErrorKind::Verify)]
+#[case::non_zero_reacting_center(b"  1  2  1  1  0  0  1", NomErrorKind::Verify)]
 fn test_bond_input12_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = bond_input12(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
+    // Use BASIC without SKIP_UNUSED_FIELDS to get strict validation
+    let flags = CtabParseFlags::BASIC & !CtabParseFlags::SKIP_UNUSED_FIELDS;
+    let result = bond_input12(input, flags);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -286,10 +290,14 @@ fn test_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomError
 }
 
 #[rstest]
-#[case::non_strict_padding(b"  1  2  1  1  0  0XXX", NomErrorKind::Verify)]
+#[case::non_numeric_reacting_center(b"  1  2  1  1  0  0XXX", NomErrorKind::Digit)]
+#[case::non_zero_topology(b"  1  2  1  1  0  1  0", NomErrorKind::Verify)]
+#[case::non_zero_reacting_center(b"  1  2  1  1  0  0  1", NomErrorKind::Verify)]
 fn test_bond_input_strict_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let input_str = input.to_str_lossy();
-    let mut parser = bond_input(CtabParseFlags::STRICT);
+    // Use BASIC without SKIP_UNUSED_FIELDS to get strict validation
+    let flags = CtabParseFlags::BASIC & !CtabParseFlags::SKIP_UNUSED_FIELDS;
+    let mut parser = bond_input(flags);
     let result = parser.parse(input);
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(

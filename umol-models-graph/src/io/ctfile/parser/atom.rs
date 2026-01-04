@@ -165,79 +165,93 @@ fn extended_atom_symbol<'inp>(
 
 /// Parse atom inputs with 52-69 characters (s. `atom_input` for more details).
 /// Includes atom mapping number.
+/// Validates that extended fields (hhh, bbb, mmm, nnn, eee) are zero unless skip_unused is set.
 fn atom_input69<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let position = position30(ignore_positions);
-    let symbol = atom_symbol(flags);
-    let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
+
+    // Parse core fields
+    let (i, position) = position30(ignore_positions).parse(input)?;
+    let (i, symbol) = preceded(tag(" "), atom_symbol(flags)).parse(i)?;
+    let (i, mass_diff) = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
         convert_atom_mass_diff_code(opt.unwrap_or(0))
-    });
-    let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
+    })
+    .parse(i)?;
+    let (i, charge_radical) = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
         convert_atom_charge_code(opt.unwrap_or(0))
-    });
-    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
+    })
+    .parse(i)?;
+    let (i, _stereo_parity) = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
         convert_atom_stereo_parity_code(code, false)
-    });
-    let padding1 = fixed_width_padding_n(2, 3, skip_padding);
-    let valence = map_res(
+    })
+    .parse(i)?;
+
+    // hhh (hydrogen count) and bbb (stereo care) - extended fields, validate zero
+    let (i, _) = fixed_width_padding_n(2, 3, skip_unused).parse(i)?;
+
+    // valence
+    let (i, valence) = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
-    );
-    let padding2 = fixed_width_padding_n(3, 3, skip_padding);
-    let atom_map_num = fixed_width_int_in_range_opt::<u32, _>(3, 1..=999);
-    let padding3 = fixed_width_padding_n(2, 3, skip_padding);
-
-    map(
-        (
-            position,
-            preceded(tag(" "), symbol),
-            mass_diff,
-            charge_radical,
-            terminated(stereo_parity, padding1),
-            terminated(valence, padding2),
-            terminated(atom_map_num, padding3),
-        ),
-        |(position, symbol, mass_diff, charge_radical, _stereo_parity, valence, _atom_map_num)| {
-            let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
-            let (charge, unpaired_e) = charge_radical;
-            (
-                Atom {
-                    element,
-                    charge: if charge == 0 { None } else { Some(charge) },
-                    isotope_mass: isotope,
-                    hydrogens: None,
-                    implicit_h: false,
-                    valence,
-                    unpaired_e,
-                    aromatic: None,
-                    chirality: None,
-                    class: None,
-                    span: None,
-                    alias: None,
-                    value: None,
-                },
-                position,
-            )
-        },
     )
-    .parse(input)
+    .parse(i)?;
+
+    // HHH, rrr, iii - truly ignored fields
+    let (i, _) = fixed_width_padding_n(3, 3, skip_unused).parse(i)?;
+
+    // mmm (atom mapping number) - reaction field, validate zero in strict mode
+    let (i, atom_map_num) = fixed_width_int_in_range_opt::<u32, _>(3, 0..=999).parse(i)?;
+    if !skip_unused {
+        if let Some(m) = atom_map_num {
+            if m != 0 {
+                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+            }
+        }
+    }
+
+    // nnn (inversion) and eee (exact change) - reaction fields, validate zero
+    let (i, _) = fixed_width_padding_n(2, 3, skip_unused).parse(i)?;
+
+    let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
+    let (charge, unpaired_e) = charge_radical;
+
+    Ok((
+        i,
+        (
+            Atom {
+                element,
+                charge: if charge == 0 { None } else { Some(charge) },
+                isotope_mass: isotope,
+                hydrogens: None,
+                implicit_h: false,
+                valence,
+                unpaired_e,
+                aromatic: None,
+                chirality: None,
+                class: None,
+                span: None,
+                alias: None,
+                value: None,
+            },
+            position,
+        ),
+    ))
 }
 
 /// Parse atom inputs with 49-51 characters (s. `atom_input` for more details).
 /// Includes mass difference, charge/radical and valence fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused` is true, do no validate unused (padding) fields.
 ///
 fn atom_input51<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let position = position30(ignore_positions);
     let symbol = atom_symbol(flags);
@@ -247,7 +261,7 @@ fn atom_input51<'inp>(
     let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
         convert_atom_charge_code(opt.unwrap_or(0))
     });
-    let padding1 = fixed_width_padding_n(2, 3, skip_padding);
+    let padding1 = fixed_width_padding_n(2, 3, skip_unused);
     let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
         convert_atom_stereo_parity_code(code, false)
     });
@@ -296,13 +310,13 @@ fn atom_input51<'inp>(
 /// (substituted by defaults).
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused` is true, do no validate unused (padding) fields.
 ///
 fn atom_input42<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let position = position30(ignore_positions);
     let symbol = atom_symbol(flags);
@@ -318,7 +332,7 @@ fn atom_input42<'inp>(
         convert_atom_stereo_parity_code(code, false)
     });
     let n = input.len().saturating_sub(42) / 3;
-    let padding1 = fixed_width_padding_n(n, 3, skip_padding);
+    let padding1 = fixed_width_padding_n(n, 3, skip_unused);
 
     map(
         (
@@ -410,7 +424,7 @@ fn atom_input39<'inp>(
 /// Lacks trailing charge/radical, valence and atom mapping fields (substituted by defaults).
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused` is true, do no validate unused (padding) fields.
 ///
 fn atom_input36<'inp>(
     input: &'inp [u8],
@@ -455,7 +469,7 @@ fn atom_input36<'inp>(
 /// (substituted by defaults).
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused` is true, do no validate unused (padding) fields.
 ///
 fn atom_input34<'inp>(
     input: &'inp [u8],
@@ -572,7 +586,7 @@ fn extended_atom_input_inner<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (ExtendedAtom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp>
 {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     move |input: &'inp [u8]| {
@@ -632,7 +646,7 @@ fn extended_atom_input_inner<'inp>(
         // Ignored fields
         let (i, _) = cond(
             !i.is_empty(),
-            fixed_width_padding_n((i.len() / 3).min(3), 3, skip_padding),
+            fixed_width_padding_n((i.len() / 3).min(3), 3, skip_unused),
         )
         .parse(i)?;
 

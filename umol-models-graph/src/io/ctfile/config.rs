@@ -39,7 +39,7 @@ bitflags! {
 
         // Input validation strictness
         const UNICODE = 1 << 22;            // Allow Unicode whitespace
-        const SKIP_PADDING = 1 << 23;       // Skip validation of unused (padding) fields
+        const SKIP_UNUSED_FIELDS = 1 << 23;  // Skip validation of unused fields
         const NO_V2000_END_TAGS = 1 << 24;  // V2000 tag and M  END tag may be omitted
         // const RESERVED_10 = 1 << 25;
 
@@ -57,7 +57,7 @@ bitflags! {
         // Maximum capabilities for basic parser
         const BASIC_MAX = Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() |
             Self::NAMED_ISOTOPES.bits() | Self::CLARK_EXTENSIONS.bits() | Self::UNICODE.bits() |
-            Self::SKIP_PADDING.bits() | Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
+            Self::SKIP_UNUSED_FIELDS.bits() | Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits() | Self::CHEMAXON_WILDCARDS.bits() |
@@ -65,19 +65,19 @@ bitflags! {
             Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits() | Self::LEGACY_ATOM_LISTS.bits();
 
         // Default for basic parser
-        const BASIC = Self::NAMED_ISOTOPES.bits() | Self::SKIP_PADDING.bits();
+        const BASIC = Self::NAMED_ISOTOPES.bits() | Self::SKIP_UNUSED_FIELDS.bits();
 
         // Default for extended parser
         const EXTENDED = Self::BASIC.bits() | Self::WILDCARDS.bits() | Self::ELECTRONS.bits() |
             Self::RGROUPS.bits() | Self::SGROUPS.bits() | Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits();
 
         // Strict parser
-        const STRICT = Self::EXTENDED.bits() & !Self::SKIP_PADDING.bits();
+        const STRICT = Self::EXTENDED.bits() & !Self::SKIP_UNUSED_FIELDS.bits();
 
         // Lenient parser
         const LENIENT = Self::EXTENDED.bits() | Self::CHEMAXON_WILDCARDS.bits() | Self::LEGACY_ATOM_LISTS.bits() |
             Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() | Self::NAMED_ISOTOPES.bits() |
-            Self::CLARK_EXTENSIONS.bits() | Self::UNICODE.bits() | Self::SKIP_PADDING.bits() |
+            Self::CLARK_EXTENSIONS.bits() | Self::UNICODE.bits() | Self::SKIP_UNUSED_FIELDS.bits() |
             Self::NO_V2000_END_TAGS.bits();
 
         // Graph-only parser
@@ -162,8 +162,8 @@ impl fmt::Display for CtabParseFlags {
             if self.contains(CtabParseFlags::UNICODE) {
                 parts.push("UNICODE");
             }
-            if self.contains(CtabParseFlags::SKIP_PADDING) {
-                parts.push("SKIP_PADDING");
+            if self.contains(CtabParseFlags::SKIP_UNUSED_FIELDS) {
+                parts.push("SKIP_UNUSED_FIELDS");
             }
             if self.contains(CtabParseFlags::NO_V2000_END_TAGS) {
                 parts.push("NO_V2000_END_TAGS");

@@ -18,43 +18,65 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
 
-/// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
-/// Lacks trailing stereo/dir fields (substituted by defaults).
+/// Parse bond inputs with 12+ characters (s. `bond_input` for more details).
+/// Validates that extended fields (topology, reacting center) are zero unless skip_unused is set.
 fn bond_input12<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (usize, usize, Bond)> {
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
-    let first_atom = fixed_width_int_minus1::<usize>(3);
-    let second_atom = fixed_width_int_minus1::<usize>(3);
-    let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
-        convert_bond_type_code(code, extended_range)
-    });
-    let stereo_direction = map_res(fixed_width_int::<u8>(3), |code| {
-        convert_bond_stereo_direction_code(code, false)
-    });
-    let n = input.len().saturating_sub(12) / 3;
-    let padding1 = fixed_width_padding_n(n, 3, skip_padding);
+    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
 
-    map(
-        (
-            first_atom,
-            second_atom,
-            bond_type,
-            terminated(stereo_direction, padding1),
-        ),
-        |(first_atom, second_atom, order, (stereo, dir))| {
-            let mut bond = Bond::with_order(order);
-            match order {
-                BondOrder::Single => bond.direction = dir,
-                BondOrder::Double => bond.stereo = stereo,
-                _ => (),
+    // Parse core fields
+    let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
+    let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
+    let (i, order) = map_res(fixed_width_int::<u8>(3), move |code| {
+        convert_bond_type_code(code, extended_range)
+    })
+    .parse(i)?;
+    let (i, (stereo, dir)) = map_res(fixed_width_int::<u8>(3), |code| {
+        convert_bond_stereo_direction_code(code, false)
+    })
+    .parse(i)?;
+
+    // Handle trailing extended fields (xxx, rrr topology, ccc reacting_center)
+    let remaining_fields = i.len() / 3;
+    let i = if skip_unused {
+        // In lenient mode, skip all remaining fields without validation
+        let skip_count = remaining_fields.min(3); // xxx, rrr, ccc
+        let (i, _) = cond(skip_count > 0, nom::bytes::complete::take(skip_count * 3)).parse(i)?;
+        i
+    } else {
+        // In strict mode, validate that topology and reacting_center are zero
+        // Skip xxx field (positions 13-15)
+        let (i, _) = cond(i.len() >= 3, fixed_width_padding_n(1, 3, false)).parse(i)?;
+
+        // Parse and validate topology field rrr (positions 16-18) - must be 0 for basic parser
+        let (i, topology) = cond(i.len() >= 3, fixed_width_int::<u8>(3)).parse(i)?;
+        if let Some(topo) = topology {
+            if topo != 0 {
+                return Err(NomErr::Error(NomError::new(input, NomErrorKind::Verify)));
             }
-            (first_atom, second_atom, bond)
-        },
-    )
-    .parse(input)
+        }
+
+        // Parse and validate reacting center field ccc (positions 19-21) - must be 0 for basic parser
+        let (i, reacting_center) = cond(i.len() >= 3, fixed_width_int::<i8>(3)).parse(i)?;
+        if let Some(rc) = reacting_center {
+            if rc != 0 {
+                return Err(NomErr::Error(NomError::new(input, NomErrorKind::Verify)));
+            }
+        }
+        i
+    };
+
+    let mut bond = Bond::with_order(order);
+    match order {
+        BondOrder::Single => bond.direction = dir,
+        BondOrder::Double => bond.stereo = stereo,
+        _ => (),
+    }
+
+    Ok((i, (first_atom, second_atom, bond)))
 }
 
 /// Parse  bond inputs with 9 characters (s. `bond_input` for more details).
@@ -115,7 +137,7 @@ fn extended_bond_input_inner<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = NomError<&'inp [u8]>>
        + use<'inp> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     let allow_wildcards = flags.contains(CtabParseFlags::WILDCARDS);
     move |input: &'inp [u8]| {
@@ -140,7 +162,7 @@ fn extended_bond_input_inner<'inp>(
         // Ignore xxx field
         let (i, _) = cond(
             !i.is_empty(),
-            fixed_width_padding_n((i.len() / 3).min(1), 3, skip_padding),
+            fixed_width_padding_n((i.len() / 3).min(1), 3, skip_unused),
         )
         .parse(i)?;
 
