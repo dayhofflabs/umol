@@ -390,7 +390,7 @@ pub fn extended_property_input<'inp>(
     let allow_rgroups = flags.contains(CtabParseFlags::RGROUPS);
     let allow_sgroups = flags.contains(CtabParseFlags::SGROUPS);
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
-    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
+    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
     move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
 
@@ -513,7 +513,7 @@ pub fn extended_property_input<'inp>(
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
                             b"M  SDD" => {
-                                { sgroup_data_display_entry(skip_unused).parse(remaining) }
+                                { sgroup_data_display_entry(skip_padding).parse(remaining) }
                                     .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o)))
                             }
                             b"M  SCD" => sgroup_data_continuation_entry()
@@ -1193,7 +1193,7 @@ fn sgroup_data_description_entry<'inp>(
 /// i: skipped, jjj: number of characters to display (1-999 or ALL), kkk: number of lines to display (unused, always 1)
 /// ll: skipped, m: tag character (if non-blank), n: Data display DASP position (1-9), oo: skipped
 fn sgroup_data_display_entry<'inp>(
-    skip_unused: bool,
+    skip_padding: bool,
 ) -> impl Parser<&'inp [u8], Output = SGroupDataDisplayEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
@@ -1201,17 +1201,17 @@ fn sgroup_data_display_entry<'inp>(
             preceded(tag(" "), fixed_width_float::<f64>(10, 4)),
             terminated(fixed_width_float::<f64>(10, 4), tag(" ")),
             preceded(
-                fixed_width_padding(3, skip_unused),
+                fixed_width_padding(3, skip_padding),
                 sgroup_data_display_type(),
             ),
             sgroup_data_display_placement(),
             sgroup_data_display_units(),
             preceded(
-                fixed_width_padding(3, skip_unused),
+                fixed_width_padding(3, skip_padding),
                 sgroup_data_display_chars(),
             ),
             preceded(
-                fixed_width_padding(7, skip_unused),
+                fixed_width_padding(7, skip_padding),
                 map_parser(take(1usize), opt(nom_u8)),
             ),
             preceded(tag("  "), fixed_width_int::<u8>(1)),

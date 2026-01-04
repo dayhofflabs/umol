@@ -30,7 +30,7 @@ use crate::io::utils::normalize_whitespace;
 use crate::position::Point3D;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
-use crate::table_ir::{Atom, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
+use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
 
 mod accumulator;
 mod atom;
@@ -419,26 +419,27 @@ fn build_extended_molecule(
 /// - Extended bond types (SingleOrDouble, Any, Zero, etc.)
 /// - S-groups, R-groups
 pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
-    // Check atoms for extended features
     for atom in &molecule.atoms {
-        if atom.has_extended_features() {
-            return true;
+        match &atom.symbol {
+            AtomSymbol::WildcardAtom(_)
+            | AtomSymbol::AtomList(_)
+            | AtomSymbol::RGroup(_)
+            | AtomSymbol::LonePair
+            | AtomSymbol::Pseudoatom(_) => return true,
+            AtomSymbol::Element(_) | AtomSymbol::NamedIsotope(_) => {}
         }
     }
 
-    // Check bonds for extended features
     for bond in &molecule.bonds {
-        if bond.has_extended_features() {
+        if bond.order.is_query() || bond.order.is_extended() {
             return true;
         }
     }
 
-    // Check for S-groups
     if !molecule.sgroups().is_empty() {
         return true;
     }
 
-    // Check for R-groups
     if !molecule.rgroups().is_empty() {
         return true;
     }

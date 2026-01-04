@@ -298,9 +298,9 @@ impl ExtendedAtom {
 
     /// Check if this atom has extended features that would be lost in conversion to basic Atom.
     /// Note: alias and value are basic features, not extended.
-    /// Note: stereo_parity is a "Generic" field that is ignored on read per MDL spec.
     pub fn has_extended_features(&self) -> bool {
         self.symbol.is_extended()
+            || self.stereo_parity.is_some()
             || self.stereo_care.is_some()
             || self.atom_map_num.is_some()
             || self.inversion_retention.is_some()
@@ -664,7 +664,6 @@ mod tests {
 
     #[test]
     fn test_has_extended_features_extended() {
-        // Use stereo_care instead of stereo_parity because stereo_parity is ignored on read per MDL spec
         let extended = ExtendedAtom {
             symbol: AtomSymbol::Element(Element::C),
             charge: None,
@@ -677,8 +676,8 @@ mod tests {
             class: None,
             alias: None,
             value: None,
-            stereo_parity: None,
-            stereo_care: Some(AtomStereoCare::Care), // Extended feature: stereo care box
+            stereo_parity: Some(AtomStereoParity::Even),
+            stereo_care: None,
             valence: None,
             atom_map_num: None,
             inversion_retention: None,

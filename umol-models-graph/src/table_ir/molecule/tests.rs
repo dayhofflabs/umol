@@ -280,8 +280,7 @@ fn test_extended_molecule_to_molecule() {
 fn test_extended_molecule_to_molecule_error() {
     let mut ext = ExtendedMolecule::empty();
     let mut atom = ExtendedAtom::from_element(Element::C);
-    // Use stereo_care instead of stereo_parity because stereo_parity is ignored on read per MDL spec
-    atom.stereo_care = Some(crate::table_ir::atom::AtomStereoCare::Care);
+    atom.stereo_parity = Some(crate::table_ir::atom::AtomStereoParity::Odd);
     ext.atoms.push(atom);
 
     let result = ext.to_molecule();

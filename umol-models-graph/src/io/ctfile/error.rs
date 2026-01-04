@@ -23,18 +23,6 @@ pub enum ParseError {
     InvalidLegacyAtomListLine { line: u32, col: u32 },
     #[error("Unsupported legacy atom list at line {line}")]
     UnsupportedLegacyAtomList { line: u32 },
-    #[error("Unsupported atom field '{field}' with value {value} at line {line}")]
-    UnsupportedAtomField {
-        line: u32,
-        field: &'static str,
-        value: i32,
-    },
-    #[error("Unsupported bond field '{field}' with value {value} at line {line}")]
-    UnsupportedBondField {
-        line: u32,
-        field: &'static str,
-        value: i32,
-    },
     #[error("Invalid property line at line {line}, col {col}")]
     InvalidPropertyLine { line: u32, col: u32 },
     #[error("Invalid Sgroup line at line {line}, col {col}")]
@@ -255,16 +243,6 @@ impl From<ParseError> for Diagnostic {
                 DiagnosticKind::CtfileInvalidLegacyAtomListLine,
                 Span::line(line),
                 None,
-            ),
-            ParseError::UnsupportedAtomField { line, field, value } => (
-                DiagnosticKind::CtfileInvalidAtomLine,
-                Span::line(line),
-                Some(format!("unsupported atom field '{}' with value {}", field, value)),
-            ),
-            ParseError::UnsupportedBondField { line, field, value } => (
-                DiagnosticKind::CtfileInvalidBondLine,
-                Span::line(line),
-                Some(format!("unsupported bond field '{}' with value {}", field, value)),
             ),
             ParseError::InvalidPropertyLine { line, .. } => (
                 DiagnosticKind::CtfileInvalidPropertyLine,

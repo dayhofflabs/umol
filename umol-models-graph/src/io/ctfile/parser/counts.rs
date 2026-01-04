@@ -30,7 +30,7 @@ use crate::io::ctfile::config::CtabParseFlags;
 pub fn counts_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = Counts, Error = NomError<&'inp [u8]>> + use<'inp> {
-    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
+    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
     let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
     terminated(
         map(
@@ -41,7 +41,7 @@ pub fn counts_input<'inp>(
                 preceded(take(3usize), fixed_width_int::<u32>(3)),
                 fixed_width_int::<u32>(3),
                 delimited(
-                    fixed_width_padding_n(4, 3, skip_unused),
+                    fixed_width_padding_n(4, 3, skip_padding),
                     fixed_width_int::<u32>(3),
                     version(no_v2000_end_tags),
                 ),
