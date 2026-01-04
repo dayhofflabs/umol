@@ -492,10 +492,12 @@ fn test_fixed_width_padding(
 #[case::two_fields_zeros(b"000000", 2, 3, false, true)]
 #[case::blank_field_zero(b"   000", 2, 3, false, true)]
 #[case::zeros_separated(b"0 0000", 2, 3, false, false)]
+#[case::two_fields_too_short(b"000", 2, 3, false, false)]
 #[case::one(b"  1", 1, 3, false, false)]
 #[case::zeros_separated_skip_padding(b"0 0000", 2, 3, true, true)]
 #[case::one_skip_padding(b"  1", 1, 3, true, true)]
 #[case::one_zero_padded_left(b"000001", 2, 3, false, false)]
+#[case::two_fields_too_short_skip_padding(b"000", 2, 3, true, false)]
 fn test_fixed_width_padding_n(
     #[case] input: &[u8],
     #[case] count: usize,
