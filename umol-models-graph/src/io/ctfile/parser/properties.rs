@@ -14,7 +14,7 @@ use umol_data::Element;
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
     fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
-    fixed_width_int_minus1, fixed_width_padding, fixed_width_str_partial, rgroup_occurrences,
+    fixed_width_int_minus1, fixed_width_unused, fixed_width_str_partial, rgroup_occurrences,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::sgroup::{
@@ -390,7 +390,7 @@ pub fn extended_property_input<'inp>(
     let allow_rgroups = flags.contains(CtabParseFlags::RGROUPS);
     let allow_sgroups = flags.contains(CtabParseFlags::SGROUPS);
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     move |input: &'inp [u8]| {
         let input = input.trim_end_with(|c| c == '\r' || c == '\n');
 
@@ -513,7 +513,7 @@ pub fn extended_property_input<'inp>(
                                 .parse(remaining)
                                 .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
                             b"M  SDD" => {
-                                { sgroup_data_display_entry(skip_padding).parse(remaining) }
+                                { sgroup_data_display_entry(skip_unused_fields).parse(remaining) }
                                     .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o)))
                             }
                             b"M  SCD" => sgroup_data_continuation_entry()
@@ -1193,7 +1193,7 @@ fn sgroup_data_description_entry<'inp>(
 /// i: skipped, jjj: number of characters to display (1-999 or ALL), kkk: number of lines to display (unused, always 1)
 /// ll: skipped, m: tag character (if non-blank), n: Data display DASP position (1-9), oo: skipped
 fn sgroup_data_display_entry<'inp>(
-    skip_padding: bool,
+    skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = SGroupDataDisplayEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
@@ -1201,17 +1201,17 @@ fn sgroup_data_display_entry<'inp>(
             preceded(tag(" "), fixed_width_float::<f64>(10, 4)),
             terminated(fixed_width_float::<f64>(10, 4), tag(" ")),
             preceded(
-                fixed_width_padding(3, skip_padding),
+                fixed_width_unused(3, skip_unused_fields),
                 sgroup_data_display_type(),
             ),
             sgroup_data_display_placement(),
             sgroup_data_display_units(),
             preceded(
-                fixed_width_padding(3, skip_padding),
+                fixed_width_unused(3, skip_unused_fields),
                 sgroup_data_display_chars(),
             ),
             preceded(
-                fixed_width_padding(7, skip_padding),
+                fixed_width_unused(7, skip_unused_fields),
                 map_parser(take(1usize), opt(nom_u8)),
             ),
             preceded(tag("  "), fixed_width_int::<u8>(1)),

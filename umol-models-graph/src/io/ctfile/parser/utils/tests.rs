@@ -451,16 +451,16 @@ fn test_fixed_width_element_partial_invalid(
 #[case::two_zeros_width2(b"00", 3, false, false)]
 #[case::two_zeros_separated(b"0 0", 3, false, false)]
 #[case::one(b"  1", 3, false, false)]
-#[case::three_zeros_skip_padding(b"000", 3, true, true)]
-#[case::two_zeros_separated_skip_padding(b"0 0", 3, true, true)]
-#[case::one_skip_padding(b"  1", 3, true, true)]
-fn test_fixed_width_padding(
+#[case::three_zeros_skip_unused_fields(b"000", 3, true, true)]
+#[case::two_zeros_separated_skip_unused_fields(b"0 0", 3, true, true)]
+#[case::one_skip_unused_fields(b"  1", 3, true, true)]
+fn test_fixed_width_unused(
     #[case] input: &[u8],
     #[case] width: usize,
-    #[case] skip_padding: bool,
+    #[case] skip_unused_fields: bool,
     #[case] expected_success: bool,
 ) {
-    let mut parser = all_consuming(fixed_width_padding(width, skip_padding));
+    let mut parser = all_consuming(fixed_width_unused(width, skip_unused_fields));
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
     assert_eq!(
@@ -494,18 +494,18 @@ fn test_fixed_width_padding(
 #[case::zeros_separated(b"0 0000", 2, 3, false, false)]
 #[case::two_fields_too_short(b"000", 2, 3, false, false)]
 #[case::one(b"  1", 1, 3, false, false)]
-#[case::zeros_separated_skip_padding(b"0 0000", 2, 3, true, true)]
-#[case::one_skip_padding(b"  1", 1, 3, true, true)]
+#[case::zeros_separated_skip_unused_fields(b"0 0000", 2, 3, true, true)]
+#[case::one_skip_unused_fields(b"  1", 1, 3, true, true)]
 #[case::one_zero_padded_left(b"000001", 2, 3, false, false)]
-#[case::two_fields_too_short_skip_padding(b"000", 2, 3, true, false)]
-fn test_fixed_width_padding_n(
+#[case::two_fields_too_short_skip_unused_fields(b"000", 2, 3, true, false)]
+fn test_fixed_width_unused_n(
     #[case] input: &[u8],
     #[case] count: usize,
     #[case] width: usize,
-    #[case] skip_padding: bool,
+    #[case] skip_unused_fields: bool,
     #[case] expected_success: bool,
 ) {
-    let mut parser = all_consuming(fixed_width_padding_n(count, width, skip_padding));
+    let mut parser = all_consuming(fixed_width_unused_n(count, width, skip_unused_fields));
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
     assert_eq!(
@@ -567,11 +567,7 @@ fn test_position30(
     let mut parser = all_consuming(position30(ignore_positions));
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
-    assert!(
-        result.is_ok(),
-        "{:?} should have succeeded",
-        input_str
-    );
+    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, pos) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(pos, expected);

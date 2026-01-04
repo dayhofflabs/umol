@@ -8,7 +8,7 @@ use nom::error::Error as NomError;
 use nom::sequence::{delimited, preceded, terminated};
 use nom::Parser;
 
-use super::utils::{fixed_width_int, fixed_width_padding_n};
+use super::utils::{fixed_width_int, fixed_width_unused_n};
 use crate::io::ctfile::config::CtabParseFlags;
 
 /// Parse counts line (39 characters wide)
@@ -30,7 +30,7 @@ use crate::io::ctfile::config::CtabParseFlags;
 pub fn counts_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = Counts, Error = NomError<&'inp [u8]>> + use<'inp> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
     terminated(
         map(
@@ -41,7 +41,7 @@ pub fn counts_input<'inp>(
                 preceded(take(3usize), fixed_width_int::<u32>(3)),
                 fixed_width_int::<u32>(3),
                 delimited(
-                    fixed_width_padding_n(4, 3, skip_padding),
+                    fixed_width_unused_n(4, 3, skip_unused),
                     fixed_width_int::<u32>(3),
                     version(no_v2000_end_tags),
                 ),

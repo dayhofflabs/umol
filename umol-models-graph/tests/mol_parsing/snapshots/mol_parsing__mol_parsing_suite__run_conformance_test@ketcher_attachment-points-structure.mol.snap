@@ -1,0 +1,38 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 27, col 0"
+molecule_lenient:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 27, col 0"
+extended_molecule:
+  success: true
+  extended_summary:
+    sum_formula: C12
+    atom_count: 12
+    bond_count: 11
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C12
+    atom_count: 12
+    bond_count: 11
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

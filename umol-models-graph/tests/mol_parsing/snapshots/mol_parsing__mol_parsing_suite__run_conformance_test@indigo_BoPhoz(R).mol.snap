@@ -1,0 +1,32 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: extended_molecule_lenient
+category: extended_molecule_lenient
+molecule:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 108, col 0"
+molecule_lenient:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 108, col 0"
+extended_molecule:
+  success: false
+  error:
+    error_type: MissingMEndTag
+    message: Missing M  END tag at line 116
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C37H4FeNP2
+    atom_count: 45
+    bond_count: 58
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 7

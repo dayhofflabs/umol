@@ -165,13 +165,9 @@ where
     T: IntParser,
     R: Contains<T> + Clone,
 {
-    verify(
-        map(
-            fixed_width_opt(width, delimited(space0, T::nom_parser(), space0)),
-            |opt| opt.unwrap_or_else(T::zero),
-        ),
-        move |val: &T| range.contains(val),
-    )
+    verify(fixed_width_int::<T>(width), move |val: &T| {
+        range.contains(val)
+    })
 }
 
 /// Parse a fixed-width field as optional integer type. If range check fails, return None.
@@ -260,15 +256,15 @@ pub(super) fn fixed_width_element_partial<'inp>(
     )
 }
 
-/// Padding field of fixed width `width`
-/// Only validate padding if `skip_padding` is false.
-pub(super) fn fixed_width_padding<'inp>(
+/// Unused field of fixed width `width`
+/// Only validate unused field if `skip_unused_fields` is false.
+pub(super) fn fixed_width_unused<'inp>(
     width: usize,
-    skip_padding: bool,
+    skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
         let (remaining, padding) = take(width).parse(input)?;
-        if !skip_padding && width > 0 && !is_all_whitespace_or_zeroes(padding) {
+        if !skip_unused_fields && width > 0 && !is_all_whitespace_or_zeroes(padding) {
             Err(Err::Error(NomError::new(input, NomErrorKind::Verify)))
         } else {
             Ok((remaining, ()))
@@ -276,17 +272,17 @@ pub(super) fn fixed_width_padding<'inp>(
     }
 }
 
-/// Multiple fixed-width padding fields of width `width`
-/// Only validate padding if `skip_padding` is false.
-pub(super) fn fixed_width_padding_n<'inp>(
+/// Multiple fixed-width unused fields of width `width`
+/// Only validate unused field if `skip_unused_fields` is false.
+pub(super) fn fixed_width_unused_n<'inp>(
     count: usize,
     width: usize,
-    skip_padding: bool,
+    skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
         let (remaining, padding) = take(count * width).parse(input)?;
-        if !skip_padding && count > 0 && width > 0 {
-            nom_count(fixed_width_padding(width, skip_padding), count)
+        if !skip_unused_fields && count > 0 && width > 0 {
+            nom_count(fixed_width_unused(width, skip_unused_fields), count)
                 .parse(padding)
                 .map(|(_, _)| (remaining, ()))
         } else {

@@ -292,9 +292,9 @@ fn test_atom_input69(
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input69(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
@@ -322,25 +322,25 @@ fn test_atom_input69(
         input_str, atom.valence, valence,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -381,9 +381,9 @@ fn test_atom_input69_strict(
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input69(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
     let input_str = input.to_str_lossy();
@@ -411,25 +411,25 @@ fn test_atom_input69_strict(
         input_str, atom.valence, valence,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -538,17 +538,17 @@ fn test_atom_input69_ignore_positions_invalid(
 #[case::charge_out_of_range_high(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4",  Element::C, Some(10), None, Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", Element::H, Some(2), Some(1), Some(1), 1.2345, 2.3456, 3.4567)]
 #[case::non_strict_padding(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input51(
+fn test_atom_input60(
     #[case] input: &[u8],
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
-    let result = atom_input51(input, CtabParseFlags::BASIC);
+    let result = atom_input60(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, (atom, position)) = result.unwrap();
@@ -574,25 +574,25 @@ fn test_atom_input51(
         input_str, atom.valence, valence,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -602,11 +602,11 @@ fn test_atom_input51(
 #[case::non_numeric_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
 #[case::out_of_range_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", NomErrorKind::Verify)]
 #[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  -2  3  0  0  0  4", NomErrorKind::MapRes)]
-fn test_atom_input51_invalid(
+fn test_atom_input60_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = atom_input51(input, CtabParseFlags::BASIC);
+    let result = atom_input60(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();   
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -624,17 +624,17 @@ fn test_atom_input51_invalid(
 #[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4", Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4", Element::C, Some(16), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", Element::H, Some(2), Some(1), Some(1), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input51_strict(
+fn test_atom_input60_strict(
     #[case] input: &[u8],
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
-    let result = atom_input51(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
+    let result = atom_input60(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
     let input_str = input.to_str_lossy();   
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, (atom, position)) = result.unwrap();
@@ -660,36 +660,36 @@ fn test_atom_input51_strict(
         input_str, atom.valence, valence,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
 #[rustfmt::skip]
 #[rstest]
 #[case::non_strict_padding(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", NomErrorKind::Verify)]
-fn test_atom_input51_strict_invalid(
+fn test_atom_input60_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = atom_input51(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
+    let result = atom_input60(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
     let input_str = input.to_str_lossy();   
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -706,14 +706,14 @@ fn test_atom_input51_strict_invalid(
 #[case::len_51(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4", Element::C, Some(10), Some(1), Some(4))]
 #[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3  0  0  0  4", Element::C, Some(10), Some(1), Some(4))]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", Element::H, Some(2), Some(1), Some(1))]
-fn test_atom_input51_ignore_positions(
+fn test_atom_input60_ignore_positions(
     #[case] input: &[u8],
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
 ) {
-    let result = atom_input51(
+    let result = atom_input60(
         input,
         CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS,
     );
@@ -765,11 +765,11 @@ fn test_atom_input51_ignore_positions(
 #[rustfmt::skip]
 #[rstest]
 #[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2  3  0  0  0  4", NomErrorKind::Tag)]
-fn test_atom_input51_ignore_positions_invalid(
+fn test_atom_input60_ignore_positions_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = atom_input51(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
+    let result = atom_input60(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -786,16 +786,16 @@ fn test_atom_input51_ignore_positions_invalid(
 #[case::blank_mass_diff(b"    1.2345    2.3456    3.4567 C      3  0  0  0  4", None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::blank_charge(b"    1.2345    2.3456    3.4567 C  -2     0  0  0  4",  Some(10), None, Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::blank_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0   ",  Some(10), Some(1), None, 1.2345, 2.3456, 3.4567)]
-fn test_atom_input51_empty_fields(
+fn test_atom_input60_empty_fields(
     #[case] input: &[u8],
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
-    let result = atom_input51(input, CtabParseFlags::BASIC);
+    let result = atom_input60(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, (atom, position)) = result.unwrap();
@@ -816,25 +816,25 @@ fn test_atom_input51_empty_fields(
         input_str, atom.valence, valence,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -849,9 +849,9 @@ fn test_atom_input42(
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input42(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
@@ -874,25 +874,25 @@ fn test_atom_input42(
         input_str, atom.charge, charge,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -928,9 +928,9 @@ fn test_atom_input42_strict(
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input42(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
     let input_str = input.to_str_lossy();
@@ -953,25 +953,25 @@ fn test_atom_input42_strict(
         input_str, atom.charge, charge,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -1070,9 +1070,9 @@ fn test_atom_input42_empty_fields(
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input42(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
@@ -1095,25 +1095,25 @@ fn test_atom_input42_empty_fields(
         input_str, atom.charge, charge,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -1127,9 +1127,9 @@ fn test_atom_input39(
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input39(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
@@ -1157,25 +1157,25 @@ fn test_atom_input39(
         input_str, atom.valence, None as Option<u8>
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -1302,9 +1302,9 @@ fn test_atom_input36(
     #[case] input: &[u8],
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input36(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
@@ -1332,25 +1332,25 @@ fn test_atom_input36(
         input_str, atom.valence, None as Option<u8>
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -1462,9 +1462,9 @@ fn test_atom_input34(
     #[case] input: &[u8],
     #[case] element: Element,
     #[case] isotope_mass: Option<u32>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input34(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
@@ -1492,25 +1492,25 @@ fn test_atom_input34(
         input_str, atom.valence, None as Option<u8>
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -1583,7 +1583,7 @@ fn test_atom_input34_ignore_positions_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = atom_input51(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
+    let result = atom_input34(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -1609,9 +1609,9 @@ fn test_atom_input(
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input(CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
@@ -1640,25 +1640,25 @@ fn test_atom_input(
         input_str, atom.valence, valence
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -1699,9 +1699,9 @@ fn test_atom_input_strict(
     #[case] isotope_mass: Option<u32>,
     #[case] charge: Option<i8>,
     #[case] valence: Option<u8>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = atom_input(CtabParseFlags::BASIC & CtabParseFlags::STRICT).parse(input);
     let input_str = input.to_str_lossy();
@@ -1730,25 +1730,25 @@ fn test_atom_input_strict(
         input_str, atom.valence, valence
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -1875,9 +1875,9 @@ fn test_extended_atom_input(
     #[case] atom_map_num: Option<u32>,
     #[case] inversion_retention: Option<AtomInversionRetention>,
     #[case] exact_change: Option<AtomExactChange>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = extended_atom_input(CtabParseFlags::EXTENDED).parse(input);
     let input_str = input.to_str_lossy();
@@ -1935,25 +1935,25 @@ fn test_extended_atom_input(
         input_str, atom.exact_change, exact_change,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
                 input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -2002,9 +2002,9 @@ fn test_extended_atom_input_strict(
     #[case] atom_map_num: Option<u32>,
     #[case] inversion_retention: Option<AtomInversionRetention>,
     #[case] exact_change: Option<AtomExactChange>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = extended_atom_input(CtabParseFlags::STRICT).parse(input);
     let input_str = input.to_str_lossy();
@@ -2062,25 +2062,25 @@ fn test_extended_atom_input_strict(
         input_str, atom.exact_change, exact_change,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -2129,9 +2129,9 @@ fn test_extended_atom_input_lenient(
     #[case] atom_map_num: Option<u32>,
     #[case] inversion_retention: Option<AtomInversionRetention>,
     #[case] exact_change: Option<AtomExactChange>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let result = extended_atom_input(CtabParseFlags::LENIENT).parse(input);
     let input_str = input.to_str_lossy();
@@ -2189,25 +2189,25 @@ fn test_extended_atom_input_lenient(
         input_str, atom.exact_change, exact_change,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 
@@ -2248,9 +2248,9 @@ fn test_extended_atom_input_pseudoatoms(
     #[case] atom_map_num: Option<u32>,
     #[case] inversion_retention: Option<AtomInversionRetention>,
     #[case] exact_change: Option<AtomExactChange>,
-    #[case] x_position: f64,
-    #[case] y_position: f64,
-    #[case] z_position: f64,
+    #[case] x: f64,
+    #[case] y: f64,
+    #[case] z: f64,
 ) {
     let flags = CtabParseFlags::EXTENDED | CtabParseFlags::PSEUDOATOMS;
     let result = extended_atom_input(flags).parse(input);
@@ -2309,25 +2309,25 @@ fn test_extended_atom_input_pseudoatoms(
         input_str, atom.exact_change, exact_change,
     );
     assert!(
-        approx_eq!(f64, position.x, x_position),
+        approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
         input_str,
         position.x,
-        x_position,
+        x,
     );
     assert!(
-        approx_eq!(f64, position.y, y_position),
+        approx_eq!(f64, position.y, y),
         "{:?} has returned y {:?}, expected {:?}",
         input_str,
         position.y,
-        y_position,
+        y,
     );
     assert!(
-        approx_eq!(f64, position.z, z_position),
+        approx_eq!(f64, position.z, z),
         "{:?} has returned z {:?}, expected {:?}",
         input_str,
         position.z,
-        z_position,
+        z,
     );
 }
 

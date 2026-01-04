@@ -16,7 +16,7 @@ use super::convert::{
     convert_atom_symbol_mass_diff, convert_atom_valence_code,
 };
 use super::utils::{
-    fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt, fixed_width_padding_n,
+    fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt, fixed_width_unused_n,
     fixed_width_partial, is_reserved_atom_symbol, position30,
 };
 use crate::io::ctfile::config::CtabParseFlags;
@@ -163,13 +163,13 @@ fn extended_atom_symbol<'inp>(
     }
 }
 
-/// Parse atom inputs with 52-69 characters (s. `atom_input` for more details).
+/// Parse atom inputs with 67-69 characters (s. `atom_input` for more details).
 /// Includes atom mapping number.
 fn atom_input69<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let position = position30(ignore_positions);
     let symbol = atom_symbol(flags);
@@ -182,14 +182,14 @@ fn atom_input69<'inp>(
     let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
         convert_atom_stereo_parity_code(code, false)
     });
-    let padding1 = fixed_width_padding_n(2, 3, skip_padding);
+    let unused1 = fixed_width_unused_n(2, 3, skip_unused_fields);
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
     );
-    let padding2 = fixed_width_padding_n(3, 3, skip_padding);
+    let unused2 = fixed_width_unused_n(3, 3, skip_unused_fields);
     let atom_map_num = fixed_width_int_in_range_opt::<u32, _>(3, 1..=999);
-    let padding3 = fixed_width_padding_n(2, 3, skip_padding);
+    let unused3 = fixed_width_unused_n(2, 3, skip_unused_fields);
 
     map(
         (
@@ -197,9 +197,9 @@ fn atom_input69<'inp>(
             preceded(tag(" "), symbol),
             mass_diff,
             charge_radical,
-            terminated(stereo_parity, padding1),
-            terminated(valence, padding2),
-            terminated(atom_map_num, padding3),
+            terminated(stereo_parity, unused1),
+            terminated(valence, unused2),
+            terminated(atom_map_num, unused3),
         ),
         |(position, symbol, mass_diff, charge_radical, _stereo_parity, valence, _atom_map_num)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
@@ -207,7 +207,7 @@ fn atom_input69<'inp>(
             (
                 Atom {
                     element,
-                    charge: if charge == 0 { None } else { Some(charge) },
+                    charge,
                     isotope_mass: isotope,
                     hydrogens: None,
                     implicit_h: false,
@@ -231,13 +231,13 @@ fn atom_input69<'inp>(
 /// Includes mass difference, charge/radical and valence fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
 ///
-fn atom_input51<'inp>(
+fn atom_input60<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let position = position30(ignore_positions);
     let symbol = atom_symbol(flags);
@@ -247,7 +247,7 @@ fn atom_input51<'inp>(
     let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
         convert_atom_charge_code(opt.unwrap_or(0))
     });
-    let padding1 = fixed_width_padding_n(2, 3, skip_padding);
+    let unused1 = fixed_width_unused_n(2, 3, skip_unused_fields);
     let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
         convert_atom_stereo_parity_code(code, false)
     });
@@ -262,7 +262,7 @@ fn atom_input51<'inp>(
             preceded(tag(" "), symbol),
             mass_diff,
             charge_radical,
-            terminated(stereo_parity, padding1),
+            terminated(stereo_parity, unused1),
             valence,
         ),
         |(position, symbol, mass_diff, charge_radical, _stereo_parity, valence)| {
@@ -271,7 +271,7 @@ fn atom_input51<'inp>(
             (
                 Atom {
                     element,
-                    charge: if charge == 0 { None } else { Some(charge) },
+                    charge,
                     isotope_mass: isotope,
                     hydrogens: None,
                     implicit_h: false,
@@ -292,17 +292,16 @@ fn atom_input51<'inp>(
 }
 
 /// Parse atom inputs with 42-48 characters including up to 6 characters of ignored data
-/// (s. `atom_input` for more details). Lacks trailing valence and atom mapping fields
-/// (substituted by defaults).
+/// (s. `atom_input` for more details). Lacks trailing valence and atom mapping fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
 ///
 fn atom_input42<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let position = position30(ignore_positions);
     let symbol = atom_symbol(flags);
@@ -318,7 +317,7 @@ fn atom_input42<'inp>(
         convert_atom_stereo_parity_code(code, false)
     });
     let n = input.len().saturating_sub(42) / 3;
-    let padding1 = fixed_width_padding_n(n, 3, skip_padding);
+    let unused1 = fixed_width_unused_n(n, 3, skip_unused_fields);
 
     map(
         (
@@ -326,7 +325,7 @@ fn atom_input42<'inp>(
             preceded(tag(" "), symbol),
             mass_diff,
             charge_radical,
-            terminated(stereo_parity, padding1),
+            terminated(stereo_parity, unused1),
         ),
         |(position, symbol, mass_diff, charge_radical, _stereo_parity)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
@@ -334,7 +333,7 @@ fn atom_input42<'inp>(
             (
                 Atom {
                     element,
-                    charge: if charge == 0 { None } else { Some(charge) },
+                    charge,
                     isotope_mass: isotope,
                     hydrogens: None,
                     implicit_h: false,
@@ -386,7 +385,7 @@ fn atom_input39<'inp>(
             (
                 Atom {
                     element,
-                    charge: if charge == 0 { None } else { Some(charge) },
+                    charge,
                     isotope_mass: isotope,
                     hydrogens: None,
                     implicit_h: false,
@@ -410,7 +409,7 @@ fn atom_input39<'inp>(
 /// Lacks trailing charge/radical, valence and atom mapping fields (substituted by defaults).
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
 ///
 fn atom_input36<'inp>(
     input: &'inp [u8],
@@ -455,7 +454,7 @@ fn atom_input36<'inp>(
 /// (substituted by defaults).
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_padding` is true, do no validate unused (padding) fields.
+/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
 ///
 fn atom_input34<'inp>(
     input: &'inp [u8],
@@ -498,17 +497,18 @@ fn atom_input34<'inp>(
 /// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
 ///
 /// *Values in the atom block*
-/// -------------------------------------------------------------------------------
-/// | Field | Meaning            | Values       | Notes                           |
-/// |-------|--------------------|--------------|----------------------------------
-/// | x,y,z | atom coordinates   |              | Generic, F10.4 format           |
-/// | aaa   | atom symbol        | s. above     | Generic, Query, 3D, RGroup      |
-/// | dd    | mass difference    | -3..=4       | Generic, s. also M  ISO         |
-/// | ccc   | charge code        | 0..=7        | Generic, s. also M  CHG/M  RAD  |
-/// | sss   | stereo parity      | 0..=3        | Generic, used in practice       |
-/// | vvv   | valence code       | 0..=15       | Generic                         |
-/// | mmm   | atom mapping       | 1..=#atoms   | Reaction, accepted as extension |
-/// -------------------------------------------------------------------------------
+/// ----------------------------------------------------------------------------------------------
+/// | Field | Position | Meaning            | Values       | Notes                               |
+/// |-------|----------|--------------------|--------------|--------------------------------------
+/// | x,y,z |  1-30    | atom coordinates   |              | Generic, F10.4 format               |
+/// | aaa   | 31-33    | atom symbol        | s. above     | Generic, Query, 3D, RGroup          |
+/// | dd    | 34-36    | mass difference    | -3..=4       | Generic, s. also M  ISO             |
+/// | ccc   | 37-39    | charge code        | 0..=7        | Generic, s. also M  CHG/M  RAD      |
+/// | sss   | 40-42    | stereo parity      | 0..=3        | Generic, ignored when read          |
+/// |       |          |                    |              | according to docs, used in practice |
+/// | vvv   | 49-51    | valence code       | 0..=15       | Generic                             |
+/// | mmm   | 61-63    | atom mapping       | 1..=#atoms   | Reaction, accepted as extension     |
+/// ----------------------------------------------------------------------------------------------
 ///
 pub fn atom_input<'inp>(
     flags: CtabParseFlags,
@@ -518,8 +518,8 @@ pub fn atom_input<'inp>(
         let len = input.len();
 
         let parser = match len {
-            67.. => atom_input69,
-            49..=66 => atom_input51,
+            61.. => atom_input69,
+            49..=60 => atom_input60,
             42..=48 => atom_input42,
             37..=41 => atom_input39,
             35..=36 => atom_input36,
@@ -536,26 +536,27 @@ pub fn atom_input<'inp>(
 /// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
 ///
 /// *Values in the atom block*
-/// -----------------------------------------------------------------------------------------
-/// | Field | Meaning            | Values       | Notes                                     |
-/// |-------|--------------------|--------------|-------------------------------------------|
-/// | x,y,z | atom coordinates   |              | Generic, F10.4 format                     |
-/// | aaa   | atom symbol        | s. above     | Generic, Query, 3D, RGroup                |
-/// | dd    | mass difference    | -3..=4       | Generic, s. also M  ISO                   |
-/// | ccc   | charge code        | 0..=7        | Generic, s. also M  CHG/M  RAD            |
-/// | sss   | stereo parity      | 0..=3        | Generic, ignored when read                |
-/// | hhh   | hydrogen code      | 0..=5        | Query, H0 means no implicit Hs            |
-/// |       |                    |              | Hn means >=n implicit Hs                  |
-/// | bbb   | stereo care        | 0, 1         | Query, consider double bond stereo        |
-/// |       |                    |              | when stereo care is 1 for both bond atoms |
-/// | vvv   | valence code       | 0..=15       | Generic                                   |
-/// | HHH   | ignored            |              |                                           |   
-/// | rrr   | ignored            |              |                                           |   
-/// | iii   | ignored            |              |                                           |   
-/// | mmm   | atom mapping       | 1..=#atoms   | Reaction, accepted as extension           |
-/// | nnn   | inversion          | 0..=2        | Reaction                                  |
-/// | eee   | exact change       | 0, 1         | Reaction                                  |
-/// -----------------------------------------------------------------------------------------
+/// --------------------------------------------------------------------------------------------------
+/// | Field | Position | Meaning          | Values       | Notes                                     |
+/// |-------|----------|------------------|--------------|-------------------------------------------|
+/// | x,y,z |  1-30    | atom coordinates |              | Generic, F10.4 format                     |
+/// | aaa   | 31-33    | atom symbol      | s. above     | Generic, Query, 3D, RGroup                |
+/// | dd    | 34-36    | mass difference  | -3..=4       | Generic, s. also M  ISO                   |
+/// | ccc   | 37-39    | charge code      | 0..=7        | Generic, s. also M  CHG/M  RAD            |
+/// | sss   | 40-42    | stereo parity    | 0..=3        | Generic, ignored when read according to   |
+/// |       |          |                  |              | docs, used in practice                    |
+/// | hhh   | 43-45    | hydrogen code    | 0..=5        | Query, H0 means no implicit Hs            |
+/// |       |          |                  |              | Hn means >=n implicit Hs                  |
+/// | bbb   | 46-48    | stereo care      | 0, 1         | Query, consider double bond stereo        |
+/// |       |          |                  |              | when stereo care is 1 for both bond atoms |
+/// | vvv   | 49-51    | valence code     | 0..=15       | Generic                                   |
+/// | HHH   | 52-54    | ignored          |              |                                           |   
+/// | rrr   | 55-57    | ignored          |              |                                           |   
+/// | iii   | 58-60    | ignored          |              |                                           |   
+/// | mmm   | 61-63    | atom mapping     | 1..=#atoms   | Reaction, accepted as extension           |
+/// | nnn   | 64-66    | inversion        | 0..=2        | Reaction                                  |
+/// | eee   | 67-69    | exact change     | 0, 1         | Reaction                                  |
+/// --------------------------------------------------------------------------------------------------
 ///
 pub fn extended_atom_input<'inp>(
     flags: CtabParseFlags,
@@ -572,7 +573,7 @@ fn extended_atom_input_inner<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (ExtendedAtom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp>
 {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     move |input: &'inp [u8]| {
@@ -632,7 +633,7 @@ fn extended_atom_input_inner<'inp>(
         // Ignored fields
         let (i, _) = cond(
             !i.is_empty(),
-            fixed_width_padding_n((i.len() / 3).min(3), 3, skip_padding),
+            fixed_width_unused_n((i.len() / 3).min(3), 3, skip_unused_fields),
         )
         .parse(i)?;
 
@@ -674,7 +675,7 @@ fn extended_atom_input_inner<'inp>(
             (
                 ExtendedAtom {
                     symbol: atom_symbol,
-                    charge: if charge == 0 { None } else { Some(charge) },
+                    charge,
                     isotope_mass,
                     unpaired_e,
                     hydrogens: hydrogen_count.flatten(),

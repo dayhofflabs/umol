@@ -13,7 +13,7 @@ use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_direction_code,
     convert_bond_topology_code, convert_bond_type_code, convert_extended_bond_type_code,
 };
-use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_padding_n};
+use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_unused_n};
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
@@ -25,7 +25,7 @@ fn bond_input12<'inp>(
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (usize, usize, Bond)> {
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let first_atom = fixed_width_int_minus1::<usize>(3);
     let second_atom = fixed_width_int_minus1::<usize>(3);
     let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
@@ -35,7 +35,7 @@ fn bond_input12<'inp>(
         convert_bond_stereo_direction_code(code, false)
     });
     let n = input.len().saturating_sub(12) / 3;
-    let padding1 = fixed_width_padding_n(n, 3, skip_padding);
+    let padding1 = fixed_width_unused_n(n, 3, skip_unused_fields);
 
     map(
         (
@@ -115,7 +115,7 @@ fn extended_bond_input_inner<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = NomError<&'inp [u8]>>
        + use<'inp> {
-    let skip_padding = flags.contains(CtabParseFlags::SKIP_PADDING);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     let allow_wildcards = flags.contains(CtabParseFlags::WILDCARDS);
     move |input: &'inp [u8]| {
@@ -140,7 +140,7 @@ fn extended_bond_input_inner<'inp>(
         // Ignore xxx field
         let (i, _) = cond(
             !i.is_empty(),
-            fixed_width_padding_n((i.len() / 3).min(1), 3, skip_padding),
+            fixed_width_unused_n((i.len() / 3).min(1), 3, skip_unused_fields),
         )
         .parse(i)?;
 

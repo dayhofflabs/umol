@@ -45,12 +45,12 @@ pub(super) fn convert_atom_symbol_mass_diff(
 /// Convert atom charge code (includes doublet radical).
 /// 'ccc' field: 0 = uncharged, 1 = +3, 2 = +2, 3 = +1, 4 = doublet radical, 5 = -1, 6 = -2, 7 = -3
 /// 0 if outside of range.
-/// Returns (charge, unpaired_e_count): for code 4, returns (0, Some(1)) for doublet radical
-pub(super) fn convert_atom_charge_code(code: u8) -> (i8, Option<u8>) {
+/// Returns (charge, unpaired_e_count): for code 4, returns (None, Some(1)) for doublet radical
+pub(super) fn convert_atom_charge_code(code: u8) -> (Option<i8>, Option<u8>) {
     match code {
-        1..=3 | 5..=7 => (4 - code as i8, None),
-        4 => (0, Some(1)), // Doublet radical: 1 unpaired electron
-        _ => (0, None),
+        1..=3 | 5..=7 => (Some(4 - code as i8), None),
+        4 => (None, Some(1)), // Doublet radical: 1 unpaired electron
+        _ => (None, None),
     }
 }
 
@@ -489,14 +489,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::zero(0, 0, None)]
-    #[case::one(1, 3, None)]
-    #[case::doublet_radical(4, 0, Some(1))] // Doublet radical: 1 unpaired electron
-    #[case::minus_one(5, -1, None)]
-    #[case::out_of_range_high(8, 0, None)]
+    #[case::zero(0, None, None)]
+    #[case::one(1, Some(3), None)]
+    #[case::doublet_radical(4, None, Some(1))] // Doublet radical: 1 unpaired electron
+    #[case::minus_one(5, Some(-1), None)]
+    #[case::out_of_range_high(8, None, None)]
     fn test_convert_atom_charge_code(
         #[case] code: u8,
-        #[case] expected_charge: i8,
+        #[case] expected_charge: Option<i8>,
         #[case] expected_unpaired_e: Option<u8>,
     ) {
         assert_eq!(

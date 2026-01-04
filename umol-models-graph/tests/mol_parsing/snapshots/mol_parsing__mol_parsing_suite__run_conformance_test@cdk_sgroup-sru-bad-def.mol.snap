@@ -1,0 +1,26 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: invalid
+category: invalid
+molecule:
+  success: false
+  error:
+    error_type: InvalidAtomLine
+    message: "Invalid atom line at line 14, col 31"
+molecule_lenient:
+  success: false
+  error:
+    error_type: InvalidAtomLine
+    message: "Invalid atom line at line 14, col 31"
+extended_molecule:
+  success: false
+  error:
+    error_type: UndefinedSGroup
+    message: "Undefined S-group 0: connectivity"
+extended_molecule_lenient:
+  success: false
+  error:
+    error_type: UndefinedSGroup
+    message: "Undefined S-group 0: connectivity"
