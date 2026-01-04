@@ -21,6 +21,8 @@ pub enum ParseError {
     InvalidBondLine { line: u32, col: u32 },
     #[error("Invalid legacy atom list line at line {line}, col {col}")]
     InvalidLegacyAtomListLine { line: u32, col: u32 },
+    #[error("Unsupported legacy atom list at line {line}")]
+    UnsupportedLegacyAtomList { line: u32 },
     #[error("Invalid property line at line {line}, col {col}")]
     InvalidPropertyLine { line: u32, col: u32 },
     #[error("Invalid Sgroup line at line {line}, col {col}")]
@@ -214,67 +216,72 @@ impl From<ParseError> for Diagnostic {
         let (kind, span, details) = match error {
             ParseError::InvalidHeader { line } => (
                 DiagnosticKind::CtfileInvalidHeader,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 None,
             ),
             ParseError::InvalidCountsLine { line } => (
                 DiagnosticKind::CtfileInvalidCountsLine,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 None,
             ),
-            ParseError::InvalidAtomLine { line, col } => (
+            ParseError::InvalidAtomLine { line, .. } => (
                 DiagnosticKind::CtfileInvalidAtomLine,
-                Span::line(line, col, 1),
+                Span::line(line),
                 None,
             ),
-            ParseError::InvalidBondLine { line, col } => (
+            ParseError::InvalidBondLine { line, .. } => (
                 DiagnosticKind::CtfileInvalidBondLine,
-                Span::line(line, col, 1),
+                Span::line(line),
                 None,
             ),
-            ParseError::InvalidLegacyAtomListLine { line, col } => (
+            ParseError::InvalidLegacyAtomListLine { line, .. } => (
                 DiagnosticKind::CtfileInvalidLegacyAtomListLine,
-                Span::line(line, col, 1),
+                Span::line(line),
                 None,
             ),
-            ParseError::InvalidPropertyLine { line, col } => (
+            ParseError::UnsupportedLegacyAtomList { line } => (
+                DiagnosticKind::CtfileInvalidLegacyAtomListLine,
+                Span::line(line),
+                None,
+            ),
+            ParseError::InvalidPropertyLine { line, .. } => (
                 DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::line(line, col, 1),
+                Span::line(line),
                 None,
             ),
-            ParseError::InvalidSgroupLine { line, col } => (
+            ParseError::InvalidSgroupLine { line, .. } => (
                 DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::line(line, col, 1),
+                Span::line(line),
                 None,
             ),
             ParseError::InvalidSdfDataHeader { line } => (
                 DiagnosticKind::CtfileInvalidSdfDataHeader,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 None,
             ),
             ParseError::InvalidSdfDataValue { line } => (
                 DiagnosticKind::CtfileInvalidSdfDataValue,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 None,
             ),
             ParseError::MissingDelimiter { line } => (
                 DiagnosticKind::CtfileMissingDelimiter,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 None,
             ),
             ParseError::MissingMEndTag { line } => (
                 DiagnosticKind::CtfileMissingMEndTag,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 None,
             ),
             ParseError::UnexpectedEof { line, block } => (
                 DiagnosticKind::CtfileUnexpectedEof,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 Some(format!("in {} block", block)),
             ),
             ParseError::Incomplete { line } => (
                 DiagnosticKind::CtfileIncomplete,
-                Span::line(line, 0, 0),
+                Span::line(line),
                 None,
             ),
             ParseError::NomError(kind) => (
@@ -282,9 +289,9 @@ impl From<ParseError> for Diagnostic {
                 Span::None,
                 Some(format!("nom error: {:?}", kind)),
             ),
-            ParseError::Generic { line, col, message } => (
+            ParseError::Generic { line, message, .. } => (
                 DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::line(line, col, 1),
+                Span::line(line),
                 Some(message),
             ),
             ParseError::InvalidChargeCode(_) => (

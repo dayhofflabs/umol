@@ -377,7 +377,7 @@ fn test_bond_input_whitespace_padded(#[case] input: &[u8]) {
 #[case::len_21_full_not_center(b"  1  2  1  0     2 -1", 0, 1, BondOrder::Single, None,
        Some(BondDirection::NotStereo), Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
 #[case::len_21_only_mandatory_fields(b"  1  2  1            ", 0, 1, BondOrder::Single, None,
-       Some(BondDirection::NotStereo), None, None)]
+       Some(BondDirection::NotStereo), Some(BondTopology::Either), Some(BondReactingCenter::UNMARKED))]
 #[case::non_strict_padding(b"  1  2  8  0XXX  1", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
 fn test_extended_bond_input(
     #[case] input: &[u8],

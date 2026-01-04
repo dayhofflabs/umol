@@ -67,9 +67,8 @@ pub fn ctab_block<'inp>(
         let atom_list_count = counts.atom_list_count;
 
         if !legacy_atom_lists && atom_list_count > 0 {
-            return Err(NomErr::Error(ParseError::InvalidPropertyLine {
+            return Err(NomErr::Error(ParseError::UnsupportedLegacyAtomList {
                 line: line_offset + atom_count + bond_count,
-                col: 0,
             }));
         }
 
@@ -116,9 +115,8 @@ pub fn extended_ctab_block<'inp>(
         let atom_list_count = counts.atom_list_count;
 
         if !legacy_atom_lists && atom_list_count > 0 {
-            return Err(NomErr::Error(ParseError::InvalidPropertyLine {
+            return Err(NomErr::Error(ParseError::UnsupportedLegacyAtomList {
                 line: line_offset + atom_count + bond_count,
-                col: 0,
             }));
         }
 

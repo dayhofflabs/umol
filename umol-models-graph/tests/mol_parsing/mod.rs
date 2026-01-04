@@ -14,10 +14,48 @@ use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::Serialize;
 use umol_models_graph::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use umol_models_graph::io::ctfile::error::ParseError;
 use umol_models_graph::io::ctfile::parser::{
     parse_extended_mol_bytes_with, parse_mol_bytes_with,
 };
 use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
+
+/// Category based on which parsers succeed
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum Category {
+    Molecule,
+    MoleculeLenient,
+    ExtendedMolecule,
+    ExtendedMoleculeLenient,
+    Invalid,
+    Bug,
+}
+
+impl Category {
+    fn from_dir_name(name: &str) -> Option<Self> {
+        match name {
+            "molecule" => Some(Category::Molecule),
+            "molecule_lenient" => Some(Category::MoleculeLenient),
+            "extended_molecule" => Some(Category::ExtendedMolecule),
+            "extended_molecule_lenient" => Some(Category::ExtendedMoleculeLenient),
+            "invalid" => Some(Category::Invalid),
+            "bug" => Some(Category::Bug),
+            _ => None,
+        }
+    }
+
+    fn from_parse_results(mol: bool, mol_len: bool, ext: bool, ext_len: bool) -> Self {
+        match (mol, mol_len, ext, ext_len) {
+            (true, true, true, true) => Category::Molecule,
+            (false, true, false, true) => Category::MoleculeLenient,
+            (false, false, true, true) => Category::ExtendedMolecule,
+            (false, false, false, true) => Category::ExtendedMoleculeLenient,
+            (false, false, false, false) => Category::Invalid,
+            _ => Category::Bug,
+        }
+    }
+}
 
 /// Summary of molecule statistics for snapshot comparison
 #[derive(Serialize)]
@@ -63,6 +101,8 @@ struct ParseResult {
 /// Combined results from all 4 parsers for a single file
 #[derive(Serialize)]
 struct FileParseResults {
+    expected_category: Category,
+    category: Category,
     molecule: ParseResult,
     molecule_lenient: ParseResult,
     extended_molecule: ParseResult,
@@ -95,6 +135,18 @@ impl From<&ExtendedMolecule> for ExtendedMoleculeSummary {
     }
 }
 
+fn error_type_name(e: &ParseError) -> String {
+    // Extract variant name from Debug representation
+    let debug = format!("{:?}", e);
+    // Take first word (variant name) before any { or (
+    debug
+        .split(|c| c == '{' || c == '(')
+        .next()
+        .unwrap_or(&debug)
+        .trim()
+        .to_string()
+}
+
 fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
     let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC);
     match parse_mol_bytes_with(bytes, &config) {
@@ -109,7 +161,7 @@ fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
             summary: None,
             extended_summary: None,
             error: Some(ParseErrorSummary {
-                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                error_type: error_type_name(&e),
                 message: e.to_string(),
             }),
         },
@@ -130,7 +182,7 @@ fn parse_with_lenient_flags(bytes: &[u8]) -> ParseResult {
             summary: None,
             extended_summary: None,
             error: Some(ParseErrorSummary {
-                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                error_type: error_type_name(&e),
                 message: e.to_string(),
             }),
         },
@@ -151,7 +203,7 @@ fn parse_extended_with_extended_flags(bytes: &[u8]) -> ParseResult {
             summary: None,
             extended_summary: None,
             error: Some(ParseErrorSummary {
-                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                error_type: error_type_name(&e),
                 message: e.to_string(),
             }),
         },
@@ -172,21 +224,54 @@ fn parse_extended_with_lenient_flags(bytes: &[u8]) -> ParseResult {
             summary: None,
             extended_summary: None,
             error: Some(ParseErrorSummary {
-                error_type: format!("{:?}", std::mem::discriminant(&e)),
+                error_type: error_type_name(&e),
                 message: e.to_string(),
             }),
         },
     }
 }
 
+fn extract_expected_category(path: &Path) -> Category {
+    // Path structure: .../data/<category>/<source>/<file>.mol
+    // We need to find the category directory (child of "data")
+    let components: Vec<_> = path.components().collect();
+    for (i, comp) in components.iter().enumerate() {
+        if let std::path::Component::Normal(name) = comp {
+            if name.to_str() == Some("data") && i + 1 < components.len() {
+                if let std::path::Component::Normal(category_name) = &components[i + 1] {
+                    if let Some(cat) = Category::from_dir_name(category_name.to_str().unwrap_or("")) {
+                        return cat;
+                    }
+                }
+            }
+        }
+    }
+    panic!("Could not determine expected category from path: {:?}", path);
+}
+
 fn parse_file(path: &Path) -> FileParseResults {
     let bytes = std::fs::read(path).expect("Failed to read file");
+    let expected_category = extract_expected_category(path);
+
+    let molecule = parse_with_basic_flags(&bytes);
+    let molecule_lenient = parse_with_lenient_flags(&bytes);
+    let extended_molecule = parse_extended_with_extended_flags(&bytes);
+    let extended_molecule_lenient = parse_extended_with_lenient_flags(&bytes);
+
+    let category = Category::from_parse_results(
+        molecule.success,
+        molecule_lenient.success,
+        extended_molecule.success,
+        extended_molecule_lenient.success,
+    );
 
     FileParseResults {
-        molecule: parse_with_basic_flags(&bytes),
-        molecule_lenient: parse_with_lenient_flags(&bytes),
-        extended_molecule: parse_extended_with_extended_flags(&bytes),
-        extended_molecule_lenient: parse_extended_with_lenient_flags(&bytes),
+        expected_category,
+        category,
+        molecule,
+        molecule_lenient,
+        extended_molecule,
+        extended_molecule_lenient,
     }
 }
 
@@ -201,6 +286,13 @@ fn run_conformance_test(file_path: &PathBuf) {
     let filename = file_path.file_name().unwrap().to_str().unwrap();
 
     let results = parse_file(file_path);
+
+    // Validate category matches expectation
+    assert_eq!(
+        results.expected_category, results.category,
+        "Category mismatch for {:?}: expected {:?}, got {:?}",
+        file_path, results.expected_category, results.category
+    );
 
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

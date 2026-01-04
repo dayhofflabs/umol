@@ -6,7 +6,7 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Span {
     Bytes { start: u32, end: u32 },
-    Line { line: u32, col: u32, len: u32 },
+    Line { line: u32 },
     None,
 }
 
@@ -15,8 +15,8 @@ impl Span {
         Span::Bytes { start, end }
     }
 
-    pub fn line(line: u32, col: u32, len: u32) -> Self {
-        Span::Line { line, col, len }
+    pub fn line(line: u32) -> Self {
+        Span::Line { line }
     }
 
     pub fn from_bytes_opt(start: Option<u32>, end: Option<u32>) -> Option<Self> {
@@ -36,7 +36,7 @@ impl fmt::Display for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Span::Bytes { start, end } => write!(f, "@{}..{}", start, end),
-            Span::Line { line, col, len } => write!(f, "@{}:{}+{}", line, col, len),
+            Span::Line { line } => write!(f, "@line {}", line),
             Span::None => write!(f, "none"),
         }
     }
