@@ -518,7 +518,7 @@ fn test_link_atom_entries_invalid(
 #[rstest]
 #[case::exclusion_flag_false(b"   1  3 F C   N   O   ",
        AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
-#[case::no_padding(b"   1  3 F C   N   O",
+#[case::no_right_padding(b"   1  3 F C   N   O",
        AtomListEntry { atom_index: 0, exclusion: false, elements: vec![Element::C, Element::N, Element::O] })]
 #[case::exclusion_flag_true(b"   5  2 T Cl  Br  ",
        AtomListEntry { atom_index: 4, exclusion: true, elements: vec![Element::Cl, Element::Br] })]

@@ -18,9 +18,151 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
 
-/// Parse bond inputs with 12-21 characters (s. `bond_input` for more details).
+/// Parse bond block (basic bonds only)
+pub(super) fn bond_block<'inp>(
+    bond_count: u32,
+    line_offset: u32,
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (Vec<(usize, usize, Bond)>, u32), Error = ParseError> + use<'inp>
+{
+    move |input: &'inp [u8]| {
+        let mut bonds = Vec::with_capacity(bond_count as usize);
+        let mut lines_iter = input.lines_with_terminator();
+        let mut offset = 0;
+
+        for i in 0..bond_count {
+            let line = lines_iter.next().ok_or_else(|| {
+                NomErr::Error(ParseError::UnexpectedEof {
+                    line: line_offset + i,
+                    block: "bond",
+                })
+            })?;
+
+            let (_, (atom1, atom2, bond)) = all_consuming(bond_input(flags))
+                .parse(line)
+                .map_err(|e| NomErr::Error(ParseError::bond_from_nom(e, line_offset + i, line)))?;
+            bonds.push((atom1, atom2, bond));
+            offset += line.len();
+        }
+
+        let remaining = &input[offset..];
+        Ok((remaining, (bonds, line_offset + bond_count)))
+    }
+}
+
+/// Parse extended bond block
+pub(super) fn extended_bond_block<'inp>(
+    bond_count: u32,
+    line_offset: u32,
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (Vec<(usize, usize, ExtendedBond)>, u32), Error = ParseError>
+       + use<'inp> {
+    move |input: &'inp [u8]| {
+        let mut bonds = Vec::with_capacity(bond_count as usize);
+        let mut lines_iter = input.lines_with_terminator();
+        let mut offset = 0;
+
+        for i in 0..bond_count {
+            let line = lines_iter.next().ok_or_else(|| {
+                NomErr::Error(ParseError::UnexpectedEof {
+                    line: line_offset + i,
+                    block: "bond",
+                })
+            })?;
+
+            let (_, (atom1, atom2, bond)) = all_consuming(extended_bond_input(flags))
+                .parse(line)
+                .map_err(|e| {
+                NomErr::Error(ParseError::bond_from_nom(e, line_offset + i, line))
+            })?;
+            bonds.push((atom1, atom2, bond));
+            offset += line.len();
+        }
+
+        let remaining = &input[offset..];
+        Ok((remaining, (bonds, line_offset + bond_count)))
+    }
+}
+
+/// Parse bond input (optimized for performance)
+/// Fails immediately on query bond properties. For parsing all bond types, see extended_bond_input.
+///
+/// "111222tttsssxxxrrrccc" (21 characters wide)
+///
+/// *Values in the bond block*
+/// -------------------------------------------------------------------------
+/// | Field | Position | Meaning              | Values     | Notes          |
+/// |-------|----------|----------------------|------------|----------------|
+/// | 111   | 1-3      | first atom           | 1..=aaa    | Generic        |
+/// | 222   | 4-6      | second atom          | 1..=aaa    | Generic        |
+/// | ttt   | 7-9      | bond type            | 1..=8      | Generic,Query  |
+/// | sss   | 10-12    | bond stereo          | 0..=6      | Generic        |
+/// | rrr   | 16-18    | bond topology        | 0..=2      | Query          |
+/// | ccc   | 19-21    | bond reacting center | 0..=15     | Reaction,Query |
+/// -------------------------------------------------------------------------
+///
+/// *Behavior in unused and extended fields*
+/// ---------------------------------------------------------------------
+/// | Field    | Basic      | Basic strict | Extended | Extended strict |
+/// ---------------------------------------------------------------------
+/// | Unused   | skip       | zero/blank   | skip     | zero/blank      |
+/// | Extended | zero/blank | zero/blank   | validate | validate        |
+/// ---------------------------------------------------------------------
+/// skip: skip field, regardless of content
+/// zero/blank: validate and accept only zero or blank values, reject any other content
+/// validate: validate field according to its specification, reject any other content
+/// 
+/// NOTE: Basic parser should accept a strict subset of inputs accepted by extended parser
+///       Increasing strictness: skip < validate < zero/blank
+/// 
+pub fn bond_input<'inp>(
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = NomError<&'inp [u8]>> + use<'inp>
+{
+    move |input: &'inp [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+        let len = input.len();
+        let parser = match len {
+            10.. => bond_input21,
+            9 => bond_input9,
+            _ => return Err(NomErr::Error(NomError::new(input, NomErrorKind::Eof))),
+        };
+
+        terminated(move |input| parser(input, flags), space0).parse(input)
+    }
+}
+
+/// Parse extended bond input
+/// Allows all bond types. For faster parsing of basic bonds, see bond_input.
+///
+/// "111222tttsssxxxrrrccc" (21 characters wide)
+///
+/// *Values in the bond block*
+/// -------------------------------------------------------------------------
+/// | Field | Position | Meaning              | Values     | Notes          |
+/// |-------|----------|----------------------|------------|----------------|
+/// | 111   | 1-3      | first atom           | 1..=aaa    | Generic        |
+/// | 222   | 4-6      | second atom          | 1..=aaa    | Generic        |
+/// | ttt   | 7-9      | bond type            | 1..=8      | Generic, Query |
+/// | sss   | 10-12    | bond stereo          | 0..=6      | Generic        |
+/// | xxx   | 13-15    | ignored              |            |                |
+/// | rrr   | 16-18    | bond topology        | 0..=2      | Query          |
+/// | ccc   | 19-21    | bond reacting center | 0..=15     | Reaction,Query |
+/// -------------------------------------------------------------------------
+///
+pub fn extended_bond_input<'inp>(
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = NomError<&'inp [u8]>>
+       + use<'inp> {
+    move |input: &'inp [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+        terminated(extended_bond_input_inner(flags), space0).parse(input)
+    }
+}
+
+/// Parse bond inputs with 10-21 characters (s. `bond_input` for more details).
 /// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input12<'inp>(
+fn bond_input21<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (usize, usize, Bond)> {
@@ -35,14 +177,14 @@ fn bond_input12<'inp>(
         convert_bond_stereo_direction_code(code, false)
     });
     let n = input.len().saturating_sub(12) / 3;
-    let padding1 = fixed_width_unused_n(n, 3, skip_unused_fields);
+    let unused1 = fixed_width_unused_n(n, 3, skip_unused_fields);
 
     map(
         (
             first_atom,
             second_atom,
             bond_type,
-            terminated(stereo_direction, padding1),
+            terminated(stereo_direction, unused1),
         ),
         |(first_atom, second_atom, order, (stereo, dir))| {
             let mut bond = Bond::with_order(order);
@@ -76,41 +218,7 @@ fn bond_input9<'inp>(
     .parse(input)
 }
 
-/// Parse bond input (optimized for performance)
-/// Fails immediately on query bond properties. For parsing all bond types, see extended_bond_input.
-///
-/// "111222tttsssxxxrrrccc" (21 characters wide)
-///
-/// *Values in the bond block*
-/// --------------------------------------------------------------
-/// | Field | Meaning              | Values     | Notes          |
-/// |-------|----------------------|------------|----------------|
-/// | 111   | first atom           | 1..=aaa    | Generic        |
-/// | 222   | second atom          | 1..=aaa    | Generic        |
-/// | ttt   | bond type            | 1..=8      | Generic,Query  |
-/// | sss   | bond stereo          | 0..=6      | Generic        |
-/// | xxx   | ignored              |            |                |
-/// | rrr   | bond topology        | 0..=2      | Query          |
-/// | ccc   | bond reacting center | 0..=3      | Reaction,Query |
-/// --------------------------------------------------------------
-///
-pub fn bond_input<'inp>(
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = NomError<&'inp [u8]>> + use<'inp>
-{
-    move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-        let len = input.len();
-        let parser = match len {
-            10.. => bond_input12,
-            9 => bond_input9,
-            _ => return Err(NomErr::Error(NomError::new(input, NomErrorKind::Eof))),
-        };
-
-        terminated(move |input| parser(input, flags), space0).parse(input)
-    }
-}
-
+/// Internal parser for extended_bond_input
 fn extended_bond_input_inner<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = NomError<&'inp [u8]>>
@@ -176,82 +284,6 @@ fn extended_bond_input_inner<'inp>(
         bond.reacting_center = reacting_center.flatten();
 
         Ok((i, (first_atom, second_atom, bond)))
-    }
-}
-
-pub fn extended_bond_input<'inp>(
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = NomError<&'inp [u8]>>
-       + use<'inp> {
-    move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-        terminated(extended_bond_input_inner(flags), space0).parse(input)
-    }
-}
-
-/// Parse bond block (basic bonds only)
-pub(super) fn bond_block<'inp>(
-    bond_count: u32,
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<(usize, usize, Bond)>, u32), Error = ParseError> + use<'inp>
-{
-    move |input: &'inp [u8]| {
-        let mut bonds = Vec::with_capacity(bond_count as usize);
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
-
-        for i in 0..bond_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                NomErr::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
-                    block: "bond",
-                })
-            })?;
-
-            let (_, (atom1, atom2, bond)) = all_consuming(bond_input(flags))
-                .parse(line)
-                .map_err(|e| NomErr::Error(ParseError::bond_from_nom(e, line_offset + i, line)))?;
-            bonds.push((atom1, atom2, bond));
-            offset += line.len();
-        }
-
-        let remaining = &input[offset..];
-        Ok((remaining, (bonds, line_offset + bond_count)))
-    }
-}
-
-/// Parse extended bond block
-pub(super) fn extended_bond_block<'inp>(
-    bond_count: u32,
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<(usize, usize, ExtendedBond)>, u32), Error = ParseError>
-       + use<'inp> {
-    move |input: &'inp [u8]| {
-        let mut bonds = Vec::with_capacity(bond_count as usize);
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
-
-        for i in 0..bond_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                NomErr::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
-                    block: "bond",
-                })
-            })?;
-
-            let (_, (atom1, atom2, bond)) = all_consuming(extended_bond_input(flags))
-                .parse(line)
-                .map_err(|e| {
-                NomErr::Error(ParseError::bond_from_nom(e, line_offset + i, line))
-            })?;
-            bonds.push((atom1, atom2, bond));
-            offset += line.len();
-        }
-
-        let remaining = &input[offset..];
-        Ok((remaining, (bonds, line_offset + bond_count)))
     }
 }
 

@@ -238,7 +238,6 @@ pub struct ExtendedAtom {
     pub value: Option<String>,
     pub stereo_parity: Option<AtomStereoParity>,
     pub stereo_care: Option<AtomStereoCare>,
-    pub atom_map_num: Option<u32>,
     pub inversion_retention: Option<AtomInversionRetention>,
     pub exact_change: Option<AtomExactChange>,
     pub attachment_point: Option<AttachmentPointType>,
@@ -270,7 +269,6 @@ impl ExtendedAtom {
             value: None,
             stereo_parity: None,
             stereo_care: None,
-            atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
             attachment_point: None,
@@ -297,12 +295,10 @@ impl ExtendedAtom {
     }
 
     /// Check if this atom has extended features that would be lost in conversion to basic Atom.
-    /// Note: alias and value are basic features, not extended.
     pub fn has_extended_features(&self) -> bool {
         self.symbol.is_extended()
             || self.stereo_parity.is_some()
             || self.stereo_care.is_some()
-            || self.atom_map_num.is_some()
             || self.inversion_retention.is_some()
             || self.exact_change.is_some()
             || self.attachment_point.is_some()
@@ -339,7 +335,6 @@ impl From<Atom> for ExtendedAtom {
             value: atom.value,
             stereo_parity: None,
             stereo_care: None,
-            atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
             attachment_point: None,
@@ -553,7 +548,6 @@ mod tests {
             value: None,
             stereo_parity: None,
             stereo_care: None,
-            atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
             attachment_point: None,
@@ -608,7 +602,6 @@ mod tests {
             stereo_parity: None,
             stereo_care: None,
             valence: None,
-            atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
             attachment_point: None,
@@ -646,7 +639,6 @@ mod tests {
             stereo_parity: None,
             stereo_care: None,
             valence: None,
-            atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
             attachment_point: None,
@@ -679,7 +671,6 @@ mod tests {
             stereo_parity: Some(AtomStereoParity::Even),
             stereo_care: None,
             valence: None,
-            atom_map_num: None,
             inversion_retention: None,
             exact_change: None,
             attachment_point: None,

@@ -559,12 +559,12 @@ fn test_fixed_width_str_partial(
 #[case::short_zero(b"       0.0       0.0       0.0", false, Point3D::zero())]
 #[case::no_integer_part(b"        .0        .0        .0", false, Point3D::zero())]
 #[case::nonzero_ignored(b"    1.2345   -2.3456    3.4567", true, Point3D::zero())]
-fn test_position30(
+fn test_fixed_width_position(
     #[case] input: &[u8],
     #[case] ignore_positions: bool,
     #[case] expected: Point3D,
 ) {
-    let mut parser = all_consuming(position30(ignore_positions));
+    let mut parser = all_consuming(fixed_width_position(ignore_positions));
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
@@ -579,8 +579,8 @@ fn test_position30(
 #[case::invalid_x(b"    x.0000    0.0000    0.0000")]
 #[case::invalid_y(b"    0.0000    y.0000    0.0000")]
 #[case::invalid_z(b"    0.0000    0.0000    z.0000")]
-fn test_position30_invalid(#[case] input: &[u8]) {
-    let mut parser = all_consuming(position30(false));
+fn test_fixed_width_position_invalid(#[case] input: &[u8]) {
+    let mut parser = all_consuming(fixed_width_position(false));
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);

@@ -6,7 +6,7 @@ use nom::character::complete::space0;
 use nom::combinator::{all_consuming, cond, map, map_res};
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::{preceded, terminated};
-use nom::{Err, Err as NomErr, IResult, Parser};
+use nom::{Err, IResult, Parser};
 use umol_data::{Element, NamedIsotope};
 
 use super::convert::{
@@ -16,8 +16,8 @@ use super::convert::{
     convert_atom_symbol_mass_diff, convert_atom_valence_code,
 };
 use super::utils::{
-    fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt, fixed_width_unused_n,
-    fixed_width_partial, is_reserved_atom_symbol, position30,
+    fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt, fixed_width_partial,
+    fixed_width_position, fixed_width_unused_n, is_reserved_atom_symbol,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
@@ -25,38 +25,232 @@ use crate::io::ctfile::parser::rgroup::rgroup_symbol;
 use crate::position::{all_zero, Point3D};
 use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, WildcardAtom};
 
+/// Parse atom block (basic atoms only)
+pub(super) fn atom_block<'inp>(
+    atom_count: u32,
+    line_offset: u32,
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (Vec<Atom>, Option<Vec<Point3D>>, u32), Error = ParseError>
+       + use<'inp> {
+    move |input: &'inp [u8]| {
+        let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
+        let mut atoms = Vec::with_capacity(atom_count as usize);
+        let mut positions = Vec::with_capacity(if ignore_positions {
+            0
+        } else {
+            atom_count as usize
+        });
+        let mut lines_iter = input.lines_with_terminator();
+        let mut offset = 0;
+
+        for i in 0..atom_count {
+            let line = lines_iter.next().ok_or_else(|| {
+                Err::Error(ParseError::UnexpectedEof {
+                    line: line_offset + i,
+                    block: "atom",
+                })
+            })?;
+
+            let (_, (atom, pos)) = all_consuming(atom_input(flags))
+                .parse(line)
+                .map_err(|e| Err::Error(ParseError::atom_from_nom(e, line_offset + i, line)))?;
+            atoms.push(atom);
+            if !ignore_positions {
+                positions.push(pos);
+            }
+            offset += line.len();
+        }
+
+        let remaining = &input[offset..];
+        if ignore_positions || (atom_count > 1 && all_zero(&positions)) {
+            Ok((remaining, (atoms, None, line_offset + atom_count)))
+        } else {
+            Ok((
+                remaining,
+                (atoms, Some(positions), line_offset + atom_count),
+            ))
+        }
+    }
+}
+
+/// Parse extended atom block
+pub(super) fn extended_atom_block<'inp>(
+    atom_count: u32,
+    line_offset: u32,
+    flags: CtabParseFlags,
+) -> impl Parser<
+    &'inp [u8],
+    Output = (Vec<ExtendedAtom>, Option<Vec<Point3D>>, u32),
+    Error = ParseError,
+> + use<'inp> {
+    move |input: &'inp [u8]| {
+        let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
+        let mut atoms = Vec::with_capacity(atom_count as usize);
+        let mut positions = Vec::with_capacity(if ignore_positions {
+            0
+        } else {
+            atom_count as usize
+        });
+        let mut lines_iter = input.lines_with_terminator();
+        let mut offset = 0;
+
+        for i in 0..atom_count {
+            let line = lines_iter.next().ok_or_else(|| {
+                Err::Error(ParseError::UnexpectedEof {
+                    line: line_offset + i,
+                    block: "atom",
+                })
+            })?;
+
+            let (_, (atom, pos)) = all_consuming(extended_atom_input(flags))
+                .parse(line)
+                .map_err(|e| Err::Error(ParseError::atom_from_nom(e, line_offset + i, line)))?;
+            atoms.push(atom);
+            if !ignore_positions {
+                positions.push(pos);
+            }
+            offset += line.len();
+        }
+
+        let remaining = &input[offset..];
+        if ignore_positions || (atom_count > 1 && all_zero(&positions)) {
+            Ok((remaining, (atoms, None, line_offset + atom_count)))
+        } else {
+            Ok((
+                remaining,
+                (atoms, Some(positions), line_offset + atom_count),
+            ))
+        }
+    }
+}
+
+/// Parse basic atom input (optimized for performance)
+/// Fails immediately on extended atom symbols. For parsing all atom types, see extended_atom_input.
+///
+/// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
+///
+/// *Values in the atom block*
+/// ----------------------------------------------------------------------------------------------
+/// | Field | Position | Meaning            | Values       | Notes                               |
+/// |-------|----------|--------------------|--------------|--------------------------------------
+/// | x,y,z |  1-30    | atom coordinates   |              | Generic, F10.4 format               |
+/// |       | 31       | blank              |              |                                     |
+/// | aaa   | 32-34    | atom symbol        | s. below     | Generic, Query, 3D, RGroup          |
+/// | dd    | 35-36    | mass difference    | -3..=4       | Generic, s. also M  ISO             |
+/// | ccc   | 37-39    | charge code        | 0..=7        | Generic, s. also M  CHG/M  RAD      |
+/// | sss   | 40-42    | stereo parity      | 0..=3        | Generic, ignored when read          |
+/// |       |          |                    |              | according to docs, used in practice |
+/// | hhh   | 43-45    | hydrogen code      | 0..=5        | Query, H0 means no implicit Hs      |
+/// |       |          |                    |              | Hn means >=n implicit Hs            |
+/// | vvv   | 49-51    | valence code       | 0..=15       | Generic                             |
+/// | mmm   | 61-63    | atom mapping       | 1..=#atoms   | Reaction, accepted as extension     |
+/// ----------------------------------------------------------------------------------------------
+///
+/// *Behavior in unused and extended fields*
+/// ---------------------------------------------------------------------
+/// | Field    | Basic      | Basic strict | Extended | Extended strict |
+/// ---------------------------------------------------------------------
+/// | Unused   | skip       | zero/blank   | skip     | zero/blank      |
+/// | Extended | zero/blank | zero/blank   | validate | validate        |
+/// ---------------------------------------------------------------------
+/// skip: skip field, regardless of content
+/// zero/blank: validate and accept only zero or blank values, reject any other content
+/// validate: validate field according to its specification, reject any other content
+///
+/// NOTE: Basic parser should accept a strict subset of inputs accepted by extended parser
+///       Increasing strictness: skip < validate < zero/blank
+///
+pub fn atom_input<'inp>(
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (Atom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp> {
+    move |input: &'inp [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+        let len = input.len();
+
+        let parser = match len {
+            61.. => atom_input69,
+            49..=60 => atom_input60,
+            40..=48 => atom_input48,
+            37..=39 => atom_input39,
+            35..=36 => atom_input36,
+            32..=34 => atom_input34,
+            _ => return Err(Err::Error(NomError::new(input, NomErrorKind::Eof))),
+        };
+        terminated(move |input| parser(input, flags), space0).parse(input)
+    }
+}
+
+/// Parse extended atom input
+/// Allows all atom types. For faster parsing of basic molecules, see atom_input.
+///
+/// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
+///
+/// *Values in the atom block*
+/// --------------------------------------------------------------------------------------------------
+/// | Field | Position | Meaning          | Values       | Notes                                     |
+/// |-------|----------|------------------|--------------|-------------------------------------------|
+/// | x,y,z |  1-30    | atom coordinates |              | Generic, F10.4 format                     |
+/// |       | 31       | blank            |              |                                           |
+/// | aaa   | 32-34    | atom symbol      | s. above     | Generic, Query, 3D, RGroup                |
+/// | dd    | 35-36    | mass difference  | -3..=4       | Generic, s. also M  ISO                   |
+/// | ccc   | 37-39    | charge code      | 0..=7        | Generic, s. also M  CHG/M  RAD            |
+/// | sss   | 40-42    | stereo parity    | 0..=3        | Generic, ignored when read according to   |
+/// |       |          |                  |              | docs, used in practice                    |
+/// | hhh   | 43-45    | hydrogen code    | 0..=5        | Query, H0 means no implicit Hs            |
+/// |       |          |                  |              | Hn means >=n implicit Hs                  |
+/// | bbb   | 46-48    | stereo care      | 0, 1         | Query, consider double bond stereo        |
+/// |       |          |                  |              | when stereo care is 1 for both bond atoms |
+/// | vvv   | 49-51    | valence code     | 0..=15       | Generic                                   |
+/// | HHH   | 52-54    | ignored          |              |                                           |   
+/// | rrr   | 55-57    | ignored          |              |                                           |   
+/// | iii   | 58-60    | ignored          |              |                                           |   
+/// | mmm   | 61-63    | atom mapping     | 1..=#atoms   | Reaction, accepted as extension           |
+/// | nnn   | 64-66    | inversion        | 0..=2        | Reaction                                  |
+/// | eee   | 67-69    | exact change     | 0, 1         | Reaction                                  |
+/// --------------------------------------------------------------------------------------------------
+///
+pub fn extended_atom_input<'inp>(
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (ExtendedAtom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp>
+{
+    move |input: &'inp [u8]| {
+        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
+        terminated(extended_atom_input_inner(flags), space0).parse(input)
+    }
+}
+
 /// Parse atom symbol (Element and NamedIsotope only).
 ///
 /// Returns error for extended atom symbols (L, A, Q, *, LP, R#, pseudoatoms).
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+///
 fn atom_symbol<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = AtomSymbol, Error = NomError<&'inp [u8]>> {
     let allow_named_isotopes = flags.contains(CtabParseFlags::NAMED_ISOTOPES);
     move |input: &'inp [u8]| {
-        fixed_width_partial(
+        let (remaining, symbol) = fixed_width_partial(
             3,
             move |s: &'inp [u8]| {
                 let s = s.trim_ascii();
-                if let Some(element) = Element::from_symbol_bytes(s) {
-                    Ok((&b""[..], AtomSymbol::Element(element)))
-                } else if allow_named_isotopes {
-                    if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
-                        Ok((&b""[..], AtomSymbol::NamedIsotope(isotope)))
-                    } else {
-                        Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
-                    }
-                } else {
-                    Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
-                }
+                Element::from_symbol_bytes(s)
+                    .map(AtomSymbol::Element)
+                    .or_else(|| {
+                        allow_named_isotopes
+                            .then(|| NamedIsotope::from_symbol_bytes(s))
+                            .flatten()
+                            .map(AtomSymbol::NamedIsotope)
+                    })
+                    .ok_or(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
+                    .map(|symbol| (&b""[..], symbol))
             },
             true,
         )
-        .parse(input)
-        .and_then(|(remaining, symbol)| match symbol {
-            Some(symbol) => Ok((remaining, symbol)),
-            None => Err(Err::Error(NomError::new(input, NomErrorKind::Eof))),
-        })
+        .parse(input)?;
+
+        symbol
+            .ok_or(Err::Error(NomError::new(input, NomErrorKind::Eof)))
+            .map(|symbol| (remaining, symbol))
     }
 }
 
@@ -163,15 +357,28 @@ fn extended_atom_symbol<'inp>(
     }
 }
 
-/// Parse atom inputs with 67-69 characters (s. `atom_input` for more details).
-/// Includes atom mapping number.
+/// Parse basic atom input with 61-69 characters (s. `atom_input` for more details).
+/// Includes atom mapping number (stored as class, see below).
+///
+/// Includes extended inversion/retention and exact change fields.
+///
+/// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+/// If `ignore_positions` is true, set atom positions to zero.
+/// If `skip_unused_fields` is true, do no validate unused fields.
+/// If `atom_map_hcount_fields` is true, set class to atom mapping number.
+/// If `extended_range` is true, allow extended hydrogen count range.
+///
 fn atom_input69<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
+    println!("atom_input69 flags: {}", flags);
+
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let position = position30(ignore_positions);
+    let atom_map_hcount_fields = flags.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS);
+    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+    let position = fixed_width_position(ignore_positions);
     let symbol = atom_symbol(flags);
     let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
         convert_atom_mass_diff_code(opt.unwrap_or(0))
@@ -182,14 +389,27 @@ fn atom_input69<'inp>(
     let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
         convert_atom_stereo_parity_code(code, false)
     });
-    let unused1 = fixed_width_unused_n(2, 3, skip_unused_fields);
+    let max_hydrogen_count = if extended_range { 255 } else { 5 };
+    let hydrogen_count = cond(
+        atom_map_hcount_fields,
+        fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
+    );
+    let num1 = if atom_map_hcount_fields { 1 } else { 2 };
+    let extended1 = fixed_width_unused_n(num1, 3, false);
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
     );
     let unused2 = fixed_width_unused_n(3, 3, skip_unused_fields);
-    let atom_map_num = fixed_width_int_in_range_opt::<u32, _>(3, 1..=999);
-    let unused3 = fixed_width_unused_n(2, 3, skip_unused_fields);
+    let atom_map_num = cond(
+        atom_map_hcount_fields,
+        fixed_width_int_in_range_opt::<u32, _>(3, 1..=999),
+    );
+    let num3 = input
+        .len()
+        .saturating_sub(if atom_map_hcount_fields { 63 } else { 60 })
+        / 3;
+    let extended3 = fixed_width_unused_n(num3, 3, false);
 
     map(
         (
@@ -197,11 +417,21 @@ fn atom_input69<'inp>(
             preceded(tag(" "), symbol),
             mass_diff,
             charge_radical,
-            terminated(stereo_parity, unused1),
+            stereo_parity,
+            terminated(hydrogen_count, extended1),
             terminated(valence, unused2),
-            terminated(atom_map_num, unused3),
+            terminated(atom_map_num, extended3),
         ),
-        |(position, symbol, mass_diff, charge_radical, _stereo_parity, valence, _atom_map_num)| {
+        |(
+            position,
+            symbol,
+            mass_diff,
+            charge_radical,
+            _stereo_parity,
+            hydrogen_count,
+            valence,
+            atom_map_num,
+        )| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, unpaired_e) = charge_radical;
             (
@@ -209,13 +439,13 @@ fn atom_input69<'inp>(
                     element,
                     charge,
                     isotope_mass: isotope,
-                    hydrogens: None,
+                    hydrogens: hydrogen_count.flatten(),
                     implicit_h: false,
                     valence,
                     unpaired_e,
                     aromatic: None,
                     chirality: None,
-                    class: None,
+                    class: atom_map_num.flatten(),
                     span: None,
                     alias: None,
                     value: None,
@@ -227,19 +457,25 @@ fn atom_input69<'inp>(
     .parse(input)
 }
 
-/// Parse atom inputs with 49-51 characters (s. `atom_input` for more details).
-/// Includes mass difference, charge/radical and valence fields.
+/// Parse basic atom input with 49-60 characters (s. `atom_input` for more details).
+/// Includes mass difference, charge/radical and valence fields. Lacks atom mapping field.
+/// Includes extended hydrogen code and stereo care fields and three ignored fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
+/// If `ignore_positions` is true, set atom positions to zero.
+/// If `skip_unused_fields` is true, do no validate unused fields.
+/// If `atom_map_hcount_fields` is true, include hydrogen count field.
+/// If `extended_range` is true, allow extended hydrogen count range.
 ///
 fn atom_input60<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let position = position30(ignore_positions);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
+    let atom_map_hcount_fields = flags.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS);
+    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+    let position = fixed_width_position(ignore_positions);
     let symbol = atom_symbol(flags);
     let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
         convert_atom_mass_diff_code(opt.unwrap_or(0))
@@ -247,14 +483,22 @@ fn atom_input60<'inp>(
     let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
         convert_atom_charge_code(opt.unwrap_or(0))
     });
-    let unused1 = fixed_width_unused_n(2, 3, skip_unused_fields);
     let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
         convert_atom_stereo_parity_code(code, false)
     });
+    let max_hydrogen_count = if extended_range { 255 } else { 5 };
+    let hydrogen_count = cond(
+        atom_map_hcount_fields,
+        fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
+    );
+    let num1 = if atom_map_hcount_fields { 1 } else { 2 };
+    let extended1 = fixed_width_unused_n(num1, 3, false);
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
     );
+    let num2 = input.len().saturating_sub(51) / 3;
+    let unused2 = fixed_width_unused_n(num2, 3, skip_unused_fields);
 
     map(
         (
@@ -262,10 +506,11 @@ fn atom_input60<'inp>(
             preceded(tag(" "), symbol),
             mass_diff,
             charge_radical,
-            terminated(stereo_parity, unused1),
-            valence,
+            stereo_parity,
+            terminated(hydrogen_count, extended1),
+            terminated(valence, unused2),
         ),
-        |(position, symbol, mass_diff, charge_radical, _stereo_parity, valence)| {
+        |(position, symbol, mass_diff, charge_radical, _stereo_parity, hydrogen_count, valence)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, unpaired_e) = charge_radical;
             (
@@ -273,7 +518,7 @@ fn atom_input60<'inp>(
                     element,
                     charge,
                     isotope_mass: isotope,
-                    hydrogens: None,
+                    hydrogens: hydrogen_count.flatten(),
                     implicit_h: false,
                     valence,
                     unpaired_e,
@@ -291,19 +536,23 @@ fn atom_input60<'inp>(
     .parse(input)
 }
 
-/// Parse atom inputs with 42-48 characters including up to 6 characters of ignored data
+/// Parse basic atom input with 40-48 characters including up to 6 characters of ignored data
 /// (s. `atom_input` for more details). Lacks trailing valence and atom mapping fields.
+/// Includes extended hydrogen code and stereo care fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
+/// If `ignore_positions` is true, set atom positions to zero.
+/// If `atom_map_hcount_fields` is true, include hydrogen count field.
+/// If `extended_range` is true, allow extended hydrogen count range.
 ///
-fn atom_input42<'inp>(
+fn atom_input48<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let position = position30(ignore_positions);
+    let atom_map_hcount_fields = flags.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS);
+    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+    let position = fixed_width_position(ignore_positions);
     let symbol = atom_symbol(flags);
     let mass_diff = map(
         fixed_width_int_in_range::<i8, _>(2, -3..=4),
@@ -316,8 +565,16 @@ fn atom_input42<'inp>(
     let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
         convert_atom_stereo_parity_code(code, false)
     });
-    let n = input.len().saturating_sub(42) / 3;
-    let unused1 = fixed_width_unused_n(n, 3, skip_unused_fields);
+    let max_hydrogen_count = if extended_range { 255 } else { 5 };
+    let hydrogen_count = cond(
+        atom_map_hcount_fields,
+        fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
+    );
+    let num1 = input
+        .len()
+        .saturating_sub(if atom_map_hcount_fields { 45 } else { 42 })
+        / 3;
+    let extended1 = fixed_width_unused_n(num1, 3, false);
 
     map(
         (
@@ -325,9 +582,10 @@ fn atom_input42<'inp>(
             preceded(tag(" "), symbol),
             mass_diff,
             charge_radical,
-            terminated(stereo_parity, unused1),
+            stereo_parity,
+            terminated(hydrogen_count, extended1),
         ),
-        |(position, symbol, mass_diff, charge_radical, _stereo_parity)| {
+        |(position, symbol, mass_diff, charge_radical, _stereo_parity, hydrogen_count)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, unpaired_e) = charge_radical;
             (
@@ -335,7 +593,7 @@ fn atom_input42<'inp>(
                     element,
                     charge,
                     isotope_mass: isotope,
-                    hydrogens: None,
+                    hydrogens: hydrogen_count.flatten(),
                     implicit_h: false,
                     valence: None,
                     unpaired_e,
@@ -353,17 +611,18 @@ fn atom_input42<'inp>(
     .parse(input)
 }
 
-/// Parse atom inputs with 37-41 characters (s. `atom_input` for more details).
-/// Lacks trailing stereo parity, valence and atom mapping fields (substituted by defaults).
+/// Parse basic atom input with 37-39 characters (s. `atom_input` for more details).
+/// Lacks trailing stereo parity, valence and atom mapping fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
+/// If `ignore_positions` is true, set atom positions to zero.
 ///
 fn atom_input39<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let position = position30(ignore_positions);
+    let position = fixed_width_position(ignore_positions);
     let symbol = atom_symbol(flags);
     let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
         convert_atom_mass_diff_code(opt.unwrap_or(0))
@@ -405,18 +664,18 @@ fn atom_input39<'inp>(
     .parse(input)
 }
 
-/// Parse atom inputs with 35-36 characters (s. `atom_input` for more details).
-/// Lacks trailing charge/radical, valence and atom mapping fields (substituted by defaults).
+/// Parse basic atom input with 34-36 characters (s. `atom_input` for more details).
+/// Lacks trailing charge/radical, valence and atom mapping fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
+/// If `ignore_positions` is true, set atom positions to zero.
 ///
 fn atom_input36<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let position = position30(ignore_positions);
+    let position = fixed_width_position(ignore_positions);
     let symbol = atom_symbol(flags);
     let mass_diff = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
         convert_atom_mass_diff_code(opt.unwrap_or(0))
@@ -449,19 +708,18 @@ fn atom_input36<'inp>(
     .parse(input)
 }
 
-/// Parse atom inputs with 34 characters (s. `atom_input` for more details).
-/// Lacks trailing mass difference, charge/radical, valence and atom mapping fields
-/// (substituted by defaults).
+/// Parse basic atom input with 31-33 characters (s. `atom_input` for more details).
+/// Lacks trailing mass difference, charge/radical, valence and atom mapping fields.
 ///
 /// If `allow_named_isotopes` is true, allow named isotopes (D, T).
-/// If `skip_unused_fields` is true, do no validate unused (padding) fields.
+/// If `ignore_positions` is true, set atom positions to zero.
 ///
 fn atom_input34<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let position = position30(ignore_positions);
+    let position = fixed_width_position(ignore_positions);
     let symbol = atom_symbol(flags);
 
     map(
@@ -491,83 +749,6 @@ fn atom_input34<'inp>(
     .parse(input)
 }
 
-/// Parse atom input (optimized for performance)
-/// Fails immediately on extended atom symbols. For parsing all atom types, see extended_atom_input.
-///
-/// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
-///
-/// *Values in the atom block*
-/// ----------------------------------------------------------------------------------------------
-/// | Field | Position | Meaning            | Values       | Notes                               |
-/// |-------|----------|--------------------|--------------|--------------------------------------
-/// | x,y,z |  1-30    | atom coordinates   |              | Generic, F10.4 format               |
-/// | aaa   | 31-33    | atom symbol        | s. above     | Generic, Query, 3D, RGroup          |
-/// | dd    | 34-36    | mass difference    | -3..=4       | Generic, s. also M  ISO             |
-/// | ccc   | 37-39    | charge code        | 0..=7        | Generic, s. also M  CHG/M  RAD      |
-/// | sss   | 40-42    | stereo parity      | 0..=3        | Generic, ignored when read          |
-/// |       |          |                    |              | according to docs, used in practice |
-/// | vvv   | 49-51    | valence code       | 0..=15       | Generic                             |
-/// | mmm   | 61-63    | atom mapping       | 1..=#atoms   | Reaction, accepted as extension     |
-/// ----------------------------------------------------------------------------------------------
-///
-pub fn atom_input<'inp>(
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Atom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-        let len = input.len();
-
-        let parser = match len {
-            61.. => atom_input69,
-            49..=60 => atom_input60,
-            42..=48 => atom_input42,
-            37..=41 => atom_input39,
-            35..=36 => atom_input36,
-            32..=34 => atom_input34,
-            _ => return Err(Err::Error(NomError::new(input, NomErrorKind::Eof))),
-        };
-        terminated(move |input| parser(input, flags), space0).parse(input)
-    }
-}
-
-/// Parse atom and extended atom input
-/// Allows all atom types. For faster parsing of basic molecules, see atom_input.
-///
-/// xxxxx.xxxxyyyyy.yyyyzzzzz.zzzz aaaddcccssshhhbbbvvvHHHrrriiimmmnnneee (69 characters wide)
-///
-/// *Values in the atom block*
-/// --------------------------------------------------------------------------------------------------
-/// | Field | Position | Meaning          | Values       | Notes                                     |
-/// |-------|----------|------------------|--------------|-------------------------------------------|
-/// | x,y,z |  1-30    | atom coordinates |              | Generic, F10.4 format                     |
-/// | aaa   | 31-33    | atom symbol      | s. above     | Generic, Query, 3D, RGroup                |
-/// | dd    | 34-36    | mass difference  | -3..=4       | Generic, s. also M  ISO                   |
-/// | ccc   | 37-39    | charge code      | 0..=7        | Generic, s. also M  CHG/M  RAD            |
-/// | sss   | 40-42    | stereo parity    | 0..=3        | Generic, ignored when read according to   |
-/// |       |          |                  |              | docs, used in practice                    |
-/// | hhh   | 43-45    | hydrogen code    | 0..=5        | Query, H0 means no implicit Hs            |
-/// |       |          |                  |              | Hn means >=n implicit Hs                  |
-/// | bbb   | 46-48    | stereo care      | 0, 1         | Query, consider double bond stereo        |
-/// |       |          |                  |              | when stereo care is 1 for both bond atoms |
-/// | vvv   | 49-51    | valence code     | 0..=15       | Generic                                   |
-/// | HHH   | 52-54    | ignored          |              |                                           |   
-/// | rrr   | 55-57    | ignored          |              |                                           |   
-/// | iii   | 58-60    | ignored          |              |                                           |   
-/// | mmm   | 61-63    | atom mapping     | 1..=#atoms   | Reaction, accepted as extension           |
-/// | nnn   | 64-66    | inversion        | 0..=2        | Reaction                                  |
-/// | eee   | 67-69    | exact change     | 0, 1         | Reaction                                  |
-/// --------------------------------------------------------------------------------------------------
-///
-pub fn extended_atom_input<'inp>(
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (ExtendedAtom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp>
-{
-    move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-        terminated(extended_atom_input_inner(flags), space0).parse(input)
-    }
-}
-
 /// Internal parser for extended_atom_input
 fn extended_atom_input_inner<'inp>(
     flags: CtabParseFlags,
@@ -578,7 +759,7 @@ fn extended_atom_input_inner<'inp>(
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     move |input: &'inp [u8]| {
         // x, y, z coordinates
-        let (i, position) = position30(ignore_positions).parse(input)?;
+        let (i, position) = fixed_width_position(ignore_positions).parse(input)?;
 
         // Atom symbol
         let (i, atom_symbol) = preceded(tag(" "), extended_atom_symbol(flags)).parse(i)?;
@@ -606,11 +787,11 @@ fn extended_atom_input_inner<'inp>(
         .parse(i)?;
 
         // Hydrogen count
-        let max_hydrogen = if extended_range { 255 } else { 5 };
+        let max_hydrogen_count = if extended_range { 255 } else { 5 };
         let (i, hydrogen_count) = cond(
             i.len() >= 3,
             map_res(
-                fixed_width_int_in_range::<u8, _>(3, 0..=max_hydrogen),
+                fixed_width_int_in_range::<u8, _>(3, 0..=max_hydrogen_count),
                 move |code| convert_atom_hydrogen_count_code(code, extended_range),
             ),
         )
@@ -682,13 +863,12 @@ fn extended_atom_input_inner<'inp>(
                     stereo_parity: stereo_parity.flatten(),
                     stereo_care: stereo_care.flatten(),
                     valence: valence.flatten(),
-                    atom_map_num: atom_map_num.flatten(),
                     inversion_retention: inversion_flag.flatten(),
                     exact_change: exact_change_flag.flatten(),
                     implicit_h: false,
                     aromatic: None,
                     chirality: None,
-                    class: None,
+                    class: atom_map_num.flatten(),
                     span: None,
                     alias: None,
                     value: None,
@@ -703,105 +883,6 @@ fn extended_atom_input_inner<'inp>(
                 position,
             ),
         ))
-    }
-}
-
-/// Parse atom block (basic atoms only)
-pub(super) fn atom_block<'inp>(
-    atom_count: u32,
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<Atom>, Option<Vec<Point3D>>, u32), Error = ParseError>
-       + use<'inp> {
-    move |input: &'inp [u8]| {
-        let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-        let mut atoms = Vec::with_capacity(atom_count as usize);
-        let mut positions = Vec::with_capacity(if ignore_positions {
-            0
-        } else {
-            atom_count as usize
-        });
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
-
-        for i in 0..atom_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                NomErr::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
-                    block: "atom",
-                })
-            })?;
-
-            let (_, (atom, pos)) = all_consuming(atom_input(flags))
-                .parse(line)
-                .map_err(|e| NomErr::Error(ParseError::atom_from_nom(e, line_offset + i, line)))?;
-            atoms.push(atom);
-            if !ignore_positions {
-                positions.push(pos);
-            }
-            offset += line.len();
-        }
-
-        let remaining = &input[offset..];
-        if ignore_positions || (atom_count > 1 && all_zero(&positions)) {
-            Ok((remaining, (atoms, None, line_offset + atom_count)))
-        } else {
-            Ok((
-                remaining,
-                (atoms, Some(positions), line_offset + atom_count),
-            ))
-        }
-    }
-}
-
-/// Parse extended atom block
-pub(super) fn extended_atom_block<'inp>(
-    atom_count: u32,
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<
-    &'inp [u8],
-    Output = (Vec<ExtendedAtom>, Option<Vec<Point3D>>, u32),
-    Error = ParseError,
-> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-        let mut atoms = Vec::with_capacity(atom_count as usize);
-        let mut positions = Vec::with_capacity(if ignore_positions {
-            0
-        } else {
-            atom_count as usize
-        });
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
-
-        for i in 0..atom_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                NomErr::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
-                    block: "atom",
-                })
-            })?;
-
-            let (_, (atom, pos)) = all_consuming(extended_atom_input(flags))
-                .parse(line)
-                .map_err(|e| NomErr::Error(ParseError::atom_from_nom(e, line_offset + i, line)))?;
-            atoms.push(atom);
-            if !ignore_positions {
-                positions.push(pos);
-            }
-            offset += line.len();
-        }
-
-        let remaining = &input[offset..];
-        if ignore_positions || (atom_count > 1 && all_zero(&positions)) {
-            Ok((remaining, (atoms, None, line_offset + atom_count)))
-        } else {
-            Ok((
-                remaining,
-                (atoms, Some(positions), line_offset + atom_count),
-            ))
-        }
     }
 }
 

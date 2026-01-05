@@ -263,8 +263,8 @@ pub(super) fn fixed_width_unused<'inp>(
     skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
-        let (remaining, padding) = take(width).parse(input)?;
-        if !skip_unused_fields && width > 0 && !is_all_whitespace_or_zeroes(padding) {
+        let (remaining, unused) = take(width).parse(input)?;
+        if !skip_unused_fields && width > 0 && !is_all_whitespace_or_zeroes(unused) {
             Err(Err::Error(NomError::new(input, NomErrorKind::Verify)))
         } else {
             Ok((remaining, ()))
@@ -280,10 +280,10 @@ pub(super) fn fixed_width_unused_n<'inp>(
     skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
-        let (remaining, padding) = take(count * width).parse(input)?;
-        if !skip_unused_fields && count > 0 && width > 0 {
+        let (remaining, unused) = take(count * width).parse(input)?;
+        if !skip_unused_fields && count > 0 && width > 0 && !is_all_whitespace_or_zeroes(unused) {
             nom_count(fixed_width_unused(width, skip_unused_fields), count)
-                .parse(padding)
+                .parse(unused)
                 .map(|(_, _)| (remaining, ()))
         } else {
             Ok((remaining, ()))
@@ -359,7 +359,7 @@ pub(super) fn is_reserved_atom_symbol(
 }
 
 /// Parse position data from 3f10.4 format
-pub(super) fn position30<'inp>(
+pub(super) fn fixed_width_position<'inp>(
     ignore_positions: bool,
 ) -> impl Parser<&'inp [u8], Output = Point3D, Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {

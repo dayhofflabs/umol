@@ -17,7 +17,7 @@ bitflags! {
                                             // SDS, SPA, CRS, SDI, SBV, SDT, SDD, SCD, SED, SPL, SNC
         const QUERY_BONDS = 1 << 5;         // Bond types 5-8
         const QUERY_PROPERTIES = 1 << 6;    // RBC, SUB, UNS, LIN, ALS, APO, AAL
-        const LEGACY_ATOM_LISTS = 1 << 7;    // Legacy atom lists
+        const LEGACY_ATOM_LISTS = 1 << 7;   // Legacy atom lists
         // const RESERVED_1 = 1 << 8;
         // const RESERVED_2 = 1 << 9;
 
@@ -28,27 +28,27 @@ bitflags! {
         // const RESERVED_4 = 1 << 13;
 
         // Format extensions
-        const NAMED_ISOTOPES = 1 << 14;     // D, T recognition
-        const PSEUDOATOMS = 1 << 15;        // General pseudoatoms (Ala)
-        const CLARK_EXTENSIONS = 1 << 16;   // ZBO, ZCH, HYD
-        // const RESERVED_5 = 1 << 17;
-        // const RESERVED_6 = 1 << 18;
-        // const RESERVED_7 = 1 << 19;
-        // const RESERVED_8 = 1 << 20;
-        // const RESERVED_9 = 1 << 21;
+        const NAMED_ISOTOPES = 1 << 14;         // D, T recognition
+        const PSEUDOATOMS = 1 << 15;            // General pseudoatoms (Ala)
+        const ATOM_MAP_HCOUNT_FIELDS = 1 << 16; // Allow atom mapping and H count in basic parser
+        const CLARK_EXTENSIONS = 1 << 17;       // ZBO, ZCH, HYD
+        // const RESERVED_5 = 1 << 18;
+        // const RESERVED_6 = 1 << 19;
+        // const RESERVED_7 = 1 << 20;
+        // const RESERVED_8 = 1 << 21;
 
         // Input validation strictness
-        const UNICODE = 1 << 22;            // Allow Unicode whitespace
+        const UNICODE = 1 << 22;             // Allow Unicode whitespace
         const SKIP_UNUSED_FIELDS = 1 << 23;  // Skip validation of unused fields
-        const NO_V2000_END_TAGS = 1 << 24;  // V2000 tag and M  END tag may be omitted
-        // const RESERVED_10 = 1 << 25;
+        const NO_V2000_END_TAGS = 1 << 24;   // V2000 tag and M  END tag may be omitted
+        // const RESERVED_9 = 1 << 25;
 
         // Parser behavior
         const IGNORE_POSITIONS = 1 << 26;   // Ignore position data
-        // const RESERVED_11 = 1 << 27;
-        // const RESERVED_12 = 1 << 28;
-        // const RESERVED_13 = 1 << 29;
-        // const RESERVED_14 = 1 << 30;
+        // const RESERVED_10 = 1 << 27;
+        // const RESERVED_11 = 1 << 28;
+        // const RESERVED_12 = 1 << 29;
+        // const RESERVED_13 = 1 << 30;
         const DEBUG = 1 << 31;              // Debug output during parsing
 
         // Presets
@@ -56,23 +56,24 @@ bitflags! {
 
         // Maximum capabilities for basic parser
         const BASIC_MAX = Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() |
-            Self::NAMED_ISOTOPES.bits() | Self::CLARK_EXTENSIONS.bits() | Self::UNICODE.bits() |
-            Self::SKIP_UNUSED_FIELDS.bits() | Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
+            Self::NAMED_ISOTOPES.bits() | Self::ATOM_MAP_HCOUNT_FIELDS.bits() | Self::CLARK_EXTENSIONS.bits() |
+            Self::UNICODE.bits() | Self::SKIP_UNUSED_FIELDS.bits() | Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits() | Self::CHEMAXON_WILDCARDS.bits() |
             Self::ELECTRONS.bits() | Self::PSEUDOATOMS.bits() | Self::RGROUPS.bits() | Self::SGROUPS.bits() |
             Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits() | Self::LEGACY_ATOM_LISTS.bits();
 
-        // Default for basic parser
-        const BASIC = Self::NAMED_ISOTOPES.bits() | Self::SKIP_UNUSED_FIELDS.bits();
-
-        // Default for extended parser
-        const EXTENDED = Self::BASIC.bits() | Self::WILDCARDS.bits() | Self::ELECTRONS.bits() |
+        // Strict parser: only parser capability extensions for extended parser over basic parser
+        // Basic strict = minimal parser
+        const STRICT = Self::WILDCARDS.bits() | Self::ELECTRONS.bits() |
             Self::RGROUPS.bits() | Self::SGROUPS.bits() | Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits();
 
-        // Strict parser
-        const STRICT = Self::EXTENDED.bits() & !Self::SKIP_UNUSED_FIELDS.bits();
+        // Default for basic parser
+        const BASIC = Self::NAMED_ISOTOPES.bits() | Self::ATOM_MAP_HCOUNT_FIELDS.bits() | Self::SKIP_UNUSED_FIELDS.bits();
+
+        // Default for extended parser
+        const EXTENDED = Self::BASIC.bits() | Self::STRICT.bits();
 
         // Lenient parser
         const LENIENT = Self::EXTENDED.bits() | Self::CHEMAXON_WILDCARDS.bits() | Self::LEGACY_ATOM_LISTS.bits() |
@@ -81,16 +82,15 @@ bitflags! {
             Self::NO_V2000_END_TAGS.bits();
 
         // Graph-only parser
-        const GRAPH_ONLY = Self::BASIC.bits() | Self::EXTENDED_RANGE.bits() |
-            Self::EXTENDED_ISOTOPES.bits() | Self::IGNORE_POSITIONS.bits();
-
-        // Smiles-compatible parser
-        const SMILES_COMPAT = Self::BASIC.bits() | Self::EXTENDED_ISOTOPES.bits() |
+        const GRAPH_ONLY = Self::BASIC.bits() | Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() |
             Self::IGNORE_POSITIONS.bits();
 
+        // Smiles-compatible parser
+        const SMILES_COMPAT = Self::BASIC.bits() | Self::EXTENDED_ISOTOPES.bits() | Self::IGNORE_POSITIONS.bits();
+
         // Smarts-compatible parser
-        const SMARTS_COMPAT = Self::SMILES_COMPAT.bits() | Self::WILDCARDS.bits() |
-            Self::QUERY_PROPERTIES.bits() | Self::QUERY_BONDS.bits();
+        const SMARTS_COMPAT = Self::SMILES_COMPAT.bits() | Self::WILDCARDS.bits() | Self::QUERY_PROPERTIES.bits() |
+            Self::QUERY_BONDS.bits();
     }
 }
 
@@ -120,9 +120,6 @@ impl fmt::Display for CtabParseFlags {
             parts.push("SMARTS_COMPAT");
         } else {
             // Show individual flags
-            if self.contains(CtabParseFlags::NAMED_ISOTOPES) {
-                parts.push("NAMED_ISOTOPES");
-            }
             if self.contains(CtabParseFlags::WILDCARDS) {
                 parts.push("WILDCARDS");
             }
@@ -155,6 +152,12 @@ impl fmt::Display for CtabParseFlags {
             }
             if self.contains(CtabParseFlags::NAMED_ISOTOPES) {
                 parts.push("NAMED_ISOTOPES");
+            }
+            if self.contains(CtabParseFlags::PSEUDOATOMS) {
+                parts.push("PSEUDOATOMS");
+            }
+            if self.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS) {
+                parts.push("ATOM_MAP_HCOUNT_FIELDS");
             }
             if self.contains(CtabParseFlags::CLARK_EXTENSIONS) {
                 parts.push("CLARK_EXTENSIONS");
