@@ -288,69 +288,70 @@ fn extended_atom_symbol<'inp>(
     let allow_pseudoatoms = flags.contains(CtabParseFlags::PSEUDOATOMS);
     move |input: &'inp [u8]| {
         map_res(
-        fixed_width_partial(
-            3,
-            move |s: &'inp [u8]| {
-                let s = s.trim_ascii();
-                if let Some(element) = Element::from_symbol_bytes(s) {
-                    return Ok((&b""[..], AtomSymbol::Element(element)));
-                }
-                if allow_named_isotopes {
-                    if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
-                        return Ok((&b""[..], AtomSymbol::NamedIsotope(isotope)));
+            fixed_width_partial(
+                3,
+                move |s: &'inp [u8]| {
+                    let s = s.trim_ascii();
+                    if let Some(element) = Element::from_symbol_bytes(s) {
+                        return Ok((&b""[..], AtomSymbol::Element(element)));
                     }
-                }
-                if allow_wildcards {
-                    match s {
-                        b"A" | b"Q" | b"*" | b"X" | b"M" => {
-                            if let Some(wildcard) = WildcardAtom::from_symbol_bytes(s) {
-                                return Ok((&b""[..], AtomSymbol::WildcardAtom(wildcard)));
-                            }
+                    if allow_named_isotopes {
+                        if let Some(isotope) = NamedIsotope::from_symbol_bytes(s) {
+                            return Ok((&b""[..], AtomSymbol::NamedIsotope(isotope)));
                         }
-                        b"AH" | b"QH" | b"XH" | b"MH" => {
-                            if allow_chemaxon_wildcards {
+                    }
+                    if allow_wildcards {
+                        match s {
+                            b"A" | b"Q" | b"*" | b"X" | b"M" => {
                                 if let Some(wildcard) = WildcardAtom::from_symbol_bytes(s) {
                                     return Ok((&b""[..], AtomSymbol::WildcardAtom(wildcard)));
                                 }
-                            } else {
-                                return Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)));
                             }
+                            b"AH" | b"QH" | b"XH" | b"MH" => {
+                                if allow_chemaxon_wildcards {
+                                    if let Some(wildcard) = WildcardAtom::from_symbol_bytes(s) {
+                                        return Ok((&b""[..], AtomSymbol::WildcardAtom(wildcard)));
+                                    }
+                                } else {
+                                    return Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)));
+                                }
+                            }
+                            b"L" => return Ok((&b""[..], AtomSymbol::AtomList(AtomList::empty()))),
+                            _ => {} // Fall through
                         }
-                        b"L" => return Ok((&b""[..], AtomSymbol::AtomList(AtomList::empty()))),
-                        _ => {} // Fall through
                     }
-                }
-                if allow_rgroups {
-                    if let Ok((_, rgroup)) = rgroup_symbol(s) {
-                        return Ok((&b""[..], AtomSymbol::RGroup(rgroup)));
+                    if allow_rgroups {
+                        if let Ok((_, rgroup)) = rgroup_symbol(s) {
+                            return Ok((&b""[..], AtomSymbol::RGroup(rgroup)));
+                        }
                     }
-                }
-                if allow_electrons && s == b"LP" {
-                    return Ok((&b""[..], AtomSymbol::LonePair));
-                }
+                    if allow_electrons && s == b"LP" {
+                        return Ok((&b""[..], AtomSymbol::LonePair));
+                    }
 
-                // Reject reserved atom symbols if corresponding flag is not set
-                if is_reserved_atom_symbol(
-                    s,
-                    allow_named_isotopes,
-                    allow_wildcards,
-                    allow_chemaxon_wildcards,
-                    allow_electrons,
-                    allow_rgroups,
-                ) {
-                    return Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)));
-                }
+                    // Reject reserved atom symbols if corresponding flag is not set
+                    if is_reserved_atom_symbol(
+                        s,
+                        allow_named_isotopes,
+                        allow_wildcards,
+                        allow_chemaxon_wildcards,
+                        allow_electrons,
+                        allow_rgroups,
+                    ) {
+                        return Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)));
+                    }
 
-                if allow_pseudoatoms && s.is_ascii() {
-                    let s = s.to_str_lossy().into_owned();
-                    return Ok((&b""[..], AtomSymbol::Pseudoatom(s)));
-                }
-                Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
-            },
-            true,
-        ),
-        move |symbol| symbol.ok_or(NomError::new(input, NomErrorKind::MapRes)),
-    ).parse(input)
+                    if allow_pseudoatoms && s.is_ascii() {
+                        let s = s.to_str_lossy().into_owned();
+                        return Ok((&b""[..], AtomSymbol::Pseudoatom(s)));
+                    }
+                    Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
+                },
+                true,
+            ),
+            move |symbol| symbol.ok_or(NomError::new(input, NomErrorKind::MapRes)),
+        )
+        .parse(input)
     }
 }
 
@@ -400,10 +401,11 @@ fn atom_input69<'inp>(
         atom_map_hcount_fields,
         fixed_width_int_in_range_opt::<u32, _>(3, 1..=999),
     );
-    let count3 = input
+    let remaining_len = input
         .len()
-        .saturating_sub(if atom_map_hcount_fields { 63 } else { 60 })
-        / 3;
+        .min(69)
+        .saturating_sub(if atom_map_hcount_fields { 63 } else { 60 });
+    let count3 = remaining_len / 3;
     let extended3 = fixed_width_unused_n(count3, 3, false);
 
     map(
@@ -492,7 +494,8 @@ fn atom_input60<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
     );
-    let count2 = input.len().saturating_sub(51) / 3;
+    let remaining_len = input.len().saturating_sub(51);
+    let count2 = remaining_len / 3;
     let unused2 = fixed_width_unused_n(count2, 3, skip_unused_fields);
 
     map(

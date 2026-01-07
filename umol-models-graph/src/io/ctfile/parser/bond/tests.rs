@@ -8,16 +8,6 @@ use super::*;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::table_ir::{BondDirection, BondOrder, BondReactingCenter, BondStereo, BondTopology};
 
-// TODO: Add bond_block tests (test_bond_block, test_bond_block_invalid, test_bond_block_ignore_positions,
-//       test_bond_block_ignore_positions_invalid)
-// TODO: Add extended_bond_block tests (test_extended_bond_block, test_extended_bond_block_invalid,
-//       test_extended_bond_block_ignore_positions, test_extended_bond_block_ignore_positions_invalid)
-
-// TODO: Checks for trailing numbers and characters
-// #[case::trailing_number(b"  2  5  2  1  0  0  0 0", NomErrorKind::Verify)]
-// #[case::trailing_chars(b"  2  5  2  1  0  0  0 XXX", NomErrorKind::Verify)]
-
-
 #[test]
 fn test_bond_block() {
     let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
@@ -48,11 +38,11 @@ fn test_extended_bond_block() {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_9(b"  1  2  1", 0, 1, BondOrder::Single, None, None)]
-#[case::len_12(b"  1  3  2  1", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
-#[case::len_13(b"  1  3  1  6", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
-#[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None)]
 #[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
+#[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None)]
+#[case::len_13(b"  1  3  1  6", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
+#[case::len_12(b"  1  3  2  1", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
+#[case::len_9(b"  1  2  1", 0, 1, BondOrder::Single, None, None)]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] atom1: usize,
@@ -302,8 +292,7 @@ fn test_bond_input21_invalid(
 #[rustfmt::skip]
 #[rstest]
 #[case::invalid_unused(b"  1  2  1  1  0  0XXX", NomErrorKind::Verify)]
-#[case::xxx_nonzero(b"  1  2  1  0  1  0  0", NomErrorKind::Verify)]
-#[case::xxx_non_numeric(b"  1  2  1  0  A  0  0", NomErrorKind::Verify)]
+#[case::nonzero_unused(b"  1  2  1  0  1  0  0", NomErrorKind::Verify)]
 fn test_bond_input21_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,

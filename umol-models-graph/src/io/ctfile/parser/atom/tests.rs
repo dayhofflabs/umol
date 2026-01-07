@@ -11,11 +11,6 @@ use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity, RGroup, WildcardAtom,
 };
 
-// TODO: Add atom_block tests (test_atom_block, test_atom_block_invalid, test_atom_block_ignore_positions,
-//       test_atom_block_ignore_positions_invalid)
-// TODO: Add extended_atom_block tests (test_extended_atom_block, test_extended_atom_block_invalid,
-//       test_extended_atom_block_ignore_positions, test_extended_atom_block_ignore_positions_invalid)
-
 #[test]
 fn test_atom_block() {
     let atom_data = b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
@@ -1145,6 +1140,14 @@ fn test_extended_atom_symbol_pseudoatoms_invalid(
 #[rstest]
 #[case::len_69(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0",
        Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
+#[case::len_66(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0",
+       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
+#[case::len_63(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0",
+       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
+#[case::len_62(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  ",
+       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
+#[case::len_61(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0 ",
+       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0",
        Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0",
@@ -1165,7 +1168,7 @@ fn test_extended_atom_symbol_pseudoatoms_invalid(
        Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0",
        Element::H, Some(2), Some(1), Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0XX0  0  0  0  0",
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0",
        Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 fn test_atom_input69(
     #[case] input: &[u8],
@@ -1230,7 +1233,9 @@ fn test_atom_input69(
 #[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Eof)]
 #[case::non_numeric_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", NomErrorKind::Digit)]
 #[case::atom_list(b"    1.2345    2.3456    3.4567 L   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0XXX  4  0  0  0  0  0  0", NomErrorKind::Verify)]
+#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0XXX", NomErrorKind::Verify)]
+#[case::len_61_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  01", NomErrorKind::Eof)]
+#[case::len_62_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0 1", NomErrorKind::Eof)]
 fn test_atom_input69_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -1318,6 +1323,7 @@ fn test_atom_input69_strict(
 #[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0XXX  0  0  0  0", NomErrorKind::Verify)]
 #[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0XXX  4  0  0  0  0  0  0", NomErrorKind::Verify)]
 #[case::invalid_named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", NomErrorKind::MapRes)]
+#[case::non_zero_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  1  0  0", NomErrorKind::Verify)]
 fn test_atom_input69_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -1412,6 +1418,9 @@ fn test_atom_input69_ignore_positions_invalid(
 
 #[rustfmt::skip]
 #[rstest]
+#[case::len_60(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
+#[case::len_57(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
+#[case::len_54(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::len_51(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4", Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4", Element::C, Some(16), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
@@ -1419,6 +1428,7 @@ fn test_atom_input69_ignore_positions_invalid(
 #[case::mass_diff_out_of_range_high(b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4", Element::C, None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::charge_out_of_range_high(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4",  Element::C, Some(10), None, Some(4), 1.2345, 2.3456, 3.4567)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", Element::H, Some(2), Some(1), Some(1), 1.2345, 2.3456, 3.4567)]
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
 fn test_atom_input60(
     #[case] input: &[u8],
     #[case] element: Element,
@@ -1483,6 +1493,8 @@ fn test_atom_input60(
 #[case::non_numeric_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
 #[case::out_of_range_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", NomErrorKind::Verify)]
 #[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  -2  3  0  0  0  4", NomErrorKind::MapRes)]
+#[case::len_50_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 4", NomErrorKind::Eof)]
+#[case::len_49_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  04", NomErrorKind::Eof)]
 fn test_atom_input60_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -1564,8 +1576,8 @@ fn test_atom_input60_strict(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", NomErrorKind::Verify)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", NomErrorKind::MapRes)]
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX", NomErrorKind::Verify)]
 fn test_atom_input60_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -1721,6 +1733,8 @@ fn test_atom_input60_empty_fields(
 
 #[rustfmt::skip]
 #[rstest]
+#[case::len_48(b"    1.2345    2.3456    3.4567 C   0  3  1  0  0", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
+#[case::len_45(b"    1.2345    2.3456    3.4567 C   0  3  1  0", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
 #[case::len_42(b"    1.2345    2.3456    3.4567 C   0  3  1", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
 #[case::blank_stereo_parity(b"    1.2345    2.3456    3.4567 C   0  3   0  ", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0", Element::H, Some(2), Some(1), 1.2345, 2.3456, 3.4567)]
@@ -1782,6 +1796,10 @@ fn test_atom_input48(
 #[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  3  0", NomErrorKind::Eof)]
 #[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L   0  3  0", NomErrorKind::MapRes)]
 #[case::invalid_extended(b"    1.2345    2.3456    3.4567 C   0  3XXX", NomErrorKind::Digit)]
+#[case::len_44_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  0 1", NomErrorKind::Eof)]
+#[case::len_43_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  01", NomErrorKind::Eof)]
+#[case::len_41_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3 1", NomErrorKind::Eof)]
+#[case::len_40_trailing_data(b"    1.2345    2.3456    3.4567 C   0  31", NomErrorKind::Eof)]
 fn test_atom_input48_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -1856,7 +1874,7 @@ fn test_atom_input48_strict(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3     a", NomErrorKind::Verify)]
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3   XXX", NomErrorKind::Verify)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0", NomErrorKind::MapRes)]
 fn test_atom_input48_strict_invalid(
     #[case] input: &[u8],
@@ -2064,6 +2082,8 @@ fn test_atom_input39(
 #[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C  -2  3", NomErrorKind::Eof)]
 #[case::non_numeric_mass_diff(b"    1.2345    2.3456    3.4567 C  -a  3", NomErrorKind::Digit)]
 #[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  -2  3", NomErrorKind::MapRes)]
+#[case::len_38_trailing_data(b"    1.2345    2.3456    3.4567 C  -2 3", NomErrorKind::Eof)]
+#[case::len_37_trailing_data(b"    1.2345    2.3456    3.4567 C  -23", NomErrorKind::Eof)]
 fn test_atom_input39_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -2238,6 +2258,7 @@ fn test_atom_input36(
 #[rstest]
 #[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C  -2", NomErrorKind::Eof)]
 #[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  -2", NomErrorKind::MapRes)]
+#[case::len_35_trailing_data(b"    1.2345    2.3456    3.4567 C  1", NomErrorKind::Eof)]
 fn test_atom_input36_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -2337,6 +2358,8 @@ fn test_atom_input36_empty_fields(#[case] input: &[u8], #[case] isotope_mass: Op
 #[rustfmt::skip]
 #[rstest]
 #[case::len_34(b"    1.2345    2.3456    3.4567 C  ", Element::C, None, 1.2345, 2.3456, 3.4567)]
+#[case::len_33(b"    1.2345    2.3456    3.4567 C ", Element::C, None, 1.2345, 2.3456, 3.4567)]
+#[case::len_32(b"    1.2345    2.3456    3.4567 C", Element::C, None, 1.2345, 2.3456, 3.4567)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  ", Element::H, Some(2), 1.2345, 2.3456, 3.4567)]
 fn test_atom_input34(
     #[case] input: &[u8],

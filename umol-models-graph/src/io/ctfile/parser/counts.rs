@@ -180,7 +180,7 @@ mod tests {
     #[case::properties_999(b"  6  5  1     1               999 V2000", Counts {atom_count: 6, bond_count: 5, atom_list_count: 1},
         vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
     #[case::tag_only(b"                                  V2000", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
-    #[case::blanks(b"  6  5  1                         V2000", Counts {atom_count: 6, bond_count: 5, atom_list_count: 1}, vec![])]
+    #[case::padded_blanks(b"  6  5  1                         V2000", Counts {atom_count: 6, bond_count: 5, atom_list_count: 1}, vec![])]
     #[case::chiral_flag(b"  1  0  0  0  1  0  0  0  0  0  0 V2000", Counts {atom_count: 1, bond_count: 0, atom_list_count: 0},
         vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
     #[case::invalid_unused(b"  4  2  0     0  1                V2000", Counts {atom_count: 4, bond_count: 2, atom_list_count: 0}, vec![])]
@@ -212,7 +212,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(b"                                       \n", NomErrorKind::Tag)]
+    #[case::blank(b"                                       \n", NomErrorKind::Tag)]
     #[case::invalid_version(b"  4  2  0     0                   V1000", NomErrorKind::Tag)]
     #[case::len_9_too_short(b"  4  2  0", NomErrorKind::Eof)]
     #[case::len_32_too_short(b"  4  2  0     0                 ", NomErrorKind::Tag)]
@@ -256,9 +256,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_v2000_tag(b" 28 34  0  0  0  0  0  0  0  0  0",
-      Counts {atom_count: 28, bond_count: 34, atom_list_count: 0})]
-    fn test_counts_input_no_v2000_tag(#[case] input: &[u8], #[case] expected: Counts) {
+    #[case::blank(b"                                 ", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::padded_blanks(b" 28 34                           ", Counts {atom_count: 28, bond_count: 34, atom_list_count: 0}, vec![])]
+    #[case::padded_zeros(b" 28 34  0  0  0  0  0  0  0  0  0", Counts {atom_count: 28, bond_count: 34, atom_list_count: 0}, vec![])]
+    #[case::has_v2000_tag(b"  0  0  0  0  0  0  0  0  0  0  0 V2000", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
+    fn test_counts_input_no_v2000_tag(
+        #[case] input: &[u8],
+        #[case] expected_counts: Counts,
+        #[case] expected_properties: Vec<PropertyEntries>,
+    ) {
         let res = counts_input(CtabParseFlags::NO_V2000_END_TAGS).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_ok(), "{:?} should have succeeded", input_str);
@@ -269,10 +275,32 @@ mod tests {
             input_str
         );
         assert_eq!(
-            (counts, properties),
-            (expected, vec![]),
-            "{:?} should have parsed correctly",
+            counts, expected_counts,
+            "{:?} should have parsed counts correctly",
             input_str
+        );
+        assert_eq!(
+            properties, expected_properties,
+            "{:?} should have parsed properties correctly",
+            input_str
+        );
+    }
+
+    #[rstest]
+    #[case::empty(b"", NomErrorKind::Eof)]
+    fn test_counts_input_no_v2000_tag_invalid(
+        #[case] input: &[u8],
+        #[case] expected_kind: NomErrorKind,
+    ) {
+        let res = counts_input(CtabParseFlags::NO_V2000_END_TAGS).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_err(), "{:?} should have failed", input_str);
+        assert!(
+            matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "{:?} should have failed with error kind {:?}, got {:?}",
+            input_str,
+            expected_kind,
+            res.clone().unwrap_err().map(|e| e.code)
         );
     }
 }
