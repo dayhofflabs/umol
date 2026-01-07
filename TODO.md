@@ -53,6 +53,13 @@
   only 0 or blanks should be accepted in the basic strict parser, 0 or other valid numeric balues should be accepted in the extended strict parser.
 - [] Add atom_map_num tests to extended (and possibly basic) parser.
 - [] Check if H count should be added to the basic parser. Check interaction with M  HYD property.
+- Please list all atom_input* and bond_input* parsers (length-dependent basic parsers) and review the corresponding unit tests. List the missing input line lengths for each parser. The dispatch logic is in atom_input() and bond_input(), respectively. The column values are given in the comments above these functions. The rules are as follows:
+* for each input line length containing a full last field, consider every field
+- field is used: at least one example of field being parsed should be available
+- field is extended: at least one example each of field being  = 0, field blank, field numeric /= 0, field non-numeric
+- field is unused: at least one example each of field being = 0, field blank, field non-numeric
+* for each input length containing a partial last field, the last (partial) field has to be blank.
+Only give a list, do not make changes
 3. Provide GIR-native bond enumeration
 Add an API on graph_ir::Molecule that yields all bonds between two atoms without redundant ordering (bond_pairs(atom_idx) or bond_between(a,b) returning iterator).
 Refactor topology lint to use this method, removing the HashMap accumulation.

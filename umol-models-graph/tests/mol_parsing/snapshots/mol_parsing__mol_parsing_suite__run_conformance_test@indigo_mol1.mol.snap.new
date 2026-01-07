@@ -8,13 +8,13 @@ category: extended_molecule_lenient
 molecule:
   success: false
   error:
-    error_type: InvalidAtomLine
-    message: "Invalid atom line at line 4, col 63"
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 43, col 0"
 molecule_lenient:
   success: false
   error:
-    error_type: InvalidAtomLine
-    message: "Invalid atom line at line 4, col 63"
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 43, col 0"
 extended_molecule:
   success: false
   error:

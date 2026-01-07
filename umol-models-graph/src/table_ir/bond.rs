@@ -113,6 +113,19 @@ pub enum BondOrder {
 }
 
 impl BondOrder {
+    pub fn from_value(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(BondOrder::Zero),
+            1 => Some(BondOrder::Single),
+            2 => Some(BondOrder::Double),
+            3 => Some(BondOrder::Triple),
+            4 => Some(BondOrder::Quadruple),
+            5 => Some(BondOrder::Quintuple),
+            6 => Some(BondOrder::Sextuple),
+            _ => None,
+        }
+    }
+
     pub fn symbol(&self) -> &str {
         match self {
             BondOrder::Zero => ".",

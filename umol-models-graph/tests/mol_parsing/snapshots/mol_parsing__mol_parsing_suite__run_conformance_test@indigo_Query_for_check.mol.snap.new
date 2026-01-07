@@ -8,26 +8,26 @@ category: extended_molecule_lenient
 molecule:
   success: false
   error:
-    error_type: InvalidPropertyLine
-    message: "Invalid property line at line 51, col 0"
+    error_type: InvalidAtomLine
+    message: "Invalid atom line at line 8, col 66"
 molecule_lenient:
   success: false
   error:
-    error_type: InvalidPropertyLine
-    message: "Invalid property line at line 51, col 0"
+    error_type: InvalidAtomLine
+    message: "Invalid atom line at line 8, col 66"
 extended_molecule:
   success: false
   error:
     error_type: MissingMEndTag
-    message: Missing M  END tag at line 52
+    message: Missing M  END tag at line 142
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C17HNO4
-    atom_count: 23
-    bond_count: 24
-    extended_atoms: 0
-    extended_bonds: 0
+    sum_formula: C54BFNOS+2
+    atom_count: 61
+    bond_count: 60
+    extended_atoms: 2
+    extended_bonds: 5
     property_count: 0
     rgroup_count: 0
-    sgroup_count: 0
+    sgroup_count: 1

@@ -1,4 +1,4 @@
-//! Atom block parser for CTab files.
+//! Atom block parsers for CTab files.
 
 use bstr::ByteSlice;
 use nom::bytes::complete::tag;
@@ -17,7 +17,7 @@ use super::convert::{
 };
 use super::utils::{
     fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt, fixed_width_partial,
-    fixed_width_position, fixed_width_unused_n, is_reserved_atom_symbol,
+    fixed_width_position, fixed_width_unused_n, is_reserved_atom_symbol, LinesWithOffsetExt,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
@@ -40,28 +40,30 @@ pub(super) fn atom_block<'inp>(
         } else {
             atom_count as usize
         });
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
+        let mut lines_iter = input.lines_with_offset();
+        let mut byte_offset = 0;
 
-        for i in 0..atom_count {
-            let line = lines_iter.next().ok_or_else(|| {
+        for line_index in 0..atom_count {
+            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
                 Err::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
+                    line: line_offset + line_index,
                     block: "atom",
                 })
             })?;
 
-            let (_, (atom, pos)) = all_consuming(atom_input(flags))
+            let (_, (atom, pos)) = all_consuming(terminated(atom_input(flags), space0))
                 .parse(line)
-                .map_err(|e| Err::Error(ParseError::atom_from_nom(e, line_offset + i, line)))?;
+                .map_err(|e| {
+                    Err::Error(ParseError::atom_from_nom(e, line_offset + line_index, line))
+                })?;
             atoms.push(atom);
             if !ignore_positions {
                 positions.push(pos);
             }
-            offset += line.len();
+            byte_offset += byte_len;
         }
 
-        let remaining = &input[offset..];
+        let remaining = &input[byte_offset..];
         if ignore_positions || (atom_count > 1 && all_zero(&positions)) {
             Ok((remaining, (atoms, None, line_offset + atom_count)))
         } else {
@@ -91,28 +93,30 @@ pub(super) fn extended_atom_block<'inp>(
         } else {
             atom_count as usize
         });
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
+        let mut lines_iter = input.lines_with_offset();
+        let mut byte_offset = 0;
 
-        for i in 0..atom_count {
-            let line = lines_iter.next().ok_or_else(|| {
+        for line_index in 0..atom_count {
+            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
                 Err::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
+                    line: line_offset + line_index,
                     block: "atom",
                 })
             })?;
 
-            let (_, (atom, pos)) = all_consuming(extended_atom_input(flags))
+            let (_, (atom, pos)) = all_consuming(terminated(extended_atom_input(flags), space0))
                 .parse(line)
-                .map_err(|e| Err::Error(ParseError::atom_from_nom(e, line_offset + i, line)))?;
+                .map_err(|e| {
+                    Err::Error(ParseError::atom_from_nom(e, line_offset + line_index, line))
+                })?;
             atoms.push(atom);
             if !ignore_positions {
                 positions.push(pos);
             }
-            offset += line.len();
+            byte_offset += byte_len;
         }
 
-        let remaining = &input[offset..];
+        let remaining = &input[byte_offset..];
         if ignore_positions || (atom_count > 1 && all_zero(&positions)) {
             Ok((remaining, (atoms, None, line_offset + atom_count)))
         } else {
@@ -149,7 +153,7 @@ pub(super) fn extended_atom_block<'inp>(
 /// *Behavior in unused and extended fields*
 /// ---------------------------------------------------------------------
 /// | Field    | Basic      | Basic strict | Extended | Extended strict |
-/// ---------------------------------------------------------------------
+/// |-------------------------------------------------------------------|
 /// | Unused   | skip       | zero/blank   | skip     | zero/blank      |
 /// | Extended | zero/blank | zero/blank   | validate | validate        |
 /// ---------------------------------------------------------------------
@@ -164,7 +168,6 @@ pub fn atom_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (Atom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp> {
     move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         let len = input.len();
 
         let parser = match len {
@@ -176,7 +179,7 @@ pub fn atom_input<'inp>(
             32..=34 => atom_input34,
             _ => return Err(Err::Error(NomError::new(input, NomErrorKind::Eof))),
         };
-        terminated(move |input| parser(input, flags), space0).parse(input)
+        (move |input| parser(input, flags)).parse(input)
     }
 }
 
@@ -213,10 +216,7 @@ pub fn extended_atom_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (ExtendedAtom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp>
 {
-    move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-        terminated(extended_atom_input_inner(flags), space0).parse(input)
-    }
+    extended_atom_input_inner(flags)
 }
 
 /// Parse atom symbol (Element and NamedIsotope only).
@@ -229,28 +229,27 @@ fn atom_symbol<'inp>(
 ) -> impl Parser<&'inp [u8], Output = AtomSymbol, Error = NomError<&'inp [u8]>> {
     let allow_named_isotopes = flags.contains(CtabParseFlags::NAMED_ISOTOPES);
     move |input: &'inp [u8]| {
-        let (remaining, symbol) = fixed_width_partial(
-            3,
-            move |s: &'inp [u8]| {
-                let s = s.trim_ascii();
-                Element::from_symbol_bytes(s)
-                    .map(AtomSymbol::Element)
-                    .or_else(|| {
-                        allow_named_isotopes
-                            .then(|| NamedIsotope::from_symbol_bytes(s))
-                            .flatten()
-                            .map(AtomSymbol::NamedIsotope)
-                    })
-                    .ok_or(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
-                    .map(|symbol| (&b""[..], symbol))
-            },
-            true,
+        map_res(
+            fixed_width_partial(
+                3,
+                move |s: &'inp [u8]| {
+                    let s = s.trim_ascii();
+                    Element::from_symbol_bytes(s)
+                        .map(AtomSymbol::Element)
+                        .or_else(|| {
+                            allow_named_isotopes
+                                .then(|| NamedIsotope::from_symbol_bytes(s))
+                                .flatten()
+                                .map(AtomSymbol::NamedIsotope)
+                        })
+                        .ok_or(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
+                        .map(|symbol| (&b""[..], symbol))
+                },
+                true,
+            ),
+            move |symbol| symbol.ok_or(NomError::new(input, NomErrorKind::MapRes)),
         )
-        .parse(input)?;
-
-        symbol
-            .ok_or(Err::Error(NomError::new(input, NomErrorKind::Eof)))
-            .map(|symbol| (remaining, symbol))
+        .parse(input)
     }
 }
 
@@ -288,6 +287,7 @@ fn extended_atom_symbol<'inp>(
     let allow_named_isotopes = flags.contains(CtabParseFlags::NAMED_ISOTOPES);
     let allow_pseudoatoms = flags.contains(CtabParseFlags::PSEUDOATOMS);
     move |input: &'inp [u8]| {
+        map_res(
         fixed_width_partial(
             3,
             move |s: &'inp [u8]| {
@@ -317,7 +317,7 @@ fn extended_atom_symbol<'inp>(
                             }
                         }
                         b"L" => return Ok((&b""[..], AtomSymbol::AtomList(AtomList::empty()))),
-                        _ => {}
+                        _ => {} // Fall through
                     }
                 }
                 if allow_rgroups {
@@ -348,12 +348,9 @@ fn extended_atom_symbol<'inp>(
                 Err(Err::Error(NomError::new(s, NomErrorKind::MapRes)))
             },
             true,
-        )
-        .parse(input)
-        .and_then(|(remaining, symbol)| match symbol {
-            Some(symbol) => Ok((remaining, symbol)),
-            None => Err(Err::Error(NomError::new(input, NomErrorKind::Eof))),
-        })
+        ),
+        move |symbol| symbol.ok_or(NomError::new(input, NomErrorKind::MapRes)),
+    ).parse(input)
     }
 }
 
@@ -372,8 +369,6 @@ fn atom_input69<'inp>(
     input: &'inp [u8],
     flags: CtabParseFlags,
 ) -> IResult<&'inp [u8], (Atom, Point3D), NomError<&'inp [u8]>> {
-    println!("atom_input69 flags: {}", flags);
-
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let atom_map_hcount_fields = flags.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS);
@@ -394,8 +389,8 @@ fn atom_input69<'inp>(
         atom_map_hcount_fields,
         fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
     );
-    let num1 = if atom_map_hcount_fields { 1 } else { 2 };
-    let extended1 = fixed_width_unused_n(num1, 3, false);
+    let count1 = if atom_map_hcount_fields { 1 } else { 2 };
+    let extended1 = fixed_width_unused_n(count1, 3, false);
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
@@ -405,11 +400,11 @@ fn atom_input69<'inp>(
         atom_map_hcount_fields,
         fixed_width_int_in_range_opt::<u32, _>(3, 1..=999),
     );
-    let num3 = input
+    let count3 = input
         .len()
         .saturating_sub(if atom_map_hcount_fields { 63 } else { 60 })
         / 3;
-    let extended3 = fixed_width_unused_n(num3, 3, false);
+    let extended3 = fixed_width_unused_n(count3, 3, false);
 
     map(
         (
@@ -491,14 +486,14 @@ fn atom_input60<'inp>(
         atom_map_hcount_fields,
         fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
     );
-    let num1 = if atom_map_hcount_fields { 1 } else { 2 };
-    let extended1 = fixed_width_unused_n(num1, 3, false);
+    let count1 = if atom_map_hcount_fields { 1 } else { 2 };
+    let extended1 = fixed_width_unused_n(count1, 3, false);
     let valence = map_res(
         fixed_width_int_in_range::<u8, _>(3, 0..=15),
         convert_atom_valence_code,
     );
-    let num2 = input.len().saturating_sub(51) / 3;
-    let unused2 = fixed_width_unused_n(num2, 3, skip_unused_fields);
+    let count2 = input.len().saturating_sub(51) / 3;
+    let unused2 = fixed_width_unused_n(count2, 3, skip_unused_fields);
 
     map(
         (
@@ -570,11 +565,11 @@ fn atom_input48<'inp>(
         atom_map_hcount_fields,
         fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
     );
-    let num1 = input
+    let count1 = input
         .len()
         .saturating_sub(if atom_map_hcount_fields { 45 } else { 42 })
         / 3;
-    let extended1 = fixed_width_unused_n(num1, 3, false);
+    let extended1 = fixed_width_unused_n(count1, 3, false);
 
     map(
         (

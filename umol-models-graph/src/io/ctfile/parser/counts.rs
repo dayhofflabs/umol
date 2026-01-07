@@ -1,15 +1,39 @@
 //! Counts line parser for CTab files.
 
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take};
+use nom::bytes::complete::tag;
 use nom::character::complete::space0;
-use nom::combinator::{map, opt, value};
+use nom::combinator::{all_consuming, map, opt, value};
 use nom::error::Error as NomError;
-use nom::sequence::{delimited, preceded, terminated};
-use nom::Parser;
+use nom::sequence::{delimited, terminated};
+use nom::{Err, Parser};
 
-use super::utils::{fixed_width_int, fixed_width_unused_n};
+use super::utils::{fixed_width_int, fixed_width_unused_n, LinesWithOffsetExt};
 use crate::io::ctfile::config::CtabParseFlags;
+use crate::io::ctfile::error::ParseError;
+use crate::io::ctfile::parser::utils::{fixed_width_int_in_range, fixed_width_unused};
+
+/// Parse counts block
+pub(super) fn counts_block<'inp>(
+    line_offset: u32,
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (Counts, u32), Error = ParseError> + use<'inp> {
+    move |input: &'inp [u8]| {
+        let (line, byte_len) = input.lines_with_offset().next().ok_or_else(|| {
+            Err::Error(ParseError::UnexpectedEof {
+                line: line_offset,
+                block: "counts",
+            })
+        })?;
+
+        let (_, counts) = all_consuming(terminated(counts_input(flags), space0))
+            .parse(line)
+            .map_err(|e| Err::Error(ParseError::counts_from_nom(e, line_offset)))?;
+
+        let remaining = &input[byte_len..];
+        Ok((remaining, (counts, line_offset + 1)))
+    }
+}
 
 /// Parse counts line (39 characters wide)
 /// aaabbblllfffcccsssxxxrrrpppiiimmmvvvvvv
@@ -21,48 +45,43 @@ use crate::io::ctfile::config::CtabParseFlags;
 /// | aaa     | number of atoms            | >0         | Generic |
 /// | bbb     | number of bonds            | >=0        | Generic |
 /// | lll     | number of atom lists       | 0..=30     | Generic |
+/// | fff     | obsolete                   | -          | Generic |
 /// | ccc     | chiral flag                | 0, 1       | Generic |
-/// | sss     | number of stext entries    | >=0        | Generic |
-/// | mmm     | number of properties lines | >=0        | Generic |
+/// | sss     | stext entries (unused)     | >=0        | Generic |
+/// | xxx     | obsolete                   | -          | Generic |
+/// | rrr     | obsolete                   | -          | Generic |
+/// | ppp     | obsolete                   | -          | Generic |
+/// | iii     | obsolete                   | -          | Generic |
+/// | mmm     | properties lines (unused)  | >=0        | Generic |
 /// | vvvvvvv | version stamp              | V2000      | Generic |
 /// ---------------------------------------------------------------
 ///
 pub fn counts_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = Counts, Error = NomError<&'inp [u8]>> + use<'inp> {
-    let skip_unused = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
+    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
-    terminated(
-        map(
-            (
-                fixed_width_int::<u32>(3),
-                fixed_width_int::<u32>(3),
-                fixed_width_int::<u32>(3),
-                preceded(take(3usize), fixed_width_int::<u32>(3)),
-                fixed_width_int::<u32>(3),
-                delimited(
-                    fixed_width_unused_n(4, 3, skip_unused),
+    map(
+        (
+            fixed_width_int::<u32>(3),
+            fixed_width_int::<u32>(3),
+            fixed_width_int::<u32>(3),
+            delimited(
+                fixed_width_unused(3, skip_unused_fields),
+                fixed_width_int_in_range::<u8, _>(3, 0..=1),
+                (
+                    fixed_width_unused_n(5, 3, skip_unused_fields),
                     fixed_width_int::<u32>(3),
                     version(no_v2000_end_tags),
                 ),
             ),
-            |(
-                atom_count,
-                bond_count,
-                atom_list_count,
-                chiral_flag,
-                stext_entry_count,
-                properties_lines,
-            )| Counts {
-                atom_count,
-                bond_count,
-                atom_list_count,
-                chiral_flag,
-                stext_entry_count,
-                properties_lines,
-            },
         ),
-        space0,
+        |(atom_count, bond_count, atom_list_count, chiral_flag)| Counts {
+            atom_count,
+            bond_count,
+            atom_list_count,
+            chiral_flag: chiral_flag != 0,
+        },
     )
 }
 
@@ -82,88 +101,155 @@ fn version<'inp>(
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Counts {
-    pub atom_count: u32,      // 'aaa' - number of atoms (max 255)
-    pub bond_count: u32,      // 'bbb' - number of bonds (max 255)
-    pub atom_list_count: u32, // 'lll' - number of atom lists (max 30)
-    // fff is obsolete, skipping
-    pub chiral_flag: u32,       // 'ccc' - chiral flag (0=not chiral, 1=chiral)
-    pub stext_entry_count: u32, // 'sss' - number of stext entries
-    // xxx is obsolete, skipping
-    // rrr is obsolete, skipping
-    // ppp is obsolete, skipping
-    // iii is obsolete, skipping
-    pub properties_lines: u32, // 'mmm' - number of additional properties lines
-                               // 'vvvvvv' - version stamp (V2000), fixed string, skipping
+    pub atom_count: u32,
+    pub bond_count: u32,
+    pub atom_list_count: u32,
+    pub chiral_flag: bool,
 }
 
 #[cfg(test)]
 mod tests {
-    use nom::combinator::all_consuming;
+    use bstr::ByteSlice;
     use nom::error::ErrorKind as NomErrorKind;
     use nom::Err;
+    use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
 
     #[rstest]
-    #[case(b"  6  5  0  0  1                 3 V2000", "counts",
-      Counts {atom_count: 6, bond_count: 5, atom_list_count: 0, chiral_flag: 1, stext_entry_count: 0, properties_lines: 3})]
-    #[case(b"  1  0  0  0  0  0  0  0  0  0999 V2000", "zeroes, 999 properties",
-      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 999})]
-    #[case(b"  1  0  0  0  0  0  0  0  0  0000 V2000    ", "padded",
-      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
-    fn test_counts_input(#[case] input: &[u8], #[case] desc: &str, #[case] expected: Counts) {
-        let res = all_consuming(counts_input(CtabParseFlags::STRICT)).parse(input);
-        assert!(res.is_ok(), "{} should have succeeded", desc);
-        let (remaining, counts) = res.unwrap();
+    #[case::zeroes(b"  0  0  0  0  0  0  0  0  0  0  0 V2000",
+      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
+    #[case::padded_newline(b"  1  0  0  0  0  0  0  0  0  0  0 V2000    \n",
+      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
+    #[case::padded_crlf(b"  6  5  1     1                   V2000\r\n",
+      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: true})]
+    #[case::properties_999(b"  6  5  1     1               999 V2000\n",
+      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: true})]
+    #[case::no_terminator(b"  1  0  0  0  0  0  0  0  0  0  0 V2000",
+      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
+    #[case::tag_only(b"                                  V2000\n",
+      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
+    #[case::chiral(b"  1  0  0  0  1  0  0  0  0  0  0 V2000",
+      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: true})]
+    #[case::invalid_unused(b"  4  2  0     0  1                V2000",
+      Counts {atom_count: 4, bond_count: 2, atom_list_count: 0, chiral_flag: false})]
+    fn test_counts_block(#[case] input: &[u8], #[case] expected: Counts) {
+        let res = counts_block(0, CtabParseFlags::BASIC).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_ok(), "{:?} should have succeeded", input_str);
+        let (remaining, (counts, line_offset)) = res.unwrap();
         assert!(
             remaining.is_empty(),
-            "{} should have consumed all input",
-            desc
+            "{:?} should have consumed all input",
+            input_str
         );
-        assert_eq!(counts, expected, "{} should have parsed correctly", desc);
+        assert_eq!(
+            counts, expected,
+            "{:?} should have parsed correctly",
+            input_str
+        );
+        assert_eq!(
+            line_offset, 1,
+            "{:?} should have incremented line offset",
+            input_str
+        );
     }
 
     #[rstest]
-    #[case(b" 28 34  0  0  0  0  0  0  0  0  0", "no V2000 tag",
-      Counts {atom_count: 28, bond_count: 34, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
-    #[case(b"                                                                     ", "len 69, blank",
-      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: 0, stext_entry_count: 0, properties_lines: 0})]
-    fn test_counts_input_no_v2000_tag(
-        #[case] input: &[u8],
-        #[case] desc: &str,
-        #[case] expected: Counts,
-    ) {
-        let res = all_consuming(counts_input(CtabParseFlags::NO_V2000_END_TAGS)).parse(input);
-        assert!(res.is_ok(), "{} should have succeeded", desc);
+    #[case::zeroes(b"  0  0  0  0  0  0  0  0  0  0  0 V2000",
+      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
+    #[case::atom_count(b"  1  0  0  0  0  0  0  0  0  0  0 V2000",
+      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
+    #[case::properties_999(b"  6  5  1     1               999 V2000",
+      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: true})]
+    #[case::tag_only(b"                                  V2000",
+      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
+    #[case::blanks(b"  6  5  1                         V2000",
+      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: false})]
+    #[case::chiral(b"  1  0  0  0  1  0  0  0  0  0  0 V2000",
+      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: true})]
+    #[case::invalid_unused(b"  4  2  0     0  1                V2000",
+      Counts {atom_count: 4, bond_count: 2, atom_list_count: 0, chiral_flag: false})]
+    fn test_counts_input(#[case] input: &[u8], #[case] expected: Counts) {
+        let res = counts_input(CtabParseFlags::BASIC).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_ok(), "{:?} should have succeeded", input_str);
         let (remaining, counts) = res.unwrap();
         assert!(
             remaining.is_empty(),
-            "{} should have consumed all input",
-            desc
+            "{:?} should have consumed all input",
+            input_str
         );
-        assert_eq!(counts, expected, "{} should have parsed correctly", desc);
+        assert_eq!(
+            counts, expected,
+            "{:?} should have parsed correctly",
+            input_str
+        );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(b"  4  2  0     0  0            999 V1000", "invalid version", NomErrorKind::Tag)]
-    #[case(b"  4  2  0     0  0            ", "too short", NomErrorKind::Tag)]
-    #[case(b" 1A  2  0     0  0            999 V2000", "non-numeric atom", NomErrorKind::Eof)]
-    #[case(b"  4 AA  0     0  0            999 V2000", "non-numeric bond", NomErrorKind::Digit)]
-    fn test_counts_input_invalid(
-        #[case] input: &[u8],
-        #[case] desc: &str,
-        #[case] expected_kind: NomErrorKind,
-    ) {
+    #[case::empty(b"                                       \n", NomErrorKind::Tag)]
+    #[case::invalid_version(b"  4  2  0     0                   V1000", NomErrorKind::Tag)]
+    #[case::len_9_too_short(b"  4  2  0", NomErrorKind::Eof)]
+    #[case::len_32_too_short(b"  4  2  0     0                 ", NomErrorKind::Tag)]
+    #[case::negative_atom_count(b" -1  2  0     0                   V2000", NomErrorKind::Digit)]
+    #[case::non_numeric_atom_count(b"  a  2  0     0                   V2000", NomErrorKind::Digit)]
+    #[case::trailing_chars_atom_count(b" 1a  2  0     0                   V2000", NomErrorKind::Eof)]
+    #[case::negative_bond_count(b"  4 -2  0     0                   V2000", NomErrorKind::Digit)]
+    #[case::non_numeric_bond_count(b"  4  a  0     0                   V2000", NomErrorKind::Digit)]
+    #[case::non_numeric_atom_list_count(b"  4  2  a     0                   V2000", NomErrorKind::Digit)]
+    #[case::chiral_flag_out_of_range(b"  1  0  0  0  2  0  0  0  0  0  0 V2000", NomErrorKind::Verify)]    
+    #[case::non_numeric_chiral_flag(b"  4  2  0     a                   V2000", NomErrorKind::Digit)]
+    #[case::non_zero_unused_sss(b"  4  2  0     0  1                V2000", NomErrorKind::Verify)]
+    #[case::non_numeric_unused(b"  4  2  0     0  a                V2000", NomErrorKind::Verify)]
+    #[case::non_numeric_properties(b"  4  2  0     0  1                a V2000", NomErrorKind::Verify)]
+    fn test_counts_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
         let res = counts_input(CtabParseFlags::STRICT).parse(input);
-        assert!(res.is_err(), "{} should have failed", desc);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_err(), "{:?} should have failed", input_str);
         assert!(
             matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-            "Mismatched error kind for {}, expected {:?}, got {}",
-            desc,
+            "{:?} should have failed with error kind {:?}, got {:?}",
+            input_str,
             expected_kind,
-            res.clone().unwrap_err().map(|e| e.code),
+            res.clone().unwrap_err().map(|e| e.code)
+        );
+    }
+
+    #[rstest]
+    #[case::invalid_unused(b"  4  2  0     0  1                V2000", NomErrorKind::Verify)]
+    fn test_counts_input_strict_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+        let res = counts_input(CtabParseFlags::STRICT).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_err(), "{:?} should have failed", input_str);
+        assert!(
+            matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "{:?} should have failed with error kind {:?}, got {:?}",
+            input_str,
+            NomErrorKind::Verify,
+            res.clone().unwrap_err().map(|e| e.code)
+        );
+    }
+
+    #[rstest]
+    #[case::no_v2000_tag(b" 28 34  0  0  0  0  0  0  0  0  0",
+      Counts {atom_count: 28, bond_count: 34, atom_list_count: 0, chiral_flag: false})]
+    fn test_counts_input_no_v2000_tag(#[case] input: &[u8], #[case] expected: Counts) {
+        let res = counts_input(CtabParseFlags::NO_V2000_END_TAGS).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_ok(), "{:?} should have succeeded", input_str);
+        let (remaining, counts) = res.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{:?} should have consumed all input",
+            input_str
+        );
+        assert_eq!(
+            counts, expected,
+            "{:?} should have parsed correctly",
+            input_str
         );
     }
 }

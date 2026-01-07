@@ -1,27 +1,26 @@
 //! CTFile format parsers (CTAB, MOL, SDF).
 //!
-//! This module provides the main entry points for parsing Connection Table formats.
+//! This module provides the main entry points for parsing Connection Table (MDL) formats.
 
 use std::borrow::Cow;
 
-use bstr::{join, ByteSlice};
+use bstr::ByteSlice;
 use indexmap::IndexMap;
-use nom::bytes::complete::{is_not, tag};
-use nom::character::complete::{line_ending, multispace0};
-use nom::combinator::{all_consuming, map_parser, opt};
+use nom::character::complete::multispace0;
+use nom::combinator::opt;
 use nom::sequence::terminated;
-use nom::{Err as NomErr, Parser};
+use nom::{Err, Parser};
 
 use self::accumulator::MoleculeProperties;
 use self::atom::{atom_block, extended_atom_block};
 pub use self::atom::{atom_input, extended_atom_input}; // NOTE: Re-exported for benchmarks
 use self::bond::{bond_block, extended_bond_block};
 pub use self::bond::{bond_input, extended_bond_input}; // NOTE: Re-exported for benchmarks
-pub use self::counts::counts_input;
-use self::counts::Counts;
+use self::counts::counts_block;
 use self::header::header_block;
+use self::legacy_atom_list::legacy_atom_list_block;
 pub use self::legacy_atom_list::legacy_atom_list_input; // NOTE: Re-exported for benchmarks
-use self::properties::{atom_alias_input, PropertyEntries};
+use self::properties::{extended_properties_block, properties_block, PropertyEntries};
 pub use self::properties::{extended_property_input, property_input}; // NOTE: Re-exported for benchmarks
 use self::sdf_data::{sdf_data_block, sdf_delimiter};
 use super::config::{CtabParseFlags, CtfileIoConfig};
@@ -48,12 +47,11 @@ mod utils;
 
 /// Parse CTAB block (basic parser, optimized for performance, basic molecules only)
 ///
-/// This parser is optimized for basic molecules without query features.
-/// It will fail if the CTAB contains query atoms, query bonds, or other advanced features.
+/// This parser is optimized for basic molecules. For extended molecules, use extended_ctab_block.
 pub fn ctab_block<'inp>(
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = Molecule, Error = ParseError> + use<'inp> {
+) -> impl Parser<&'inp [u8], Output = (Molecule, u32), Error = ParseError> + use<'inp> {
     debug_assert!(
         CtabParseFlags::BASIC_MAX.contains(flags),
         "flags must be a subset of BASIC_MAX"
@@ -67,7 +65,7 @@ pub fn ctab_block<'inp>(
         let atom_list_count = counts.atom_list_count;
 
         if !legacy_atom_lists && atom_list_count > 0 {
-            return Err(NomErr::Error(ParseError::UnsupportedLegacyAtomList {
+            return Err(Err::Error(ParseError::UnsupportedLegacyAtomList {
                 line: line_offset + atom_count + bond_count,
             }));
         }
@@ -90,22 +88,26 @@ pub fn ctab_block<'inp>(
             properties
         };
 
-        let (remaining, _) = end_block(line_offset, flags).parse(remaining)?;
-
-        let molecule = build_molecule(atoms, bonds, positions, properties, flags)
-            .map_err(|e| NomErr::Error(e))?;
-        Ok((remaining, molecule))
+        let molecule = build_molecule(
+            atoms,
+            bonds,
+            positions,
+            properties,
+            counts.chiral_flag,
+            flags,
+        )
+        .map_err(|e| Err::Error(e))?;
+        Ok((remaining, (molecule, line_offset)))
     }
 }
 
 /// Parse CTAB block (general parser, handles all features including queries)
 ///
-/// This parser handles all CTAB features including query atoms, query bonds,
-/// R-groups, S-groups, and all property lines.
+/// This parser handles extended molecules. For basic molecules, use ctab_block.
 pub fn extended_ctab_block<'inp>(
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = ExtendedMolecule, Error = ParseError> + use<'inp> {
+) -> impl Parser<&'inp [u8], Output = (ExtendedMolecule, u32), Error = ParseError> + use<'inp> {
     let legacy_atom_lists = flags.contains(CtabParseFlags::LEGACY_ATOM_LISTS);
 
     move |input: &'inp [u8]| {
@@ -115,7 +117,7 @@ pub fn extended_ctab_block<'inp>(
         let atom_list_count = counts.atom_list_count;
 
         if !legacy_atom_lists && atom_list_count > 0 {
-            return Err(NomErr::Error(ParseError::UnsupportedLegacyAtomList {
+            return Err(Err::Error(ParseError::UnsupportedLegacyAtomList {
                 line: line_offset + atom_count + bond_count,
             }));
         }
@@ -141,199 +143,16 @@ pub fn extended_ctab_block<'inp>(
             properties
         };
 
-        let (remaining, _) = end_block(line_offset, flags).parse(remaining)?;
-
         let extended = build_extended_molecule(
             atoms,
             bonds,
             positions,
             properties,
+            counts.chiral_flag,
             flags,
         )
-        .map_err(|e| NomErr::Error(e))?;
-        Ok((remaining, extended))
-    }
-}
-
-/// Parse counts block
-fn counts_block<'inp>(
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Counts, u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let (remaining, counts) =
-            map_parser(terminated(is_not("\r\n"), line_ending), counts_input(flags))
-                .parse(input)
-                .map_err(|e| NomErr::Error(ParseError::counts_from_nom(e, line_offset)))?;
-
-        Ok((remaining, (counts, line_offset + 1)))
-    }
-}
-
-// Parse legacy atom list block
-fn legacy_atom_list_block<'inp>(
-    atom_list_count: u32,
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let mut properties = Vec::with_capacity(atom_list_count as usize);
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
-
-        for i in 0..atom_list_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                NomErr::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
-                    block: "legacy atom list",
-                })
-            })?;
-
-            let (_, property) = all_consuming(legacy_atom_list_input(flags))
-                .parse(line)
-                .map_err(|e| {
-                    NomErr::Error(ParseError::legacy_atom_list_from_nom(
-                        e,
-                        line_offset + i,
-                        line,
-                    ))
-                })?;
-            properties.push(property);
-            offset += line.len();
-        }
-
-        let remaining = &input[offset..];
-        Ok((remaining, (properties, line_offset + atom_list_count)))
-    }
-}
-
-/// Parse properties block (basic properties only)
-fn properties_block<'inp>(
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let mut properties = Vec::new();
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
-        let mut line_count = 0;
-
-        while let Some(line) = lines_iter.next() {
-            if line.starts_with(b"M  END") {
-                // Include M  END line in remaining for termination
-                break;
-            }
-
-            // Handle atom alias (two-line property)
-            if line.starts_with(b"A  ") {
-                if let Some(next_line) = lines_iter.next() {
-                    let combined_line = join(b"\n", [line, next_line]);
-                    let line_bytes = line.len() + next_line.len();
-
-                    if let Ok((_, property)) =
-                        all_consuming(atom_alias_input()).parse(&combined_line)
-                    {
-                        properties.push(property);
-                        offset += line_bytes;
-                        line_count += 2;
-                    } else {
-                        break; // Backtrack
-                    };
-                } else {
-                    break; // Incomplete atom alias
-                }
-            } else {
-                match all_consuming(property_input(flags)).parse(line) {
-                    Ok((_, property)) => {
-                        properties.push(property);
-                        offset += line.len();
-                        line_count += 1;
-                    }
-                    Err(_) => {
-                        return Err(NomErr::Error(ParseError::InvalidPropertyLine {
-                            line: line_offset + line_count,
-                            col: 0,
-                        }));
-                    }
-                }
-            }
-        }
-
-        let remaining = &input[offset..];
-        Ok((remaining, (properties, line_offset + line_count)))
-    }
-}
-
-/// Parse extended properties block
-fn extended_properties_block<'inp>(
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let mut properties = Vec::new();
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
-        let mut line_count = 0;
-
-        while let Some(line) = lines_iter.next() {
-            if line.starts_with(b"M  END") {
-                break; // Include M  END line in remaining for termination
-            }
-
-            // Handle atom alias (two-line property)
-            if line.starts_with(b"A  ") {
-                if let Some(next_line) = lines_iter.next() {
-                    let combined_line = join(b"\n", [line, next_line]);
-                    let line_bytes = line.len() + next_line.len();
-
-                    if let Ok((_, property)) =
-                        all_consuming(atom_alias_input()).parse(&combined_line)
-                    {
-                        properties.push(property);
-                        offset += line_bytes;
-                        line_count += 2;
-                    } else {
-                        break; // Backtrack
-                    };
-                } else {
-                    break; // Incomplete atom alias
-                }
-            } else if let Ok((_, property)) =
-                all_consuming(extended_property_input(flags)).parse(line)
-            {
-                properties.push(property);
-                offset += line.len();
-                line_count += 1;
-            } else {
-                break; // Backtrack
-            }
-        }
-
-        let remaining = &input[offset..];
-        Ok((remaining, (properties, line_offset + line_count)))
-    }
-}
-
-/// Parse end block (M END line)
-/// Accepts "M  END" followed by optional whitespace, or nothing.
-fn end_block<'inp>(
-    line_offset: u32,
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = ((), u32), Error = ParseError> + use<'inp> {
-    move |input: &'inp [u8]| {
-        let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
-        if no_v2000_end_tags {
-            let (remaining, found) = opt(terminated(tag("M  END"), multispace0))
-                .parse(input)
-                .map_err(|e| NomErr::Error(ParseError::m_end_from_nom(e, line_offset + 1)))?;
-            let line_count = if found.is_some() { 1 } else { 0 };
-            return Ok((remaining, ((), line_offset + line_count)));
-        } else {
-            let (remaining, _) = terminated(tag("M  END"), multispace0)
-                .parse(input)
-                .map_err(|e| NomErr::Error(ParseError::m_end_from_nom(e, line_offset + 1)))?;
-            return Ok((remaining, ((), line_offset + 1)));
-        }
+        .map_err(|e| Err::Error(e))?;
+        Ok((remaining, (extended, line_offset)))
     }
 }
 
@@ -343,6 +162,8 @@ fn build_molecule(
     bonds: Vec<(usize, usize, Bond)>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
+    // TODO: Add chiral flag to molecule
+    _chiral_flag: bool,
     flags: CtabParseFlags,
 ) -> Result<Molecule, ParseError> {
     let bonds: Vec<Bond> = bonds
@@ -378,6 +199,8 @@ fn build_extended_molecule(
     bonds: Vec<(usize, usize, ExtendedBond)>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
+    // TODO: Add chiral flag to extended molecule
+    _chiral_flag: bool,
     flags: CtabParseFlags,
 ) -> Result<ExtendedMolecule, ParseError> {
     let bonds: Vec<ExtendedBond> = bonds
@@ -457,11 +280,10 @@ pub fn parse_mol_bytes_with(input: &[u8], config: &CtfileIoConfig) -> Result<Mol
         Cow::Borrowed(input)
     };
 
-    let (remaining, comments) = header_block()
-        .parse(&*data)
-        .map_err(|e| ParseError::header_from_nom(e, 0))?;
+    let (remaining, (comments, line_offset)) = header_block(0)(&*data)?;
 
-    let (_, mut molecule) = ctab_block(3, flags).parse(remaining)?;
+    let (_, (mut molecule, _line_offset)) =
+        terminated(ctab_block(line_offset, flags), multispace0).parse(remaining)?;
 
     molecule.comments = comments;
 
@@ -470,8 +292,8 @@ pub fn parse_mol_bytes_with(input: &[u8], config: &CtfileIoConfig) -> Result<Mol
 
 /// Parse MOL bytes into a Molecule
 ///
-/// Parses MOL file with basic flags. Returns error if molecule contains
-/// extended atom/bond types (use parse_extended_mol_bytes for those).
+/// Parses MOL file with basic flags. For extended molecules, use parse_extended_mol_bytes.
+///
 pub fn parse_mol_bytes(input: &[u8]) -> Result<Molecule, ParseError> {
     let config = CtfileIoConfig::basic();
     parse_mol_bytes_with(input, &config)
@@ -495,6 +317,8 @@ pub fn parse_extended_mol_bytes_with(
     input: &[u8],
     config: &CtfileIoConfig,
 ) -> Result<ExtendedMolecule, ParseError> {
+    use nom::character::complete::multispace0;
+
     let flags = config.parse_flags;
 
     let data: Cow<'_, [u8]> = if flags.contains(CtabParseFlags::UNICODE) {
@@ -503,12 +327,10 @@ pub fn parse_extended_mol_bytes_with(
         Cow::Borrowed(input)
     };
 
-    let (remaining, comments) = header_block()
-        .parse(&*data)
-        .map_err(|e| ParseError::header_from_nom(e, 0))?;
+    let (remaining, (comments, line_offset)) = header_block(0)(&*data)?;
 
-    let (_, mut molecule) = extended_ctab_block(3, flags).parse(remaining)?;
-
+    let (_, (mut molecule, _line_offset)) =
+        terminated(extended_ctab_block(line_offset, flags), multispace0).parse(remaining)?;
     molecule.comments = comments;
 
     Ok(molecule)
@@ -535,6 +357,8 @@ pub fn parse_extended_mol(input: &str) -> Result<ExtendedMolecule, ParseError> {
     parse_extended_mol_bytes(input.as_bytes())
 }
 
+/// TODO: Review the SDF related functions
+
 /// Parse single SDF compound into Molecule (basic, optimized)
 fn parse_sdf_molecule<'inp>(
     input: &'inp [u8],
@@ -543,22 +367,18 @@ fn parse_sdf_molecule<'inp>(
 ) -> Result<(&'inp [u8], Molecule, u32), ParseError> {
     let flags = config.parse_flags;
 
-    let (remaining, comments) = header_block()
-        .parse(input)
-        .map_err(|e| ParseError::header_from_nom(e, line_offset))?;
+    let (remaining, (comments, header_end_offset)) = header_block(line_offset)(input)?;
 
-    let (remaining, mut molecule) = ctab_block(line_offset + 3, flags).parse(remaining)?;
-
-    let consumed_for_mol = input.len() - remaining.len();
-    let mol_lines = input[..consumed_for_mol].lines_with_terminator().count() as u32;
+    let (remaining, (mut molecule, ctab_end_offset)) =
+        ctab_block(header_end_offset, flags).parse(remaining)?;
 
     let (remaining, data_fields) = sdf_data_block()
         .parse(remaining)
-        .map_err(|e| ParseError::sdf_data_from_nom(e, line_offset + mol_lines))?;
+        .map_err(|e| ParseError::sdf_data_from_nom(e, ctab_end_offset))?;
 
     let (remaining, _) = opt(sdf_delimiter())
         .parse(remaining)
-        .map_err(|e| ParseError::delimiter_from_nom(e, line_offset + mol_lines))?;
+        .map_err(|e| ParseError::delimiter_from_nom(e, ctab_end_offset))?;
 
     molecule.comments = comments;
     molecule.properties = data_fields;
@@ -577,22 +397,18 @@ fn parse_sdf_extended_molecule<'inp>(
 ) -> Result<(&'inp [u8], ExtendedMolecule, u32), ParseError> {
     let flags = config.parse_flags;
 
-    let (remaining, comments) = header_block()
-        .parse(input)
-        .map_err(|e| ParseError::header_from_nom(e, line_offset))?;
+    let (remaining, (comments, header_end_offset)) = header_block(line_offset)(input)?;
 
-    let (remaining, mut molecule) = extended_ctab_block(line_offset + 3, flags).parse(remaining)?;
-
-    let consumed_for_mol = input.len() - remaining.len();
-    let mol_lines = input[..consumed_for_mol].lines_with_terminator().count() as u32;
+    let (remaining, (mut molecule, ctab_end_offset)) =
+        extended_ctab_block(header_end_offset, flags).parse(remaining)?;
 
     let (remaining, data_fields) = sdf_data_block()
         .parse(remaining)
-        .map_err(|e| ParseError::sdf_data_from_nom(e, line_offset + mol_lines))?;
+        .map_err(|e| ParseError::sdf_data_from_nom(e, ctab_end_offset))?;
 
     let (remaining, _) = opt(sdf_delimiter())
         .parse(remaining)
-        .map_err(|e| ParseError::delimiter_from_nom(e, line_offset + mol_lines))?;
+        .map_err(|e| ParseError::delimiter_from_nom(e, ctab_end_offset))?;
 
     molecule.comments = comments;
     molecule.properties = data_fields;
@@ -814,6 +630,8 @@ pub fn parse_extended_sdf_iter(input: &[u8]) -> ExtendedSdfIter<'_> {
 pub fn parse_extended_sdf_iter_with(input: &[u8], config: CtfileIoConfig) -> ExtendedSdfIter<'_> {
     ExtendedSdfIter::new(input, config)
 }
+
+/// END: TODO: Review the SDF related functions
 
 #[cfg(test)]
 mod tests;

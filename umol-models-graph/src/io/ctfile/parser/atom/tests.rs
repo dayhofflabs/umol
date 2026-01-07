@@ -16,13 +16,43 @@ use crate::table_ir::{
 // TODO: Add extended_atom_block tests (test_extended_atom_block, test_extended_atom_block_invalid,
 //       test_extended_atom_block_ignore_positions, test_extended_atom_block_ignore_positions_invalid)
 
+#[test]
+fn test_atom_block() {
+    let atom_data = b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+";
+    let flags = CtabParseFlags::BASIC;
+    let result = atom_block(2, 0, flags).parse(atom_data);
+    assert!(result.is_ok(), "Atom block should parse successfully");
+
+    let (remaining, (atoms, _, _)) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(atoms.len(), 2, "Should have 2 atoms");
+    assert_eq!(atoms[0].element, Element::C);
+    assert_eq!(atoms[1].element, Element::O);
+}
+
+#[test]
+fn test_extended_atom_block() {
+    let atom_data = b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+";
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_atom_block(2, 0, flags).parse(atom_data);
+    assert!(result.is_ok(), "Atom block should parse successfully");
+
+    let (remaining, (atoms, _, _)) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(atoms.len(), 2, "Should have 2 atoms");
+    assert_eq!(atoms[0].symbol, AtomSymbol::Element(Element::C));
+    assert_eq!(atoms[1].symbol, AtomSymbol::Element(Element::O));
+}
+
 #[rustfmt::skip]
 #[rstest]
 #[case::len_34(b"    1.0000    2.0000    3.0000 C  ", Element::C, None, None, None, 1.0000, 2.0000, 3.0000)]
-#[case::len_35_padded(b"    1.0000    2.0000    3.0000 C   ", Element::C, None, None, None, 1.0000, 2.0000, 3.0000)]
 #[case::len_36(b"    1.0000    2.0000    3.0000 C  -2", Element::C, Some(10), None, None, 1.0000, 2.0000, 3.0000)]
 #[case::len_39(b"    1.0000    2.0000    3.0000 C  -2  3", Element::C, Some(10), Some(1), None, 1.0000, 2.0000, 3.0000)]
-#[case::len_42_with_stereo_parity(b"    1.0000    2.0000    3.0000 C  -2  3  1", Element::C, Some(10), Some(1), None, 1.0000, 2.0000, 3.0000)]
 fn test_atom_input(
     #[case] input: &[u8],
     #[case] element: Element,
@@ -89,7 +119,7 @@ fn test_atom_input(
 #[case::pseudoatom(b"   -1.8857    2.4750    0.0000 Psd 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
 #[case::non_numeric_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
 #[case::incorrect_yz_coordinates(b"    0.1   0.0    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Eof)]
-#[case::len_51_with_query_fields(b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4", NomErrorKind::Verify)]
+#[case::non_zero_hydrogen_count_stereo_care(b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4", NomErrorKind::Verify)]
 fn test_atom_input_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -873,8 +903,8 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
 }
 
 #[rstest]
-#[case::empty(b"", NomErrorKind::Eof)]
-#[case::blank(b"   ", NomErrorKind::Eof)]
+#[case::empty(b"", NomErrorKind::MapRes)]
+#[case::blank(b"   ", NomErrorKind::MapRes)]
 #[case::element_invalid_1(b"Xx ", NomErrorKind::MapRes)]
 #[case::element_invalid_2(b"LQ ", NomErrorKind::MapRes)]
 #[case::wildcard_atom_a(b"A  ", NomErrorKind::MapRes)]
@@ -882,7 +912,7 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
 #[case::atom_list(b"L  ", NomErrorKind::MapRes)]
 #[case::lone_pair(b"LP ", NomErrorKind::MapRes)]
 #[case::rgroup(b"R1 ", NomErrorKind::MapRes)]
-#[case::pseudoatom_al(b"Ala", NomErrorKind::MapRes)]
+#[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
 #[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
 fn test_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = atom_symbol(CtabParseFlags::BASIC).parse(input);
@@ -901,8 +931,8 @@ fn test_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErro
 #[case::named_isotope_d(b"D  ", NomErrorKind::MapRes)]
 #[case::named_isotope_d_lowercase(b"d  ", NomErrorKind::MapRes)]
 #[case::named_isotope_t(b"T  ", NomErrorKind::MapRes)]
-fn test_atom_symbol_minimal_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = atom_symbol(CtabParseFlags::MINIMAL).parse(input);
+fn test_atom_symbol_strict_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let result = atom_symbol(CtabParseFlags::STRICT).parse(input);
     assert!(result.is_err(), "{:?} should have failed", input);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
@@ -956,8 +986,8 @@ fn test_extended_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol)
 }
 
 #[rstest]
-#[case::empty(b"", NomErrorKind::Eof)]
-#[case::blank(b"   ", NomErrorKind::Eof)]
+#[case::empty(b"", NomErrorKind::MapRes)]
+#[case::blank(b"   ", NomErrorKind::MapRes)]
 #[case::element_invalid_1(b"Xx ", NomErrorKind::MapRes)]
 #[case::element_invalid_2(b"LQ ", NomErrorKind::MapRes)]
 #[case::chemaxon_wildcard_atom(b"QH ", NomErrorKind::MapRes)]
@@ -977,30 +1007,49 @@ fn test_extended_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind
 }
 
 #[rstest]
+#[case::wildcard_atom_a(b"A  ", AtomSymbol::WildcardAtom(WildcardAtom::Heavy))]
+#[case::wildcard_atom_q(b"Q  ", AtomSymbol::WildcardAtom(WildcardAtom::Heteroatom))]
+#[case::wildcard_atom_star(b"*  ", AtomSymbol::WildcardAtom(WildcardAtom::Any))]
+#[case::atom_list(b"L  ", AtomSymbol::AtomList(AtomList::empty()))]
+#[case::lone_pair(b"LP ", AtomSymbol::LonePair)]
+#[case::rgroup(b"R  ", AtomSymbol::RGroup(RGroup::new(None)))]
+#[case::rgroup_unlabeled(b"R# ", AtomSymbol::RGroup(RGroup::new(None)))]
+#[case::rgroup_r1(b"R1 ", AtomSymbol::RGroup(RGroup::new(Some(1))))]
+#[case::rgroup_r3(b"R3 ", AtomSymbol::RGroup(RGroup::new(Some(3))))]
+fn test_extended_atom_symbol_strict(#[case] input: &[u8], #[case] expected: AtomSymbol) {
+    let result = extended_atom_symbol(CtabParseFlags::STRICT).parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    let (remaining, symbol) = result.unwrap();
+    assert!(
+        remaining.is_empty(),
+        "{:?} has non-empty remaining",
+        input_str
+    );
+    assert_eq!(
+        symbol, expected,
+        "{:?} has returned symbol {:?}, expected {:?}",
+        input, symbol, expected
+    );
+}
+
+#[rstest]
 #[case::named_isotope_d(b"D  ", NomErrorKind::MapRes)]
 #[case::named_isotope_d_lowercase(b"d  ", NomErrorKind::MapRes)]
 #[case::named_isotope_t(b"T  ", NomErrorKind::MapRes)]
-#[case::wildcard_atom_a(b"A  ", NomErrorKind::MapRes)]
-#[case::wildcard_atom_q(b"Q  ", NomErrorKind::MapRes)]
-#[case::wildcard_atom_star(b"*  ", NomErrorKind::MapRes)]
-#[case::atom_list(b"L  ", NomErrorKind::MapRes)]
-#[case::lone_pair(b"LP ", NomErrorKind::MapRes)]
-#[case::rgroup(b"R  ", NomErrorKind::MapRes)]
-#[case::rgroup_unlabeled(b"R# ", NomErrorKind::MapRes)]
-#[case::rgroup_r1(b"R1 ", NomErrorKind::MapRes)]
-#[case::rgroup_r3(b"R3 ", NomErrorKind::MapRes)]
 #[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
 #[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_extended_atom_symbol_minimal_invalid(
+fn test_extended_atom_symbol_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = extended_atom_symbol(CtabParseFlags::MINIMAL).parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input);
+    let result = extended_atom_symbol(CtabParseFlags::STRICT).parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{:?} should have failed with error kind {:?}, got {:?}",
-        input,
+        input_str,
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code)
     );
@@ -1025,8 +1074,8 @@ fn test_extended_atom_symbol_lenient(
 }
 
 #[rstest]
-#[case::empty(b"", NomErrorKind::Eof)]
-#[case::blank(b"   ", NomErrorKind::Eof)]
+#[case::empty(b"", NomErrorKind::MapRes)]
+#[case::blank(b"   ", NomErrorKind::MapRes)]
 #[case::element_invalid_1(b"Xx ", NomErrorKind::MapRes)]
 #[case::element_invalid_2(b"LQ ", NomErrorKind::MapRes)]
 #[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]

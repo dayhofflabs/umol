@@ -1,0 +1,35 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 305
+expression: results
+---
+expected_category: molecule_lenient
+category: molecule_lenient
+molecule:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 8, col 0"
+molecule_lenient:
+  success: true
+  summary:
+    sum_formula: BN
+    atom_count: 2
+    bond_count: 1
+    property_count: 0
+extended_molecule:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 8, col 0"
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: BN
+    atom_count: 2
+    bond_count: 1
+    extended_atoms: 0
+    extended_bonds: 1
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

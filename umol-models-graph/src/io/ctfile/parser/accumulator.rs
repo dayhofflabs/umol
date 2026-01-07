@@ -11,17 +11,16 @@ type Result<T> = std::result::Result<T, ParseError>;
 
 use super::context::Context;
 use super::convert::{
-    convert_atom_isotope_mass_number, convert_attachment_point_code,
-    convert_extended_bond_type_code, convert_radical_type_code, convert_ring_bond_count_code,
-    convert_substitution_count_code, convert_unsaturated_atom_code,
+    convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
+    convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{PropertyEntries, SGroupDataEntry};
 use crate::table_ir::{
-    AtomList, AtomSymbol, AttachmentPointType, CtfileData, ExtendedMolecule, LinkAtom, RGroup,
-    RGroupOccurrence, RingBondCount, SGroup, SGroupBracketCoords, SGroupConnectingBond,
-    SGroupConnectivity, SGroupData, SGroupDataDisplay, SGroupMultiplier, SGroupSubtype, SGroupType,
-    SubstitutionCount, UnsaturatedAtom,
+    AtomList, AtomSymbol, AttachmentPointType, BondOrder, CtfileData, ExtendedMolecule,
+    LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount, SGroup,
+    SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay,
+    SGroupMultiplier, SGroupSubtype, SGroupType, SubstitutionCount, UnsaturatedAtom,
 };
 
 // Accumulator for properties of a single atom
@@ -47,9 +46,8 @@ pub(super) struct AtomProperties {
 // Accumulator for properties of a single bond
 #[derive(Debug, Default)]
 pub(super) struct BondProperties {
-    pub order_override: Option<u8>,
+    pub order_override: Option<BondOrder>,
 }
-
 // Accumulator for properties of a single R-Group
 #[derive(Debug, Default)]
 pub(super) struct RGroupProperties {
@@ -125,6 +123,7 @@ pub(super) struct MoleculeProperties {
     pub bond_properties: BTreeMap<usize, BondProperties>,
     pub rgroup_properties: BTreeMap<usize, RGroupProperties>,
     pub sgroup_properties: BTreeMap<usize, SGroupProperties>,
+    pub legacy_group_abbreviations: Vec<LegacyGroupAbbreviation>,
 }
 
 impl MoleculeProperties {
@@ -135,6 +134,7 @@ impl MoleculeProperties {
             bond_properties: BTreeMap::new(),
             rgroup_properties: BTreeMap::new(),
             sgroup_properties: BTreeMap::new(),
+            legacy_group_abbreviations: Vec::new(),
         }
     }
 
@@ -148,6 +148,14 @@ impl MoleculeProperties {
             PropertyEntries::AtomAliasEntry(e) => {
                 let props = self.atom_properties.entry(e.atom_index).or_default();
                 props.alias = Some(e.alias);
+            }
+            PropertyEntries::LegacyGroupAbbreviationEntry(e) => {
+                self.legacy_group_abbreviations
+                    .push(LegacyGroupAbbreviation {
+                        atom_index1: e.atom_index1,
+                        atom_index2: e.atom_index2,
+                        label: e.label,
+                    });
             }
             PropertyEntries::AtomValueEntry(e) => {
                 let props = self.atom_properties.entry(e.atom_index).or_default();
@@ -539,7 +547,7 @@ impl MoleculeProperties {
                     props.component_number = Some(entry.component_number);
                 }
             }
-            PropertyEntries::ZeroBondOrderEntries(entries) => {
+            PropertyEntries::BondOrderOverrideEntries(entries) => {
                 for entry in entries {
                     self.bond_properties.insert(
                         entry.bond_index,
@@ -549,7 +557,7 @@ impl MoleculeProperties {
                     );
                 }
             }
-            PropertyEntries::ZeroAtomChargeEntries(entries) => {
+            PropertyEntries::AtomChargeOverrideEntries(entries) => {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
                     props.charge = Some(entry.charge);
@@ -558,10 +566,11 @@ impl MoleculeProperties {
             PropertyEntries::AtomHydrogenCountEntries(entries) => {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
-                    props.hydrogen_count = Some(entry.hydrogen_count);
+                    if entry.hydrogen_count.is_some() {
+                        props.hydrogen_count = entry.hydrogen_count;
+                    }
                 }
             }
-            PropertyEntries::End => {}
         }
         Ok(())
     }
@@ -631,10 +640,10 @@ impl MoleculeProperties {
         Ok(())
     }
 
-    /// Apply all properties to ExtendedMolecule (TableIR type)
+    /// Apply all properties to Molecule
     pub(crate) fn update_molecule(
         &mut self,
-        molecule: &mut crate::table_ir::Molecule,
+        molecule: &mut Molecule,
         flags: CtabParseFlags,
     ) -> Result<()> {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
@@ -669,12 +678,9 @@ impl MoleculeProperties {
 
             // Apply isotope
             if let Some(isotope) = props.isotope_mass {
-                let validated = convert_atom_isotope_mass_number(
-                    atom.element,
-                    isotope,
-                    extended_isotopes,
-                )?;
-                atom.isotope_mass = validated;
+                let mass =
+                    convert_atom_isotope_mass_number(atom.element, isotope, extended_isotopes)?;
+                atom.isotope_mass = mass;
             }
 
             // Apply hydrogen count
@@ -683,15 +689,13 @@ impl MoleculeProperties {
             }
         }
 
-        // Apply bond properties (zero order bonds)
+        // Apply bond properties (bond order override)
         for (&bond_idx, props) in &self.bond_properties {
-            if let Some(order_code) = props.order_override {
-                let extended = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-                let queries = flags.contains(CtabParseFlags::WILDCARDS);
+            if let Some(bo) = props.order_override {
                 let Some(bond) = molecule.bonds.get_mut(bond_idx) else {
                     return Err(ParseError::IndexOutOfBounds(bond_idx));
                 };
-                bond.order = convert_extended_bond_type_code(order_code, extended, queries)?;
+                bond.order = bo;
             }
         }
 
@@ -766,9 +770,10 @@ impl MoleculeProperties {
             // Apply ring bond count
             if let Some(rbc) = props.ring_bond_count {
                 if atom.ring_bond_count.is_some() {
-                    return Err(ParseError::DuplicateProperty(
-                        format!("Ring bond count conflict: existing value for atom {}", atom_idx),
-                    ));
+                    return Err(ParseError::DuplicateProperty(format!(
+                        "Ring bond count conflict: existing value for atom {}",
+                        atom_idx
+                    )));
                 }
                 atom.ring_bond_count = Some(rbc);
             }
@@ -776,9 +781,10 @@ impl MoleculeProperties {
             // Apply substitution count
             if let Some(sub) = props.substitution_count {
                 if atom.substitution_count.is_some() {
-                    return Err(ParseError::DuplicateProperty(
-                        format!("Substitution count conflict: existing value for atom {}", atom_idx),
-                    ));
+                    return Err(ParseError::DuplicateProperty(format!(
+                        "Substitution count conflict: existing value for atom {}",
+                        atom_idx
+                    )));
                 }
                 atom.substitution_count = Some(sub);
             }
@@ -786,9 +792,10 @@ impl MoleculeProperties {
             // Apply unsaturated
             if props.unsaturated.is_some() {
                 if atom.unsaturated.is_some() {
-                    return Err(ParseError::DuplicateProperty(
-                        format!("Unsaturated conflict: existing value for atom {}", atom_idx),
-                    ));
+                    return Err(ParseError::DuplicateProperty(format!(
+                        "Unsaturated conflict: existing value for atom {}",
+                        atom_idx
+                    )));
                 }
                 atom.unsaturated = Some(UnsaturatedAtom);
             }
@@ -796,9 +803,10 @@ impl MoleculeProperties {
             // Apply link atom
             if let Some(link) = props.link_atom {
                 if atom.link_atom.is_some() {
-                    return Err(ParseError::DuplicateProperty(
-                        format!("Link atom conflict: existing value for atom {}", atom_idx),
-                    ));
+                    return Err(ParseError::DuplicateProperty(format!(
+                        "Link atom conflict: existing value for atom {}",
+                        atom_idx
+                    )));
                 }
                 atom.link_atom = Some(link);
             }
@@ -838,9 +846,10 @@ impl MoleculeProperties {
             if let Some(rgroup_label) = props.rgroup_label {
                 // Check for conflicts: can't set RGroup label on AtomList
                 if matches!(atom.symbol, AtomSymbol::AtomList(_)) {
-                    return Err(ParseError::DuplicateProperty(
-                        format!("RGroup label conflict: atom {} already has AtomList", atom_idx),
-                    ));
+                    return Err(ParseError::DuplicateProperty(format!(
+                        "RGroup label conflict: atom {} already has AtomList",
+                        atom_idx
+                    )));
                 }
                 // Check for conflicts: can't change existing RGroup label (but can overwrite None)
                 if let AtomSymbol::RGroup(existing_rgroup) = &atom.symbol {
@@ -865,24 +874,24 @@ impl MoleculeProperties {
 
         // Apply bond properties (zero order bonds)
         for (&bond_idx, props) in &self.bond_properties {
-            if let Some(order_code) = props.order_override {
-                let extended = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-                let queries = flags.contains(CtabParseFlags::WILDCARDS);
+            if let Some(bo) = props.order_override {
                 let Some(bond) = molecule.bonds.get_mut(bond_idx) else {
                     return Err(ParseError::IndexOutOfBounds(bond_idx));
                 };
-                bond.order = convert_extended_bond_type_code(order_code, extended, queries)?;
+                bond.order = bo;
             }
         }
 
         // Initialize ctfile_data if we have any CTFile-specific data
-        if (!self.rgroup_properties.is_empty() || !self.sgroup_properties.is_empty())
+        if (!self.rgroup_properties.is_empty()
+            || !self.sgroup_properties.is_empty()
+            || !self.legacy_group_abbreviations.is_empty())
             && molecule.ctfile_data.is_none()
         {
             molecule.ctfile_data = Some(CtfileData::default());
         }
 
-        // Apply R-group logic
+        // Apply R-group logic and legacy group abbreviations
         if let Some(ref mut ctfile_data) = molecule.ctfile_data {
             for (&rgroup_label, props) in &self.rgroup_properties {
                 let rgroup = RGroup {
@@ -893,6 +902,10 @@ impl MoleculeProperties {
                 };
                 ctfile_data.rgroups.insert(rgroup_label, rgroup);
             }
+            // TODO: Add verifiication for atom indices
+            ctfile_data
+                .legacy_group_abbreviations
+                .append(&mut self.legacy_group_abbreviations);
         }
 
         // Validate and apply S-groups
@@ -904,6 +917,11 @@ impl MoleculeProperties {
 
     fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<()> {
         for (sgroup_index, props) in mem::take(&mut self.sgroup_properties) {
+            debug_assert!(
+                molecule.ctfile_data.is_some(),
+                "ctfile_data should be present"
+            );
+
             let group_type = props
                 .group_type
                 .ok_or(ParseError::SGroupMissingType(sgroup_index))?;
@@ -952,9 +970,6 @@ impl MoleculeProperties {
             }
 
             // Store in ctfile_data
-            if molecule.ctfile_data.is_none() {
-                molecule.ctfile_data = Some(CtfileData::default());
-            }
             molecule
                 .ctfile_data
                 .as_mut()

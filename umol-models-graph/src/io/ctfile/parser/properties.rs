@@ -3,8 +3,8 @@
 use bstr::ByteSlice;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
-use nom::character::complete::{line_ending, not_line_ending, space0, u8 as nom_u8};
-use nom::combinator::{all_consuming, cond, map, map_parser, map_res, opt, rest, success};
+use nom::character::complete::{space0, u8 as nom_u8};
+use nom::combinator::{all_consuming, cond, map, map_opt, map_parser, map_res, opt, rest};
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::multi::{count as nom_count, length_count};
 use nom::sequence::{delimited, preceded, terminated};
@@ -14,23 +14,32 @@ use umol_data::Element;
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
     fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
-    fixed_width_int_minus1, fixed_width_unused, fixed_width_str_partial, rgroup_occurrences,
+    fixed_width_int_minus1, fixed_width_str_partial, fixed_width_unused, rgroup_occurrences,
+    LinesWithOffsetExt,
 };
 use crate::io::ctfile::config::CtabParseFlags;
+use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier, sgroup_subscript,
 };
 use crate::table_ir::{
-    RGroupOccurrence, SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement,
-    SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupSubtype,
-    SGroupType,
+    BondOrder, RGroupOccurrence, SGroupConnectivity, SGroupDataDisplayChars,
+    SGroupDataDisplayPlacement, SGroupDataDisplayType, SGroupDataDisplayUnits, SGroupDataType,
+    SGroupMultiplier, SGroupSubtype, SGroupType,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomAliasEntry {
     pub atom_index: usize,
     pub alias: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LegacyGroupAbbreviationEntry {
+    pub atom_index1: usize, // Atoms on this side are abbreviated
+    pub atom_index2: usize, // Attachment point to main structure
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -244,13 +253,13 @@ pub struct SGroupHierarchyEntry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ZeroBondOrderEntry {
+pub struct BondOrderOverrideEntry {
     pub bond_index: usize,
-    pub bond_order: u8,
+    pub bond_order: BondOrder,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ZeroAtomChargeEntry {
+pub struct AtomChargeOverrideEntry {
     pub atom_index: usize,
     pub charge: i8,
 }
@@ -258,13 +267,14 @@ pub struct ZeroAtomChargeEntry {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomHydrogenCountEntry {
     pub atom_index: usize,
-    pub hydrogen_count: u8,
+    pub hydrogen_count: Option<u8>,
 }
 
 /// Parsed property entries
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyEntries {
     AtomAliasEntry(AtomAliasEntry),
+    LegacyGroupAbbreviationEntry(LegacyGroupAbbreviationEntry),
     AtomValueEntry(AtomValueEntry),
     ChargeEntries(Vec<ChargeEntry>),
     RadicalEntries(Vec<RadicalEntry>),
@@ -295,94 +305,233 @@ pub enum PropertyEntries {
     SGroupDataDisplayEntry(SGroupDataDisplayEntry),
     SGroupHierarchyEntries(Vec<SGroupHierarchyEntry>),
     SGroupComponentEntries(Vec<SGroupComponentEntry>),
-    ZeroBondOrderEntries(Vec<ZeroBondOrderEntry>),
-    ZeroAtomChargeEntries(Vec<ZeroAtomChargeEntry>),
+    BondOrderOverrideEntries(Vec<BondOrderOverrideEntry>),
+    AtomChargeOverrideEntries(Vec<AtomChargeOverrideEntry>),
     AtomHydrogenCountEntries(Vec<AtomHydrogenCountEntry>),
-    End,
 }
 
-/// Wrapper for atom_alias_entry (used in property_block and extended_property_block)
-pub fn atom_alias_input<'inp>(
-) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> {
+/// Parse properties block (basic properties only)
+pub(super) fn properties_block<'inp>(
+    line_offset: u32,
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp> {
+    let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
+
     move |input: &'inp [u8]| {
-        if input.len() >= 3 && &input[0..3] == b"A  " {
-            atom_alias_entry()
-                .parse(&input[3..])
-                .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o)))
-        } else {
-            Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
+        let mut properties = Vec::new();
+        let mut lines_iter = input.lines_with_offset();
+        let mut byte_offset = 0;
+        let mut line_index = 0;
+        let mut end_found = false;
+
+        while let Some((line, byte_len)) = lines_iter.next() {
+            if line.starts_with(b"M  END") {
+                byte_offset += byte_len;
+                line_index += 1;
+                end_found = true;
+                break;
+            }
+
+            // Handle atom alias (two-line property)
+            if line.starts_with(b"A  ") {
+                let (next_line, next_byte_len) = lines_iter.next().ok_or_else(|| {
+                    Err::Error(ParseError::UnexpectedEof {
+                        line: line_offset + line_index + 1,
+                        block: "atom alias",
+                    })
+                })?;
+                let property = parse_atom_alias_input(line, next_line).map_err(|_| {
+                    Err::Error(ParseError::InvalidPropertyLine {
+                        line: line_offset + line_index,
+                        col: 0,
+                    })
+                })?;
+                properties.push(property);
+                byte_offset += byte_len + next_byte_len;
+                line_index += 2;
+            } else {
+                let (_, property) = all_consuming(terminated(property_input(flags), space0))
+                    .parse(line)
+                    .map_err(|_| {
+                        Err::Error(ParseError::InvalidPropertyLine {
+                            line: line_offset + line_index,
+                            col: 0,
+                        })
+                    })?;
+                properties.push(property);
+                byte_offset += byte_len;
+                line_index += 1;
+            }
         }
+
+        if !end_found && !no_v2000_end_tags {
+            return Err(Err::Error(ParseError::MissingMEndTag {
+                line: line_offset + line_index,
+            }));
+        }
+
+        let remaining = &input[byte_offset..];
+        Ok((remaining, (properties, line_offset + line_index)))
+    }
+}
+
+/// Parse extended properties block
+pub(super) fn extended_properties_block<'inp>(
+    line_offset: u32,
+    flags: CtabParseFlags,
+) -> impl Parser<&'inp [u8], Output = (Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp> {
+    let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
+
+    move |input: &'inp [u8]| {
+        let mut properties = Vec::new();
+        let mut lines_iter = input.lines_with_offset();
+        let mut byte_offset = 0;
+        let mut line_index = 0;
+        let mut end_found = false;
+
+        while let Some((line, byte_len)) = lines_iter.next() {
+            if line.starts_with(b"M  END") {
+                byte_offset += byte_len;
+                line_index += 1;
+                end_found = true;
+                break;
+            }
+
+            // Handle atom alias (two-line property)
+            if line.starts_with(b"A  ") {
+                let (next_line, next_byte_len) = lines_iter.next().ok_or_else(|| {
+                    Err::Error(ParseError::UnexpectedEof {
+                        line: line_offset + line_index + 1,
+                        block: "atom alias",
+                    })
+                })?;
+                let property = parse_atom_alias_input(line, next_line).map_err(|_| {
+                    Err::Error(ParseError::InvalidPropertyLine {
+                        line: line_offset + line_index,
+                        col: 0,
+                    })
+                })?;
+                properties.push(property);
+                byte_offset += byte_len + next_byte_len;
+                line_index += 2;
+            // Handle legacy group abbreviation (two-line property)
+            } else if line.starts_with(b"G  ") {
+                let (next_line, next_byte_len) = lines_iter.next().ok_or_else(|| {
+                    Err::Error(ParseError::UnexpectedEof {
+                        line: line_offset + line_index + 1,
+                        block: "legacy group abbreviation",
+                    })
+                })?;
+                let property =
+                    parse_legacy_group_abbreviation_input(line, next_line).map_err(|_| {
+                        Err::Error(ParseError::InvalidPropertyLine {
+                            line: line_offset + line_index,
+                            col: 0,
+                        })
+                    })?;
+                properties.push(property);
+                byte_offset += byte_len + next_byte_len;
+                line_index += 2;
+            } else {
+                let (_, property) =
+                    all_consuming(terminated(extended_property_input(flags), space0))
+                        .parse(line)
+                        .map_err(|_| {
+                            Err::Error(ParseError::InvalidPropertyLine {
+                                line: line_offset + line_index,
+                                col: 0,
+                            })
+                        })?;
+                properties.push(property);
+                byte_offset += byte_len;
+                line_index += 1;
+            }
+        }
+
+        if !end_found && !no_v2000_end_tags {
+            return Err(Err::Error(ParseError::MissingMEndTag {
+                line: line_offset + line_index,
+            }));
+        }
+
+        let remaining = &input[byte_offset..];
+        Ok((remaining, (properties, line_offset + line_index)))
     }
 }
 
 /// Parse property line (basic properties only)
+/// Note: A  (atom alias) and M  END are handled at the block level, not here.
 pub fn property_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
     move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         if input.len() < 3 {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
         }
 
-        // Handle A and V lines
-        match &input[0..3] {
-            b"A  " => atom_alias_entry()
+        // A  (atom alias) and M  END are handled at block level
+        debug_assert!(
+            &input[0..3] != b"A  ",
+            "A   should be handled at block level"
+        );
+
+        // Handle V lines
+        if &input[0..3] == b"V  " {
+            return atom_value_entry()
                 .parse(&input[3..])
-                .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
-            b"V  " => atom_value_entry()
-                .parse(&input[3..])
-                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
-            _ => {
-                // Handle M lines
-                if input.len() < 6 {
-                    return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
-                }
-                let (remaining, tag) = take(6u8)(input)?;
-                // General M properties
-                let (remaining, result) = match tag {
-                    b"M  END" => success(PropertyEntries::End).parse(remaining),
-                    b"M  CHG" => charge_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
-                    b"M  RAD" => radical_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
-                    b"M  ISO" => isotope_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-                    // Clark extensions
-                    tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") => {
-                        if allow_clark_extensions {
-                            match tag {
-                                b"M  ZBO" => zero_bond_order_entries()
-                                    .parse(remaining)
-                                    .map(|(i, o)| (i, PropertyEntries::ZeroBondOrderEntries(o))),
-                                b"M  ZCH" => zero_atom_charge_entries()
-                                    .parse(remaining)
-                                    .map(|(i, o)| (i, PropertyEntries::ZeroAtomChargeEntries(o))),
-                                b"M  HYD" => {
-                                    hydrogen_count_entries().parse(remaining).map(|(i, o)| {
-                                        (i, PropertyEntries::AtomHydrogenCountEntries(o))
-                                    })
-                                }
-                                _ => unreachable!(),
-                            }
-                        } else {
-                            Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
-                        }
-                    }
-                    _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
-                }?;
-                let (remaining, _) = space0.parse(remaining)?;
-                Ok((remaining, result))
-            }
+                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o)));
         }
+
+        // Handle M lines
+        if input.len() < 6 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
+        debug_assert!(
+            &input[0..6] != b"M  END",
+            "M  END should be handled at block level"
+        );
+        let (remaining, tag_bytes) = take(6u8)(input)?;
+
+        // General M properties
+        let (remaining, result) = match tag_bytes {
+            b"M  CHG" => charge_entries()
+                .parse(remaining)
+                .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
+            b"M  RAD" => radical_entries()
+                .parse(remaining)
+                .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
+            b"M  ISO" => isotope_entries()
+                .parse(remaining)
+                .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
+            // Clark extensions
+            tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") => {
+                if allow_clark_extensions {
+                    match tag {
+                        b"M  ZBO" => bond_order_override_entries()
+                            .parse(remaining)
+                            .map(|(i, o)| (i, PropertyEntries::BondOrderOverrideEntries(o))),
+                        b"M  ZCH" => atom_charge_overrides_entries()
+                            .parse(remaining)
+                            .map(|(i, o)| (i, PropertyEntries::AtomChargeOverrideEntries(o))),
+                        b"M  HYD" => atom_hydrogen_count_entries()
+                            .parse(remaining)
+                            .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
+                }
+            }
+            _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
+        }?;
+        Ok((remaining, result))
     }
 }
 
 /// Parse extended property line
+/// Note: A  (atom alias) and M  END are handled at the block level, not here.
 pub fn extended_property_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
@@ -392,190 +541,209 @@ pub fn extended_property_input<'inp>(
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-
         if input.len() < 3 {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
         }
 
-        // Handle A and V lines
-        match &input[0..3] {
-            b"A  " => atom_alias_entry()
+        // A  (atom alias), G  (legacy group abbreviation), and M  END are handled at block level
+        debug_assert!(
+            &input[0..3] != b"A  " && &input[0..3] != b"G  ",
+            "A or G should be handled at block level"
+        );
+
+        // Handle V lines
+        if &input[0..3] == b"V  " {
+            return atom_value_entry()
                 .parse(&input[3..])
-                .map(|(i, o)| (i, PropertyEntries::AtomAliasEntry(o))),
-            b"V  " => atom_value_entry()
-                .parse(&input[3..])
-                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o))),
-            _ => {
-                // Handle M lines
-                if input.len() < 6 {
-                    return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
-                }
-                let (remaining, tag) = take(6u8)(input)?;
-                let (remaining, result) = match tag {
-                    // General M properties
-                    b"M  END" => success(PropertyEntries::End).parse(remaining),
-                    b"M  CHG" => charge_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
-                    b"M  RAD" => radical_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
-                    b"M  ISO" => isotope_entries()
-                        .parse(remaining)
-                        .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
-                    // Query properties
-                    tag @ (b"M  RBC" | b"M  SUB" | b"M  UNS" | b"M  LIN" | b"M  ALS")
-                        if allow_queries =>
-                    {
-                        match tag {
-                            b"M  RBC" => ring_bond_count_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
-                            b"M  SUB" => substitution_count_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SubstitutionCountEntries(o))),
-                            b"M  UNS" => unsaturated_atom_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::UnsaturatedAtomEntries(o))),
-                            b"M  LIN" => link_atom_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
-                            b"M  ALS" => atom_list_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
-                            _ => unreachable!(),
-                        }
-                    }
-                    // RGroup properties
-                    tag @ (b"M  APO" | b"M  AAL" | b"M  RGP" | b"M  LOG") if allow_rgroups => {
-                        match tag {
-                            b"M  APO" => attachment_point_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
-                            b"M  AAL" => atom_attachment_order_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
-                            b"M  RGP" => rgroup_label_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
-                            b"M  LOG" => rgroup_logic_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
-                            _ => unreachable!(),
-                        }
-                    }
-                    // SGroup properties
-                    tag @ (b"M  STY" | b"M  SST" | b"M  SLB" | b"M  SCN" | b"M  SAL"
-                    | b"M  SBL" | b"M  SMT" | b"M  SDS" | b"M  SPA" | b"M  CRS"
-                    | b"M  SDI" | b"M  SBV" | b"M  SDT" | b"M  SDD" | b"M  SCD"
-                    | b"M  SED" | b"M  SPL" | b"M  SNC")
-                        if allow_sgroups =>
-                    {
-                        match tag {
-                            b"M  STY" => sgroup_type_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
-                            b"M  SST" => sgroup_subtype_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
-                            b"M  SLB" => sgroup_label_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
-                            b"M  SCN" => sgroup_connectivity_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
-                            b"M  SAL" => sgroup_atom_list_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
-                            b"M  SBL" => sgroup_bond_list_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
-                            b"M  SMT" => sgroup_subscript_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
-                            b"M  SDS" => sgroup_expansion_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
-                            b"M  SPA" => sgroup_parent_atom_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
-                            b"M  CRS" => sgroup_correspondence_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
-                            b"M  SDI" => sgroup_display_info_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
-                            b"M  SBV" => sgroup_connecting_bond_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
-                            b"M  SDT" => sgroup_data_description_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
-                            b"M  SDD" => {
-                                { sgroup_data_display_entry(skip_unused_fields).parse(remaining) }
-                                    .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o)))
-                            }
-                            b"M  SCD" => sgroup_data_continuation_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
-                            b"M  SED" => sgroup_data_end_entry()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
-                            b"M  SPL" => sgroup_hierarchy_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupHierarchyEntries(o))),
-                            b"M  SNC" => sgroup_component_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::SGroupComponentEntries(o))),
-                            _ => unreachable!(),
-                        }
-                    }
-                    // Clark extensions
-                    tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") if allow_clark_extensions => {
-                        match tag {
-                            b"M  ZBO" => zero_bond_order_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::ZeroBondOrderEntries(o))),
-                            b"M  ZCH" => zero_atom_charge_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::ZeroAtomChargeEntries(o))),
-                            b"M  HYD" => hydrogen_count_entries()
-                                .parse(remaining)
-                                .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
-                }?;
-                let (remaining, _) = space0.parse(remaining)?;
-                Ok((remaining, result))
-            }
+                .map(|(i, o)| (i, PropertyEntries::AtomValueEntry(o)));
         }
+
+        // Handle M lines
+        if input.len() < 6 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
+        debug_assert!(
+            &input[0..6] != b"M  END",
+            "M  END should be handled at block level"
+        );
+        let (remaining, tag_bytes) = take(6u8)(input)?;
+
+        let (remaining, result) = match tag_bytes {
+            // General M properties
+            b"M  CHG" => charge_entries()
+                .parse(remaining)
+                .map(|(i, o)| (i, PropertyEntries::ChargeEntries(o))),
+            b"M  RAD" => radical_entries()
+                .parse(remaining)
+                .map(|(i, o)| (i, PropertyEntries::RadicalEntries(o))),
+            b"M  ISO" => isotope_entries()
+                .parse(remaining)
+                .map(|(i, o)| (i, PropertyEntries::IsotopeEntries(o))),
+            // Query properties
+            tag @ (b"M  RBC" | b"M  SUB" | b"M  UNS" | b"M  LIN" | b"M  ALS") if allow_queries => {
+                match tag {
+                    b"M  RBC" => ring_bond_count_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::RingBondCountEntries(o))),
+                    b"M  SUB" => substitution_count_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SubstitutionCountEntries(o))),
+                    b"M  UNS" => unsaturated_atom_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::UnsaturatedAtomEntries(o))),
+                    b"M  LIN" => link_atom_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::LinkAtomEntries(o))),
+                    b"M  ALS" => atom_list_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::AtomListEntry(o))),
+                    _ => unreachable!(),
+                }
+            }
+            // RGroup properties
+            tag @ (b"M  APO" | b"M  AAL" | b"M  RGP" | b"M  LOG") if allow_rgroups => match tag {
+                b"M  APO" => attachment_point_entries()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::AttachmentPointEntries(o))),
+                b"M  AAL" => atom_attachment_order_entry()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::AtomAttachmentOrderEntry(o))),
+                b"M  RGP" => rgroup_label_entries()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::RGroupLabelEntries(o))),
+                b"M  LOG" => rgroup_logic_entry()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::RGroupLogicEntry(o))),
+                _ => unreachable!(),
+            },
+            // SGroup properties
+            tag @ (b"M  STY" | b"M  SST" | b"M  SLB" | b"M  SCN" | b"M  SAL" | b"M  SBL"
+            | b"M  SMT" | b"M  SDS" | b"M  SPA" | b"M  CRS" | b"M  SDI" | b"M  SBV"
+            | b"M  SDT" | b"M  SDD" | b"M  SCD" | b"M  SED" | b"M  SPL" | b"M  SNC")
+                if allow_sgroups =>
+            {
+                match tag {
+                    b"M  STY" => sgroup_type_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupTypeEntries(o))),
+                    b"M  SST" => sgroup_subtype_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupSubtypeEntries(o))),
+                    b"M  SLB" => sgroup_label_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupLabelEntries(o))),
+                    b"M  SCN" => sgroup_connectivity_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectivityEntries(o))),
+                    b"M  SAL" => sgroup_atom_list_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupAtomListEntry(o))),
+                    b"M  SBL" => sgroup_bond_list_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupBondListEntry(o))),
+                    b"M  SMT" => sgroup_subscript_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupSubscriptEntry(o))),
+                    b"M  SDS" => sgroup_expansion_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupExpansionEntries(o))),
+                    b"M  SPA" => sgroup_parent_atom_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupParentAtomEntry(o))),
+                    b"M  CRS" => sgroup_correspondence_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupCorrespondenceEntry(o))),
+                    b"M  SDI" => sgroup_display_info_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDisplayInfoEntry(o))),
+                    b"M  SBV" => sgroup_connecting_bond_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupConnectingBondEntry(o))),
+                    b"M  SDT" => sgroup_data_description_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDescriptionEntry(o))),
+                    b"M  SDD" => sgroup_data_display_entry(skip_unused_fields)
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataDisplayEntry(o))),
+                    b"M  SCD" => sgroup_data_continuation_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
+                    b"M  SED" => sgroup_data_end_entry()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupDataEntry(o))),
+                    b"M  SPL" => sgroup_hierarchy_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupHierarchyEntries(o))),
+                    b"M  SNC" => sgroup_component_entries()
+                        .parse(remaining)
+                        .map(|(i, o)| (i, PropertyEntries::SGroupComponentEntries(o))),
+                    _ => unreachable!(),
+                }
+            }
+            // Clark extensions
+            tag @ (b"M  ZBO" | b"M  ZCH" | b"M  HYD") if allow_clark_extensions => match tag {
+                b"M  ZBO" => bond_order_override_entries()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::BondOrderOverrideEntries(o))),
+                b"M  ZCH" => atom_charge_overrides_entries()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::AtomChargeOverrideEntries(o))),
+                b"M  HYD" => atom_hydrogen_count_entries()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
+                _ => unreachable!(),
+            },
+            _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
+        }?;
+        Ok((remaining, result))
     }
 }
 
-/// Parse atom alias entry.
+/// Create atom alias property from two lines.
 /// A  aaa
-/// x..
-/// aaa: atom index, x..: alias string (can contain spaces)
-pub(super) fn atom_alias_entry<'inp>(
-) -> impl Parser<&'inp [u8], Output = AtomAliasEntry, Error = NomError<&'inp [u8]>> {
-    map_res(
+/// x...
+/// aaa: atom index, x...: alias text
+pub(super) fn parse_atom_alias_input<'a>(
+    first_line: &'a [u8],
+    second_line: &[u8],
+) -> Result<PropertyEntries, NomError<&'a [u8]>> {
+    let (_, atom_index) = preceded(tag("A  "), fixed_width_int_minus1::<usize>(3))
+        .parse(first_line)
+        .map_err(|_: Err<NomError<_>>| NomError::new(first_line, NomErrorKind::Digit))?;
+
+    Ok(PropertyEntries::AtomAliasEntry(AtomAliasEntry {
+        atom_index,
+        alias: second_line.to_str_lossy().into_owned(),
+    }))
+}
+
+/// Create legacy group abbreviation property from two lines.
+/// G  aaappp
+/// x...
+/// aaa: atom index1, ppp: atom index2, x...: abbreviation label
+/// The atoms on the side of atom index1 are abbreviated
+pub(super) fn parse_legacy_group_abbreviation_input<'a>(
+    first_line: &'a [u8],
+    second_line: &[u8],
+) -> Result<PropertyEntries, NomError<&'a [u8]>> {
+    let (_, (atom_index1, atom_index2)) = preceded(
+        tag("G  "),
         (
-            terminated(
-                map_parser(not_line_ending, fixed_width_int_minus1::<usize>(3)),
-                line_ending,
-            ),
-            rest,
+            fixed_width_int_minus1::<usize>(3),
+            fixed_width_int_minus1::<usize>(3),
         ),
-        move |(atom_index, alias)| -> Result<AtomAliasEntry, NomError<&[u8]>> {
-            Ok(AtomAliasEntry {
-                atom_index,
-                alias: alias.to_str_lossy().into_owned(),
-            })
-        },
     )
+    .parse(first_line)
+    .map_err(|_: Err<NomError<_>>| NomError::new(first_line, NomErrorKind::Digit))?;
+
+    Ok(PropertyEntries::LegacyGroupAbbreviationEntry(
+        LegacyGroupAbbreviationEntry {
+            atom_index1,
+            atom_index2,
+            label: second_line.to_str_lossy().into_owned(),
+        },
+    ))
 }
 
 /// Parse atom value entry.
@@ -742,8 +910,8 @@ fn link_atom_entries<'inp>(
 /// Parse atom list property entry.
 /// M  ALS aaannn e 11112222333344445555...
 /// aaa: Atom number, nnn: Number of entries (16 max), e: Exclusion (T/F), 1111: 4-char symbols
-fn atom_list_entry<'inp>() -> impl Parser<&'inp [u8], Output = AtomListEntry, Error = NomError<&'inp [u8]>>
-{
+fn atom_list_entry<'inp>(
+) -> impl Parser<&'inp [u8], Output = AtomListEntry, Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
         let (remaining, atom_index) =
             preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
@@ -835,7 +1003,7 @@ fn rgroup_label_entries<'inp>(
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 0..=999)),
+                preceded(tag(" "), fixed_width_int::<u32>(3)),
             ),
             |(atom_index, label)| RGroupLabelEntry { atom_index, label },
         ),
@@ -1333,19 +1501,21 @@ fn sgroup_component_entries<'inp>(
 
 /// Parse zero bond order entries.
 /// M  ZBOnn8 bbb vvv ...
-/// bbb: bond index, vvv: bond vector override (>= 0)
-fn zero_bond_order_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<ZeroBondOrderEntry>, Error = NomError<&'inp [u8]>> {
+/// bbb: bond index, vvv: bond vector override (>= 0, limited to 6 here)
+fn bond_order_override_entries<'inp>(
+) -> impl Parser<&'inp [u8], Output = Vec<BondOrderOverrideEntry>, Error = NomError<&'inp [u8]>> {
     length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
-        map(
+        map_opt(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int::<u8>(3)),
+                preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=6)),
             ),
-            |(bond_index, bond_order)| ZeroBondOrderEntry {
-                bond_index,
-                bond_order,
+            |(bond_index, bond_order)| {
+                BondOrder::from_value(bond_order).map(|bo| BondOrderOverrideEntry {
+                    bond_index,
+                    bond_order: bo,
+                })
             },
         ),
     )
@@ -1353,36 +1523,40 @@ fn zero_bond_order_entries<'inp>(
 
 /// Parse zero atom charge entries.
 /// M  ZCHnn8 aaa ccc ...
-/// aaa: atom index, ccc: atom charge override
-fn zero_atom_charge_entries<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<ZeroAtomChargeEntry>, Error = NomError<&'inp [u8]>> {
+/// aaa: atom index, ccc: atom charge override (-8..=8)
+fn atom_charge_overrides_entries<'inp>(
+) -> impl Parser<&'inp [u8], Output = Vec<AtomChargeOverrideEntry>, Error = NomError<&'inp [u8]>> {
     length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int::<i8>(3)),
+                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -8..=8)),
             ),
-            |(atom_index, charge)| ZeroAtomChargeEntry { atom_index, charge },
+            |(atom_index, charge)| AtomChargeOverrideEntry { atom_index, charge },
         ),
     )
 }
 
 /// Parse atom explicit hydrogen count entries.
 /// M  HCTnn8 aaa hhh ...
-/// aaa: atom index, hhh: atom explicit hydrogen count (>= 0)
-fn hydrogen_count_entries<'inp>(
+/// aaa: atom index, hhh: atom explicit hydrogen count (>= 0, limited to 8 here, -1 = no override)
+fn atom_hydrogen_count_entries<'inp>(
 ) -> impl Parser<&'inp [u8], Output = Vec<AtomHydrogenCountEntry>, Error = NomError<&'inp [u8]>> {
     length_count(
-        fixed_width_int_in_range::<u8, _>(3, 1..=8),
+        fixed_width_int_in_range::<u8, _>(3, 0..=8),
         map(
             (
                 preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int::<u8>(3)),
+                preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -1..=8)),
             ),
             |(atom_index, hydrogen_count)| AtomHydrogenCountEntry {
                 atom_index,
-                hydrogen_count,
+                hydrogen_count: if hydrogen_count == -1 {
+                    None
+                } else {
+                    Some(hydrogen_count as u8)
+                },
             },
         ),
     )

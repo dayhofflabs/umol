@@ -13,14 +13,46 @@ use crate::table_ir::{BondDirection, BondOrder, BondReactingCenter, BondStereo, 
 // TODO: Add extended_bond_block tests (test_extended_bond_block, test_extended_bond_block_invalid,
 //       test_extended_bond_block_ignore_positions, test_extended_bond_block_ignore_positions_invalid)
 
+// TODO: Checks for trailing numbers and characters
+// #[case::trailing_number(b"  2  5  2  1  0  0  0 0", NomErrorKind::Verify)]
+// #[case::trailing_chars(b"  2  5  2  1  0  0  0 XXX", NomErrorKind::Verify)]
+
+
+#[test]
+fn test_bond_block() {
+    let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
+    let flags = CtabParseFlags::BASIC;
+    let result = bond_block(2, 0, flags).parse(bond_data);
+    assert!(result.is_ok(), "Bond block should parse successfully");
+
+    let (remaining, (bonds, _)) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(bonds.len(), 2, "Should have 2 bonds");
+    assert_eq!(bonds[0].2.order, BondOrder::Single);
+    assert_eq!(bonds[1].2.order, BondOrder::Double);
+}
+
+#[test]
+fn test_extended_bond_block() {
+    let bond_data = b"  1  2  1  0  0  0  0\n  1  3  2  0  0  0  0\n";
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_bond_block(2, 0, flags).parse(bond_data);
+    assert!(result.is_ok(), "Bond block should parse successfully");
+
+    let (remaining, (bonds, _)) = result.unwrap();
+    assert_eq!(remaining, b"", "All input should be consumed");
+    assert_eq!(bonds.len(), 2, "Should have 2 bonds");
+    assert_eq!(bonds[0].2.order, BondOrder::Single);
+    assert_eq!(bonds[1].2.order, BondOrder::Double);
+}
+
 #[rustfmt::skip]
 #[rstest]
 #[case::len_9(b"  1  2  1", 0, 1, BondOrder::Single, None, None)]
-#[case::len_10_padded(b"  1  2  1 ", 0, 1, BondOrder::Single, None, None)]
 #[case::len_12(b"  1  3  2  1", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
-#[case::len_13_padded(b"  1  3  1  6 ", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
+#[case::len_13(b"  1  3  1  6", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
 #[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None)]
-#[case::len_to_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
+#[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] atom1: usize,
@@ -34,7 +66,7 @@ fn test_bond_input(
     let result = parser.parse(input);
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, (a1, a2, bond)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+    assert!(remaining.is_empty(), "{:?} has non-blank remaining", input_str);
     assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
     assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
@@ -144,7 +176,7 @@ fn test_bond_input_whitespace_padded(#[case] input: &[u8]) {
 #[case::len_9_zero_bond(b"  1  2  0", 0, 1, BondOrder::Zero, None, None, None, None)]
 #[case::len_9_quadruple_bond(b"  1  2  9", 0, 1, BondOrder::Quadruple, None, None, None, None)]
 #[case::len_12_double_either(b"  1  2  2  3", 0, 1, BondOrder::Double, Some(BondStereo::Either), None, None, None)]
-#[case::len_13_single_dash_padded(b"  1  2  1  6  ", 0, 1, BondOrder::Single, None, Some(BondDirection::Down), None, None)]
+#[case::len_12_single_dash(b"  1  2  1  6", 0, 1, BondOrder::Single, None, Some(BondDirection::Down), None, None)]
 #[case::len_18_any_bond_ring(b"  1  2  8  0     1", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
 #[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, Some(BondDirection::NotStereo), Some(BondTopology::Either), None)]
 #[case::len_21_full_chain_center(b"  1  2  1  0     2  1", 0, 1, BondOrder::Single, None,
@@ -217,6 +249,11 @@ fn test_extended_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind:
 #[case::len_12_double_cis(b"  1  3  2  1", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case::len_12_single_dash(b"  2  4  1  6", 1, 3, BondOrder::Single, None, Some(BondDirection::Down))]
 #[case::len_12_triple_empty_fields(b"  2  5  3   ", 1, 4, BondOrder::Triple, None, None)]
+#[case::len_12_blank(b"  1  2  1   ", 0, 1, BondOrder::Single, None, None)]
+#[case::len_15_blank(b"  1  2  1  0   ", 0, 1, BondOrder::Single, None, None)]
+#[case::len_15_zero(b"  1  2  1  0  0", 0, 1, BondOrder::Single, None, None)]
+#[case::len_18_blank(b"  1  2  1  0  0   ", 0, 1, BondOrder::Single, None, None)]
+#[case::len_21_blank(b"  1  2  1  0  0  0   ", 0, 1, BondOrder::Single, None, None)]
 #[case::invalid_unused(b"  1  2  1  1  0  0XXX", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
 fn test_bond_input21(
     #[case] input: &[u8],
@@ -265,6 +302,8 @@ fn test_bond_input21_invalid(
 #[rustfmt::skip]
 #[rstest]
 #[case::invalid_unused(b"  1  2  1  1  0  0XXX", NomErrorKind::Verify)]
+#[case::xxx_nonzero(b"  1  2  1  0  1  0  0", NomErrorKind::Verify)]
+#[case::xxx_non_numeric(b"  1  2  1  0  A  0  0", NomErrorKind::Verify)]
 fn test_bond_input21_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,

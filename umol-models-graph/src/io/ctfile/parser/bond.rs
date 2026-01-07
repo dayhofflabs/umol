@@ -1,19 +1,18 @@
-//! Bond block parser for CTab files.
-//!
-//! Parses bond blocks from CTFile format and produces TableIR types directly.
+//! Bond block parsers for CTab files.
 
-use bstr::ByteSlice;
 use nom::character::complete::space0;
 use nom::combinator::{all_consuming, cond, map, map_res};
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::terminated;
-use nom::{Err as NomErr, IResult, Parser};
+use nom::{Err, IResult, Parser};
 
 use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_direction_code,
     convert_bond_topology_code, convert_bond_type_code, convert_extended_bond_type_code,
 };
-use super::utils::{fixed_width_int, fixed_width_int_minus1, fixed_width_unused_n};
+use super::utils::{
+    fixed_width_int, fixed_width_int_minus1, fixed_width_unused_n, LinesWithOffsetExt,
+};
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
@@ -27,25 +26,27 @@ pub(super) fn bond_block<'inp>(
 {
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count as usize);
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
+        let mut lines_iter = input.lines_with_offset();
+        let mut byte_offset = 0;
 
-        for i in 0..bond_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                NomErr::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
+        for line_index in 0..bond_count {
+            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
+                Err::Error(ParseError::UnexpectedEof {
+                    line: line_offset + line_index,
                     block: "bond",
                 })
             })?;
 
-            let (_, (atom1, atom2, bond)) = all_consuming(bond_input(flags))
+            let (_, (atom1, atom2, bond)) = all_consuming(terminated(bond_input(flags), space0))
                 .parse(line)
-                .map_err(|e| NomErr::Error(ParseError::bond_from_nom(e, line_offset + i, line)))?;
+                .map_err(|e| {
+                    Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
+                })?;
             bonds.push((atom1, atom2, bond));
-            offset += line.len();
+            byte_offset += byte_len;
         }
 
-        let remaining = &input[offset..];
+        let remaining = &input[byte_offset..];
         Ok((remaining, (bonds, line_offset + bond_count)))
     }
 }
@@ -59,27 +60,28 @@ pub(super) fn extended_bond_block<'inp>(
        + use<'inp> {
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count as usize);
-        let mut lines_iter = input.lines_with_terminator();
-        let mut offset = 0;
+        let mut lines_iter = input.lines_with_offset();
+        let mut byte_offset = 0;
 
-        for i in 0..bond_count {
-            let line = lines_iter.next().ok_or_else(|| {
-                NomErr::Error(ParseError::UnexpectedEof {
-                    line: line_offset + i,
+        for line_index in 0..bond_count {
+            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
+                Err::Error(ParseError::UnexpectedEof {
+                    line: line_offset + line_index,
                     block: "bond",
                 })
             })?;
 
-            let (_, (atom1, atom2, bond)) = all_consuming(extended_bond_input(flags))
-                .parse(line)
-                .map_err(|e| {
-                NomErr::Error(ParseError::bond_from_nom(e, line_offset + i, line))
-            })?;
+            let (_, (atom1, atom2, bond)) =
+                all_consuming(terminated(extended_bond_input(flags), space0))
+                    .parse(line)
+                    .map_err(|e| {
+                        Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
+                    })?;
             bonds.push((atom1, atom2, bond));
-            offset += line.len();
+            byte_offset += byte_len;
         }
 
-        let remaining = &input[offset..];
+        let remaining = &input[byte_offset..];
         Ok((remaining, (bonds, line_offset + bond_count)))
     }
 }
@@ -111,24 +113,23 @@ pub(super) fn extended_bond_block<'inp>(
 /// skip: skip field, regardless of content
 /// zero/blank: validate and accept only zero or blank values, reject any other content
 /// validate: validate field according to its specification, reject any other content
-/// 
+///
 /// NOTE: Basic parser should accept a strict subset of inputs accepted by extended parser
 ///       Increasing strictness: skip < validate < zero/blank
-/// 
+///
 pub fn bond_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = NomError<&'inp [u8]>> + use<'inp>
 {
     move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
         let len = input.len();
         let parser = match len {
-            10.. => bond_input21,
+            10..=21 => bond_input21,
             9 => bond_input9,
-            _ => return Err(NomErr::Error(NomError::new(input, NomErrorKind::Eof))),
+            _ => return Err(Err::Error(NomError::new(input, NomErrorKind::Eof))),
         };
 
-        terminated(move |input| parser(input, flags), space0).parse(input)
+        (move |input| parser(input, flags)).parse(input)
     }
 }
 
@@ -154,10 +155,7 @@ pub fn extended_bond_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = NomError<&'inp [u8]>>
        + use<'inp> {
-    move |input: &'inp [u8]| {
-        let input = input.trim_end_with(|c| c == '\r' || c == '\n');
-        terminated(extended_bond_input_inner(flags), space0).parse(input)
-    }
+    extended_bond_input_inner(flags)
 }
 
 /// Parse bond inputs with 10-21 characters (s. `bond_input` for more details).

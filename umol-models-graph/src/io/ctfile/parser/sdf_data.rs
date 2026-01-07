@@ -4,10 +4,10 @@ use bstr::ByteSlice;
 use indexmap::IndexMap;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_until};
-use nom::character::complete::{line_ending, not_line_ending};
+use nom::character::complete::{line_ending, not_line_ending, space1};
 use nom::combinator::{eof, map, opt, peek, value};
 use nom::error::Error as NomError;
-use nom::multi::{many1, many_till};
+use nom::multi::many_till;
 use nom::sequence::{delimited, terminated};
 use nom::Parser;
 
@@ -16,9 +16,9 @@ pub(super) fn sdf_data_header<'inp>(
 ) -> impl Parser<&'inp [u8], Output = String, Error = NomError<&'inp [u8]>> {
     map(
         delimited(
-            (tag(">"), many1(tag(" "))), // Allow multiple spaces after >
+            (tag(">"), space1),
             delimited(tag("<"), take_until(">"), tag(">")),
-            not_line_ending, // Ignore any trailing content
+            not_line_ending,
         ),
         |field_name: &[u8]| field_name.to_str_lossy().into_owned(),
     )
@@ -29,15 +29,14 @@ pub(super) fn sdf_data_value<'inp>(
 ) -> impl Parser<&'inp [u8], Output = String, Error = NomError<&'inp [u8]>> {
     map(
         many_till(
-            terminated(
-                not_line_ending::<&'inp [u8], NomError<&'inp [u8]>>,
-                line_ending,
-            ),
+            terminated(not_line_ending, line_ending),
+            // TODO: Why is this a blank line?
             alt((
                 peek(line_ending), // blank line
                 eof,
             )),
         ),
+        // TODO: Understand why this is necessary.
         |(lines, _): (Vec<&[u8]>, _)| {
             lines
                 .iter()

@@ -20,7 +20,7 @@ umol = { path = "../umol" }
 [dev-dependencies]
 rstest = "0.26.1"
 pretty_assertions = "1.4.1"
-criterion = "0.7.0"
+criterion = "0.8.1"
 float-cmp = "0.10.0"
 
 [lib]

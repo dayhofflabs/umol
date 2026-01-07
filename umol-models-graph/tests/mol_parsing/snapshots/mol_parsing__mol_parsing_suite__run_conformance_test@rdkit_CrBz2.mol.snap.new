@@ -3,31 +3,33 @@ source: umol-models-graph/tests/mol_parsing/mod.rs
 assertion_line: 305
 expression: results
 ---
-expected_category: extended_molecule_lenient
-category: extended_molecule_lenient
+expected_category: molecule_lenient
+category: molecule_lenient
 molecule:
   success: false
   error:
     error_type: InvalidPropertyLine
-    message: "Invalid property line at line 51, col 0"
+    message: "Invalid property line at line 41, col 0"
 molecule_lenient:
-  success: false
-  error:
-    error_type: InvalidPropertyLine
-    message: "Invalid property line at line 51, col 0"
+  success: true
+  summary:
+    sum_formula: C12Cr
+    atom_count: 13
+    bond_count: 24
+    property_count: 0
 extended_molecule:
   success: false
   error:
-    error_type: MissingMEndTag
-    message: Missing M  END tag at line 52
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 41, col 0"
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C17HNO4
-    atom_count: 23
+    sum_formula: C12Cr
+    atom_count: 13
     bond_count: 24
     extended_atoms: 0
-    extended_bonds: 0
+    extended_bonds: 12
     property_count: 0
     rgroup_count: 0
     sgroup_count: 0

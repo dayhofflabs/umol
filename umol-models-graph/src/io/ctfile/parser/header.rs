@@ -1,35 +1,41 @@
 //! Header parser for MOL files.
 
 use bstr::ByteSlice;
-use nom::character::complete::{line_ending, not_line_ending};
-use nom::combinator::map;
-use nom::error::Error as NomError;
-use nom::sequence::terminated;
-use nom::Parser;
+use nom::Err;
 
-/// Parse a single line from the MOL header
-fn header_input<'inp>() -> impl Parser<&'inp [u8], Output = String, Error = NomError<&'inp [u8]>> {
-    map(not_line_ending, |s: &[u8]| s.to_str_lossy().into_owned())
-}
+use super::utils::LinesWithOffsetExt;
+use crate::io::ctfile::error::ParseError;
 
 /// Parse the 3-line MOL file header block (name, program info, comment)
 ///
-/// Returns a Vec of 3 strings: [name, program_info, comment]
+/// Returns (Vec of 3 strings, updated line offset)
 pub(super) fn header_block<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<String>, Error = NomError<&'inp [u8]>> {
-    map(
-        (
-            terminated(header_input(), line_ending),
-            terminated(header_input(), line_ending),
-            terminated(header_input(), line_ending),
-        ),
-        |(name, program_info, comment)| vec![name, program_info, comment],
-    )
+    line_offset: u32,
+) -> impl FnMut(&'inp [u8]) -> Result<(&'inp [u8], (Vec<String>, u32)), Err<ParseError>> {
+    move |input: &'inp [u8]| {
+        let mut lines_iter = input.lines_with_offset();
+        let mut headers = Vec::with_capacity(3);
+        let mut byte_offset = 0;
+
+        for i in 0..3 {
+            let (line, byte_len) = lines_iter.next().ok_or_else(|| {
+                Err::Error(ParseError::UnexpectedEof {
+                    line: line_offset + i,
+                    block: "header",
+                })
+            })?;
+            headers.push(line.to_str_lossy().into_owned());
+            byte_offset += byte_len;
+        }
+
+        let remaining = &input[byte_offset..];
+        Ok((remaining, (headers, line_offset + 3)))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use nom::combinator::all_consuming;
+    use nom::Parser;
     use rstest::*;
 
     use super::*;
@@ -47,11 +53,24 @@ mod tests {
         b"  Molecule Name  \n  Program Info  \n  Comment Line  \n",
         vec!["  Molecule Name  ".to_string(), "  Program Info  ".to_string(), "  Comment Line  ".to_string()]
     )]
+    #[case::crlf(
+        b"Name\r\nProgram\r\nComment\r\n",
+        vec!["Name".to_string(), "Program".to_string(), "Comment".to_string()]
+    )]
     fn test_header_block(#[case] input: &[u8], #[case] expected: Vec<String>) {
-        let result = all_consuming(header_block()).parse(input);
+        let result = header_block(0).parse(input);
         assert!(result.is_ok(), "should have succeeded: {:?}", result.err());
-        let (remaining, header) = result.unwrap();
+        let (remaining, (headers, line_offset)) = result.unwrap();
         assert!(remaining.is_empty(), "has remaining data");
-        assert_eq!(header, expected);
+        assert_eq!(headers, expected);
+        assert_eq!(line_offset, 3);
+    }
+
+    #[rstest]
+    #[case::two_lines(b"Line1\nLine2\n", Err::Error(ParseError::UnexpectedEof { line: 2, block: "header" }))]
+    fn test_header_block_invalid(#[case] input: &[u8], #[case] expected_error: Err<ParseError>) {
+        let result = header_block(0).parse(input);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), expected_error);
     }
 }

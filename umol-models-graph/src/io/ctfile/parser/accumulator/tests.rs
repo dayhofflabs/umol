@@ -7,15 +7,15 @@ use umol_data::{e, Element, NamedIsotope};
 use super::*;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{
-    AtomAliasEntry, AtomAttachmentOrderEntry, AtomHydrogenCountEntry, AtomListEntry,
-    AtomValueEntry, AttachmentPointEntry, ChargeEntry, IsotopeEntry, LinkAtomEntry,
-    PropertyEntries, RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry,
-    SGroupAtomListEntry, SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry,
-    SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDataDescriptionEntry,
-    SGroupDataDisplayEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
-    SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
-    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
-    ZeroAtomChargeEntry, ZeroBondOrderEntry,
+    AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,
+    AtomListEntry, AtomValueEntry, AttachmentPointEntry, BondOrderOverrideEntry, ChargeEntry,
+    IsotopeEntry, LegacyGroupAbbreviationEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry,
+    RGroupLogicEntry, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
+    SGroupComponentEntry, SGroupConnectingBondEntry, SGroupConnectivityEntry,
+    SGroupCorrespondenceEntry, SGroupDataDescriptionEntry, SGroupDataDisplayEntry, SGroupDataEntry,
+    SGroupDisplayInfoEntry, SGroupExpansionEntry, SGroupHierarchyEntry, SGroupLabelEntry,
+    SGroupParentAtomEntry, SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry,
+    SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::table_ir::{
     Atom, AtomList, AtomSymbol, AttachmentPointType, Bond, BondOrder, ExtendedAtom, ExtendedBond,
@@ -410,11 +410,11 @@ fn test_apply_isotope_lenient(mut single_atom: Molecule, flags_lenient: CtabPars
 }
 
 #[rstest]
-fn test_apply_zero_order_bond(mut with_bond: Molecule, flags_lenient: CtabParseFlags) {
+fn test_apply_bond_order_override(mut with_bond: Molecule, flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
+    let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 0,
-        bond_order: 0,
+        bond_order: BondOrder::Zero,
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     acc.update_molecule(&mut with_bond, flags_lenient).unwrap();
@@ -424,11 +424,14 @@ fn test_apply_zero_order_bond(mut with_bond: Molecule, flags_lenient: CtabParseF
 }
 
 #[rstest]
-fn test_apply_zero_order_bond_invalid(mut single_atom: Molecule, flags_lenient: CtabParseFlags) {
+fn test_apply_bond_order_override_invalid(
+    mut single_atom: Molecule,
+    flags_lenient: CtabParseFlags,
+) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
+    let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 5,
-        bond_order: 0,
+        bond_order: BondOrder::Zero,
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     let result = acc.update_molecule(&mut single_atom, flags_lenient);
@@ -436,9 +439,9 @@ fn test_apply_zero_order_bond_invalid(mut single_atom: Molecule, flags_lenient: 
 }
 
 #[rstest]
-fn test_apply_zero_atom_charge(mut single_atom: Molecule, flags_lenient: CtabParseFlags) {
+fn test_apply_atom_charge_override(mut single_atom: Molecule, flags_lenient: CtabParseFlags) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+    let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 0,
         charge: -1,
     }]);
@@ -451,9 +454,12 @@ fn test_apply_zero_atom_charge(mut single_atom: Molecule, flags_lenient: CtabPar
 }
 
 #[rstest]
-fn test_apply_zero_atom_charge_invalid(mut single_atom: Molecule, flags_lenient: CtabParseFlags) {
+fn test_apply_atom_charge_override_invalid(
+    mut single_atom: Molecule,
+    flags_lenient: CtabParseFlags,
+) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+    let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 5,
         charge: -1,
     }]);
@@ -467,7 +473,7 @@ fn test_apply_atom_hydrogen_count(mut single_atom: Molecule, flags_lenient: Ctab
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 0,
-        hydrogen_count: 1,
+        hydrogen_count: Some(1),
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     acc.update_molecule(&mut single_atom, flags_lenient)
@@ -485,7 +491,7 @@ fn test_apply_atom_hydrogen_count_invalid(
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 5,
-        hydrogen_count: 1,
+        hydrogen_count: Some(1),
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     let result = acc.update_molecule(&mut single_atom, flags_lenient);
@@ -523,6 +529,29 @@ fn test_apply_extended_atom_alias_invalid_index(
     acc.add_entry(entry, flags_basic).unwrap();
     let result = acc.update_extended_molecule(&mut single_extended_atom, flags_basic);
     assert!(result.is_err());
+}
+
+#[rstest]
+fn test_apply_extended_legacy_group_abbreviation(
+    mut triatomic_extended_molecule: ExtendedMolecule,
+    flags_basic: CtabParseFlags,
+) {
+    let mut acc = MoleculeProperties::new();
+    let entry = PropertyEntries::LegacyGroupAbbreviationEntry(LegacyGroupAbbreviationEntry {
+        atom_index1: 0,
+        atom_index2: 1,
+        label: "A".to_string(),
+    });
+    acc.add_entry(entry, flags_basic).unwrap();
+    acc.update_extended_molecule(&mut triatomic_extended_molecule, flags_basic)
+        .unwrap();
+
+    let ctfile_data = triatomic_extended_molecule.ctfile_data.as_ref().unwrap();
+    assert_eq!(ctfile_data.legacy_group_abbreviations.len(), 1);
+    let abbreviation = &ctfile_data.legacy_group_abbreviations[0];
+    assert_eq!(abbreviation.atom_index1, 0);
+    assert_eq!(abbreviation.atom_index2, 1);
+    assert_eq!(abbreviation.label, "A");
 }
 
 #[rstest]
@@ -773,14 +802,14 @@ fn test_apply_extended_isotope_lenient(
 }
 
 #[rstest]
-fn test_apply_extended_zero_order_bond(
+fn test_apply_extended_bond_order_override(
     mut with_extended_bond: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
+    let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 0,
-        bond_order: 0,
+        bond_order: BondOrder::Zero,
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     acc.update_extended_molecule(&mut with_extended_bond, flags_lenient)
@@ -790,14 +819,14 @@ fn test_apply_extended_zero_order_bond(
 }
 
 #[rstest]
-fn test_apply_extended_zero_order_bond_invalid(
+fn test_apply_extended_bond_order_override_invalid(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry {
+    let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 5,
-        bond_order: 0,
+        bond_order: BondOrder::Zero,
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     let result = acc.update_extended_molecule(&mut single_extended_atom, flags_lenient);
@@ -805,12 +834,12 @@ fn test_apply_extended_zero_order_bond_invalid(
 }
 
 #[rstest]
-fn test_apply_extended_zero_atom_charge(
+fn test_apply_extended_atom_charge_override(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+    let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 0,
         charge: -1,
     }]);
@@ -822,12 +851,12 @@ fn test_apply_extended_zero_atom_charge(
 }
 
 #[rstest]
-fn test_apply_extended_zero_atom_charge_invalid(
+fn test_apply_extended_atom_charge_override_invalid(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
-    let entry = PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry {
+    let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 5,
         charge: -1,
     }]);
@@ -837,14 +866,14 @@ fn test_apply_extended_zero_atom_charge_invalid(
 }
 
 #[rstest]
-fn test_apply_extended_hydrogen_count(
+fn test_apply_extended_atom_hydrogen_count(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 0,
-        hydrogen_count: 1,
+        hydrogen_count: Some(1),
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     acc.update_extended_molecule(&mut single_extended_atom, flags_lenient)
@@ -854,14 +883,14 @@ fn test_apply_extended_hydrogen_count(
 }
 
 #[rstest]
-fn test_apply_extended_hydrogen_count_invalid(
+fn test_apply_extended_atom_hydrogen_count_invalid(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
     let mut acc = MoleculeProperties::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 5,
-        hydrogen_count: 1,
+        hydrogen_count: Some(1),
     }]);
     acc.add_entry(entry, flags_lenient).unwrap();
     let result = acc.update_extended_molecule(&mut single_extended_atom, flags_lenient);

@@ -2,11 +2,11 @@
 alwaysApply: true
 ---
 ## Do not write code unless explicitly asked
-- **NEVER** proceed with an implementation as a response to a "how?" question
-- Describe implementation design before coding if it was not discussed before
-- Only write enough code to fulfill the user requirements. You ain't gonna need it.
-- Do not "future-proof" code. Ask whether edge cases need to be considered
-- Avoid superfluous and excessive commenting of the code; make the actual code legible instead
+- **NEVER** proceed with an implementation as a response to a "how?" question.
+- Describe implementation design before coding if it was not discussed before.
+- Only write enough code to fulfill the user requirements.
+- Do not "future-proof" code. Ask whether edge cases need to be considered.
+- Avoid superfluous and excessive commenting of the code; make the actual code legible instead.
 
 ## Do not take initiative in being the architect
 - **NEVER** change the design based on your internal deliberations
@@ -26,7 +26,6 @@ alwaysApply: true
 
 ## Project targets
 - Prefer speed over generality; simple, direct implementations first.
-- Keep functions short and cohesive; minimal comments, clear code.
-- No premature abstraction or future-proofing; YAGNI.
+- Prefer meaningful variable and function names to comments.
 - Respect existing names and modules; avoid churn.
 - Tests should be small, focused, and fast; prefer table tests.

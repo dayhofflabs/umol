@@ -22,6 +22,41 @@ use umol_data::{Element, NamedIsotope};
 use crate::position::Point3D;
 use crate::table_ir::RGroupOccurrence;
 
+/// Iterator over lines that yields each line without terminator and its byte length including terminator.
+pub(super) struct LinesWithOffset<'inp> {
+    inner: bstr::LinesWithTerminator<'inp>,
+}
+
+impl<'inp> LinesWithOffset<'inp> {
+    pub(super) fn new(input: &'inp [u8]) -> Self {
+        Self {
+            inner: input.lines_with_terminator(),
+        }
+    }
+}
+
+impl<'inp> Iterator for LinesWithOffset<'inp> {
+    type Item = (&'inp [u8], usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|line_with_term| {
+            let byte_len = line_with_term.len();
+            let line = line_with_term.trim_end_with(|c| c == '\r' || c == '\n');
+            (line, byte_len)
+        })
+    }
+}
+
+pub(super) trait LinesWithOffsetExt<'inp> {
+    fn lines_with_offset(self) -> LinesWithOffset<'inp>;
+}
+
+impl<'inp> LinesWithOffsetExt<'inp> for &'inp [u8] {
+    fn lines_with_offset(self) -> LinesWithOffset<'inp> {
+        LinesWithOffset::new(self)
+    }
+}
+
 pub(super) trait Contains<T: PartialOrd> {
     fn contains(&self, value: &T) -> bool;
 }

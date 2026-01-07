@@ -85,7 +85,6 @@ pub enum ParseError {
     SGroupIndexMismatch { expected: usize, actual: usize },
 }
 
-/// TODO: Use LineSpan wrapper to track column offset
 impl<I> NomParseError<I> for ParseError {
     fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
         ParseError::NomError(kind)

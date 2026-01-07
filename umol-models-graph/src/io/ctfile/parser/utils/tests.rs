@@ -9,6 +9,34 @@ use rstest::*;
 use super::*;
 
 #[rstest]
+#[case::empty(b"", vec![])]
+#[case::single_line_lf(b"abc\n", vec![(b"abc".as_slice(), 4)])]
+#[case::single_line_crlf(b"abc\r\n", vec![(b"abc".as_slice(), 5)])]
+#[case::single_line_no_term(b"abc", vec![(b"abc".as_slice(), 3)])]
+#[case::two_lines_lf(b"abc\ndef\n", vec![(b"abc".as_slice(), 4), (b"def".as_slice(), 4)])]
+#[case::two_lines_crlf(b"abc\r\ndef\r\n", vec![(b"abc".as_slice(), 5), (b"def".as_slice(), 5)])]
+#[case::two_lines_mixed(b"abc\r\ndef\n", vec![(b"abc".as_slice(), 5), (b"def".as_slice(), 4)])]
+#[case::two_lines_no_final_term(b"abc\ndef", vec![(b"abc".as_slice(), 4), (b"def".as_slice(), 3)])]
+#[case::empty_line_lf(b"\n", vec![(b"".as_slice(), 1)])]
+#[case::empty_line_crlf(b"\r\n", vec![(b"".as_slice(), 2)])]
+#[case::two_empty_lines(b"\n\n", vec![(b"".as_slice(), 1), (b"".as_slice(), 1)])]
+#[case::blank_line_between(b"a\n\nb\n", vec![(b"a".as_slice(), 2), (b"".as_slice(), 1), (b"b".as_slice(), 2)])]
+fn test_lines_with_offset(#[case] input: &[u8], #[case] expected: Vec<(&[u8], usize)>) {
+    let result: Vec<_> = input.lines_with_offset().collect();
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_lines_with_offset_offset_sum() {
+    let input = b"line1\r\nline2\nline3";
+    let mut total = 0;
+    for (_, len) in input.lines_with_offset() {
+        total += len;
+    }
+    assert_eq!(total, input.len());
+}
+
+#[rstest]
 #[case::empty(b"", true)]
 #[case::whitespace(b"   ", true)]
 #[case::zero(b"  0", true)]
@@ -115,6 +143,7 @@ fn test_fixed_width_opt_invalid(#[case] input: &[u8], #[case] expected_kind: Nom
 #[case::negative(b"-98", -98i32)]
 #[case::padded(b"  8", 8i32)]
 #[case::blank(b"   ", 0i32)]
+#[case::blank_width2(b"  ", 0i32)]
 fn test_fixed_width_int(#[case] input: &[u8], #[case] expected: i32) {
     let mut parser = all_consuming(fixed_width_int::<i32>(3));
     let result = parser.parse(input);
@@ -371,6 +400,7 @@ fn test_fixed_width_int_partial_invalid(#[case] input: &[u8], #[case] expected_k
 #[case::integer_padded_left(b"   1234567", 123.4567)]
 #[case::negative_padded_left(b"  -1234567", -123.4567)]
 #[case::blank(b"          ", 0.0)]
+#[case::blank_width9(b"         ", 0.0)]
 fn test_fixed_width_float(#[case] input: &[u8], #[case] expected: f64) {
     let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
     let result = parser.parse(input);
@@ -404,6 +434,8 @@ fn test_fixed_width_float_invalid(#[case] input: &[u8], #[case] expected_kind: N
 #[case::two_characters_pos1(b"Cu  ", Some(Element::Cu))]
 #[case::two_characters_pos2(b" Cu ", Some(Element::Cu))]
 #[case::two_characters_pos3(b"  Cu", Some(Element::Cu))]
+#[case::blank(b"   ", None)]
+#[case::blank_width2(b"  ", None)]
 fn test_fixed_width_element_partial(#[case] input: &[u8], #[case] expected: Option<Element>) {
     let mut parser = all_consuming(fixed_width_element_partial(4));
     let result = parser.parse(input);
@@ -454,6 +486,8 @@ fn test_fixed_width_element_partial_invalid(
 #[case::three_zeros_skip_unused_fields(b"000", 3, true, true)]
 #[case::two_zeros_separated_skip_unused_fields(b"0 0", 3, true, true)]
 #[case::one_skip_unused_fields(b"  1", 3, true, true)]
+#[case::non_numeric(b" a ", 3, false, false)]
+#[case::blank_width2(b"  ", 3, false, false)]
 fn test_fixed_width_unused(
     #[case] input: &[u8],
     #[case] width: usize,
@@ -498,6 +532,7 @@ fn test_fixed_width_unused(
 #[case::one_skip_unused_fields(b"  1", 1, 3, true, true)]
 #[case::one_zero_padded_left(b"000001", 2, 3, false, false)]
 #[case::two_fields_too_short_skip_unused_fields(b"000", 2, 3, true, false)]
+#[case::two_fields_blank_width5(b"     ", 2, 3, false, false)]
 fn test_fixed_width_unused_n(
     #[case] input: &[u8],
     #[case] count: usize,
@@ -609,6 +644,38 @@ fn test_rgroup_occurrences(#[case] input: &[u8], #[case] expected: Vec<RGroupOcc
         expected,
         "{}: value mismatch",
         String::from_utf8_lossy(input)
+    );
+}
+
+#[rstest]
+#[case::named_isotope_disallowed(b"D", false, false, false, false, false, true)]
+#[case::named_isotope_allowed(b"D", true, false, false, false, false, false)]
+#[case::wildcard_disallowed(b"A", false, false, false, false, false, true)]
+#[case::wildcard_allowed(b"A", false, true, false, false, false, false)]
+#[case::electrons_disallowed(b"LP", false, false, false, false, false, true)]
+#[case::electrons_allowed(b"LP", false, false, false, true, false, false)]
+#[case::rgroup_disallowed(b"R1", false, false, false, false, false, true)]
+#[case::rgroup_allowed(b"R1", false, false, false, false, true, false)]
+#[case::element_symbol(b"C", false, false, false, false, false, false)]
+fn test_is_reserved_atom_symbol(
+    #[case] symbol: &[u8],
+    #[case] allow_named_isotopes: bool,
+    #[case] allow_wildcards: bool,
+    #[case] allow_chemaxon_wildcards: bool,
+    #[case] allow_electrons: bool,
+    #[case] allow_rgroups: bool,
+    #[case] expected: bool,
+) {
+    assert_eq!(
+        is_reserved_atom_symbol(
+            symbol,
+            allow_named_isotopes,
+            allow_wildcards,
+            allow_chemaxon_wildcards,
+            allow_electrons,
+            allow_rgroups
+        ),
+        expected
     );
 }
 

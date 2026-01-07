@@ -10,37 +10,54 @@ use super::*;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::table_ir::{SGroupMultiplierOp, SGroupMultiplierTerm};
 
-#[rstest]
-#[case::no_space(b"  1\nCF3", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
-#[case::leading_space(b" 15\n  Et", AtomAliasEntry { atom_index: 14, alias: "  Et".to_string() })]
-fn test_atom_alias_entry(#[case] input: &[u8], #[case] expected: AtomAliasEntry) {
-    let result = all_consuming(atom_alias_entry()).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, result) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(result, expected);
-}
-
-#[rstest]
-#[case::atom_index_is_zero(b"  0\n  Et", NomErrorKind::Verify)]
-#[case::too_short(b" 1\n  Et", NomErrorKind::Eof)]
-#[case::too_long(b"   1\n  Et", NomErrorKind::Verify)]
-fn test_atom_alias_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = all_consuming(atom_alias_entry()).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
+#[test]
+fn test_properties_block() {
+    let ctab_data = b"M  CHG  1   2  -1\nM  END";
+    let flags = CtabParseFlags::BASIC;
+    let result = properties_block(0, flags).parse(ctab_data);
     assert!(
-        matches!(result.as_ref(), Err(Err::Error(e)) if e.code == expected_kind),
-        "Expected {:?} error for {:?}, got {:?}",
-        expected_kind,
-        input_str,
-        result
+        result.is_ok(),
+        "Properties block should parse successfully in BASIC mode"
     );
+
+    let (remaining, (property_entries, _)) = result.unwrap();
+    assert!(remaining.is_empty(), "All input should be consumed");
+    assert_eq!(property_entries.len(), 1, "Should have 1 property entry");
+    assert!(matches!(
+        property_entries[0],
+        PropertyEntries::ChargeEntries(_)
+    ));
+}
+
+#[test]
+fn test_extended_properties_block() {
+    let ctab_data = b"M  ALS   1  2 F Cl  Br\nM  END";
+    let flags = CtabParseFlags::EXTENDED;
+    let result = extended_properties_block(0, flags).parse(ctab_data);
+    assert!(
+        result.is_ok(),
+        "Extended properties block should parse successfully in EXTENDED mode"
+    );
+    let (remaining, _) = result.unwrap();
+    assert!(remaining.is_empty(), "All input should be consumed");
+}
+
+#[test]
+fn test_properties_block_m_end_only() {
+    let ctab_data = b"M  END";
+    let flags = CtabParseFlags::BASIC;
+    let result = properties_block(0, flags).parse(ctab_data);
+    assert!(
+        result.is_ok(),
+        "Properties block should parse with just M  END"
+    );
+
+    let (remaining, (property_entries, _)) = result.unwrap();
+    assert!(remaining.is_empty(), "All input should be consumed");
+    assert_eq!(property_entries.len(), 0, "Should have 0 property entries");
 }
 
 #[rstest]
-#[case::a_atom_alias(b"A    1\nCF3", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 #[case::v_atom_value(b"V    1 *", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
 #[case::chg_atom(b"M  CHG  1   1  -1", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case::rad_atom(b"M  RAD  1   1   2", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
@@ -109,10 +126,10 @@ fn test_property_input_invalid(#[case] input: &[u8]) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::zbo_bond(b"M  ZBO  1   1   0", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
-#[case::zch_atom(b"M  ZCH  1   1  -1", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case::hyd_atom(b"M  HYD  1   1   1", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
-fn test_property_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries) {
+#[case::bond_order_override(b"M  ZBO  1   1   0", PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry { bond_index: 0, bond_order: BondOrder::Zero }]))]
+#[case::atom_charge_override(b"M  ZCH  1   1  -1", PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry { atom_index: 0, charge: -1 }]))]
+#[case::atom_hydrogen_count(b"M  HYD  1   1   1", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: Some(1) }]))]
+fn test_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries) {
     let (remaining, result) = all_consuming(property_input(CtabParseFlags::LENIENT))
         .parse(input)
         .unwrap();
@@ -126,7 +143,6 @@ fn test_property_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries
 }
 
 #[rstest]
-#[case::a_atom_alias(b"A    1\nCF3", PropertyEntries::AtomAliasEntry(AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() }))]
 #[case::v_atom_value(b"V    1 *", PropertyEntries::AtomValueEntry(AtomValueEntry { atom_index: 0, value: "*".to_string() }))]
 #[case::chg(b"M  CHG  1   1  -1", PropertyEntries::ChargeEntries(vec![ChargeEntry { atom_index: 0, charge: -1 }]))]
 #[case::rad(b"M  RAD  1   1   2", PropertyEntries::RadicalEntries(vec![RadicalEntry { atom_index: 0, radical_type: 2 }]))]
@@ -186,9 +202,9 @@ fn test_extended_property_input(#[case] input: &[u8], #[case] expected: Property
 #[case::count_zero(b"M  CHG  0", NomErrorKind::Verify)]
 #[case::atom_index_zero(b"M  CHG  1   0 -10", NomErrorKind::Verify)]
 #[case::invalid_property_tag(b"M  XXX  1   1  -1", NomErrorKind::Tag)]
-#[case::zbo_clark_extensions(b"M  ZBO  1   1   0", NomErrorKind::Tag)]
-#[case::zch_clark_extensions(b"M  ZCH  1   1  -1", NomErrorKind::Tag)]
-#[case::hyd_clark_extensions(b"M  HYD  1   1   1", NomErrorKind::Tag)]
+#[case::bond_order_override(b"M  ZBO  1   1   0", NomErrorKind::Tag)]
+#[case::atom_charge_override(b"M  ZCH  1   1  -1", NomErrorKind::Tag)]
+#[case::atom_hydrogen_count(b"M  HYD  1   1   1", NomErrorKind::Tag)]
 fn test_extended_property_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(extended_property_input(CtabParseFlags::EXTENDED)).parse(input);
     let input_str = input.to_str_lossy();
@@ -204,9 +220,9 @@ fn test_extended_property_input_invalid(#[case] input: &[u8], #[case] expected_k
 
 #[rustfmt::skip]
 #[rstest]
-#[case::zbo_clark_extensions(b"M  ZBO  1   1   0", PropertyEntries::ZeroBondOrderEntries(vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }]))]
-#[case::zch_clark_extensions(b"M  ZCH  1   1  -1", PropertyEntries::ZeroAtomChargeEntries(vec![ZeroAtomChargeEntry { atom_index: 0, charge: -1 }]))]
-#[case::hyd_clark_extensions(b"M  HYD  1   1   1", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 1 }]))]
+#[case::bond_order_override(b"M  ZBO  1   1   0", PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry { bond_index: 0, bond_order: BondOrder::Zero }]))]
+#[case::atom_charge_override(b"M  ZCH  1   1  -1", PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry { atom_index: 0, charge: -1 }]))]
+#[case::atom_hydrogen_count(b"M  HYD  1   1   1", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: Some(1) }]))]
 fn test_extended_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries) {
     let result = all_consuming(extended_property_input(CtabParseFlags::LENIENT)).parse(input);
     let input_str = input.to_str_lossy();
@@ -218,6 +234,74 @@ fn test_extended_property_input_lenient(#[case] input: &[u8], #[case] expected: 
         input_str
     );
     assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case::no_space(b"A    1", b"CF3", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
+#[case::leading_space(b"A   15", b"  Et", AtomAliasEntry { atom_index: 14, alias: "  Et".to_string() })]
+fn test_parse_atom_alias_input(
+    #[case] first_line: &[u8],
+    #[case] second_line: &[u8],
+    #[case] expected: AtomAliasEntry,
+) {
+    let result = parse_atom_alias_input(first_line, second_line);
+    assert!(result.is_ok(), "{:?} should have succeeded", first_line);
+    assert_eq!(result.unwrap(), PropertyEntries::AtomAliasEntry(expected));
+}
+
+#[rstest]
+#[case::atom_index_is_zero(b"A    0", b"Et", NomErrorKind::Digit)]
+#[case::too_short(b"A   1", b"Et", NomErrorKind::Digit)]
+fn test_parse_atom_alias_input_invalid(
+    #[case] first_line: &[u8],
+    #[case] second_line: &[u8],
+    #[case] expected_kind: NomErrorKind,
+) {
+    let result = parse_atom_alias_input(first_line, second_line);
+    assert!(result.is_err(), "{:?} should have failed", first_line);
+    assert!(
+        matches!(result.as_ref(), Err(e) if e.code == expected_kind),
+        "Expected {:?} error, got {:?}",
+        expected_kind,
+        result
+    );
+}
+
+#[rstest]
+#[case::basic(b"G   12 11", b"SH", LegacyGroupAbbreviationEntry { atom_index1: 11, atom_index2: 10, label: "SH".to_string() })]
+#[case::single_digit(b"G    5  1", b"NH2", LegacyGroupAbbreviationEntry { atom_index1: 4, atom_index2: 0, label: "NH2".to_string() })]
+#[case::double_digit(b"G   17 16", b"COOH", LegacyGroupAbbreviationEntry { atom_index1: 16, atom_index2: 15, label: "COOH".to_string() })]
+#[case::no_padding(b"G  123456", b"X", LegacyGroupAbbreviationEntry { atom_index1: 122, atom_index2: 455, label: "X".to_string() })]
+fn test_parse_legacy_group_abbreviation_input(
+    #[case] first_line: &[u8],
+    #[case] second_line: &[u8],
+    #[case] expected: LegacyGroupAbbreviationEntry,
+) {
+    let result = parse_legacy_group_abbreviation_input(first_line, second_line);
+    assert!(result.is_ok(), "{:?} should have succeeded", first_line);
+    assert_eq!(
+        result.unwrap(),
+        PropertyEntries::LegacyGroupAbbreviationEntry(expected)
+    );
+}
+
+#[rstest]
+#[case::from_atom_is_zero(b"G    0  1", b"Et", NomErrorKind::Digit)]
+#[case::to_atom_is_zero(b"G    1  0", b"Et", NomErrorKind::Digit)]
+#[case::too_short(b"G   12", b"Et", NomErrorKind::Digit)]
+fn test_parse_legacy_group_abbreviation_input_invalid(
+    #[case] first_line: &[u8],
+    #[case] second_line: &[u8],
+    #[case] expected_kind: NomErrorKind,
+) {
+    let result = parse_legacy_group_abbreviation_input(first_line, second_line);
+    assert!(result.is_err(), "{:?} should have failed", first_line);
+    assert!(
+        matches!(result.as_ref(), Err(e) if e.code == expected_kind),
+        "Expected {:?} error, got {:?}",
+        expected_kind,
+        result
+    );
 }
 
 #[rstest]
@@ -386,10 +470,7 @@ fn test_ring_bond_count_entries(#[case] input: &[u8], #[case] expected: Vec<Ring
 #[case::trailing_characters(b"  1   1   2 a", NomErrorKind::Eof)]
 #[case::count_is_zero(b"  0", NomErrorKind::Verify)]
 #[case::atom_index_is_zero(b"  1   0   2", NomErrorKind::Verify)]
-fn test_ring_bond_count_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
+fn test_ring_bond_count_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(ring_bond_count_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
@@ -647,10 +728,7 @@ fn test_rgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<RGroupL
 #[case::count_exceeds_8(b"  9   1   2", NomErrorKind::Verify)]
 #[case::atom_index_is_zero(b"  1   0   2", NomErrorKind::Verify)]
 #[case::trailing_characters(b"  1   1   2 a", NomErrorKind::Eof)]
-fn test_rgroup_label_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
+fn test_rgroup_label_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(rgroup_label_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?}", input_str);
@@ -754,10 +832,7 @@ fn test_sgroup_subtype_entries(#[case] input: &[u8], #[case] expected: Vec<SGrou
 #[rstest]
 #[case::invalid_sgroup_subtype(b"  1   1 FOO", NomErrorKind::MapRes)]
 #[case::trailing_characters(b"  1   1 ALT a", NomErrorKind::Eof)]
-fn test_sgroup_subtype_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
+fn test_sgroup_subtype_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(sgroup_subtype_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
@@ -787,10 +862,7 @@ fn test_sgroup_label_entries(#[case] input: &[u8], #[case] expected: Vec<SGroupL
 #[case::label_out_of_range(b"  1   1   0", NomErrorKind::Verify)]
 #[case::label_out_of_range_high(b"  1   1 513", NomErrorKind::Verify)]
 #[case::trailing_characters(b"  1   1   1 a", NomErrorKind::Eof)]
-fn test_sgroup_label_entries_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
+fn test_sgroup_label_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(sgroup_label_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
@@ -897,10 +969,7 @@ fn test_sgroup_atom_list_entry(#[case] input: &[u8], #[case] expected: SGroupAto
 #[rstest]
 #[case::count_exceeds_15(b"   1 16   1", NomErrorKind::Verify)]
 #[case::trailing_characters(b"   1  1   1 a", NomErrorKind::Eof)]
-fn test_sgroup_atom_list_entry_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
+fn test_sgroup_atom_list_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(sgroup_atom_list_entry()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
@@ -928,10 +997,7 @@ fn test_sgroup_bond_list_entry(#[case] input: &[u8], #[case] expected: SGroupBon
 #[rstest]
 #[case::count_exceeds_15(b"   1 16   1", NomErrorKind::Verify)]
 #[case::trailing_characters(b"   1  1   1 a", NomErrorKind::Eof)]
-fn test_sgroup_bond_list_entry_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
+fn test_sgroup_bond_list_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(sgroup_bond_list_entry()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
@@ -990,10 +1056,7 @@ fn test_sgroup_subscript_entry(#[case] input: &[u8], #[case] expected: SGroupSub
 
 #[rstest]
 #[case::sgroup_index_is_zero(b"   0 1", NomErrorKind::Verify)]
-fn test_sgroup_subscript_entry_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
+fn test_sgroup_subscript_entry_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = all_consuming(sgroup_subscript_entry()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
@@ -1348,13 +1411,16 @@ fn test_sgroup_component_entries_invalid(
 }
 
 #[rstest]
-#[case::one_entry(b"  1   1   0", vec![ZeroBondOrderEntry { bond_index: 0, bond_order: 0 }])]
+#[case::one_entry(b"  1   1   0", vec![BondOrderOverrideEntry { bond_index: 0, bond_order: BondOrder::Zero }])]
 #[case::multiple_entries(b"  2   1   2   3   4", vec![
-    ZeroBondOrderEntry { bond_index: 0, bond_order: 2 },
-    ZeroBondOrderEntry { bond_index: 2, bond_order: 4 },
+    BondOrderOverrideEntry { bond_index: 0, bond_order: BondOrder::Double },
+    BondOrderOverrideEntry { bond_index: 2, bond_order: BondOrder::Quadruple },
 ])]
-fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<ZeroBondOrderEntry>) {
-    let result = all_consuming(zero_bond_order_entries()).parse(input);
+fn test_bond_order_override_entries(
+    #[case] input: &[u8],
+    #[case] expected: Vec<BondOrderOverrideEntry>,
+) {
+    let result = all_consuming(bond_order_override_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1365,9 +1431,10 @@ fn test_zero_order_bond_entries(#[case] input: &[u8], #[case] expected: Vec<Zero
 #[rstest]
 #[case::count_is_zero(b"  0   1   0", NomErrorKind::Verify)]
 #[case::bond_index_is_zero(b"  1   0   0", NomErrorKind::Verify)]
+#[case::bond_order_out_of_range(b"  1   1   7", NomErrorKind::Verify)]
 #[case::trailing_characters(b"  1   1   0 a", NomErrorKind::Eof)]
-fn test_zero_bond_order_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = all_consuming(zero_bond_order_entries()).parse(input);
+fn test_bond_order_override_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let result = all_consuming(bond_order_override_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -1380,13 +1447,16 @@ fn test_zero_bond_order_entries_invalid(#[case] input: &[u8], #[case] expected_k
 }
 
 #[rstest]
-#[case::one_entry(b"  1   1   0", vec![ZeroAtomChargeEntry { atom_index: 0, charge: 0 }])]
+#[case::one_entry(b"  1   1   0", vec![AtomChargeOverrideEntry { atom_index: 0, charge: 0 }])]
 #[case::multiple_entries(b"  2   1   2   3  -1", vec![
-    ZeroAtomChargeEntry { atom_index: 0, charge: 2 },
-    ZeroAtomChargeEntry { atom_index: 2, charge: -1 },
+    AtomChargeOverrideEntry { atom_index: 0, charge: 2 },
+    AtomChargeOverrideEntry { atom_index: 2, charge: -1 },
 ])]
-fn test_zero_atom_charge_entries(#[case] input: &[u8], #[case] expected: Vec<ZeroAtomChargeEntry>) {
-    let result = all_consuming(zero_atom_charge_entries()).parse(input);
+fn test_atom_charge_override_entries(
+    #[case] input: &[u8],
+    #[case] expected: Vec<AtomChargeOverrideEntry>,
+) {
+    let result = all_consuming(atom_charge_overrides_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1397,12 +1467,13 @@ fn test_zero_atom_charge_entries(#[case] input: &[u8], #[case] expected: Vec<Zer
 #[rstest]
 #[case::count_is_zero(b"  0   1   0", NomErrorKind::Verify)]
 #[case::atom_index_is_zero(b"  1   0   0", NomErrorKind::Verify)]
+#[case::hydrogen_count_out_of_range(b"  1   1   9", NomErrorKind::Verify)]
 #[case::trailing_characters(b"  1   1   0 a", NomErrorKind::Eof)]
-fn test_zero_atom_charge_entries_invalid(
+fn test_atom_charge_override_entries_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = all_consuming(zero_atom_charge_entries()).parse(input);
+    let result = all_consuming(atom_charge_overrides_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -1415,16 +1486,17 @@ fn test_zero_atom_charge_entries_invalid(
 }
 
 #[rstest]
-#[case::one_entry(b"  1   1   0", vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 0 }])]
+#[case::one_entry(b"  1   1   0", vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: Some(0) }])]
+#[case::no_override(b"  1   1  -1", vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: None }])]
 #[case::multiple_entries(b"  2   1   2   3   4", vec![
-    AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: 2 },
-    AtomHydrogenCountEntry { atom_index: 2, hydrogen_count: 4 },
+    AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: Some(2) },
+    AtomHydrogenCountEntry { atom_index: 2, hydrogen_count: Some(4) },
 ])]
 fn test_atom_hydrogen_count_entries(
     #[case] input: &[u8],
     #[case] expected: Vec<AtomHydrogenCountEntry>,
 ) {
-    let result = all_consuming(hydrogen_count_entries()).parse(input);
+    let result = all_consuming(atom_hydrogen_count_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1433,14 +1505,15 @@ fn test_atom_hydrogen_count_entries(
 }
 
 #[rstest]
-#[case::count_is_zero(b"  0   1   0", NomErrorKind::Verify)]
+#[case::count_is_zero(b"  0   1   0", NomErrorKind::Eof)]
 #[case::atom_index_is_zero(b"  1   0   0", NomErrorKind::Verify)]
+#[case::hydrogen_count_out_of_range(b"  1   1   9", NomErrorKind::Verify)]
 #[case::trailing_characters(b"  1   1   0 a", NomErrorKind::Eof)]
 fn test_atom_hydrogen_count_entries_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = all_consuming(hydrogen_count_entries()).parse(input);
+    let result = all_consuming(atom_hydrogen_count_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
