@@ -11,7 +11,7 @@ use nom::combinator::opt;
 use nom::sequence::terminated;
 use nom::{Err, Parser};
 
-use self::accumulator::MoleculeProperties;
+use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};
 pub use self::atom::{atom_input, extended_atom_input}; // NOTE: Re-exported for benchmarks
 use self::bond::{bond_block, extended_bond_block};
@@ -59,7 +59,8 @@ pub fn ctab_block<'inp>(
     let legacy_atom_lists = flags.contains(CtabParseFlags::LEGACY_ATOM_LISTS);
 
     move |input: &'inp [u8]| {
-        let (remaining, (counts, line_offset)) = counts_block(line_offset, flags).parse(input)?;
+        let (remaining, (counts, molecule_properties, line_offset)) =
+            counts_block(line_offset, flags).parse(input)?;
         let atom_count = counts.atom_count;
         let bond_count = counts.bond_count;
         let atom_list_count = counts.atom_list_count;
@@ -82,21 +83,18 @@ pub fn ctab_block<'inp>(
         let (remaining, (properties, line_offset)) =
             properties_block(line_offset, flags).parse(remaining)?;
 
-        let properties = if !legacy_properties.is_empty() {
-            properties.into_iter().chain(legacy_properties).collect()
+        let properties = if !legacy_properties.is_empty() || !molecule_properties.is_empty() {
+            properties
+                .into_iter()
+                .chain(molecule_properties)
+                .chain(legacy_properties)
+                .collect()
         } else {
             properties
         };
 
-        let molecule = build_molecule(
-            atoms,
-            bonds,
-            positions,
-            properties,
-            counts.chiral_flag,
-            flags,
-        )
-        .map_err(|e| Err::Error(e))?;
+        let molecule = build_molecule(atoms, bonds, positions, properties, flags)
+            .map_err(|e| Err::Error(e))?;
         Ok((remaining, (molecule, line_offset)))
     }
 }
@@ -111,7 +109,8 @@ pub fn extended_ctab_block<'inp>(
     let legacy_atom_lists = flags.contains(CtabParseFlags::LEGACY_ATOM_LISTS);
 
     move |input: &'inp [u8]| {
-        let (remaining, (counts, line_offset)) = counts_block(line_offset, flags).parse(input)?;
+        let (remaining, (counts, molecule_properties, line_offset)) =
+            counts_block(line_offset, flags).parse(input)?;
         let atom_count = counts.atom_count;
         let bond_count = counts.bond_count;
         let atom_list_count = counts.atom_list_count;
@@ -137,21 +136,18 @@ pub fn extended_ctab_block<'inp>(
         let (remaining, (properties, line_offset)) =
             extended_properties_block(line_offset, flags).parse(remaining)?;
 
-        let properties = if !legacy_properties.is_empty() {
-            properties.into_iter().chain(legacy_properties).collect()
+        let properties = if !legacy_properties.is_empty() || !molecule_properties.is_empty() {
+            properties
+                .into_iter()
+                .chain(legacy_properties)
+                .chain(molecule_properties)
+                .collect()
         } else {
             properties
         };
 
-        let extended = build_extended_molecule(
-            atoms,
-            bonds,
-            positions,
-            properties,
-            counts.chiral_flag,
-            flags,
-        )
-        .map_err(|e| Err::Error(e))?;
+        let extended = build_extended_molecule(atoms, bonds, positions, properties, flags)
+            .map_err(|e| Err::Error(e))?;
         Ok((remaining, (extended, line_offset)))
     }
 }
@@ -162,8 +158,6 @@ fn build_molecule(
     bonds: Vec<(usize, usize, Bond)>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
-    // TODO: Add chiral flag to molecule
-    _chiral_flag: bool,
     flags: CtabParseFlags,
 ) -> Result<Molecule, ParseError> {
     let bonds: Vec<Bond> = bonds
@@ -184,7 +178,7 @@ fn build_molecule(
         source_format: SourceFormat::MOL,
     };
 
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     for entry in properties {
         acc.add_entry(entry, flags)?;
     }
@@ -199,8 +193,6 @@ fn build_extended_molecule(
     bonds: Vec<(usize, usize, ExtendedBond)>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
-    // TODO: Add chiral flag to extended molecule
-    _chiral_flag: bool,
     flags: CtabParseFlags,
 ) -> Result<ExtendedMolecule, ParseError> {
     let bonds: Vec<ExtendedBond> = bonds
@@ -225,7 +217,7 @@ fn build_extended_molecule(
         source_format: SourceFormat::MOL,
     };
 
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     for entry in properties {
         acc.add_entry(entry, flags)?;
     }

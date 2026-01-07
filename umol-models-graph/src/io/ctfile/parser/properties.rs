@@ -30,6 +30,11 @@ use crate::table_ir::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct MoleculeChiralFlagEntry {
+    pub chiral_flag: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AtomAliasEntry {
     pub atom_index: usize,
     pub alias: String,
@@ -273,6 +278,7 @@ pub struct AtomHydrogenCountEntry {
 /// Parsed property entries
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyEntries {
+    MoleculeChiralFlagEntry(MoleculeChiralFlagEntry),
     AtomAliasEntry(AtomAliasEntry),
     LegacyGroupAbbreviationEntry(LegacyGroupAbbreviationEntry),
     AtomValueEntry(AtomValueEntry),

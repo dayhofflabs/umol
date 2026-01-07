@@ -9,13 +9,13 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,
     AtomListEntry, AtomValueEntry, AttachmentPointEntry, BondOrderOverrideEntry, ChargeEntry,
-    IsotopeEntry, LegacyGroupAbbreviationEntry, LinkAtomEntry, PropertyEntries, RGroupLabelEntry,
-    RGroupLogicEntry, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
-    SGroupComponentEntry, SGroupConnectingBondEntry, SGroupConnectivityEntry,
-    SGroupCorrespondenceEntry, SGroupDataDescriptionEntry, SGroupDataDisplayEntry, SGroupDataEntry,
-    SGroupDisplayInfoEntry, SGroupExpansionEntry, SGroupHierarchyEntry, SGroupLabelEntry,
-    SGroupParentAtomEntry, SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry,
-    SubstitutionCountEntry, UnsaturatedAtomEntry,
+    IsotopeEntry, LegacyGroupAbbreviationEntry, LinkAtomEntry, MoleculeChiralFlagEntry,
+    PropertyEntries, RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry,
+    SGroupAtomListEntry, SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry,
+    SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDataDescriptionEntry,
+    SGroupDataDisplayEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
+    SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
+    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::table_ir::{
     Atom, AtomList, AtomSymbol, AttachmentPointType, Bond, BondOrder, ExtendedAtom, ExtendedBond,
@@ -141,8 +141,8 @@ fn with_extended_bond(mut single_extended_atom: ExtendedMolecule) -> ExtendedMol
 }
 
 #[fixture]
-fn acc_with_superatom_sgroup(flags_extended: CtabParseFlags) -> MoleculeProperties {
-    let mut acc = MoleculeProperties::new();
+fn acc_with_superatom_sgroup(flags_extended: CtabParseFlags) -> PropertyAccumulator {
+    let mut acc = PropertyAccumulator::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
         sgroup_type: SGroupType::Superatom,
@@ -152,8 +152,8 @@ fn acc_with_superatom_sgroup(flags_extended: CtabParseFlags) -> MoleculeProperti
 }
 
 #[fixture]
-fn acc_with_data_sgroup(flags_extended: CtabParseFlags) -> MoleculeProperties {
-    let mut acc = MoleculeProperties::new();
+fn acc_with_data_sgroup(flags_extended: CtabParseFlags) -> PropertyAccumulator {
+    let mut acc = PropertyAccumulator::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
         sgroup_type: SGroupType::Data,
@@ -174,8 +174,8 @@ fn acc_with_data_sgroup(flags_extended: CtabParseFlags) -> MoleculeProperties {
 }
 
 #[fixture]
-fn acc_with_multiple_sgroup(flags_extended: CtabParseFlags) -> MoleculeProperties {
-    let mut acc = MoleculeProperties::new();
+fn acc_with_multiple_sgroup(flags_extended: CtabParseFlags) -> PropertyAccumulator {
+    let mut acc = PropertyAccumulator::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
         sgroup_type: SGroupType::MultipleGroup,
@@ -185,8 +185,8 @@ fn acc_with_multiple_sgroup(flags_extended: CtabParseFlags) -> MoleculePropertie
 }
 
 #[fixture]
-fn acc_with_copolymer_sgroup(flags_extended: CtabParseFlags) -> MoleculeProperties {
-    let mut acc = MoleculeProperties::new();
+fn acc_with_copolymer_sgroup(flags_extended: CtabParseFlags) -> PropertyAccumulator {
+    let mut acc = PropertyAccumulator::new();
     let type_entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
         sgroup_type: SGroupType::Copolymer,
@@ -196,8 +196,30 @@ fn acc_with_copolymer_sgroup(flags_extended: CtabParseFlags) -> MoleculeProperti
 }
 
 #[rstest]
+fn test_apply_molecule_chiral_flag(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
+    let mut acc = PropertyAccumulator::new();
+    let entry =
+        PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true });
+    acc.add_entry(entry, flags_basic).unwrap();
+    acc.update_molecule(&mut single_atom, flags_basic).unwrap();
+
+    assert_eq!(
+        single_atom.properties.get("chiral_flag"),
+        Some(&"true".to_string())
+    );
+}
+
+#[rstest]
+fn test_apply_molecule_no_chiral_flag(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
+    let mut acc = PropertyAccumulator::new();
+    acc.update_molecule(&mut single_atom, flags_basic).unwrap();
+
+    assert!(single_atom.properties.get("chiral_flag").is_none());
+}
+
+#[rstest]
 fn test_apply_atom_alias(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 0,
         alias: "CF3".to_string(),
@@ -211,7 +233,7 @@ fn test_apply_atom_alias(mut single_atom: Molecule, flags_basic: CtabParseFlags)
 
 #[rstest]
 fn test_apply_atom_alias_invalid_index(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 5,
         alias: "CF3".to_string(),
@@ -223,7 +245,7 @@ fn test_apply_atom_alias_invalid_index(mut single_atom: Molecule, flags_basic: C
 
 #[rstest]
 fn test_apply_atom_value(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 0,
         value: "*".to_string(),
@@ -237,7 +259,7 @@ fn test_apply_atom_value(mut single_atom: Molecule, flags_basic: CtabParseFlags)
 
 #[rstest]
 fn test_apply_atom_value_invalid_index(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 5,
         value: "*".to_string(),
@@ -249,7 +271,7 @@ fn test_apply_atom_value_invalid_index(mut single_atom: Molecule, flags_basic: C
 
 #[rstest]
 fn test_apply_charge(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 0,
         charge: -1,
@@ -264,7 +286,7 @@ fn test_apply_charge(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
 
 #[rstest]
 fn test_apply_charge_multiple(mut triatomic_molecule: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
 
     let entries = vec![
         ChargeEntry {
@@ -288,7 +310,7 @@ fn test_apply_charge_multiple(mut triatomic_molecule: Molecule, flags_basic: Cta
 
 #[rstest]
 fn test_apply_charge_invalid_index(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 5,
         charge: -1,
@@ -300,7 +322,7 @@ fn test_apply_charge_invalid_index(mut single_atom: Molecule, flags_basic: CtabP
 
 #[rstest]
 fn test_apply_charge_overwrite(mut with_properties: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 0,
         charge: -2,
@@ -316,7 +338,7 @@ fn test_apply_charge_overwrite(mut with_properties: Molecule, flags_basic: CtabP
 
 #[rstest]
 fn test_apply_radical(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 2, // Doublet: 1 unpaired electron
@@ -331,7 +353,7 @@ fn test_apply_radical(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
 
 #[rstest]
 fn test_apply_radical_invalid_index(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 5,
         radical_type: 2,
@@ -343,7 +365,7 @@ fn test_apply_radical_invalid_index(mut single_atom: Molecule, flags_basic: Ctab
 
 #[rstest]
 fn test_apply_radical_invalid_code(flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 4,
@@ -354,7 +376,7 @@ fn test_apply_radical_invalid_code(flags_basic: CtabParseFlags) {
 
 #[rstest]
 fn test_apply_radical_overwrite(mut with_properties: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 1,
@@ -370,7 +392,7 @@ fn test_apply_radical_overwrite(mut with_properties: Molecule, flags_basic: Ctab
 
 #[rstest]
 fn test_apply_isotope(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 14,
@@ -384,7 +406,7 @@ fn test_apply_isotope(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
 
 #[rstest]
 fn test_apply_isotope_invalid_index(mut single_atom: Molecule, flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 5,
         mass: 13,
@@ -396,7 +418,7 @@ fn test_apply_isotope_invalid_index(mut single_atom: Molecule, flags_basic: Ctab
 
 #[rstest]
 fn test_apply_isotope_lenient(mut single_atom: Molecule, flags_lenient: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 40,
@@ -411,7 +433,7 @@ fn test_apply_isotope_lenient(mut single_atom: Molecule, flags_lenient: CtabPars
 
 #[rstest]
 fn test_apply_bond_order_override(mut with_bond: Molecule, flags_lenient: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 0,
         bond_order: BondOrder::Zero,
@@ -428,7 +450,7 @@ fn test_apply_bond_order_override_invalid(
     mut single_atom: Molecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 5,
         bond_order: BondOrder::Zero,
@@ -440,7 +462,7 @@ fn test_apply_bond_order_override_invalid(
 
 #[rstest]
 fn test_apply_atom_charge_override(mut single_atom: Molecule, flags_lenient: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 0,
         charge: -1,
@@ -458,7 +480,7 @@ fn test_apply_atom_charge_override_invalid(
     mut single_atom: Molecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 5,
         charge: -1,
@@ -470,7 +492,7 @@ fn test_apply_atom_charge_override_invalid(
 
 #[rstest]
 fn test_apply_atom_hydrogen_count(mut single_atom: Molecule, flags_lenient: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 0,
         hydrogen_count: Some(1),
@@ -488,7 +510,7 @@ fn test_apply_atom_hydrogen_count_invalid(
     mut single_atom: Molecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 5,
         hydrogen_count: Some(1),
@@ -499,11 +521,41 @@ fn test_apply_atom_hydrogen_count_invalid(
 }
 
 #[rstest]
+fn test_apply_extended_molecule_chiral_flag(
+    mut single_extended_atom: ExtendedMolecule,
+    flags_extended: CtabParseFlags,
+) {
+    let mut acc = PropertyAccumulator::new();
+    let entry =
+        PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true });
+    acc.add_entry(entry, flags_extended).unwrap();
+    acc.update_extended_molecule(&mut single_extended_atom, flags_extended)
+        .unwrap();
+
+    assert_eq!(
+        single_extended_atom.properties.get("chiral_flag"),
+        Some(&"true".to_string())
+    );
+}
+
+#[rstest]
+fn test_apply_extended_molecule_no_chiral_flag(
+    mut single_extended_atom: ExtendedMolecule,
+    flags_extended: CtabParseFlags,
+) {
+    let mut acc = PropertyAccumulator::new();
+    acc.update_extended_molecule(&mut single_extended_atom, flags_extended)
+        .unwrap();
+
+    assert!(single_extended_atom.properties.get("chiral_flag").is_none());
+}
+
+#[rstest]
 fn test_apply_extended_atom_alias(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 0,
         alias: "CF3".to_string(),
@@ -521,7 +573,7 @@ fn test_apply_extended_atom_alias_invalid_index(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomAliasEntry(AtomAliasEntry {
         atom_index: 5,
         alias: "CF3".to_string(),
@@ -536,7 +588,7 @@ fn test_apply_extended_legacy_group_abbreviation(
     mut triatomic_extended_molecule: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::LegacyGroupAbbreviationEntry(LegacyGroupAbbreviationEntry {
         atom_index1: 0,
         atom_index2: 1,
@@ -559,7 +611,7 @@ fn test_apply_extended_atom_value(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 0,
         value: "*".to_string(),
@@ -577,7 +629,7 @@ fn test_apply_extended_atom_value_invalid_index(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomValueEntry(AtomValueEntry {
         atom_index: 5,
         value: "*".to_string(),
@@ -592,7 +644,7 @@ fn test_apply_extended_charge(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 0,
         charge: -1,
@@ -611,7 +663,7 @@ fn test_apply_extended_charge_multiple(
     mut triatomic_extended_molecule: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
 
     let entries = vec![
         ChargeEntry {
@@ -638,7 +690,7 @@ fn test_apply_extended_charge_invalid_index(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 5,
         charge: -1,
@@ -653,7 +705,7 @@ fn test_apply_extended_charge_overwrite(
     mut with_extended_properties: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::ChargeEntries(vec![ChargeEntry {
         atom_index: 0,
         charge: -2,
@@ -672,7 +724,7 @@ fn test_apply_extended_radical(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 2, // Doublet: 1 unpaired electron
@@ -691,7 +743,7 @@ fn test_apply_extended_radical_invalid_index(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 5,
         radical_type: 2,
@@ -703,7 +755,7 @@ fn test_apply_extended_radical_invalid_index(
 
 #[rstest]
 fn test_apply_extended_radical_invalid_code(flags_basic: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 4,
@@ -717,7 +769,7 @@ fn test_apply_extended_radical_overwrite(
     mut with_extended_properties: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RadicalEntries(vec![RadicalEntry {
         atom_index: 0,
         radical_type: 1,
@@ -736,7 +788,7 @@ fn test_apply_extended_isotope(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 14,
@@ -754,7 +806,7 @@ fn test_apply_extended_isotope_invalid_index(
     mut single_extended_atom: ExtendedMolecule,
     flags_basic: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 5,
         mass: 13,
@@ -770,7 +822,7 @@ fn test_apply_extended_isotope_named_isotope(
     flags_extended: CtabParseFlags,
 ) {
     single_extended_atom.atoms[0].symbol = AtomSymbol::NamedIsotope(NamedIsotope::D);
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 3,
@@ -788,7 +840,7 @@ fn test_apply_extended_isotope_lenient(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::IsotopeEntries(vec![IsotopeEntry {
         atom_index: 0,
         mass: 40,
@@ -806,7 +858,7 @@ fn test_apply_extended_bond_order_override(
     mut with_extended_bond: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 0,
         bond_order: BondOrder::Zero,
@@ -823,7 +875,7 @@ fn test_apply_extended_bond_order_override_invalid(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::BondOrderOverrideEntries(vec![BondOrderOverrideEntry {
         bond_index: 5,
         bond_order: BondOrder::Zero,
@@ -838,7 +890,7 @@ fn test_apply_extended_atom_charge_override(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 0,
         charge: -1,
@@ -855,7 +907,7 @@ fn test_apply_extended_atom_charge_override_invalid(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry {
         atom_index: 5,
         charge: -1,
@@ -870,7 +922,7 @@ fn test_apply_extended_atom_hydrogen_count(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 0,
         hydrogen_count: Some(1),
@@ -887,7 +939,7 @@ fn test_apply_extended_atom_hydrogen_count_invalid(
     mut single_extended_atom: ExtendedMolecule,
     flags_lenient: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry {
         atom_index: 5,
         hydrogen_count: Some(1),
@@ -902,7 +954,7 @@ fn test_apply_extended_sgroup_type(
     mut single_extended_atom: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupTypeEntries(vec![SGroupTypeEntry {
         sgroup_index: 0,
         sgroup_type: SGroupType::Superatom,
@@ -918,7 +970,7 @@ fn test_apply_extended_sgroup_type(
 
 #[rstest]
 fn test_apply_extended_sgroup_type_conflict(flags_extended: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SGroupTypeEntries(vec![
         SGroupTypeEntry {
             sgroup_index: 0,
@@ -936,7 +988,7 @@ fn test_apply_extended_sgroup_type_conflict(flags_extended: CtabParseFlags) {
 #[rstest]
 fn test_apply_extended_sgroup_subtype(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_copolymer_sgroup: MoleculeProperties,
+    mut acc_with_copolymer_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let subtype_entry = PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry {
@@ -956,7 +1008,7 @@ fn test_apply_extended_sgroup_subtype(
 
 #[rstest]
 fn test_apply_extended_sgroup_subtype_missing(flags_strict: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let subtype_entry = PropertyEntries::SGroupSubtypeEntries(vec![SGroupSubtypeEntry {
         sgroup_index: 0,
         sgroup_subtype: SGroupSubtype::Alternating,
@@ -968,7 +1020,7 @@ fn test_apply_extended_sgroup_subtype_missing(flags_strict: CtabParseFlags) {
 #[rstest]
 fn test_apply_extended_sgroup_label(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let label_entry = PropertyEntries::SGroupLabelEntries(vec![SGroupLabelEntry {
@@ -989,7 +1041,7 @@ fn test_apply_extended_sgroup_label(
 #[rstest]
 fn test_apply_extended_sgroup_connectivity(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupConnectivityEntries(vec![SGroupConnectivityEntry {
@@ -1010,7 +1062,7 @@ fn test_apply_extended_sgroup_connectivity(
 #[rstest]
 fn test_apply_extended_sgroup_expansion(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry =
@@ -1029,7 +1081,7 @@ fn test_apply_extended_sgroup_expansion(
 #[rstest]
 fn test_apply_extended_sgroup_atom_list(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupAtomListEntry(SGroupAtomListEntry {
@@ -1050,7 +1102,7 @@ fn test_apply_extended_sgroup_atom_list(
 #[rstest]
 fn test_apply_extended_sgroup_bond_list(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupBondListEntry(SGroupBondListEntry {
@@ -1071,7 +1123,7 @@ fn test_apply_extended_sgroup_bond_list(
 #[rstest]
 fn test_apply_extended_sgroup_parent_atom(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupParentAtomEntry(SGroupParentAtomEntry {
@@ -1092,7 +1144,7 @@ fn test_apply_extended_sgroup_parent_atom(
 #[rstest]
 fn test_apply_extended_sgroup_subscript(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
@@ -1115,7 +1167,7 @@ fn test_apply_extended_sgroup_subscript(
 #[rstest]
 fn test_apply_extended_sgroup_multiplier(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_multiple_sgroup: MoleculeProperties,
+    mut acc_with_multiple_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupSubscriptEntry(SGroupSubscriptEntry {
@@ -1145,7 +1197,7 @@ fn test_apply_extended_sgroup_multiplier(
 #[rstest]
 fn test_apply_extended_sgroup_correspondence(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupCorrespondenceEntry(SGroupCorrespondenceEntry {
@@ -1166,7 +1218,7 @@ fn test_apply_extended_sgroup_correspondence(
 #[rstest]
 fn test_apply_extended_sgroup_display_info(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupDisplayInfoEntry(SGroupDisplayInfoEntry {
@@ -1193,7 +1245,7 @@ fn test_apply_extended_sgroup_display_info(
 #[rstest]
 fn test_apply_extended_sgroup_connecting_bond(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let entry = PropertyEntries::SGroupConnectingBondEntry(SGroupConnectingBondEntry {
@@ -1221,7 +1273,7 @@ fn test_apply_extended_sgroup_connecting_bond(
 #[rstest]
 fn test_apply_extended_sgroup_data_description(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_data_sgroup: MoleculeProperties,
+    mut acc_with_data_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     acc_with_data_sgroup
@@ -1239,7 +1291,7 @@ fn test_apply_extended_sgroup_data_description(
 #[rstest]
 fn test_apply_extended_sgroup_data_entry(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_data_sgroup: MoleculeProperties,
+    mut acc_with_data_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
@@ -1267,7 +1319,7 @@ fn test_apply_extended_sgroup_data_entry(
 #[rstest]
 fn test_apply_extended_sgroup_data_display(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let display_entry = PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry {
@@ -1302,7 +1354,7 @@ fn test_apply_extended_sgroup_data_display(
 #[rstest]
 fn test_apply_extended_sgroup_hierarchy(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     // Add a second SGroup as parent
@@ -1333,7 +1385,7 @@ fn test_apply_extended_sgroup_hierarchy(
 #[rstest]
 fn test_apply_extended_sgroup_component(
     mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_superatom_sgroup: MoleculeProperties,
+    mut acc_with_superatom_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
     let component_entry = PropertyEntries::SGroupComponentEntries(vec![SGroupComponentEntry {
@@ -1362,7 +1414,7 @@ fn test_apply_extended_ring_bond_count(
     #[case] expected: Option<RingBondCount>,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
         ring_bond_count: code,
@@ -1378,7 +1430,7 @@ fn test_apply_extended_ring_bond_count_conflict(
     mut with_extended_properties: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
         ring_bond_count: 3,
@@ -1392,7 +1444,7 @@ fn test_apply_extended_ring_bond_count_conflict(
 #[case::out_of_range_low(1)]
 #[case::out_of_range_high(5)]
 fn test_apply_extended_ring_bond_count_invalid(#[case] code: i8, flags_strict: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RingBondCountEntries(vec![RingBondCountEntry {
         atom_index: 0,
         ring_bond_count: code,
@@ -1412,7 +1464,7 @@ fn test_apply_extended_substitution_count(
     #[case] expected: Option<SubstitutionCount>,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
         substitution_count: code,
@@ -1428,7 +1480,7 @@ fn test_apply_extended_substitution_count_conflict(
     mut with_extended_properties: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
         substitution_count: 3,
@@ -1442,7 +1494,7 @@ fn test_apply_extended_substitution_count_conflict(
 #[case::out_of_range_low(-3)]
 #[case::out_of_range_high(7)]
 fn test_apply_extended_substitution_count_invalid(#[case] code: i8, flags_strict: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::SubstitutionCountEntries(vec![SubstitutionCountEntry {
         atom_index: 0,
         substitution_count: code,
@@ -1460,7 +1512,7 @@ fn test_apply_extended_unsaturated(
     #[case] expected: Option<UnsaturatedAtom>,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry {
         atom_index: 0,
         unsaturated: code,
@@ -1474,7 +1526,7 @@ fn test_apply_extended_unsaturated(
 #[rstest]
 #[case::out_of_range_high(2)]
 fn test_apply_extended_unsaturated_invalid(#[case] code: u8, flags_strict: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::UnsaturatedAtomEntries(vec![UnsaturatedAtomEntry {
         atom_index: 0,
         unsaturated: code,
@@ -1488,7 +1540,7 @@ fn test_apply_extended_link_atom(
     mut single_extended_atom: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::LinkAtomEntries(vec![LinkAtomEntry {
         atom_index: 0,
         repeat_count: 2,
@@ -1510,7 +1562,7 @@ fn test_apply_extended_link_atom(
 
 #[rstest]
 fn test_apply_extended_link_atom_conflict(flags_extended: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::LinkAtomEntries(vec![
         LinkAtomEntry {
             atom_index: 0,
@@ -1534,7 +1586,7 @@ fn test_apply_extended_atom_list(
     mut single_extended_atom: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
         atom_index: 0,
         elements: vec![e!(N), e!(O)],
@@ -1557,7 +1609,7 @@ fn test_apply_extended_atom_list_conflict(
     mut with_rgroup: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomListEntry(AtomListEntry {
         atom_index: 0,
         elements: vec![e!(N), e!(O)],
@@ -1579,7 +1631,7 @@ fn test_apply_extended_attachment_point(
     #[case] expected: Option<AttachmentPointType>,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry {
         atom_index: 0,
         attachment_type: code,
@@ -1592,7 +1644,7 @@ fn test_apply_extended_attachment_point(
 
 #[rstest]
 fn test_apply_extended_attachment_point_conflict(flags_extended: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![
         AttachmentPointEntry {
             atom_index: 0,
@@ -1609,7 +1661,7 @@ fn test_apply_extended_attachment_point_conflict(flags_extended: CtabParseFlags)
 
 #[rstest]
 fn test_apply_extended_attachment_point_invalid(flags_strict: CtabParseFlags) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AttachmentPointEntries(vec![AttachmentPointEntry {
         atom_index: 0,
         attachment_type: 4,
@@ -1623,7 +1675,7 @@ fn test_apply_extended_attachment_order(
     mut single_extended_atom: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::AtomAttachmentOrderEntry(AtomAttachmentOrderEntry {
         atom_index: 0,
         attachments: vec![(1, 2), (2, 1)],
@@ -1645,7 +1697,7 @@ fn test_apply_extended_rgroup_label(
     mut single_extended_atom: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 1,
@@ -1666,7 +1718,7 @@ fn test_apply_extended_rgroup_label_keep(
     mut with_rgroup: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 1,
@@ -1688,7 +1740,7 @@ fn test_apply_extended_rgroup_label_overwrite(
     mut with_unlabeled_rgroup: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 3,
@@ -1710,7 +1762,7 @@ fn test_apply_extended_rgroup_label_conflict(
     mut with_rgroup: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 2,
@@ -1729,7 +1781,7 @@ fn test_apply_extended_rgroup_label_invalid(
         elements: vec![e!(N), e!(O)],
         exclusion: false,
     });
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLabelEntries(vec![RGroupLabelEntry {
         atom_index: 0,
         label: 1,
@@ -1744,7 +1796,7 @@ fn test_apply_extended_rgroup_logic(
     mut with_rgroup: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLogicEntry(RGroupLogicEntry {
         label: 1,
         dependent_label: Some(2),
@@ -1767,7 +1819,7 @@ fn test_apply_extended_rgroup_logic_multiple_occurrences(
     mut with_rgroup: ExtendedMolecule,
     flags_extended: CtabParseFlags,
 ) {
-    let mut acc = MoleculeProperties::new();
+    let mut acc = PropertyAccumulator::new();
     let entry = PropertyEntries::RGroupLogicEntry(RGroupLogicEntry {
         label: 1,
         dependent_label: Some(2),

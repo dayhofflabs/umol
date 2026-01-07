@@ -237,6 +237,17 @@ fn test_extended_property_input_lenient(#[case] input: &[u8], #[case] expected: 
 }
 
 #[rstest]
+#[case::chiral_flag_true(true, PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true }))]
+#[case::chiral_flag_false(false, PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: false }))]
+fn test_make_molecule_chiral_flag_entry(
+    #[case] chiral_flag: bool,
+    #[case] expected: PropertyEntries,
+) {
+    let result = PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag });
+    assert_eq!(result, expected);
+}
+
+#[rstest]
 #[case::no_space(b"A    1", b"CF3", AtomAliasEntry { atom_index: 0, alias: "CF3".to_string() })]
 #[case::leading_space(b"A   15", b"  Et", AtomAliasEntry { atom_index: 14, alias: "  Et".to_string() })]
 fn test_parse_atom_alias_input(
@@ -1433,7 +1444,10 @@ fn test_bond_order_override_entries(
 #[case::bond_index_is_zero(b"  1   0   0", NomErrorKind::Verify)]
 #[case::bond_order_out_of_range(b"  1   1   7", NomErrorKind::Verify)]
 #[case::trailing_characters(b"  1   1   0 a", NomErrorKind::Eof)]
-fn test_bond_order_override_entries_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+fn test_bond_order_override_entries_invalid(
+    #[case] input: &[u8],
+    #[case] expected_kind: NomErrorKind,
+) {
     let result = all_consuming(bond_order_override_entries()).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);

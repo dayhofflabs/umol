@@ -8,16 +8,20 @@ use nom::error::Error as NomError;
 use nom::sequence::{delimited, terminated};
 use nom::{Err, Parser};
 
-use super::utils::{fixed_width_int, fixed_width_unused_n, LinesWithOffsetExt};
+use super::properties::{MoleculeChiralFlagEntry, PropertyEntries};
+use super::utils::{
+    fixed_width_int, fixed_width_int_in_range, fixed_width_unused, fixed_width_unused_n,
+    LinesWithOffsetExt,
+};
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
-use crate::io::ctfile::parser::utils::{fixed_width_int_in_range, fixed_width_unused};
 
 /// Parse counts block
 pub(super) fn counts_block<'inp>(
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Counts, u32), Error = ParseError> + use<'inp> {
+) -> impl Parser<&'inp [u8], Output = (Counts, Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp>
+{
     move |input: &'inp [u8]| {
         let (line, byte_len) = input.lines_with_offset().next().ok_or_else(|| {
             Err::Error(ParseError::UnexpectedEof {
@@ -26,12 +30,12 @@ pub(super) fn counts_block<'inp>(
             })
         })?;
 
-        let (_, counts) = all_consuming(terminated(counts_input(flags), space0))
+        let (_, (counts, properties)) = all_consuming(terminated(counts_input(flags), space0))
             .parse(line)
             .map_err(|e| Err::Error(ParseError::counts_from_nom(e, line_offset)))?;
 
         let remaining = &input[byte_len..];
-        Ok((remaining, (counts, line_offset + 1)))
+        Ok((remaining, (counts, properties, line_offset + 1)))
     }
 }
 
@@ -58,7 +62,8 @@ pub(super) fn counts_block<'inp>(
 ///
 pub fn counts_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = Counts, Error = NomError<&'inp [u8]>> + use<'inp> {
+) -> impl Parser<&'inp [u8], Output = (Counts, Vec<PropertyEntries>), Error = NomError<&'inp [u8]>>
+       + use<'inp> {
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let no_v2000_end_tags = flags.contains(CtabParseFlags::NO_V2000_END_TAGS);
     map(
@@ -76,11 +81,21 @@ pub fn counts_input<'inp>(
                 ),
             ),
         ),
-        |(atom_count, bond_count, atom_list_count, chiral_flag)| Counts {
-            atom_count,
-            bond_count,
-            atom_list_count,
-            chiral_flag: chiral_flag != 0,
+        |(atom_count, bond_count, atom_list_count, chiral_flag)| {
+            (
+                Counts {
+                    atom_count,
+                    bond_count,
+                    atom_list_count,
+                },
+                if chiral_flag == 1 {
+                    vec![PropertyEntries::MoleculeChiralFlagEntry(
+                        MoleculeChiralFlagEntry { chiral_flag: true },
+                    )]
+                } else {
+                    vec![]
+                },
+            )
         },
     )
 }
@@ -104,7 +119,6 @@ pub struct Counts {
     pub atom_count: u32,
     pub bond_count: u32,
     pub atom_list_count: u32,
-    pub chiral_flag: bool,
 }
 
 #[cfg(test)]
@@ -118,35 +132,39 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::zeroes(b"  0  0  0  0  0  0  0  0  0  0  0 V2000",
-      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
-    #[case::padded_newline(b"  1  0  0  0  0  0  0  0  0  0  0 V2000    \n",
-      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
-    #[case::padded_crlf(b"  6  5  1     1                   V2000\r\n",
-      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: true})]
-    #[case::properties_999(b"  6  5  1     1               999 V2000\n",
-      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: true})]
-    #[case::no_terminator(b"  1  0  0  0  0  0  0  0  0  0  0 V2000",
-      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
-    #[case::tag_only(b"                                  V2000\n",
-      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
-    #[case::chiral(b"  1  0  0  0  1  0  0  0  0  0  0 V2000",
-      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: true})]
-    #[case::invalid_unused(b"  4  2  0     0  1                V2000",
-      Counts {atom_count: 4, bond_count: 2, atom_list_count: 0, chiral_flag: false})]
-    fn test_counts_block(#[case] input: &[u8], #[case] expected: Counts) {
+    #[case::zeroes(b"  0  0  0  0  0  0  0  0  0  0  0 V2000", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::padded_newline(b"  1  0  0  0  0  0  0  0  0  0  0 V2000    \n", Counts {atom_count: 1, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::padded_crlf(b"  6  5  1     1                   V2000\r\n", Counts {atom_count: 6, bond_count: 5, atom_list_count: 1},
+        vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
+    #[case::properties_999(b"  6  5  1     1               999 V2000\n", Counts {atom_count: 6, bond_count: 5, atom_list_count: 1},
+        vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
+    #[case::no_terminator(b"  1  0  0  0  0  0  0  0  0  0  0 V2000", Counts {atom_count: 1, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::tag_only(b"                                  V2000\n", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::chiral_flag(b"  1  0  0  0  1  0  0  0  0  0  0 V2000", Counts {atom_count: 1, bond_count: 0, atom_list_count: 0},
+        vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
+    #[case::invalid_unused(b"  4  2  0     0  1                V2000", Counts {atom_count: 4, bond_count: 2, atom_list_count: 0}, vec![])]
+    fn test_counts_block(
+        #[case] input: &[u8],
+        #[case] expected_counts: Counts,
+        #[case] expected_properties: Vec<PropertyEntries>,
+    ) {
         let res = counts_block(0, CtabParseFlags::BASIC).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_ok(), "{:?} should have succeeded", input_str);
-        let (remaining, (counts, line_offset)) = res.unwrap();
+        let (remaining, (counts, properties, line_offset)) = res.unwrap();
         assert!(
             remaining.is_empty(),
             "{:?} should have consumed all input",
             input_str
         );
         assert_eq!(
-            counts, expected,
-            "{:?} should have parsed correctly",
+            counts, expected_counts,
+            "{:?} should have parsed counts correctly",
+            input_str
+        );
+        assert_eq!(
+            properties, expected_properties,
+            "{:?} should have parsed properties correctly",
             input_str
         );
         assert_eq!(
@@ -157,33 +175,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::zeroes(b"  0  0  0  0  0  0  0  0  0  0  0 V2000",
-      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
-    #[case::atom_count(b"  1  0  0  0  0  0  0  0  0  0  0 V2000",
-      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
-    #[case::properties_999(b"  6  5  1     1               999 V2000",
-      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: true})]
-    #[case::tag_only(b"                                  V2000",
-      Counts {atom_count: 0, bond_count: 0, atom_list_count: 0, chiral_flag: false})]
-    #[case::blanks(b"  6  5  1                         V2000",
-      Counts {atom_count: 6, bond_count: 5, atom_list_count: 1, chiral_flag: false})]
-    #[case::chiral(b"  1  0  0  0  1  0  0  0  0  0  0 V2000",
-      Counts {atom_count: 1, bond_count: 0, atom_list_count: 0, chiral_flag: true})]
-    #[case::invalid_unused(b"  4  2  0     0  1                V2000",
-      Counts {atom_count: 4, bond_count: 2, atom_list_count: 0, chiral_flag: false})]
-    fn test_counts_input(#[case] input: &[u8], #[case] expected: Counts) {
+    #[case::zeroes(b"  0  0  0  0  0  0  0  0  0  0  0 V2000", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::atom_count(b"  1  0  0  0  0  0  0  0  0  0  0 V2000", Counts {atom_count: 1, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::properties_999(b"  6  5  1     1               999 V2000", Counts {atom_count: 6, bond_count: 5, atom_list_count: 1},
+        vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
+    #[case::tag_only(b"                                  V2000", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
+    #[case::blanks(b"  6  5  1                         V2000", Counts {atom_count: 6, bond_count: 5, atom_list_count: 1}, vec![])]
+    #[case::chiral_flag(b"  1  0  0  0  1  0  0  0  0  0  0 V2000", Counts {atom_count: 1, bond_count: 0, atom_list_count: 0},
+        vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
+    #[case::invalid_unused(b"  4  2  0     0  1                V2000", Counts {atom_count: 4, bond_count: 2, atom_list_count: 0}, vec![])]
+    fn test_counts_input(
+        #[case] input: &[u8],
+        #[case] expected_counts: Counts,
+        #[case] expected_properties: Vec<PropertyEntries>,
+    ) {
         let res = counts_input(CtabParseFlags::BASIC).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_ok(), "{:?} should have succeeded", input_str);
-        let (remaining, counts) = res.unwrap();
+        let (remaining, (counts, properties)) = res.unwrap();
         assert!(
             remaining.is_empty(),
             "{:?} should have consumed all input",
             input_str
         );
         assert_eq!(
-            counts, expected,
-            "{:?} should have parsed correctly",
+            counts, expected_counts,
+            "{:?} should have parsed counts correctly",
+            input_str
+        );
+        assert_eq!(
+            properties, expected_properties,
+            "{:?} should have parsed properties correctly",
             input_str
         );
     }
@@ -235,19 +257,20 @@ mod tests {
 
     #[rstest]
     #[case::no_v2000_tag(b" 28 34  0  0  0  0  0  0  0  0  0",
-      Counts {atom_count: 28, bond_count: 34, atom_list_count: 0, chiral_flag: false})]
+      Counts {atom_count: 28, bond_count: 34, atom_list_count: 0})]
     fn test_counts_input_no_v2000_tag(#[case] input: &[u8], #[case] expected: Counts) {
         let res = counts_input(CtabParseFlags::NO_V2000_END_TAGS).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_ok(), "{:?} should have succeeded", input_str);
-        let (remaining, counts) = res.unwrap();
+        let (remaining, (counts, properties)) = res.unwrap();
         assert!(
             remaining.is_empty(),
             "{:?} should have consumed all input",
             input_str
         );
         assert_eq!(
-            counts, expected,
+            (counts, properties),
+            (expected, vec![]),
             "{:?} should have parsed correctly",
             input_str
         );

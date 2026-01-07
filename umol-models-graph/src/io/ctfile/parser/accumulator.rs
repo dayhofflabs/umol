@@ -23,6 +23,12 @@ use crate::table_ir::{
     SGroupMultiplier, SGroupSubtype, SGroupType, SubstitutionCount, UnsaturatedAtom,
 };
 
+/// Accumulator for global molecule properties
+#[derive(Debug, Default)]
+pub(super) struct MoleculeProperties {
+    pub chiral_flag: Option<bool>,
+}
+
 // Accumulator for properties of a single atom
 #[derive(Debug, Default)]
 pub(super) struct AtomProperties {
@@ -117,8 +123,9 @@ fn sgroup_accepts_multiplier(sgroup_type: SGroupType) -> bool {
 
 /// Accumulator for molecular properties
 #[derive(Debug)]
-pub(super) struct MoleculeProperties {
+pub(super) struct PropertyAccumulator {
     context: Context,
+    pub molecule_properties: Vec<MoleculeProperties>,
     pub atom_properties: BTreeMap<usize, AtomProperties>,
     pub bond_properties: BTreeMap<usize, BondProperties>,
     pub rgroup_properties: BTreeMap<usize, RGroupProperties>,
@@ -126,10 +133,11 @@ pub(super) struct MoleculeProperties {
     pub legacy_group_abbreviations: Vec<LegacyGroupAbbreviation>,
 }
 
-impl MoleculeProperties {
+impl PropertyAccumulator {
     pub(crate) fn new() -> Self {
         Self {
             context: Context::new(),
+            molecule_properties: Vec::new(),
             atom_properties: BTreeMap::new(),
             bond_properties: BTreeMap::new(),
             rgroup_properties: BTreeMap::new(),
@@ -145,6 +153,11 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
         match entry {
+            PropertyEntries::MoleculeChiralFlagEntry(e) => {
+                self.molecule_properties.push(MoleculeProperties {
+                    chiral_flag: Some(e.chiral_flag),
+                });
+            }
             PropertyEntries::AtomAliasEntry(e) => {
                 let props = self.atom_properties.entry(e.atom_index).or_default();
                 props.alias = Some(e.alias);
@@ -648,6 +661,13 @@ impl MoleculeProperties {
     ) -> Result<()> {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
 
+        // Apply molecule properties (chiral flag)
+        if let Some(chiral_flag) = self.molecule_properties.first().and_then(|p| p.chiral_flag) {
+            molecule
+                .properties
+                .insert("chiral_flag".to_string(), chiral_flag.to_string());
+        }
+
         // Apply atom properties (only basic ones compatible with Atom)
         for (&atom_idx, props) in &self.atom_properties {
             let Some(atom) = molecule.atoms.get_mut(atom_idx) else {
@@ -708,6 +728,13 @@ impl MoleculeProperties {
         flags: CtabParseFlags,
     ) -> Result<()> {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
+
+        // Apply molecule properties (chiral flag)
+        if let Some(chiral_flag) = self.molecule_properties.first().and_then(|p| p.chiral_flag) {
+            molecule
+                .properties
+                .insert("chiral_flag".to_string(), chiral_flag.to_string());
+        }
 
         // Apply atom properties
         for (&atom_idx, props) in &self.atom_properties {
