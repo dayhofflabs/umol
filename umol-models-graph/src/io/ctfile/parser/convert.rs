@@ -6,8 +6,8 @@ use umol_data::{Element, Isotope};
 
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::{
-    AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomStereoParity, AtomSymbol,
-    AttachmentPointType, BondDirection, BondOrder, BondReactingCenter, BondStereo, BondTopology,
+    AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomSymbol, AttachmentPointType,
+    BondDirection, BondOrder, BondReactingCenter, BondStereo, BondTopology, Chirality,
     RingBondCount, SubstitutionCount, UnsaturatedAtom,
 };
 
@@ -74,19 +74,16 @@ pub(super) fn convert_atom_isotope_mass_number(
     }
 }
 
-/// Convert atom stereo parity code (not stereo, odd, even, either or unmarked).
-// 'sss' field: 0 = not stereo, 1 = odd, 2 = even, 3 = either or unmarked
-/// use_defaults: if true, include default values (code 0), if false, return None for defaults
+/// Convert atom stereo parity code to Chirality.
+/// 'sss' field: 0 = not stereo, 1 = odd (clockwise), 2 = even (counter-clockwise), 3 = either
 pub(super) fn convert_atom_stereo_parity_code(
     code: u8,
-    use_defaults: bool,
-) -> Result<Option<AtomStereoParity>, ParseError> {
+) -> Result<Option<Chirality>, ParseError> {
     match code {
-        0 if use_defaults => Ok(Some(AtomStereoParity::Either)),
         0 => Ok(None),
-        1 => Ok(Some(AtomStereoParity::Odd)),
-        2 => Ok(Some(AtomStereoParity::Even)),
-        3 => Ok(Some(AtomStereoParity::Either)),
+        1 => Ok(Some(Chirality::Clockwise)),
+        2 => Ok(Some(Chirality::CounterClockwise)),
+        3 => Ok(Some(Chirality::Unspecified)),
         _ => Err(ParseError::InvalidStereoParity(code)),
     }
 }
@@ -243,19 +240,11 @@ pub(super) fn convert_extended_bond_type_code(
 /// Stereo (double bond): (0=Unknown, 1=Cis, 3|4=Either, 6=Trans)
 /// Direction (single bond): (0=Not stereo, 1=Up, 3|4=Either, 6=Down)
 /// NOTE: CTFile docs do not define cis/trans, 3=Double Either, 4=Single Either
-/// use_defaults: if true, include default values (code 0), if false, return None for defaults
 pub(super) fn convert_bond_stereo_direction_code(
     code: u8,
-    use_defaults: bool,
 ) -> Result<(Option<BondStereo>, Option<BondDirection>), ParseError> {
     match code {
-        0 => {
-            if use_defaults {
-                Ok((Some(BondStereo::Unknown), Some(BondDirection::NotStereo)))
-            } else {
-                Ok((None, None))
-            }
-        }
+        0 => Ok((None, None)),
         1 => Ok((Some(BondStereo::Cis), Some(BondDirection::Up))),
         3 | 4 => Ok((Some(BondStereo::Either), Some(BondDirection::Either))),
         6 => Ok((Some(BondStereo::Trans), Some(BondDirection::Down))),
@@ -268,13 +257,8 @@ pub(super) fn convert_bond_stereo_direction_code(
 
 /// Convert bond topology code
 /// 'rrr' field - bond topology (0=Either, 1=Ring, 2=Chain)
-/// use_defaults: if true, include default values (code 0), if false, return None for defaults
-pub(super) fn convert_bond_topology_code(
-    code: u8,
-    use_defaults: bool,
-) -> Result<Option<BondTopology>, ParseError> {
+pub(super) fn convert_bond_topology_code(code: u8) -> Result<Option<BondTopology>, ParseError> {
     match code {
-        0 if use_defaults => Ok(Some(BondTopology::Either)),
         0 => Ok(None),
         1 => Ok(Some(BondTopology::Ring)),
         2 => Ok(Some(BondTopology::Chain)),
@@ -288,19 +272,13 @@ pub(super) fn convert_bond_topology_code(
 /// Convert bond reacting center code
 /// 'ccc' field - bond reacting center (0=Not reacting, 1=Reacting, -1=Not a center,
 /// 2=No change, 4=Bond made/broken, 8=Bond order changes)
-/// use_defaults: if true, include default values (code 0), if false, return None for defaults
 /// If extended range, allow 3, 6, 7, 10, 11, 14, 15 (meaning no change)
 pub(super) fn convert_bond_reacting_center_code(
     code: i8,
-    use_defaults: bool,
     extended_range: bool,
 ) -> Result<Option<BondReactingCenter>, ParseError> {
     if code == 0 {
-        if use_defaults {
-            return Ok(Some(BondReactingCenter::UNMARKED));
-        } else {
-            return Ok(None);
-        }
+        return Ok(None);
     }
     if code == -1 {
         return Ok(Some(BondReactingCenter::NOT_CENTER));
@@ -551,42 +529,17 @@ mod tests {
 
     #[rstest]
     #[case::none(0, None)]
-    #[case::odd(1, Some(AtomStereoParity::Odd))]
-    #[case::even(2, Some(AtomStereoParity::Even))]
-    #[case::either(3, Some(AtomStereoParity::Either))]
-    fn test_convert_atom_stereo_parity_code(
-        #[case] code: u8,
-        #[case] expected: Option<AtomStereoParity>,
-    ) {
-        assert_eq!(
-            convert_atom_stereo_parity_code(code, false).unwrap(),
-            expected
-        );
+    #[case::clockwise(1, Some(Chirality::Clockwise))]
+    #[case::counter_clockwise(2, Some(Chirality::CounterClockwise))]
+    #[case::unspecified(3, Some(Chirality::Unspecified))]
+    fn test_convert_atom_stereo_parity_code(#[case] code: u8, #[case] expected: Option<Chirality>) {
+        assert_eq!(convert_atom_stereo_parity_code(code).unwrap(), expected);
     }
 
     #[rstest]
-    #[case::out_of_range_high(4, "too high")]
-    fn test_convert_atom_stereo_parity_code_invalid(#[case] code: u8, #[case] desc: &str) {
-        assert!(
-            convert_atom_stereo_parity_code(code, true).is_err(),
-            "{} should have failed",
-            desc
-        );
-    }
-
-    #[rstest]
-    #[case::zero(0, Some(AtomStereoParity::Either))]
-    #[case::odd(1, Some(AtomStereoParity::Odd))]
-    #[case::even(2, Some(AtomStereoParity::Even))]
-    #[case::either(3, Some(AtomStereoParity::Either))]
-    fn test_convert_atom_stereo_parity_code_use_defaults(
-        #[case] code: u8,
-        #[case] expected: Option<AtomStereoParity>,
-    ) {
-        assert_eq!(
-            convert_atom_stereo_parity_code(code, true).unwrap(),
-            expected
-        );
+    #[case::out_of_range_high(4)]
+    fn test_convert_atom_stereo_parity_code_invalid(#[case] code: u8) {
+        assert!(convert_atom_stereo_parity_code(code).is_err());
     }
 
     #[rstest]
@@ -792,19 +745,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(0, (None, None))]
-    #[case::cis(1,  (Some(BondStereo::Cis), Some(BondDirection::Up)))]
+    #[case::not_stereo(0, (None, None))]
+    #[case::cis(1, (Some(BondStereo::Cis), Some(BondDirection::Up)))]
     #[case::either(3, (Some(BondStereo::Either), Some(BondDirection::Either)))]
-    #[case::unknown(4,  (Some(BondStereo::Either), Some(BondDirection::Either)))]
+    #[case::unknown(4, (Some(BondStereo::Either), Some(BondDirection::Either)))]
     #[case::trans(6, (Some(BondStereo::Trans), Some(BondDirection::Down)))]
     fn test_convert_bond_stereo_direction_code(
         #[case] code: u8,
         #[case] expected: (Option<BondStereo>, Option<BondDirection>),
     ) {
-        assert_eq!(
-            convert_bond_stereo_direction_code(code, false).unwrap(),
-            expected
-        );
+        assert_eq!(convert_bond_stereo_direction_code(code).unwrap(), expected);
     }
 
     #[rstest]
@@ -812,23 +762,7 @@ mod tests {
     #[case::unused_5(5)]
     #[case::out_of_range_high(7)]
     fn test_convert_bond_stereo_direction_code_invalid(#[case] code: u8) {
-        assert!(convert_bond_stereo_direction_code(code, false).is_err());
-    }
-
-    #[rstest]
-    #[case::default(0, (Some(BondStereo::Unknown), Some(BondDirection::NotStereo)))]
-    #[case::cis(1, (Some(BondStereo::Cis), Some(BondDirection::Up)))]
-    #[case::either(3, (Some(BondStereo::Either), Some(BondDirection::Either)))]
-    #[case::unknown(4, (Some(BondStereo::Either), Some(BondDirection::Either)))]
-    #[case::trans(6, (Some(BondStereo::Trans), Some(BondDirection::Down)))]
-    fn test_convert_bond_stereo_direction_code_use_defaults(
-        #[case] code: u8,
-        #[case] expected: (Option<BondStereo>, Option<BondDirection>),
-    ) {
-        assert_eq!(
-            convert_bond_stereo_direction_code(code, true).unwrap(),
-            expected
-        );
+        assert!(convert_bond_stereo_direction_code(code).is_err());
     }
 
     #[rstest]
@@ -836,28 +770,17 @@ mod tests {
     #[case::ring(1, Some(BondTopology::Ring))]
     #[case::chain(2, Some(BondTopology::Chain))]
     fn test_convert_bond_topology_code(#[case] code: u8, #[case] expected: Option<BondTopology>) {
-        assert_eq!(convert_bond_topology_code(code, false).unwrap(), expected);
+        assert_eq!(convert_bond_topology_code(code).unwrap(), expected);
     }
 
     #[rstest]
     #[case::out_of_range_high(3)]
     fn test_convert_bond_topology_code_invalid(#[case] code: u8) {
-        assert!(convert_bond_topology_code(code, true).is_err());
+        assert!(convert_bond_topology_code(code).is_err());
     }
 
     #[rstest]
-    #[case::either(0, Some(BondTopology::Either))]
-    #[case::ring(1, Some(BondTopology::Ring))]
-    #[case::chain(2, Some(BondTopology::Chain))]
-    fn test_convert_bond_topology_code_use_defaults(
-        #[case] code: u8,
-        #[case] expected: Option<BondTopology>,
-    ) {
-        assert_eq!(convert_bond_topology_code(code, true).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::unmarked(0, Some(BondReactingCenter::UNMARKED))]
+    #[case::unmarked(0, None)]
     #[case::not_center(-1, Some(BondReactingCenter::NOT_CENTER))]
     #[case::center(1, Some(BondReactingCenter::CENTER))]
     #[case::no_change(2, Some(BondReactingCenter::NO_CHANGE))]
@@ -876,13 +799,8 @@ mod tests {
         #[case] expected: Option<BondReactingCenter>,
     ) {
         assert_eq!(
-            convert_bond_reacting_center_code(code, true, false).unwrap(),
+            convert_bond_reacting_center_code(code, false).unwrap(),
             expected
-        );
-        let expected_default = if code == 0 { None } else { expected };
-        assert_eq!(
-            convert_bond_reacting_center_code(code, false, false).unwrap(),
-            expected_default
         );
     }
 
@@ -891,43 +809,24 @@ mod tests {
     #[case::out_of_range_high(16)]
     #[case::out_of_range_low(-2)]
     fn test_convert_bond_reacting_center_code_invalid(#[case] code: i8) {
-        assert!(convert_bond_reacting_center_code(code, true, false).is_err());
+        assert!(convert_bond_reacting_center_code(code, false).is_err());
     }
 
+    // Extended range allows codes 3,6,7,10,11,14,15 which all map to just NO_CHANGE
     #[rstest]
-    #[case::none(0, None)]
-    #[case::not_center(-1, Some(BondReactingCenter::NOT_CENTER))]
-    #[case::center(1, Some(BondReactingCenter::CENTER))]
-    #[case::no_change(2, Some(BondReactingCenter::NO_CHANGE))]
-    #[case::made_broken(4, Some(BondReactingCenter::MADE_BROKEN))]
-    #[case::order_changed(8, Some(BondReactingCenter::ORDER_CHANGED))]
-    #[case::center_and_made_broken(5, Some(BondReactingCenter::CENTER | BondReactingCenter::MADE_BROKEN))]
-    #[case::center_and_order_changed(9, Some(BondReactingCenter::CENTER | BondReactingCenter::ORDER_CHANGED))]
-    #[case::made_broken_and_order_changed(12, Some(BondReactingCenter::MADE_BROKEN | BondReactingCenter::ORDER_CHANGED))]
-    #[case::center_and_made_broken_and_order_changed(13, Some(
-        BondReactingCenter::CENTER
-            | BondReactingCenter::MADE_BROKEN
-            | BondReactingCenter::ORDER_CHANGED
-    ))]
-    fn test_convert_bond_reacting_center_code_use_defaults(
-        #[case] code: i8,
-        #[case] expected: Option<BondReactingCenter>,
-    ) {
-        assert_eq!(
-            convert_bond_reacting_center_code(code, false, false).unwrap(),
-            expected
-        );
-    }
-
-    #[rstest]
-    #[case(3, Some(BondReactingCenter::NO_CHANGE))]
-    #[case(15, Some(BondReactingCenter::NO_CHANGE))]
+    #[case::no_change_3(3, Some(BondReactingCenter::NO_CHANGE))]
+    #[case::no_change_6(6, Some(BondReactingCenter::NO_CHANGE))]
+    #[case::no_change_7(7, Some(BondReactingCenter::NO_CHANGE))]
+    #[case::no_change_10(10, Some(BondReactingCenter::NO_CHANGE))]
+    #[case::no_change_11(11, Some(BondReactingCenter::NO_CHANGE))]
+    #[case::no_change(14, Some(BondReactingCenter::NO_CHANGE))]
+    #[case::no_change_15(15, Some(BondReactingCenter::NO_CHANGE))]
     fn test_convert_bond_reacting_center_code_extended(
         #[case] code: i8,
         #[case] expected: Option<BondReactingCenter>,
     ) {
         assert_eq!(
-            convert_bond_reacting_center_code(code, true, true).unwrap(),
+            convert_bond_reacting_center_code(code, true).unwrap(),
             expected
         );
     }

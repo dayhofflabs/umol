@@ -4,8 +4,8 @@ use umol_data::Element;
 
 use super::*;
 use crate::table_ir::{
-    Atom, Bond, BondOrder, ConversionError, ExtendedAtom, ExtendedBond, RGroup, RGroupOccurrence,
-    SGroup, SGroupType, SourceFormat,
+    Atom, AtomStereoCare, Bond, BondOrder, ConversionError, ExtendedAtom, ExtendedBond, RGroup,
+    RGroupOccurrence, SGroup, SGroupType, SourceFormat,
 };
 
 #[test]
@@ -280,7 +280,7 @@ fn test_extended_molecule_to_molecule() {
 fn test_extended_molecule_to_molecule_error() {
     let mut ext = ExtendedMolecule::empty();
     let mut atom = ExtendedAtom::from_element(Element::C);
-    atom.stereo_parity = Some(crate::table_ir::atom::AtomStereoParity::Odd);
+    atom.stereo_care = Some(AtomStereoCare::Care);
     ext.atoms.push(atom);
 
     let result = ext.to_molecule();

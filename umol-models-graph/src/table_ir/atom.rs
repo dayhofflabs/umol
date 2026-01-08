@@ -211,6 +211,7 @@ impl AtomList {
 pub enum Chirality {
     Clockwise,
     CounterClockwise,
+    Unspecified,
     Tetrahedral { arr: u32 },
     Allenal { arr: u32 },
     SquarePlanar { arr: u32 },
@@ -236,7 +237,6 @@ pub struct ExtendedAtom {
     pub class: Option<u32>,
     pub alias: Option<String>,
     pub value: Option<String>,
-    pub stereo_parity: Option<AtomStereoParity>,
     pub stereo_care: Option<AtomStereoCare>,
     pub inversion_retention: Option<AtomInversionRetention>,
     pub exact_change: Option<AtomExactChange>,
@@ -267,7 +267,6 @@ impl ExtendedAtom {
             class: None,
             alias: None,
             value: None,
-            stereo_parity: None,
             stereo_care: None,
             inversion_retention: None,
             exact_change: None,
@@ -297,7 +296,6 @@ impl ExtendedAtom {
     /// Check if this atom has extended features that would be lost in conversion to basic Atom.
     pub fn has_extended_features(&self) -> bool {
         self.symbol.is_extended()
-            || self.stereo_parity.is_some()
             || self.stereo_care.is_some()
             || self.inversion_retention.is_some()
             || self.exact_change.is_some()
@@ -333,7 +331,6 @@ impl From<Atom> for ExtendedAtom {
             class: atom.class,
             alias: atom.alias,
             value: atom.value,
-            stereo_parity: None,
             stereo_care: None,
             inversion_retention: None,
             exact_change: None,
@@ -386,14 +383,6 @@ impl TryFrom<ExtendedAtom> for Atom {
 }
 
 /// Atom stereo parity
-/// CTFile extension
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum AtomStereoParity {
-    Odd,  // Clockwise / R
-    Even, // Counter-Clockwise / S
-    Either,
-}
-
 /// Atom stereo care
 /// CTFile extension
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -546,7 +535,6 @@ mod tests {
             class: None,
             alias: None,
             value: None,
-            stereo_parity: None,
             stereo_care: None,
             inversion_retention: None,
             exact_change: None,
@@ -599,7 +587,6 @@ mod tests {
             class: None,
             alias: None,
             value: None,
-            stereo_parity: None,
             stereo_care: None,
             valence: None,
             inversion_retention: None,
@@ -636,7 +623,6 @@ mod tests {
             class: Some(5),
             alias: None,
             value: None,
-            stereo_parity: None,
             stereo_care: None,
             valence: None,
             inversion_retention: None,
@@ -668,8 +654,7 @@ mod tests {
             class: None,
             alias: None,
             value: None,
-            stereo_parity: Some(AtomStereoParity::Even),
-            stereo_care: None,
+            stereo_care: Some(AtomStereoCare::Care),
             valence: None,
             inversion_retention: None,
             exact_change: None,

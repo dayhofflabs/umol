@@ -28,8 +28,8 @@ bitflags! {
         // const RESERVED_4 = 1 << 13;
 
         // Format extensions
-        const NAMED_ISOTOPES = 1 << 14;         // D, T recognition
-        const PSEUDOATOMS = 1 << 15;            // General pseudoatoms (Ala)
+        const NAMED_ISOTOPES = 1 << 14;         // Allow D, T as element symbols
+        const PSEUDOATOMS = 1 << 15;            // General pseudoatoms (any non-reserved string)
         const ATOM_MAP_HCOUNT_FIELDS = 1 << 16; // Allow atom mapping and H count in basic parser
         const CLARK_EXTENSIONS = 1 << 17;       // ZBO, ZCH, HYD
         // const RESERVED_5 = 1 << 18;

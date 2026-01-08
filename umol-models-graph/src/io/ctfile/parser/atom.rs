@@ -382,13 +382,14 @@ fn atom_input69<'inp>(
     let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
         convert_atom_charge_code(opt.unwrap_or(0))
     });
-    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
-        convert_atom_stereo_parity_code(code, false)
-    });
-    let max_hydrogen_count = if extended_range { 255 } else { 5 };
+    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), convert_atom_stereo_parity_code);
+    let max_hydrogen_count = if extended_range { 13 } else { 5 };
     let hydrogen_count = cond(
         atom_map_hcount_fields,
-        fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
+        map_res(
+            fixed_width_int_in_range::<u8, _>(3, 0..=max_hydrogen_count),
+            move |code| convert_atom_hydrogen_count_code(code, extended_range),
+        ),
     );
     let count1 = if atom_map_hcount_fields { 1 } else { 2 };
     let extended1 = fixed_width_unused_n(count1, 3, false);
@@ -424,7 +425,7 @@ fn atom_input69<'inp>(
             symbol,
             mass_diff,
             charge_radical,
-            _stereo_parity,
+            chirality,
             hydrogen_count,
             valence,
             atom_map_num,
@@ -441,7 +442,7 @@ fn atom_input69<'inp>(
                     valence,
                     unpaired_e,
                     aromatic: None,
-                    chirality: None,
+                    chirality,
                     class: atom_map_num.flatten(),
                     span: None,
                     alias: None,
@@ -480,13 +481,14 @@ fn atom_input60<'inp>(
     let charge_radical = map(fixed_width_int_in_range_opt::<u8, _>(3, 0..=7), |opt| {
         convert_atom_charge_code(opt.unwrap_or(0))
     });
-    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
-        convert_atom_stereo_parity_code(code, false)
-    });
-    let max_hydrogen_count = if extended_range { 255 } else { 5 };
+    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), convert_atom_stereo_parity_code);
+    let max_hydrogen_count = if extended_range { 13 } else { 5 };
     let hydrogen_count = cond(
         atom_map_hcount_fields,
-        fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
+        map_res(
+            fixed_width_int_in_range::<u8, _>(3, 0..=max_hydrogen_count),
+            move |code| convert_atom_hydrogen_count_code(code, extended_range),
+        ),
     );
     let count1 = if atom_map_hcount_fields { 1 } else { 2 };
     let extended1 = fixed_width_unused_n(count1, 3, false);
@@ -508,7 +510,7 @@ fn atom_input60<'inp>(
             terminated(hydrogen_count, extended1),
             terminated(valence, unused2),
         ),
-        |(position, symbol, mass_diff, charge_radical, _stereo_parity, hydrogen_count, valence)| {
+        |(position, symbol, mass_diff, charge_radical, chirality, hydrogen_count, valence)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, unpaired_e) = charge_radical;
             (
@@ -521,7 +523,7 @@ fn atom_input60<'inp>(
                     valence,
                     unpaired_e,
                     aromatic: None,
-                    chirality: None,
+                    chirality,
                     class: None,
                     span: None,
                     alias: None,
@@ -560,13 +562,14 @@ fn atom_input48<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 0..=7),
         convert_atom_charge_code,
     );
-    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
-        convert_atom_stereo_parity_code(code, false)
-    });
-    let max_hydrogen_count = if extended_range { 255 } else { 5 };
+    let stereo_parity = map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), convert_atom_stereo_parity_code);
+    let max_hydrogen_count = if extended_range { 13 } else { 5 };
     let hydrogen_count = cond(
         atom_map_hcount_fields,
-        fixed_width_int_in_range_opt::<u8, _>(3, 0..=max_hydrogen_count),
+        map_res(
+            fixed_width_int_in_range::<u8, _>(3, 0..=max_hydrogen_count),
+            move |code| convert_atom_hydrogen_count_code(code, extended_range),
+        ),
     );
     let count1 = input
         .len()
@@ -583,7 +586,7 @@ fn atom_input48<'inp>(
             stereo_parity,
             terminated(hydrogen_count, extended1),
         ),
-        |(position, symbol, mass_diff, charge_radical, _stereo_parity, hydrogen_count)| {
+        |(position, symbol, mass_diff, charge_radical, chirality, hydrogen_count)| {
             let (element, isotope) = convert_atom_symbol_mass_diff(symbol, mass_diff);
             let (charge, unpaired_e) = charge_radical;
             (
@@ -596,7 +599,7 @@ fn atom_input48<'inp>(
                     valence: None,
                     unpaired_e,
                     aromatic: None,
-                    chirality: None,
+                    chirality,
                     class: None,
                     span: None,
                     alias: None,
@@ -778,14 +781,12 @@ fn extended_atom_input_inner<'inp>(
         // Stereo parity
         let (i, stereo_parity) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), |code| {
-                convert_atom_stereo_parity_code(code, true)
-            }),
+            map_res(fixed_width_int_in_range::<u8, _>(3, 0..=3), convert_atom_stereo_parity_code),
         )
         .parse(i)?;
 
         // Hydrogen count
-        let max_hydrogen_count = if extended_range { 255 } else { 5 };
+        let max_hydrogen_count = if extended_range { 13 } else { 5 };
         let (i, hydrogen_count) = cond(
             i.len() >= 3,
             map_res(
@@ -858,14 +859,13 @@ fn extended_atom_input_inner<'inp>(
                     isotope_mass,
                     unpaired_e,
                     hydrogens: hydrogen_count.flatten(),
-                    stereo_parity: stereo_parity.flatten(),
                     stereo_care: stereo_care.flatten(),
                     valence: valence.flatten(),
                     inversion_retention: inversion_flag.flatten(),
                     exact_change: exact_change_flag.flatten(),
                     implicit_h: false,
                     aromatic: None,
-                    chirality: None,
+                    chirality: stereo_parity.flatten(),
                     class: atom_map_num.flatten(),
                     span: None,
                     alias: None,

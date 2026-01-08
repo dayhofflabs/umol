@@ -171,9 +171,7 @@ fn bond_input21<'inp>(
     let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
         convert_bond_type_code(code, extended_range)
     });
-    let stereo_direction = map_res(fixed_width_int::<u8>(3), |code| {
-        convert_bond_stereo_direction_code(code, false)
-    });
+    let stereo_direction = map_res(fixed_width_int::<u8>(3), convert_bond_stereo_direction_code);
     let n = input.len().saturating_sub(12) / 3;
     let unused1 = fixed_width_unused_n(n, 3, skip_unused_fields);
 
@@ -237,9 +235,7 @@ fn extended_bond_input_inner<'inp>(
         // Stereo/dir
         let (i, stereo_direction) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_stereo_direction_code(code, true)
-            }),
+            map_res(fixed_width_int::<u8>(3), convert_bond_stereo_direction_code),
         )
         .parse(i)?;
 
@@ -253,15 +249,13 @@ fn extended_bond_input_inner<'inp>(
         // Topology, reacting center
         let (i, topology) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int::<u8>(3), |code| {
-                convert_bond_topology_code(code, true)
-            }),
+            map_res(fixed_width_int::<u8>(3), convert_bond_topology_code),
         )
         .parse(i)?;
         let (i, reacting_center) = cond(
             i.len() >= 3,
-            map_res(fixed_width_int::<i8>(3), |code| {
-                convert_bond_reacting_center_code(code, true, extended_range)
+            map_res(fixed_width_int::<i8>(3), move |code| {
+                convert_bond_reacting_center_code(code, extended_range)
             }),
         )
         .parse(i)?;
