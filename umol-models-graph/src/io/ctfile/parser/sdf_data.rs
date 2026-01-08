@@ -1,11 +1,10 @@
 //! SDF data field parsers
 
-use bstr::ByteSlice;
+use bstr::{join, ByteSlice};
 use indexmap::IndexMap;
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take_until};
-use nom::character::complete::{line_ending, not_line_ending, space1};
-use nom::combinator::{eof, map, opt, peek, value};
+use nom::bytes::complete::{is_not, tag, take_until1};
+use nom::character::complete::{line_ending, multispace0, not_line_ending, space0};
+use nom::combinator::{map, value};
 use nom::error::Error as NomError;
 use nom::multi::many_till;
 use nom::sequence::{delimited, terminated};
@@ -16,11 +15,11 @@ pub(super) fn sdf_data_header<'inp>(
 ) -> impl Parser<&'inp [u8], Output = String, Error = NomError<&'inp [u8]>> {
     map(
         delimited(
-            (tag(">"), space1),
-            delimited(tag("<"), take_until(">"), tag(">")),
-            not_line_ending,
+            (tag(">"), is_not("<")),
+            delimited(tag("<"), take_until1(">"), tag(">")),
+            (not_line_ending, line_ending),
         ),
-        |field_name: &[u8]| field_name.to_str_lossy().into_owned(),
+        |field_name: &[u8]| field_name.trim().to_str_lossy().into_owned(),
     )
 }
 
@@ -30,19 +29,12 @@ pub(super) fn sdf_data_value<'inp>(
     map(
         many_till(
             terminated(not_line_ending, line_ending),
-            // TODO: Why is this a blank line?
-            alt((
-                peek(line_ending), // blank line
-                eof,
-            )),
+            value((), (space0, line_ending)),
         ),
-        // TODO: Understand why this is necessary.
-        |(lines, _): (Vec<&[u8]>, _)| {
-            lines
-                .iter()
-                .map(|line| line.to_str_lossy())
-                .collect::<Vec<_>>()
-                .join("\n")
+        |(lines, _)| {
+            join(",", lines.iter().map(|line: &&[u8]| line.trim()))
+                .to_str_lossy()
+                .to_string()
         },
     )
 }
@@ -50,114 +42,170 @@ pub(super) fn sdf_data_value<'inp>(
 /// Parse complete data field (header + value)
 pub(super) fn sdf_data_field<'inp>(
 ) -> impl Parser<&'inp [u8], Output = (String, String), Error = NomError<&'inp [u8]>> {
-    (terminated(sdf_data_header(), line_ending), sdf_data_value())
+    (sdf_data_header(), sdf_data_value())
 }
 
 /// Parse SDF record delimiter
 pub(super) fn sdf_delimiter<'inp>(
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
-    value((), (tag("$$$$"), opt(line_ending)))
+    value((), (tag("$$$$"), multispace0))
 }
 
 /// Parse multiple data fields
 pub(super) fn sdf_data_block<'inp>(
 ) -> impl Parser<&'inp [u8], Output = IndexMap<String, String>, Error = NomError<&'inp [u8]>> {
     map(
-        many_till(
-            alt((
-                sdf_data_field(),
-                // Skip non-data lines
-                value(
-                    (String::new(), String::new()),
-                    terminated(not_line_ending, line_ending),
-                ),
-            )),
-            peek(alt((tag("$$$$"), eof))),
-        ),
-        |(fields, _): (Vec<(String, String)>, _)| {
-            fields
-                .into_iter()
-                .filter(|(name, _)| !name.is_empty())
-                .collect::<IndexMap<_, _>>()
-        },
+        many_till(sdf_data_field(), sdf_delimiter()),
+        |(fields, _)| fields.into_iter().collect(),
     )
 }
 
 #[cfg(test)]
 mod tests {
+    use bstr::ByteSlice;
+    use indexmap::indexmap;
     use pretty_assertions::assert_eq;
+    use rstest::*;
 
     use super::*;
 
-    #[test]
-    fn test_sdf_data_header() {
-        let input = b"> <MELTING.POINT>\n";
+    #[rstest]
+    #[case::dotted(b"> <MELTING.POINT>\n", "MELTING.POINT".to_string())]
+    #[case::whitespace(b"> <CAS NR>\n", "CAS NR".to_string())]
+    #[case::multiple_space(b">  <BOILING.POINT>\n", "BOILING.POINT".to_string())]
+    #[case::interstitial_data(b"> (MD-0894) <CAS NR>\n", "CAS NR".to_string())]
+    #[case::trailing_data(b"> <CAS NR> DT12\n", "CAS NR".to_string())]
+    #[case::surrounding_data(b"> (MD-0894) <BOILING.POINT> FROM ARCHIVES\n", "BOILING.POINT".to_string())]
+    fn test_sdf_data_header(#[case] input: &[u8], #[case] expected: String) {
         let result = sdf_data_header().parse(input);
-        assert!(result.is_ok());
-        let (_, field_name) = result.unwrap();
-        assert_eq!(field_name, "MELTING.POINT");
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded, result: {:?}",
+            input_str,
+            result
+        );
+        let (remaining, name) = result.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{:?} leaved unparsed data: {:?}",
+            input_str,
+            remaining
+        );
+        assert_eq!(
+            name, expected,
+            "{:?}: name {:?} != expected {:?}",
+            input_str, name, expected
+        );
     }
 
-    #[test]
-    fn test_sdf_data_header_multiple_spaces() {
-        let input = b">  <BOILING.POINT>\n";
-        let result = sdf_data_header().parse(input);
-        assert!(result.is_ok());
-        let (_, field_name) = result.unwrap();
-        assert_eq!(field_name, "BOILING.POINT");
-    }
-
-    #[test]
-    fn test_sdf_data_value() {
-        let input = b"100.5\n\n";
+    #[rstest]
+    #[case::single_line(b"100.5\n\n", "100.5".to_string())]
+    #[case::whitespace(b" 100.5 \n\n", "100.5".to_string())]
+    #[case::multiple_lines(b"benzene\nBenzol\n\n", "benzene,Benzol".to_string())]
+    fn test_sdf_data_value(#[case] input: &[u8], #[case] expected: String) {
         let result = sdf_data_value().parse(input);
-        assert!(result.is_ok());
-        let (_, value) = result.unwrap();
-        assert_eq!(value, "100.5");
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded, result: {:?}",
+            input_str,
+            result
+        );
+        let (remaining, value) = result.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{:?} leaves unparsed data: {:?}",
+            input_str,
+            remaining
+        );
+        assert_eq!(
+            value, expected,
+            "{:?}: value {:?} != expected {:?}",
+            input_str, value, expected
+        );
     }
 
-    #[test]
-    fn test_sdf_data_value_multiline() {
-        let input = b"Line 1\nLine 2\nLine 3\n\n";
-        let result = sdf_data_value().parse(input);
-        assert!(result.is_ok());
-        let (_, value) = result.unwrap();
-        assert_eq!(value, "Line 1\nLine 2\nLine 3");
-    }
-
-    #[test]
-    fn test_sdf_data_field() {
-        let input = b"> <TEST_FIELD>\n100.5\n\n";
+    #[rstest]
+    #[case::single_line(b"> <BOILING.POINT>\n100.5\n\n", "BOILING.POINT".to_string(), "100.5".to_string())]
+    #[case::multiple_line(b"> <NAMES>\nbenzene\nBenzol\n\n", "NAMES".to_string(), "benzene,Benzol".to_string())]
+    fn test_sdf_data_field(
+        #[case] input: &[u8],
+        #[case] expected_name: String,
+        #[case] expected_value: String,
+    ) {
         let result = sdf_data_field().parse(input);
-        assert!(result.is_ok());
-        let (_, (field_name, field_value)) = result.unwrap();
-        assert_eq!(field_name, "TEST_FIELD");
-        assert_eq!(field_value, "100.5");
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded, result: {:?}",
+            input_str,
+            result
+        );
+        let (remaining, (name, value)) = result.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{:?} leaves unparsed data: {:?}",
+            input_str,
+            remaining
+        );
+        assert_eq!(
+            name, expected_name,
+            "{:?}: name {:?} != expected {:?}",
+            input_str, name, expected_name
+        );
+        assert_eq!(
+            value, expected_value,
+            "{:?}: value {:?} != expected {:?}",
+            input_str, value, expected_value
+        );
     }
 
-    #[test]
-    fn test_sdf_delimiter() {
-        let input = b"$$$$\n";
+    #[rstest]
+    #[case::terminated(b"$$$$\n")]
+    #[case::no_newline(b"$$$$")]
+    fn test_sdf_delimiter(#[case] input: &[u8]) {
+        let input_str = input.to_str_lossy();
         let result = sdf_delimiter().parse(input);
-        assert!(result.is_ok());
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded, result: {:?}",
+            input_str,
+            result
+        );
+        let (remaining, _) = result.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{:?} leaves unparsed data: {:?}",
+            input_str,
+            remaining
+        );
     }
 
-    #[test]
-    fn test_sdf_delimiter_no_newline() {
-        let input = b"$$$$";
-        let result = sdf_delimiter().parse(input);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_sdf_data_block() {
-        let input = b"> <FIELD1>\nValue1\n\n> <FIELD2>\nValue2\n\n$$$$\n";
+    #[rstest]
+    #[case::single_entry(b"> <NAMES>\nbenzene\nBenzol\n\n$$$$\n", indexmap! {"NAMES".to_string() => "benzene,Benzol".to_string()})]
+    #[case::two_entries(b"> <BOILING.POINT>\n100.5\n\n> <CAS NR>\n110-82-7\n12217-02-6\n\n$$$$\n",
+        indexmap! {"BOILING.POINT".to_string() => "100.5".to_string(), "CAS NR".to_string() => "110-82-7,12217-02-6".to_string()})]
+    fn test_sdf_data_block(#[case] input: &[u8], #[case] expected: IndexMap<String, String>) {
         let result = sdf_data_block().parse(input);
-        assert!(result.is_ok());
-        let (remaining, fields): (&[u8], IndexMap<String, String>) = result.unwrap();
-        assert_eq!(fields.len(), 2);
-        assert_eq!(fields.get("FIELD1"), Some(&"Value1".to_string()));
-        assert_eq!(fields.get("FIELD2"), Some(&"Value2".to_string()));
-        assert!(remaining.starts_with(b"$$$$"));
+        let input_str = input.to_str_lossy().to_owned();
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded, result: {:?}",
+            input_str,
+            result
+        );
+        let (remaining, data) = result.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{:?} leaves unparsed data: {:?}",
+            input_str,
+            remaining
+        );
+        assert_eq!(
+            data, expected,
+            "{:?}: data {:?} != expected {:?}",
+            input_str, data, expected
+        );
     }
 }

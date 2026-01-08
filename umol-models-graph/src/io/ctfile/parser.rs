@@ -349,8 +349,6 @@ pub fn parse_extended_mol(input: &str) -> Result<ExtendedMolecule, ParseError> {
     parse_extended_mol_bytes(input.as_bytes())
 }
 
-/// TODO: Review the SDF related functions
-
 /// Parse single SDF compound into Molecule (basic, optimized)
 fn parse_sdf_molecule<'inp>(
     input: &'inp [u8],
