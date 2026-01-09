@@ -4,8 +4,8 @@ use rstest::*;
 
 use crate::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
 use crate::io::ctfile::parser::{
-    parse_extended_sdf, parse_extended_sdf_iter, parse_extended_sdf_with, parse_sdf,
-    parse_sdf_bytes, parse_sdf_bytes_with, parse_sdf_iter, parse_sdf_iter_with, parse_sdf_with,
+    parse_extended_sdf, parse_extended_sdf_with, parse_sdf, parse_sdf_bytes, parse_sdf_bytes_with,
+    parse_sdf_with,
 };
 
 #[fixture]
@@ -122,32 +122,6 @@ fn test_parse_extended_sdf_with_config(single_compound_sdf: &str) {
 }
 
 #[rstest]
-fn test_parse_sdf_iter(single_compound_sdf: &str) {
-    let iter = parse_sdf_iter(single_compound_sdf.as_bytes());
-    let molecules: Vec<_> = iter.collect();
-    assert_eq!(molecules.len(), 1);
-    assert!(molecules[0].is_ok());
-    assert_eq!(molecules[0].as_ref().unwrap().atom_count(), 1);
-}
-
-#[rstest]
-fn test_parse_sdf_iter_multiple(two_compound_sdf: &str) {
-    let iter = parse_sdf_iter(two_compound_sdf.as_bytes());
-    let molecules: Vec<_> = iter.collect();
-    assert_eq!(molecules.len(), 2);
-    assert!(molecules[0].is_ok());
-    assert!(molecules[1].is_ok());
-}
-
-#[rstest]
-fn test_parse_extended_sdf_iter(single_compound_sdf: &str) {
-    let iter = parse_extended_sdf_iter(single_compound_sdf.as_bytes());
-    let molecules: Vec<_> = iter.collect();
-    assert_eq!(molecules.len(), 1);
-    assert!(molecules[0].is_ok());
-}
-
-#[rstest]
 fn test_parse_sdf_invalid_unicode(sdf_with_unicode_whitespace: &[u8]) {
     let config = CtfileIoConfig::basic();
     let result = parse_sdf_bytes_with(sdf_with_unicode_whitespace, &config);
@@ -173,18 +147,4 @@ fn test_parse_sdf_lenient(sdf_with_unicode_whitespace: &[u8]) {
     let molecules = result.unwrap();
     assert_eq!(molecules.len(), 1);
     assert_eq!(molecules[0].atom_count(), 1);
-}
-
-#[rstest]
-fn test_parse_sdf_iter_lenient(sdf_with_unicode_whitespace: &[u8]) {
-    let config =
-        CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT);
-    let iter = parse_sdf_iter_with(sdf_with_unicode_whitespace, config);
-    let molecules: Vec<_> = iter.collect();
-    assert_eq!(molecules.len(), 1);
-    assert!(
-        molecules[0].is_ok(),
-        "Iterator should parse SDF with unicode whitespace: {:?}",
-        molecules[0].as_ref().err()
-    );
 }

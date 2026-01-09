@@ -4,10 +4,8 @@
 
 use std::borrow::Cow;
 
-use bstr::ByteSlice;
 use indexmap::IndexMap;
 use nom::character::complete::multispace0;
-use nom::combinator::opt;
 use nom::sequence::terminated;
 use nom::{Err, Parser};
 
@@ -22,7 +20,7 @@ use self::legacy_atom_list::legacy_atom_list_block;
 pub use self::legacy_atom_list::legacy_atom_list_input; // NOTE: Re-exported for benchmarks
 use self::properties::{extended_properties_block, properties_block, PropertyEntries};
 pub use self::properties::{extended_property_input, property_input}; // NOTE: Re-exported for benchmarks
-use self::sdf_data::{sdf_data_block, sdf_delimiter};
+use self::sdf_data::sdf_data_block;
 use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::ParseError;
 use crate::io::utils::normalize_whitespace;
@@ -354,29 +352,20 @@ fn parse_sdf_molecule<'inp>(
     input: &'inp [u8],
     line_offset: u32,
     config: &CtfileIoConfig,
-) -> Result<(&'inp [u8], Molecule, u32), ParseError> {
+) -> Result<(&'inp [u8], (Molecule, u32)), ParseError> {
     let flags = config.parse_flags;
 
-    let (remaining, (comments, header_end_offset)) = header_block(line_offset)(input)?;
+    let (remaining, (comments, line_offset)) = header_block(line_offset).parse(input)?;
 
-    let (remaining, (mut molecule, ctab_end_offset)) =
-        ctab_block(header_end_offset, flags).parse(remaining)?;
+    let (remaining, (mut molecule, line_offset)) =
+        ctab_block(line_offset, flags).parse(remaining)?;
 
-    let (remaining, data_fields) = sdf_data_block()
-        .parse(remaining)
-        .map_err(|e| ParseError::sdf_data_from_nom(e, ctab_end_offset))?;
-
-    let (remaining, _) = opt(sdf_delimiter())
-        .parse(remaining)
-        .map_err(|e| ParseError::delimiter_from_nom(e, ctab_end_offset))?;
+    let (remaining, (mut sdf_data, line_offset)) = sdf_data_block(line_offset).parse(remaining)?;
 
     molecule.comments = comments;
-    molecule.properties = data_fields;
+    molecule.properties.append(&mut sdf_data);
 
-    let consumed = input.len() - remaining.len();
-    let lines_consumed = input[..consumed].lines_with_terminator().count() as u32;
-
-    Ok((remaining, molecule, lines_consumed))
+    Ok((remaining, (molecule, line_offset)))
 }
 
 /// Parse single SDF compound into ExtendedMolecule
@@ -384,29 +373,20 @@ fn parse_sdf_extended_molecule<'inp>(
     input: &'inp [u8],
     line_offset: u32,
     config: &CtfileIoConfig,
-) -> Result<(&'inp [u8], ExtendedMolecule, u32), ParseError> {
+) -> Result<(&'inp [u8], (ExtendedMolecule, u32)), ParseError> {
     let flags = config.parse_flags;
 
-    let (remaining, (comments, header_end_offset)) = header_block(line_offset)(input)?;
+    let (remaining, (comments, line_offset)) = header_block(line_offset).parse(input)?;
 
-    let (remaining, (mut molecule, ctab_end_offset)) =
-        extended_ctab_block(header_end_offset, flags).parse(remaining)?;
+    let (remaining, (mut molecule, line_offset)) =
+        extended_ctab_block(line_offset, flags).parse(remaining)?;
 
-    let (remaining, data_fields) = sdf_data_block()
-        .parse(remaining)
-        .map_err(|e| ParseError::sdf_data_from_nom(e, ctab_end_offset))?;
-
-    let (remaining, _) = opt(sdf_delimiter())
-        .parse(remaining)
-        .map_err(|e| ParseError::delimiter_from_nom(e, ctab_end_offset))?;
+    let (remaining, (mut sdf_data, line_offset)) = sdf_data_block(line_offset).parse(remaining)?;
 
     molecule.comments = comments;
-    molecule.properties = data_fields;
+    molecule.properties.append(&mut sdf_data);
 
-    let consumed = input.len() - remaining.len();
-    let lines_consumed = input[..consumed].lines_with_terminator().count() as u32;
-
-    Ok((remaining, molecule, lines_consumed))
+    Ok((remaining, (molecule, line_offset)))
 }
 
 /// Parse SDF bytes into Vec<Molecule> with config (basic, optimized)
@@ -427,10 +407,11 @@ pub fn parse_sdf_bytes_with(
     let mut remaining: &[u8] = &data;
 
     while !remaining.trim_ascii().is_empty() {
-        let (rem, molecule, lines_consumed) = parse_sdf_molecule(remaining, line_offset, config)?;
+        let (new_remaining, (molecule, new_line_offset)) =
+            parse_sdf_molecule(remaining, line_offset, config)?;
         molecules.push(molecule);
-        line_offset += lines_consumed;
-        remaining = rem;
+        remaining = new_remaining;
+        line_offset = new_line_offset;
     }
 
     Ok(molecules)
@@ -470,11 +451,11 @@ pub fn parse_extended_sdf_bytes_with(
     let mut remaining: &[u8] = &data;
 
     while !remaining.trim_ascii().is_empty() {
-        let (rem, molecule, lines_consumed) =
+        let (new_remaining, (molecule, new_line_offset)) =
             parse_sdf_extended_molecule(remaining, line_offset, config)?;
         molecules.push(molecule);
-        line_offset += lines_consumed;
-        remaining = rem;
+        remaining = new_remaining;
+        line_offset = new_line_offset;
     }
 
     Ok(molecules)
@@ -498,130 +479,6 @@ pub fn parse_extended_sdf_with(
 pub fn parse_extended_sdf(input: &str) -> Result<Vec<ExtendedMolecule>, ParseError> {
     parse_extended_sdf_bytes(input.as_bytes())
 }
-
-/// Iterator for lazy streaming SDF parsing into Molecule
-pub struct SdfIter<'inp> {
-    data: Cow<'inp, [u8]>,
-    offset: usize,
-    line_offset: u32,
-    config: CtfileIoConfig,
-}
-
-impl<'inp> SdfIter<'inp> {
-    fn new(input: &'inp [u8], config: CtfileIoConfig) -> Self {
-        let data = if config.parse_flags.contains(CtabParseFlags::UNICODE) {
-            normalize_whitespace(input)
-        } else {
-            Cow::Borrowed(input)
-        };
-        Self {
-            data,
-            offset: 0,
-            line_offset: 0,
-            config,
-        }
-    }
-
-    fn remaining(&self) -> &[u8] {
-        &self.data[self.offset..]
-    }
-}
-
-impl<'inp> Iterator for SdfIter<'inp> {
-    type Item = Result<Molecule, ParseError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let remaining = self.remaining();
-        if remaining.trim_ascii().is_empty() {
-            return None;
-        }
-
-        match parse_sdf_molecule(remaining, self.line_offset, &self.config) {
-            Ok((rem, molecule, lines_consumed)) => {
-                self.offset = self.data.len() - rem.len();
-                self.line_offset += lines_consumed;
-                Some(Ok(molecule))
-            }
-            Err(e) => {
-                self.offset = self.data.len();
-                Some(Err(e))
-            }
-        }
-    }
-}
-
-/// Iterator for lazy streaming SDF parsing into ExtendedMolecule
-pub struct ExtendedSdfIter<'inp> {
-    data: Cow<'inp, [u8]>,
-    offset: usize,
-    line_offset: u32,
-    config: CtfileIoConfig,
-}
-
-impl<'inp> ExtendedSdfIter<'inp> {
-    fn new(input: &'inp [u8], config: CtfileIoConfig) -> Self {
-        let data = if config.parse_flags.contains(CtabParseFlags::UNICODE) {
-            normalize_whitespace(input)
-        } else {
-            Cow::Borrowed(input)
-        };
-        Self {
-            data,
-            offset: 0,
-            line_offset: 0,
-            config,
-        }
-    }
-
-    fn remaining(&self) -> &[u8] {
-        &self.data[self.offset..]
-    }
-}
-
-impl<'inp> Iterator for ExtendedSdfIter<'inp> {
-    type Item = Result<ExtendedMolecule, ParseError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let remaining = self.remaining();
-        if remaining.trim_ascii().is_empty() {
-            return None;
-        }
-
-        match parse_sdf_extended_molecule(remaining, self.line_offset, &self.config) {
-            Ok((rem, molecule, lines_consumed)) => {
-                self.offset = self.data.len() - rem.len();
-                self.line_offset += lines_consumed;
-                Some(Ok(molecule))
-            }
-            Err(e) => {
-                self.offset = self.data.len();
-                Some(Err(e))
-            }
-        }
-    }
-}
-
-/// Create a lazy streaming iterator for SDF bytes into Molecule (basic)
-pub fn parse_sdf_iter(input: &[u8]) -> SdfIter<'_> {
-    SdfIter::new(input, CtfileIoConfig::basic_max())
-}
-
-/// Create a lazy streaming iterator for SDF bytes into Molecule with config
-pub fn parse_sdf_iter_with(input: &[u8], config: CtfileIoConfig) -> SdfIter<'_> {
-    SdfIter::new(input, config)
-}
-
-/// Create a lazy streaming iterator for SDF bytes into ExtendedMolecule
-pub fn parse_extended_sdf_iter(input: &[u8]) -> ExtendedSdfIter<'_> {
-    ExtendedSdfIter::new(input, CtfileIoConfig::extended())
-}
-
-/// Create a lazy streaming iterator for SDF bytes into ExtendedMolecule with config
-pub fn parse_extended_sdf_iter_with(input: &[u8], config: CtfileIoConfig) -> ExtendedSdfIter<'_> {
-    ExtendedSdfIter::new(input, config)
-}
-
-/// END: TODO: Review the SDF related functions
 
 #[cfg(test)]
 mod tests;
