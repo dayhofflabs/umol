@@ -174,16 +174,21 @@ fn test_property_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomE
 #[case::atom_hydrogen_count(b"M  HYD  1   1   1", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: Some(1) }]))]
 #[case::chemsketch_atom_label(b"M  ZZC   1 1", PropertyEntries::ChemSketchLabelEntry(ChemSketchLabelEntry { atom_index: 0, label: "1".to_string()}))]
 fn test_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries) {
-    let (remaining, result) = all_consuming(property_input(CtabParseFlags::LENIENT))
-        .parse(input)
-        .unwrap();
+    let result = property_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
+        .parse(input);
     let input_str = input.to_str_lossy();
+    assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
+    let (remaining, property) = result.unwrap();
     assert!(
         remaining.is_empty(),
-        "remaining should be empty for {:?}",
-        input_str
+        "{:?} should consume all input, remaining: {:?}",
+        input_str,
+        remaining
     );
-    assert_eq!(result, expected);
+    assert_eq!(property, expected,
+        "{:?}: property {:?} != expected {:?}", input_str, property,
+        expected
+    );
 }
 
 #[rstest]

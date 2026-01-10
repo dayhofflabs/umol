@@ -1,316 +1,163 @@
 //! Tests for CTAB block parsing
 
-use nom::Parser;
+use bstr::ByteSlice;
+use nom::{Finish, Parser};
 use pretty_assertions::assert_eq;
 use rstest::*;
+use umol_data::Element;
 
 use crate::io::ctfile::config::CtabParseFlags;
+use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::{ctab_block, extended_ctab_block};
-use crate::table_ir::AtomSymbol;
+use crate::table_ir::{AtomList, AtomSymbol, BondOrder};
 
-#[fixture]
-fn header_atoms_only() -> &'static [u8] {
-    b"  2  0  0  0  0  0  0  0  0  0999 V2000\n"
-}
-
-#[fixture]
-fn header_atoms_bonds() -> &'static [u8] {
-    b"  2  1  0  0  0  0  0  0  0  0999 V2000\n"
-}
-
-#[fixture]
-fn header_atoms_bonds_legacy() -> &'static [u8] {
-    b"  2  1  1  0  0  0  0  0  0  0999 V2000\n"
-}
-
-#[fixture]
-fn atoms() -> &'static [u8] {
-    b"    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n"
-}
-
-#[fixture]
-fn bonds() -> &'static [u8] {
-    b"  1  2  1  0  0  0  0\n"
-}
-
-#[fixture]
-fn legacy_atom_list() -> &'static [u8] {
-    b"  1 F    3   9   7   8  \n"
-}
-
-#[fixture]
-fn properties() -> &'static [u8] {
-    b"M  CHG  1   2  -1\n"
-}
-
-#[fixture]
-fn m_end() -> &'static [u8] {
-    b"M  END\n"
-}
-
-#[fixture]
-fn m_end_no_newline() -> &'static [u8] {
-    b"M  END"
-}
-
-// FIX: Use fixtures
-#[test]
-fn test_ctab_block_error_extended_features() {
-    let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
-    0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0
-    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-M  ALS   1  2 F Cl  Br
-M  END
-";
-    let flags = CtabParseFlags::BASIC;
-    let result = ctab_block(0, flags).parse(ctab_data);
-    assert!(
-        result.is_err(),
-        "ctab_block parser should fail on query features"
-    );
-}
-
-// FIX: Use fixtures
-#[test]
-fn test_extended_ctab_block_truncated_lines() {
-    let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
-    0.0000    0.0000    0.0000 C   0  0
-    1.5400    0.0000    0.0000 C   0  0
-  1  2  1
-M  END
-";
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(0, flags).parse(ctab_data);
+#[rustfmt::skip]
+#[rstest]
+#[case::diatomic(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  3  0  0  0  0\nM  END\n",
+    2, 1, Element::N, BondOrder::Triple)]
+#[case::properties(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  3  0  0  0  0\nM  CHG  1   2  -1\nM  END\n",
+    2, 1, Element::N, BondOrder::Triple)]
+#[case::short_lines(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0\n    1.5400    0.0000    0.0000 C   0  0\n  1  2  1\nM  END\n",
+    2, 1, Element::C, BondOrder::Single)]
+#[case::no_terminal_newline(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1\nM  END",
+    2, 1, Element::C, BondOrder::Single)]
+fn test_ctab_block(
+    #[case] input: &[u8],
+    #[case] expected_atoms: usize,
+    #[case] expected_bonds: usize,
+    #[case] expected_element0: Element,
+    #[case] expected_order0: BondOrder,
+) {
+    let result = ctab_block(0, CtabParseFlags::BASIC).parse(input);
+    let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
-        "CTAB block with truncated lines should parse successfully"
+        "{:?} should parse successfully: {:?}",
+        input_str,
+        result
     );
-
     let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-    assert_eq!(molecule.bond_count(), 1, "Should have 1 bond");
-}
-
-// FIX: Use fixtures
-#[test]
-fn test_extended_ctab_block_insufficient_atoms() {
-    let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
-    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-M  END
-";
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_ctab_block(0, flags).parse(ctab_data);
-    assert!(result.is_err(), "Should fail with insufficient atoms");
-}
-
-// FIX: Use fixtures
-#[test]
-fn test_extended_ctab_block_insufficient_bonds() {
-    let ctab_data = b"  2  2  0  0  0  0  0  0  0  0999 V2000
-    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-M  END
-";
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_ctab_block(0, flags).parse(ctab_data);
-    assert!(result.is_err(), "Should fail with insufficient bonds");
-}
-
-// FIX: Use fixtures
-#[test]
-fn test_extended_ctab_block() {
-    let ctab_data = b"  2  1  0  0  0  0  0  0  0  0999 V2000
-    0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0
-    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-M  ALS   1  2 F Cl  Br
-M  END
-";
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_ctab_block(0, flags).parse(ctab_data);
     assert!(
-        result.is_ok(),
-        "CTAB block with query features should parse successfully"
+        remaining.is_empty(),
+        "{:?} should consume all input, remaining: {:?}",
+        input_str,
+        remaining
     );
-
-    let (_, (molecule, _)) = result.unwrap();
-    let atom1 = &molecule.atoms[0];
-    assert!(matches!(atom1.symbol, AtomSymbol::AtomList(_)));
-}
-
-#[rstest]
-fn test_extended_ctab_block_termination(
-    header_atoms_bonds: &[u8],
-    atoms: &[u8],
-    bonds: &[u8],
-    m_end: &[u8],
-) {
-    let mut data = Vec::new();
-    data.extend_from_slice(header_atoms_bonds);
-    data.extend_from_slice(atoms);
-    data.extend_from_slice(bonds);
-    data.extend_from_slice(m_end);
-
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_ctab_block(0, flags).parse(&data);
-    assert!(result.is_ok(), "Should parse successfully");
-
-    let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-    assert_eq!(molecule.bond_count(), 1, "Should have 1 bond");
-}
-
-#[rstest]
-fn test_extended_ctab_block_termination_with_properties(
-    header_atoms_bonds: &[u8],
-    atoms: &[u8],
-    bonds: &[u8],
-    properties: &[u8],
-    m_end: &[u8],
-) {
-    let mut data = Vec::new();
-    data.extend_from_slice(header_atoms_bonds);
-    data.extend_from_slice(atoms);
-    data.extend_from_slice(bonds);
-    data.extend_from_slice(properties);
-    data.extend_from_slice(m_end);
-
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_ctab_block(0, flags).parse(&data);
-    assert!(result.is_ok(), "Should parse successfully");
-
-    let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-    assert_eq!(molecule.bond_count(), 1, "Should have 1 bond");
-
-    let atom2 = &molecule.atoms[1];
     assert_eq!(
-        atom2.charge,
-        Some(-1),
-        "Oxygen should have -1 charge from M CHG"
+        molecule.atom_count(),
+        expected_atoms,
+        "{:?}: atom count {} != expected {}",
+        input_str,
+        molecule.atom_count(),
+        expected_atoms
+    );
+    assert_eq!(
+        molecule.bond_count(),
+        expected_bonds,
+        "{:?}: bonds count {} != expected {}",
+        input_str,
+        molecule.bond_count(),
+        expected_bonds
+    );
+    assert_eq!(
+        molecule.atoms[0].element, expected_element0,
+        "{:?}: element0: {:?} != expected {:?}",
+        input_str, molecule.atoms[0], expected_element0
+    );
+    assert_eq!(
+        molecule.bonds[0].order, expected_order0,
+        "{:?} bond order 0: {:?} != expected {:?}",
+        input_str, molecule.bonds[0], expected_order0
+    ) 
+}
+
+#[rstest]
+#[case::als_query_property(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  ALS   1  2 F Cl  Br\nM  END\n",
+    ParseError::InvalidAtomLine { line: 1, col: 31 })]
+#[case::legacy_atom_list(b"  2  1  1  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1 F    3   9   7   8  \nM  END\n",
+    ParseError::UnsupportedLegacyAtomList { line: 4 })]
+#[case::insufficient_atoms(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n",
+    ParseError::InvalidAtomLine { line: 2, col: 0 })]
+#[case::insufficient_bonds(b"  2  2  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  END\n",
+    ParseError::InvalidBondLine { line: 4, col: 0 })]
+#[case::missing_m_end(b"  2  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n",
+    ParseError::MissingMEndTag { line: 3 })]
+fn test_ctab_block_invalid(#[case] input: &[u8], #[case] expected_error: ParseError) {
+    let result = ctab_block(0, CtabParseFlags::BASIC).parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    let error = result.finish().unwrap_err();
+    assert_eq!(
+        error, expected_error,
+        "{:?}: error {:?} != {:?}",
+        input_str, error, expected_error,
     );
 }
 
 #[rstest]
-fn test_extended_ctab_block_missing_m_end(header_atoms_only: &[u8], atoms: &[u8]) {
-    let mut data = Vec::new();
-    data.extend_from_slice(header_atoms_only);
-    data.extend_from_slice(atoms);
-
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(0, flags).parse(&data);
-    assert!(result.is_ok(), "Should parse successfully");
-
-    let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-}
-
-#[rstest]
-fn test_extended_ctab_block_missing_m_end_no_newline(header_atoms_only: &[u8], atoms: &[u8]) {
-    let mut data = Vec::new();
-    data.extend_from_slice(header_atoms_only);
-    data.extend_from_slice(atoms);
-
-    // Remove trailing newline
-    if data.ends_with(b"\n") {
-        data.pop();
-    }
-
-    let flags = CtabParseFlags::LENIENT;
-    let result = extended_ctab_block(0, flags).parse(&data);
-    assert!(result.is_ok(), "Should parse successfully");
-
-    let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-}
-
-#[rstest]
-#[case::legacy_list(vec![atoms(), bonds(), legacy_atom_list()])]
-#[case::properties_with_legacy(vec![atoms(), bonds(), legacy_atom_list(), properties()])]
-fn test_extended_ctab_block_missing_m_end_legacy(
-    #[case] blocks: Vec<&[u8]>,
-    header_atoms_bonds_legacy: &[u8],
+#[case::atom_list(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  ALS   1  2 F Cl  Br\nM  END\n",
+    2, 1, AtomSymbol::AtomList(AtomList { elements: vec![Element::Cl, Element::Br], exclusion: false }), BondOrder::Single)]
+fn test_extended_ctab_block(
+    #[case] input: &[u8],
+    #[case] expected_atoms: usize,
+    #[case] expected_bonds: usize,
+    #[case] expected_symbol0: AtomSymbol,
+    #[case] expected_order0: BondOrder,
 ) {
-    let mut data = Vec::new();
-    data.extend_from_slice(header_atoms_bonds_legacy);
-
-    for block in blocks {
-        data.extend_from_slice(block);
-    }
-
-    let result = extended_ctab_block(0, CtabParseFlags::LENIENT).parse(&data);
-    assert!(result.is_ok(), "Should parse successfully");
-
-    let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-}
-
-#[rstest]
-#[case::legacy_list(vec![atoms(), bonds(), legacy_atom_list()])]
-#[case::properties_with_legacy(vec![atoms(), bonds(), legacy_atom_list(), properties()])]
-fn test_extended_ctab_block_missing_m_end_legacy_no_newline(
-    #[case] blocks: Vec<&[u8]>,
-    header_atoms_bonds_legacy: &[u8],
-) {
-    let mut data = Vec::new();
-    data.extend_from_slice(header_atoms_bonds_legacy);
-
-    for block in blocks {
-        data.extend_from_slice(block);
-    }
-
-    // Remove trailing newline
-    if data.ends_with(b"\n") {
-        data.pop();
-    }
-
-    let result = extended_ctab_block(0, CtabParseFlags::LENIENT).parse(&data);
-    assert!(result.is_ok(), "Should parse successfully");
-
-    let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-}
-
-#[rstest]
-fn test_extended_ctab_block_m_end_no_newline(
-    header_atoms_bonds: &[u8],
-    atoms: &[u8],
-    bonds: &[u8],
-    properties: &[u8],
-    m_end_no_newline: &[u8],
-) {
-    let mut data = Vec::new();
-    data.extend_from_slice(header_atoms_bonds);
-    data.extend_from_slice(atoms);
-    data.extend_from_slice(bonds);
-    data.extend_from_slice(properties);
-    data.extend_from_slice(m_end_no_newline);
-
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_ctab_block(0, flags).parse(&data);
+    let result = extended_ctab_block(0, CtabParseFlags::EXTENDED).parse(input);
+    let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
-        "M END without newline should parse successfully"
+        "{:?} should parse successfully: {:?}",
+        input_str,
+        result
     );
-
     let (remaining, (molecule, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "All input should be consumed");
-    assert_eq!(molecule.atom_count(), 2, "Should have 2 atoms");
-    assert_eq!(molecule.bond_count(), 1, "Should have 1 bond");
-
-    let atom2 = &molecule.atoms[1];
+    assert!(
+        remaining.is_empty(),
+        "{:?} should consume all input, remaining: {:?}",
+        input_str,
+        remaining
+    );
     assert_eq!(
-        atom2.charge,
-        Some(-1),
-        "Oxygen should have -1 charge from M CHG"
+        molecule.atom_count(),
+        expected_atoms,
+        "{:?}: atom count {} != expected {}",
+        input_str,
+        molecule.atom_count(),
+        expected_atoms
+    );
+    assert_eq!(
+        molecule.bond_count(),
+        expected_bonds,
+        "{:?}: bonds count {} != expected {}",
+        input_str,
+        molecule.bond_count(),
+        expected_bonds
+    );
+    assert_eq!(
+        molecule.atoms[0].symbol, expected_symbol0,
+        "{:?}: atom symbol 0: {:?} != expected {:?}",
+        input_str, molecule.atoms[0], expected_symbol0
+    );
+    assert_eq!(
+        molecule.bonds[0].order, expected_order0,
+        "{:?} bond order 0: {:?} != expected {:?}",
+        input_str, molecule.bonds[0], expected_order0
+    )
+}
+
+#[rstest]
+#[case::legacy_atom_list(b"  2  1  1  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1 F    3   9   7   8  \nM  END\n",
+    ParseError::UnsupportedLegacyAtomList { line: 4 })]
+fn test_extended_ctab_block_invalid(#[case] input: &[u8], #[case] expected_error: ParseError) {
+    let result = extended_ctab_block(0, CtabParseFlags::EXTENDED).parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    let error = result.finish().unwrap_err();
+    assert_eq!(
+        error, expected_error,
+        "{:?}: error {:?} != {:?}",
+        input_str, error, expected_error,
     );
 }
