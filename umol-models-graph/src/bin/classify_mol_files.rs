@@ -9,8 +9,8 @@
 //! - bug: hierarchy violation (indicates parser inconsistency)
 //!
 //! Usage:
-//!   cargo run --bin mol_classifier           # Show classification stats
-//!   cargo run --bin mol_classifier -- --sort # Copy files to data/ directories
+//!   cargo run --bin classify_mol_files           # Show classification stats
+//!   cargo run --bin classify_mol_files -- --sort # Copy files to data/ directories
 
 use std::collections::HashMap;
 use std::fs;
@@ -142,7 +142,10 @@ impl ClassificationStats {
     }
 
     fn valid_count(&self) -> usize {
-        self.molecule + self.molecule_lenient + self.extended_molecule + self.extended_molecule_lenient
+        self.molecule
+            + self.molecule_lenient
+            + self.extended_molecule
+            + self.extended_molecule_lenient
     }
 
     fn valid_percentage(&self) -> f64 {
@@ -154,7 +157,9 @@ impl ClassificationStats {
     }
 }
 
-fn classify_mol_file(file_path: &Path) -> Result<(Category, ParseResults), Box<dyn std::error::Error>> {
+fn classify_mol_file(
+    file_path: &Path,
+) -> Result<(Category, ParseResults), Box<dyn std::error::Error>> {
     let mol_bytes = fs::read(file_path)?;
 
     // For basic parser: BASIC vs BASIC_MAX (lenient parsing features, no extended atoms/bonds)
@@ -223,6 +228,15 @@ fn collect_mol_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn std:
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+    if !(args.len() == 1 || args.len() == 2 && args[1] == "--sort") {
+        eprintln!(
+            "Usage: cargo run --bin classify_mol_files           # Show classification stats"
+        );
+        eprintln!(
+            "       cargo run --bin classify_mol_files -- --sort # Copy files to data/ directories"
+        );
+        std::process::exit(1);
+    }
     let should_sort = args.iter().any(|a| a == "--sort");
 
     // Paths relative to workspace root, prefixed with package dir
@@ -368,10 +382,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if error_files > 0 {
         println!("- Errors: {} files could not be read", error_files);
     }
-    println!("- {:.1}% of files are valid (parseable)", totals.valid_percentage());
+    println!(
+        "- {:.1}% of files are valid (parseable)",
+        totals.valid_percentage()
+    );
 
     if totals.bug > 0 {
-        println!("\n⚠️  **WARNING: {} files have parser hierarchy violations!**\n", totals.bug);
+        println!(
+            "\n⚠️  **WARNING: {} files have parser hierarchy violations!**\n",
+            totals.bug
+        );
         println!("| Source | File | Pattern | Violation |");
         println!("| --- | --- | --- | --- |");
         for (source, filename, results) in &bug_files {
@@ -388,7 +408,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !should_sort {
         println!("\n**Note:** Run with `--sort` flag to copy files to data/ directories:");
         println!("```");
-        println!("cargo run --bin mol_classifier -- --sort");
+        println!("cargo run --bin classify_mol_files -- --sort");
         println!("```");
     } else {
         println!("\n**Files sorted into data/ directories**");

@@ -112,6 +112,7 @@ fn test_extended_bond_block_invalid(#[case] input: &[u8]) {
 #[case::len_13(b"  1  3  1  6", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
 #[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None)]
 #[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
+#[case::invalid_unused(b"  1  2  1  1XXX  0  0", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] atom1: usize,
@@ -137,6 +138,7 @@ fn test_bond_input(
 #[case::line_too_short(b"  1  2 ", NomErrorKind::Eof)]
 #[case::extended_range_quadruple(b"  1  2  9", NomErrorKind::MapRes)]
 #[case::extended_range_zero(b"  1  2  0", NomErrorKind::MapRes)]
+#[case::invalid_extended(b"  2  5  2  1  0  0  1", NomErrorKind::Verify)]
 fn test_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let input_str = input.to_str_lossy();
     let mut parser = bond_input(CtabParseFlags::BASIC);
@@ -152,7 +154,7 @@ fn test_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomError
 }
 
 #[rstest]
-#[case::invalid_unused(b"  1  2  1  1  0  0XXX", NomErrorKind::Verify)]
+#[case::invalid_unused(b"  1  2  1  1XXX  0  0", NomErrorKind::Verify)]
 fn test_bond_input_strict_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let input_str = input.to_str_lossy();
     let mut parser = bond_input(CtabParseFlags::STRICT);
@@ -219,14 +221,13 @@ fn test_bond_input_partial_fields(#[case] input: &[u8]) {
 #[case::len_12_single_dash(b"  1  2  1  6", 0, 1, BondOrder::Single, None, Some(BondDirection::Down), None, None)]
 #[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None, None, None)]
 #[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None, None, None)]
-#[case::len_9_zero_bond(b"  1  2  0", 0, 1, BondOrder::Zero, None, None, None, None)]
-#[case::len_9_quadruple_bond(b"  1  2  9", 0, 1, BondOrder::Quadruple, None, None, None, None)]
 #[case::len_12_double_either(b"  1  2  2  3", 0, 1, BondOrder::Double, Some(BondStereo::Either), None, None, None)]
 #[case::len_18_any_bond_ring(b"  1  2  8  0     1", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
 #[case::len_21_chain_center(b"  1  2  1  0     2  1", 0, 1, BondOrder::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::CENTER))]
 #[case::len_21_not_center(b"  1  2  1  0     2 -1", 0, 1, BondOrder::Single, None, None, Some(BondTopology::Chain), Some(BondReactingCenter::NOT_CENTER))]
 #[case::len_21_blank_fields(b"  1  2  1            ", 0, 1, BondOrder::Single, None, None, None, None)]
-#[case::invalid_unused(b"  1  2  8  0XXX  1", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
+#[case::len_21_reaction_center(b"  2  5  2  1  0  0  1", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None, None, Some(BondReactingCenter::CENTER))]
+#[case::len_15_invalid_unused(b"  1  2  8  0XXX  1", 0, 1, BondOrder::Any, None, None, Some(BondTopology::Ring), None)]
 fn test_extended_bond_input(
     #[case] input: &[u8],
     #[case] atom1: usize,
@@ -238,7 +239,7 @@ fn test_extended_bond_input(
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {
     let input_str = input.to_str_lossy();
-    let mut parser = extended_bond_input(CtabParseFlags::LENIENT);
+    let mut parser = extended_bond_input(CtabParseFlags::EXTENDED);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, (a1, a2, bond)) = result.unwrap();
@@ -257,8 +258,28 @@ fn test_extended_bond_input(
 #[case::bond_type_above_range(b"  1  2  9", NomErrorKind::MapRes)]
 #[case::bond_type_below_range(b"  1  2  0", NomErrorKind::MapRes)]
 #[case::invalid_topology(b"  2  5  2  0  0  4  0", NomErrorKind::MapRes)]
-#[case::invalid_unused(b"  1  2  8  0XXX  1", NomErrorKind::Verify)]
+#[case::invalid_reacting_center(b"  2  3  1  0  0  0XXX", NomErrorKind::Digit)]
+#[case::extended_reacting_center(b"  2  3  1  0  0  0  6", NomErrorKind::MapRes)]
 fn test_extended_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let input_str = input.to_str_lossy();
+    let mut parser = extended_bond_input(CtabParseFlags::EXTENDED);
+    let result = parser.parse(input);
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rstest]
+#[case::len_15_invalid_unused(b"  1  2  8  0XXX  1", NomErrorKind::Verify)]
+fn test_extended_bond_input_strict_invalid(
+    #[case] input: &[u8],
+    #[case] expected_kind: NomErrorKind,
+) {
     let input_str = input.to_str_lossy();
     let mut parser = extended_bond_input(CtabParseFlags::STRICT);
     let result = parser.parse(input);
@@ -271,6 +292,35 @@ fn test_extended_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind:
         result.clone().unwrap_err().map(|e| e.code)
     );
 }
+
+#[rustfmt::skip]
+#[rstest]
+#[case::len_9_zero_bond(b"  1  2  0", 0, 1, BondOrder::Zero, None, None, None, None)]
+#[case::len_9_quadruple_bond(b"  1  2  9", 0, 1, BondOrder::Quadruple, None, None, None, None)]
+#[case::extended_reacting_center(b"  2  3  1  0  0  0  6", 1, 2, BondOrder::Single, None, None, None, Some(BondReactingCenter::NO_CHANGE))]
+fn test_extended_bond_input_lenient(
+    #[case] input: &[u8],
+    #[case] atom1: usize,
+    #[case] atom2: usize,
+    #[case] bond_type: BondOrder,
+    #[case] stereo: Option<BondStereo>,
+    #[case] dir: Option<BondDirection>,
+    #[case] topology: Option<BondTopology>,
+    #[case] reacting_center: Option<BondReactingCenter>) {
+        let input_str = input.to_str_lossy();
+        let mut parser = extended_bond_input(CtabParseFlags::LENIENT);
+        let result = parser.parse(input);
+        assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+        let (remaining, (a1, a2, bond)) = result.unwrap();
+        assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
+        assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
+        assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
+        assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
+        assert_eq!(bond.stereo, stereo, "{:?} has returned stereo {:?}, expected {:?}", input_str, bond.stereo, stereo);
+        assert_eq!(bond.direction, dir, "{:?} has returned dir {:?}, expected {:?}", input_str, bond.direction, dir);
+        assert_eq!(bond.topology, topology, "{:?} has returned topology {:?}, expected {:?}", input_str, bond.topology, topology);
+        assert_eq!(bond.reacting_center, reacting_center, "{:?} has returned reacting_center {:?}, expected {:?}", input_str, bond.reacting_center, reacting_center); 
+    }
 
 #[rustfmt::skip]
 #[rstest]
@@ -295,7 +345,6 @@ fn test_extended_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind:
 #[case::len_15_zero(b"  1  2  1  0  0", 0, 1, BondOrder::Single, None, None)]
 #[case::len_18_blank(b"  1  2  1  0  0   ", 0, 1, BondOrder::Single, None, None)]
 #[case::len_21_blank(b"  1  2  1  0  0  0   ", 0, 1, BondOrder::Single, None, None)]
-#[case::invalid_unused(b"  1  2  1  1  0  0XXX", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
 fn test_bond_input21(
     #[case] input: &[u8],
     #[case] atom1: usize,
@@ -324,6 +373,7 @@ fn test_bond_input21(
 #[case::len_21_non_numeric_atom(b"  A  2  1  1  0  0  0", NomErrorKind::Digit)]
 #[case::len_21_non_numeric_type(b"  1  2  A  1  0  0  0", NomErrorKind::Digit)]
 #[case::len_12_non_numeric_stereo(b"  1  2  1  A", NomErrorKind::Digit)]
+#[case::len_21_invalid_extended(b"  1  2  1  1  0  0  1", NomErrorKind::Verify)]
 fn test_bond_input21_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
@@ -471,7 +521,7 @@ fn test_bond_input9_invalid(#[case] input: &[u8], #[case] expected_kind: NomErro
 #[rstest]
 #[case::quadruple(b"  1  2  9", 0, 1, BondOrder::Quadruple)]
 #[case::zero(b"  2  5  0", 1, 4, BondOrder::Zero)]
-fn test_bond_input9_extended(
+fn test_bond_input9_lenient(
     #[case] input: &[u8],
     #[case] atom1: usize,
     #[case] atom2: usize,

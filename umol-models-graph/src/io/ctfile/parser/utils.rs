@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
 
 use bstr::ByteSlice;
-use fast_float::FastFloat;
+use fast_float2::FastFloat;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{
@@ -262,14 +262,14 @@ where
                 alt((
                     map(
                         recognize((opt(tag(&b"-"[..])), digit1, tag(&b"."[..]), digit0)),
-                        |s| fast_float::parse::<T, _>(s).unwrap(),
+                        |s| fast_float2::parse::<T, _>(s).unwrap(),
                     ),
                     map(
                         recognize((opt(tag(&b"-"[..])), digit0, tag(&b"."[..]), digit1)),
-                        |s| fast_float::parse::<T, _>(s).unwrap(),
+                        |s| fast_float2::parse::<T, _>(s).unwrap(),
                     ),
                     map(recognize((opt(tag(&b"-"[..])), digit1)), move |s| {
-                        fast_float::parse::<T, _>(s).unwrap()
+                        fast_float2::parse::<T, _>(s).unwrap()
                             / T::from(10.0).unwrap().powi(precision as i32)
                     }),
                 )),

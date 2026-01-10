@@ -177,6 +177,7 @@ pub(super) fn convert_bond_type_code(
         4 => Ok(BondOrder::Aromatic),
         _ => {
             if extended_range && (code == 0 || (9..=11).contains(&code)) {
+                // TODO: In RDKit: 9 is Dative
                 match code {
                     0 => Ok(BondOrder::Zero),
                     9 => Ok(BondOrder::Quadruple),
@@ -211,6 +212,7 @@ pub(super) fn convert_extended_bond_type_code(
         _ => {
             if allow_wildcards && (5..=8).contains(&code) {
                 match code {
+                    // TODO: In RDKit: 8 is Zero query bond
                     5 => Ok(BondOrder::SingleOrDouble),
                     6 => Ok(BondOrder::SingleOrAromatic),
                     7 => Ok(BondOrder::DoubleOrAromatic),
@@ -246,6 +248,8 @@ pub(super) fn convert_bond_stereo_direction_code(
     match code {
         0 => Ok((None, None)),
         1 => Ok((Some(BondStereo::Cis), Some(BondDirection::Up))),
+        // TODO: In RDKit: 3 is "either" double bond
+        // 4 is "either" single bond
         3 | 4 => Ok((Some(BondStereo::Either), Some(BondDirection::Either))),
         6 => Ok((Some(BondStereo::Trans), Some(BondDirection::Down))),
         _ => Err(ParseError::InvalidCode {

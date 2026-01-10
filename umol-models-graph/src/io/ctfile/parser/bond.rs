@@ -15,6 +15,7 @@ use super::utils::{
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
+use crate::io::ctfile::parser::utils::fixed_width_unused;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
 
 /// Parse bond block (basic bonds only)
@@ -42,6 +43,7 @@ pub(super) fn bond_block<'inp>(
                 .map_err(|e| {
                     Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
                 })?;
+            println!("BASIC: {atom1}, {atom2} {bond:?}");
             bonds.push((atom1, atom2, bond));
             byte_offset += byte_len;
         }
@@ -75,8 +77,10 @@ pub(super) fn extended_bond_block<'inp>(
                 all_consuming(terminated(extended_bond_input(flags), space0))
                     .parse(line)
                     .map_err(|e| {
+                        println!("ERROR: {e:?}");
                         Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
                     })?;
+            println!("EXTENDED: {atom1}, {atom2} {bond:?}");
             bonds.push((atom1, atom2, bond));
             byte_offset += byte_len;
         }
@@ -172,15 +176,16 @@ fn bond_input21<'inp>(
         convert_bond_type_code(code, extended_range)
     });
     let stereo_direction = map_res(fixed_width_int::<u8>(3), convert_bond_stereo_direction_code);
-    let n = input.len().saturating_sub(12) / 3;
-    let unused1 = fixed_width_unused_n(n, 3, skip_unused_fields);
+    let unused1 = cond(input.len() >= 15, fixed_width_unused(3, skip_unused_fields));
+    let count2 = input.len().saturating_sub(15) / 3;
+    let extended2 = fixed_width_unused_n(count2, 3, false);
 
     map(
         (
             first_atom,
             second_atom,
             bond_type,
-            terminated(stereo_direction, unused1),
+            terminated(stereo_direction, (unused1, extended2)),
         ),
         |(first_atom, second_atom, order, (stereo, dir))| {
             let mut bond = Bond::with_order(order);
