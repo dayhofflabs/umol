@@ -58,7 +58,7 @@ pub enum ParseError {
     #[error("Inconsistent Sgroups: {0}")]
     InconsistentSgroups(String),
     #[error("Index out of bounds: {0}")]
-    IndexOutOfBounds(usize),
+    IndexOutOfBounds(u32),
     #[error("Incomplete structure: {0}")]
     IncompleteStructure(String),
     #[error("Duplicate property: {0}")]
@@ -69,11 +69,11 @@ pub enum ParseError {
     InvalidIsotopeMass { mass: u32, element: Element },
     #[error("Undefined S-group {index}: {property}")]
     UndefinedSGroup {
-        index: usize,
+        index: u32,
         property: &'static str,
     },
     #[error("S-group {0} has no type")]
-    SGroupMissingType(usize),
+    SGroupMissingType(u32),
     #[error("S-group type {sgroup_type:?}: {message}")]
     SGroupTypeConstraint {
         sgroup_type: SGroupType,
@@ -82,7 +82,7 @@ pub enum ParseError {
     #[error("Missing S-group data context")]
     MissingSGroupDataContext,
     #[error("S-group index mismatch: expected {expected}, got {actual}")]
-    SGroupIndexMismatch { expected: usize, actual: usize },
+    SGroupIndexMismatch { expected: u32, actual: u32 },
 }
 
 impl<I> NomParseError<I> for ParseError {

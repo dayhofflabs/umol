@@ -12,15 +12,15 @@ use super::sgroup::SGroup;
 /// Legacy group abbreviation
 #[derive(Debug, Clone, PartialEq)]
 pub struct LegacyGroupAbbreviation {
-    pub atom_index1: usize, // Atoms on this side are abbreviated
-    pub atom_index2: usize, // Attachment point to main structure
+    pub atom_index1: u32, // Atoms on this side are abbreviated
+    pub atom_index2: u32, // Attachment point to main structure
     pub label: String,
 }
 
 /// CTFile-specific data container for ExtendedMolecule
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CtfileData {
-    pub sgroups: BTreeMap<usize, SGroup>,
-    pub rgroups: BTreeMap<usize, RGroup>,
+    pub sgroups: BTreeMap<u32, SGroup>,
+    pub rgroups: BTreeMap<u32, RGroup>,
     pub legacy_group_abbreviations: Vec<LegacyGroupAbbreviation>,
 }

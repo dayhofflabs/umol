@@ -36,89 +36,89 @@ pub struct MoleculeChiralFlagEntry {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomAliasEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub alias: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LegacyGroupAbbreviationEntry {
-    pub atom_index1: usize, // Atoms on this side are abbreviated
-    pub atom_index2: usize, // Attachment point to main structure
+    pub atom_index1: u32, // Atoms on this side are abbreviated
+    pub atom_index2: u32, // Attachment point to main structure
     pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomValueEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChargeEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub charge: i8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RadicalEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub radical_type: u8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IsotopeEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub mass: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RingBondCountEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub ring_bond_count: i8, // -2=r*, -1=r0, 0=off, 2=r2, 3=r3, 4+=r4
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubstitutionCountEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub substitution_count: i8, // -2=s*, -1=s0, 0=off, 1-5=s1-s5, 6+=s6
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnsaturatedAtomEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub unsaturated: u8, // 0=off, 1=on
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LinkAtomEntry {
-    pub atom_index: usize,
-    pub repeat_count: u8,           // vvv >= 2
-    pub subs_index1: usize,         // bbb
-    pub subs_index2: Option<usize>, // ccc (optional)
+    pub atom_index: u32,
+    pub repeat_count: u8,         // vvv >= 2
+    pub subs_index1: u32,         // bbb
+    pub subs_index2: Option<u32>, // ccc (optional)
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomListEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub exclusion: bool,        // T = NOT list, F = normal list
     pub elements: Vec<Element>, // Converted from 4-char symbols
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttachmentPointEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub attachment_type: u8, // 0=none, 1=first, 2=second, 3=both
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomAttachmentOrderEntry {
-    pub atom_index: usize,
-    pub attachments: Vec<(usize, u8)>, // (neighbor index, attachment order)
+    pub atom_index: u32,
+    pub attachments: Vec<(u32, u8)>, // (neighbor index, attachment order)
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RGroupLabelEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub label: u32, // 0 = no label, 1-32 in CTab spec, 1-999 in RDKit
 }
 
@@ -136,80 +136,80 @@ pub struct RGroupLogicEntry {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupTypeEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub sgroup_type: SGroupType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupSubtypeEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub sgroup_subtype: SGroupSubtype,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupLabelEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub label: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupConnectivityEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub connectivity: SGroupConnectivity,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupExpansionEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupAtomListEntry {
-    pub sgroup_index: usize,
-    pub atom_indices: Vec<usize>,
+    pub sgroup_index: u32,
+    pub atom_indices: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupBondListEntry {
-    pub sgroup_index: usize,
-    pub bond_indices: Vec<usize>,
+    pub sgroup_index: u32,
+    pub bond_indices: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupParentAtomEntry {
-    pub sgroup_index: usize,
-    pub atom_indices: Vec<usize>,
+    pub sgroup_index: u32,
+    pub atom_indices: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupSubscriptEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub multiplier: Option<SGroupMultiplier>,
     pub subscript: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupCorrespondenceEntry {
-    pub sgroup_index: usize,
-    pub bond_indices: Vec<usize>,
+    pub sgroup_index: u32,
+    pub bond_indices: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupDisplayInfoEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub bracket_coords: Vec<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupConnectingBondEntry {
-    pub sgroup_index: usize,
-    pub bond_index: usize,
+    pub sgroup_index: u32,
+    pub bond_index: u32,
     pub bond_vector: (f64, f64),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupDataDescriptionEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub field_name: String,
     pub field_type: SGroupDataType,
     pub field_units: Option<String>,
@@ -221,21 +221,21 @@ pub struct SGroupDataDescriptionEntry {
 pub enum SGroupDataEntry {
     /// SCD - Continuation data (exactly 69 characters)
     Continuation {
-        sgroup_index: usize,
+        sgroup_index: u32,
         data_content: String, // Should be exactly 69 chars
     },
     /// SED - End with data (<= 69 characters)
     EndWithData {
-        sgroup_index: usize,
+        sgroup_index: u32,
         data_content: String, // 0-69 chars
     },
     /// SED - End without data (blank, processes buffered data)
-    EndBlank { sgroup_index: usize },
+    EndBlank { sgroup_index: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupDataDisplayEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub coords: (f64, f64),
     pub display_type: SGroupDataDisplayType,
     pub display_placement: SGroupDataDisplayPlacement,
@@ -247,32 +247,38 @@ pub struct SGroupDataDisplayEntry {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupComponentEntry {
-    pub sgroup_index: usize,
+    pub sgroup_index: u32,
     pub component_number: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupHierarchyEntry {
-    pub sgroup_index: usize,
-    pub parent_sgroup_index: usize,
+    pub sgroup_index: u32,
+    pub parent_sgroup_index: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BondOrderOverrideEntry {
-    pub bond_index: usize,
+    pub bond_index: u32,
     pub bond_order: BondOrder,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomChargeOverrideEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub charge: i8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AtomHydrogenCountEntry {
-    pub atom_index: usize,
+    pub atom_index: u32,
     pub hydrogen_count: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChemSketchLabelEntry {
+    pub atom_index: u32,
+    pub label: String,
 }
 
 /// Parsed property entries
@@ -314,6 +320,7 @@ pub enum PropertyEntries {
     BondOrderOverrideEntries(Vec<BondOrderOverrideEntry>),
     AtomChargeOverrideEntries(Vec<AtomChargeOverrideEntry>),
     AtomHydrogenCountEntries(Vec<AtomHydrogenCountEntry>),
+    ChemSketchLabelEntry(ChemSketchLabelEntry),
 }
 
 /// Parse properties block (basic properties only)
@@ -471,6 +478,7 @@ pub fn property_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
+    let allow_editor_extensions = flags.contains(CtabParseFlags::EDITOR_EXTENSIONS);
     move |input: &'inp [u8]| {
         if input.len() < 3 {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
@@ -530,6 +538,19 @@ pub fn property_input<'inp>(
                     Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
                 }
             }
+            // Editor extensions
+            tag @ b"M  ZZC" => {
+                if allow_editor_extensions {
+                    match tag {
+                        b"M  ZZC" => chemsketch_label_entry()
+                            .parse(remaining)
+                            .map(|(i, o)| (i, PropertyEntries::ChemSketchLabelEntry(o))),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
+                }
+            }
             _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
         }?;
         Ok((remaining, result))
@@ -545,6 +566,7 @@ pub fn extended_property_input<'inp>(
     let allow_rgroups = flags.contains(CtabParseFlags::RGROUPS);
     let allow_sgroups = flags.contains(CtabParseFlags::SGROUPS);
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
+    let allow_editor_extensions = flags.contains(CtabParseFlags::EDITOR_EXTENSIONS);
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     move |input: &'inp [u8]| {
         if input.len() < 3 {
@@ -700,6 +722,19 @@ pub fn extended_property_input<'inp>(
                     .map(|(i, o)| (i, PropertyEntries::AtomHydrogenCountEntries(o))),
                 _ => unreachable!(),
             },
+            // Editor extensions
+            tag @ b"M  ZZC" => {
+                if allow_editor_extensions {
+                    match tag {
+                        b"M  ZZC" => chemsketch_label_entry()
+                            .parse(remaining)
+                            .map(|(i, o)| (i, PropertyEntries::ChemSketchLabelEntry(o))),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
+                }
+            }
             _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
         }?;
         Ok((remaining, result))
@@ -714,7 +749,7 @@ pub(super) fn parse_atom_alias_input<'a>(
     first_line: &'a [u8],
     second_line: &[u8],
 ) -> Result<PropertyEntries, NomError<&'a [u8]>> {
-    let (_, atom_index) = preceded(tag("A  "), fixed_width_int_minus1::<usize>(3))
+    let (_, atom_index) = preceded(tag("A  "), fixed_width_int_minus1::<u32>(3))
         .parse(first_line)
         .map_err(|_: Err<NomError<_>>| NomError::new(first_line, NomErrorKind::Digit))?;
 
@@ -736,8 +771,8 @@ pub(super) fn parse_legacy_group_abbreviation_input<'a>(
     let (_, (atom_index1, atom_index2)) = preceded(
         tag("G  "),
         (
-            fixed_width_int_minus1::<usize>(3),
-            fixed_width_int_minus1::<usize>(3),
+            fixed_width_int_minus1::<u32>(3),
+            fixed_width_int_minus1::<u32>(3),
         ),
     )
     .parse(first_line)
@@ -757,13 +792,11 @@ pub(super) fn parse_legacy_group_abbreviation_input<'a>(
 /// aaa: atom index, v..: value string (can contain spaces)
 fn atom_value_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = AtomValueEntry, Error = NomError<&'inp [u8]>> {
-    map_res(
-        (fixed_width_int_minus1::<usize>(3), preceded(tag(" "), rest)),
-        move |(atom_index, value)| -> Result<AtomValueEntry, NomError<&[u8]>> {
-            Ok(AtomValueEntry {
-                atom_index,
-                value: value.to_str_lossy().into_owned(),
-            })
+    map(
+        (fixed_width_int_minus1::<u32>(3), preceded(tag(" "), rest)),
+        move |(atom_index, value)| AtomValueEntry {
+            atom_index,
+            value: value.to_str_lossy().into_owned(),
         },
     )
 }
@@ -777,7 +810,7 @@ fn charge_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -15..=15)),
             ),
             |(atom_index, charge)| ChargeEntry { atom_index, charge },
@@ -794,7 +827,7 @@ fn radical_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
             ),
             |(atom_index, radical_type)| RadicalEntry {
@@ -816,7 +849,7 @@ fn isotope_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int::<u32>(3)),
             ),
             |(atom_index, mass)| IsotopeEntry { atom_index, mass },
@@ -834,7 +867,7 @@ fn ring_bond_count_entries<'inp>(
             fixed_width_int_in_range::<u8, _>(3, 1..=8),
             map(
                 (
-                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                    preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                     preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=4)),
                 ),
                 |(atom_index, ring_bond_count)| RingBondCountEntry {
@@ -857,7 +890,7 @@ fn substitution_count_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -2..=15)),
             ),
             |(atom_index, substitution_count)| SubstitutionCountEntry {
@@ -877,7 +910,7 @@ fn unsaturated_atom_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=1)),
             ),
             |(atom_index, unsaturated)| UnsaturatedAtomEntry {
@@ -898,10 +931,10 @@ fn link_atom_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=4),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 2..=255)),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                opt(preceded(tag(" "), fixed_width_int_minus1::<usize>(3))),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
+                opt(preceded(tag(" "), fixed_width_int_minus1::<u32>(3))),
             ),
             |(atom_index, repeat_count, subs_index1, subs_index2)| LinkAtomEntry {
                 atom_index,
@@ -920,7 +953,7 @@ fn atom_list_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = AtomListEntry, Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
         let (remaining, atom_index) =
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)).parse(input)?;
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)).parse(input)?;
 
         let (remaining, count) =
             fixed_width_int_in_range::<usize, _>(3, 1..=16).parse(remaining)?;
@@ -964,7 +997,7 @@ fn attachment_point_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=2),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=3)),
             ),
             |(atom_index, attachment_type)| AttachmentPointEntry {
@@ -983,11 +1016,11 @@ fn atom_attachment_order_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = AtomAttachmentOrderEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             length_count(
                 fixed_width_int_in_range::<u8, _>(3, 1..=2),
                 (
-                    preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                    preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                     preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 1..=2)),
                 ),
             ),
@@ -1008,7 +1041,7 @@ fn rgroup_label_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int::<u32>(3)),
             ),
             |(atom_index, label)| RGroupLabelEntry { atom_index, label },
@@ -1077,7 +1110,7 @@ fn sgroup_type_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), sgroup_type()),
             ),
             |(sgroup_index, sgroup_type)| SGroupTypeEntry {
@@ -1093,11 +1126,11 @@ fn sgroup_type_entries<'inp>(
 /// sss: SGroup index, ttt: SGroup subtype (3-character string)
 fn sgroup_subtype_entries<'inp>(
 ) -> impl Parser<&'inp [u8], Output = Vec<SGroupSubtypeEntry>, Error = NomError<&'inp [u8]>> {
-    all_consuming(length_count(
+    length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), sgroup_subtype()),
             ),
             |(sgroup_index, sgroup_subtype)| SGroupSubtypeEntry {
@@ -1105,7 +1138,7 @@ fn sgroup_subtype_entries<'inp>(
                 sgroup_subtype,
             },
         ),
-    ))
+    )
 }
 
 /// Parse SGroup label entries.
@@ -1117,7 +1150,7 @@ fn sgroup_label_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<u32, _>(3, 1..=512)),
             ),
             |(sgroup_index, label)| SGroupLabelEntry {
@@ -1137,7 +1170,7 @@ fn sgroup_connectivity_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), sgroup_connectivity()),
             ),
             |(sgroup_index, connectivity)| SGroupConnectivityEntry {
@@ -1158,7 +1191,7 @@ fn sgroup_expansion_entries<'inp>(
         length_count(
             fixed_width_int_in_range::<u8, _>(3, 1..=15),
             map(
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 |sgroup_index| SGroupExpansionEntry { sgroup_index },
             ),
         ),
@@ -1172,10 +1205,10 @@ fn sgroup_atom_list_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupAtomListEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             length_count(
                 fixed_width_int_in_range::<u8, _>(3, 1..=15),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             ),
         ),
         |(sgroup_index, atom_indices)| SGroupAtomListEntry {
@@ -1192,10 +1225,10 @@ fn sgroup_bond_list_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupBondListEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             length_count(
                 fixed_width_int_in_range::<u8, _>(3, 1..=15),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             ),
         ),
         |(sgroup_index, bond_indices)| SGroupBondListEntry {
@@ -1212,10 +1245,10 @@ fn sgroup_parent_atom_entries<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupParentAtomEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             length_count(
                 fixed_width_int_in_range::<u8, _>(3, 1..=15),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             ),
         ),
         |(sgroup_index, atom_indices)| SGroupParentAtomEntry {
@@ -1234,7 +1267,7 @@ fn sgroup_subscript_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupSubscriptEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             preceded(
                 tag(" "),
                 map_res(rest, move |s: &[u8]| {
@@ -1271,10 +1304,10 @@ fn sgroup_correspondence_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupCorrespondenceEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             length_count(
                 fixed_width_int_in_range::<usize, _>(3, 1..=6),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             ),
         ),
         |(sgroup_index, bond_indices)| SGroupCorrespondenceEntry {
@@ -1291,7 +1324,7 @@ fn sgroup_display_info_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupDisplayInfoEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             length_count(
                 fixed_width_int_in_range::<usize, _>(3, 1..=4),
                 fixed_width_float::<f64>(10, 4),
@@ -1311,8 +1344,8 @@ fn sgroup_connecting_bond_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupConnectingBondEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             fixed_width_float::<f64>(10, 4),
             fixed_width_float::<f64>(10, 4),
         ),
@@ -1333,7 +1366,7 @@ fn sgroup_data_description_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupDataDescriptionEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             preceded(tag(" "), fixed_width_str_partial(30)),
             sgroup_data_type(),
             fixed_width_str_partial(20),
@@ -1371,7 +1404,7 @@ fn sgroup_data_display_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupDataDisplayEntry, Error = NomError<&'inp [u8]>> {
     map(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             preceded(tag(" "), fixed_width_float::<f64>(10, 4)),
             terminated(fixed_width_float::<f64>(10, 4), tag(" ")),
             preceded(
@@ -1420,7 +1453,7 @@ fn sgroup_data_continuation_entry<'inp>(
 ) -> impl Parser<&'inp [u8], Output = SGroupDataEntry, Error = NomError<&'inp [u8]>> {
     map_res(
         (
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             opt(preceded(tag(" "), rest)),
         ),
         move |(sgroup_index, data_content)| -> Result<SGroupDataEntry, NomError<&[u8]>> {
@@ -1446,7 +1479,7 @@ fn sgroup_data_end_entry<'inp>(
     alt((
         map_res(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), rest),
             ),
             move |(sgroup_index, data_content)| -> Result<SGroupDataEntry, NomError<&[u8]>> {
@@ -1459,7 +1492,7 @@ fn sgroup_data_end_entry<'inp>(
             },
         ),
         map(
-            preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             |sgroup_index| SGroupDataEntry::EndBlank { sgroup_index },
         ),
     ))
@@ -1470,19 +1503,19 @@ fn sgroup_data_end_entry<'inp>(
 /// sss: SGroup index, ppp: Parent SGroup index
 fn sgroup_hierarchy_entries<'inp>(
 ) -> impl Parser<&'inp [u8], Output = Vec<SGroupHierarchyEntry>, Error = NomError<&'inp [u8]>> {
-    all_consuming(length_count(
+    length_count(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             ),
             |(sgroup_index, parent_sgroup_index)| SGroupHierarchyEntry {
                 sgroup_index,
                 parent_sgroup_index,
             },
         ),
-    ))
+    )
 }
 
 /// Parse SGroup component number entries.
@@ -1494,7 +1527,7 @@ fn sgroup_component_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int::<u32>(3)),
             ),
             |(sgroup_index, component_number)| SGroupComponentEntry {
@@ -1514,7 +1547,7 @@ fn bond_order_override_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map_opt(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<u8, _>(3, 0..=6)),
             ),
             |(bond_index, bond_order)| {
@@ -1536,7 +1569,7 @@ fn atom_charge_overrides_entries<'inp>(
         fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -8..=8)),
             ),
             |(atom_index, charge)| AtomChargeOverrideEntry { atom_index, charge },
@@ -1545,15 +1578,15 @@ fn atom_charge_overrides_entries<'inp>(
 }
 
 /// Parse atom explicit hydrogen count entries.
-/// M  HCTnn8 aaa hhh ...
+/// M  HYDnn8 aaa hhh ...
 /// aaa: atom index, hhh: atom explicit hydrogen count (>= 0, limited to 8 here, -1 = no override)
 fn atom_hydrogen_count_entries<'inp>(
 ) -> impl Parser<&'inp [u8], Output = Vec<AtomHydrogenCountEntry>, Error = NomError<&'inp [u8]>> {
     length_count(
-        fixed_width_int_in_range::<u8, _>(3, 0..=8),
+        fixed_width_int_in_range::<u8, _>(3, 1..=8),
         map(
             (
-                preceded(tag(" "), fixed_width_int_minus1::<usize>(3)),
+                preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
                 preceded(tag(" "), fixed_width_int_in_range::<i8, _>(3, -1..=8)),
             ),
             |(atom_index, hydrogen_count)| AtomHydrogenCountEntry {
@@ -1565,6 +1598,23 @@ fn atom_hydrogen_count_entries<'inp>(
                 },
             },
         ),
+    )
+}
+
+/// Parse ACD/ChemSketch label entry
+/// M  ZZC aaa x...
+/// aaa: atom index, x: text label
+fn chemsketch_label_entry<'inp>(
+) -> impl Parser<&'inp [u8], Output = ChemSketchLabelEntry, Error = NomError<&'inp [u8]>> {
+    map(
+        (
+            preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
+            preceded(tag(" "), rest),
+        ),
+        |(atom_index, label)| ChemSketchLabelEntry {
+            atom_index,
+            label: label.to_str_lossy().into_owned(),
+        },
     )
 }
 

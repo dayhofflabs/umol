@@ -32,7 +32,7 @@ pub(super) struct MoleculeProperties {
 // Accumulator for properties of a single atom
 #[derive(Debug, Default)]
 pub(super) struct AtomProperties {
-    pub alias: Option<String>,
+    pub label: Option<String>,
     pub value: Option<String>,
     pub charge: Option<i8>,
     pub unpaired_e: Option<u8>,
@@ -43,7 +43,7 @@ pub(super) struct AtomProperties {
     pub unsaturated: Option<UnsaturatedAtom>,
     pub link_atom: Option<LinkAtom>,
     pub attachment_point: Option<AttachmentPointType>,
-    pub attachment_order: Option<Vec<(usize, u8)>>,
+    pub attachment_order: Option<Vec<(u32, u8)>>,
     pub rgroup_label: Option<u32>,
     pub atom_list_elements: Option<Vec<Element>>,
     pub atom_list_exclusion: Option<bool>,
@@ -70,15 +70,15 @@ pub(super) struct SGroupProperties {
     pub label: Option<u32>,
     pub connectivity: Option<SGroupConnectivity>,
     pub expansion: Option<bool>,
-    pub atom_indices: Option<Vec<usize>>,
-    pub bond_indices: Option<Vec<usize>>,
-    pub parent_atom_indices: Option<Vec<usize>>,
+    pub atom_indices: Option<Vec<u32>>,
+    pub bond_indices: Option<Vec<u32>>,
+    pub parent_atom_indices: Option<Vec<u32>>,
     pub multiplier: Option<SGroupMultiplier>,
     pub subscript: Option<String>,
-    pub correspondence: Option<Vec<usize>>,
+    pub correspondence: Option<Vec<u32>>,
     pub bracket_coords: Option<SGroupBracketCoords>,
     pub connecting_bond: Option<SGroupConnectingBond>,
-    pub hierarchy_parent: Option<usize>,
+    pub hierarchy_parent: Option<u32>,
     pub component_number: Option<u32>,
     pub data: BTreeMap<String, SGroupData>,
     pub display: Option<SGroupDataDisplay>,
@@ -126,10 +126,10 @@ fn sgroup_accepts_multiplier(sgroup_type: SGroupType) -> bool {
 pub(super) struct PropertyAccumulator {
     context: Context,
     pub molecule_properties: Vec<MoleculeProperties>,
-    pub atom_properties: BTreeMap<usize, AtomProperties>,
-    pub bond_properties: BTreeMap<usize, BondProperties>,
-    pub rgroup_properties: BTreeMap<usize, RGroupProperties>,
-    pub sgroup_properties: BTreeMap<usize, SGroupProperties>,
+    pub atom_properties: BTreeMap<u32, AtomProperties>,
+    pub bond_properties: BTreeMap<u32, BondProperties>,
+    pub rgroup_properties: BTreeMap<u32, RGroupProperties>,
+    pub sgroup_properties: BTreeMap<u32, SGroupProperties>,
     pub legacy_group_abbreviations: Vec<LegacyGroupAbbreviation>,
 }
 
@@ -160,7 +160,7 @@ impl PropertyAccumulator {
             }
             PropertyEntries::AtomAliasEntry(e) => {
                 let props = self.atom_properties.entry(e.atom_index).or_default();
-                props.alias = Some(e.alias);
+                props.label = Some(e.alias);
             }
             PropertyEntries::LegacyGroupAbbreviationEntry(e) => {
                 self.legacy_group_abbreviations
@@ -255,10 +255,7 @@ impl PropertyAccumulator {
                 }
             }
             PropertyEntries::RGroupLogicEntry(entry) => {
-                let props = self
-                    .rgroup_properties
-                    .entry(entry.label as usize)
-                    .or_default();
+                let props = self.rgroup_properties.entry(entry.label).or_default();
                 props.dependent_label = entry.dependent_label;
                 props.rgroup_or_h = Some(entry.rgroup_or_h);
                 props.occurrence = Some(entry.occurrence);
@@ -584,7 +581,12 @@ impl PropertyAccumulator {
                     }
                 }
             }
+            PropertyEntries::ChemSketchLabelEntry(e) => {
+                let props = self.atom_properties.entry(e.atom_index).or_default();
+                props.label = Some(e.label);
+            }
         }
+
         Ok(())
     }
 
@@ -600,7 +602,7 @@ impl PropertyAccumulator {
 
     fn finalize_sgroup_data(
         &mut self,
-        sgroup_index: usize,
+        sgroup_index: u32,
         sed_content: Option<String>,
     ) -> Result<()> {
         let data_field = self
@@ -670,13 +672,13 @@ impl PropertyAccumulator {
 
         // Apply atom properties (only basic ones compatible with Atom)
         for (&atom_idx, props) in &self.atom_properties {
-            let Some(atom) = molecule.atoms.get_mut(atom_idx) else {
+            let Some(atom) = molecule.atoms.get_mut(atom_idx as usize) else {
                 return Err(ParseError::IndexOutOfBounds(atom_idx));
             };
 
             // Apply alias
-            if let Some(ref alias) = props.alias {
-                atom.alias = Some(alias.clone());
+            if let Some(ref label) = props.label {
+                atom.label = Some(label.clone());
             }
 
             // Apply value
@@ -712,7 +714,7 @@ impl PropertyAccumulator {
         // Apply bond properties (bond order override)
         for (&bond_idx, props) in &self.bond_properties {
             if let Some(bo) = props.order_override {
-                let Some(bond) = molecule.bonds.get_mut(bond_idx) else {
+                let Some(bond) = molecule.bonds.get_mut(bond_idx as usize) else {
                     return Err(ParseError::IndexOutOfBounds(bond_idx));
                 };
                 bond.order = bo;
@@ -738,13 +740,13 @@ impl PropertyAccumulator {
 
         // Apply atom properties
         for (&atom_idx, props) in &self.atom_properties {
-            let Some(atom) = molecule.atoms.get_mut(atom_idx) else {
+            let Some(atom) = molecule.atoms.get_mut(atom_idx as usize) else {
                 return Err(ParseError::IndexOutOfBounds(atom_idx));
             };
 
             // Apply alias
-            if let Some(ref alias) = props.alias {
-                atom.alias = Some(alias.clone());
+            if let Some(ref label) = props.label {
+                atom.label = Some(label.clone());
             }
 
             // Apply value
@@ -902,7 +904,7 @@ impl PropertyAccumulator {
         // Apply bond properties (zero order bonds)
         for (&bond_idx, props) in &self.bond_properties {
             if let Some(bo) = props.order_override {
-                let Some(bond) = molecule.bonds.get_mut(bond_idx) else {
+                let Some(bond) = molecule.bonds.get_mut(bond_idx as usize) else {
                     return Err(ParseError::IndexOutOfBounds(bond_idx));
                 };
                 bond.order = bo;

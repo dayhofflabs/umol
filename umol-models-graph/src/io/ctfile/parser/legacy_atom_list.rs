@@ -69,7 +69,7 @@ pub fn legacy_atom_list_input<'inp>(
         }
         map(
             (
-                fixed_width_int_minus1::<usize>(3),
+                fixed_width_int_minus1::<u32>(3),
                 delimited(
                     tag(" "),
                     map_res(take(1usize), |b: &[u8]| match b {

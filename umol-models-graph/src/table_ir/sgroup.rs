@@ -77,7 +77,7 @@ pub struct SGroupBracketCoords {
 /// SGroup connecting bond
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SGroupConnectingBond {
-    pub bond_index: usize,
+    pub bond_index: u32,
     pub bond_vector: (f64, f64),
 }
 
@@ -148,12 +148,12 @@ pub struct SGroup {
     pub group_subtype: Option<SGroupSubtype>,
     pub connectivity: Option<SGroupConnectivity>,
     pub expansion: bool,
-    pub atom_indices: Vec<usize>,
-    pub bond_indices: Vec<usize>,
-    pub parent_atom_indices: Option<Vec<usize>>,
-    pub correspondence: Option<Vec<usize>>,
+    pub atom_indices: Vec<u32>,
+    pub bond_indices: Vec<u32>,
+    pub parent_atom_indices: Option<Vec<u32>>,
+    pub correspondence: Option<Vec<u32>>,
     pub connecting_bond: Option<SGroupConnectingBond>,
-    pub hierarchy_parent: Option<usize>,
+    pub hierarchy_parent: Option<u32>,
     pub component_number: Option<u32>,
     pub bracket_style: Option<SGroupBracketStyle>,
     pub data: BTreeMap<String, SGroupData>,

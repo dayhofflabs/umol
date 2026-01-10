@@ -21,7 +21,7 @@ pub struct Atom {
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
-    pub alias: Option<String>,
+    pub label: Option<String>,
     pub value: Option<String>,
     pub span: Option<Span>,
 }
@@ -40,7 +40,7 @@ impl Atom {
             aromatic: None,
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             span: None,
         }
@@ -58,7 +58,7 @@ impl Atom {
             aromatic: Some(false),
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             span: None,
         }
@@ -77,7 +77,7 @@ impl Atom {
             aromatic: Some(false),
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             span: Some(span),
         }
@@ -96,7 +96,7 @@ impl Atom {
             aromatic: Some(true),
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             span: None,
         }
@@ -115,7 +115,7 @@ impl Atom {
             aromatic: Some(true),
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             span: Some(span),
         }
@@ -235,13 +235,13 @@ pub struct ExtendedAtom {
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
-    pub alias: Option<String>,
+    pub label: Option<String>,
     pub value: Option<String>,
     pub stereo_care: Option<AtomStereoCare>,
     pub inversion_retention: Option<AtomInversionRetention>,
     pub exact_change: Option<AtomExactChange>,
     pub attachment_point: Option<AttachmentPointType>,
-    pub attachment_order: Option<Vec<(usize, u8)>>,
+    pub attachment_order: Option<Vec<(u32, u8)>>,
     pub ring_bond_count: Option<RingBondCount>,
     pub substitution_count: Option<SubstitutionCount>,
     pub unsaturated: Option<UnsaturatedAtom>,
@@ -265,7 +265,7 @@ impl ExtendedAtom {
             aromatic: None,
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             stereo_care: None,
             inversion_retention: None,
@@ -329,7 +329,7 @@ impl From<Atom> for ExtendedAtom {
             aromatic: atom.aromatic,
             chirality: atom.chirality,
             class: atom.class,
-            alias: atom.alias,
+            label: atom.label,
             value: atom.value,
             stereo_care: None,
             inversion_retention: None,
@@ -375,7 +375,7 @@ impl TryFrom<ExtendedAtom> for Atom {
             aromatic: extended.aromatic,
             chirality: extended.chirality,
             class: extended.class,
-            alias: extended.alias,
+            label: extended.label,
             value: extended.value,
             span: extended.span,
         })
@@ -454,8 +454,8 @@ pub struct UnsaturatedAtom;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LinkAtom {
     pub repeat_count: u8,
-    pub subs_index1: usize,
-    pub subs_index2: Option<usize>,
+    pub subs_index1: u32,
+    pub subs_index2: Option<u32>,
 }
 
 #[cfg(test)]
@@ -501,7 +501,7 @@ mod tests {
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
-            alias: None,
+            label: None,
             value: None,
             span: None,
         };
@@ -533,7 +533,7 @@ mod tests {
             aromatic: Some(false),
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             stereo_care: None,
             inversion_retention: None,
@@ -585,7 +585,7 @@ mod tests {
             aromatic: None,
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             stereo_care: None,
             valence: None,
@@ -621,7 +621,7 @@ mod tests {
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
-            alias: None,
+            label: None,
             value: None,
             stereo_care: None,
             valence: None,
@@ -652,7 +652,7 @@ mod tests {
             aromatic: None,
             chirality: None,
             class: None,
-            alias: None,
+            label: None,
             value: None,
             stereo_care: Some(AtomStereoCare::Care),
             valence: None,
@@ -684,7 +684,7 @@ mod tests {
             aromatic: Some(false),
             chirality: Some(Chirality::CounterClockwise),
             span: None,
-            alias: None,
+            label: None,
             value: None,
             class: Some(10),
         };
@@ -702,7 +702,7 @@ mod tests {
         assert_eq!(atom.aromatic, atom2.aromatic);
         assert_eq!(atom.chirality, atom2.chirality);
         assert_eq!(atom.class, atom2.class);
-        assert_eq!(atom.alias, atom2.alias);
+        assert_eq!(atom.label, atom2.label);
         assert_eq!(atom.value, atom2.value);
         assert_eq!(atom.span, atom2.span);
     }

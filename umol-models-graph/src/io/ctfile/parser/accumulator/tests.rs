@@ -67,7 +67,7 @@ fn with_properties(mut single_atom: Molecule) -> Molecule {
         atom.charge = Some(1);
         atom.unpaired_e = Some(1); // Doublet: 1 unpaired electron
         atom.isotope_mass = Some(13);
-        atom.alias = Some("existing".to_string());
+        atom.label = Some("existing".to_string());
         atom.value = Some("existing".to_string());
     }
     single_atom
@@ -228,7 +228,7 @@ fn test_apply_atom_alias(mut single_atom: Molecule, flags_basic: CtabParseFlags)
     acc.update_molecule(&mut single_atom, flags_basic).unwrap();
 
     let atom = &single_atom.atoms[0];
-    assert_eq!(atom.alias, Some("CF3".to_string()));
+    assert_eq!(atom.label, Some("CF3".to_string()));
 }
 
 #[rstest]
@@ -565,7 +565,7 @@ fn test_apply_extended_atom_alias(
         .unwrap();
 
     let atom = &single_extended_atom.atoms[0];
-    assert_eq!(atom.alias, Some("CF3".to_string()));
+    assert_eq!(atom.label, Some("CF3".to_string()));
 }
 
 #[rstest]

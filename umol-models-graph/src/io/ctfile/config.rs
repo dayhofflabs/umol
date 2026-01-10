@@ -18,37 +18,37 @@ bitflags! {
         const QUERY_BONDS = 1 << 5;         // Bond types 5-8
         const QUERY_PROPERTIES = 1 << 6;    // RBC, SUB, UNS, LIN, ALS, APO, AAL
         const LEGACY_ATOM_LISTS = 1 << 7;   // Legacy atom lists
-        // const RESERVED_1 = 1 << 8;
-        // const RESERVED_2 = 1 << 9;
+        // const RESERVED_8 = 1 << 8;
+        // const RESERVED_9 = 1 << 9;
 
         // Data validation strictness
         const EXTENDED_RANGE = 1 << 10;     // Extended range of values (bond orders, H counts)
         const EXTENDED_ISOTOPES = 1 << 11;  // Extended isotopes (no catalog check)
-        // const RESERVED_3 = 1 << 12;
-        // const RESERVED_4 = 1 << 13;
+        // const RESERVED_12 = 1 << 12;
+        // const RESERVED_13 = 1 << 13;
 
         // Format extensions
         const NAMED_ISOTOPES = 1 << 14;         // Allow D, T as element symbols
         const PSEUDOATOMS = 1 << 15;            // General pseudoatoms (any non-reserved string)
         const ATOM_MAP_HCOUNT_FIELDS = 1 << 16; // Allow atom mapping and H count in basic parser
         const CLARK_EXTENSIONS = 1 << 17;       // ZBO, ZCH, HYD
-        // const RESERVED_5 = 1 << 18;
-        // const RESERVED_6 = 1 << 19;
-        // const RESERVED_7 = 1 << 20;
-        // const RESERVED_8 = 1 << 21;
+        const EDITOR_EXTENSIONS = 1 << 18;      // ZZC (ACD/ChemSketch)
+        // const RESERVED_19 = 1 << 19;
+        // const RESERVED_20 = 1 << 20;
+        // const RESERVED_21 = 1 << 21;
 
         // Input validation strictness
         const UNICODE = 1 << 22;             // Allow Unicode whitespace
         const SKIP_UNUSED_FIELDS = 1 << 23;  // Skip validation of unused fields
         const NO_V2000_END_TAGS = 1 << 24;   // V2000 tag and M  END tag may be omitted
-        // const RESERVED_9 = 1 << 25;
+        // const RESERVED_25 = 1 << 25;
 
         // Parser behavior
         const IGNORE_POSITIONS = 1 << 26;   // Ignore position data
-        // const RESERVED_10 = 1 << 27;
-        // const RESERVED_11 = 1 << 28;
-        // const RESERVED_12 = 1 << 29;
-        // const RESERVED_13 = 1 << 30;
+        // const RESERVED_27 = 1 << 27;
+        // const RESERVED_28 = 1 << 28;
+        // const RESERVED_29 = 1 << 29;
+        // const RESERVED_30 = 1 << 30;
         const DEBUG = 1 << 31;              // Debug output during parsing
 
         // Presets
@@ -78,8 +78,8 @@ bitflags! {
         // Lenient parser
         const LENIENT = Self::EXTENDED.bits() | Self::CHEMAXON_WILDCARDS.bits() | Self::LEGACY_ATOM_LISTS.bits() |
             Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() | Self::NAMED_ISOTOPES.bits() |
-            Self::CLARK_EXTENSIONS.bits() | Self::UNICODE.bits() | Self::SKIP_UNUSED_FIELDS.bits() |
-            Self::NO_V2000_END_TAGS.bits();
+            Self::CLARK_EXTENSIONS.bits() | Self::EDITOR_EXTENSIONS.bits() | Self::UNICODE.bits() |
+            Self::SKIP_UNUSED_FIELDS.bits() | Self::NO_V2000_END_TAGS.bits();
 
         // Graph-only parser
         const GRAPH_ONLY = Self::BASIC.bits() | Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() |
@@ -161,6 +161,9 @@ impl fmt::Display for CtabParseFlags {
             }
             if self.contains(CtabParseFlags::CLARK_EXTENSIONS) {
                 parts.push("CLARK_EXTENSIONS");
+            }
+            if self.contains(CtabParseFlags::EDITOR_EXTENSIONS) {
+                parts.push("EDITOR_EXTENSIONS");
             }
             if self.contains(CtabParseFlags::UNICODE) {
                 parts.push("UNICODE");

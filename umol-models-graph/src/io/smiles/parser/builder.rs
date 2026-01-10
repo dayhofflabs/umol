@@ -67,7 +67,7 @@ impl MoleculeBuilder {
             aromatic: Some(a.aromatic),
             chirality: a.chirality,
             class: a.class,
-            alias: None,
+            label: None,
             value: None,
             span,
         };

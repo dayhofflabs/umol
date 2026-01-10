@@ -51,8 +51,7 @@ fn test_atom_block(
     #[case] hydrogen_count: Option<u8>,
     #[case] valence: Option<u8>,
 ) {
-    let flags = CtabParseFlags::BASIC;
-    let result = atom_block(1, 0, flags).parse(input);
+    let result = atom_block(1, 0, CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
     let (remaining, (atoms, positions, _)) = result.unwrap();
@@ -82,9 +81,7 @@ fn test_atom_block(
 #[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n")]
 #[case::len_31_too_short(b"    1.0000    2.0000    3.0000 \n")]
 fn test_atom_block_invalid(#[case] input: &[u8]) {
-    use crate::io::ctfile::error::ParseError;
-    let flags = CtabParseFlags::BASIC;
-    let result = atom_block(1, 0, flags).parse(input);
+    let result = atom_block(1, 0, CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -134,8 +131,7 @@ fn test_extended_atom_block(
     #[case] hydrogen_count: Option<u8>,
     #[case] valence: Option<u8>,
 ) {
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_atom_block(1, 0, flags).parse(input);
+    let result = extended_atom_block(1, 0, CtabParseFlags::EXTENDED).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
     let (remaining, (atoms, positions, _)) = result.unwrap();
@@ -165,9 +161,7 @@ fn test_extended_atom_block(
 #[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n")]
 #[case::len_31_too_short(b"    1.0000    2.0000    3.0000 \n")]
 fn test_extended_atom_block_invalid(#[case] input: &[u8]) {
-    use crate::io::ctfile::error::ParseError;
-    let flags = CtabParseFlags::EXTENDED;
-    let result = extended_atom_block(1, 0, flags).parse(input);
+    let result = extended_atom_block(1, 0, CtabParseFlags::EXTENDED).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(

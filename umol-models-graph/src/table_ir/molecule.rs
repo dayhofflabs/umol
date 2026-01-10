@@ -190,8 +190,8 @@ impl ExtendedMolecule {
 
     /// Get reference to SGroups (CTFile-specific)
     /// Returns empty map if ctfile_data is not present
-    pub fn sgroups(&self) -> &std::collections::BTreeMap<usize, SGroup> {
-        static EMPTY: LazyLock<BTreeMap<usize, SGroup>> = LazyLock::new(BTreeMap::new);
+    pub fn sgroups(&self) -> &BTreeMap<u32, SGroup> {
+        static EMPTY: LazyLock<BTreeMap<u32, SGroup>> = LazyLock::new(BTreeMap::new);
 
         self.ctfile_data
             .as_ref()
@@ -201,7 +201,7 @@ impl ExtendedMolecule {
 
     /// Get mutable reference to SGroups (CTFile-specific)
     /// Initializes ctfile_data if not present
-    pub fn sgroups_mut(&mut self) -> &mut std::collections::BTreeMap<usize, SGroup> {
+    pub fn sgroups_mut(&mut self) -> &mut BTreeMap<u32, SGroup> {
         if self.ctfile_data.is_none() {
             self.ctfile_data = Some(CtfileData::default());
         }
@@ -210,8 +210,8 @@ impl ExtendedMolecule {
 
     /// Get reference to RGroups (CTFile-specific)
     /// Returns empty map if ctfile_data is not present
-    pub fn rgroups(&self) -> &std::collections::BTreeMap<usize, RGroup> {
-        static EMPTY: LazyLock<BTreeMap<usize, RGroup>> = LazyLock::new(BTreeMap::new);
+    pub fn rgroups(&self) -> &BTreeMap<u32, RGroup> {
+        static EMPTY: LazyLock<BTreeMap<u32, RGroup>> = LazyLock::new(BTreeMap::new);
 
         self.ctfile_data
             .as_ref()
@@ -221,7 +221,7 @@ impl ExtendedMolecule {
 
     /// Get mutable reference to RGroups (CTFile-specific)
     /// Initializes ctfile_data if not present
-    pub fn rgroups_mut(&mut self) -> &mut std::collections::BTreeMap<usize, RGroup> {
+    pub fn rgroups_mut(&mut self) -> &mut BTreeMap<u32, RGroup> {
         if self.ctfile_data.is_none() {
             self.ctfile_data = Some(CtfileData::default());
         }
@@ -240,7 +240,10 @@ impl ExtendedMolecule {
 
     /// Count of extended bonds (query or extended bond orders)
     pub fn extended_bond_count(&self) -> usize {
-        self.bonds.iter().filter(|b| b.has_extended_features()).count()
+        self.bonds
+            .iter()
+            .filter(|b| b.has_extended_features())
+            .count()
     }
 
     /// Count of RGroups defined in CTFile data

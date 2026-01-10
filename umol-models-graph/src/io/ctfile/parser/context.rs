@@ -6,10 +6,10 @@ use crate::table_ir::SGroupType;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Context {
-    pub current_sgroup_index: Option<usize>,
+    pub current_sgroup_index: Option<u32>,
     pub current_data_field: Option<String>,
     pub current_data_content: Option<Vec<String>>,
-    pub sgroup_types: HashMap<usize, SGroupType>,
+    pub sgroup_types: HashMap<u32, SGroupType>,
 }
 
 impl Context {

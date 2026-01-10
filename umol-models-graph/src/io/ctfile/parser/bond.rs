@@ -43,7 +43,6 @@ pub(super) fn bond_block<'inp>(
                 .map_err(|e| {
                     Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
                 })?;
-            println!("BASIC: {atom1}, {atom2} {bond:?}");
             bonds.push((atom1, atom2, bond));
             byte_offset += byte_len;
         }
@@ -77,10 +76,8 @@ pub(super) fn extended_bond_block<'inp>(
                 all_consuming(terminated(extended_bond_input(flags), space0))
                     .parse(line)
                     .map_err(|e| {
-                        println!("ERROR: {e:?}");
                         Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
                     })?;
-            println!("EXTENDED: {atom1}, {atom2} {bond:?}");
             bonds.push((atom1, atom2, bond));
             byte_offset += byte_len;
         }
