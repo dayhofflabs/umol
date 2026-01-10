@@ -41,6 +41,7 @@ fn test_bond_block(
 
 #[rustfmt::skip]
 #[rstest]
+#[case::len_19_incomplete_field(b"  1  21  0     0  0\n")]
 #[case::len_21_trailing_data(b"  1  2  1  0  0  0  0X\n")]
 #[case::len_8_too_short(b"  1  2  \n")]
 fn test_bond_block_invalid(#[case] input: &[u8]) {

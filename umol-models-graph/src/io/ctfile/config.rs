@@ -223,11 +223,11 @@ impl CtfileIoConfig {
     }
 
     pub fn basic_lenient() -> Self {
-        Self::with_parse_flags(CtabParseFlags::LENIENT | CtabParseFlags::STRICT)
+        Self::with_parse_flags(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
     }
 
     pub fn extended_lenient() -> Self {
-        Self::with_parse_flags(CtabParseFlags::EXTENDED | CtabParseFlags::LENIENT)
+        Self::with_parse_flags(CtabParseFlags::EXTENDED_MAX & CtabParseFlags::LENIENT)
     }
 
     pub fn minimal() -> Self {

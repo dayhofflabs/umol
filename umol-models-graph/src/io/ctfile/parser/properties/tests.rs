@@ -83,6 +83,8 @@ fn test_extended_properties_block(#[case] input: &[u8], #[case] expected: Vec<Pr
 #[rstest]
 #[case::trailing_chars(b"M  CHG  1   1  -1  a")]
 #[case::item_list_exceeds_count(b"M  ISO  2   1   1   4   1   5   1")]
+#[case::count_malformed(b"M  ISO   2   2   2   3   3")]
+#[case::value_malformed(b"M  CHG  2  1  1  3  -1")]
 fn test_extended_properties_block_invalid(#[case] input: &[u8]) {
     let result = extended_properties_block(0, CtabParseFlags::EXTENDED).parse(input);
     let input_str = input.to_str_lossy();

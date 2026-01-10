@@ -465,7 +465,9 @@ impl PropertyAccumulator {
                     data_content,
                 } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(ParseError::MissingSGroupDataContext);
+                        return Err(ParseError::MissingSGroupDataContext {
+                            location: "continuation",
+                        });
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
@@ -521,7 +523,9 @@ impl PropertyAccumulator {
 
                 SGroupDataEntry::EndBlank { sgroup_index } => {
                     if self.context.current_sgroup_index.is_none() {
-                        return Err(ParseError::MissingSGroupDataContext);
+                        return Err(ParseError::MissingSGroupDataContext {
+                            location: "end blank",
+                        });
                     }
 
                     let context_sgroup = self.context.current_sgroup_index.unwrap();
@@ -605,11 +609,11 @@ impl PropertyAccumulator {
         sgroup_index: u32,
         sed_content: Option<String>,
     ) -> Result<()> {
-        let data_field = self
-            .context
-            .current_data_field
-            .as_ref()
-            .ok_or(ParseError::MissingSGroupDataContext)?;
+        let data_field = self.context.current_data_field.as_ref().ok_or(
+            ParseError::MissingSGroupDataContext {
+                location: "finalization",
+            },
+        )?;
 
         let props =
             self.sgroup_properties

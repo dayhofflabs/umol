@@ -153,6 +153,7 @@ fn test_extended_atom_block(
 
 #[rustfmt::skip]
 #[rstest]
+#[case::len_70_malformed(b"   -1.9225   -0.6187    0.0000 R20  0  0  0  0  0  0  0  0  0  0  0  0\n")]
 #[case::len_69_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0X\n")]
 #[case::len_60_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0X\n")]
 #[case::len_48_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0X\n")]
@@ -459,10 +460,7 @@ fn test_atom_input_ignore_positions_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = atom_input69(
-        input,
-        CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS,
-    );
+    let result = atom_input(CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -597,6 +595,7 @@ fn test_extended_atom_input(
 #[rustfmt::skip]
 #[rstest]
 #[case::invalid_stereo_parity(b"    1.0000    2.0000    3.0000 C  -2  3  4", NomErrorKind::Verify)]
+#[case::negative_hydrogen_count(b"    1.4289    0.8250    0.0000 C   0  0  0 -1  0  0  0  0  0  0  0  0", NomErrorKind::Digit)]
 #[case::non_numeric_hydrogen_count(b"    1.0000    2.0000    3.0000 C  -2  3  0  a", NomErrorKind::Digit)]
 #[case::non_numeric_valence(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
 #[case::chemaxon_wildcard(b"    1.2345    2.3456    3.4567 AH 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]

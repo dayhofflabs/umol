@@ -1,6 +1,9 @@
 use std::{env, fs, process};
 
-use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes, parse_mol_bytes};
+use umol_models_graph::io::ctfile::config::CtfileIoConfig;
+use umol_models_graph::io::ctfile::{
+    parse_extended_mol_bytes, parse_extended_mol_bytes_with, parse_mol_bytes, parse_mol_bytes_with,
+};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -29,9 +32,11 @@ fn main() {
     println!("Size: {} bytes", mol_bytes.len());
     println!();
 
-    // Test with basic parser (parse_mol)
-    println!("=== BASIC PARSER (parse_mol) ===");
-    match parse_mol_bytes(&mol_bytes) {
+    // Test with basic parser (parse_mol_bytes)
+    println!("=== BASIC PARSER (parse_mol_bytes) ===");
+    let basic_parsed = parse_mol_bytes(&mol_bytes);
+    let basic_ok = basic_parsed.is_ok();
+    match basic_parsed {
         Ok(molecule) => {
             println!("✅ SUCCESS");
             println!("   Atoms: {}", molecule.atom_count());
@@ -45,9 +50,29 @@ fn main() {
 
     println!();
 
-    // Test with extended parser (parse_extended_mol)
+    // Test with basic lenient parser (parse_mol_bytes_with)
+    println!("=== BASIC LENIENT PARSER (parse_mol_bytes_with) ===");
+    let basic_lenient_parsed = parse_mol_bytes_with(&mol_bytes, &CtfileIoConfig::basic_lenient());
+    let basic_lenient_ok = basic_lenient_parsed.is_ok();
+    match basic_lenient_parsed {
+        Ok(molecule) => {
+            println!("✅ SUCCESS");
+            println!("   Atoms: {}", molecule.atom_count());
+            println!("   Bonds: {}", molecule.bond_count());
+        }
+        Err(e) => {
+            println!("❌ FAILED");
+            println!("   Error: {:?}", e);
+        }
+    }
+
+    println!();
+
+    // Test with extended parser (parse_extended_mol_bytes)
     println!("=== EXTENDED PARSER (parse_extended_mol) ===");
-    match parse_extended_mol_bytes(&mol_bytes) {
+    let extended_parsed = parse_extended_mol_bytes(&mol_bytes);
+    let extended_ok = extended_parsed.is_ok();
+    match extended_parsed {
         Ok(extended_molecule) => {
             println!("✅ SUCCESS");
             println!("   Atoms: {}", extended_molecule.atom_count());
@@ -61,15 +86,32 @@ fn main() {
 
     println!();
 
-    // Summary
-    let basic_ok = parse_mol_bytes(&mol_bytes).is_ok();
-    let extended_ok = parse_extended_mol_bytes(&mol_bytes).is_ok();
+    // Test with extended lenient parser (parse_extended_mol_bytes_with)
+    println!("=== EXTENDED LENIENT PARSER (parse_extended_mol_bytes_with) ===");
+    let extended_lenient_parsed =
+        parse_extended_mol_bytes_with(&mol_bytes, &CtfileIoConfig::extended_lenient());
+    let extended_lenient_ok = extended_lenient_parsed.is_ok();
+    match extended_lenient_parsed {
+        Ok(extended_molecule) => {
+            println!("✅ SUCCESS");
+            println!("   Atoms: {}", extended_molecule.atom_count());
+            println!("   Bonds: {}", extended_molecule.bond_count());
+        }
+        Err(e) => {
+            println!("❌ FAILED");
+            println!("   Error: {:?}", e);
+        }
+    }
+
+    println!();
 
     println!("=== CLASSIFICATION ===");
-    match (basic_ok, extended_ok) {
-        (true, true) => println!("📁 MOLECULE (basic parser works)"),
-        (false, true) => println!("📁 EXTENDED MOLECULE (extended parser works)"),
-        (true, false) => println!("🐛 BUG: basic succeeds but extended fails!"),
-        (false, false) => println!("❌ INVALID (both parsers fail)"),
+    match (basic_ok, basic_lenient_ok, extended_ok, extended_lenient_ok) {
+        (true, true, true, true) => println!("📁 MOLECULE (basic parser works)"),
+        (false, true, false, true) => println!("📁 NON-STANDARD BASIC MOLECULE (basic lenient parser works)"),
+        (false, false, true, true) => println!("📁 EXTENDED MOLECULE (extended parser works)"),
+        (false, false, false, true) => println!("📁 NON-STANDARD EXTENDED MOLECULE (extended lenient parser works)"),
+        (false, false, false, false) => println!("❌ INVALID (all parsers fail)"),
+       _ => println!("🐛 BUG: hierarchy violation (basic: {basic_ok}, basic lenient: {basic_lenient_ok}, extended: {extended_ok}, extended lenient: {extended_lenient_ok})"),
     }
 }

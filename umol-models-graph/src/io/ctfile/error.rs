@@ -68,10 +68,7 @@ pub enum ParseError {
     #[error("Invalid isotope mass {mass} for element {element}")]
     InvalidIsotopeMass { mass: u32, element: Element },
     #[error("Undefined S-group {index}: {property}")]
-    UndefinedSGroup {
-        index: u32,
-        property: &'static str,
-    },
+    UndefinedSGroup { index: u32, property: &'static str },
     #[error("S-group {0} has no type")]
     SGroupMissingType(u32),
     #[error("S-group type {sgroup_type:?}: {message}")]
@@ -79,8 +76,8 @@ pub enum ParseError {
         sgroup_type: SGroupType,
         message: &'static str,
     },
-    #[error("Missing S-group data context")]
-    MissingSGroupDataContext,
+    #[error("Missing S-group data context in {location}")]
+    MissingSGroupDataContext { location: &'static str },
     #[error("S-group index mismatch: expected {expected}, got {actual}")]
     SGroupIndexMismatch { expected: u32, actual: u32 },
 }
@@ -213,11 +210,9 @@ impl ParseError {
 impl From<ParseError> for Diagnostic {
     fn from(error: ParseError) -> Self {
         let (kind, span, details) = match error {
-            ParseError::InvalidHeader { line } => (
-                DiagnosticKind::CtfileInvalidHeader,
-                Span::line(line),
-                None,
-            ),
+            ParseError::InvalidHeader { line } => {
+                (DiagnosticKind::CtfileInvalidHeader, Span::line(line), None)
+            }
             ParseError::InvalidCountsLine { line } => (
                 DiagnosticKind::CtfileInvalidCountsLine,
                 Span::line(line),
@@ -268,21 +263,17 @@ impl From<ParseError> for Diagnostic {
                 Span::line(line),
                 None,
             ),
-            ParseError::MissingMEndTag { line } => (
-                DiagnosticKind::CtfileMissingMEndTag,
-                Span::line(line),
-                None,
-            ),
+            ParseError::MissingMEndTag { line } => {
+                (DiagnosticKind::CtfileMissingMEndTag, Span::line(line), None)
+            }
             ParseError::UnexpectedEof { line, block } => (
                 DiagnosticKind::CtfileUnexpectedEof,
                 Span::line(line),
                 Some(format!("in {} block", block)),
             ),
-            ParseError::Incomplete { line } => (
-                DiagnosticKind::CtfileIncomplete,
-                Span::line(line),
-                None,
-            ),
+            ParseError::Incomplete { line } => {
+                (DiagnosticKind::CtfileIncomplete, Span::line(line), None)
+            }
             ParseError::NomError(kind) => (
                 DiagnosticKind::CtfileParserError,
                 Span::None,
@@ -358,7 +349,7 @@ impl From<ParseError> for Diagnostic {
                 Span::None,
                 Some(error.to_string()),
             ),
-            ParseError::MissingSGroupDataContext => (
+            ParseError::MissingSGroupDataContext { .. } => (
                 DiagnosticKind::CtfileInvalidSgroupLine,
                 Span::None,
                 Some(error.to_string()),

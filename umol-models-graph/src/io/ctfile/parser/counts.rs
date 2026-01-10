@@ -212,10 +212,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::blank(b"                                       \n", NomErrorKind::Tag)]
+    #[case::blank(b"                                       ", NomErrorKind::Tag)]
     #[case::invalid_version(b"  4  2  0     0                   V1000", NomErrorKind::Tag)]
     #[case::len_9_too_short(b"  4  2  0", NomErrorKind::Eof)]
     #[case::len_32_too_short(b"  4  2  0     0                 ", NomErrorKind::Tag)]
+    #[case::len_38_malformed(b" 6  6  0  0  0  0  0  0  0  0  1 V2000", NomErrorKind::Tag)]
     #[case::negative_atom_count(b" -1  2  0     0                   V2000", NomErrorKind::Digit)]
     #[case::non_numeric_atom_count(b"  a  2  0     0                   V2000", NomErrorKind::Digit)]
     #[case::trailing_chars_atom_count(b" 1a  2  0     0                   V2000", NomErrorKind::Eof)]
