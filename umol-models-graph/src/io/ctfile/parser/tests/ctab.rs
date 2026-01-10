@@ -32,7 +32,7 @@ fn test_ctab_block(
     let input_str = input.to_str_lossy();
     assert!(
         result.is_ok(),
-        "{:?} should parse successfully: {:?}",
+        "{:?} should parse successfully, got error: {:?}",
         input_str,
         result
     );
@@ -82,6 +82,8 @@ fn test_ctab_block(
     ParseError::InvalidBondLine { line: 4, col: 0 })]
 #[case::missing_m_end(b"  2  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n",
     ParseError::MissingMEndTag { line: 3 })]
+#[case::unicode_whitespace(b"24602\n\xA0 -OEChem-11060703412D\n\n  3  2 \xA00\xA0 0 \xA00 \xA00 \xA00 \xA00 \xA00  0999 V2000\n    2.5369   -0.1550    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    3.0739    0.1550    0.0000 D   1  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.1550    0.0000 T   1  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1  3  1  0  0  0  0\nM  ISO   2   2   2   3   3\nM  END\n",
+    ParseError::InvalidCountsLine { line: 0 })]
 fn test_ctab_block_invalid(#[case] input: &[u8], #[case] expected_error: ParseError) {
     let result = ctab_block(0, CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
@@ -93,7 +95,6 @@ fn test_ctab_block_invalid(#[case] input: &[u8], #[case] expected_error: ParseEr
         input_str, error, expected_error,
     );
 }
-
 #[rstest]
 #[case::atom_list(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  ALS   1  2 F Cl  Br\nM  END\n",
     2, 1, AtomSymbol::AtomList(AtomList { elements: vec![Element::Cl, Element::Br], exclusion: false }), BondOrder::Single)]
