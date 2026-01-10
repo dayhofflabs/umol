@@ -7,8 +7,6 @@ use umol_data::Element;
 
 use crate::io::ctfile::error::ParseError;
 
-type Result<T> = std::result::Result<T, ParseError>;
-
 use super::context::Context;
 use super::convert::{
     convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
@@ -150,7 +148,7 @@ impl PropertyAccumulator {
         &mut self,
         entry: PropertyEntries,
         flags: CtabParseFlags,
-    ) -> Result<()> {
+    ) -> Result<(), ParseError> {
         let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
         match entry {
             PropertyEntries::MoleculeChiralFlagEntry(e) => {
@@ -594,7 +592,7 @@ impl PropertyAccumulator {
         Ok(())
     }
 
-    fn validate_sgroup_data(&mut self) -> Result<()> {
+    fn validate_sgroup_data(&mut self) -> Result<(), ParseError> {
         if self.context.current_sgroup_index.is_some() {
             let sgroup_index = self.context.current_sgroup_index.unwrap();
             self.finalize_sgroup_data(sgroup_index, None)?;
@@ -608,7 +606,8 @@ impl PropertyAccumulator {
         &mut self,
         sgroup_index: u32,
         sed_content: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<(), ParseError>  {
+
         let data_field = self.context.current_data_field.as_ref().ok_or(
             ParseError::MissingSGroupDataContext {
                 location: "finalization",
@@ -664,7 +663,7 @@ impl PropertyAccumulator {
         &mut self,
         molecule: &mut Molecule,
         flags: CtabParseFlags,
-    ) -> Result<()> {
+    ) -> Result<(), ParseError>  {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
 
         // Apply molecule properties (chiral flag)
@@ -732,7 +731,7 @@ impl PropertyAccumulator {
         &mut self,
         molecule: &mut ExtendedMolecule,
         flags: CtabParseFlags,
-    ) -> Result<()> {
+    ) -> Result<(), ParseError>  {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
 
         // Apply molecule properties (chiral flag)
@@ -948,7 +947,7 @@ impl PropertyAccumulator {
         Ok(())
     }
 
-    fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<()> {
+    fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<(), ParseError>  {
         for (sgroup_index, props) in mem::take(&mut self.sgroup_properties) {
             debug_assert!(
                 molecule.ctfile_data.is_some(),
