@@ -338,7 +338,7 @@ impl PropertyAccumulator {
                 let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
                     ParseError::UndefinedSGroup {
                         index: entry.sgroup_index,
-                        property: "parent atom list",
+                        property: "parent atom",
                     },
                 )?;
                 props.parent_atom_indices = Some(entry.atom_indices);
@@ -526,6 +526,15 @@ impl PropertyAccumulator {
             }
             PropertyEntries::SGroupHierarchyEntries(entries) => {
                 for entry in entries {
+                    if !self
+                        .sgroup_properties
+                        .contains_key(&entry.parent_sgroup_index)
+                    {
+                        return Err(ParseError::UndefinedSGroup {
+                            index: entry.parent_sgroup_index,
+                            property: "hierarchy parent",
+                        });
+                    }
                     let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
                         ParseError::UndefinedSGroup {
                             index: entry.sgroup_index,
