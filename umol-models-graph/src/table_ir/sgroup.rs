@@ -2,8 +2,6 @@
 // These are temporary types inherited from CTFile
 // TODO: Replace by semantically defined structures that SGroup type combines.
 
-use std::collections::BTreeMap;
-
 /// SGroup type
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SGroupType {
@@ -100,6 +98,7 @@ pub enum SGroupDataType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SGroupData {
     pub field_type: SGroupDataType,
+    pub field_name: String,
     pub field_units: Option<String>,
     pub query_identifier: Option<String>,
     pub data_query_operator: Option<String>,
@@ -156,7 +155,7 @@ pub struct SGroup {
     pub hierarchy_parent: Option<u32>,
     pub component_number: Option<u32>,
     pub bracket_style: Option<SGroupBracketStyle>,
-    pub data: BTreeMap<String, SGroupData>,
+    pub data: Option<SGroupData>,
     pub multiplier: Option<SGroupMultiplier>,
     pub bracket_coords: Option<SGroupBracketCoords>,
     pub display: Option<SGroupDataDisplay>,
@@ -179,7 +178,7 @@ impl SGroup {
             hierarchy_parent: None,
             component_number: None,
             bracket_style: None,
-            data: BTreeMap::new(),
+            data: None,
             multiplier: None,
             bracket_coords: None,
             display: None,

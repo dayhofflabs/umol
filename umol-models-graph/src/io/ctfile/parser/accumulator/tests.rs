@@ -170,6 +170,12 @@ fn acc_with_data_sgroup(flags_extended: CtabParseFlags) -> PropertyAccumulator {
         });
     acc.add_entry(data_description_entry, flags_extended)
         .unwrap();
+    let data_end_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData {
+        sgroup_index: 0,
+        data_content: "data".to_string(),
+    });
+    acc.add_entry(data_end_entry, flags_extended).unwrap();
+
     acc
 }
 
@@ -1271,49 +1277,23 @@ fn test_apply_extended_sgroup_connecting_bond(
 }
 
 #[rstest]
-fn test_apply_extended_sgroup_data_description(
-    mut single_extended_atom: ExtendedMolecule,
-    mut acc_with_data_sgroup: PropertyAccumulator,
-    flags_extended: CtabParseFlags,
-) {
-    acc_with_data_sgroup
-        .update_extended_molecule(&mut single_extended_atom, flags_extended)
-        .unwrap();
-
-    let sgroup = single_extended_atom.sgroups().get(&0).unwrap();
-    let data = sgroup.data.get("test").unwrap();
-    assert_eq!(data.field_type, SGroupDataType::Text);
-    assert_eq!(data.field_units, None);
-    assert_eq!(data.query_identifier, None);
-    assert_eq!(data.data_query_operator, None);
-}
-
-#[rstest]
 fn test_apply_extended_sgroup_data_entry(
     mut single_extended_atom: ExtendedMolecule,
     mut acc_with_data_sgroup: PropertyAccumulator,
     flags_extended: CtabParseFlags,
 ) {
-    let continuation_entry = PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation {
-        sgroup_index: 0,
-        data_content: "content".to_string(),
-    });
-    acc_with_data_sgroup
-        .add_entry(continuation_entry, flags_extended)
-        .unwrap();
-
-    let data_entry =
-        PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 });
-    acc_with_data_sgroup
-        .add_entry(data_entry, flags_extended)
-        .unwrap();
     acc_with_data_sgroup
         .update_extended_molecule(&mut single_extended_atom, flags_extended)
         .unwrap();
 
     let sgroup = single_extended_atom.sgroups().get(&0).unwrap();
-    let data = sgroup.data.get("test").unwrap();
-    assert_eq!(data.data_content, Some(vec!["content".to_string()]));
+    let data = sgroup.data.as_ref().unwrap();
+    assert_eq!(data.field_type, SGroupDataType::Text);
+    assert_eq!(data.field_name, "test".to_string());
+    assert_eq!(data.data_content, Some(vec!["data".to_string()]));
+    assert_eq!(data.field_units, None);
+    assert_eq!(data.query_identifier, None);
+    assert_eq!(data.data_query_operator, None);
 }
 
 #[rstest]

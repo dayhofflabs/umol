@@ -215,8 +215,6 @@ fn build_extended_molecule(
         source_format: SourceFormat::MOL,
     };
 
-    println!("PROPERTIES: {:?}", properties);
-
     let mut acc = PropertyAccumulator::new();
     for entry in properties {
         acc.add_entry(entry, flags)?;

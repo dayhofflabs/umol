@@ -5,14 +5,13 @@ use std::mem;
 
 use umol_data::Element;
 
-use crate::io::ctfile::error::ParseError;
-
 use super::context::Context;
 use super::convert::{
     convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
     convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
 };
 use crate::io::ctfile::config::CtabParseFlags;
+use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::properties::{PropertyEntries, SGroupDataEntry};
 use crate::table_ir::{
     AtomList, AtomSymbol, AttachmentPointType, BondOrder, CtfileData, ExtendedMolecule,
@@ -78,7 +77,7 @@ pub(super) struct SGroupProperties {
     pub connecting_bond: Option<SGroupConnectingBond>,
     pub hierarchy_parent: Option<u32>,
     pub component_number: Option<u32>,
-    pub data: BTreeMap<String, SGroupData>,
+    pub data: Option<SGroupData>,
     pub display: Option<SGroupDataDisplay>,
 }
 
@@ -100,7 +99,7 @@ impl SGroupProperties {
             connecting_bond: None,
             hierarchy_parent: None,
             component_number: None,
-            data: BTreeMap::new(),
+            data: None,
             display: None,
         }
     }
@@ -428,19 +427,18 @@ impl PropertyAccumulator {
                         property: "data description",
                     },
                 )?;
-                props.data.insert(
-                    entry.field_name.clone(),
-                    SGroupData {
-                        field_type: entry.field_type,
-                        field_units: entry.field_units,
-                        query_identifier: entry.query_identifier,
-                        data_query_operator: entry.data_query_operator,
-                        data_content: None,
-                    },
-                );
+                let field_name = entry.field_name.clone();
+                props.data = Some(SGroupData {
+                    field_type: entry.field_type,
+                    field_name: entry.field_name,
+                    field_units: entry.field_units,
+                    query_identifier: entry.query_identifier,
+                    data_query_operator: entry.data_query_operator,
+                    data_content: None,
+                });
 
-                self.context.current_sgroup_index = Some(entry.sgroup_index);
-                self.context.current_data_field = Some(entry.field_name);
+                self.context.current_data_sgroup_index = Some(entry.sgroup_index);
+                self.context.current_data_field = Some(field_name);
             }
             PropertyEntries::SGroupDataDisplayEntry(entry) => {
                 let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
@@ -457,86 +455,75 @@ impl PropertyAccumulator {
                     display_chars: entry.display_chars,
                 });
             }
-            PropertyEntries::SGroupDataEntry(entry) => match entry {
-                SGroupDataEntry::Continuation {
-                    sgroup_index,
-                    data_content,
-                } => {
-                    if self.context.current_sgroup_index.is_none() {
-                        return Err(ParseError::MissingSGroupDataContext {
-                            location: "continuation",
-                        });
-                    }
+            PropertyEntries::SGroupDataEntry(entry) => {
+                // NOTE: SGroup Data Description (SDT) field must appear before the SCD/SED fields
+                // SDT sets self.context.current_data_sgroup_index and self.context.current_data_field
+                let sgroup_index = match entry {
+                    SGroupDataEntry::Continuation {
+                        sgroup_index: sg, ..
+                    } => sg,
+                    SGroupDataEntry::EndBlank { sgroup_index: sg } => sg,
+                    SGroupDataEntry::EndWithData {
+                        sgroup_index: sg, ..
+                    } => sg,
+                };
+                if let Some(context_sgroup) = self.context.current_data_sgroup_index {
+                    debug_assert!(
+                        self.context.current_data_field.is_some(),
+                        "current data field must be set together with current data sgroup index"
+                    );
 
-                    let context_sgroup = self.context.current_sgroup_index.unwrap();
                     if sgroup_index != context_sgroup {
                         return Err(ParseError::SGroupIndexMismatch {
                             expected: context_sgroup,
                             actual: sgroup_index,
                         });
                     }
-
-                    if self.context.current_data_content.is_none() {
-                        self.context.current_data_content = Some(Vec::new());
-                    }
-
-                    let buffer = self.context.current_data_content.as_mut().unwrap();
-                    if buffer.is_empty() {
-                        buffer.push(data_content.clone());
-                    } else {
-                        let last_line = buffer.last_mut().unwrap();
-                        last_line.push_str(&data_content);
-                    }
+                } else {
+                    let location = match entry {
+                        SGroupDataEntry::Continuation { .. } => "continuation",
+                        SGroupDataEntry::EndBlank { .. } => "end blank",
+                        SGroupDataEntry::EndWithData { .. } => "end with data",
+                    };
+                    return Err(ParseError::MissingSGroupDataContext {
+                        index: sgroup_index,
+                        location,
+                    });
                 }
 
-                SGroupDataEntry::EndWithData {
-                    sgroup_index,
-                    data_content,
-                } => {
-                    if let Some(context_sgroup) = self.context.current_sgroup_index {
-                        if sgroup_index != context_sgroup {
-                            return Err(ParseError::SGroupIndexMismatch {
-                                expected: context_sgroup,
-                                actual: sgroup_index,
+                match entry {
+                    SGroupDataEntry::Continuation {
+                        sgroup_index: _sg,
+                        data_content,
+                    } => {
+                        if let Some(context_content) = self.context.current_data_content.as_mut() {
+                            context_content.push(data_content);
+                        } else {
+                            self.context.current_data_content = Some(vec![data_content]);
+                        }
+                    }
+                    SGroupDataEntry::EndWithData {
+                        sgroup_index,
+                        data_content,
+                    } => {
+                        if let Some(context_content) = self.context.current_data_content.as_mut() {
+                            context_content.push(data_content);
+                        } else {
+                            self.context.current_data_content = Some(vec![data_content]);
+                        }
+                        self.finalize_sgroup_data(sgroup_index)?;
+                    }
+                    SGroupDataEntry::EndBlank { sgroup_index } => {
+                        if self.context.current_data_content.is_none() {
+                            return Err(ParseError::MissingSGroupDataContext {
+                                index: sgroup_index,
+                                location: "end",
                             });
                         }
-
-                        if self.context.current_data_content.is_none() {
-                            self.context.current_data_content = Some(Vec::new());
-                        }
-
-                        let buffer = self.context.current_data_content.as_mut().unwrap();
-                        if buffer.is_empty() {
-                            buffer.push(data_content.clone());
-                        } else {
-                            let last_line = buffer.last_mut().unwrap();
-                            last_line.push_str(&data_content);
-                        }
-
-                        self.finalize_sgroup_data(sgroup_index, None)?;
-                    } else {
-                        self.finalize_sgroup_data(sgroup_index, Some(data_content.clone()))?;
+                        self.finalize_sgroup_data(sgroup_index)?;
                     }
                 }
-
-                SGroupDataEntry::EndBlank { sgroup_index } => {
-                    if self.context.current_sgroup_index.is_none() {
-                        return Err(ParseError::MissingSGroupDataContext {
-                            location: "end blank",
-                        });
-                    }
-
-                    let context_sgroup = self.context.current_sgroup_index.unwrap();
-                    if sgroup_index != context_sgroup {
-                        return Err(ParseError::SGroupIndexMismatch {
-                            expected: context_sgroup,
-                            actual: sgroup_index,
-                        });
-                    }
-
-                    self.finalize_sgroup_data(sgroup_index, None)?;
-                }
-            },
+            }
             PropertyEntries::SGroupHierarchyEntries(entries) => {
                 for entry in entries {
                     let props = self.sgroup_properties.get_mut(&entry.sgroup_index).ok_or(
@@ -593,26 +580,38 @@ impl PropertyAccumulator {
     }
 
     fn validate_sgroup_data(&mut self) -> Result<(), ParseError> {
-        if self.context.current_sgroup_index.is_some() {
-            let sgroup_index = self.context.current_sgroup_index.unwrap();
-            self.finalize_sgroup_data(sgroup_index, None)?;
-            self.context.current_sgroup_index = None;
-            self.context.current_data_field = None;
+        if self.context.current_data_sgroup_index.is_some()
+            || self.context.current_data_field.is_some()
+        {
+            return Err(ParseError::MissingSgroupDataEnd {
+                index: self.context.current_data_sgroup_index.unwrap(),
+            });
         }
         Ok(())
     }
 
-    fn finalize_sgroup_data(
-        &mut self,
-        sgroup_index: u32,
-        sed_content: Option<String>,
-    ) -> Result<(), ParseError>  {
-
-        let data_field = self.context.current_data_field.as_ref().ok_or(
-            ParseError::MissingSGroupDataContext {
+    fn finalize_sgroup_data(&mut self, sgroup_index: u32) -> Result<(), ParseError> {
+        if let Some(context_sgroup) = self.context.current_data_sgroup_index {
+            debug_assert!(
+                self.context.current_data_field.is_some(),
+                "current data field must be set together with current data sgroup index"
+            );
+            debug_assert!(
+                self.context.current_data_content.is_some(),
+                "current data context must be set together with current data sgroup index"
+            );
+            if sgroup_index != context_sgroup {
+                return Err(ParseError::SGroupIndexMismatch {
+                    expected: context_sgroup,
+                    actual: sgroup_index,
+                });
+            }
+        } else {
+            return Err(ParseError::MissingSGroupDataContext {
+                index: sgroup_index,
                 location: "finalization",
-            },
-        )?;
+            });
+        }
 
         let props =
             self.sgroup_properties
@@ -622,38 +621,28 @@ impl PropertyAccumulator {
                     property: "data content",
                 })?;
 
-        let has_sed_content = sed_content.is_some();
-
-        let buffer = self.context.current_data_content.as_mut();
-        let mut content = if let Some(buffer) = buffer {
-            if buffer.is_empty() {
-                String::new()
-            } else {
-                buffer.join("")
-            }
-        } else {
-            String::new()
-        };
-
-        if let Some(sed_data) = sed_content {
-            content.push_str(&sed_data);
-        }
-
+        let mut content = self.context.current_data_content.as_mut().unwrap().join("");
         if content.len() > 200 {
             content.truncate(200);
         }
         let content = content.trim_end().to_string();
 
-        if let Some(data) = props.data.get_mut(data_field) {
-            if !content.is_empty() || has_sed_content {
-                if let Some(existing_content) = &mut data.data_content {
-                    existing_content.push(content);
-                } else {
-                    data.data_content = Some(vec![content]);
-                }
-            }
+        if props.data.is_none() {
+            return Err(ParseError::MissingSGroupDataContext {
+                index: sgroup_index,
+                location: "finalization",
+            });
         }
 
+        let data = props.data.as_mut().unwrap();
+        if let Some(data_content) = data.data_content.as_mut() {
+            data_content.push(content);
+        } else {
+            data.data_content = Some(vec![content]);
+        }
+
+        self.context.current_data_sgroup_index = None;
+        self.context.current_data_field = None;
         self.context.current_data_content = None;
         Ok(())
     }
@@ -663,7 +652,7 @@ impl PropertyAccumulator {
         &mut self,
         molecule: &mut Molecule,
         flags: CtabParseFlags,
-    ) -> Result<(), ParseError>  {
+    ) -> Result<(), ParseError> {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
 
         // Apply molecule properties (chiral flag)
@@ -731,7 +720,7 @@ impl PropertyAccumulator {
         &mut self,
         molecule: &mut ExtendedMolecule,
         flags: CtabParseFlags,
-    ) -> Result<(), ParseError>  {
+    ) -> Result<(), ParseError> {
         let extended_isotopes = flags.contains(CtabParseFlags::EXTENDED_ISOTOPES);
 
         // Apply molecule properties (chiral flag)
@@ -947,7 +936,7 @@ impl PropertyAccumulator {
         Ok(())
     }
 
-    fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<(), ParseError>  {
+    fn apply_sgroup(&mut self, molecule: &mut ExtendedMolecule) -> Result<(), ParseError> {
         for (sgroup_index, props) in mem::take(&mut self.sgroup_properties) {
             debug_assert!(
                 molecule.ctfile_data.is_some(),
@@ -988,8 +977,8 @@ impl PropertyAccumulator {
             if let Some(component_number) = props.component_number {
                 sgroup.component_number = Some(component_number);
             }
-            if !props.data.is_empty() {
-                sgroup.data = props.data;
+            if let Some(data) = props.data {
+                sgroup.data = Some(data);
             }
             if let Some(multiplier) = props.multiplier {
                 sgroup.multiplier = Some(multiplier);

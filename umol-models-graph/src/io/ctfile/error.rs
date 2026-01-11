@@ -76,8 +76,10 @@ pub enum ParseError {
         sgroup_type: SGroupType,
         message: &'static str,
     },
-    #[error("Missing S-group data context in {location}")]
-    MissingSGroupDataContext { location: &'static str },
+    #[error("Missing context for data SGroup {index} in {location}")]
+    MissingSGroupDataContext { index: u32, location: &'static str },
+    #[error("Unfinalized data SGroup {index}")]
+    MissingSgroupDataEnd { index: u32 },
     #[error("S-group index mismatch: expected {expected}, got {actual}")]
     SGroupIndexMismatch { expected: u32, actual: u32 },
 }
@@ -350,6 +352,11 @@ impl From<ParseError> for Diagnostic {
                 Some(error.to_string()),
             ),
             ParseError::MissingSGroupDataContext { .. } => (
+                DiagnosticKind::CtfileInvalidSgroupLine,
+                Span::None,
+                Some(error.to_string()),
+            ),
+            ParseError::MissingSgroupDataEnd { .. } => (
                 DiagnosticKind::CtfileInvalidSgroupLine,
                 Span::None,
                 Some(error.to_string()),
