@@ -227,7 +227,7 @@ fn test_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyE
     field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None }))]
 #[case::sdd_sgroup(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry { sgroup_index: 0,
     coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached, display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-    display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 6 }))]
+    display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(6) }))]
 #[case::scd_sgroup(b"M  SCD   1 4.6", PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() }))]
 #[case::sed_sgroup(b"M  SED   2 E/Z unknown", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() }))]
 #[case::sed_sgroup_empty(b"M  SED   1", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 }))]
@@ -1269,19 +1269,23 @@ fn test_sgroup_data_description_entry_invalid(
 #[case::detached(b"   1     0.0000    0.0000    DR    ALL  0       0",
         SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]
+        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(0) })]
 #[case::relative_position(b"   2     0.0000    0.0000    DR    ALL  1       6",
         SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 6 })]
+        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(6) })]
 #[case::number(b"   2     0.0000    0.0000    DR    1    1       6",
         SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::Number(1), display_tag: None, display_position: 6 })]
+        display_chars: SGroupDataDisplayChars::Number(1), display_tag: None, display_position: Some(6) })]
 #[case::absolute_position(b"   3     0.0000    0.0000    DR    ALL  0       0 ",
         SGroupDataDisplayEntry { sgroup_index: 2, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: 0 })]
+        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(0) })]
+#[case::no_display_position(b"   1     0.0000    0.0000    DR    ALL  1     ",
+        SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
+        display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
+        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: None })]
 fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroupDataDisplayEntry) {
     let result = terminated(sgroup_data_display_entry(true), space0).parse(input);
     let input_str = input.to_str_lossy();

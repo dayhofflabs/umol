@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use umol_models_graph::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use umol_models_graph::io::ctfile::config::CtfileIoConfig;
 use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
 
 /// Results from running all 4 parsers on a file
@@ -29,33 +29,55 @@ struct ParseResults {
 }
 
 impl ParseResults {
-    fn pattern(&self) -> &'static str {
-        match (
-            self.mol_basic,
-            self.mol_lenient,
-            self.ext_extended,
-            self.ext_lenient,
-        ) {
-            (true, true, true, true) => "++++",
-            (false, true, false, true) => "-+-+",
-            (false, false, true, true) => "--++",
-            (false, false, false, true) => "---+",
-            (false, false, false, false) => "----",
-            _ => "bug!",
-        }
+    fn pattern(&self) -> String {
+        let chars = vec![
+            if self.mol_basic {
+                "+".to_string()
+            } else {
+                "-".to_string()
+            },
+            if self.mol_lenient {
+                "+".to_string()
+            } else {
+                "-".to_string()
+            },
+            if self.ext_extended {
+                "+".to_string()
+            } else {
+                "-".to_string()
+            },
+            if self.ext_lenient {
+                "+".to_string()
+            } else {
+                "-".to_string()
+            },
+        ];
+        chars.join("")
     }
 
     fn has_hierarchy_violation(&self) -> bool {
         // mol(basic) → mol(lenient)
         if self.mol_basic && !self.mol_lenient {
+            println!(
+                "mol_basic ({}) -> mol_lenient ({})",
+                self.mol_basic, self.mol_lenient
+            );
             return true;
         }
         // mol(basic) → extended(extended)
         if self.mol_basic && !self.ext_extended {
+            println!(
+                "mol_basic ({}) -> ext_extended ({})",
+                self.mol_basic, self.ext_extended
+            );
             return true;
         }
         // extended(extended) → extended(lenient)
         if self.ext_extended && !self.ext_lenient {
+            println!(
+                "ext_extended ({}) -> ext_lenient ({})",
+                self.ext_extended, self.ext_lenient
+            );
             return true;
         }
         false
@@ -95,13 +117,16 @@ impl Category {
         if results.has_hierarchy_violation() {
             return Category::Bug;
         }
-        match results.pattern() {
+        match &results.pattern()[..] {
             "++++" => Category::Molecule,
             "-+-+" => Category::MoleculeLenient,
             "--++" => Category::ExtendedMolecule,
             "---+" => Category::ExtendedMoleculeLenient,
             "----" => Category::Invalid,
-            _ => Category::Bug,
+            _ => {
+                println!("PATTERN {}", results.pattern());
+                Category::Bug
+            }
         }
     }
 
@@ -162,13 +187,13 @@ fn classify_mol_file(
 ) -> Result<(Category, ParseResults), Box<dyn std::error::Error>> {
     let mol_bytes = fs::read(file_path)?;
 
-    // For basic parser: BASIC vs BASIC_MAX (lenient parsing features, no extended atoms/bonds)
-    let mol_basic_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC);
-    let mol_lenient_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX);
+    // For basic parser: BASIC vs BASIC LENIENT (lenient parsing features, no extended atoms/bonds)
+    let mol_basic_config = CtfileIoConfig::basic();
+    let mol_lenient_config = CtfileIoConfig::basic_lenient();
 
     // For extended parser: EXTENDED vs LENIENT (includes all extended features)
-    let ext_extended_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::EXTENDED);
-    let ext_lenient_config = CtfileIoConfig::with_parse_flags(CtabParseFlags::LENIENT);
+    let ext_extended_config = CtfileIoConfig::extended();
+    let ext_lenient_config = CtfileIoConfig::extended_lenient();
 
     let results = ParseResults {
         mol_basic: parse_mol_bytes_with(&mol_bytes, &mol_basic_config).is_ok(),

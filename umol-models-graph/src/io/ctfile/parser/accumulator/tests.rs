@@ -1536,7 +1536,7 @@ fn test_apply_extended_sgroup_data_display(
         display_units: SGroupDataDisplayUnits::DisplayUnits,
         display_chars: SGroupDataDisplayChars::Number(5),
         display_tag: Some(5),
-        display_position: 3,
+        display_position: Some(3),
     });
     acc_with_superatom_sgroup
         .add_entry(entry, CtabParseFlags::EXTENDED)
@@ -1568,7 +1568,7 @@ fn test_apply_extended_data_display_no_sgroup() {
         display_units: SGroupDataDisplayUnits::DisplayUnits,
         display_chars: SGroupDataDisplayChars::Number(5),
         display_tag: Some(5),
-        display_position: 3,
+        display_position: Some(3),
     });
     let result = acc.add_entry(entry, CtabParseFlags::EXTENDED);
     assert!(result.is_err());

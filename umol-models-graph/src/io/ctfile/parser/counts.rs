@@ -3,7 +3,7 @@
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::space0;
-use nom::combinator::{all_consuming, map, opt, value};
+use nom::combinator::{all_consuming, map, rest, value};
 use nom::error::Error as NomError;
 use nom::sequence::{delimited, terminated};
 use nom::{Err, Parser};
@@ -57,7 +57,7 @@ pub(super) fn counts_block<'inp>(
 /// | ppp     | obsolete                   | -          | Generic |
 /// | iii     | obsolete                   | -          | Generic |
 /// | mmm     | properties lines (unused)  | >=0        | Generic |
-/// | vvvvvvv | version stamp              | V2000      | Generic |
+/// | vvvvvv  | version stamp              | V2000      | Generic |
 /// ---------------------------------------------------------------
 ///
 pub fn counts_input<'inp>(
@@ -107,7 +107,7 @@ fn version<'inp>(
     move |input: &'inp [u8]| {
         let v2000 = alt((tag(" V2000"), tag("V2000 ")));
         if no_v2000_end_tags {
-            value((), opt(v2000)).parse(input)
+            value((), rest).parse(input)
         } else {
             value((), v2000).parse(input)
         }
@@ -142,13 +142,72 @@ mod tests {
     #[case::tag_only(b"                                  V2000\n", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
     #[case::chiral_flag(b"  1  0  0  0  1  0  0  0  0  0  0 V2000", Counts {atom_count: 1, bond_count: 0, atom_list_count: 0},
         vec![PropertyEntries::MoleculeChiralFlagEntry(MoleculeChiralFlagEntry { chiral_flag: true })])]
-    #[case::invalid_unused(b"  4  2  0     0  1                V2000", Counts {atom_count: 4, bond_count: 2, atom_list_count: 0}, vec![])]
+    #[case::non_zero_unused(b"  4  2  0     0  1                V2000", Counts {atom_count: 4, bond_count: 2, atom_list_count: 0}, vec![])]
     fn test_counts_block(
         #[case] input: &[u8],
         #[case] expected_counts: Counts,
         #[case] expected_properties: Vec<PropertyEntries>,
     ) {
         let res = counts_block(0, CtabParseFlags::BASIC).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_ok(), "{:?} should have succeeded", input_str);
+        let (remaining, (counts, properties, line_offset)) = res.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{:?} should have consumed all input",
+            input_str
+        );
+        assert_eq!(
+            counts, expected_counts,
+            "{:?} should have parsed counts correctly",
+            input_str
+        );
+        assert_eq!(
+            properties, expected_properties,
+            "{:?} should have parsed properties correctly",
+            input_str
+        );
+        assert_eq!(
+            line_offset, 1,
+            "{:?} should have incremented line offset",
+            input_str
+        );
+    }
+
+    #[rstest]
+    #[case::no_v2000_tag(b" 28 34                           ")]
+    #[case::trailing_characters(b"  2  1  0  0  0  0  0  0  0  0  0    0")]
+    fn test_counts_block_invalid(#[case] input: &[u8]) {
+        let res = counts_block(0, CtabParseFlags::BASIC).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_err(), "{:?} should have failed", input_str);
+        assert!(matches!(
+            res.unwrap_err(),
+            Err::Error(ParseError::InvalidCountsLine { .. })
+        ));
+    }
+
+    #[rstest]
+    #[case::non_zero_unused(b"  4  2  0     0  1                V2000")]
+    fn test_counts_block_strict_invalid(#[case] input: &[u8]) {
+        let res = counts_block(0, CtabParseFlags::STRICT).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_err(), "{:?} should have failed", input_str);
+        assert!(matches!(
+            res.unwrap_err(),
+            Err::Error(ParseError::InvalidCountsLine { .. })
+        ));
+    }
+
+    #[rstest]
+    #[case::no_v2000_tag(b" 28 34                           ", Counts { atom_count: 28, bond_count: 34, atom_list_count: 0 }, vec![])]
+    #[case::trailing_characters(b"  2  1  0  0  0  0  0  0  0  0  0    0", Counts { atom_count: 2, bond_count: 1, atom_list_count: 0 }, vec![])]
+    fn test_counts_block_lenient(
+        #[case] input: &[u8],
+        #[case] expected_counts: Counts,
+        #[case] expected_properties: Vec<PropertyEntries>,
+    ) {
+        let res = counts_block(0, CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_ok(), "{:?} should have succeeded", input_str);
         let (remaining, (counts, properties, line_offset)) = res.unwrap();
@@ -225,11 +284,8 @@ mod tests {
     #[case::non_numeric_atom_list_count(b"  4  2  a     0                   V2000", NomErrorKind::Digit)]
     #[case::chiral_flag_out_of_range(b"  1  0  0  0  2  0  0  0  0  0  0 V2000", NomErrorKind::Verify)]    
     #[case::non_numeric_chiral_flag(b"  4  2  0     a                   V2000", NomErrorKind::Digit)]
-    #[case::non_zero_unused_sss(b"  4  2  0     0  1                V2000", NomErrorKind::Verify)]
-    #[case::non_numeric_unused(b"  4  2  0     0  a                V2000", NomErrorKind::Verify)]
-    #[case::non_numeric_properties(b"  4  2  0     0  1                a V2000", NomErrorKind::Verify)]
     fn test_counts_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-        let res = counts_input(CtabParseFlags::STRICT).parse(input);
+        let res = counts_input(CtabParseFlags::BASIC).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_err(), "{:?} should have failed", input_str);
         assert!(
@@ -242,7 +298,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::invalid_unused(b"  4  2  0     0  1                V2000", NomErrorKind::Verify)]
+    #[case::non_zero_unused(b"  4  2  0     0  1                V2000", NomErrorKind::Verify)]
+    #[case::non_numeric_unused(b"  4  2  0     0  a                V2000", NomErrorKind::Verify)]
+    #[case::non_numeric_properties(
+        b"  4  2  0     0  1                a V2000",
+        NomErrorKind::Verify
+    )]
     fn test_counts_input_strict_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
         let res = counts_input(CtabParseFlags::STRICT).parse(input);
         let input_str = input.to_str_lossy();
@@ -257,23 +318,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::blank(b"                                 ", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
-    #[case::padded_blanks(b" 28 34                           ", Counts {atom_count: 28, bond_count: 34, atom_list_count: 0}, vec![])]
-    #[case::padded_zeros(b" 28 34  0  0  0  0  0  0  0  0  0", Counts {atom_count: 28, bond_count: 34, atom_list_count: 0}, vec![])]
-    #[case::has_v2000_tag(b"  0  0  0  0  0  0  0  0  0  0  0 V2000", Counts {atom_count: 0, bond_count: 0, atom_list_count: 0}, vec![])]
-    fn test_counts_input_no_v2000_tag(
+    #[case::blank(b"                                 ", Counts { atom_count: 0, bond_count: 0, atom_list_count: 0 }, vec![])]
+    #[case::padded_blanks(b" 28 34                           ", Counts { atom_count: 28, bond_count: 34, atom_list_count: 0 }, vec![])]
+    #[case::padded_zeros(b" 28 34  0  0  0  0  0  0  0  0  0", Counts { atom_count: 28, bond_count: 34, atom_list_count: 0 }, vec![])]
+    #[case::has_v2000_tag(b"  0  0  0  0  0  0  0  0  0  0  0 V2000", Counts { atom_count: 0, bond_count: 0, atom_list_count: 0 }, vec![])]
+    fn test_counts_input_lenient(
         #[case] input: &[u8],
         #[case] expected_counts: Counts,
         #[case] expected_properties: Vec<PropertyEntries>,
     ) {
-        let res = counts_input(CtabParseFlags::NO_V2000_END_TAGS).parse(input);
+        let res = counts_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_ok(), "{:?} should have succeeded", input_str);
         let (remaining, (counts, properties)) = res.unwrap();
         assert!(
             remaining.is_empty(),
-            "{:?} should have consumed all input",
-            input_str
+            "{:?} should have consumed all input, remaining: {:?}",
+            input_str,
+            remaining.to_str_lossy()
         );
         assert_eq!(
             counts, expected_counts,
@@ -289,11 +351,11 @@ mod tests {
 
     #[rstest]
     #[case::empty(b"", NomErrorKind::Eof)]
-    fn test_counts_input_no_v2000_tag_invalid(
+    fn test_counts_input_lenient_invalid(
         #[case] input: &[u8],
         #[case] expected_kind: NomErrorKind,
     ) {
-        let res = counts_input(CtabParseFlags::NO_V2000_END_TAGS).parse(input);
+        let res = counts_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT).parse(input);
         let input_str = input.to_str_lossy();
         assert!(res.is_err(), "{:?} should have failed", input_str);
         assert!(

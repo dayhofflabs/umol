@@ -242,7 +242,7 @@ pub struct SGroupDataDisplayEntry {
     pub display_units: SGroupDataDisplayUnits,
     pub display_chars: SGroupDataDisplayChars,
     pub display_tag: Option<u8>, // 0 = no tag, 1-9 = tag
-    pub display_position: u8,
+    pub display_position: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1421,7 +1421,7 @@ fn sgroup_data_display_entry<'inp>(
                 fixed_width_unused(7, skip_unused_fields),
                 map_parser(take(1usize), opt(nom_u8)),
             ),
-            preceded(tag("  "), fixed_width_int::<u8>(1)),
+            opt(preceded(tag("  "), fixed_width_int::<u8>(1))),
         ),
         |(
             sgroup_index,

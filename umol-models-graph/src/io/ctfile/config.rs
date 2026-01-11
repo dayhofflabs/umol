@@ -58,7 +58,7 @@ bitflags! {
         const BASIC_MAX = Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() |
             Self::NAMED_ISOTOPES.bits() | Self::ATOM_MAP_HCOUNT_FIELDS.bits() | Self::CLARK_EXTENSIONS.bits() |
             Self::EDITOR_EXTENSIONS.bits() | Self::UNICODE.bits() | Self::SKIP_UNUSED_FIELDS.bits() |
-            Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
+            Self::NO_V2000_END_TAGS.bits() | Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits() | Self::CHEMAXON_WILDCARDS.bits() |
