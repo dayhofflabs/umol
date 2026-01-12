@@ -9,13 +9,14 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,
     AtomListEntry, AtomValueEntry, AttachmentPointEntry, BondOrderOverrideEntry, ChargeEntry,
-    IsotopeEntry, LegacyGroupAbbreviationEntry, LinkAtomEntry, MoleculeChiralFlagEntry,
-    PropertyEntries, RGroupLabelEntry, RGroupLogicEntry, RadicalEntry, RingBondCountEntry,
-    SGroupAtomListEntry, SGroupBondListEntry, SGroupComponentEntry, SGroupConnectingBondEntry,
-    SGroupConnectivityEntry, SGroupCorrespondenceEntry, SGroupDataDescriptionEntry,
-    SGroupDataDisplayEntry, SGroupDataEntry, SGroupDisplayInfoEntry, SGroupExpansionEntry,
-    SGroupHierarchyEntry, SGroupLabelEntry, SGroupParentAtomEntry, SGroupSubscriptEntry,
-    SGroupSubtypeEntry, SGroupTypeEntry, SubstitutionCountEntry, UnsaturatedAtomEntry,
+    ChemSketchLabelEntry, IsotopeEntry, LegacyGroupAbbreviationEntry, LinkAtomEntry,
+    MarvinSmartsPatternEntry, MoleculeChiralFlagEntry, PropertyEntries, RGroupLabelEntry,
+    RGroupLogicEntry, RadicalEntry, RingBondCountEntry, SGroupAtomListEntry, SGroupBondListEntry,
+    SGroupComponentEntry, SGroupConnectingBondEntry, SGroupConnectivityEntry,
+    SGroupCorrespondenceEntry, SGroupDataDescriptionEntry, SGroupDataDisplayEntry, SGroupDataEntry,
+    SGroupDisplayInfoEntry, SGroupExpansionEntry, SGroupHierarchyEntry, SGroupLabelEntry,
+    SGroupParentAtomEntry, SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry,
+    SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::table_ir::{
     Atom, AtomList, AtomSymbol, AttachmentPointType, Bond, BondOrder, ExtendedAtom, ExtendedBond,
@@ -2076,4 +2077,34 @@ fn test_apply_extended_rgroup_logic_multiple_occurrences(mut with_rgroup: Extend
     assert_eq!(rgroup.occurrence.len(), 2);
     assert_eq!(rgroup.occurrence[0], RGroupOccurrence::Exactly(1));
     assert_eq!(rgroup.occurrence[1], RGroupOccurrence::GreaterThan(5));
+}
+
+#[rstest]
+fn test_apply_chemskecth_label(mut triatomic_extended_molecule: ExtendedMolecule) {
+    let mut acc = PropertyAccumulator::new();
+    let entry = PropertyEntries::ChemSketchLabelEntry(ChemSketchLabelEntry {
+        atom_index: 0,
+        label: "atom 1".to_string(),
+    });
+    acc.add_entry(entry, CtabParseFlags::LENIENT).unwrap();
+    acc.update_extended_molecule(&mut triatomic_extended_molecule, CtabParseFlags::LENIENT)
+        .unwrap();
+
+    let atom = &triatomic_extended_molecule.atoms[0];
+    assert_eq!(atom.label, Some("atom 1".to_string()));
+}
+
+#[rstest]
+fn test_apply_marvin_smarts_pattern(mut triatomic_extended_molecule: ExtendedMolecule) {
+    let mut acc = PropertyAccumulator::new();
+    let entry = PropertyEntries::MarvinSmartsPatternEntry(MarvinSmartsPatternEntry {
+        atom_index: 0,
+        smarts_pattern: "[#6,X1]".to_string(),
+    });
+    acc.add_entry(entry, CtabParseFlags::LENIENT).unwrap();
+    acc.update_extended_molecule(&mut triatomic_extended_molecule, CtabParseFlags::LENIENT)
+        .unwrap();
+
+    let atom = &triatomic_extended_molecule.atoms[0];
+    assert_eq!(atom.pattern, Some("[#6,X1]".to_string()));
 }

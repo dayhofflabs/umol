@@ -803,6 +803,17 @@ impl PropertyAccumulator {
                 atom.hydrogens = Some(h_count);
             }
 
+            // Apply SMARTS pattern
+            if let Some(ref pattern) = props.pattern {
+                if atom.pattern.is_some() {
+                    return Err(ParseError::DuplicateProperty(format!(
+                        "SMARTS pattern conflict: existing value for atom {}",
+                        atom_idx
+                    )));
+                }
+                atom.pattern = Some(pattern.clone());
+            }
+
             // Apply ring bond count
             if let Some(rbc) = props.ring_bond_count {
                 if atom.ring_bond_count.is_some() {

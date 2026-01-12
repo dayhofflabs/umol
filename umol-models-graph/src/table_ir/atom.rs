@@ -298,6 +298,7 @@ impl ExtendedAtom {
     /// Check if this atom has extended features that would be lost in conversion to basic Atom.
     pub fn has_extended_features(&self) -> bool {
         self.symbol.is_extended()
+            || self.pattern.is_some()
             || self.stereo_care.is_some()
             || self.inversion_retention.is_some()
             || self.exact_change.is_some()
