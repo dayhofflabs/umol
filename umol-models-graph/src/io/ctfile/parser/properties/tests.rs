@@ -1278,7 +1278,7 @@ fn test_sgroup_data_description_entry_invalid(
         SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::Number(1), display_tag: None, display_position: Some(6) })]
-#[case::absolute_position(b"   3     0.0000    0.0000    DR    ALL  0       0 ",
+#[case::absolute_position(b"   3     0.0000    0.0000    DR    ALL  0       0",
         SGroupDataDisplayEntry { sgroup_index: 2, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(0) })]
@@ -1287,11 +1287,16 @@ fn test_sgroup_data_description_entry_invalid(
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
         display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: None })]
 fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroupDataDisplayEntry) {
-    let result = terminated(sgroup_data_display_entry(true), space0).parse(input);
+    let result = sgroup_data_display_entry(true) .parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
+    assert!(
+        remaining.is_empty(),
+        "{:?}: remaining should be empty, got {:?}",
+        input_str,
+        remaining.to_str_lossy()
+    );
     assert_eq!(result, expected);
 }
 
