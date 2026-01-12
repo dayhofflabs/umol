@@ -35,6 +35,7 @@ pub(super) struct AtomProperties {
     pub unpaired_e: Option<u8>,
     pub isotope_mass: Option<u32>,
     pub hydrogen_count: Option<u8>,
+    pub pattern: Option<String>,
     pub ring_bond_count: Option<RingBondCount>,
     pub substitution_count: Option<SubstitutionCount>,
     pub unsaturated: Option<UnsaturatedAtom>,
@@ -455,6 +456,7 @@ impl PropertyAccumulator {
                     display_chars: entry.display_chars,
                 });
             }
+            // TODO: Verify that multiple records can be attached to a single data SGroup.
             PropertyEntries::SGroupDataEntry(entry) => {
                 // NOTE: SGroup Data Description (SDT) field must appear before the SCD/SED fields
                 // SDT sets self.context.current_data_sgroup_index and self.context.current_data_field
@@ -582,6 +584,10 @@ impl PropertyAccumulator {
             PropertyEntries::ChemSketchLabelEntry(e) => {
                 let props = self.atom_properties.entry(e.atom_index).or_default();
                 props.label = Some(e.label);
+            }
+            PropertyEntries::MarvinSmartsPatternEntry(e) => {
+                let props = self.atom_properties.entry(e.atom_index).or_default();
+                props.pattern = Some(e.smarts_pattern);
             }
         }
 

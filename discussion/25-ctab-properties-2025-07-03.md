@@ -51,7 +51,7 @@ https://en.wikipedia.org/wiki/Chemical_table_file
 | Marvin SM  | MRV    | -    | Marvin  | x      | x         | -      | x       |                       |
 | Atom Label | ZZC    | x B  | ADC     | -      | -         | x      | -       |                       |
 | Skip       | SKIP   | -    | Generic | ?      | -         | x      | -       |                       |
-| End        | END    | x    | Generic | x      | x         | x      | x       |                       |
+| End        | END    | x B  | Generic | x      | x         | x      | x       |                       |
 |------------------------------------------------------------------------------------------------------|
 
 B Parsed by basic parser

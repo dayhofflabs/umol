@@ -870,6 +870,7 @@ fn extended_atom_input_inner<'inp>(
                     span: None,
                     label: None,
                     value: None,
+                    pattern: None,
                     ring_bond_count: None,
                     substitution_count: None,
                     unsaturated: None,

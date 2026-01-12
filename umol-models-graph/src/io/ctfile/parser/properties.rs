@@ -242,7 +242,6 @@ pub struct SGroupDataDisplayEntry {
     pub display_units: SGroupDataDisplayUnits,
     pub display_chars: SGroupDataDisplayChars,
     pub display_tag: Option<u8>, // 0 = no tag, 1-9 = tag
-    pub display_position: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -279,6 +278,12 @@ pub struct AtomHydrogenCountEntry {
 pub struct ChemSketchLabelEntry {
     pub atom_index: u32,
     pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarvinSmartsPatternEntry {
+    pub atom_index: u32,
+    pub smarts_pattern: String,
 }
 
 /// Parsed property entries
@@ -321,6 +326,7 @@ pub enum PropertyEntries {
     AtomChargeOverrideEntries(Vec<AtomChargeOverrideEntry>),
     AtomHydrogenCountEntries(Vec<AtomHydrogenCountEntry>),
     ChemSketchLabelEntry(ChemSketchLabelEntry),
+    MarvinSmartsPatternEntry(MarvinSmartsPatternEntry),
 }
 
 /// Parse properties block (basic properties only)
@@ -723,18 +729,15 @@ pub fn extended_property_input<'inp>(
                 _ => unreachable!(),
             },
             // Editor extensions
-            tag @ b"M  ZZC" => {
-                if allow_editor_extensions {
-                    match tag {
-                        b"M  ZZC" => chemsketch_label_entry()
-                            .parse(remaining)
-                            .map(|(i, o)| (i, PropertyEntries::ChemSketchLabelEntry(o))),
-                        _ => unreachable!(),
-                    }
-                } else {
-                    Err(Err::Error(NomError::new(input, NomErrorKind::Tag)))
-                }
-            }
+            tag @ (b"M  ZZC" | b"M  MRV") if allow_editor_extensions => match tag {
+                b"M  ZZC" => chemsketch_label_entry()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::ChemSketchLabelEntry(o))),
+                b"M  MRV" if allow_queries => marvin_smarts_pattern_entry()
+                    .parse(remaining)
+                    .map(|(i, o)| (i, PropertyEntries::MarvinSmartsPatternEntry(o))),
+                _ => unreachable!(),
+            },
             _ => Err(Err::Error(NomError::new(input, NomErrorKind::Tag))),
         }?;
         Ok((remaining, result))
@@ -1398,7 +1401,9 @@ fn sgroup_data_description_entry<'inp>(
 /// sss: SGroup index, x, y: coordinates (f10.4), eee: skipped, f: data display (A=attached, D=detached)
 /// g: absolute, relative placement (A=absolute, R=relative), h: display units (" "=none, U=display units)
 /// i: skipped, jjj: number of characters to display (1-999 or ALL), kkk: number of lines to display (unused, always 1)
-/// ll: skipped, m: tag character (if non-blank), n: Data display DASP position (1-9), oo: skipped
+/// ll: skipped, m: tag character (if non-blank),
+/// nn, oo: skipped (nn is MACCS-II only in the CTFile spec and refers to the second position, however example files
+/// show numerical data in the first position as well).
 fn sgroup_data_display_entry<'inp>(
     skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = SGroupDataDisplayEntry, Error = NomError<&'inp [u8]>> {
@@ -1417,11 +1422,11 @@ fn sgroup_data_display_entry<'inp>(
                 fixed_width_unused(3, skip_unused_fields),
                 sgroup_data_display_chars(),
             ),
-            preceded(
+            delimited(
                 fixed_width_unused(7, skip_unused_fields),
                 map_parser(take(1usize), opt(nom_u8)),
+                opt((tag(" "), fixed_width_unused(2, skip_unused_fields))),
             ),
-            opt(preceded(tag("  "), fixed_width_int::<u8>(1))),
         ),
         |(
             sgroup_index,
@@ -1432,7 +1437,6 @@ fn sgroup_data_display_entry<'inp>(
             display_units,
             display_chars,
             display_tag,
-            display_position,
         )| SGroupDataDisplayEntry {
             sgroup_index,
             coords: (x, y),
@@ -1441,7 +1445,6 @@ fn sgroup_data_display_entry<'inp>(
             display_units,
             display_chars,
             display_tag,
-            display_position,
         },
     )
 }
@@ -1614,6 +1617,23 @@ fn chemsketch_label_entry<'inp>(
         |(atom_index, label)| ChemSketchLabelEntry {
             atom_index,
             label: label.to_str_lossy().into_owned(),
+        },
+    )
+}
+
+/// Parse Marvin SMARTS pattern entry
+/// M  MRV SMA aaa p...
+/// aaa: atom index, p: SMARTS pattern
+fn marvin_smarts_pattern_entry<'inp>(
+) -> impl Parser<&'inp [u8], Output = MarvinSmartsPatternEntry, Error = NomError<&'inp [u8]>> {
+    map(
+        (
+            preceded(tag(" SMA "), fixed_width_int_minus1::<u32>(3)),
+            preceded(tag(" "), rest),
+        ),
+        |(atom_index, smarts_pattern)| MarvinSmartsPatternEntry {
+            atom_index,
+            smarts_pattern: smarts_pattern.to_str_lossy().into_owned(),
         },
     )
 }

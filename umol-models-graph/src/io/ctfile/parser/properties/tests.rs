@@ -156,6 +156,7 @@ fn test_property_input(#[case] input: &[u8], #[case] expected: PropertyEntries) 
 #[case::zch_clark_extensions(b"M  ZCH  1   1  -1", NomErrorKind::Tag)]
 #[case::hyd_clark_extensions(b"M  HYD  1   1   1", NomErrorKind::Tag)]
 #[case::zzc_editor_extensions(b"M  ZZC   1 1", NomErrorKind::Tag)]
+#[case::mrv_editor_extensions(b"M  MRV SMA   1 [#6;X0]", NomErrorKind::Tag)]
 fn test_property_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = property_input(CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
@@ -227,7 +228,7 @@ fn test_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyE
     field_type: SGroupDataType::Text, field_units: None, query_identifier: None, data_query_operator: None }))]
 #[case::sdd_sgroup(b"M  SDD   1     0.0000    0.0000    DR    ALL  1       6", PropertyEntries::SGroupDataDisplayEntry(SGroupDataDisplayEntry { sgroup_index: 0,
     coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached, display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-    display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(6) }))]
+    display_chars: SGroupDataDisplayChars::All, display_tag: None }))]
 #[case::scd_sgroup(b"M  SCD   1 4.6", PropertyEntries::SGroupDataEntry(SGroupDataEntry::Continuation { sgroup_index: 0, data_content: "4.6".to_string() }))]
 #[case::sed_sgroup(b"M  SED   2 E/Z unknown", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndWithData { sgroup_index: 1, data_content: "E/Z unknown".to_string() }))]
 #[case::sed_sgroup_empty(b"M  SED   1", PropertyEntries::SGroupDataEntry(SGroupDataEntry::EndBlank { sgroup_index: 0 }))]
@@ -256,6 +257,7 @@ fn test_extended_property_input(#[case] input: &[u8], #[case] expected: Property
 #[case::zch_clark_extensions(b"M  ZCH  1   1  -1", NomErrorKind::Tag)]
 #[case::hyd_clark_extensions(b"M  HYD  1   1   1", NomErrorKind::Tag)]
 #[case::zzc_editor_extensions(b"M  ZZC   1 1", NomErrorKind::Tag)]
+#[case::mrv_editor_extensions(b"M  MRV SMA   1 [#6;X0]", NomErrorKind::Tag)]
 fn test_extended_property_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let result = extended_property_input(CtabParseFlags::EXTENDED).parse(input);
     let input_str = input.to_str_lossy();
@@ -275,6 +277,7 @@ fn test_extended_property_input_invalid(#[case] input: &[u8], #[case] expected_k
 #[case::atom_charge_override(b"M  ZCH  1   1  -1", PropertyEntries::AtomChargeOverrideEntries(vec![AtomChargeOverrideEntry { atom_index: 0, charge: -1 }]))]
 #[case::atom_hydrogen_count(b"M  HYD  1   1   1", PropertyEntries::AtomHydrogenCountEntries(vec![AtomHydrogenCountEntry { atom_index: 0, hydrogen_count: Some(1) }]))]
 #[case::chemsketch_atom_label(b"M  ZZC   1 1", PropertyEntries::ChemSketchLabelEntry(ChemSketchLabelEntry { atom_index: 0, label: "1".to_string()}))]
+#[case::marvin_smarts_pattern(b"M  MRV SMA   1 [#6;X0]", PropertyEntries::MarvinSmartsPatternEntry(MarvinSmartsPatternEntry { atom_index: 0, smarts_pattern: "[#6;X0]".to_string() }))]
 fn test_extended_property_input_lenient(#[case] input: &[u8], #[case] expected: PropertyEntries) {
     let result = extended_property_input(CtabParseFlags::LENIENT).parse(input);
     let input_str = input.to_str_lossy();
@@ -834,7 +837,8 @@ fn test_rgroup_logic_entry_invalid(
 }
 
 #[rstest]
-#[case::single_entry(b"  1   1 SUP", vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }])]
+#[case::single_entry_superatom(b"  1   1 SUP", vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom }])]
+#[case::single_entry_data(b"  1   1 DAT", vec![SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Data }])]
 #[case::two_entries(b"  2   1 SUP   2 DAT", vec![
     SGroupTypeEntry { sgroup_index: 0, sgroup_type: SGroupType::Superatom },
     SGroupTypeEntry { sgroup_index: 1, sgroup_type: SGroupType::Data }
@@ -1269,25 +1273,29 @@ fn test_sgroup_data_description_entry_invalid(
 #[case::detached(b"   1     0.0000    0.0000    DR    ALL  0       0",
         SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(0) })]
+        display_chars: SGroupDataDisplayChars::All, display_tag: None })]
 #[case::relative_position(b"   2     0.0000    0.0000    DR    ALL  1       6",
         SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(6) })]
+        display_chars: SGroupDataDisplayChars::All, display_tag: None })]
 #[case::number(b"   2     0.0000    0.0000    DR    1    1       6",
         SGroupDataDisplayEntry { sgroup_index: 1, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::Number(1), display_tag: None, display_position: Some(6) })]
+        display_chars: SGroupDataDisplayChars::Number(1), display_tag: None })]
 #[case::absolute_position(b"   3     0.0000    0.0000    DR    ALL  0       0",
         SGroupDataDisplayEntry { sgroup_index: 2, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: Some(0) })]
+        display_chars: SGroupDataDisplayChars::All, display_tag: None })]
 #[case::no_display_position(b"   1     0.0000    0.0000    DR    ALL  1     ",
         SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
         display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
-        display_chars: SGroupDataDisplayChars::All, display_tag: None, display_position: None })]
+        display_chars: SGroupDataDisplayChars::All, display_tag: None })]
+#[case::unused_field_misplaced(b"   1     0.0000    0.0000    DR    ALL  1      1 ", 
+        SGroupDataDisplayEntry { sgroup_index: 0, coords: (0.0000, 0.0000), display_type: SGroupDataDisplayType::Detached,
+        display_placement: SGroupDataDisplayPlacement::Relative, display_units: SGroupDataDisplayUnits::None,
+        display_chars: SGroupDataDisplayChars::All, display_tag: None })]
 fn test_sgroup_data_display_entry(#[case] input: &[u8], #[case] expected: SGroupDataDisplayEntry) {
-    let result = sgroup_data_display_entry(true) .parse(input);
+    let result = sgroup_data_display_entry(true).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, result) = result.unwrap();
@@ -1591,6 +1599,40 @@ fn test_chemsketch_atom_label_entry_invalid(
     #[case] expected_kind: NomErrorKind,
 ) {
     let result = chemsketch_label_entry().parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "Mismatched error kind for {:?}, expected {:?}, got {}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rstest]
+#[case::smarts_valence(b" SMA   1 [#6;X0]", MarvinSmartsPatternEntry { atom_index: 0, smarts_pattern: "[#6;X0]".to_string() })]
+#[case::smarts_recursive(b" SMA   2 [#7;A;$([N]c)]", MarvinSmartsPatternEntry { atom_index: 1, smarts_pattern: "[#7;A;$([N]c)]".to_string() })]
+fn test_marvin_smarts_pattern_entry(
+    #[case] input: &[u8],
+    #[case] expected: MarvinSmartsPatternEntry,
+) {
+    let result = marvin_smarts_pattern_entry().parse(input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    let (remaining, result) = result.unwrap();
+    assert!(remaining.is_empty(), "remaining should be empty");
+    assert_eq!(result, expected);
+}
+
+#[rstest]
+#[case::invalid_atom_index(b" SMA   0 [#6;X0]", NomErrorKind::Verify)]
+#[case::non_numeric_atom_index(b" SMA   a [#6;X0]", NomErrorKind::Digit)]
+fn test_marvin_smarts_pattern_entry_invalid(
+    #[case] input: &[u8],
+    #[case] expected_kind: NomErrorKind,
+) {
+    let result = marvin_smarts_pattern_entry().parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
