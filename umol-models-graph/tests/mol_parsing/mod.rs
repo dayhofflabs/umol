@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::Serialize;
-use umol_models_graph::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use umol_models_graph::io::ctfile::config::CtfileIoConfig;
 use umol_models_graph::io::ctfile::error::ParseError;
 use umol_models_graph::io::ctfile::parser::{
     parse_extended_mol_bytes_with, parse_mol_bytes_with,
