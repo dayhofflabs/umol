@@ -1,0 +1,42 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  summary:
+    sum_formula: C34H34N4O4
+    atom_count: 76
+    bond_count: 80
+    property_count: 1
+molecule_lenient:
+  success: true
+  summary:
+    sum_formula: C34H34N4O4
+    atom_count: 76
+    bond_count: 80
+    property_count: 1
+extended_molecule:
+  success: true
+  extended_summary:
+    sum_formula: C34H34N4O4
+    atom_count: 76
+    bond_count: 80
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C34H34N4O4
+    atom_count: 76
+    bond_count: 80
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 0

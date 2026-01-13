@@ -148,7 +148,7 @@ fn error_type_name(e: &ParseError) -> String {
 }
 
 fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
-    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC);
+    let config = CtfileIoConfig::basic();
     match parse_mol_bytes_with(bytes, &config) {
         Ok(mol) => ParseResult {
             success: true,
@@ -169,7 +169,7 @@ fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
 }
 
 fn parse_with_lenient_flags(bytes: &[u8]) -> ParseResult {
-    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX);
+    let config = CtfileIoConfig::basic_lenient();
     match parse_mol_bytes_with(bytes, &config) {
         Ok(mol) => ParseResult {
             success: true,
@@ -190,7 +190,7 @@ fn parse_with_lenient_flags(bytes: &[u8]) -> ParseResult {
 }
 
 fn parse_extended_with_extended_flags(bytes: &[u8]) -> ParseResult {
-    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::EXTENDED);
+    let config = CtfileIoConfig::extended();
     match parse_extended_mol_bytes_with(bytes, &config) {
         Ok(mol) => ParseResult {
             success: true,
@@ -211,7 +211,7 @@ fn parse_extended_with_extended_flags(bytes: &[u8]) -> ParseResult {
 }
 
 fn parse_extended_with_lenient_flags(bytes: &[u8]) -> ParseResult {
-    let config = CtfileIoConfig::with_parse_flags(CtabParseFlags::LENIENT);
+    let config = CtfileIoConfig::extended_lenient();
     match parse_extended_mol_bytes_with(bytes, &config) {
         Ok(mol) => ParseResult {
             success: true,

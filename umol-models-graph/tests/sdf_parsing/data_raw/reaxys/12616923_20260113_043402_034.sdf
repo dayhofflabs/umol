@@ -1,0 +1,37 @@
+
+  Mrv17d0 01132604342D          
+HDR
+  1  0  0  0  0  0            999 V2000
+   -0.8000   -2.0000    0.0000 Fe  0  0  0  0  0  0  0  0  0  0  0  0
+M  STY  1   1 SUP
+M  SAL   1  1   1
+M  SMT   1 Fe
+M  END
+>  <IDE.XRN>
+4122945
+
+>  <IDE.RN>
+7439-89-6
+
+>  <IDE.CN>
+iron|ferrous|iron(0)|ferrum|Eisen|Fe|ferrous powder
+
+>  <IDE.LSF>
+Fe1
+
+>  <IDE.MF>
+Fe
+
+>  <IDE.MW>
+55.847
+
+>  <IDE.STYPE>
+Alloy|Isotope or isotope containing compound|Coordination compound
+
+>  <IDE.INCHI>
+XEEYBQQBJWHFJM-UHFFFAOYSA-N
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$

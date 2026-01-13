@@ -1,0 +1,34 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: molecule_lenient
+category: molecule_lenient
+molecule:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 25, col 0"
+molecule_lenient:
+  success: true
+  summary:
+    sum_formula: C5FeO5
+    atom_count: 11
+    bond_count: 10
+    property_count: 0
+extended_molecule:
+  success: false
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 25, col 0"
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C5FeO5
+    atom_count: 11
+    bond_count: 10
+    extended_atoms: 0
+    extended_bonds: 5
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

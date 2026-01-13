@@ -1,0 +1,31 @@
+Iron
+Fe
+7439-89-6 Copyright (C) 2025 ACS
+  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 Fe  0  0  0  0  0 15  0  0  0  0  0  0
+M  END
+> <cas.rn>
+7439-89-6
+
+> <ca.index.name>
+Iron
+
+> <molecular.formula>
+Fe
+
+> <smiles.canonical>
+[Fe]
+
+> <molecular.weight>
+55.85
+
+> <melting.point.experimental>
+1535 °C
+
+> <boiling.point.experimental>
+3000 °C
+
+> <density.experimental>
+7.86 g/cm³
+
+$$$$

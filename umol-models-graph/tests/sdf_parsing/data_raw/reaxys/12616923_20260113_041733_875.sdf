@@ -1,0 +1,45 @@
+
+  Mrv17d0 01132604172D          
+HDR
+  4  4  0  0  0  0            999 V2000
+    0.8250    0.8250    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.8250    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8250    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  2  0  0  0  0
+  2  4  2  0  0  0  0
+  3  4  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+1846716
+
+>  <IDE.RN>
+1120-53-2
+
+>  <IDE.CN>
+1,3-cyclobutadiene|cyclobutadiene
+
+>  <IDE.LSF>
+C4H4
+
+>  <IDE.MF>
+C4H4
+
+>  <IDE.MW>
+52.0758
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+HWEQKSVYKBUIIK-UHFFFAOYSA-N
+
+>  <FA.FA>
+RX(34),YY(1),LB(1),PSD(1),MB(1),CALC(1),EXTID(2),RSTR(1),AUTEX(499),CDER(3),ASSM(2),CNF(1),CRYPH(1),DP(1),EM(1),EBC(1),HFOR(2),HHDG(1),FINFO(6),IDA(2),IP(2),DFM(2),OTHE(1),NMR(2),IR(12),MS(3),UV(4),ES
+R(1),RAMAN(2),OSM(1),USE(1),RCT(16),PRO(18),BEH(9),PRE(25),DET(29),CNR(562)
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$

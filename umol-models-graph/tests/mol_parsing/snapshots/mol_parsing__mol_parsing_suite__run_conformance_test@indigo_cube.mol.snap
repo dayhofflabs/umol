@@ -1,0 +1,38 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 12, col 6"
+molecule_lenient:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 12, col 6"
+extended_molecule:
+  success: true
+  extended_summary:
+    sum_formula: C8
+    atom_count: 8
+    bond_count: 12
+    extended_atoms: 0
+    extended_bonds: 12
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C8
+    atom_count: 8
+    bond_count: 12
+    extended_atoms: 0
+    extended_bonds: 12
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 0

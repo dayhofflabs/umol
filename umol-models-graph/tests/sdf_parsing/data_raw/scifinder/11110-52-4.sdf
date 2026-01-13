@@ -1,0 +1,20 @@
+Sodium amalgam
+Hg.Na
+11110-52-4 Copyright (C) 2025 ACS
+  2  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    1.5400    0.0000 Na  0  0  0  0  0 15  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 Hg  0  0  0  0  0 15  0  0  0  0  0  0
+M  END
+> <cas.rn>
+11110-52-4
+
+> <ca.index.name>
+Mercury alloy, base, Hg,Na
+
+> <molecular.formula>
+Hg.Na
+
+> <smiles.canonical>
+[Na].[Hg]
+
+$$$$

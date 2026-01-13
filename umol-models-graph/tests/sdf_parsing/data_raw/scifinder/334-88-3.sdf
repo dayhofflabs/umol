@@ -1,0 +1,36 @@
+Diazomethane
+CH2N2
+334-88-3 Copyright (C) 2025 ACS
+  3  2  0  0  0  0  0  0  0  0999 V2000
+    1.5400    0.0000    0.0000 N   0  3  0  0  0  4  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.0800    0.0000    0.0000 N   0  5  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  2  0  0  0  0
+M  CHG  2   1   1   3  -1
+M  END
+> <cas.rn>
+334-88-3
+
+> <ca.index.name>
+Methane, diazo-
+
+> <molecular.formula>
+CH2N2
+
+> <smiles.canonical>
+[N-]=[N+]=C
+
+> <molecular.weight>
+42.04
+
+> <melting.point.experimental>
+-145 °C
+
+> <boiling.point.experimental>
+-23 °C
+
+> <density.experimental>
+1.45 g/cm³
+
+$$$$

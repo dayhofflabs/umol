@@ -1,0 +1,42 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  summary:
+    sum_formula: C20H19F3O6S
+    atom_count: 49
+    bond_count: 51
+    property_count: 1
+molecule_lenient:
+  success: true
+  summary:
+    sum_formula: C20H19F3O6S
+    atom_count: 49
+    bond_count: 51
+    property_count: 1
+extended_molecule:
+  success: true
+  extended_summary:
+    sum_formula: C20H19F3O6S
+    atom_count: 49
+    bond_count: 51
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C20H19F3O6S
+    atom_count: 49
+    bond_count: 51
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 0

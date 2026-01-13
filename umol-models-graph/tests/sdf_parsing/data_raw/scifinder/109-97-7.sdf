@@ -1,0 +1,43 @@
+1H-Pyrrole
+C4H5N
+109-97-7 Copyright (C) 2025 ACS
+  5  5  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.9052    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2459    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4759    2.3698    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4917    0.9052    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0159    2.3698    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  2  0  0  0  0
+  2  4  2  0  0  0  0
+  3  5  1  0  0  0  0
+  4  5  1  0  0  0  0
+M  END
+> <cas.rn>
+109-97-7
+
+> <ca.index.name>
+1H-Pyrrole
+
+> <molecular.formula>
+C4H5N
+
+> <smiles.canonical>
+C=1C=CNC1
+
+> <molecular.weight>
+67.09
+
+> <melting.point.experimental>
+-23.4 °C
+
+> <boiling.point.experimental>
+129.7 °C
+
+> <density.experimental>
+0.9698 g/cm³    Temp: 20 °C
+
+> <pka.experimental>
+23.0    Solvent: Dimethyl sulfoxide
+
+$$$$

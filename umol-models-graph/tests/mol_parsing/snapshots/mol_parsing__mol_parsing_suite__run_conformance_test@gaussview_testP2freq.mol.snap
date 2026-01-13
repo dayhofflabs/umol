@@ -1,0 +1,34 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: molecule_lenient
+category: molecule_lenient
+molecule:
+  success: false
+  error:
+    error_type: InvalidCountsLine
+    message: Invalid counts line at line 3
+molecule_lenient:
+  success: true
+  summary:
+    sum_formula: C11H17O4P
+    atom_count: 33
+    bond_count: 34
+    property_count: 0
+extended_molecule:
+  success: false
+  error:
+    error_type: InvalidCountsLine
+    message: Invalid counts line at line 3
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C11H17O4P
+    atom_count: 33
+    bond_count: 34
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

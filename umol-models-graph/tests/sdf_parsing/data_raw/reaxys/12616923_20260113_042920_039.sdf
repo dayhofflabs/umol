@@ -1,0 +1,49 @@
+
+  Mrv17d0 01132604292D          
+HDR
+  5  5  0  0  0  0            999 V2000
+    0.6675    1.2699    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3344    0.7846    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.7846    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0793    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2539    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  2  4  2  0  0  0  0
+  3  5  2  0  0  0  0
+  4  5  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+103221
+
+>  <IDE.RN>
+110-00-9
+
+>  <IDE.CN>
+furan|furane
+
+>  <IDE.LSF>
+C4OH4
+
+>  <IDE.MF>
+C4H4O
+
+>  <IDE.MW>
+68.0752
+
+>  <IDE.STYPE>
+heterocyclic
+
+>  <IDE.INCHI>
+YLQBMQCUIZJEEH-UHFFFAOYSA-N
+
+>  <FA.FA>
+RX(6923),YY(1),LB(164),PSD(30),MB(1),CALC(1),EXTID(2),RSTR(2),AUTEX(29889),CDER(29),MP(4),BP(10),RI(26),DEN(18),ADSM(20),ASSM(63),AZE(1),BSPM(1),COMP(1),CRD(1),CRP(1),CRT(2),CRYPH(5),CPD(1),DIC(7),DE(
+3),DV(5),ELE(4),EM(24),ELP(3),ELCB(5),POT(2),ENEM(12),HPTP(1),HCOM(1),HFOR(1),HFUS(3),HHDG(1),HVAP(4),FINFO(71),CP(6),CP0(4),IDA(4),IP(9),LIQPH(2),LLSM(5),LSSM(3),LVSM(11),MAG(1),MSUS(3),MECM(9),MEC(3
+),DFM(5),ORP(1),OPT(7),OTHE(5),POW(1),SLB(3),SOUND(3),SDIC(4),ST(3),CPTP(2),TRAM(5),TP(1),VP(3),NMR(52),IR(46),MS(17),UV(20),ESR(3),NQR(1),ROT(3),RAMAN(10),LUM(1),FLU(1),OSM(2),PHARM(1771),ECT(10),ECA
+(1),ECC(3),BIO(1),BIOD(2),ECS(1),EOD(1),USE(3),INP(2),QUAN(1),RCT(6562),PRO(361),BEH(513),PRE(6572),DET(6740),CNR(34843)
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$

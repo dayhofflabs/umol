@@ -1,0 +1,34 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: molecule_lenient
+category: molecule_lenient
+molecule:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 14, col 6"
+molecule_lenient:
+  success: true
+  summary:
+    sum_formula: C3Cl2Mg
+    atom_count: 6
+    bond_count: 5
+    property_count: 0
+extended_molecule:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 14, col 6"
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C3Cl2Mg
+    atom_count: 6
+    bond_count: 5
+    extended_atoms: 0
+    extended_bonds: 1
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

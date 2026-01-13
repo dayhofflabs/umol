@@ -1,0 +1,41 @@
+Phosphorus pentachloride
+Cl5P
+10026-13-8 Copyright (C) 2025 ACS
+  6  5  0  0  0  0  0  0  0  0999 V2000
+    1.4647    1.5400    0.0000 P   0  0  0  0  0  5  0  0  0  0  0  0
+    1.4647    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    2.3699    2.7859    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.0641    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    2.9294    1.0641    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.5595    2.7859    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+M  END
+> <cas.rn>
+10026-13-8
+
+> <ca.index.name>
+Phosphorane, pentachloro-
+
+> <molecular.formula>
+Cl5P
+
+> <smiles.canonical>
+ClP(Cl)(Cl)(Cl)Cl
+
+> <molecular.weight>
+208.24
+
+> <melting.point.experimental>
+160.5 °C
+
+> <boiling.point.experimental>
+160 °C
+
+> <density.experimental>
+2.114 g/cm³    Temp: 20 °C
+
+$$$$

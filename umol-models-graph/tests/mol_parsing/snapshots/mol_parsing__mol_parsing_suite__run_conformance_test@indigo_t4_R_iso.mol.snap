@@ -1,0 +1,34 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+expression: results
+---
+expected_category: molecule_lenient
+category: molecule_lenient
+molecule:
+  success: false
+  error:
+    error_type: InvalidIsotopeMass
+    message: Invalid isotope mass 16 for element F
+molecule_lenient:
+  success: true
+  summary:
+    sum_formula: CBrClF2
+    atom_count: 5
+    bond_count: 4
+    property_count: 0
+extended_molecule:
+  success: false
+  error:
+    error_type: InvalidIsotopeMass
+    message: Invalid isotope mass 16 for element F
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: CBrClF2
+    atom_count: 5
+    bond_count: 4
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0
