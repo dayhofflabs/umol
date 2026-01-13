@@ -1,0 +1,30 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: invalid
+category: invalid
+molecule:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 16, col 0"
+molecule_lenient:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 16, col 0"
+extended_molecule:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 16, col 0"
+extended_molecule_lenient:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 16, col 0"

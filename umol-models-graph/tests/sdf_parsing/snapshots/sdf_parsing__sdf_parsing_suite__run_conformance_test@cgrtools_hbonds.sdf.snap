@@ -1,0 +1,42 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 24, col 6"
+molecule_lenient:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 24, col 6"
+extended_molecule:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C3H7O7
+      atom_count: 17
+      bond_count: 16
+      extended_atoms: 0
+      extended_bonds: 6
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C3H7O7
+      atom_count: 17
+      bond_count: 16
+      extended_atoms: 0
+      extended_bonds: 6
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 0

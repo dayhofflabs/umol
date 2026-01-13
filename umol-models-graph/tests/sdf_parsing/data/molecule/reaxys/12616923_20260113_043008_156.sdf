@@ -1,0 +1,45 @@
+
+  Mrv17d0 01132604303D          
+HDR
+  6  5  0  0  0  0            999 V2000
+    0.9152    1.1087    0.8038 P   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.0947    0.8802 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    1.3111    1.2621    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    1.4422    0.9712    1.5402 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.9152    2.2276    0.9840 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.9152    0.0000    0.6237 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+2036449
+
+>  <IDE.RN>
+874483-75-7
+
+>  <IDE.CN>
+phosphorus pentachloride|phosphorus(V) chloride|2-methyl-2-trideuteriomethoxy-propane|phosphorous pentachloride
+
+>  <IDE.LSF>
+Cl5P
+
+>  <IDE.MF>
+Cl5P
+
+>  <IDE.MW>
+208.239
+
+>  <IDE.INCHI>
+UHZYTMXLRWXGPK-UHFFFAOYSA-N
+
+>  <FA.FA>
+RX(4711),YY(1),LB(4),PSD(5),MB(1),CALC(1),EXTID(2),AUTEX(1539),PUR(2),MP(5),BP(1),SP(6),DEN(9),ADSM(2),ASSM(2),CRT(1),CRYPH(3),CPD(6),CSYS(1),DIC(5),ELCB(1),ELYC(7),HFOR(4),HFUS(1),HSP(2),FINFO(53),ID
+A(1),MSUS(1),DFM(1),OTHE(4),SLB(24),CSG(4),ST(3),CPTP(1),VP(1),NMR(11),IR(1),NQR(1),RAMAN(1),LUM(1),PHARM(291),USE(25),QUAN(16),RCT(4614),PRO(97),BEH(3330),PRE(1382),DET(3157),CNR(5788)
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$

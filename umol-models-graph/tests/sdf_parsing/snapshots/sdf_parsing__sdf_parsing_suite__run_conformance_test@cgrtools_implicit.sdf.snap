@@ -1,0 +1,42 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 27, col 0"
+molecule_lenient:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidPropertyLine
+    message: "Invalid property line at line 27, col 0"
+extended_molecule:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C7N4
+      atom_count: 11
+      bond_count: 12
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 2
+extended_molecule_lenient:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C7N4
+      atom_count: 11
+      bond_count: 12
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 2

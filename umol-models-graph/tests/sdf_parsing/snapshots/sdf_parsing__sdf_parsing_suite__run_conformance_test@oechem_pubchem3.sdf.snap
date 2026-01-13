@@ -1,0 +1,94 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 3
+  summaries:
+    - sum_formula: C9H17NO4
+      atom_count: 31
+      bond_count: 30
+      property_count: 34
+    - sum_formula: C9H18NO4+
+      atom_count: 32
+      bond_count: 31
+      property_count: 34
+    - sum_formula: C7H8O4
+      atom_count: 19
+      bond_count: 19
+      property_count: 34
+molecule_lenient:
+  success: true
+  compound_count: 3
+  summaries:
+    - sum_formula: C9H17NO4
+      atom_count: 31
+      bond_count: 30
+      property_count: 34
+    - sum_formula: C9H18NO4+
+      atom_count: 32
+      bond_count: 31
+      property_count: 34
+    - sum_formula: C7H8O4
+      atom_count: 19
+      bond_count: 19
+      property_count: 34
+extended_molecule:
+  success: true
+  compound_count: 3
+  extended_summaries:
+    - sum_formula: C9H17NO4
+      atom_count: 31
+      bond_count: 30
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C9H18NO4+
+      atom_count: 32
+      bond_count: 31
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C7H8O4
+      atom_count: 19
+      bond_count: 19
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 3
+  extended_summaries:
+    - sum_formula: C9H17NO4
+      atom_count: 31
+      bond_count: 30
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C9H18NO4+
+      atom_count: 32
+      bond_count: 31
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C7H8O4
+      atom_count: 19
+      bond_count: 19
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0

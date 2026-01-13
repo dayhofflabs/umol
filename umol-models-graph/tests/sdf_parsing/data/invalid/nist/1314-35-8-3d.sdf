@@ -1,0 +1,49 @@
+
+  NIST    07251215363D 1   1.00000  -292.83950
+Copyright by the U.S. Sec. Commerce on behalf of U.S.A. All rights reserved.
+  4  0  0  0  0  0  0  0  0  0999 V2000
+    0.9190    0.3858   -0.2205 W    0  0  0  0  0  0  0  0  0  0  0  0
+    1.5300    0.7504    1.3659 O    0  0  0  0  0  0  0  0  0  0  0  0
+    2.1238   -0.5634   -1.0392 O    0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4881   -0.6158   -0.0203 O    0  0  0  0  0  0  0  0  0  0  0  0
+M  CHG  4   1   6   2  -2   3  -2   4  -2
+M  END
+> <COPYRIGHT>
+Collection (C) 2016 copyright by the U.S. Secretary of Commerce on behalf of the United States of America. All rights reserved.
+
+> <DATE>
+2012-07-25
+
+> <CAS.NUMBER>
+1314-35-8
+
+> <METHOD>
+B3LYP/GENECP
+
+> <DIPOLE.MOMENT>
+5.6464 debye
+
+> <ELECTRONIC.ENERGY>
+-292.839500427 hartree
+
+> <IR.FREQUENCIES>
+"Frequency (cm-1)"   "Intensity (km/mol)"
+278.2815  20.1139
+338.7881  2.0781
+339.4505  2.0624
+932.8199  138.8347
+933.0850  138.8164
+1000.4338  1.7570
+
+> <ROTATIONAL.CONSTANTS>
+6.46497 GHz
+6.46294 GHz
+4.01875 GHz
+
+> <SOFTWARE>
+Gaussian 09, Revision C.01
+
+> <CONTRIBUTOR>
+Katherine Hafner
+
+$$$$

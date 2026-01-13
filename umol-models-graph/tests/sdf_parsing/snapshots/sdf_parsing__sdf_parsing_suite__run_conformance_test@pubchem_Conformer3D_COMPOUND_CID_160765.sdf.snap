@@ -1,0 +1,46 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C4H8O2S
+      atom_count: 15
+      bond_count: 14
+      property_count: 21
+molecule_lenient:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C4H8O2S
+      atom_count: 15
+      bond_count: 14
+      property_count: 21
+extended_molecule:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C4H8O2S
+      atom_count: 15
+      bond_count: 14
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 21
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C4H8O2S
+      atom_count: 15
+      bond_count: 14
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 21
+      rgroup_count: 0
+      sgroup_count: 0

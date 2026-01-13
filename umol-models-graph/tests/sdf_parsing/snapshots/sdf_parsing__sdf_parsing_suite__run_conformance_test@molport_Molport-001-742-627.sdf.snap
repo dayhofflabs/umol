@@ -1,0 +1,46 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C47NO14
+      atom_count: 62
+      bond_count: 68
+      property_count: 2
+molecule_lenient:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C47NO14
+      atom_count: 62
+      bond_count: 68
+      property_count: 2
+extended_molecule:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C47NO14
+      atom_count: 62
+      bond_count: 68
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 2
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C47NO14
+      atom_count: 62
+      bond_count: 68
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 2
+      rgroup_count: 0
+      sgroup_count: 0

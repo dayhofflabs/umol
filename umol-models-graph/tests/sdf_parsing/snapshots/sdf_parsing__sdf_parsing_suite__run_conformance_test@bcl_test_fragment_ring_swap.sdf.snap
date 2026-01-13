@@ -1,0 +1,646 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 26
+  summaries:
+    - sum_formula: C19H19NO2
+      atom_count: 41
+      bond_count: 44
+      property_count: 6
+    - sum_formula: C15H14O2
+      atom_count: 31
+      bond_count: 32
+      property_count: 6
+    - sum_formula: C18H25NO2
+      atom_count: 46
+      bond_count: 48
+      property_count: 6
+    - sum_formula: C13H23NO2
+      atom_count: 39
+      bond_count: 40
+      property_count: 6
+    - sum_formula: C15H25N3O2
+      atom_count: 45
+      bond_count: 47
+      property_count: 6
+    - sum_formula: C12H20N2O2
+      atom_count: 36
+      bond_count: 37
+      property_count: 6
+    - sum_formula: C17H22N2O
+      atom_count: 42
+      bond_count: 44
+      property_count: 6
+    - sum_formula: C15H22O
+      atom_count: 38
+      bond_count: 39
+      property_count: 6
+    - sum_formula: C16H23NO
+      atom_count: 41
+      bond_count: 43
+      property_count: 6
+    - sum_formula: C15H16O
+      atom_count: 32
+      bond_count: 33
+      property_count: 6
+    - sum_formula: C16H21NO2
+      atom_count: 40
+      bond_count: 43
+      property_count: 6
+    - sum_formula: C11H13N3O
+      atom_count: 28
+      bond_count: 29
+      property_count: 6
+    - sum_formula: C14H18N4O
+      atom_count: 37
+      bond_count: 39
+      property_count: 6
+    - sum_formula: C9H11N3OS
+      atom_count: 25
+      bond_count: 26
+      property_count: 6
+    - sum_formula: C16H15N5O
+      atom_count: 37
+      bond_count: 40
+      property_count: 6
+    - sum_formula: C8H10N4OS
+      atom_count: 24
+      bond_count: 25
+      property_count: 6
+    - sum_formula: C14H14N2OS
+      atom_count: 32
+      bond_count: 34
+      property_count: 6
+    - sum_formula: C10H15NO2S
+      atom_count: 29
+      bond_count: 30
+      property_count: 6
+    - sum_formula: C11H11N5OS
+      atom_count: 29
+      bond_count: 31
+      property_count: 6
+    - sum_formula: C10H16N2OS
+      atom_count: 30
+      bond_count: 31
+      property_count: 6
+    - sum_formula: C17H21NO
+      atom_count: 40
+      bond_count: 42
+      property_count: 6
+    - sum_formula: C13H19NO
+      atom_count: 34
+      bond_count: 35
+      property_count: 6
+    - sum_formula: C14H26N2O
+      atom_count: 43
+      bond_count: 45
+      property_count: 6
+    - sum_formula: C15H21N5O
+      atom_count: 42
+      bond_count: 45
+      property_count: 6
+    - sum_formula: C13H19N5O
+      atom_count: 38
+      bond_count: 40
+      property_count: 6
+    - sum_formula: C19H23N5O
+      atom_count: 48
+      bond_count: 51
+      property_count: 6
+molecule_lenient:
+  success: true
+  compound_count: 26
+  summaries:
+    - sum_formula: C19H19NO2
+      atom_count: 41
+      bond_count: 44
+      property_count: 6
+    - sum_formula: C15H14O2
+      atom_count: 31
+      bond_count: 32
+      property_count: 6
+    - sum_formula: C18H25NO2
+      atom_count: 46
+      bond_count: 48
+      property_count: 6
+    - sum_formula: C13H23NO2
+      atom_count: 39
+      bond_count: 40
+      property_count: 6
+    - sum_formula: C15H25N3O2
+      atom_count: 45
+      bond_count: 47
+      property_count: 6
+    - sum_formula: C12H20N2O2
+      atom_count: 36
+      bond_count: 37
+      property_count: 6
+    - sum_formula: C17H22N2O
+      atom_count: 42
+      bond_count: 44
+      property_count: 6
+    - sum_formula: C15H22O
+      atom_count: 38
+      bond_count: 39
+      property_count: 6
+    - sum_formula: C16H23NO
+      atom_count: 41
+      bond_count: 43
+      property_count: 6
+    - sum_formula: C15H16O
+      atom_count: 32
+      bond_count: 33
+      property_count: 6
+    - sum_formula: C16H21NO2
+      atom_count: 40
+      bond_count: 43
+      property_count: 6
+    - sum_formula: C11H13N3O
+      atom_count: 28
+      bond_count: 29
+      property_count: 6
+    - sum_formula: C14H18N4O
+      atom_count: 37
+      bond_count: 39
+      property_count: 6
+    - sum_formula: C9H11N3OS
+      atom_count: 25
+      bond_count: 26
+      property_count: 6
+    - sum_formula: C16H15N5O
+      atom_count: 37
+      bond_count: 40
+      property_count: 6
+    - sum_formula: C8H10N4OS
+      atom_count: 24
+      bond_count: 25
+      property_count: 6
+    - sum_formula: C14H14N2OS
+      atom_count: 32
+      bond_count: 34
+      property_count: 6
+    - sum_formula: C10H15NO2S
+      atom_count: 29
+      bond_count: 30
+      property_count: 6
+    - sum_formula: C11H11N5OS
+      atom_count: 29
+      bond_count: 31
+      property_count: 6
+    - sum_formula: C10H16N2OS
+      atom_count: 30
+      bond_count: 31
+      property_count: 6
+    - sum_formula: C17H21NO
+      atom_count: 40
+      bond_count: 42
+      property_count: 6
+    - sum_formula: C13H19NO
+      atom_count: 34
+      bond_count: 35
+      property_count: 6
+    - sum_formula: C14H26N2O
+      atom_count: 43
+      bond_count: 45
+      property_count: 6
+    - sum_formula: C15H21N5O
+      atom_count: 42
+      bond_count: 45
+      property_count: 6
+    - sum_formula: C13H19N5O
+      atom_count: 38
+      bond_count: 40
+      property_count: 6
+    - sum_formula: C19H23N5O
+      atom_count: 48
+      bond_count: 51
+      property_count: 6
+extended_molecule:
+  success: true
+  compound_count: 26
+  extended_summaries:
+    - sum_formula: C19H19NO2
+      atom_count: 41
+      bond_count: 44
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H14O2
+      atom_count: 31
+      bond_count: 32
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C18H25NO2
+      atom_count: 46
+      bond_count: 48
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C13H23NO2
+      atom_count: 39
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H25N3O2
+      atom_count: 45
+      bond_count: 47
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C12H20N2O2
+      atom_count: 36
+      bond_count: 37
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C17H22N2O
+      atom_count: 42
+      bond_count: 44
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H22O
+      atom_count: 38
+      bond_count: 39
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C16H23NO
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H16O
+      atom_count: 32
+      bond_count: 33
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C16H21NO2
+      atom_count: 40
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C11H13N3O
+      atom_count: 28
+      bond_count: 29
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C14H18N4O
+      atom_count: 37
+      bond_count: 39
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C9H11N3OS
+      atom_count: 25
+      bond_count: 26
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C16H15N5O
+      atom_count: 37
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C8H10N4OS
+      atom_count: 24
+      bond_count: 25
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C14H14N2OS
+      atom_count: 32
+      bond_count: 34
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C10H15NO2S
+      atom_count: 29
+      bond_count: 30
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C11H11N5OS
+      atom_count: 29
+      bond_count: 31
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C10H16N2OS
+      atom_count: 30
+      bond_count: 31
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C17H21NO
+      atom_count: 40
+      bond_count: 42
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C13H19NO
+      atom_count: 34
+      bond_count: 35
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C14H26N2O
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H21N5O
+      atom_count: 42
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C13H19N5O
+      atom_count: 38
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H23N5O
+      atom_count: 48
+      bond_count: 51
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 26
+  extended_summaries:
+    - sum_formula: C19H19NO2
+      atom_count: 41
+      bond_count: 44
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H14O2
+      atom_count: 31
+      bond_count: 32
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C18H25NO2
+      atom_count: 46
+      bond_count: 48
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C13H23NO2
+      atom_count: 39
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H25N3O2
+      atom_count: 45
+      bond_count: 47
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C12H20N2O2
+      atom_count: 36
+      bond_count: 37
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C17H22N2O
+      atom_count: 42
+      bond_count: 44
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H22O
+      atom_count: 38
+      bond_count: 39
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C16H23NO
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H16O
+      atom_count: 32
+      bond_count: 33
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C16H21NO2
+      atom_count: 40
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C11H13N3O
+      atom_count: 28
+      bond_count: 29
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C14H18N4O
+      atom_count: 37
+      bond_count: 39
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C9H11N3OS
+      atom_count: 25
+      bond_count: 26
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C16H15N5O
+      atom_count: 37
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C8H10N4OS
+      atom_count: 24
+      bond_count: 25
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C14H14N2OS
+      atom_count: 32
+      bond_count: 34
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C10H15NO2S
+      atom_count: 29
+      bond_count: 30
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C11H11N5OS
+      atom_count: 29
+      bond_count: 31
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C10H16N2OS
+      atom_count: 30
+      bond_count: 31
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C17H21NO
+      atom_count: 40
+      bond_count: 42
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C13H19NO
+      atom_count: 34
+      bond_count: 35
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C14H26N2O
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C15H21N5O
+      atom_count: 42
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C13H19N5O
+      atom_count: 38
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H23N5O
+      atom_count: 48
+      bond_count: 51
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 6
+      rgroup_count: 0
+      sgroup_count: 0

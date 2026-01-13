@@ -1,0 +1,1444 @@
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <FA.FA>
+CNR(8),YY(1),MB(1),CALC(1),EXTID(2),AUTEX(5),CRYPH(1),CSYS(1),CP(23),CSG(1),NMR(2),RAMAN(1)
+
+>  <CRYPH.KW>
+Powder X-ray Diffraction
+
+>  <CRYPH.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <CSYS.CSYS>
+Rhombic
+
+>  <CSYS.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <CP.CP>
+0.448
+
+>  <CP.T>
+-263.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <CSG.CSG>
+31
+
+>  <CSG.COM>
+a = 5.485 Angstroem, b = 4.857 Angstroem, c = 5.035 Angstroem; T = 160 K
+
+>  <CSG.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.NUC>
+15N
+
+>  <NMR.SOL>
+solid
+
+>  <NMR.T>
+-120.16
+
+>  <NMR.COM>
+Signals given
+
+>  <NMR.citation>
+8518845; Article; Gunaydin-Sen; Achey; Dalal; Stowe; Autrey; Journal of Physical Chemistry B; vol. 111; 4; (2007); p. 677 - 681; (from Gmelin) 
+
+>  <RAMAN.KW>
+Raman
+
+>  <RAMAN.citation>
+8680719; Article; Hess, Nancy J.; Bowden, Mark E.; Parvanov, Vencislav M.; Mundy, Chris; Kathmann, Shawn M.; et al.; Journal of Chemical Physics; p. 1 - 11; Journal of Chemical Physics; vol. 128; (200
+8); (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+2.304
+
+>  <CP.T>
+-253.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.NUC>
+15N
+
+>  <NMR.SOL>
+solid
+
+>  <NMR.T>
+-48.46
+
+>  <NMR.COM>
+Signals given
+
+>  <NMR.citation>
+8518845; Article; Gunaydin-Sen; Achey; Dalal; Stowe; Autrey; Journal of Physical Chemistry B; vol. 111; 4; (2007); p. 677 - 681; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+6.183
+
+>  <CP.T>
+-243.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+11.17
+
+>  <CP.T>
+-233.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+16.65
+
+>  <CP.T>
+-223.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+21.83
+
+>  <CP.T>
+-213.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+26.73
+
+>  <CP.T>
+-203.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+31.1
+
+>  <CP.T>
+-193.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+35.03
+
+>  <CP.T>
+-183.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+38.61
+
+>  <CP.T>
+-173.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+41.83
+
+>  <CP.T>
+-163.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+44.85
+
+>  <CP.T>
+-153.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+47.75
+
+>  <CP.T>
+-143.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+50.57
+
+>  <CP.T>
+-133.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+53.42
+
+>  <CP.T>
+-123.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+56.25
+
+>  <CP.T>
+-113.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+59.27
+
+>  <CP.T>
+-103.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+62.66
+
+>  <CP.T>
+-93.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+66.7
+
+>  <CP.T>
+-83.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+72.08
+
+>  <CP.T>
+-73.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+79.9
+
+>  <CP.T>
+-63.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.CP>
+99.97
+
+>  <CP.T>
+-53.16
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604273D          
+HDR
+  8  7  0  0  0  0            999 V2000
+    1.3594    0.9164    0.9001 N   0  0  0  0  0  4  0  0  0  0  0  0
+    0.3367    0.9164    0.9001 B   0  0  0  0  0  4  0  0  0  0  0  0
+    1.6966    0.0000    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.1562    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6966    1.5761    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.8327    1.1332 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.6739    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.2540    1.5615 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+M  END
+>  <IDE.XRN>
+16324220
+
+>  <IDE.RN>
+13774-81-7
+
+>  <IDE.CN>
+ammonia borane|borazane|borazane BH6N, low temperature, orthorhombic
+
+>  <IDE.LSF>
+NH3BH3
+
+>  <IDE.MF>
+BH6N
+
+>  <IDE.MW>
+30.8653
+
+>  <IDE.STYPE>
+Coordination compound
+
+>  <IDE.TYPMOD>
+low temperature, orthorhombic
+
+>  <IDE.INCHI>
+PJYXJGDRFASJSB-UHFFFAOYSA-N
+
+>  <CP.COM>
+Cp diagram
+
+>  <CP.citation>
+8373328; Article; Wolf; Van Miltenburg; Wolf; Thermochimica Acta; vol. 317; 2; (1998); p. 111 - 116; (from Gmelin) 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$

@@ -1,0 +1,40 @@
+Nitric acid
+HNO3
+7697-37-2 Copyright (C) 2025 ACS
+  4  3  0  0  0  0  0  0  0  0999 V2000
+    1.3337    1.5400    0.0000 N   0  0  0  0  0  5  0  0  0  0  0  0
+    0.0000    2.3101    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    2.6673    2.3101    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3337    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  2  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+> <cas.rn>
+7697-37-2
+
+> <ca.index.name>
+Nitric acid
+
+> <molecular.formula>
+HNO3
+
+> <smiles.canonical>
+O=N(=O)O
+
+> <molecular.weight>
+63.01
+
+> <melting.point.experimental>
+-41.6 °C
+
+> <boiling.point.experimental>
+83 °C
+
+> <density.experimental>
+1.55 g/cm³
+
+> <pka.experimental>
+-1.4 (acid)    Solvent: Water
+
+$$$$

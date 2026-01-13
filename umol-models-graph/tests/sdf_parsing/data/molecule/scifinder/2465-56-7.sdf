@@ -1,0 +1,31 @@
+Methylene
+CH2
+2465-56-7 Copyright (C) 2025 ACS
+  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  2  0  0  0  0  0  0
+M  END
+> <cas.rn>
+2465-56-7
+
+> <ca.index.name>
+Methylene
+
+> <molecular.formula>
+CH2
+
+> <smiles.canonical>
+[CH2]
+
+> <molecular.weight>
+14.03
+
+> <melting.point.experimental>
+135-136 °C    Solvent: Carbon tetrachloride
+
+> <boiling.point.predicted>
+-164.000±7.00 °C    Press: 760.00 Torr
+
+> <pka.experimental>
+4.92
+
+$$$$

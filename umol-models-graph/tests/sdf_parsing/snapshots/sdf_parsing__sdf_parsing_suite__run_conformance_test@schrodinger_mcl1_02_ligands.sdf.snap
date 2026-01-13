@@ -1,0 +1,622 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 25
+  summaries:
+    - sum_formula: C22H18NO3-
+      atom_count: 44
+      bond_count: 47
+      property_count: 43
+    - sum_formula: C21H21ClNO3-
+      atom_count: 47
+      bond_count: 49
+      property_count: 43
+    - sum_formula: C21H17N2O3-
+      atom_count: 43
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H18ClO3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H18ClO4-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C21H20NO3-
+      atom_count: 45
+      bond_count: 48
+      property_count: 43
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C21H20Cl2NO3-
+      atom_count: 47
+      bond_count: 49
+      property_count: 43
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H17ClNO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C20H17N2O3-
+      atom_count: 42
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C18H15ClNO3-
+      atom_count: 38
+      bond_count: 40
+      property_count: 43
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C18H16NO3-
+      atom_count: 38
+      bond_count: 40
+      property_count: 43
+molecule_lenient:
+  success: true
+  compound_count: 25
+  summaries:
+    - sum_formula: C22H18NO3-
+      atom_count: 44
+      bond_count: 47
+      property_count: 43
+    - sum_formula: C21H21ClNO3-
+      atom_count: 47
+      bond_count: 49
+      property_count: 43
+    - sum_formula: C21H17N2O3-
+      atom_count: 43
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H18ClO3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H18ClO4-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C21H20NO3-
+      atom_count: 45
+      bond_count: 48
+      property_count: 43
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      property_count: 43
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C21H20Cl2NO3-
+      atom_count: 47
+      bond_count: 49
+      property_count: 43
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H17ClNO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C20H17N2O3-
+      atom_count: 42
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      property_count: 43
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C18H15ClNO3-
+      atom_count: 38
+      bond_count: 40
+      property_count: 43
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      property_count: 43
+    - sum_formula: C18H16NO3-
+      atom_count: 38
+      bond_count: 40
+      property_count: 43
+extended_molecule:
+  success: true
+  compound_count: 25
+  extended_summaries:
+    - sum_formula: C22H18NO3-
+      atom_count: 44
+      bond_count: 47
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H21ClNO3-
+      atom_count: 47
+      bond_count: 49
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H17N2O3-
+      atom_count: 43
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18ClO3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18ClO4-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H20NO3-
+      atom_count: 45
+      bond_count: 48
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H20Cl2NO3-
+      atom_count: 47
+      bond_count: 49
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H17ClNO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17N2O3-
+      atom_count: 42
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C18H15ClNO3-
+      atom_count: 38
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C18H16NO3-
+      atom_count: 38
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 25
+  extended_summaries:
+    - sum_formula: C22H18NO3-
+      atom_count: 44
+      bond_count: 47
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H21ClNO3-
+      atom_count: 47
+      bond_count: 49
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H17N2O3-
+      atom_count: 43
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18ClO3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18ClO4-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H20NO3-
+      atom_count: 45
+      bond_count: 48
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H19ClNO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H18Cl2NO3-
+      atom_count: 44
+      bond_count: 46
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C21H20Cl2NO3-
+      atom_count: 47
+      bond_count: 49
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H15F3NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H17ClNO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H16Cl2NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17N2O3-
+      atom_count: 42
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C20H17Cl2O3S-
+      atom_count: 43
+      bond_count: 45
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C18H15ClNO3-
+      atom_count: 38
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C19H18NO3-
+      atom_count: 41
+      bond_count: 43
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C18H16NO3-
+      atom_count: 38
+      bond_count: 40
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 43
+      rgroup_count: 0
+      sgroup_count: 0

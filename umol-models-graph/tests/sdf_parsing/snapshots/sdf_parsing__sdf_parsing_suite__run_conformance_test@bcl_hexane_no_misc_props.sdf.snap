@@ -1,0 +1,22 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 0
+  summaries: []
+molecule_lenient:
+  success: true
+  compound_count: 0
+  summaries: []
+extended_molecule:
+  success: true
+  compound_count: 0
+  extended_summaries: []
+extended_molecule_lenient:
+  success: true
+  compound_count: 0
+  extended_summaries: []

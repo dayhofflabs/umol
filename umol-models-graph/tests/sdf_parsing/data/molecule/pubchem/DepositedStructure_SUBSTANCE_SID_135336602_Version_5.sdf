@@ -1,0 +1,42 @@
+135336602
+  -OEChem-01122622212D
+
+  0  0  0     0  0  0  0  0  0999 V2000
+M  END
+> <PUBCHEM_SUBSTANCE_ID>
+135336602
+
+> <PUBCHEM_SUBSTANCE_VERSION>
+5
+
+> <PUBCHEM_EXT_DATASOURCE_NAME>
+ChemIDplus
+
+> <PUBCHEM_EXT_DATASOURCE_REGID>
+0058927267
+
+> <PUBCHEM_SUBSTANCE_COMMENT>
+0058927267
+
+> <PUBCHEM_SUBSTANCE_SYNONYM>
+Tri(deoxycytidylic acid-deoxyguanylic acid)
+58927-26-7
+Guanosine, 2'-deoxycytidylyl-(3'-5')-2'-deoxyguanylyl-(3'-5')-2'-deoxycytidylyl-(3'-5')-2'-deoxyguanylyl-(3'-5')-2'-deoxycytidylyl-(3'-5')-2'-deoxy-, stereoisomer
+d(CG)3
+d(Cgcgcg)
+d(Cpgpcpgpcpg)
+(dC-dG)(3)
+
+> <PUBCHEM_GENERIC_REGISTRY_NAME>
+58927-26-7
+
+> <PUBCHEM_XREF_EXT_ID>
+0058927267
+
+> <PUBCHEM_EXT_DATASOURCE_URL>
+https://pubchem.ncbi.nlm.nih.gov/source/ChemIDplus
+
+> <PUBCHEM_EXT_SUBSTANCE_URL>
+https://pubchem.ncbi.nlm.nih.gov/substance/?source=ChemIDplus&sourceid=0058927267
+
+$$$$

@@ -50,6 +50,10 @@ bench = false
 name = "parse_smiles"
 bench = false
 
+[[bin]]
+name = "classify_sdf_files"
+bench = false
+
 [[bench]]
 name = "mol_parsing"
 harness = false

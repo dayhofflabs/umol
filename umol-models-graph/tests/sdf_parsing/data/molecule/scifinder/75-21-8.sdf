@@ -1,0 +1,36 @@
+Ethylene oxide
+C2H4O
+75-21-8 Copyright (C) 2025 ACS
+  3  3  0  0  0  0  0  0  0  0999 V2000
+    0.0000    1.3337    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5400    1.3337    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7700    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END
+> <cas.rn>
+75-21-8
+
+> <ca.index.name>
+Oxirane
+
+> <molecular.formula>
+C2H4O
+
+> <smiles.canonical>
+O1CC1
+
+> <molecular.weight>
+44.05
+
+> <melting.point.experimental>
+-111 °C
+
+> <boiling.point.experimental>
+10.7 °C    Press: 760 Torr
+
+> <density.experimental>
+0.882 g/cm³    Temp: 10 °C
+
+$$$$

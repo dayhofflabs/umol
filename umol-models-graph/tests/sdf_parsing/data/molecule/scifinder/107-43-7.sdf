@@ -1,0 +1,46 @@
+Betaine
+C5H11NO2
+107-43-7 Copyright (C) 2025 ACS
+  8  7  0  0  0  0  0  0  0  0999 V2000
+    3.0800    1.5400    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5400    1.5400    0.0000 N   0  3  0  0  0  4  0  0  0  0  0  0
+    3.8500    2.8736    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.5400    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5400    3.0800    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    5.3900    2.8736    0.0000 O   0  5  0  0  0  0  0  0  0  0  0  0
+    3.0800    4.2073    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+  3  7  1  0  0  0  0
+  3  8  2  0  0  0  0
+M  CHG  2   2   1   7  -1
+M  END
+> <cas.rn>
+107-43-7
+
+> <ca.index.name>
+Methanaminium, 1-carboxy-N,N,N-trimethyl-, inner salt
+
+> <molecular.formula>
+C5H11NO2
+
+> <smiles.canonical>
+O=C([O-])C[N+](C)(C)C
+
+> <molecular.weight>
+117.15
+
+> <melting.point.experimental>
+293 °C (decomp)
+
+> <density.experimental>
+1.195 x 10⁻³ g/cm³    Temp: 25 °C; Press: 750 Torr
+
+> <pka.experimental>
+1.84
+
+$$$$

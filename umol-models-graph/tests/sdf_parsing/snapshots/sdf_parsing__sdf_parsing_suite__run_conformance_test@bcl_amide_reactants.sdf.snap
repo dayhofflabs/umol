@@ -1,0 +1,70 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 2
+  summaries:
+    - sum_formula: C5H8O2
+      atom_count: 15
+      bond_count: 15
+      property_count: 0
+    - sum_formula: C3H9N
+      atom_count: 13
+      bond_count: 12
+      property_count: 0
+molecule_lenient:
+  success: true
+  compound_count: 2
+  summaries:
+    - sum_formula: C5H8O2
+      atom_count: 15
+      bond_count: 15
+      property_count: 0
+    - sum_formula: C3H9N
+      atom_count: 13
+      bond_count: 12
+      property_count: 0
+extended_molecule:
+  success: true
+  compound_count: 2
+  extended_summaries:
+    - sum_formula: C5H8O2
+      atom_count: 15
+      bond_count: 15
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C3H9N
+      atom_count: 13
+      bond_count: 12
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 2
+  extended_summaries:
+    - sum_formula: C5H8O2
+      atom_count: 15
+      bond_count: 15
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C3H9N
+      atom_count: 13
+      bond_count: 12
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 0
+      rgroup_count: 0
+      sgroup_count: 0

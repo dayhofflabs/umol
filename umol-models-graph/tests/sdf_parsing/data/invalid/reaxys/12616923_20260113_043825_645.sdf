@@ -1,0 +1,1570 @@
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <FA.FA>
+RX(13),YY(1),LB(9),MB(1),CALC(1),EXTID(2),RSTR(1),AUTEX(1),ASSM(1),HFOR(2),FINFO(1),IP(1),OTHE(2),NMR(23),IR(4),MS(2),RAMAN(1),OSM(1),RCT(5),PRO(8),BEH(11),PRE(3),DET(11),CNR(40)
+
+>  <LB.LB>
+cation 11
+
+>  <LB.citation>
+6054377; Article; Abboud, José-Luis M.; Castaño, Obis; Della, Ernest W.; Herreros, Marta; Müller, Pa
+ul; Notario, Rafael; Rossier, Jean-Claude; Journal of the American Chemical Society; vol. 119; 9; (1
+997); p. 2262 - 2266; 
+
+>  <RSTR.citation>
+59377; Article; Goering,H.; Humski,K.; Journal of the American Chemical Society; vol. 90; (1968); p. 6213 - 6214; |5214459; Article; Olah; White; Journal of the American Chemical Society; vol. 91; (19
+69); p. 3954; |5214504; Article; Klopman; Journal of the American Chemical Society; vol. 91; (1969); p. 89; 
+
+>  <ASSM.KW>
+NMR spectrum of the complex
+
+>  <ASSM.T>
+-76
+
+>  <ASSM.PA>
+C7H10(2)H(1+)
+
+>  <ASSM.citation>
+5737664; Article; Saunders, Martin; Kates, Mandes R.; Journal of the American Chemical Society; vol. 105; 11; (1983); p. 3571 - 3573; 
+
+>  <HFOR.HFOR>
+-97134
+
+>  <HFOR.T>
+-55
+
+>  <HFOR.citation>
+5628949; Article; Arnett, Edward M.; Pienta, Norbert J.; Journal of the American Chemical Society; vol. 102; 10; (1980); p. 3329 - 3334; 
+
+>  <FINFO.KW>
+Further information
+
+>  <FINFO.citation>
+4221008; Article; Clark et al.; Journal of the Chemical Society. Chemical communications; (1977); p. 276; 
+
+>  <IP.citation>
+3085765; Article; Staley et al.; Journal of the American Chemical Society; vol. 99; (1977); p. 5964,5966,5967,5969-5971; 
+
+>  <OTHE.KW>
+Enthalpy
+
+>  <OTHE.citation>
+2862688; Article; Wieting et al.; Journal of the American Chemical Society; vol. 96; (1974); p. 7552; |3085765; Article; Staley et al.; Journal of the American Chemical Society; vol. 99; (1977); p. 59
+64,5966,5967,5969-5971; 
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.NUC>
+13C
+
+>  <NMR.SOL>
+solid matrix
+
+>  <NMR.T>
+-267.2 - -153.2
+
+>  <NMR.citation>
+5516677; Article; Myhre; Webb, Gretchen G.; Yannoni; Journal of the American Chemical Society; vol. 112; 24; (1990); p. 8991 - 8992; 
+
+>  <IR.KW>
+Spectrum
+
+>  <IR.SOL>
+various solvent(s)
+
+>  <IR.T>
+-73.2
+
+>  <IR.COM>
+1550 - 800 cm**(-1)
+
+>  <IR.citation>
+5845044; Article; Sieber, Stefan; Schleyer, Paul von Rague; Vancik, Hrvoj; Mesic, Milan; Sunko, Dionis E.; Angewandte Chemie; vol. 105; 11; (1993); p. 1673 - 1675; 
+
+>  <MS.KW>
+spectrum
+
+>  <MS.citation>
+5760408; Article; Blanchette, Marcia C.; Holmes, John L.; Lossing, F. P.; Journal of the American Chemical Society; vol. 109; 5; (1987); p. 1392 - 1395; 
+
+>  <RAMAN.KW>
+Raman
+
+>  <RAMAN.citation>
+4252170; Article; Olah et al.; Journal of the American Chemical Society; vol. 92; (1970); p. 4627,4631; 
+
+>  <OSM.KW>
+ESCA
+
+>  <OSM.citation>
+5760509; Article; Johnson, Stephen A.; Clark, David T.; Journal of the American Chemical Society; vol. 110; 13; (1988); p. 4112 - 4117; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+4
+
+>  <LB.citation>
+5845044; Article; Sieber, Stefan; Schleyer, Paul von Rague; Vancik, Hrvoj; Mesic, Milan; Sunko, Dionis E.; Angewandte Chemie; vol. 105; 11; (1993); p. 1673 - 1675; 
+
+>  <HFOR.citation>
+3100352; Article; Larsen; Metzner; Journal of the American Chemical Society; vol. 94; (1972); p. 1614,1617; |4037883; Article; Saluja; Kebarle; Journal of the American Chemical Society; vol. 101; (197
+9); p. 1084,1085; 
+
+>  <OTHE.KW>
+Thermodynamic properties
+
+>  <OTHE.citation>
+3085765; Article; Staley et al.; Journal of the American Chemical Society; vol. 99; (1977); p. 5964,5966,5967,5969-5971; 
+
+>  <NMR.KW>
+Chemical shifts
+
+>  <NMR.NUC>
+1H
+
+>  <NMR.SOL>
+CH2Cl2
+
+>  <NMR.T>
+-80 - -30
+
+>  <NMR.citation>
+5787043; Article; Kramer, G. M.; Scouten, C. G.; Kastrup, R. V.; Ernst, E. R.; Pictroski, C. F.; Journal of Physical Chemistry; vol. 93; 16; (1989); p. 6257 - 6260; 
+
+>  <IR.KW>
+Spectrum
+
+>  <IR.SOL>
+neat (no solvent)
+
+>  <IR.T>
+-123.2 - -73.2
+
+>  <IR.COM>
+3200 - 800 cm**(-1)
+
+>  <IR.citation>
+5505464; Article; Koch, Wolfram; Liu, Bowen; DeFrees, Douglas J.; Sunko, Dionis E.; Vancik, Hrvoj; Angewandte Chemie; vol. 102; 2; (1990); p. 198 - 200; 
+
+>  <MS.KW>
+ion-cyclotron resonance
+
+>  <MS.citation>
+3085765; Article; Staley et al.; Journal of the American Chemical Society; vol. 99; (1977); p. 5964,5966,5967,5969-5971; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+2-Nb(+)
+
+>  <LB.citation>
+5787043; Article; Kramer, G. M.; Scouten, C. G.; Kastrup, R. V.; Ernst, E. R.; Pictroski, C. F.; Journal of Physical Chemistry; vol. 93; 16; (1989); p. 6257 - 6260; 
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.NUC>
+1H
+
+>  <NMR.SOL>
+various solvent(s)
+
+>  <NMR.T>
+-100
+
+>  <NMR.citation>
+2367882; Article; Olah,G.A.; Prakash,G.K.; Arvanaghi,M.; Journal of the American Chemical Society; vol. 104; (1982); p. 7105; 
+
+>  <IR.KW>
+Spectrum
+
+>  <IR.SOL>
+solid matrix
+
+>  <IR.T>
+-123.2
+
+>  <IR.COM>
+3100 - 750 cm**(-1)
+
+>  <IR.citation>
+5516116; Article; Vancik; Percac; Sunko; Journal of the American Chemical Society; vol. 112; 20; (1990); p. 7418 - 7419; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+Nb(1+)
+
+>  <LB.citation>
+5720217; Article; Sharma, R. B.; Sharma, D. K. Sen; Hiraoka, K.; Kebarle, P.; Journal of the American Chemical Society; vol. 107; 13; (1985); p. 3747 - 3757; 
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.NUC>
+1H
+
+>  <NMR.SOL>
+various solvent(s)
+
+>  <NMR.T>
+-100 - 158
+
+>  <NMR.citation>
+2367882; Article; Olah,G.A.; Prakash,G.K.; Arvanaghi,M.; Journal of the American Chemical Society; vol. 104; (1982); p. 7105; 
+
+>  <IR.KW>
+Bands
+
+>  <IR.SOL>
+solid matrix
+
+>  <IR.T>
+-123.2
+
+>  <IR.COM>
+3100 - 865 cm**(-1)
+
+>  <IR.citation>
+5516116; Article; Vancik; Percac; Sunko; Journal of the American Chemical Society; vol. 112; 20; (1990); p. 7418 - 7419; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+2-Nb(1+)
+
+>  <LB.citation>
+5720218; Article; Sharma, Dilip K. Sen; Hoejer, Sarah Meza de; Kebarle, Paul; Journal of the American Chemical Society; vol. 107; 13; (1985); p. 3757 - 3762; 
+
+>  <NMR.KW>
+Chemical shifts
+
+>  <NMR.NUC>
+1H
+
+>  <NMR.SOL>
+various solvent(s)
+
+>  <NMR.citation>
+2367882; Article; Olah,G.A.; Prakash,G.K.; Arvanaghi,M.; Journal of the American Chemical Society; vol. 104; (1982); p. 7105; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+10
+
+>  <LB.citation>
+4124224; Article; Kelly; Brown; Australian Journal of Chemistry; vol. 29; (1976); p. 957,960, 964, 965; 
+
+>  <NMR.KW>
+Chemical shifts
+
+>  <NMR.NUC>
+1H
+
+>  <NMR.SOL>
+various solvent(s)
+
+>  <NMR.T>
+-100
+
+>  <NMR.citation>
+2367882; Article; Olah,G.A.; Prakash,G.K.; Arvanaghi,M.; Journal of the American Chemical Society; vol. 104; (1982); p. 7105; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+11
+
+>  <LB.citation>
+4187558; Article; Altmann et al.; Journal of the American Chemical Society; vol. 98; (1976); p. 7132,7133; 
+
+>  <NMR.KW>
+Chemical shifts
+
+>  <NMR.NUC>
+1H
+
+>  <NMR.SOL>
+various solvent(s)
+
+>  <NMR.T>
+-158
+
+>  <NMR.citation>
+2367882; Article; Olah,G.A.; Prakash,G.K.; Arvanaghi,M.; Journal of the American Chemical Society; vol. 104; (1982); p. 7105; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+1
+
+>  <LB.citation>
+4252170; Article; Olah et al.; Journal of the American Chemical Society; vol. 92; (1970); p. 4627,4631; 
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.NUC>
+1H
+
+>  <NMR.SOL>
+various solvent(s)
+
+>  <NMR.T>
+-125
+
+>  <NMR.citation>
+5628606; Article; Arnett, Edward M.; Pienta, Norbert; Petro, Craig; Journal of the American Chemical Society; vol. 102; 1; (1980); p. 398 - 400; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <LB.LB>
+2
+
+>  <LB.citation>
+4050134; Article; Hogeveen; Gaasbeek; Recueil des Travaux Chimiques des Pays-Bas; vol. 89; (1970); p. 395,397; 
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+S. 5684
+
+>  <NMR.citation>
+72544; Article; Olah,G.A. et al.; Journal of the American Chemical Society; vol. 99; 17; (1977); p. 5683 - 5687; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+13C (S. 964)
+
+>  <NMR.citation>
+4124224; Article; Kelly; Brown; Australian Journal of Chemistry; vol. 29; (1976); p. 957,960, 964, 965; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+13C: signifikante Abweichungen gegenueber Olah et al., J. Am. Chem. Soc. 95 <1973> 8698 (S. 964)
+
+>  <NMR.citation>
+4124224; Article; Kelly; Brown; Australian Journal of Chemistry; vol. 29; (1976); p. 957,960, 964, 965; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+1H
+
+>  <NMR.citation>
+4252170; Article; Olah et al.; Journal of the American Chemical Society; vol. 92; (1970); p. 4627,4631; |5039916; Article; Olah; Makromolekulare Chemie; vol. 175; (1974); p. 1039,1042; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+13C
+
+>  <NMR.citation>
+4252170; Article; Olah et al.; Journal of the American Chemical Society; vol. 92; (1970); p. 4627,4631; |5039916; Article; Olah; Makromolekulare Chemie; vol. 175; (1974); p. 1039,1042; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+1H (s. Fig. 1 ,links)
+
+>  <NMR.citation>
+68059; Article; Olah,G.A.; Mo,Y.K.; Journal of the American Chemical Society; vol. 96; (1974); p. 3560 - 3564; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+Spin-spin coupling constants
+
+>  <NMR.citation>
+4252170; Article; Olah et al.; Journal of the American Chemical Society; vol. 92; (1970); p. 4627,4631; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+INDOR
+
+>  <NMR.COM>
+13C-INDOR-Spektrum
+
+>  <NMR.citation>
+4252170; Article; Olah et al.; Journal of the American Chemical Society; vol. 92; (1970); p. 4627,4631; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.COM>
+H-NMR
+
+>  <NMR.citation>
+5214459; Article; Olah; White; Journal of the American Chemical Society; vol. 91; (1969); p. 3954; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.COM>
+13C-NMR
+
+>  <NMR.citation>
+5214459; Article; Olah; White; Journal of the American Chemical Society; vol. 91; (1969); p. 3954; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+(25grad, SO2) und in Abh. v. d. Temp. (-80grad, -143grad)
+
+>  <NMR.citation>
+3974109; Article; Jensen; Beck; Tetrahedron Letters; (1966); p. 4287,4288, 4289; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.COM>
+1H (S. 2998)
+
+>  <NMR.citation>
+3814674; Article; Olah et al.; Journal of the American Chemical Society; vol. 87; (1965); p. 2997; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+Spectrum
+
+>  <NMR.COM>
+0-7 ppm (in SbF5 bei 37grad und in SbF5-SO2 bei -60grad)
+
+>  <NMR.citation>
+4142202; Article; Schleyer et al.; Journal of the American Chemical Society; vol. 86; (1964); p. 5679; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+0-7 ppm, Temperaturbereich von -120grad bis +3grad
+
+>  <NMR.citation>
+4142203; Article; Saunders et al.; Journal of the American Chemical Society; vol. 86; (1964); p. 5680; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$
+
+  Mrv17d0 01132604382D          
+HDR
+  7  8  0  0  0  0            999 V2000
+    0.7047    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.4684    0.8292    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7047    1.6509    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.2269    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4179    1.2269    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  4  7  1  0  0  0  0
+  5  6  1  0  0  0  0
+  5  7  1  0  0  0  0
+M  CHG  1   7   1
+M  END
+>  <IDE.XRN>
+1847831
+
+>  <IDE.RN>
+24321-81-1
+
+>  <IDE.CN>
+norbornan-2-ylium|2-Norbornyl-Kation|2-norbornyl cation|Norbornylkation|norbornyl cation|Norbornyl-(2)-Kation
+
+>  <IDE.LSF>
+C7H11(1+)
+
+>  <IDE.MF>
+C7H11
+
+>  <IDE.MW>
+95.1643
+
+>  <IDE.STYPE>
+isocyclic
+
+>  <IDE.INCHI>
+ZABTZKBSEKPKKW-UHFFFAOYSA-N
+
+>  <NMR.KW>
+NMR
+
+>  <NMR.COM>
+In SbF5-SO2ClF-SO2 bei -143grad
+
+>  <NMR.citation>
+4142203; Article; Saunders et al.; Journal of the American Chemical Society; vol. 86; (1964); p. 5680; 
+
+>  <COPYRIGHT>
+Copyright (C) 2026 Elsevier Life Sciences IP Limited except certain content provided by third parties. Reaxys is a trademark of Elsevier Life Sciences IP Limited.
+
+$$$$

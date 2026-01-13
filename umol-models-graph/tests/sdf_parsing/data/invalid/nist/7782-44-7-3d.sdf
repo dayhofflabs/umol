@@ -1,0 +1,48 @@
+Oxygen
+  NIST    06271311353D 1   1.00000  -150.25743
+Copyright by the U.S. Sec. Commerce on behalf of U.S.A. All rights reserved.
+  2  1  0  0  0  0  0  0  0  0999 V2000
+   -0.0576    0.0000    0.0000 O    0  0  0  0  0  0  0  0  0  0  0  0
+    1.1584    0.0000    0.0000 O    0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0
+M  END
+> <COPYRIGHT>
+Collection (C) 2016 copyright by the U.S. Secretary of Commerce on behalf of the United States of America. All rights reserved.
+
+> <DATE>
+2013-06-27
+
+> <CAS.NUMBER>
+7782-44-7
+
+> <SYNONYMS>
+Oxygen
+5: PN: WO2013059649 SEQID: 3 claimed DNA
+Dioxygen
+Molecular oxygen
+
+> <METHOD>
+B3LYP/6-31G*
+
+> <DIPOLE.MOMENT>
+0.0000 debye
+
+> <ELECTRONIC.ENERGY>
+-150.257426732 hartree
+
+> <IR.FREQUENCIES>
+"Frequency (cm-1)"   "Intensity (km/mol)"
+1643.5115  0.0000
+
+> <ROTATIONAL.CONSTANTS>
+0.0000000 GHz
+42.7416942 GHz
+42.7416942 GHz
+
+> <SOFTWARE>
+Gaussian 09, Revision D.01
+
+> <CONTRIBUTOR>
+Michael Liou
+
+$$$$

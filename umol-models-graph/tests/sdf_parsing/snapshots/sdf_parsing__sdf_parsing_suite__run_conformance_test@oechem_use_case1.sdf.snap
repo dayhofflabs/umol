@@ -1,0 +1,70 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 2
+  summaries:
+    - sum_formula: C3H7CaO6P
+      atom_count: 18
+      bond_count: 16
+      property_count: 34
+    - sum_formula: CLi2O3
+      atom_count: 6
+      bond_count: 3
+      property_count: 32
+molecule_lenient:
+  success: true
+  compound_count: 2
+  summaries:
+    - sum_formula: C3H7CaO6P
+      atom_count: 18
+      bond_count: 16
+      property_count: 34
+    - sum_formula: CLi2O3
+      atom_count: 6
+      bond_count: 3
+      property_count: 32
+extended_molecule:
+  success: true
+  compound_count: 2
+  extended_summaries:
+    - sum_formula: C3H7CaO6P
+      atom_count: 18
+      bond_count: 16
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: CLi2O3
+      atom_count: 6
+      bond_count: 3
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 32
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 2
+  extended_summaries:
+    - sum_formula: C3H7CaO6P
+      atom_count: 18
+      bond_count: 16
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 34
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: CLi2O3
+      atom_count: 6
+      bond_count: 3
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 32
+      rgroup_count: 0
+      sgroup_count: 0

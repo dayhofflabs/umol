@@ -1,0 +1,46 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C21H27N7O14P2
+      atom_count: 71
+      bond_count: 75
+      property_count: 35
+molecule_lenient:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C21H27N7O14P2
+      atom_count: 71
+      bond_count: 75
+      property_count: 35
+extended_molecule:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C21H27N7O14P2
+      atom_count: 71
+      bond_count: 75
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 35
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C21H27N7O14P2
+      atom_count: 71
+      bond_count: 75
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 35
+      rgroup_count: 0
+      sgroup_count: 0

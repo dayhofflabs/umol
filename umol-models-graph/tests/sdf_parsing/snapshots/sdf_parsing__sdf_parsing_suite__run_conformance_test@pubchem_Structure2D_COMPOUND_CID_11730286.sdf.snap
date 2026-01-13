@@ -1,0 +1,46 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+expression: results
+---
+expected_category: molecule
+category: molecule
+molecule:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C20H43Ta-3
+      atom_count: 64
+      bond_count: 60
+      property_count: 33
+molecule_lenient:
+  success: true
+  compound_count: 1
+  summaries:
+    - sum_formula: C20H43Ta-3
+      atom_count: 64
+      bond_count: 60
+      property_count: 33
+extended_molecule:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C20H43Ta-3
+      atom_count: 64
+      bond_count: 60
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 33
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C20H43Ta-3
+      atom_count: 64
+      bond_count: 60
+      extended_atoms: 0
+      extended_bonds: 0
+      property_count: 33
+      rgroup_count: 0
+      sgroup_count: 0
