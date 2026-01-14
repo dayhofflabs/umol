@@ -4,8 +4,8 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use nom::Parser;
-use umol_models_graph::io::ctab::config::CtabParseFlags;
-use umol_models_graph::io::ctab::parser::{
+use umol_models_graph::io::ctfile::config::CtabParseFlags;
+use umol_models_graph::io::ctfile::parser::{
     atom_input, bond_input, counts_input, extended_atom_input, extended_bond_input,
     extended_property_input, legacy_atom_list_input, property_input,
 };
@@ -127,7 +127,7 @@ fn mol_parsing(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| {
-                    extended_atom_input(CtabParseFlags::LENIENT).parse(std::hint::black_box(input))
+                    extended_atom_input(CtabParseFlags::EXTENDED).parse(std::hint::black_box(input))
                 })
             });
         }
@@ -169,7 +169,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| extended_bond_input(CtabParseFlags::LENIENT).parse(black_box(input)))
+                b.iter(|| extended_bond_input(CtabParseFlags::EXTENDED).parse(black_box(input)))
             });
         }
         group.finish();
@@ -184,7 +184,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| legacy_atom_list_input(CtabParseFlags::BASIC).parse(black_box(input)))
+                b.iter(|| legacy_atom_list_input(CtabParseFlags::EXTENDED).parse(black_box(input)))
             });
         }
         group.finish();
@@ -326,7 +326,7 @@ fn mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| extended_property_input(CtabParseFlags::LENIENT).parse(black_box(input)))
+                b.iter(|| extended_property_input(CtabParseFlags::EXTENDED).parse(black_box(input)))
             });
         }
         group.finish();

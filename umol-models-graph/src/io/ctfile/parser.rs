@@ -15,6 +15,7 @@ pub use self::atom::{atom_input, extended_atom_input}; // NOTE: Re-exported for 
 use self::bond::{bond_block, extended_bond_block};
 pub use self::bond::{bond_input, extended_bond_input}; // NOTE: Re-exported for benchmarks
 use self::counts::counts_block;
+pub use self::counts::counts_input; // NOTE: Re-exported for benchmarks
 use self::header::header_block;
 use self::legacy_atom_list::legacy_atom_list_block;
 pub use self::legacy_atom_list::legacy_atom_list_input; // NOTE: Re-exported for benchmarks
