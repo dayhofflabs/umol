@@ -134,7 +134,7 @@ fn test_bond_input(
 }
 
 #[rstest]
-#[case::line_too_short(b"  1  2 ", NomErrorKind::MapRes)]
+#[case::line_too_short(b"  1  2", NomErrorKind::Eof)]
 #[case::extended_range_quadruple(b"  1  2  9", NomErrorKind::MapRes)]
 #[case::extended_range_zero(b"  1  2  0", NomErrorKind::MapRes)]
 #[case::invalid_extended(b"  2  5  2  1  0  0  1", NomErrorKind::Verify)]
@@ -170,7 +170,6 @@ fn test_bond_input_strict_invalid(#[case] input: &[u8], #[case] expected_kind: N
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_6_blank_bond_type(b"  1  2", 0, 1, BondOrder::Zero)]
 #[case::len_9_zero_bond(b"  1  2  0", 0, 1, BondOrder::Zero)]
 #[case::len_9_quadruple_bond(b"  1  2  9", 0, 1, BondOrder::Quadruple)]
 fn test_bond_input_lenient(
@@ -187,6 +186,22 @@ fn test_bond_input_lenient(
     assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
     assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
+}
+
+#[rstest]
+#[case::len_6_too_short(b"  1  2", NomErrorKind::Eof)]
+fn test_bond_input_lenient_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let input_str = input.to_str_lossy();
+    let mut parser = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT);
+    let result = parser.parse(input);
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rustfmt::skip]
@@ -229,7 +244,7 @@ fn test_extended_bond_input(
 }
 
 #[rstest]
-#[case::len_6_too_short(b"  1  2", NomErrorKind::MapRes)]
+#[case::len_6_too_short(b"  1  2", NomErrorKind::Eof)]
 #[case::bond_type_above_range(b"  1  2  9", NomErrorKind::MapRes)]
 #[case::bond_type_below_range(b"  1  2  0", NomErrorKind::MapRes)]
 #[case::invalid_topology(b"  2  5  2  0  0  4  0", NomErrorKind::MapRes)]
@@ -326,7 +341,7 @@ fn test_bond_input21(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] dir: Option<BondDirection>,
+    #[case] direction: Option<BondDirection>,
 ) {
     let result = bond_input21(input, CtabParseFlags::BASIC);
     let input_str = input.to_str_lossy();
@@ -337,7 +352,7 @@ fn test_bond_input21(
     assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
     assert_eq!(bond.stereo, stereo, "{:?} has returned stereo {:?}, expected {:?}", input_str, bond.stereo, stereo);
-    assert_eq!(bond.direction, dir, "{:?} has returned dir {:?}, expected {:?}", input_str, bond.direction, dir);
+    assert_eq!(bond.direction, direction, "{:?} has returned dir {:?}, expected {:?}", input_str, bond.direction, direction);
 }
 
 #[rustfmt::skip]
@@ -395,7 +410,7 @@ fn test_bond_input21_lenient(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] dir: Option<BondDirection>,
+    #[case] direction: Option<BondDirection>,
 ) {
     let result = bond_input21(input, CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT);
     let input_str = input.to_str_lossy();
@@ -427,9 +442,9 @@ fn test_bond_input21_lenient(
         input_str, bond.stereo, stereo
     );
     assert_eq!(
-        bond.direction, dir,
+        bond.direction, direction,
         "{:?} has returned dir {:?}, expected {:?}",
-        input_str, bond.direction, dir
+        input_str, bond.direction, direction
     );
 }
 

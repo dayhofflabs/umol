@@ -194,6 +194,12 @@ pub fn atom_input<'inp>(
     let atom_map_hcount_fields = flags.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     move |input: &'inp [u8]| {
+
+
+        if input.len() < 32 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
         // x, y, z coordinates
         let (remaining, position) = fixed_width_position(ignore_positions).parse(input)?;
 
@@ -340,6 +346,12 @@ pub fn extended_atom_input<'inp>(
     let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     move |input: &'inp [u8]| {
+
+
+        if input.len() < 32 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
         // x, y, z coordinates
         let (remaining, position) = fixed_width_position(ignore_positions).parse(input)?;
 

@@ -142,6 +142,10 @@ pub fn bond_input<'inp>(
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     move |input: &'inp [u8]| {
+        if input.len() < 9 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
         // Atom indices
         let (remaining, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
         let (remaining, second_atom) = fixed_width_int_minus1::<usize>(3).parse(remaining)?;
@@ -217,6 +221,10 @@ pub fn extended_bond_input<'inp>(
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     let allow_wildcards = flags.contains(CtabParseFlags::WILDCARDS);
     move |input: &'inp [u8]| {
+        if input.len() < 9 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
         // Atom indices
         let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
         let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;

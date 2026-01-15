@@ -261,7 +261,7 @@ fn test_atom_input(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_31_too_short(b"    1.234a    2.3456    3.4567 ", NomErrorKind::Eof)]
+#[case::len_30_too_short(b"    1.2345    2.3456    3.4567", NomErrorKind::Eof)]
 #[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Eof)]
 #[case::atom_list(b"    0.7145    2.0625    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
 #[case::pseudoatom(b"   -1.8857    2.4750    0.0000 Psd 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
@@ -590,6 +590,7 @@ fn test_extended_atom_input(
 #[case::non_numeric_valence(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
 #[case::chemaxon_wildcard(b"    1.2345    2.3456    3.4567 AH 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
 #[case::pseudoatom(b"    1.2345    2.3456    3.4567 Ala 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
+#[case::len_30_too_short(b"    1.2345    2.3456    3.4567", NomErrorKind::Eof)]
 fn test_extended_atom_input_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
