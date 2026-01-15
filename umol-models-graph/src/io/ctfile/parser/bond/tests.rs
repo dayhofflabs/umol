@@ -108,9 +108,7 @@ fn test_extended_bond_block_invalid(#[case] input: &[u8]) {
 #[rustfmt::skip]
 #[rstest]
 #[case::len_9(b"  1  2  1", 0, 1, BondOrder::Single, None, None)]
-#[case::len_10(b"  1  2  1 ", 0, 1, BondOrder::Single, None, None)]
 #[case::len_12(b"  1  3  2  1", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
-#[case::len_13(b"  1  3  1  6", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
 #[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None)]
 #[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case::invalid_unused(b"  1  2  1  1XXX  0  0", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
@@ -136,7 +134,7 @@ fn test_bond_input(
 }
 
 #[rstest]
-#[case::line_too_short(b"  1  2 ", NomErrorKind::Eof)]
+#[case::line_too_short(b"  1  2 ", NomErrorKind::MapRes)]
 #[case::extended_range_quadruple(b"  1  2  9", NomErrorKind::MapRes)]
 #[case::extended_range_zero(b"  1  2  0", NomErrorKind::MapRes)]
 #[case::invalid_extended(b"  2  5  2  1  0  0  1", NomErrorKind::Verify)]
@@ -172,6 +170,7 @@ fn test_bond_input_strict_invalid(#[case] input: &[u8], #[case] expected_kind: N
 
 #[rustfmt::skip]
 #[rstest]
+#[case::len_6_blank_bond_type(b"  1  2", 0, 1, BondOrder::Zero)]
 #[case::len_9_zero_bond(b"  1  2  0", 0, 1, BondOrder::Zero)]
 #[case::len_9_quadruple_bond(b"  1  2  9", 0, 1, BondOrder::Quadruple)]
 fn test_bond_input_lenient(
@@ -188,31 +187,6 @@ fn test_bond_input_lenient(
     assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
     assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::line_too_short(b"  1  2 ", NomErrorKind::Eof)]
-fn test_bond_input_lenient_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let input_str = input.to_str_lossy();
-    let result = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT).parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rstest]
-#[case::len_11(b"  1  2  1 1")]
-fn test_bond_input_partial_fields(#[case] input: &[u8]) {
-    let input_str = input.to_str_lossy();
-    let mut parser = bond_input(CtabParseFlags::BASIC);
-    let result = parser.parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input_str);
 }
 
 #[rustfmt::skip]

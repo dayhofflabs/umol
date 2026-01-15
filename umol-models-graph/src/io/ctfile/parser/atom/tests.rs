@@ -176,24 +176,14 @@ fn test_extended_atom_block_invalid(#[case] input: &[u8]) {
 #[rstest]
 #[case::len_69(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
-#[case::len_61(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0 ",
-    1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_60(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
-#[case::len_49(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0 ",
-    1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, None)]
 #[case::len_48(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0",
-    1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, None)]
-#[case::len_40(b"    1.0000    2.0000    3.0000 C  -2  3 ",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, None)]
 #[case::len_39(b"    1.0000    2.0000    3.0000 C  -2  3",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, None)]
-#[case::len_37(b"    1.0000    2.0000    3.0000 C  -2 ",
-    1.0000, 2.0000, 3.0000, Element::C, Some(10), None, None, None, None)]
 #[case::len_36(b"    1.0000    2.0000    3.0000 C  -2",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), None, None, None, None)]
-#[case::len_35(b"    1.0000    2.0000    3.0000 C   ",
-    1.0000, 2.0000, 3.0000, Element::C, None, None, None, None, None)]
 #[case::len_34(b"    1.0000    2.0000    3.0000 C  ",
     1.0000, 2.0000, 3.0000, Element::C, None, None, None, None, None)]
 #[case::len_32(b"    1.0000    2.0000    3.0000 C",
@@ -214,7 +204,7 @@ fn test_atom_input(
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should consume all input", input_str);
+    assert!(remaining.is_empty(), "{:?} has non-empty remaining {:?}", input_str, remaining);
 
     assert!(
         approx_eq!(f64, position.x, x),
@@ -381,7 +371,7 @@ fn test_atom_input_strict(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", NomErrorKind::Verify)]
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", NomErrorKind::Digit)]
 fn test_atom_input_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,

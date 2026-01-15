@@ -25,10 +25,10 @@ pub(super) fn convert_atom_mass_diff_code(code: i8) -> Option<i8> {
 /// Processes elements and named isotopes.
 /// Returns error for extended atom symbols (L, A, Q, *, LP, R#)
 pub(super) fn convert_atom_symbol_mass_diff(
-    symbol: AtomSymbol,
+    symbol: &AtomSymbol,
     mass_diff: Option<i8>,
 ) -> (Element, Option<u32>) {
-    let (element, isotope_mass) = match symbol {
+    let (element, isotope_mass) = match *symbol {
         AtomSymbol::Element(e) => {
             let isotope_mass = match mass_diff {
                 None | Some(0) => None,
@@ -40,6 +40,22 @@ pub(super) fn convert_atom_symbol_mass_diff(
         _ => unreachable!("atom_symbol() should only return Element or NamedIsotope"),
     };
     (element, isotope_mass)
+}
+
+/// Convert extended atom symbol and mass difference to isotope mass
+/// 'ss' field: atom symbol, 'dd' field: mass difference
+/// Returns None for extended atom symbols (L, A, Q, *, LP, R#)
+pub(super) fn convert_extended_atom_symbol_mass_diff(
+    symbol: &AtomSymbol,
+    mass_diff: Option<i8>,
+) -> Option<u32> {
+    match *symbol {
+        AtomSymbol::Element(e) => {
+            mass_diff.map(|diff| (e.reference_mass_number() as i8 + diff) as u32)
+        }
+        AtomSymbol::NamedIsotope(iso) => Some(iso.mass_number()),
+        _ => None,
+    }
 }
 
 /// Convert atom charge code (includes doublet radical).
@@ -76,9 +92,7 @@ pub(super) fn convert_atom_isotope_mass_number(
 
 /// Convert atom stereo parity code to Chirality.
 /// 'sss' field: 0 = not stereo, 1 = odd (clockwise), 2 = even (counter-clockwise), 3 = either
-pub(super) fn convert_atom_stereo_parity_code(
-    code: u8,
-) -> Result<Option<Chirality>, ParseError> {
+pub(super) fn convert_atom_stereo_parity_code(code: u8) -> Result<Option<Chirality>, ParseError> {
     match code {
         0 => Ok(None),
         1 => Ok(Some(Chirality::Clockwise)),
@@ -446,6 +460,7 @@ mod tests {
     use umol_data::NamedIsotope;
 
     use super::*;
+    use crate::table_ir::WildcardAtom;
 
     #[rstest]
     #[case::zero(0, None)]
@@ -458,16 +473,34 @@ mod tests {
     }
 
     #[rstest]
-    #[case::element(AtomSymbol::Element(Element::C), None, (Element::C, None))]
-    #[case::element_mass_diff(AtomSymbol::Element(Element::C), Some(1), (Element::C, Some(13)))]
-    #[case::named_isotope(AtomSymbol::NamedIsotope(NamedIsotope::D), None, (Element::H, Some(2)))]
-    #[case::named_isotope_mass_diff(AtomSymbol::NamedIsotope(NamedIsotope::D), Some(3), (Element::H, Some(2)))]
+    #[case::element(&AtomSymbol::Element(Element::C), None, (Element::C, None))]
+    #[case::element_mass_diff(&AtomSymbol::Element(Element::C), Some(1), (Element::C, Some(13)))]
+    #[case::named_isotope(&AtomSymbol::NamedIsotope(NamedIsotope::D), None, (Element::H, Some(2)))]
+    #[case::named_isotope_mass_diff(&AtomSymbol::NamedIsotope(NamedIsotope::D), Some(3), (Element::H, Some(2)))]
     fn test_convert_atom_symbol_mass_diff(
-        #[case] symbol: AtomSymbol,
+        #[case] symbol: &AtomSymbol,
         #[case] mass_diff: Option<i8>,
         #[case] expected: (Element, Option<u32>),
     ) {
         assert_eq!(convert_atom_symbol_mass_diff(symbol, mass_diff), expected);
+    }
+
+    #[rstest]
+    #[case::element(&AtomSymbol::Element(Element::C), None, None)]
+    #[case::element_mass_diff(&AtomSymbol::Element(Element::C), Some(1), Some(13))]
+    #[case::named_isotope(&AtomSymbol::NamedIsotope(NamedIsotope::D), None, Some(2))]
+    #[case::named_isotope_mass_diff(&AtomSymbol::NamedIsotope(NamedIsotope::D), Some(3), Some(2))]
+    #[case::wildcard(&AtomSymbol::WildcardAtom(WildcardAtom::Any), None, None)]
+    #[case::wildcard(&AtomSymbol::WildcardAtom(WildcardAtom::Any), Some(-1), None)]
+    fn test_convert_extended_atom_symbol_mass_diff(
+        #[case] symbol: &AtomSymbol,
+        #[case] mass_diff: Option<i8>,
+        #[case] expected: Option<u32>,
+    ) {
+        assert_eq!(
+            convert_extended_atom_symbol_mass_diff(symbol, mass_diff),
+            expected
+        );
     }
 
     #[rstest]

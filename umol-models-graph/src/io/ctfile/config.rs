@@ -65,8 +65,8 @@ bitflags! {
             Self::ELECTRONS.bits() | Self::PSEUDOATOMS.bits() | Self::RGROUPS.bits() | Self::SGROUPS.bits() |
             Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits() | Self::LEGACY_ATOM_LISTS.bits();
 
-        // Strict parser: only parser capability extensions for extended parser over basic parser
-        // Basic strict = minimal parser
+        // Strict parser: only additional capabilities of extended parser over basic parser according to spec
+        // Basic strict: STRICT & BASIC = MINIMAL
         const STRICT = Self::WILDCARDS.bits() | Self::ELECTRONS.bits() |
             Self::RGROUPS.bits() | Self::SGROUPS.bits() | Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits();
 
@@ -101,16 +101,16 @@ impl fmt::Display for CtabParseFlags {
 
         if *self == CtabParseFlags::MINIMAL {
             parts.push("MINIMAL");
-        } else if *self == CtabParseFlags::BASIC_MAX {
-            parts.push("BASIC_MAX");
-        } else if *self == CtabParseFlags::EXTENDED_MAX {
-            parts.push("EXTENDED_MAX");
         } else if *self == CtabParseFlags::BASIC {
             parts.push("BASIC");
-        } else if *self == CtabParseFlags::EXTENDED {
-            parts.push("EXTENDED");
+        } else if *self == CtabParseFlags::BASIC_MAX {
+            parts.push("BASIC_MAX");
         } else if *self == CtabParseFlags::STRICT {
             parts.push("STRICT");
+        } else if *self == CtabParseFlags::EXTENDED {
+            parts.push("EXTENDED");
+        } else if *self == CtabParseFlags::EXTENDED_MAX {
+            parts.push("EXTENDED_MAX");
         } else if *self == CtabParseFlags::LENIENT {
             parts.push("LENIENT");
         } else if *self == CtabParseFlags::GRAPH_ONLY {
@@ -206,48 +206,48 @@ impl CtfileIoConfig {
         Self { parse_flags: flags }
     }
 
-    pub fn basic_max() -> Self {
-        Self::with_parse_flags(CtabParseFlags::BASIC_MAX)
-    }
-
-    pub fn extended_max() -> Self {
-        Self::with_parse_flags(CtabParseFlags::EXTENDED_MAX)
+    pub fn minimal() -> Self {
+        Self::with_parse_flags(CtabParseFlags::MINIMAL)
     }
 
     pub fn basic_strict() -> Self {
-        Self::with_parse_flags(CtabParseFlags::BASIC | CtabParseFlags::STRICT)
-    }
-
-    pub fn extended_strict() -> Self {
-        Self::with_parse_flags(CtabParseFlags::EXTENDED | CtabParseFlags::STRICT)
-    }
-
-    pub fn basic_lenient() -> Self {
-        Self::with_parse_flags(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
-    }
-
-    pub fn extended_lenient() -> Self {
-        Self::with_parse_flags(CtabParseFlags::EXTENDED_MAX & CtabParseFlags::LENIENT)
-    }
-
-    pub fn minimal() -> Self {
-        Self::with_parse_flags(CtabParseFlags::MINIMAL)
+        Self::with_parse_flags(CtabParseFlags::BASIC & CtabParseFlags::STRICT)
     }
 
     pub fn basic() -> Self {
         Self::with_parse_flags(CtabParseFlags::BASIC)
     }
 
-    pub fn extended() -> Self {
-        Self::with_parse_flags(CtabParseFlags::EXTENDED)
+    pub fn basic_lenient() -> Self {
+        Self::with_parse_flags(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT)
+    }
+
+    pub fn basic_max() -> Self {
+        Self::with_parse_flags(CtabParseFlags::BASIC_MAX)
     }
 
     pub fn strict() -> Self {
         Self::with_parse_flags(CtabParseFlags::STRICT)
     }
 
+    pub fn extended() -> Self {
+        Self::with_parse_flags(CtabParseFlags::EXTENDED)
+    }
+
+    pub fn extended_strict() -> Self {
+        Self::with_parse_flags(CtabParseFlags::EXTENDED & CtabParseFlags::STRICT)
+    }
+
     pub fn lenient() -> Self {
         Self::with_parse_flags(CtabParseFlags::LENIENT)
+    }
+
+    pub fn extended_lenient() -> Self {
+        Self::with_parse_flags(CtabParseFlags::EXTENDED_MAX & CtabParseFlags::LENIENT)
+    }
+
+    pub fn extended_max() -> Self {
+        Self::with_parse_flags(CtabParseFlags::EXTENDED_MAX)
     }
 }
 
