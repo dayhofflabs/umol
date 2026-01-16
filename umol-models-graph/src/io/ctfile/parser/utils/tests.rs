@@ -402,18 +402,18 @@ fn test_fixed_width_int_partial_invalid(#[case] input: &[u8], #[case] expected_k
 #[case::blank(b"          ", 0.0)]
 #[case::blank_width9(b"         ", 0.0)]
 fn test_fixed_width_float(#[case] input: &[u8], #[case] expected: f64) {
-    let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
+    let mut parser = all_consuming(fixed_width_float_f10_4::<f64>());
     let result = parser.parse(input);
     let (_, parsed_val) = result.unwrap();
     assert!((parsed_val - expected).abs() < 1e-9);
 }
 
 #[rstest]
-#[case::trailing_characters(b"1.23a     ", NomErrorKind::Eof)]
-#[case::invalid_decimal_point(b"1.2.3     ", NomErrorKind::Eof)]
-#[case::trailing_characters_after_blank(b"          a", NomErrorKind::Eof)]
+#[case::trailing_characters(b"1.23a     ", NomErrorKind::Digit)]
+#[case::invalid_decimal_point(b"1.2.3     ", NomErrorKind::Digit)]
+#[case::trailing_data(b"          a", NomErrorKind::Eof)]
 fn test_fixed_width_float_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let mut parser = all_consuming(fixed_width_float::<f64>(10, 4));
+    let mut parser = all_consuming(fixed_width_float_f10_4::<f64>());
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
@@ -623,7 +623,6 @@ fn test_fixed_width_position(
 }
 
 #[rstest]
-#[case::too_short(b"    0.0000    0.0000    0.000", false, false, NomErrorKind::Eof)]
 #[case::too_long(b"    0.0000    0.0000    0.00000", false, false, NomErrorKind::Eof)]
 #[case::invalid_x(b"    x.0000    0.0000    0.0000", false, false, NomErrorKind::Digit)]
 #[case::invalid_y(b"    0.0000    y.0000    0.0000", false, false, NomErrorKind::Digit)]

@@ -11,7 +11,8 @@ use super::convert::{
     convert_bond_topology_code, convert_bond_type_code, convert_extended_bond_type_code,
 };
 use super::utils::{
-    fixed_width_int, fixed_width_int_minus1, fixed_width_unused_n, LinesWithOffsetExt,
+    fixed_width_int, fixed_width_int_minus1, fixed_width_int_opt_unsigned, fixed_width_unused_n,
+    LinesWithOffsetExt,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
@@ -121,12 +122,21 @@ pub fn bond_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = NomError<&'inp [u8]>> + use<'inp>
 {
-    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     move |input: &'inp [u8]| {
         if input.len() < 9 {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
         }
+
+        if flags == CtabParseFlags::BASIC {
+            match input.len() {
+                21 => return basic_bond_input21(input),
+                18 => return basic_bond_input18(input),
+                _ => {}
+            }
+        }
+
+        let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
+        let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
 
         // Atom indices
         let (remaining, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
@@ -174,6 +184,85 @@ pub fn bond_input<'inp>(
 
         Ok((remaining, (first_atom, second_atom, bond)))
     }
+}
+
+/// Fast-path basic bond input parser for 21-character lines.  Hard-codes
+/// CtabParseFlags::BASIC = NAMED_ISOTOPES | ATOM_MAP_HCOUNT_FIELDS | SKIP_UNUSED_FIELDS behavior.
+/// behavior
+fn basic_bond_input21<'inp>(
+    input: &'inp [u8],
+) -> Result<(&'inp [u8], (usize, usize, Bond)), Err<NomError<&'inp [u8]>>> {
+    let line = &input[..21];
+    let remaining = &input[21..];
+
+    let first_atom = fixed_width_int_opt_unsigned(input, &line[0..3])?
+        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+    let second_atom = fixed_width_int_opt_unsigned(input, &line[3..6])?
+        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+    let order_code = fixed_width_int_opt_unsigned(input, &line[6..9])?.unwrap_or(0) as u8;
+    let order = convert_bond_type_code(order_code, false)
+        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
+
+    let stereo_code = fixed_width_int_opt_unsigned(input, &line[9..12])?.unwrap_or(0) as u8;
+    let stereo_direction = convert_bond_stereo_direction_code(stereo_code)
+        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+
+    if !super::utils::is_all_whitespace_or_zeroes(&line[15..18]) {
+        return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+    }
+    if !super::utils::is_all_whitespace_or_zeroes(&line[18..21]) {
+        return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+    }
+
+    let mut bond = Bond::with_order(order);
+    if let (Some(stereo), Some(direction)) = stereo_direction {
+        match order {
+            BondOrder::Single => bond.direction = Some(direction),
+            BondOrder::Double => bond.stereo = Some(stereo),
+            _ => {}
+        }
+    }
+    Ok((remaining, (first_atom, second_atom, bond)))
+}
+
+/// Fast-path basic bond input parser for 18-character lines.  Hard-codes
+/// CtabParseFlags::BASIC = NAMED_ISOTOPES | ATOM_MAP_HCOUNT_FIELDS | SKIP_UNUSED_FIELDS behavior.
+///
+fn basic_bond_input18<'inp>(
+    input: &'inp [u8],
+) -> Result<(&'inp [u8], (usize, usize, Bond)), Err<NomError<&'inp [u8]>>> {
+    let line = &input[..18];
+    let remaining = &input[18..];
+
+    let first_atom = fixed_width_int_opt_unsigned(input, &line[0..3])?
+        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+    let second_atom = fixed_width_int_opt_unsigned(input, &line[3..6])?
+        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+    let order_code = fixed_width_int_opt_unsigned(input, &line[6..9])?.unwrap_or(0) as u8;
+    let order = convert_bond_type_code(order_code, false)
+        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
+
+    let stereo_code = fixed_width_int_opt_unsigned(input, &line[9..12])?.unwrap_or(0) as u8;
+    let stereo_direction = convert_bond_stereo_direction_code(stereo_code)
+        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+
+    if !super::utils::is_all_whitespace_or_zeroes(&line[15..18]) {
+        return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+    }
+
+    let mut bond = Bond::with_order(order);
+    if let (Some(stereo), Some(direction)) = stereo_direction {
+        match order {
+            BondOrder::Single => bond.direction = Some(direction),
+            BondOrder::Double => bond.stereo = Some(stereo),
+            _ => {}
+        }
+    }
+    Ok((remaining, (first_atom, second_atom, bond)))
 }
 
 /// Parse extended bond input

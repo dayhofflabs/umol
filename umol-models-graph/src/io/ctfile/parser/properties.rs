@@ -13,9 +13,9 @@ use umol_data::Element;
 
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
-    fixed_width_element_partial, fixed_width_float, fixed_width_int, fixed_width_int_in_range,
-    fixed_width_int_minus1, fixed_width_str_partial, fixed_width_unused, rgroup_occurrences,
-    LinesWithOffsetExt,
+    fixed_width_element_partial, fixed_width_float_f10_4, fixed_width_int,
+    fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_str_partial,
+    fixed_width_unused, rgroup_occurrences, LinesWithOffsetExt,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
@@ -1330,7 +1330,7 @@ fn sgroup_display_info_entry<'inp>(
             preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             length_count(
                 fixed_width_int_in_range::<usize, _>(3, 1..=4),
-                fixed_width_float::<f64>(10, 4),
+                fixed_width_float_f10_4::<f64>(),
             ),
         ),
         |(sgroup_index, bracket_coords)| SGroupDisplayInfoEntry {
@@ -1349,8 +1349,8 @@ fn sgroup_connecting_bond_entry<'inp>(
         (
             preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
             preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            fixed_width_float::<f64>(10, 4),
-            fixed_width_float::<f64>(10, 4),
+            fixed_width_float_f10_4::<f64>(),
+            fixed_width_float_f10_4::<f64>(),
         ),
         |(sgroup_index, bond_index, x1, y1)| SGroupConnectingBondEntry {
             sgroup_index,
@@ -1410,8 +1410,8 @@ fn sgroup_data_display_entry<'inp>(
     map(
         (
             preceded(tag(" "), fixed_width_int_minus1::<u32>(3)),
-            preceded(tag(" "), fixed_width_float::<f64>(10, 4)),
-            terminated(fixed_width_float::<f64>(10, 4), tag(" ")),
+            preceded(tag(" "), fixed_width_float_f10_4::<f64>()),
+            terminated(fixed_width_float_f10_4::<f64>(), tag(" ")),
             preceded(
                 fixed_width_unused(3, skip_unused_fields),
                 sgroup_data_display_type(),

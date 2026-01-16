@@ -11,7 +11,7 @@ use nom::{Err, Parser};
 
 use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};
-pub use self::atom::{atom_input, extended_atom_input}; // NOTE: Re-exported for benchmarks
+pub use self::atom::{atom_input, extended_atom_input, basic_atom_input69}; // NOTE: Re-exported for benchmarks
 use self::bond::{bond_block, extended_bond_block};
 pub use self::bond::{bond_input, extended_bond_input}; // NOTE: Re-exported for benchmarks
 use self::counts::counts_block;

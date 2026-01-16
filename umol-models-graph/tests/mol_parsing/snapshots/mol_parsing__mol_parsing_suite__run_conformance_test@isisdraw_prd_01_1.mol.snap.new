@@ -1,0 +1,33 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 305
+expression: results
+---
+expected_category: extended_molecule_lenient
+category: extended_molecule_lenient
+molecule:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 10, col 0"
+molecule_lenient:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 10, col 15"
+extended_molecule:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 11, col 18"
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C4O2
+    atom_count: 6
+    bond_count: 5
+    extended_atoms: 0
+    extended_bonds: 5
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

@@ -1,0 +1,39 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 305
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  error:
+    error_type: InvalidAtomLine
+    message: "Invalid atom line at line 24, col 0"
+molecule_lenient:
+  success: false
+  error:
+    error_type: InvalidAtomLine
+    message: "Invalid atom line at line 24, col 31"
+extended_molecule:
+  success: true
+  extended_summary:
+    sum_formula: C35
+    atom_count: 36
+    bond_count: 33
+    extended_atoms: 1
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C35
+    atom_count: 36
+    bond_count: 33
+    extended_atoms: 1
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

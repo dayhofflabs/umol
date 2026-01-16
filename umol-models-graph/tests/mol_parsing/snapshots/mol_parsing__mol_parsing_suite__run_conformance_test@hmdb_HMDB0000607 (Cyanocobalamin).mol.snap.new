@@ -1,0 +1,39 @@
+---
+source: umol-models-graph/tests/mol_parsing/mod.rs
+assertion_line: 305
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 157, col 0"
+molecule_lenient:
+  success: false
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 157, col 6"
+extended_molecule:
+  success: true
+  extended_summary:
+    sum_formula: C63H2CoN14O14P
+    atom_count: 95
+    bond_count: 106
+    extended_atoms: 0
+    extended_bonds: 4
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 4
+extended_molecule_lenient:
+  success: true
+  extended_summary:
+    sum_formula: C63H2CoN14O14P
+    atom_count: 95
+    bond_count: 106
+    extended_atoms: 0
+    extended_bonds: 4
+    property_count: 1
+    rgroup_count: 0
+    sgroup_count: 4

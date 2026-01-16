@@ -8,12 +8,12 @@ use fast_float2::FastFloat;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
 use nom::character::complete::{
-    alpha1, digit0, digit1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32,
-    u8 as nom_u8, usize as nom_usize,
+    alpha1, i16 as nom_i16, i32 as nom_i32, i8 as nom_i8, space0, u32 as nom_u32, u8 as nom_u8,
+    usize as nom_usize,
 };
-use nom::combinator::{map, map_opt, opt, recognize, rest, success, verify};
+use nom::combinator::{map, map_opt, rest, success, verify};
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
-use nom::multi::{count as nom_count, separated_list1};
+use nom::multi::separated_list1;
 use nom::sequence::delimited;
 use nom::{Err, Parser};
 use num::{Float, Integer};
@@ -247,37 +247,31 @@ where
 }
 
 /// Parse a fixed-width field as float with Fortran semantics (Fw.d).
-pub(super) fn fixed_width_float<'inp, T>(
-    width: usize,
-    precision: usize,
+pub(super) fn fixed_width_float_f10_4<'inp, T>(
 ) -> impl Parser<&'inp [u8], Output = T, Error = NomError<&'inp [u8]>>
 where
     T: Float + FastFloat,
 {
-    map(
-        fixed_width_opt(
-            width,
-            delimited(
-                space0,
-                alt((
-                    map(
-                        recognize((opt(tag(&b"-"[..])), digit1, tag(&b"."[..]), digit0)),
-                        |s| fast_float2::parse::<T, _>(s).unwrap(),
-                    ),
-                    map(
-                        recognize((opt(tag(&b"-"[..])), digit0, tag(&b"."[..]), digit1)),
-                        |s| fast_float2::parse::<T, _>(s).unwrap(),
-                    ),
-                    map(recognize((opt(tag(&b"-"[..])), digit1)), move |s| {
-                        fast_float2::parse::<T, _>(s).unwrap()
-                            / T::from(10.0).unwrap().powi(precision as i32)
-                    }),
-                )),
-                space0,
-            ),
-        ),
-        |opt| opt.unwrap_or_else(T::zero),
-    )
+    move |input: &'inp [u8]| {
+        let min_width = 10.min(input.len());
+        let (remaining, field) = take(min_width).parse(input)?;
+        let trimmed = field.trim_ascii();
+        if trimmed.is_empty() {
+            return Ok((remaining, T::zero()));
+        }
+        if trimmed.find_not_byteset(b"0123456789+-.").is_some() {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Digit)));
+        }
+        let val = if trimmed.find_byte(b'.').is_some() {
+            fast_float2::parse::<T, _>(trimmed)
+                .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))?
+        } else {
+            let val = fast_float2::parse::<T, _>(trimmed)
+                .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))?;
+            val / T::from(10.0).unwrap().powi(4)
+        };
+        Ok((remaining, val))
+    }
 }
 
 /// Parse a fixed-width field as element symbol
@@ -297,14 +291,7 @@ pub(super) fn fixed_width_unused<'inp>(
     width: usize,
     skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
-    move |input: &'inp [u8]| {
-        let (remaining, unused) = take(width).parse(input)?;
-        if !skip_unused_fields && width > 0 && !is_all_whitespace_or_zeroes(unused) {
-            Err(Err::Error(NomError::new(input, NomErrorKind::Verify)))
-        } else {
-            Ok((remaining, ()))
-        }
-    }
+    fixed_width_unused_n(1, width, skip_unused_fields)
 }
 
 /// Multiple fixed-width unused fields of width `width`
@@ -315,14 +302,22 @@ pub(super) fn fixed_width_unused_n<'inp>(
     skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
-        let (remaining, unused) = take(count * width).parse(input)?;
-        if !skip_unused_fields && count > 0 && width > 0 && !is_all_whitespace_or_zeroes(unused) {
-            nom_count(fixed_width_unused(width, skip_unused_fields), count)
-                .parse(unused)
-                .map(|(_, _)| (remaining, ()))
-        } else {
-            Ok((remaining, ()))
+        let total = count * width;
+        let (remaining, unused) = take(total).parse(input)?;
+        if skip_unused_fields || count == 0 || width == 0 {
+            return Ok((remaining, ()));
         }
+        for i in 0..count {
+            let start = i * width;
+            let end = start + width;
+            if end > unused.len() {
+                return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+            }
+            if !is_all_whitespace_or_zeroes(&unused[start..end]) {
+                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+            }
+        }
+        Ok((remaining, ()))
     }
 }
 
@@ -393,6 +388,56 @@ pub(super) fn is_reserved_atom_symbol(
     false
 }
 
+pub(super) fn fixed_width_int_opt_signed<'inp>(
+    input: &'inp [u8],
+    field: &'inp [u8],
+) -> Result<Option<i32>, Err<NomError<&'inp [u8]>>> {
+    let trimmed = field.trim_ascii();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let mut sign = 1i32;
+    let mut idx = 0;
+    if trimmed[0] == b'-' {
+        sign = -1;
+        idx = 1;
+    } else if trimmed[0] == b'+' {
+        idx = 1;
+    }
+    if idx >= trimmed.len() || !trimmed[idx..].iter().all(|b| b.is_ascii_digit()) {
+        return Err(Err::Error(NomError::new(input, NomErrorKind::Digit)));
+    }
+    let mut val = 0i32;
+    for &b in &trimmed[idx..] {
+        val = val
+            .checked_mul(10)
+            .and_then(|v| v.checked_add((b - b'0') as i32))
+            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::TooLarge)))?;
+    }
+    Ok(Some(sign * val))
+}
+
+pub(super) fn fixed_width_int_opt_unsigned<'inp>(
+    input: &'inp [u8],
+    field: &'inp [u8],
+) -> Result<Option<u32>, Err<NomError<&'inp [u8]>>> {
+    let trimmed = field.trim_ascii();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if !trimmed.iter().all(|b| b.is_ascii_digit()) {
+        return Err(Err::Error(NomError::new(input, NomErrorKind::Digit)));
+    }
+    let mut val: u32 = 0;
+    for &b in trimmed {
+        val = val
+            .checked_mul(10)
+            .and_then(|v| v.checked_add((b - b'0') as u32))
+            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::TooLarge)))?;
+    }
+    Ok(Some(val))
+}
+
 /// Parse position data from 3f10.4 format
 pub(super) fn fixed_width_position<'inp>(
     ignore_positions: bool,
@@ -401,18 +446,18 @@ pub(super) fn fixed_width_position<'inp>(
     move |input: &'inp [u8]| {
         if ignore_positions && skip_unused_fields {
             let (remaining, _) = take(30usize).parse(input)?;
+            return Ok((remaining, Point3D::zero()));
+        }
+
+        let x = fixed_width_float_f10_4::<f64>();
+        let y = fixed_width_float_f10_4::<f64>();
+        let z = fixed_width_float_f10_4::<f64>();
+        let (remaining, position) =
+            map((x, y, z), |(x, y, z)| Point3D::new(x, y, z)).parse(input)?;
+        if ignore_positions {
             Ok((remaining, Point3D::zero()))
         } else {
-            let x = fixed_width_float::<f64>(10, 4);
-            let y = fixed_width_float::<f64>(10, 4);
-            let z = fixed_width_float::<f64>(10, 4);
-            let (remaining, position) =
-                map((x, y, z), |(x, y, z)| Point3D::new(x, y, z)).parse(input)?;
-            if ignore_positions {
-                Ok((remaining, Point3D::zero()))
-            } else {
-                Ok((remaining, position))
-            }
+            Ok((remaining, position))
         }
     }
 }

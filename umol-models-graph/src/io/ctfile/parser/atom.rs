@@ -16,8 +16,10 @@ use super::convert::{
     convert_atom_symbol_mass_diff, convert_atom_valence_code,
 };
 use super::utils::{
-    fixed_width_int, fixed_width_int_in_range, fixed_width_int_in_range_opt, fixed_width_partial,
-    fixed_width_position, fixed_width_unused_n, is_reserved_atom_symbol, LinesWithOffsetExt,
+    fixed_width_float_f10_4, fixed_width_int, fixed_width_int_in_range,
+    fixed_width_int_in_range_opt, fixed_width_int_opt_signed, fixed_width_int_opt_unsigned,
+    fixed_width_partial, fixed_width_position, fixed_width_unused_n, is_all_whitespace_or_zeroes,
+    is_reserved_atom_symbol, LinesWithOffsetExt,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
@@ -169,14 +171,18 @@ pub(super) fn extended_atom_block<'inp>(
 pub fn atom_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (Atom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp> {
-    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
-    let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
-    let atom_map_hcount_fields = flags.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS);
-    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     move |input: &'inp [u8]| {
         if input.len() < 32 {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
         }
+        if flags == CtabParseFlags::BASIC && input.len() >= 69 {
+            return basic_atom_input69().parse(input);
+        }
+
+        let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
+        let ignore_positions = flags.contains(CtabParseFlags::IGNORE_POSITIONS);
+        let atom_map_hcount_fields = flags.contains(CtabParseFlags::ATOM_MAP_HCOUNT_FIELDS);
+        let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
 
         // x, y, z coordinates
         let (remaining, position) =
@@ -186,9 +192,10 @@ pub fn atom_input<'inp>(
         let (remaining, symbol) = preceded(tag(" "), atom_symbol(flags)).parse(remaining)?;
 
         // Mass difference
-        let (remaining, mass_diff) = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
-            convert_atom_mass_diff_code(opt.unwrap_or(0))
-        })
+        let (remaining, mass_diff) = map(
+            fixed_width_int_in_range_opt::<i8, _>(2, -3..=4),
+            |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+        )
         .parse(remaining)?;
 
         // Combine atom mass difference and named isotope information
@@ -349,9 +356,10 @@ pub fn extended_atom_input<'inp>(
             preceded(tag(" "), extended_atom_symbol(flags)).parse(remaining)?;
 
         // Mass difference
-        let (remaining, mass_diff) = map(fixed_width_int_in_range_opt::<i8, _>(2, -3..=4), |opt| {
-            convert_atom_mass_diff_code(opt.unwrap_or(0))
-        })
+        let (remaining, mass_diff) = map(
+            fixed_width_int_in_range_opt::<i8, _>(2, -3..=4),
+            |opt| convert_atom_mass_diff_code(opt.unwrap_or(0)),
+        )
         .parse(remaining)?;
 
         // Combine atom mass difference and named isotope information
@@ -375,11 +383,10 @@ pub fn extended_atom_input<'inp>(
         .parse(remaining)?;
 
         // Hydrogen count
-        let max_hydrogen_count = if extended_range { 13 } else { 5 };
         let (remaining, hydrogen_count) = cond(
             remaining.len() >= 3,
             map_res(
-                fixed_width_int_in_range::<u8, _>(3, 0..=max_hydrogen_count),
+                fixed_width_int_in_range::<u8, _>(3, 0..=13),
                 move |code| convert_atom_hydrogen_count_code(code, extended_range),
             ),
         )
@@ -598,6 +605,110 @@ fn extended_atom_symbol<'inp>(
             move |symbol| symbol.ok_or(NomError::new(input, NomErrorKind::MapRes)),
         )
         .parse(input)
+    }
+}
+
+/// Fast-path basic atom input parser for 69-character lines.
+/// Hard-codes CtabParseFlags::BASIC = NAMED_ISOTOPES | ATOM_MAP_HCOUNT_FIELDS | SKIP_UNUSED_FIELDS
+/// behavior.
+///
+pub fn basic_atom_input69<'inp>(
+) -> impl Parser<&'inp [u8], Output = (Atom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp> {
+    move |input: &'inp [u8]| {
+        if input.len() < 69 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
+        let line = &input[..69];
+        let remaining = &input[69..];
+
+        let x = fixed_width_float_f10_4::<f64>().parse(&line[0..10])?.1;
+        let y = fixed_width_float_f10_4::<f64>().parse(&line[10..20])?.1;
+        let z = fixed_width_float_f10_4::<f64>().parse(&line[20..30])?.1;
+        let position = Point3D::new(x, y, z);
+
+        if line[30] != b' ' {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Char)));
+        }
+
+        let symbol_field = &line[31..34];
+        let symbol_trimmed = symbol_field.trim_ascii();
+        if symbol_trimmed.is_empty() {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::MapRes)));
+        }
+        let symbol = Element::from_symbol_bytes(symbol_trimmed)
+            .map(AtomSymbol::Element)
+            .or_else(|| {
+                NamedIsotope::from_symbol_bytes(symbol_trimmed).map(AtomSymbol::NamedIsotope)
+            })
+            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
+
+        let mass_diff = fixed_width_int_opt_signed(input, &line[34..36])?;
+        let mass_diff = mass_diff.filter(|val| (-3..=4).contains(val)).unwrap_or(0);
+        let (element, isotope_mass) =
+            convert_atom_symbol_mass_diff(&symbol, convert_atom_mass_diff_code(mass_diff as i8));
+
+        let charge_code = fixed_width_int_opt_signed(input, &line[36..39])?;
+        let charge_code = charge_code.filter(|val| (0..=7).contains(val)).unwrap_or(0);
+        let (charge, unpaired_e) = convert_atom_charge_code(charge_code as u8);
+
+        let stereo_code = fixed_width_int_opt_signed(input, &line[39..42])?.unwrap_or(0);
+        if !(0..=3).contains(&stereo_code) {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+        }
+        let chirality = convert_atom_stereo_parity_code(stereo_code as u8)
+            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+
+        let h_code = fixed_width_int_opt_signed(input, &line[42..45])?.unwrap_or(0);
+        if !(0..=5).contains(&h_code) {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+        }
+        let hydrogens = convert_atom_hydrogen_count_code(h_code as u8, false)
+            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+
+        if !is_all_whitespace_or_zeroes(&line[45..48]) {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+        }
+
+        let valence_code = fixed_width_int_opt_signed(input, &line[48..51])?.unwrap_or(0);
+        if !(0..=15).contains(&valence_code) {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+        }
+        let valence = convert_atom_valence_code(valence_code as u8)
+            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+
+        let class = fixed_width_int_opt_unsigned(input, &line[60..63])?
+            .and_then(|val| (1..=999).contains(&val).then_some(val));
+
+        for i in 0..2 {
+            let start = i * 3;
+            let end = start + 3;
+            if !is_all_whitespace_or_zeroes(&line[63 + start..63 + end]) {
+                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+            }
+        }
+
+        Ok((
+            remaining,
+            (
+                Atom {
+                    element,
+                    charge,
+                    isotope_mass,
+                    hydrogens,
+                    implicit_h: false,
+                    valence,
+                    unpaired_e,
+                    aromatic: None,
+                    chirality,
+                    class,
+                    span: None,
+                    label: None,
+                    value: None,
+                },
+                position,
+            ),
+        ))
     }
 }
 

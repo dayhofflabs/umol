@@ -1,0 +1,43 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+assertion_line: 314
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 117, col 0"
+molecule_lenient:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 117, col 15"
+extended_molecule:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C47H51NO14
+      atom_count: 113
+      bond_count: 119
+      extended_atoms: 0
+      extended_bonds: 119
+      property_count: 90
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 1
+  extended_summaries:
+    - sum_formula: C47H51NO14
+      atom_count: 113
+      bond_count: 119
+      extended_atoms: 0
+      extended_bonds: 119
+      property_count: 90
+      rgroup_count: 0
+      sgroup_count: 0

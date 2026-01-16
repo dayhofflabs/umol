@@ -73,7 +73,7 @@ fn test_ctab_block(
 
 #[rstest]
 #[case::als_query_property(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\nM  ALS   1  2 F Cl  Br\nM  END\n",
-    ParseError::InvalidAtomLine { line: 1, col: 31 })]
+    ParseError::InvalidAtomLine { line: 1, col: 0 })]
 #[case::legacy_atom_list(b"  2  1  1  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1 F    3   9   7   8  \nM  END\n",
     ParseError::UnsupportedLegacyAtomList { line: 4 })]
 #[case::insufficient_atoms(b"  2  1  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n",

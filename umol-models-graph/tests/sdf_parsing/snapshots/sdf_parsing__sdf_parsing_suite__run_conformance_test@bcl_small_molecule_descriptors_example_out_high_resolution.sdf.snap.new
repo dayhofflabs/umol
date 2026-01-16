@@ -1,0 +1,155 @@
+---
+source: umol-models-graph/tests/sdf_parsing/mod.rs
+assertion_line: 314
+expression: results
+---
+expected_category: extended_molecule
+category: extended_molecule
+molecule:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 37, col 0"
+molecule_lenient:
+  success: false
+  compound_count: 0
+  error:
+    error_type: InvalidBondLine
+    message: "Invalid bond line at line 37, col 15"
+extended_molecule:
+  success: true
+  compound_count: 8
+  extended_summaries:
+    - sum_formula: C16H13ClN2O
+      atom_count: 33
+      bond_count: 35
+      extended_atoms: 0
+      extended_bonds: 35
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C10H8
+      atom_count: 18
+      bond_count: 19
+      extended_atoms: 0
+      extended_bonds: 19
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C47H51NO14
+      atom_count: 113
+      bond_count: 119
+      extended_atoms: 0
+      extended_bonds: 119
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C6H6
+      atom_count: 12
+      bond_count: 12
+      extended_atoms: 0
+      extended_bonds: 12
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C4H5N
+      atom_count: 10
+      bond_count: 10
+      extended_atoms: 0
+      extended_bonds: 10
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C4H4O
+      atom_count: 9
+      bond_count: 9
+      extended_atoms: 0
+      extended_bonds: 9
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C2H4
+      atom_count: 6
+      bond_count: 5
+      extended_atoms: 0
+      extended_bonds: 5
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C2H3F
+      atom_count: 6
+      bond_count: 5
+      extended_atoms: 0
+      extended_bonds: 5
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+extended_molecule_lenient:
+  success: true
+  compound_count: 8
+  extended_summaries:
+    - sum_formula: C16H13ClN2O
+      atom_count: 33
+      bond_count: 35
+      extended_atoms: 0
+      extended_bonds: 35
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C10H8
+      atom_count: 18
+      bond_count: 19
+      extended_atoms: 0
+      extended_bonds: 19
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C47H51NO14
+      atom_count: 113
+      bond_count: 119
+      extended_atoms: 0
+      extended_bonds: 119
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C6H6
+      atom_count: 12
+      bond_count: 12
+      extended_atoms: 0
+      extended_bonds: 12
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C4H5N
+      atom_count: 10
+      bond_count: 10
+      extended_atoms: 0
+      extended_bonds: 10
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C4H4O
+      atom_count: 9
+      bond_count: 9
+      extended_atoms: 0
+      extended_bonds: 9
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C2H4
+      atom_count: 6
+      bond_count: 5
+      extended_atoms: 0
+      extended_bonds: 5
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
+    - sum_formula: C2H3F
+      atom_count: 6
+      bond_count: 5
+      extended_atoms: 0
+      extended_bonds: 5
+      property_count: 66
+      rgroup_count: 0
+      sgroup_count: 0
