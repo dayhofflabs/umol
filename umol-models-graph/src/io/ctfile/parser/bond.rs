@@ -1,10 +1,10 @@
 //! Bond block parsers for CTab files.
 
 use nom::character::complete::space0;
-use nom::combinator::{all_consuming, cond, map, map_res};
+use nom::combinator::{all_consuming, cond, map_res};
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::terminated;
-use nom::{Err, IResult, Parser};
+use nom::{Err, Parser};
 
 use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_direction_code,
@@ -15,7 +15,6 @@ use super::utils::{
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
-use crate::io::ctfile::parser::utils::fixed_width_unused;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
 
 /// Parse bond block (basic bonds only)
@@ -118,23 +117,6 @@ pub(super) fn extended_bond_block<'inp>(
 /// NOTE: Basic parser should accept a strict subset of inputs accepted by extended parser
 ///       Increasing strictness: skip < validate < zero/blank
 ///
-#[allow(dead_code)]
-pub fn bond_input_save<'inp>(
-    flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = NomError<&'inp [u8]>> + use<'inp>
-{
-    move |input: &'inp [u8]| {
-        let len = input.len();
-        let parser = match len {
-            10..=21 => bond_input21,
-            9 => bond_input9,
-            _ => return Err(Err::Error(NomError::new(input, NomErrorKind::Eof))),
-        };
-
-        (move |input| parser(input, flags)).parse(input)
-    }
-}
-
 pub fn bond_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = NomError<&'inp [u8]>> + use<'inp>
@@ -281,61 +263,5 @@ pub fn extended_bond_input<'inp>(
     }
 }
 
-/// Parse bond inputs with 10-21 characters (s. `bond_input` for more details).
-/// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input21<'inp>(
-    input: &'inp [u8],
-    flags: CtabParseFlags,
-) -> IResult<&'inp [u8], (usize, usize, Bond)> {
-    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-    let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
-    let first_atom = fixed_width_int_minus1::<usize>(3);
-    let second_atom = fixed_width_int_minus1::<usize>(3);
-    let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
-        convert_bond_type_code(code, extended_range)
-    });
-    let stereo_direction = map_res(fixed_width_int::<u8>(3), convert_bond_stereo_direction_code);
-    let unused1 = cond(input.len() >= 15, fixed_width_unused(3, skip_unused_fields));
-    let count2 = input.len().saturating_sub(15) / 3;
-    let extended2 = fixed_width_unused_n(count2, 3, false);
-
-    map(
-        (
-            first_atom,
-            second_atom,
-            bond_type,
-            terminated(stereo_direction, (unused1, extended2)),
-        ),
-        |(first_atom, second_atom, order, (stereo, dir))| {
-            let mut bond = Bond::with_order(order);
-            match order {
-                BondOrder::Single => bond.direction = dir,
-                BondOrder::Double => bond.stereo = stereo,
-                _ => (),
-            }
-            (first_atom, second_atom, bond)
-        },
-    )
-    .parse(input)
-}
-
-/// Parse  bond inputs with 9 characters (s. `bond_input` for more details).
-/// Lacks trailing stereo/dir fields (substituted by defaults).
-fn bond_input9<'inp>(
-    input: &'inp [u8],
-    flags: CtabParseFlags,
-) -> IResult<&'inp [u8], (usize, usize, Bond)> {
-    let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
-    let first_atom = fixed_width_int_minus1::<usize>(3);
-    let second_atom = fixed_width_int_minus1::<usize>(3);
-    let bond_type = map_res(fixed_width_int::<u8>(3), move |code| {
-        convert_bond_type_code(code, extended_range)
-    });
-    map(
-        (first_atom, second_atom, bond_type),
-        |(first_atom, second_atom, order)| (first_atom, second_atom, Bond::with_order(order)),
-    )
-    .parse(input)
-}
 #[cfg(test)]
 mod tests;

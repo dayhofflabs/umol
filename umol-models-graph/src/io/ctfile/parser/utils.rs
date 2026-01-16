@@ -396,16 +396,23 @@ pub(super) fn is_reserved_atom_symbol(
 /// Parse position data from 3f10.4 format
 pub(super) fn fixed_width_position<'inp>(
     ignore_positions: bool,
+    skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = Point3D, Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
-        if ignore_positions {
+        if ignore_positions && skip_unused_fields {
             let (remaining, _) = take(30usize).parse(input)?;
             Ok((remaining, Point3D::zero()))
         } else {
             let x = fixed_width_float::<f64>(10, 4);
             let y = fixed_width_float::<f64>(10, 4);
             let z = fixed_width_float::<f64>(10, 4);
-            map((x, y, z), |(x, y, z)| Point3D::new(x, y, z)).parse(input)
+            let (remaining, position) =
+                map((x, y, z), |(x, y, z)| Point3D::new(x, y, z)).parse(input)?;
+            if ignore_positions {
+                Ok((remaining, Point3D::zero()))
+            } else {
+                Ok((remaining, position))
+            }
         }
     }
 }

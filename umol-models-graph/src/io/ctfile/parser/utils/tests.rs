@@ -587,38 +587,72 @@ fn test_fixed_width_str_partial(
 }
 
 #[rstest]
-#[case::zero(b"    0.0000    0.0000    0.0000", false, Point3D::zero())]
-#[case::nonzero(b"    1.2345   -2.3456    3.4567", false, Point3D::new(1.2345, -2.3456, 3.4567))]
-#[case::tens(b"   10.0000  -20.0000   30.0000", false, Point3D::new(10.0, -20.0, 30.0))]
-#[case::hundreds(b"  123.4567 -234.5678  345.6789", false, Point3D::new(123.4567, -234.5678, 345.6789))]
-#[case::short_zero(b"       0.0       0.0       0.0", false, Point3D::zero())]
-#[case::no_integer_part(b"        .0        .0        .0", false, Point3D::zero())]
-#[case::nonzero_ignored(b"    1.2345   -2.3456    3.4567", true, Point3D::zero())]
+#[case::zero(b"    0.0000    0.0000    0.0000", false, false, Point3D::zero())]
+#[case::nonzero(b"    1.2345   -2.3456    3.4567", false, false, Point3D::new(1.2345, -2.3456, 3.4567))]
+#[case::tens(b"   10.0000  -20.0000   30.0000", false, false, Point3D::new(10.0, -20.0, 30.0))]
+#[case::hundreds(b"  123.4567 -234.5678  345.6789", false, false, Point3D::new(123.4567, -234.5678, 345.6789))]
+#[case::short_zero(b"       0.0       0.0       0.0", false, false, Point3D::zero())]
+#[case::no_integer_part(b"        .0        .0        .0", false, false, Point3D::zero())]
+#[case::zero_ignored(b"    0.0000    0.0000    0.0000", true, false, Point3D::zero())]
+#[case::nonzero_ignored(b"    1.2345   -2.3456    3.4567", true, false, Point3D::zero())]
+#[case::zero_skipped(b"    0.0000    0.0000    0.0000", true, true, Point3D::zero())]
+#[case::invalid_skipped(b"    x.0000    0.0000    0.0000", true, true, Point3D::zero())]
 fn test_fixed_width_position(
     #[case] input: &[u8],
     #[case] ignore_positions: bool,
+    #[case] skip_unused_fields: bool,
     #[case] expected: Point3D,
 ) {
-    let mut parser = all_consuming(fixed_width_position(ignore_positions));
+    let mut parser = all_consuming(fixed_width_position(ignore_positions, skip_unused_fields));
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    assert!(
+        result.is_ok(),
+        "{:?} should have succeeded, error: {:?}",
+        input_str,
+        result.clone().unwrap_err()
+    );
     let (remaining, pos) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
+    assert!(
+        remaining.is_empty(),
+        "{:?} should have consumed all input, remaining: {:?}",
+        input_str,
+        remaining
+    );
     assert_eq!(pos, expected);
 }
 
 #[rstest]
-#[case::too_short(b"    0.0000    0.0000    0.000")]
-#[case::too_long(b"    0.0000    0.0000    0.00000")]
-#[case::invalid_x(b"    x.0000    0.0000    0.0000")]
-#[case::invalid_y(b"    0.0000    y.0000    0.0000")]
-#[case::invalid_z(b"    0.0000    0.0000    z.0000")]
-fn test_fixed_width_position_invalid(#[case] input: &[u8]) {
-    let mut parser = all_consuming(fixed_width_position(false));
+#[case::too_short(b"    0.0000    0.0000    0.000", false, false, NomErrorKind::Eof)]
+#[case::too_long(b"    0.0000    0.0000    0.00000", false, false, NomErrorKind::Eof)]
+#[case::invalid_x(b"    x.0000    0.0000    0.0000", false, false, NomErrorKind::Digit)]
+#[case::invalid_y(b"    0.0000    y.0000    0.0000", false, false, NomErrorKind::Digit)]
+#[case::invalid_z(b"    0.0000    0.0000    z.0000", false, false, NomErrorKind::Digit)]
+#[case::invalid_x_unused(b"    x.0000    0.0000    0.0000", true, false, NomErrorKind::Digit)]
+#[case::invalid_y_unused(b"    0.0000    y.0000    0.0000", true, false, NomErrorKind::Digit)]
+#[case::invalid_z_unused(b"    0.0000    0.0000    z.0000", true, false, NomErrorKind::Digit)]
+fn test_fixed_width_position_invalid(
+    #[case] input: &[u8],
+    #[case] ignore_positions: bool,
+    #[case] skip_unused_fields: bool,
+    #[case] expected_kind: NomErrorKind,
+) {
+    let mut parser = all_consuming(fixed_width_position(ignore_positions, skip_unused_fields));
     let result = parser.parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        result.is_err(),
+        "{:?} should have failed, output: {:?}",
+        input_str,
+        result.clone().unwrap()
+    );
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
 }
 
 #[rstest]

@@ -17,6 +17,8 @@ use crate::table_ir::{
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_69(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0\n",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_62(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  \n",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_61(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0 \n",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_60(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0\n",
@@ -53,9 +55,9 @@ fn test_atom_block(
 ) {
     let result = atom_block(1, 0, CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
+    assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
     let (remaining, (atoms, positions, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should consume all input, remaining: {:?}", input_str, remaining);
+    assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining);
     assert_eq!(atoms.len(), 1);
     let atom = &atoms[0];
     let positions = positions.expect("positions should be present");
@@ -74,16 +76,23 @@ fn test_atom_block(
 #[rustfmt::skip]
 #[rstest]
 #[case::len_69_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0X\n")]
+#[case::len_62_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0 1\n")]
+#[case::len_61_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  01\n")]
 #[case::len_60_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0X\n")]
+#[case::len_50_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 4\n")]
+#[case::len_49_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  04\n")]
 #[case::len_48_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0X\n")]
 #[case::len_39_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3X\n")]
+#[case::len_38_trailing_data(b"    1.2345    2.3456    3.4567 C  -2 3\n")]
+#[case::len_37_trailing_data(b"    1.2345    2.3456    3.4567 C  -23\n")]
 #[case::len_36_trailing_data(b"    1.0000    2.0000    3.0000 C  -2X\n")]
+#[case::len_35_trailing_data(b"    1.2345    2.3456    3.4567 C  1\n")]
 #[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n")]
 #[case::len_31_too_short(b"    1.0000    2.0000    3.0000 \n")]
 fn test_atom_block_invalid(#[case] input: &[u8]) {
     let result = atom_block(1, 0, CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
     assert!(
         matches!(result, Err(Err::Error(ParseError::InvalidAtomLine { .. }))),
         "{:?} should have failed with InvalidAtomLine",
@@ -97,6 +106,8 @@ fn test_atom_block_invalid(#[case] input: &[u8]) {
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_69(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0\n",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_62(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  \n",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_61(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0 \n",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_60(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0\n",
@@ -133,9 +144,9 @@ fn test_extended_atom_block(
 ) {
     let result = extended_atom_block(1, 0, CtabParseFlags::EXTENDED).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should parse successfully: {:?}", input_str, result);
+    assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
     let (remaining, (atoms, positions, _)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should consume all input, remaining: {:?}", input_str, remaining);
+    assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining);
     assert_eq!(atoms.len(), 1);
     let atom = &atoms[0];
     let positions = positions.expect("positions should be present");
@@ -157,6 +168,10 @@ fn test_extended_atom_block(
 #[case::len_69_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0X\n")]
 #[case::len_60_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0X\n")]
 #[case::len_48_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0X\n")]
+#[case::len_44_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  0 1")]
+#[case::len_43_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  01")]
+#[case::len_41_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3 1")]
+#[case::len_40_trailing_data(b"    1.2345    2.3456    3.4567 C   0  31")]
 #[case::len_39_trailing_data(b"    1.0000    2.0000    3.0000 C  -2  3X\n")]
 #[case::len_36_trailing_data(b"    1.0000    2.0000    3.0000 C  -2X\n")]
 #[case::len_34_trailing_data(b"    1.0000    2.0000    3.0000 C  X\n")]
@@ -164,11 +179,12 @@ fn test_extended_atom_block(
 fn test_extended_atom_block_invalid(#[case] input: &[u8]) {
     let result = extended_atom_block(1, 0, CtabParseFlags::EXTENDED).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
     assert!(
         matches!(result, Err(Err::Error(ParseError::InvalidAtomLine { .. }))),
-        "{:?} should have failed with InvalidAtomLine",
+        "{:?} should have failed with InvalidAtomLine, output: {:?}",
         input_str,
+        result.clone().unwrap_err(),
     );
 }
 
@@ -176,18 +192,66 @@ fn test_extended_atom_block_invalid(#[case] input: &[u8]) {
 #[rstest]
 #[case::len_69(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_66(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_63(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_60(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0  4  0  0  0",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_57(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_54(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_51(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::len_48(b"    1.0000    2.0000    3.0000 C  -2  3  0  0  0",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, None)]
+#[case::len_45(b"    1.2345    2.3456    3.4567 C   0  3  1  0",
+    1.2345, 2.3456, 3.4567, Element::C, None, Some(1), Some(Chirality::Clockwise), None, None)]
+#[case::len_42(b"    1.2345    2.3456    3.4567 C   0  3  1",
+    1.2345, 2.3456, 3.4567, Element::C, None, Some(1), Some(Chirality::Clockwise), None, None)]
 #[case::len_39(b"    1.0000    2.0000    3.0000 C  -2  3",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), Some(1), None, None, None)]
 #[case::len_36(b"    1.0000    2.0000    3.0000 C  -2",
     1.0000, 2.0000, 3.0000, Element::C, Some(10), None, None, None, None)]
 #[case::len_34(b"    1.0000    2.0000    3.0000 C  ",
     1.0000, 2.0000, 3.0000, Element::C, None, None, None, None, None)]
+#[case::len_33(b"    1.0000    2.0000    3.0000 C ",
+    1.0000, 2.0000, 3.0000, Element::C, None, None, None, None, None)]
 #[case::len_32(b"    1.0000    2.0000    3.0000 C",
     1.0000, 2.0000, 3.0000, Element::C, None, None, None, None, None)]
+#[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(9), Some(1), None, None, Some(4))]
+#[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(16), Some(1), None, None, Some(4))]
+#[case::mass_diff_out_of_range_low(b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, None, Some(1), None, None, Some(4))]
+#[case::mass_diff_out_of_range_high(b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, None, Some(1), None, None, Some(4))]
+#[case::charge_out_of_range_high(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), None, None, None, Some(4))]
+#[case::blank_mass_diff(b"    1.2345    2.3456    3.4567 C      3  0  0  0  4",
+    1.2345, 2.3456, 3.4567, Element::C, None, Some(1), None, None, Some(4))]
+#[case::blank_charge(b"    1.2345    2.3456    3.4567 C  -2     0  0  0  4",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), None, None, None, Some(4))]
+#[case::blank_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0   ", 
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, None)]
+#[case::blank_stereo_parity(b"    1.2345    2.3456    3.4567 C   0  3   0  ",
+    1.2345, 2.3456, 3.4567, Element::C, None, Some(1), None, None, None)]
+#[case::blank_block_1(b"    1.2345    2.3456    3.4567 C  -2  3  0     0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::blank_block_2(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4     0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::blank_block_3(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0      ",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::gaps_with_spaces_and_zeros(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4           1 0    ",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3  0  0  0  4",
+    0.0000, 0.0000, 0.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::H, Some(2), Some(1), None, None, Some(1))]
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
 fn test_atom_input(
     #[case] input: &[u8],
     #[case] x: f64,
@@ -202,10 +266,9 @@ fn test_atom_input(
 ) {
     let result = atom_input(CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
     let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining {:?}", input_str, remaining);
-
+    assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining);
     assert!(
         approx_eq!(f64, position.x, x),
         "{:?} has returned x {:?}, expected {:?}",
@@ -261,20 +324,26 @@ fn test_atom_input(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_30_too_short(b"    1.2345    2.3456    3.4567", NomErrorKind::Eof)]
+#[case::too_short(b"    1.2345    2.3456    3.4567", NomErrorKind::Eof)]
 #[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Eof)]
+#[case::malformed_coordinate(b"    0.1   0.0    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Eof)]
 #[case::atom_list(b"    0.7145    2.0625    0.0000 L   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
 #[case::pseudoatom(b"   -1.8857    2.4750    0.0000 Psd 0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
+#[case::stereo_parity_out_of_range(b"    1.2345    2.3456    3.4567 C   0  3  4", NomErrorKind::Verify)]
 #[case::non_numeric_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
-#[case::incorrect_yz_coordinates(b"    0.1   0.0    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Eof)]
+#[case::valence_out_of_range(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", NomErrorKind::Verify)]
 #[case::non_zero_hydrogen_count_stereo_care(b"    1.0000    2.0000    3.0000 C  -2  3  1  2  1  4", NomErrorKind::Verify)]
+#[case::non_numeric_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", NomErrorKind::Digit)]
+#[case::len69_invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0XXX", NomErrorKind::Verify)]
+#[case::len69_non_zero_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  1", NomErrorKind::Verify)]
+#[case::len48_invalid_extended(b"    1.2345    2.3456    3.4567 C   0  3  0  0XXX", NomErrorKind::Verify)]
 fn test_atom_input_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
     let result = atom_input(CtabParseFlags::BASIC).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
     assert! (
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{:?} should have failed with error kind {:?}, got {:?}",
@@ -298,6 +367,10 @@ fn test_atom_input_invalid(
     1.0000, 2.0000, 3.0000, Element::C, Some(10), None, None, None, None)]
 #[case::len_34(b"    1.0000    2.0000    3.0000 C  ",
     1.0000, 2.0000, 3.0000, Element::C, None, None, None, None, None)]
+#[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(9), Some(1), None, None, Some(4))]
+#[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0",
+    1.2345, 2.3456, 3.4567, Element::C, Some(16), Some(1), None, None, Some(4))]
 fn test_atom_input_strict(
     #[case] input: &[u8],
     #[case] x: f64,
@@ -312,9 +385,9 @@ fn test_atom_input_strict(
 ) {
     let result = atom_input(CtabParseFlags::BASIC & CtabParseFlags::STRICT).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
     let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should consume all input", input_str);
+    assert!(remaining.is_empty(), "{:?} should consume all input, remaining: {:?}", input_str, remaining);
 
     assert!(
         approx_eq!(f64, position.x, x),
@@ -371,14 +444,19 @@ fn test_atom_input_strict(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", NomErrorKind::Digit)]
+#[case::len_69_invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0XXX  0  0  0  0", NomErrorKind::Verify)]
+#[case::len_51_invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0XXX  0  4", NomErrorKind::Digit)]
+#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0XXX  4  0  0  0  0  0  0", NomErrorKind::Verify)]
+#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX", NomErrorKind::Verify)]
+#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", NomErrorKind::MapRes)]
+#[case::non_zero_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  1  0  0", NomErrorKind::Verify)]
 fn test_atom_input_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
     let result = atom_input(CtabParseFlags::BASIC & CtabParseFlags::STRICT).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
     assert! (
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{:?} should have failed with error kind {:?}, got {:?}",
@@ -390,12 +468,24 @@ fn test_atom_input_strict_invalid(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len_34(b"    1.0000    2.0000    3.0000 C  ", Element::C, None, None, None, None, None)]
-#[case::len_36(b"    1.0000    2.0000    3.0000 C  -2", Element::C, Some(10), None, None, None, None)]
-#[case::len_39(b"    1.0000    2.0000    3.0000 C  -2  3", Element::C, Some(10), Some(1), None, None, None)]
-#[case::len_42(b"    1.0000    2.0000    3.0000 C  -2  3  1", Element::C, Some(10), Some(1), Some(Chirality::Clockwise), None, None)]
-#[case::len_51(b"    1.0000    2.0000    3.0000 C  -2  3  1  0  0  4", Element::C, Some(10), Some(1), Some(Chirality::Clockwise), None, Some(4))]
-#[case::len_69(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0", Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_69(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0",
+    Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::len_51(b"    1.0000    2.0000    3.0000 C  -2  3  1  0  0  4",
+    Element::C, Some(10), Some(1), Some(Chirality::Clockwise), None, Some(4))]
+#[case::len_42(b"    1.0000    2.0000    3.0000 C  -2  3  1",
+    Element::C, Some(10), Some(1), Some(Chirality::Clockwise), None, None)]
+#[case::len_39(b"    1.0000    2.0000    3.0000 C  -2  3",
+    Element::C, Some(10), Some(1), None, None, None )]
+#[case::len_36(b"    1.0000    2.0000    3.0000 C  -2",
+    Element::C, Some(10), None, None, None, None)]
+#[case::len_34(b"    1.0000    2.0000    3.0000 C  ",
+    Element::C, None, None, None, None, None)]
+#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0",
+    Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0",
+    Element::H, Some(2), Some(1), None, None, Some(1))]
+#[case::invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0",
+    Element::C, Some(10), Some(1), None, None, Some(4))]
 fn test_atom_input_ignore_positions(
     #[case] input: &[u8],
     #[case] element: Element,
@@ -407,10 +497,9 @@ fn test_atom_input_ignore_positions(
 ) {
     let result = atom_input(CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
     let (remaining, (atom, _position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} should consume all input", input_str);
-
+    assert!(remaining.is_empty(), "{:?} should consume all input, remaining: {:?}", input_str, remaining);
     assert_eq!(
         atom.element, element,
         "{:?} has returned element {:?}, expected {:?}",
@@ -445,14 +534,19 @@ fn test_atom_input_ignore_positions(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", NomErrorKind::Tag)]
-fn test_atom_input_ignore_positions_invalid(
+#[case::len69_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", NomErrorKind::Digit)]
+#[case::len60_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0", NomErrorKind::Digit)]
+#[case::len42_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0", NomErrorKind::Digit)]
+#[case::len39_invalid_coordinates(b"   invalid   invalid   invalid C  -2  3", NomErrorKind::Digit)]
+#[case::len36_invalid_coordinates(b"   invalid   invalid   invalid C  -2", NomErrorKind::Digit)]
+#[case::len34_invalid_coordinates(b"   invalid   invalid   invalid C  ", NomErrorKind::Digit)]
+fn test_atom_input_ignore_positions_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = atom_input(CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS).parse(input);
+    let result = atom_input(CtabParseFlags::BASIC & CtabParseFlags::STRICT | CtabParseFlags::IGNORE_POSITIONS).parse(input);
     let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(result.is_err(), "{:?} should have failed, output: {:?}", input_str, result.clone().unwrap());
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{:?} should have failed with error kind {:?}, got {:?}",
@@ -950,6 +1044,8 @@ fn test_extended_atom_input_pseudoatoms(
        AtomSymbol::AtomList(AtomList { elements: vec![], exclusion: false }), None, None, Some(4), None, None, None, None, None)]
 #[case::chemaxon_wildcard(b"    1.2345    2.3456    3.4567 AH  0  0  0  0  0  0  0  0  0  0  0  0",
        AtomSymbol::WildcardAtom(WildcardAtom::HeavyOrH), None, None, None, None, None, None, None, None)]
+#[case::invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0",
+        AtomSymbol::Element(Element::C), Some(10), Some(1), Some(4), None, None, None, None, None)]
 fn test_extended_atom_input_ignore_positions(
     #[case] input: &[u8],
     #[case] symbol: AtomSymbol,
@@ -1032,12 +1128,12 @@ fn test_extended_atom_input_ignore_positions(
 
 #[rustfmt::skip]
 #[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", NomErrorKind::Tag)]
-fn test_extended_atom_input_ignore_positions_invalid(
+#[case::invalid_coordinates(b"   invalid   invalid   invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", NomErrorKind::Digit)]
+fn test_extended_atom_input_ignore_positions_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = extended_atom_input(CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS).parse(input);
+    let result = extended_atom_input(CtabParseFlags::EXTENDED & CtabParseFlags::STRICT | CtabParseFlags::IGNORE_POSITIONS).parse(input);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -1306,1368 +1402,6 @@ fn test_extended_atom_symbol_pseudoatoms_invalid(
     #[case] expected_kind: NomErrorKind,
 ) {
     let result = extended_atom_symbol(CtabParseFlags::PSEUDOATOMS).parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_69(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::len_66(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::len_63(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::len_62(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  ",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::len_61(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0 ",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, Some(16), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_out_of_range_low(b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_out_of_range_high(b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::charge_out_of_range_high(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4  0  0  0  0  0  0",
-       Element::C, Some(10), None, Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::blank_block_1(b"    1.2345    2.3456    3.4567 C  -2  3  0     0  4  0  0  0  0  0  0",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::blank_block_2(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4     0  0  0  0  0",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::blank_block_3(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0      ",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::gaps_with_spaces_and_zeros(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4           1 0    ",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0",
-       Element::H, Some(2), Some(1), Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input69(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] valence: Option<u8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input69(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, valence,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, valence,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::Eof)]
-#[case::non_numeric_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  a  0  0", NomErrorKind::Digit)]
-#[case::atom_list(b"    1.2345    2.3456    3.4567 L   0  0  0  0  0  0  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0XXX", NomErrorKind::Verify)]
-#[case::len_61_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  01", NomErrorKind::Eof)]
-#[case::len_62_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0 1", NomErrorKind::Eof)]
-fn test_atom_input69_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input69(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_69(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4  0  0  0  0  0  0",
-       Element::C, Some(16), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input69_strict(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] valence: Option<u8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input69(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, valence,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, valence,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0XXX  0  0  0  0", NomErrorKind::Verify)]
-#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C  -2  3  0  0XXX  4  0  0  0  0  0  0", NomErrorKind::Verify)]
-#[case::invalid_named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", NomErrorKind::MapRes)]
-#[case::non_zero_atom_map_number(b"    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  1  0  0", NomErrorKind::Verify)]
-fn test_atom_input69_strict_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input69(input, CtabParseFlags::BASIC &  CtabParseFlags::STRICT);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_69(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0  0  0  0", Element::C, Some(10), Some(1), Some(4))]
-#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3  0  0  0  4  0  0  0  0  0  0", Element::C, Some(10), Some(1), Some(4))]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0", Element::H, Some(2), Some(1), Some(1))]
-fn test_atom_input69_ignore_positions(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] valence: Option<u8>,
-) {
-    let result = atom_input69(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, valence,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, valence,
-    );
-    assert_eq!(
-        position.x, 0.0,
-        "{:?} has returned x {:?}, expected 0.0",
-        input_str, position.x,
-    );
-    assert_eq!(
-        position.y, 0.0,
-        "{:?} has returned y {:?}, expected 0.0",
-        input_str, position.y,
-    );
-    assert_eq!(
-        position.z, 0.0,
-        "{:?} has returned z {:?}, expected 0.0",
-        input_str, position.z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2  3  0  0  0  4  0  0  0  0  0  0", NomErrorKind::Tag)]
-fn test_atom_input69_ignore_positions_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input69(
-        input,
-        CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS,
-    );
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_60(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0  0", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::len_57(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::len_54(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::len_51(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4", Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4", Element::C, Some(16), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_out_of_range_low(b"    1.2345    2.3456    3.4567 C  -4  3  0  0  0  4", Element::C, None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_out_of_range_high(b"    1.2345    2.3456    3.4567 C   5  3  0  0  0  4", Element::C, None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::charge_out_of_range_high(b"    1.2345    2.3456    3.4567 C  -2  8  0  0  0  4",  Element::C, Some(10), None, Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", Element::H, Some(2), Some(1), Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input60(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] valence: Option<u8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input60(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, valence,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, valence,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C  -2  3  0  0  0  4", NomErrorKind::Eof)]
-#[case::non_numeric_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  a", NomErrorKind::Digit)]
-#[case::out_of_range_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 16", NomErrorKind::Verify)]
-#[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  -2  3  0  0  0  4", NomErrorKind::MapRes)]
-#[case::len_50_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0 4", NomErrorKind::Eof)]
-#[case::len_49_trailing_data(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  04", NomErrorKind::Eof)]
-fn test_atom_input60_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input60(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();   
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_51(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4", Element::C, Some(10), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_lower_bound(b"    1.2345    2.3456    3.4567 C  -3  3  0  0  0  4", Element::C, Some(9), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_upper_bound(b"    1.2345    2.3456    3.4567 C   4  3  0  0  0  4", Element::C, Some(16), Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input60_strict(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] valence: Option<u8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input60(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
-    let input_str = input.to_str_lossy();   
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, valence,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, valence,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", NomErrorKind::MapRes)]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX", NomErrorKind::Verify)]
-fn test_atom_input60_strict_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input60(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
-    let input_str = input.to_str_lossy();   
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_51(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4", Element::C, Some(10), Some(1), Some(4))]
-#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3  0  0  0  4", Element::C, Some(10), Some(1), Some(4))]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1", Element::H, Some(2), Some(1), Some(1))]
-fn test_atom_input60_ignore_positions(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] valence: Option<u8>,
-) {
-    let result = atom_input60(
-        input,
-        CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS,
-    );
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} has non-empty remaining",
-        input_str
-    );
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, valence,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, valence,
-    );
-    assert_eq!(
-        position.x, 0.0,
-        "{:?} has returned x {:?}, expected 0.0",
-        input_str, position.x,
-    );
-    assert_eq!(
-        position.y, 0.0,
-        "{:?} has returned y {:?}, expected 0.0",
-        input_str, position.y,
-    );
-    assert_eq!(
-        position.z, 0.0,
-        "{:?} has returned z {:?}, expected 0.0",
-        input_str, position.z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2  3  0  0  0  4", NomErrorKind::Tag)]
-fn test_atom_input60_ignore_positions_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input60(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::blank_mass_diff(b"    1.2345    2.3456    3.4567 C      3  0  0  0  4", None, Some(1), Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::blank_charge(b"    1.2345    2.3456    3.4567 C  -2     0  0  0  4",  Some(10), None, Some(4), 1.2345, 2.3456, 3.4567)]
-#[case::blank_valence(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0   ",  Some(10), Some(1), None, 1.2345, 2.3456, 3.4567)]
-fn test_atom_input60_empty_fields(
-    #[case] input: &[u8],
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] valence: Option<u8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input60(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, valence,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, valence,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_48(b"    1.2345    2.3456    3.4567 C   0  3  1  0  0", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::len_45(b"    1.2345    2.3456    3.4567 C   0  3  1  0", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::len_42(b"    1.2345    2.3456    3.4567 C   0  3  1", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::blank_stereo_parity(b"    1.2345    2.3456    3.4567 C   0  3   0  ", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0", Element::H, Some(2), Some(1), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input48(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input48(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::stereo_parity_out_of_range(b"    1.2345    2.3456    3.4567 C   0  3  4", NomErrorKind::Verify)]
-#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C   0  3  0", NomErrorKind::Eof)]
-#[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L   0  3  0", NomErrorKind::MapRes)]
-#[case::invalid_extended(b"    1.2345    2.3456    3.4567 C   0  3XXX", NomErrorKind::Digit)]
-#[case::len_44_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  0 1", NomErrorKind::Eof)]
-#[case::len_43_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3  01", NomErrorKind::Eof)]
-#[case::len_41_trailing_data(b"    1.2345    2.3456    3.4567 C   0  3 1", NomErrorKind::Eof)]
-#[case::len_40_trailing_data(b"    1.2345    2.3456    3.4567 C   0  31", NomErrorKind::Eof)]
-fn test_atom_input48_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input48(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_42(b"    1.2345    2.3456    3.4567 C   0  3  1", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff(b"    1.2345    2.3456    3.4567 C  -2  3  0", Element::C, Some(10), Some(1), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input48_strict(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input48(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3   XXX", NomErrorKind::Verify)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0", NomErrorKind::MapRes)]
-fn test_atom_input48_strict_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input48(input, CtabParseFlags::BASIC & CtabParseFlags::STRICT);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_42(b"    1.2345    2.3456    3.4567 C  -2  3  0", Element::C, Some(10), Some(1))]
-#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3  0", Element::C, Some(10), Some(1))]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0", Element::H, Some(2), Some(1))]
-fn test_atom_input48_ignore_positions(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-) {
-    let result = atom_input48(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();       
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        position.x, 0.0,
-        "{:?} has returned x {:?}, expected 0.0",
-        input_str, position.x,
-    );
-    assert_eq!(
-        position.y, 0.0,
-        "{:?} has returned y {:?}, expected 0.0",
-        input_str, position.y,
-    );
-    assert_eq!(
-        position.z, 0.0,
-        "{:?} has returned z {:?}, expected 0.0",
-        input_str, position.z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2  3  0", NomErrorKind::Tag)]
-fn test_atom_input48_ignore_positions_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input69(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::blank_stereo_parity(b"    1.2345    2.3456    3.4567 C   0  3   ", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::blank_mass_diff(b"    1.2345    2.3456    3.4567 C      3  0", Element::C, None, Some(1), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input48_empty_fields(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input48(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_39(b"    1.2345    2.3456    3.4567 C  -2  3", Element::C, Some(10), Some(1), 1.2345, 2.3456, 3.4567)]
-#[case::charge_out_of_range_high(b"    1.2345    2.3456    3.4567 C  -2  8",  Element::C, Some(10), None, 1.2345, 2.3456, 3.4567)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3",  Element::H, Some(2), Some(1), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input39(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input39(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        atom.valence, None,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, None as Option<u8>
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C  -2  3", NomErrorKind::Eof)]
-#[case::non_numeric_mass_diff(b"    1.2345    2.3456    3.4567 C  -a  3", NomErrorKind::Digit)]
-#[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  -2  3", NomErrorKind::MapRes)]
-#[case::len_38_trailing_data(b"    1.2345    2.3456    3.4567 C  -2 3", NomErrorKind::Eof)]
-#[case::len_37_trailing_data(b"    1.2345    2.3456    3.4567 C  -23", NomErrorKind::Eof)]
-fn test_atom_input39_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input39(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_39(b"    1.2345    2.3456    3.4567 C  -2  3", Element::C, Some(10), Some(1))]
-#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3", Element::C, Some(10), Some(1))]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3", Element::H, Some(2), Some(1))]
-fn test_atom_input39_ignore_positions(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-) {
-    let result = atom_input39(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-    assert_eq!(
-        position.x, 0.0,
-        "{:?} has returned x {:?}, expected 0.0",
-        input_str, position.x,
-    );
-    assert_eq!(
-        position.y, 0.0,
-        "{:?} has returned y {:?}, expected 0.0",
-        input_str, position.y,
-    );
-    assert_eq!(
-        position.z, 0.0,
-        "{:?} has returned z {:?}, expected 0.0",
-        input_str, position.z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2  3", NomErrorKind::Tag)]
-fn test_atom_input39_ignore_positions_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input39(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::blank_mass_diff(b"    1.2345    2.3456    3.4567 C      3", None, Some(1))]
-#[case::blank_charge(b"    1.2345    2.3456    3.4567 C  -2   ", Some(10), None)]
-fn test_atom_input39_empty_fields(
-    #[case] input: &[u8],
-    #[case] isotope_mass: Option<u32>,
-    #[case] charge: Option<i8>,
-) {
-    let result = atom_input39(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, _position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, charge,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, charge,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_36(b"    1.2345    2.3456    3.4567 C  -2", Element::C, Some(10), 1.2345, 2.3456, 3.4567)]
-#[case::mass_diff_out_of_range_low(b"    1.2345    2.3456    3.4567 C  -4", Element::C, None, 1.2345, 2.3456, 3.4567)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2", Element::H, Some(2), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input36(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input36(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, None,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, None as Option<i8>
-    );
-    assert_eq!(
-        atom.valence, None,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, None as Option<u8>
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C  -2", NomErrorKind::Eof)]
-#[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  -2", NomErrorKind::MapRes)]
-#[case::len_35_trailing_data(b"    1.2345    2.3456    3.4567 C  1", NomErrorKind::Eof)]
-fn test_atom_input36_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input36(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
- }
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_36(b"    1.2345    2.3456    3.4567 C  -2", Element::C, Some(10))]
-#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2", Element::C, Some(10))]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2", Element::H, Some(2))]
-fn test_atom_input36_ignore_positions(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-) {
-    let result = atom_input36(input,  CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        position.x, 0.0,
-        "{:?} has returned x {:?}, expected 0.0",
-        input_str, position.x,
-    );
-    assert_eq!(
-        position.y, 0.0,
-        "{:?} has returned y {:?}, expected 0.0",
-        input_str, position.y,
-    );
-    assert_eq!(
-        position.z, 0.0,
-        "{:?} has returned z {:?}, expected 0.0",
-        input_str, position.z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  -2", NomErrorKind::Tag)]
-fn test_atom_input36_ignore_positions_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input39(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rstest]
-#[case::blank_mass_diff(b"    1.2345    2.3456    3.4567 C    ", None)]
-fn test_atom_input36_empty_fields(#[case] input: &[u8], #[case] isotope_mass: Option<u32>) {
-    let result = atom_input36(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, _position)) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} has non-empty remaining",
-        input_str
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_34(b"    1.2345    2.3456    3.4567 C  ", Element::C, None, 1.2345, 2.3456, 3.4567)]
-#[case::len_33(b"    1.2345    2.3456    3.4567 C ", Element::C, None, 1.2345, 2.3456, 3.4567)]
-#[case::len_32(b"    1.2345    2.3456    3.4567 C", Element::C, None, 1.2345, 2.3456, 3.4567)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  ", Element::H, Some(2), 1.2345, 2.3456, 3.4567)]
-fn test_atom_input34(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-    #[case] x: f64,
-    #[case] y: f64,
-    #[case] z: f64,
-) {
-    let result = atom_input34(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        atom.charge, None,
-        "{:?} has returned charge {:?}, expected {:?}",
-        input_str, atom.charge, None as Option<i8>
-    );
-    assert_eq!(
-        atom.valence, None,
-        "{:?} has returned valence {:?}, expected {:?}",
-        input_str, atom.valence, None as Option<u8>
-    );
-    assert!(
-        approx_eq!(f64, position.x, x),
-        "{:?} has returned x {:?}, expected {:?}",
-        input_str,
-        position.x,
-        x,
-    );
-    assert!(
-        approx_eq!(f64, position.y, y),
-        "{:?} has returned y {:?}, expected {:?}",
-        input_str,
-        position.y,
-        y,
-    );
-    assert!(
-        approx_eq!(f64, position.z, z),
-        "{:?} has returned z {:?}, expected {:?}",
-        input_str,
-        position.z,
-        z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::non_numeric_coordinate(b"    1.234a    2.3456    3.4567 C  ", NomErrorKind::Eof)]
-#[case::invalid_atom_symbol(b"    1.2345    2.3456    3.4567 L  ", NomErrorKind::MapRes)]
-fn test_atom_input34_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input34(input, CtabParseFlags::BASIC);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::len_34(b"    1.2345    2.3456    3.4567 C  ", Element::C, None)]
-#[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  ", Element::C, None)]
-#[case::named_isotope(b"    1.2345    2.3456    3.4567 D  ", Element::H, Some(2))]
-fn test_atom_input34_ignore_positions(
-    #[case] input: &[u8],
-    #[case] element: Element,
-    #[case] isotope_mass: Option<u32>,
-) {
-    let result = atom_input34(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (atom, position)) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(
-        atom.element, element,
-        "{:?} has returned element {:?}, expected {:?}",
-        input_str, atom.element, element,
-    );
-    assert_eq!(
-        atom.isotope_mass, isotope_mass,
-        "{:?} has returned isotope mass {:?}, expected {:?}",
-        input_str, atom.isotope_mass, isotope_mass,
-    );
-    assert_eq!(
-        position.x, 0.0,
-        "{:?} has returned x {:?}, expected 0.0",
-        input_str, position.x,
-    );
-    assert_eq!(
-        position.y, 0.0,
-        "{:?} has returned y {:?}, expected 0.0",
-        input_str, position.y,
-    );
-    assert_eq!(
-        position.z, 0.0,
-        "{:?} has returned z {:?}, expected 0.0",
-        input_str, position.z,
-    );
-}
-
-#[rustfmt::skip]
-#[rstest]
-#[case::invalid_coordinates(b"    invalid    invalid    invalid C  ", NomErrorKind::Tag)]
-fn test_atom_input34_ignore_positions_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let result = atom_input34(input, CtabParseFlags::BASIC | CtabParseFlags::IGNORE_POSITIONS);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
