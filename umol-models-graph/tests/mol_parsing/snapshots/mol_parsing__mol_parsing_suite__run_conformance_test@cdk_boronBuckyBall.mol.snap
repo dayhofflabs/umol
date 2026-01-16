@@ -2,18 +2,22 @@
 source: umol-models-graph/tests/mol_parsing/mod.rs
 expression: results
 ---
-expected_category: extended_molecule
-category: extended_molecule
+expected_category: molecule
+category: molecule
 molecule:
-  success: false
-  error:
-    error_type: InvalidBondLine
-    message: "Invalid bond line at line 84, col 0"
+  success: true
+  summary:
+    sum_formula: B80
+    atom_count: 80
+    bond_count: 210
+    property_count: 0
 molecule_lenient:
-  success: false
-  error:
-    error_type: InvalidBondLine
-    message: "Invalid bond line at line 84, col 0"
+  success: true
+  summary:
+    sum_formula: B80
+    atom_count: 80
+    bond_count: 210
+    property_count: 0
 extended_molecule:
   success: true
   extended_summary:

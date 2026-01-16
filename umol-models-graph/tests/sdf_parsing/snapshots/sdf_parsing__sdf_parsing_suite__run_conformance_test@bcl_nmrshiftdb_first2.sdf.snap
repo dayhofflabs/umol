@@ -2,20 +2,40 @@
 source: umol-models-graph/tests/sdf_parsing/mod.rs
 expression: results
 ---
-expected_category: extended_molecule
-category: extended_molecule
+expected_category: molecule
+category: molecule
 molecule:
-  success: false
-  compound_count: 0
-  error:
-    error_type: InvalidBondLine
-    message: "Invalid bond line at line 145, col 0"
+  success: true
+  compound_count: 3
+  summaries:
+    - sum_formula: C23H26O12
+      atom_count: 61
+      bond_count: 63
+      property_count: 9
+    - sum_formula: C8N2O
+      atom_count: 11
+      bond_count: 11
+      property_count: 4
+    - sum_formula: C17HO3
+      atom_count: 21
+      bond_count: 21
+      property_count: 4
 molecule_lenient:
-  success: false
-  compound_count: 0
-  error:
-    error_type: InvalidBondLine
-    message: "Invalid bond line at line 145, col 0"
+  success: true
+  compound_count: 3
+  summaries:
+    - sum_formula: C23H26O12
+      atom_count: 61
+      bond_count: 63
+      property_count: 9
+    - sum_formula: C8N2O
+      atom_count: 11
+      bond_count: 11
+      property_count: 4
+    - sum_formula: C17HO3
+      atom_count: 21
+      bond_count: 21
+      property_count: 4
 extended_molecule:
   success: true
   compound_count: 3
