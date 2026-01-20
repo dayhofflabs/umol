@@ -51,8 +51,6 @@ pub enum ParseError {
     InvalidChargeCode(u8),
     #[error("Invalid valence code: {0}")]
     InvalidValenceCode(u8),
-    #[error("Invalid stereo parity code: {0}")]
-    InvalidStereoParity(u8),
     #[error("Property mismatch: {0}")]
     PropertyMismatch(String),
     #[error("Inconsistent Sgroups: {0}")]
@@ -293,11 +291,6 @@ impl From<ParseError> for Diagnostic {
             ),
             ParseError::InvalidValenceCode(_) => (
                 DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::InvalidStereoParity(_) => (
-                DiagnosticKind::CtfileInvalidAtomLine,
                 Span::None,
                 Some(error.to_string()),
             ),

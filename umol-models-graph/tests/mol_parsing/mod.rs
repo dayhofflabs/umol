@@ -15,9 +15,7 @@ use rstest::rstest;
 use serde::Serialize;
 use umol_models_graph::io::ctfile::config::CtfileIoConfig;
 use umol_models_graph::io::ctfile::error::ParseError;
-use umol_models_graph::io::ctfile::parser::{
-    parse_extended_mol_bytes_with, parse_mol_bytes_with,
-};
+use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
 use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 
 /// Category based on which parsers succeed
@@ -239,14 +237,18 @@ fn extract_expected_category(path: &Path) -> Category {
         if let std::path::Component::Normal(name) = comp {
             if name.to_str() == Some("data") && i + 1 < components.len() {
                 if let std::path::Component::Normal(category_name) = &components[i + 1] {
-                    if let Some(cat) = Category::from_dir_name(category_name.to_str().unwrap_or("")) {
+                    if let Some(cat) = Category::from_dir_name(category_name.to_str().unwrap_or(""))
+                    {
                         return cat;
                     }
                 }
             }
         }
     }
-    panic!("Could not determine expected category from path: {:?}", path);
+    panic!(
+        "Could not determine expected category from path: {:?}",
+        path
+    );
 }
 
 fn parse_file(path: &Path) -> FileParseResults {

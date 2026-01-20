@@ -167,9 +167,9 @@ impl BondOrder {
 /// In SMILES: Up=/, Down=\
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondDirection {
-    Up,        // MOL: Wedge (code 1), SMILES: /
-    Down,      // MOL: Dash (code 6), SMILES: \
-    Either,    // MOL code 4 (Either)
+    Up,     // MOL: Wedge (code 1), SMILES: /
+    Down,   // MOL: Dash (code 6), SMILES: \
+    Either, // MOL code 4 (Either)
 }
 
 /// Double-bond stereochemistry (E/Z) annotation in IR

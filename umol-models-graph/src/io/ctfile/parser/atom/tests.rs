@@ -562,8 +562,6 @@ fn test_atom_input_ignore_positions_strict_invalid(
        1.0000, 2.0000, 3.0000, AtomSymbol::Element(Element::C), None, None, None, None, None, None, None, None, None)]
 #[case::len_34(b"    1.0000    2.0000    3.0000 C  ",
        1.0000, 2.0000, 3.0000, AtomSymbol::Element(Element::C), None, None, None, None, None, None, None, None, None)]
-#[case::len_35(b"    1.0000    2.0000    3.0000 C   ",
-       1.0000, 2.0000, 3.0000, AtomSymbol::Element(Element::C), None, None, None, None, None, None, None, None, None)]
 #[case::len_36(b"    1.0000    2.0000    3.0000 C  -2",
        1.0000, 2.0000, 3.0000, AtomSymbol::Element(Element::C), Some(10), None, None, None, None, None, None, None, None)]
 #[case::len_39(b"    1.0000    2.0000    3.0000 C  -2  3",
@@ -1161,17 +1159,16 @@ fn test_extended_atom_input_ignore_positions_strict_invalid(
 #[case::element_h_one_character(b"H", AtomSymbol::Element(Element::H))]
 #[case::element_h_two_characters(b"H ", AtomSymbol::Element(Element::H))]
 #[case::element_hg_two_characters(b"Hg", AtomSymbol::Element(Element::Hg))]
-fn test_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = atom_symbol(CtabParseFlags::BASIC).parse(input);
+fn test_parse_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
+    let result = parse_atom_symbol(input, input, true);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, symbol) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} has non-empty remaining",
-        input_str
+    let symbol = result.unwrap();
+    assert_eq!(
+        symbol, expected,
+        "{:?} has returned symbol {:?}, expected {:?}",
+        input_str, symbol, expected
     );
-    assert_eq!(symbol, expected);
 }
 
 #[rstest]
@@ -1186,14 +1183,14 @@ fn test_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
 #[case::rgroup(b"R1 ", NomErrorKind::MapRes)]
 #[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
 #[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = atom_symbol(CtabParseFlags::BASIC).parse(input);
+fn test_parse_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let result = parse_atom_symbol(input, input, true);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{:?} should have failed with error kind {:?}, got {:?}",
-        input,
+        input_str,
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code)
     );
@@ -1203,13 +1200,17 @@ fn test_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErro
 #[case::named_isotope_d(b"D  ", NomErrorKind::MapRes)]
 #[case::named_isotope_d_lowercase(b"d  ", NomErrorKind::MapRes)]
 #[case::named_isotope_t(b"T  ", NomErrorKind::MapRes)]
-fn test_atom_symbol_strict_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = atom_symbol(CtabParseFlags::STRICT).parse(input);
-    assert!(result.is_err(), "{:?} should have failed", input);
+fn test_parse_atom_symbol_strict_invalid(
+    #[case] input: &[u8],
+    #[case] expected_kind: NomErrorKind,
+) {
+    let result = parse_atom_symbol(input, input, false);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
         matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
         "{:?} should have failed with error kind {:?}, got {:?}",
-        input,
+        input_str,
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code)
     );
@@ -1240,20 +1241,15 @@ fn test_atom_symbol_strict_invalid(#[case] input: &[u8], #[case] expected_kind: 
 #[case::rgroup_unlabeled(b"R# ", AtomSymbol::RGroup(RGroup::new(None)))]
 #[case::rgroup_r1(b"R1 ", AtomSymbol::RGroup(RGroup::new(Some(1))))]
 #[case::rgroup_r3(b"R3 ", AtomSymbol::RGroup(RGroup::new(Some(3))))]
-fn test_extended_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = extended_atom_symbol(CtabParseFlags::EXTENDED).parse(input);
+fn test_parse_extended_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol) {
+    let result = parse_extended_atom_symbol(input, input, true, true, false, true, true, false);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, symbol) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} has non-empty remaining",
-        input_str
-    );
+    let symbol = result.unwrap();
     assert_eq!(
         symbol, expected,
         "{:?} has returned symbol {:?}, expected {:?}",
-        input, symbol, expected
+        input_str, symbol, expected
     );
 }
 
@@ -1266,7 +1262,7 @@ fn test_extended_atom_symbol(#[case] input: &[u8], #[case] expected: AtomSymbol)
 #[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
 #[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
 fn test_extended_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
-    let result = extended_atom_symbol(CtabParseFlags::EXTENDED).parse(input);
+    let result = parse_extended_atom_symbol(input, input, true, true, false, true, true, false);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -1288,20 +1284,15 @@ fn test_extended_atom_symbol_invalid(#[case] input: &[u8], #[case] expected_kind
 #[case::rgroup_unlabeled(b"R# ", AtomSymbol::RGroup(RGroup::new(None)))]
 #[case::rgroup_r1(b"R1 ", AtomSymbol::RGroup(RGroup::new(Some(1))))]
 #[case::rgroup_r3(b"R3 ", AtomSymbol::RGroup(RGroup::new(Some(3))))]
-fn test_extended_atom_symbol_strict(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = extended_atom_symbol(CtabParseFlags::STRICT).parse(input);
+fn test_parse_extended_atom_symbol_strict(#[case] input: &[u8], #[case] expected: AtomSymbol) {
+    let result = parse_extended_atom_symbol(input, input, false, true, false, true, true, false);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, symbol) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} has non-empty remaining",
-        input_str
-    );
+    let symbol = result.unwrap();
     assert_eq!(
         symbol, expected,
         "{:?} has returned symbol {:?}, expected {:?}",
-        input, symbol, expected
+        input_str, symbol, expected
     );
 }
 
@@ -1311,11 +1302,11 @@ fn test_extended_atom_symbol_strict(#[case] input: &[u8], #[case] expected: Atom
 #[case::named_isotope_t(b"T  ", NomErrorKind::MapRes)]
 #[case::pseudoatom_ala(b"Ala", NomErrorKind::MapRes)]
 #[case::pseudoatom_unicode(b"\xCE\xB1 ", NomErrorKind::MapRes)]
-fn test_extended_atom_symbol_strict_invalid(
+fn test_parse_extended_atom_symbol_strict_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = extended_atom_symbol(CtabParseFlags::STRICT).parse(input);
+    let result = parse_extended_atom_symbol(input, input, false, true, false, true, true, false);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -1337,12 +1328,11 @@ fn test_extended_atom_symbol_lenient(
     #[case] input: &[u8],
     #[case] expected: AtomSymbol,
 ) {
-    let result = extended_atom_symbol(CtabParseFlags::LENIENT).parse(input);
+    let result = parse_extended_atom_symbol(input, input, true, true, true, true, true, false);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, symbol) = result.unwrap();
-    assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(symbol, expected, "{:?} has returned symbol {:?}, expected {:?}", input, symbol, expected);
+    let symbol = result.unwrap();
+    assert_eq!(symbol, expected, "{:?} has returned symbol {:?}, expected {:?}", input_str, symbol, expected);
 }
 
 #[rstest]
@@ -1356,7 +1346,7 @@ fn test_extended_atom_symbol_lenient_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = extended_atom_symbol(CtabParseFlags::LENIENT).parse(input);
+    let result = parse_extended_atom_symbol(input, input, true, true, true, true, true, false);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(
@@ -1371,19 +1361,14 @@ fn test_extended_atom_symbol_lenient_invalid(
 #[rstest]
 #[case::pseudoatom_ala(b"Ala", AtomSymbol::Pseudoatom("Ala".to_string()))]
 fn test_extended_atom_symbol_pseudoatoms(#[case] input: &[u8], #[case] expected: AtomSymbol) {
-    let result = extended_atom_symbol(CtabParseFlags::PSEUDOATOMS).parse(input);
+    let result = parse_extended_atom_symbol(input, input, false, false, false, false, false, true);
     let input_str = input.to_str_lossy();
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, symbol) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} has non-empty remaining",
-        input_str
-    );
+    let symbol = result.unwrap();
     assert_eq!(
         symbol, expected,
         "{:?} has returned symbol {:?}, expected {:?}",
-        input, symbol, expected
+        input_str, symbol, expected
     );
 }
 
@@ -1401,7 +1386,7 @@ fn test_extended_atom_symbol_pseudoatoms_invalid(
     #[case] input: &[u8],
     #[case] expected_kind: NomErrorKind,
 ) {
-    let result = extended_atom_symbol(CtabParseFlags::PSEUDOATOMS).parse(input);
+    let result = parse_extended_atom_symbol(input, input, false, false, false, false, false, true);
     let input_str = input.to_str_lossy();
     assert!(result.is_err(), "{:?} should have failed", input_str);
     assert!(

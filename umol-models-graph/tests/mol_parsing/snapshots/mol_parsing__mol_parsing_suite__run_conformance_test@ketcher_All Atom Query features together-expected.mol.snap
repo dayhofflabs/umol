@@ -8,7 +8,7 @@ molecule:
   success: false
   error:
     error_type: InvalidAtomLine
-    message: "Invalid atom line at line 41, col 42"
+    message: "Invalid atom line at line 41, col 0"
 molecule_lenient:
   success: false
   error:
@@ -18,7 +18,7 @@ extended_molecule:
   success: false
   error:
     error_type: InvalidAtomLine
-    message: "Invalid atom line at line 41, col 42"
+    message: "Invalid atom line at line 41, col 0"
 extended_molecule_lenient:
   success: false
   error:

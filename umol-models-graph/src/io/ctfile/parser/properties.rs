@@ -14,8 +14,8 @@ use umol_data::Element;
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{
     fixed_width_element_partial, fixed_width_float_f10_4, fixed_width_int,
-    fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_str_partial,
-    fixed_width_unused, rgroup_occurrences, LinesWithOffsetExt,
+    fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_str_partial, fixed_width_unused,
+    rgroup_occurrences, LinesWithOffsetExt,
 };
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;

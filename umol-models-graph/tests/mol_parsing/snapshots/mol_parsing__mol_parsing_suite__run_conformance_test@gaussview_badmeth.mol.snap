@@ -13,7 +13,7 @@ molecule_lenient:
   success: false
   error:
     error_type: InvalidAtomLine
-    message: "Invalid atom line at line 5, col 20"
+    message: "Invalid atom line at line 5, col 0"
 extended_molecule:
   success: false
   error:
@@ -23,4 +23,4 @@ extended_molecule_lenient:
   success: false
   error:
     error_type: InvalidAtomLine
-    message: "Invalid atom line at line 5, col 20"
+    message: "Invalid atom line at line 5, col 0"

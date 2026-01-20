@@ -13,7 +13,11 @@ impl Point3D {
         Self { x, y, z }
     }
     pub fn zero() -> Self {
-        Self { x: 0.0, y: 0.0, z: 0.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
     }
 
     pub fn is_zero(&self) -> bool {

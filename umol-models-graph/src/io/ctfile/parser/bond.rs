@@ -1,7 +1,7 @@
 //! Bond block parsers for CTab files.
 
 use nom::character::complete::space0;
-use nom::combinator::{all_consuming, cond, map_res};
+use nom::combinator::all_consuming;
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::terminated;
 use nom::{Err, Parser};
@@ -10,10 +10,7 @@ use super::convert::{
     convert_bond_reacting_center_code, convert_bond_stereo_direction_code,
     convert_bond_topology_code, convert_bond_type_code, convert_extended_bond_type_code,
 };
-use super::utils::{
-    fixed_width_int, fixed_width_int_minus1, fixed_width_int_opt_unsigned, fixed_width_unused_n,
-    LinesWithOffsetExt,
-};
+use super::utils::{parse_int_opt, validate_unused_n, LinesWithOffsetExt};
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
@@ -127,142 +124,63 @@ pub fn bond_input<'inp>(
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
         }
 
-        if flags == CtabParseFlags::BASIC {
-            match input.len() {
-                21 => return basic_bond_input21(input),
-                18 => return basic_bond_input18(input),
-                _ => {}
-            }
-        }
+        let mut offset;
 
         let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
         let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
 
-        // Atom indices
-        let (remaining, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
-        let (remaining, second_atom) = fixed_width_int_minus1::<usize>(3).parse(remaining)?;
+        // Atom indices (0-2, 3-5)
+        let first_atom = parse_int_opt::<u32>(input, &input[0..3])?
+            .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+        let second_atom = parse_int_opt::<u32>(input, &input[3..6])?
+            .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
 
-        // Bond type
-        let (remaining, order) = map_res(fixed_width_int::<u8>(3), move |code| {
-            convert_bond_type_code(code, extended_range)
-        })
-        .parse(remaining)?;
+        // Bond type (6-8)
+        let order_code = parse_int_opt::<u8>(input, &input[6..9])?.unwrap_or(0);
+        let order = convert_bond_type_code(order_code, extended_range)
+            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
 
-        // Stereo/direction
-        let (remaining, stereo_direction) = cond(
-            remaining.len() >= 3,
-            map_res(fixed_width_int::<u8>(3), convert_bond_stereo_direction_code),
-        )
-        .parse(remaining)?;
+        offset = 9;
 
-        // Ignored field
-        let (remaining, _) = cond(
-            !remaining.is_empty(),
-            fixed_width_unused_n((remaining.len() / 3).min(1), 3, skip_unused_fields),
-        )
-        .parse(remaining)?;
+        // Stereo/direction (9-11)
+        let (stereo, direction) = if input.len() >= 12 {
+            offset = 12;
+            let stereo_code = parse_int_opt::<u8>(input, &input[9..12])?.unwrap_or(0);
+            convert_bond_stereo_direction_code(stereo_code)
+        } else {
+            (None, None)
+        };
 
-        // Unused fields
-        let (remaining, _) = cond(
-            !remaining.is_empty(),
-            fixed_width_unused_n((remaining.len() / 3).min(2), 3, false),
-        )
-        .parse(remaining)?;
+        // Ignored field xxx (12-14)
+        if input.len() >= 15 {
+            offset = 15;
+            validate_unused_n(input, &input[12..15], 1, 3, skip_unused_fields)?;
+        }
+
+        // Bond topology and reacting center (15-20) - extended
+        let count = ((input.len().saturating_sub(15)) / 3).min(2);
+        if count > 0 {
+            offset = 15 + count * 3;
+            validate_unused_n(input, &input[15..15 + count * 3], count, 3, false)?;
+        }
 
         let mut bond = Bond::with_order(order);
-        if let Some((stereo_val, direction)) = stereo_direction {
+        if let (Some(stereo), Some(direction)) = (stereo, direction) {
             match order {
                 BondOrder::Single => {
-                    bond.direction = direction;
+                    bond.direction = Some(direction);
                 }
                 BondOrder::Double => {
-                    bond.stereo = stereo_val;
+                    bond.stereo = Some(stereo);
                 }
                 _ => (),
             }
         }
 
-        Ok((remaining, (first_atom, second_atom, bond)))
+        Ok((&input[offset..], (first_atom, second_atom, bond)))
     }
-}
-
-/// Fast-path basic bond input parser for 21-character lines.  Hard-codes
-/// CtabParseFlags::BASIC = NAMED_ISOTOPES | ATOM_MAP_HCOUNT_FIELDS | SKIP_UNUSED_FIELDS behavior.
-/// behavior
-fn basic_bond_input21<'inp>(
-    input: &'inp [u8],
-) -> Result<(&'inp [u8], (usize, usize, Bond)), Err<NomError<&'inp [u8]>>> {
-    let line = &input[..21];
-    let remaining = &input[21..];
-
-    let first_atom = fixed_width_int_opt_unsigned(input, &line[0..3])?
-        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
-        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
-    let second_atom = fixed_width_int_opt_unsigned(input, &line[3..6])?
-        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
-        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
-    let order_code = fixed_width_int_opt_unsigned(input, &line[6..9])?.unwrap_or(0) as u8;
-    let order = convert_bond_type_code(order_code, false)
-        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
-
-    let stereo_code = fixed_width_int_opt_unsigned(input, &line[9..12])?.unwrap_or(0) as u8;
-    let stereo_direction = convert_bond_stereo_direction_code(stereo_code)
-        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
-
-    if !super::utils::is_all_whitespace_or_zeroes(&line[15..18]) {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
-    }
-    if !super::utils::is_all_whitespace_or_zeroes(&line[18..21]) {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
-    }
-
-    let mut bond = Bond::with_order(order);
-    if let (Some(stereo), Some(direction)) = stereo_direction {
-        match order {
-            BondOrder::Single => bond.direction = Some(direction),
-            BondOrder::Double => bond.stereo = Some(stereo),
-            _ => {}
-        }
-    }
-    Ok((remaining, (first_atom, second_atom, bond)))
-}
-
-/// Fast-path basic bond input parser for 18-character lines.  Hard-codes
-/// CtabParseFlags::BASIC = NAMED_ISOTOPES | ATOM_MAP_HCOUNT_FIELDS | SKIP_UNUSED_FIELDS behavior.
-///
-fn basic_bond_input18<'inp>(
-    input: &'inp [u8],
-) -> Result<(&'inp [u8], (usize, usize, Bond)), Err<NomError<&'inp [u8]>>> {
-    let line = &input[..18];
-    let remaining = &input[18..];
-
-    let first_atom = fixed_width_int_opt_unsigned(input, &line[0..3])?
-        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
-        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
-    let second_atom = fixed_width_int_opt_unsigned(input, &line[3..6])?
-        .and_then(|val| (val >= 1).then_some((val - 1) as usize))
-        .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
-    let order_code = fixed_width_int_opt_unsigned(input, &line[6..9])?.unwrap_or(0) as u8;
-    let order = convert_bond_type_code(order_code, false)
-        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
-
-    let stereo_code = fixed_width_int_opt_unsigned(input, &line[9..12])?.unwrap_or(0) as u8;
-    let stereo_direction = convert_bond_stereo_direction_code(stereo_code)
-        .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
-
-    if !super::utils::is_all_whitespace_or_zeroes(&line[15..18]) {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
-    }
-
-    let mut bond = Bond::with_order(order);
-    if let (Some(stereo), Some(direction)) = stereo_direction {
-        match order {
-            BondOrder::Single => bond.direction = Some(direction),
-            BondOrder::Double => bond.stereo = Some(stereo),
-            _ => {}
-        }
-    }
-    Ok((remaining, (first_atom, second_atom, bond)))
 }
 
 /// Parse extended bond input
@@ -291,64 +209,85 @@ pub fn extended_bond_input<'inp>(
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     let allow_wildcards = flags.contains(CtabParseFlags::WILDCARDS);
+
     move |input: &'inp [u8]| {
         if input.len() < 9 {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
         }
 
-        // Atom indices
-        let (i, first_atom) = fixed_width_int_minus1::<usize>(3).parse(input)?;
-        let (i, second_atom) = fixed_width_int_minus1::<usize>(3).parse(i)?;
+        let mut offset = 9;
 
-        let (i, order) = map_res(fixed_width_int::<u8>(3), move |code| {
-            convert_extended_bond_type_code(code, extended_range, allow_wildcards)
-        })
-        .parse(i)?;
+        // Atom indices (0-2, 3-5)
+        let first_atom = parse_int_opt::<u32>(input, &input[0..3])?
+            .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
+        let second_atom = parse_int_opt::<u32>(input, &input[3..6])?
+            .and_then(|val| (val >= 1).then_some((val - 1) as usize))
+            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::Verify)))?;
 
-        // Stereo/dir
-        let (i, stereo_direction) = cond(
-            i.len() >= 3,
-            map_res(fixed_width_int::<u8>(3), convert_bond_stereo_direction_code),
-        )
-        .parse(i)?;
+        // Bond type (6-8)
+        let order_code = parse_int_opt::<u8>(input, &input[6..9])?.unwrap_or(0);
+        let order = convert_extended_bond_type_code(order_code, extended_range, allow_wildcards)
+            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
 
-        // Ignore xxx field
-        let (i, _) = cond(
-            !i.is_empty(),
-            fixed_width_unused_n((i.len() / 3).min(1), 3, skip_unused_fields),
-        )
-        .parse(i)?;
+        // Stereo/direction (9-11)
+        let stereo_direction = if input.len() >= 12 {
+            offset = 12;
+            let stereo_code = parse_int_opt::<u8>(input, &input[9..12])?.unwrap_or(0);
+            convert_bond_stereo_direction_code(stereo_code)
+        } else {
+            (None, None)
+        };
 
-        // Topology, reacting center
-        let (i, topology) = cond(
-            i.len() >= 3,
-            map_res(fixed_width_int::<u8>(3), convert_bond_topology_code),
-        )
-        .parse(i)?;
-        let (i, reacting_center) = cond(
-            i.len() >= 3,
-            map_res(fixed_width_int::<i8>(3), move |code| {
-                convert_bond_reacting_center_code(code, extended_range)
-            }),
-        )
-        .parse(i)?;
+        // Ignored field xxx (12-14)
+        if input.len() >= 15 {
+            offset = 15;
+            validate_unused_n(input, &input[12..15], 1, 3, skip_unused_fields)?;
+        }
+
+        // Topology rrr (15-17)
+        let topology = if input.len() >= 18 {
+            offset = 18;
+            let val = parse_int_opt::<u8>(input, &input[15..18])?.unwrap_or(0);
+            if val > 2 {
+                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+            }
+            convert_bond_topology_code(val)
+        } else {
+            None
+        };
+
+        // Reacting center ccc (18-20)
+        let reacting_center = if input.len() >= 21 {
+            offset = 21;
+            let val = parse_int_opt::<i8>(input, &input[18..21])?.unwrap_or(0);
+            convert_bond_reacting_center_code(val, extended_range)
+                .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Verify)))?
+        } else {
+            None
+        };
+
+        // Validate any trailing bytes as whitespace
+        if input.len() > offset && !input[offset..].trim_ascii().is_empty() {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
+        }
 
         let mut bond = ExtendedBond::with_order(order);
-        if let Some((stereo_val, direction)) = stereo_direction {
+        if let (Some(stereo), Some(direction)) = stereo_direction {
             match order {
                 BondOrder::Single => {
-                    bond.direction = direction;
+                    bond.direction = Some(direction);
                 }
                 BondOrder::Double => {
-                    bond.stereo = stereo_val;
+                    bond.stereo = Some(stereo);
                 }
                 _ => (),
             }
         }
-        bond.topology = topology.flatten();
-        bond.reacting_center = reacting_center.flatten();
+        bond.topology = topology;
+        bond.reacting_center = reacting_center;
 
-        Ok((i, (first_atom, second_atom, bond)))
+        Ok((&input[input.len()..], (first_atom, second_atom, bond)))
     }
 }
 

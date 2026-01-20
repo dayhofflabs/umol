@@ -11,35 +11,25 @@ use crate::table_ir::{
     RingBondCount, SubstitutionCount, UnsaturatedAtom,
 };
 
-/// Convert atom mass difference code (atom block)
-/// 'dd' field: mass difference (-3..=4), None if 0 or value outside of this range
-pub(super) fn convert_atom_mass_diff_code(code: i8) -> Option<i8> {
-    match code {
-        -3..=-1 | 1..=4 => Some(code),
-        _ => None,
-    }
-}
-
 /// Convert atom symbol and mass difference to element and isotope mass
 /// 'ss' field: atom symbol, 'dd' field: mass difference
 /// Processes elements and named isotopes.
 /// Returns error for extended atom symbols (L, A, Q, *, LP, R#)
 pub(super) fn convert_atom_symbol_mass_diff(
     symbol: &AtomSymbol,
-    mass_diff: Option<i8>,
+    mass_diff_code: i8,
 ) -> (Element, Option<u32>) {
-    let (element, isotope_mass) = match *symbol {
+    match *symbol {
         AtomSymbol::Element(e) => {
-            let isotope_mass = match mass_diff {
-                None | Some(0) => None,
-                Some(diff) => Some((e.reference_mass_number() as i8 + diff) as u32),
+            let isotope_mass = match mass_diff_code {
+                0 => None,
+                diff => Some((e.reference_mass_number() as i8 + diff) as u32),
             };
             (e, isotope_mass)
         }
         AtomSymbol::NamedIsotope(i) => (i.element(), Some(i.mass_number())),
         _ => unreachable!("atom_symbol() should only return Element or NamedIsotope"),
-    };
-    (element, isotope_mass)
+    }
 }
 
 /// Convert extended atom symbol and mass difference to isotope mass
@@ -47,12 +37,13 @@ pub(super) fn convert_atom_symbol_mass_diff(
 /// Returns None for extended atom symbols (L, A, Q, *, LP, R#)
 pub(super) fn convert_extended_atom_symbol_mass_diff(
     symbol: &AtomSymbol,
-    mass_diff: Option<i8>,
+    mass_diff_code: i8,
 ) -> Option<u32> {
     match *symbol {
-        AtomSymbol::Element(e) => {
-            mass_diff.map(|diff| (e.reference_mass_number() as i8 + diff) as u32)
-        }
+        AtomSymbol::Element(e) => match mass_diff_code {
+            0 => None,
+            diff => Some((e.reference_mass_number() as i8 + diff) as u32),
+        },
         AtomSymbol::NamedIsotope(iso) => Some(iso.mass_number()),
         _ => None,
     }
@@ -92,89 +83,66 @@ pub(super) fn convert_atom_isotope_mass_number(
 
 /// Convert atom stereo parity code to Chirality.
 /// 'sss' field: 0 = not stereo, 1 = odd (clockwise), 2 = even (counter-clockwise), 3 = either
-pub(super) fn convert_atom_stereo_parity_code(code: u8) -> Result<Option<Chirality>, ParseError> {
+pub(super) fn convert_atom_stereo_parity_code(code: u8) -> Option<Chirality> {
     match code {
-        0 => Ok(None),
-        1 => Ok(Some(Chirality::Clockwise)),
-        2 => Ok(Some(Chirality::CounterClockwise)),
-        3 => Ok(Some(Chirality::Unspecified)),
-        _ => Err(ParseError::InvalidStereoParity(code)),
+        0 => None,
+        1 => Some(Chirality::Clockwise),
+        2 => Some(Chirality::CounterClockwise),
+        3 => Some(Chirality::Unspecified),
+        _ => unreachable!("invalid stereo parity code: {}", code),
     }
 }
 
 /// Convert atom hydrogen count code (extension: 0 in non-query atoms).
 /// 'hhh' field: 0 = non-query atom, 1 = H0, 2 = H1, 3 = H2, 4 = H3, 5 = H4
 /// Extended range: 6 = H5, 7 = H6, ..., 13 = H12
-pub(super) fn convert_atom_hydrogen_count_code(
-    code: u8,
-    extended_range: bool,
-) -> Result<Option<u8>, ParseError> {
+pub(super) fn convert_atom_hydrogen_count_code(code: u8) -> Option<u8> {
     match code {
-        0 => Ok(None),
-        1..=5 => Ok(Some(code - 1)),
-        6..=13 if extended_range => Ok(Some(code - 1)),
-        _ => Err(ParseError::InvalidValenceCode(code)),
+        0 => None,
+        code => Some((code - 1) as u8),
     }
 }
 
 /// Convert atom stereo care box code.
 /// 'bbb' field: 0 = ignore stereo, 1 = stereo must match
 /// Note: AtomStereoCare has no default value - 0 always means None
-pub(super) fn convert_atom_stereo_care_code(
-    code: u8,
-) -> Result<Option<AtomStereoCare>, ParseError> {
+pub(super) fn convert_atom_stereo_care_code(code: u8) -> Option<AtomStereoCare> {
     match code {
-        0 => Ok(None),
-        1 => Ok(Some(AtomStereoCare::Care)),
-        _ => Err(ParseError::InvalidCode {
-            field: "stereo care",
-            value: code as i32,
-        }),
+        0 => None,
+        1 => Some(AtomStereoCare::Care),
+        _ => unreachable!("invalid stereo care code: {}", code),
     }
 }
 
 /// Convert atom valence code (default, explicit, explicit zero).
 /// 'vvv' field: 0 = default, 1..=14 = explicit, 15 = explicit 0
-/// Returns error for invalid valence codes.
-pub(super) fn convert_atom_valence_code(code: u8) -> Result<Option<u8>, ParseError> {
+pub(super) fn convert_atom_valence_code(code: u8) -> Option<u8> {
     match code {
-        0 => Ok(None),             // default/unspecified valence
-        v @ 1..=14 => Ok(Some(v)), // explicit valences
-        15 => Ok(Some(0)),         // explicit zero valence
-        _ => Err(ParseError::InvalidValenceCode(code)),
+        0 => None,             // default/unspecified valence
+        v @ 1..=14 => Some(v), // explicit valences
+        15 => Some(0),         // explicit zero valence
+        _ => unreachable!("invalid valence code: {}", code),
     }
 }
 
 /// Convert atom inversion flag code.
 /// 'nnn' field: 0 = not applicable, 1 = inverted, 2 = retained
-/// Note: AtomInversionRetention has no default value - 0 always means None
-pub(super) fn convert_atom_inversion_flag_code(
-    code: u8,
-) -> Result<Option<AtomInversionRetention>, ParseError> {
+pub(super) fn convert_atom_inversion_flag_code(code: u8) -> Option<AtomInversionRetention> {
     match code {
-        0 => Ok(None),
-        1 => Ok(Some(AtomInversionRetention::Inverted)),
-        2 => Ok(Some(AtomInversionRetention::Retained)),
-        _ => Err(ParseError::InvalidCode {
-            field: "inversion flag",
-            value: code as i32,
-        }),
+        0 => None,
+        1 => Some(AtomInversionRetention::Inverted),
+        2 => Some(AtomInversionRetention::Retained),
+        _ => unreachable!("invalid inversion flag code: {}", code),
     }
 }
 
 /// Convert atom exact change flag code.
 /// 'eee' field: 0 = change allowed, 1 = exact change required
-/// Note: AtomExactChange has no default value - 0 always means None
-pub(super) fn convert_atom_exact_change_flag_code(
-    code: u8,
-) -> Result<Option<AtomExactChange>, ParseError> {
+pub(super) fn convert_atom_exact_change_flag_code(code: u8) -> Option<AtomExactChange> {
     match code {
-        0 => Ok(None),
-        1 => Ok(Some(AtomExactChange::Match)),
-        _ => Err(ParseError::InvalidCode {
-            field: "exact change flag",
-            value: code as i32,
-        }),
+        0 => None,
+        1 => Some(AtomExactChange::Match),
+        _ => unreachable!("invalid exact change flag code: {}", code),
     }
 }
 
@@ -258,32 +226,26 @@ pub(super) fn convert_extended_bond_type_code(
 /// NOTE: CTFile docs do not define cis/trans, 3=Double Either, 4=Single Either
 pub(super) fn convert_bond_stereo_direction_code(
     code: u8,
-) -> Result<(Option<BondStereo>, Option<BondDirection>), ParseError> {
+) -> (Option<BondStereo>, Option<BondDirection>) {
     match code {
-        0 => Ok((None, None)),
-        1 => Ok((Some(BondStereo::Cis), Some(BondDirection::Up))),
+        0 => (None, None),
+        1 => (Some(BondStereo::Cis), Some(BondDirection::Up)),
         // TODO: In RDKit: 3 is "either" double bond
         // 4 is "either" single bond
-        3 | 4 => Ok((Some(BondStereo::Either), Some(BondDirection::Either))),
-        6 => Ok((Some(BondStereo::Trans), Some(BondDirection::Down))),
-        _ => Err(ParseError::InvalidCode {
-            field: "bond stereo/direction",
-            value: code as i32,
-        }),
+        3 | 4 => (Some(BondStereo::Either), Some(BondDirection::Either)),
+        6 => (Some(BondStereo::Trans), Some(BondDirection::Down)),
+        _ => unreachable!("invalid stereo/direction code: {}", code),
     }
 }
 
 /// Convert bond topology code
 /// 'rrr' field - bond topology (0=Either, 1=Ring, 2=Chain)
-pub(super) fn convert_bond_topology_code(code: u8) -> Result<Option<BondTopology>, ParseError> {
+pub(super) fn convert_bond_topology_code(code: u8) -> Option<BondTopology> {
     match code {
-        0 => Ok(None),
-        1 => Ok(Some(BondTopology::Ring)),
-        2 => Ok(Some(BondTopology::Chain)),
-        _ => Err(ParseError::InvalidCode {
-            field: "bond topology",
-            value: code as i32,
-        }),
+        0 => None,
+        1 => Some(BondTopology::Ring),
+        2 => Some(BondTopology::Chain),
+        _ => unreachable!("invalid topology code: {}", code),
     }
 }
 
@@ -463,42 +425,35 @@ mod tests {
     use crate::table_ir::WildcardAtom;
 
     #[rstest]
-    #[case::zero(0, None)]
-    #[case::negative(-3, Some(-3))]
-    #[case::positive(4, Some(4))]
-    #[case::out_of_range_high(5, None)]
-    #[case(5, None)]
-    fn test_convert_atom_mass_diff_code(#[case] code: i8, #[case] expected: Option<i8>) {
-        assert_eq!(convert_atom_mass_diff_code(code), expected);
-    }
-
-    #[rstest]
-    #[case::element(&AtomSymbol::Element(Element::C), None, (Element::C, None))]
-    #[case::element_mass_diff(&AtomSymbol::Element(Element::C), Some(1), (Element::C, Some(13)))]
-    #[case::named_isotope(&AtomSymbol::NamedIsotope(NamedIsotope::D), None, (Element::H, Some(2)))]
-    #[case::named_isotope_mass_diff(&AtomSymbol::NamedIsotope(NamedIsotope::D), Some(3), (Element::H, Some(2)))]
+    #[case::element(&AtomSymbol::Element(Element::C), 0, (Element::C, None))]
+    #[case::element_mass_diff(&AtomSymbol::Element(Element::C), 1, (Element::C, Some(13)))]
+    #[case::named_isotope(&AtomSymbol::NamedIsotope(NamedIsotope::D), 0, (Element::H, Some(2)))]
+    #[case::named_isotope_mass_diff(&AtomSymbol::NamedIsotope(NamedIsotope::D), 3, (Element::H, Some(2)))]
     fn test_convert_atom_symbol_mass_diff(
         #[case] symbol: &AtomSymbol,
-        #[case] mass_diff: Option<i8>,
+        #[case] mass_diff_code: i8,
         #[case] expected: (Element, Option<u32>),
     ) {
-        assert_eq!(convert_atom_symbol_mass_diff(symbol, mass_diff), expected);
+        assert_eq!(
+            convert_atom_symbol_mass_diff(symbol, mass_diff_code),
+            expected
+        );
     }
 
     #[rstest]
-    #[case::element(&AtomSymbol::Element(Element::C), None, None)]
-    #[case::element_mass_diff(&AtomSymbol::Element(Element::C), Some(1), Some(13))]
-    #[case::named_isotope(&AtomSymbol::NamedIsotope(NamedIsotope::D), None, Some(2))]
-    #[case::named_isotope_mass_diff(&AtomSymbol::NamedIsotope(NamedIsotope::D), Some(3), Some(2))]
-    #[case::wildcard(&AtomSymbol::WildcardAtom(WildcardAtom::Any), None, None)]
-    #[case::wildcard(&AtomSymbol::WildcardAtom(WildcardAtom::Any), Some(-1), None)]
+    #[case::element(&AtomSymbol::Element(Element::C), 0, None)]
+    #[case::element_mass_diff(&AtomSymbol::Element(Element::C), 1, Some(13))]
+    #[case::named_isotope(&AtomSymbol::NamedIsotope(NamedIsotope::D), 0, Some(2))]
+    #[case::named_isotope_mass_diff(&AtomSymbol::NamedIsotope(NamedIsotope::D), 3, Some(2))]
+    #[case::wildcard(&AtomSymbol::WildcardAtom(WildcardAtom::Any), 0, None)]
+    #[case::wildcard(&AtomSymbol::WildcardAtom(WildcardAtom::Any), -1, None)]
     fn test_convert_extended_atom_symbol_mass_diff(
         #[case] symbol: &AtomSymbol,
-        #[case] mass_diff: Option<i8>,
+        #[case] mass_diff_code: i8,
         #[case] expected: Option<u32>,
     ) {
         assert_eq!(
-            convert_extended_atom_symbol_mass_diff(symbol, mass_diff),
+            convert_extended_atom_symbol_mass_diff(symbol, mass_diff_code),
             expected
         );
     }
@@ -570,13 +525,7 @@ mod tests {
     #[case::counter_clockwise(2, Some(Chirality::CounterClockwise))]
     #[case::unspecified(3, Some(Chirality::Unspecified))]
     fn test_convert_atom_stereo_parity_code(#[case] code: u8, #[case] expected: Option<Chirality>) {
-        assert_eq!(convert_atom_stereo_parity_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::out_of_range_high(4)]
-    fn test_convert_atom_stereo_parity_code_invalid(#[case] code: u8) {
-        assert!(convert_atom_stereo_parity_code(code).is_err());
+        assert_eq!(convert_atom_stereo_parity_code(code), expected);
     }
 
     #[rstest]
@@ -587,38 +536,7 @@ mod tests {
     #[case::three(4, Some(3))]
     #[case::four(5, Some(4))]
     fn test_convert_atom_hydrogen_count_code(#[case] code: u8, #[case] expected: Option<u8>) {
-        assert_eq!(
-            convert_atom_hydrogen_count_code(code, false).unwrap(),
-            expected
-        );
-    }
-
-    #[rstest]
-    #[case::extended_range_high(6)]
-    #[case::out_of_range_high(14)]
-    fn test_convert_atom_hydrogen_count_code_invalid(#[case] code: u8) {
-        assert!(
-            convert_atom_hydrogen_count_code(code, false).is_err(),
-            "{} should have failed",
-            code
-        );
-    }
-
-    #[rstest]
-    #[case::five(6, Some(5))]
-    #[case::six(7, Some(6))]
-    #[case::seven(8, Some(7))]
-    #[case::eight(9, Some(8))]
-    #[case::nine(10, Some(9))]
-    #[case::twelve(13, Some(12))]
-    fn test_convert_atom_hydrogen_count_code_extended(
-        #[case] code: u8,
-        #[case] expected: Option<u8>,
-    ) {
-        assert_eq!(
-            convert_atom_hydrogen_count_code(code, true).unwrap(),
-            expected
-        );
+        assert_eq!(convert_atom_hydrogen_count_code(code), expected);
     }
 
     #[rstest]
@@ -628,17 +546,7 @@ mod tests {
         #[case] code: u8,
         #[case] expected: Option<AtomStereoCare>,
     ) {
-        assert_eq!(convert_atom_stereo_care_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::out_of_range_high(2)]
-    fn test_convert_atom_stereo_care_code_invalid(#[case] code: u8) {
-        assert!(
-            convert_atom_stereo_care_code(code).is_err(),
-            "{} should have failed",
-            code
-        );
+        assert_eq!(convert_atom_stereo_care_code(code), expected);
     }
 
     #[rstest]
@@ -647,17 +555,7 @@ mod tests {
     #[case::fourteen(14, Some(14))]
     #[case::zero(15, Some(0))]
     fn test_convert_atom_valence_code(#[case] code: u8, #[case] expected: Option<u8>) {
-        assert_eq!(convert_atom_valence_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::out_of_range_high(16)]
-    fn test_convert_atom_valence_code_invalid(#[case] code: u8) {
-        assert!(
-            convert_atom_valence_code(code).is_err(),
-            "{} should have failed",
-            code
-        );
+        assert_eq!(convert_atom_valence_code(code), expected);
     }
 
     #[rstest]
@@ -668,17 +566,7 @@ mod tests {
         #[case] code: u8,
         #[case] expected: Option<AtomInversionRetention>,
     ) {
-        assert_eq!(convert_atom_inversion_flag_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::out_of_range_high(3)]
-    fn test_convert_atom_inversion_flag_code_invalid(#[case] code: u8) {
-        assert!(
-            convert_atom_inversion_flag_code(code).is_err(),
-            "{} should have failed",
-            code
-        );
+        assert_eq!(convert_atom_inversion_flag_code(code), expected);
     }
 
     #[rstest]
@@ -688,17 +576,7 @@ mod tests {
         #[case] code: u8,
         #[case] expected: Option<AtomExactChange>,
     ) {
-        assert_eq!(convert_atom_exact_change_flag_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::out_of_range_high(2)]
-    fn test_convert_atom_exact_change_flag_code_invalid(#[case] code: u8) {
-        assert!(
-            convert_atom_exact_change_flag_code(code).is_err(),
-            "{} should have failed",
-            code
-        );
+        assert_eq!(convert_atom_exact_change_flag_code(code), expected);
     }
 
     #[rstest]
@@ -791,15 +669,7 @@ mod tests {
         #[case] code: u8,
         #[case] expected: (Option<BondStereo>, Option<BondDirection>),
     ) {
-        assert_eq!(convert_bond_stereo_direction_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::unused_2(2)]
-    #[case::unused_5(5)]
-    #[case::out_of_range_high(7)]
-    fn test_convert_bond_stereo_direction_code_invalid(#[case] code: u8) {
-        assert!(convert_bond_stereo_direction_code(code).is_err());
+        assert_eq!(convert_bond_stereo_direction_code(code), expected);
     }
 
     #[rstest]
@@ -807,13 +677,7 @@ mod tests {
     #[case::ring(1, Some(BondTopology::Ring))]
     #[case::chain(2, Some(BondTopology::Chain))]
     fn test_convert_bond_topology_code(#[case] code: u8, #[case] expected: Option<BondTopology>) {
-        assert_eq!(convert_bond_topology_code(code).unwrap(), expected);
-    }
-
-    #[rstest]
-    #[case::out_of_range_high(3)]
-    fn test_convert_bond_topology_code_invalid(#[case] code: u8) {
-        assert!(convert_bond_topology_code(code).is_err());
+        assert_eq!(convert_bond_topology_code(code), expected);
     }
 
     #[rstest]

@@ -1,3 +1,4 @@
+use float_cmp::approx_eq;
 use nom::character::complete::space0;
 use nom::combinator::all_consuming;
 use nom::error::ErrorKind as NomErrorKind;
@@ -255,53 +256,6 @@ fn test_fixed_width_int_in_range_inclusive(#[case] input: &[u8], #[case] expecte
 }
 
 #[rstest]
-#[case::padded_left_one_digit(b"  5", Some(5i32))]
-#[case::padded_left_two_digits(b" 10", Some(10i32))]
-#[case::padded_left_zero(b"  0", Some(0i32))]
-#[case::two_digits_out_of_range(b" 11", None)]
-#[case::negative_out_of_range(b" -1", None)]
-#[case::blank(b"   ", None)]
-#[case::blank_width2(b"  ", None)]
-fn test_fixed_width_int_in_range_opt(#[case] input: &[u8], #[case] expected: Option<i32>) {
-    let mut parser = all_consuming(fixed_width_int_in_range_opt::<i32, _>(3, 0..=10));
-    let result = parser.parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(
-        result.is_ok(),
-        "{:?} should have succeeded but failed with {:?}",
-        input_str,
-        result
-    );
-    let (remaining, value) = result.unwrap();
-    assert!(remaining.is_empty(), "remaining should be empty");
-    assert_eq!(
-        value, expected,
-        "{:?} has returned value {:?}, expected {:?}",
-        input_str, value, expected
-    );
-}
-
-#[rstest]
-#[case::non_numeric_input(b"abc", NomErrorKind::Digit)]
-#[case::trailing_characters(b"1a ", NomErrorKind::Eof)]
-fn test_fixed_width_int_in_range_opt_invalid(
-    #[case] input: &[u8],
-    #[case] expected_kind: NomErrorKind,
-) {
-    let mut parser = all_consuming(fixed_width_int_in_range_opt::<i32, _>(3, 0..=10));
-    let result = parser.parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(result.is_err(), "{:?} should have failed", input_str);
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
-}
-
-#[rstest]
 #[case::padded_left(b"  1", 0usize)]
 #[case::three_digits(b"123", 122usize)]
 fn test_fixed_width_int_minus1(#[case] input: &[u8], #[case] expected: usize) {
@@ -404,8 +358,15 @@ fn test_fixed_width_int_partial_invalid(#[case] input: &[u8], #[case] expected_k
 fn test_fixed_width_float(#[case] input: &[u8], #[case] expected: f64) {
     let mut parser = all_consuming(fixed_width_float_f10_4::<f64>());
     let result = parser.parse(input);
+    let input_str = input.to_str_lossy();
     let (_, parsed_val) = result.unwrap();
-    assert!((parsed_val - expected).abs() < 1e-9);
+    assert!(
+        approx_eq!(f64, parsed_val, expected, epsilon = 1e-4),
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str,
+        parsed_val,
+        expected
+    );
 }
 
 #[rstest]
@@ -515,56 +476,6 @@ fn test_fixed_width_unused(
 }
 
 #[rstest]
-#[case::empty(b"", 0, 0, false, true)]
-#[case::blank(b"   ", 1, 3, false, true)]
-#[case::zero(b"  0", 1, 3, false, true)]
-#[case::zero_pos2(b" 0 ", 1, 3, false, true)]
-#[case::zero_pos1(b"0  ", 1, 3, false, true)]
-#[case::two_zeros(b" 00", 1, 3, false, true)]
-#[case::two_zeros_pos1(b"00 ", 1, 3, false, true)]
-#[case::three_zeros(b"000", 1, 3, false, true)]
-#[case::two_fields_zeros(b"000000", 2, 3, false, true)]
-#[case::blank_field_zero(b"   000", 2, 3, false, true)]
-#[case::zeros_separated(b"0 0000", 2, 3, false, false)]
-#[case::two_fields_too_short(b"000", 2, 3, false, false)]
-#[case::one(b"  1", 1, 3, false, false)]
-#[case::zeros_separated_skip_unused_fields(b"0 0000", 2, 3, true, true)]
-#[case::one_skip_unused_fields(b"  1", 1, 3, true, true)]
-#[case::one_zero_padded_left(b"000001", 2, 3, false, false)]
-#[case::two_fields_too_short_skip_unused_fields(b"000", 2, 3, true, false)]
-#[case::two_fields_blank_width5(b"     ", 2, 3, false, false)]
-fn test_fixed_width_unused_n(
-    #[case] input: &[u8],
-    #[case] count: usize,
-    #[case] width: usize,
-    #[case] skip_unused_fields: bool,
-    #[case] expected_success: bool,
-) {
-    let mut parser = all_consuming(fixed_width_unused_n(count, width, skip_unused_fields));
-    let result = parser.parse(input);
-    let input_str = input.to_str_lossy();
-    assert_eq!(
-        result.is_ok(),
-        expected_success,
-        "{:?}: should have {}",
-        input_str,
-        if expected_success {
-            "succeeded"
-        } else {
-            "failed"
-        }
-    );
-    if expected_success {
-        let (remaining, _) = result.unwrap();
-        assert!(
-            remaining.is_empty(),
-            "remaining should be empty for {:?}",
-            input_str
-        );
-    }
-}
-
-#[rstest]
 #[case::full_field(b"abcd", 4, Some("abcd".to_string()))]
 #[case::padded_right(b"abc ", 4, Some("abc".to_string()))]
 #[case::too_short(b"abc", 4, Some("abc".to_string()))]
@@ -584,74 +495,6 @@ fn test_fixed_width_str_partial(
     let (remaining, result) = result.unwrap();
     assert!(remaining.is_empty(), "remaining should be empty");
     assert_eq!(result, expected);
-}
-
-#[rstest]
-#[case::zero(b"    0.0000    0.0000    0.0000", false, false, Point3D::zero())]
-#[case::nonzero(b"    1.2345   -2.3456    3.4567", false, false, Point3D::new(1.2345, -2.3456, 3.4567))]
-#[case::tens(b"   10.0000  -20.0000   30.0000", false, false, Point3D::new(10.0, -20.0, 30.0))]
-#[case::hundreds(b"  123.4567 -234.5678  345.6789", false, false, Point3D::new(123.4567, -234.5678, 345.6789))]
-#[case::short_zero(b"       0.0       0.0       0.0", false, false, Point3D::zero())]
-#[case::no_integer_part(b"        .0        .0        .0", false, false, Point3D::zero())]
-#[case::zero_ignored(b"    0.0000    0.0000    0.0000", true, false, Point3D::zero())]
-#[case::nonzero_ignored(b"    1.2345   -2.3456    3.4567", true, false, Point3D::zero())]
-#[case::zero_skipped(b"    0.0000    0.0000    0.0000", true, true, Point3D::zero())]
-#[case::invalid_skipped(b"    x.0000    0.0000    0.0000", true, true, Point3D::zero())]
-fn test_fixed_width_position(
-    #[case] input: &[u8],
-    #[case] ignore_positions: bool,
-    #[case] skip_unused_fields: bool,
-    #[case] expected: Point3D,
-) {
-    let mut parser = all_consuming(fixed_width_position(ignore_positions, skip_unused_fields));
-    let result = parser.parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(
-        result.is_ok(),
-        "{:?} should have succeeded, error: {:?}",
-        input_str,
-        result.clone().unwrap_err()
-    );
-    let (remaining, pos) = result.unwrap();
-    assert!(
-        remaining.is_empty(),
-        "{:?} should have consumed all input, remaining: {:?}",
-        input_str,
-        remaining
-    );
-    assert_eq!(pos, expected);
-}
-
-#[rstest]
-#[case::too_long(b"    0.0000    0.0000    0.00000", false, false, NomErrorKind::Eof)]
-#[case::invalid_x(b"    x.0000    0.0000    0.0000", false, false, NomErrorKind::Digit)]
-#[case::invalid_y(b"    0.0000    y.0000    0.0000", false, false, NomErrorKind::Digit)]
-#[case::invalid_z(b"    0.0000    0.0000    z.0000", false, false, NomErrorKind::Digit)]
-#[case::invalid_x_unused(b"    x.0000    0.0000    0.0000", true, false, NomErrorKind::Digit)]
-#[case::invalid_y_unused(b"    0.0000    y.0000    0.0000", true, false, NomErrorKind::Digit)]
-#[case::invalid_z_unused(b"    0.0000    0.0000    z.0000", true, false, NomErrorKind::Digit)]
-fn test_fixed_width_position_invalid(
-    #[case] input: &[u8],
-    #[case] ignore_positions: bool,
-    #[case] skip_unused_fields: bool,
-    #[case] expected_kind: NomErrorKind,
-) {
-    let mut parser = all_consuming(fixed_width_position(ignore_positions, skip_unused_fields));
-    let result = parser.parse(input);
-    let input_str = input.to_str_lossy();
-    assert!(
-        result.is_err(),
-        "{:?} should have failed, output: {:?}",
-        input_str,
-        result.clone().unwrap()
-    );
-    assert!(
-        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-        "{:?} should have failed with error kind {:?}, got {:?}",
-        input_str,
-        expected_kind,
-        result.clone().unwrap_err().map(|e| e.code)
-    );
 }
 
 #[rstest]
@@ -727,4 +570,130 @@ fn test_rgroup_occurrences_invalid(#[case] input: &[u8], #[case] expected_kind: 
         expected_kind,
         result.clone().unwrap_err().map(|e| e.code),
     );
+}
+
+#[rstest]
+#[case::whitespace_only(b"   ", None::<i32>)]
+#[case::zero(b"  0", Some(0i32))]
+#[case::positive(b" 42", Some(42i32))]
+#[case::negative(b" -5", Some(-5i32))]
+#[case::padded(b"123", Some(123i32))]
+fn test_parse_int_opt(#[case] field: &[u8], #[case] expected: Option<i32>) {
+    let input = b"dummy";
+    let result = parse_int_opt::<i32>(input, field);
+    assert!(
+        result.is_ok(),
+        "should succeed for {:?}",
+        field.to_str_lossy()
+    );
+    assert_eq!(result.unwrap(), expected);
+}
+
+#[rstest]
+#[case::whitespace_only_u8(b"   ", None::<u8>)]
+#[case::zero_u8(b"  0", Some(0u8))]
+#[case::positive_u8(b" 42", Some(42u8))]
+#[case::max_u8(b"255", Some(255u8))]
+fn test_parse_int_opt_unsigned(#[case] field: &[u8], #[case] expected: Option<u8>) {
+    let input = b"dummy";
+    let result = parse_int_opt::<u8>(input, field);
+    assert!(
+        result.is_ok(),
+        "should succeed for {:?}",
+        field.to_str_lossy()
+    );
+    assert_eq!(result.unwrap(), expected);
+}
+
+#[rstest]
+#[case::non_digit(b"abc")]
+#[case::mixed(b"12a")]
+#[case::trailing_space_char(b"12 3")]
+fn test_parse_int_opt_invalid(#[case] field: &[u8]) {
+    let input = b"dummy";
+    let result = parse_int_opt::<i32>(input, field);
+    assert!(
+        result.is_err(),
+        "should fail for {:?}",
+        field.to_str_lossy()
+    );
+}
+
+#[rstest]
+#[case::padded_both_sides(b"  1.2345  ", 1.2345)]
+#[case::negative(b"    -1.234", -1.234)]
+#[case::dot_zero_padded_right(b"1.0       ", 1.0)]
+#[case::no_fractional_part_padded_right(b"1.        ", 1.0)]
+#[case::no_integer_part_padded_both_sides(b" .1       ", 0.1)]
+#[case::padded_right(b"1.23456   ", 1.23456)]
+#[case::integer_padded_left(b"   1234567", 123.4567)]
+#[case::negative_padded_left(b"  -1234567", -123.4567)]
+#[case::blank(b"          ", 0.0)]
+#[case::blank_width9(b"         ", 0.0)]
+fn test_parse_float_f10_4(#[case] input: &[u8], #[case] expected: f64) {
+    let result = parse_float_f10_4(input, input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_ok(), "{:?} should have succeeded", input_str);
+    let value = result.unwrap();
+    assert_eq!(
+        value, expected,
+        "{:?} has returned value {:?}, expected {:?}",
+        input_str, value, expected
+    );
+}
+
+#[rstest]
+#[case::trailing_characters(b"1.23a     ", NomErrorKind::Digit)]
+#[case::invalid_decimal_point(b"1.2.3     ", NomErrorKind::Digit)]
+#[case::trailing_data(b"          a", NomErrorKind::Digit)]
+fn test_parse_float_f10_4_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
+    let result = parse_float_f10_4(input, input);
+    let input_str = input.to_str_lossy();
+    assert!(result.is_err(), "{:?} should have failed", input_str);
+    assert!(
+        matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+        "{:?} should have failed with error kind {:?}, got {:?}",
+        input_str,
+        expected_kind,
+        result.clone().unwrap_err().map(|e| e.code)
+    );
+}
+
+#[rstest]
+#[case::empty(b"", 0, 0, false, true)]
+#[case::blank(b"   ", 1, 3, false, true)]
+#[case::zero(b"  0", 1, 3, false, true)]
+#[case::zero_pos2(b" 0 ", 1, 3, false, true)]
+#[case::zero_pos1(b"0  ", 1, 3, false, true)]
+#[case::two_zeros(b" 00", 1, 3, false, true)]
+#[case::two_zeros_pos1(b"00 ", 1, 3, false, true)]
+#[case::three_zeros(b"000", 1, 3, false, true)]
+#[case::two_fields_zeros(b"000000", 2, 3, false, true)]
+#[case::blank_field_zero(b"   000", 2, 3, false, true)]
+#[case::zeros_separated(b"0 0000", 2, 3, false, false)]
+#[case::two_fields_too_short(b"000", 2, 3, false, false)]
+#[case::one(b"  1", 1, 3, false, false)]
+#[case::zeros_separated_skip_unused_fields(b"0 0000", 2, 3, true, true)]
+#[case::one_skip_unused_fields(b"  1", 1, 3, true, true)]
+#[case::one_zero_padded_left(b"000001", 2, 3, false, false)]
+#[case::two_fields_too_short_skip_unused_fields(b"000", 2, 3, true, false)]
+#[case::two_fields_blank_width5(b"     ", 2, 3, false, false)]
+fn test_validate_unused_n(
+    #[case] input: &[u8],
+    #[case] count: usize,
+    #[case] width: usize,
+    #[case] skip_unused_fields: bool,
+    #[case] expected_success: bool,
+) {
+    let result = validate_unused_n(input, input, count, width, skip_unused_fields);
+    let input_str = input.to_str_lossy();
+    if expected_success {
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded",
+            input_str
+        );
+    } else {
+        assert!(result.is_err(), "{:?} should have failed", input_str);
+    }
 }

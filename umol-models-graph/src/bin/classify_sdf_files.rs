@@ -17,9 +17,7 @@ use std::fs;
 use std::path::Path;
 
 use umol_models_graph::io::ctfile::config::CtfileIoConfig;
-use umol_models_graph::io::ctfile::parser::{
-    parse_extended_sdf_bytes_with, parse_sdf_bytes_with,
-};
+use umol_models_graph::io::ctfile::parser::{parse_extended_sdf_bytes_with, parse_sdf_bytes_with};
 
 /// Results from running all 4 parsers on a file
 #[derive(Debug, Clone, Copy)]

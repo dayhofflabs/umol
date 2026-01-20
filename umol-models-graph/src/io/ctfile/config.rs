@@ -49,7 +49,7 @@ bitflags! {
         // const RESERVED_28 = 1 << 28;
         // const RESERVED_29 = 1 << 29;
         // const RESERVED_30 = 1 << 30;
-        const DEBUG = 1 << 31;              // Debug output during parsing
+        // const RESERVED_31 = 1 << 31;
 
         // Presets
         const MINIMAL = 0;
@@ -58,7 +58,7 @@ bitflags! {
         const BASIC_MAX = Self::EXTENDED_RANGE.bits() | Self::EXTENDED_ISOTOPES.bits() |
             Self::NAMED_ISOTOPES.bits() | Self::ATOM_MAP_HCOUNT_FIELDS.bits() | Self::CLARK_EXTENSIONS.bits() |
             Self::EDITOR_EXTENSIONS.bits() | Self::UNICODE.bits() | Self::SKIP_UNUSED_FIELDS.bits() |
-            Self::NO_V2000_END_TAGS.bits() | Self::IGNORE_POSITIONS.bits() | Self::DEBUG.bits();
+            Self::NO_V2000_END_TAGS.bits() | Self::IGNORE_POSITIONS.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits() | Self::CHEMAXON_WILDCARDS.bits() |
@@ -177,9 +177,6 @@ impl fmt::Display for CtabParseFlags {
             }
             if self.contains(CtabParseFlags::IGNORE_POSITIONS) {
                 parts.push("IGNORE_POSITIONS");
-            }
-            if self.contains(CtabParseFlags::DEBUG) {
-                parts.push("DEBUG");
             }
         }
         write!(f, "{}", parts.join(" | "))

@@ -19,7 +19,6 @@ use nom::{Err, Parser};
 use num::{Float, Integer};
 use umol_data::{Element, NamedIsotope};
 
-use crate::position::Point3D;
 use crate::table_ir::RGroupOccurrence;
 
 /// Iterator over lines that yields each line without terminator and its byte length including terminator.
@@ -205,21 +204,6 @@ where
     })
 }
 
-/// Parse a fixed-width field as optional integer type. If range check fails, return None.
-pub(super) fn fixed_width_int_in_range_opt<'inp, T, R>(
-    width: usize,
-    range: R,
-) -> impl Parser<&'inp [u8], Output = Option<T>, Error = NomError<&'inp [u8]>>
-where
-    T: IntParser,
-    R: Contains<T> + Clone,
-{
-    map(
-        fixed_width_opt(width, delimited(space0, T::nom_parser(), space0)),
-        move |opt| opt.filter(|val| range.contains(val)),
-    )
-}
-
 /// Parse a fixed-width field as an integer type, subtracting one.
 pub(super) fn fixed_width_int_minus1<'inp, T>(
     width: usize,
@@ -247,6 +231,8 @@ where
 }
 
 /// Parse a fixed-width field as float with Fortran semantics (Fw.d).
+/// Parser combinator version for use with nom combinators.
+#[inline(always)]
 pub(super) fn fixed_width_float_f10_4<'inp, T>(
 ) -> impl Parser<&'inp [u8], Output = T, Error = NomError<&'inp [u8]>>
 where
@@ -291,31 +277,13 @@ pub(super) fn fixed_width_unused<'inp>(
     width: usize,
     skip_unused_fields: bool,
 ) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
-    fixed_width_unused_n(1, width, skip_unused_fields)
-}
-
-/// Multiple fixed-width unused fields of width `width`
-/// Only validate unused field if `skip_unused_fields` is false.
-pub(super) fn fixed_width_unused_n<'inp>(
-    count: usize,
-    width: usize,
-    skip_unused_fields: bool,
-) -> impl Parser<&'inp [u8], Output = (), Error = NomError<&'inp [u8]>> {
     move |input: &'inp [u8]| {
-        let total = count * width;
-        let (remaining, unused) = take(total).parse(input)?;
-        if skip_unused_fields || count == 0 || width == 0 {
+        let (remaining, unused) = take(width).parse(input)?;
+        if skip_unused_fields {
             return Ok((remaining, ()));
         }
-        for i in 0..count {
-            let start = i * width;
-            let end = start + width;
-            if end > unused.len() {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
-            }
-            if !is_all_whitespace_or_zeroes(&unused[start..end]) {
-                return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
-            }
+        if !is_all_whitespace_or_zeroes(&unused) {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
         }
         Ok((remaining, ()))
     }
@@ -328,6 +296,32 @@ pub(super) fn fixed_width_str_partial<'inp>(
     map(fixed_width_partial(width, rest, true), move |opt| {
         opt.and_then(|s| Some(s.trim_ascii().to_str_lossy().into_owned()))
     })
+}
+
+/// Parse a single RGroup occurrence.
+pub(super) fn rgroup_occurrence<'inp>(
+) -> impl Parser<&'inp [u8], Output = RGroupOccurrence, Error = NomError<&'inp [u8]>> {
+    alt((
+        map((nom_u8, tag("-"), nom_u8), |(n, _, m)| {
+            RGroupOccurrence::Range(n, m)
+        }),
+        map(nom_u8, RGroupOccurrence::Exactly),
+        map((tag(">"), nom_u8), |(_, n)| {
+            RGroupOccurrence::GreaterThan(n)
+        }),
+        map((tag("<"), nom_u8), |(_, n)| RGroupOccurrence::FewerThan(n)),
+    ))
+}
+
+/// Parse a comma-separated list of RGroup occurrences.
+pub(super) fn rgroup_occurrences<'inp>(
+) -> impl Parser<&'inp [u8], Output = Vec<RGroupOccurrence>, Error = NomError<&'inp [u8]>> {
+    delimited(
+        space0,
+        separated_list1(tag(","), rgroup_occurrence()),
+        space0,
+    )
+    .or(success(vec![RGroupOccurrence::GreaterThan(0)]))
 }
 
 /// Check if a symbol is a reserved atom symbol that requires a specific flag.
@@ -388,104 +382,75 @@ pub(super) fn is_reserved_atom_symbol(
     false
 }
 
-pub(super) fn fixed_width_int_opt_signed<'inp>(
+/// Parse an optional integer field. Returns None if field is whitespace only.
+#[inline(always)]
+pub(super) fn parse_int_opt<'inp, T: IntParser>(
     input: &'inp [u8],
-    field: &'inp [u8],
-) -> Result<Option<i32>, Err<NomError<&'inp [u8]>>> {
+    field: &[u8],
+) -> Result<Option<T>, Err<NomError<&'inp [u8]>>> {
     let trimmed = field.trim_ascii();
     if trimmed.is_empty() {
         return Ok(None);
     }
-    let mut sign = 1i32;
-    let mut idx = 0;
-    if trimmed[0] == b'-' {
-        sign = -1;
-        idx = 1;
-    } else if trimmed[0] == b'+' {
-        idx = 1;
+    match T::nom_parser().parse(trimmed) {
+        Ok((remaining, val)) if remaining.is_empty() => Ok(Some(val)),
+        Ok(_) => Err(Err::Error(NomError::new(input, NomErrorKind::Eof))), // trailing garbage
+        Err(Err::Error(_)) => Err(Err::Error(NomError::new(input, NomErrorKind::Digit))),
+        Err(Err::Failure(e)) => Err(Err::Failure(NomError::new(input, e.code))),
+        Err(Err::Incomplete(n)) => Err(Err::Incomplete(n)),
     }
-    if idx >= trimmed.len() || !trimmed[idx..].iter().all(|b| b.is_ascii_digit()) {
-        return Err(Err::Error(NomError::new(input, NomErrorKind::Digit)));
-    }
-    let mut val = 0i32;
-    for &b in &trimmed[idx..] {
-        val = val
-            .checked_mul(10)
-            .and_then(|v| v.checked_add((b - b'0') as i32))
-            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::TooLarge)))?;
-    }
-    Ok(Some(sign * val))
 }
 
-pub(super) fn fixed_width_int_opt_unsigned<'inp>(
+/// Parse a float field with F10.4 format. Returns 0.0 if field is whitespace only.
+#[inline(always)]
+pub(super) fn parse_float_f10_4<'inp>(
     input: &'inp [u8],
-    field: &'inp [u8],
-) -> Result<Option<u32>, Err<NomError<&'inp [u8]>>> {
+    field: &[u8],
+) -> Result<f64, Err<NomError<&'inp [u8]>>> {
     let trimmed = field.trim_ascii();
     if trimmed.is_empty() {
-        return Ok(None);
+        return Ok(0.0);
     }
-    if !trimmed.iter().all(|b| b.is_ascii_digit()) {
+    if trimmed.find_not_byteset(b"0123456789+-.").is_some() {
         return Err(Err::Error(NomError::new(input, NomErrorKind::Digit)));
     }
-    let mut val: u32 = 0;
-    for &b in trimmed {
-        val = val
-            .checked_mul(10)
-            .and_then(|v| v.checked_add((b - b'0') as u32))
-            .ok_or_else(|| Err::Error(NomError::new(input, NomErrorKind::TooLarge)))?;
+    if trimmed.find_byte(b'.').is_some() {
+        fast_float2::parse::<f64, _>(trimmed)
+            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))
+    } else {
+        let val = fast_float2::parse::<f64, _>(trimmed)
+            .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::Digit)))?;
+        Ok(val / 10_000.0)
     }
-    Ok(Some(val))
 }
 
-/// Parse position data from 3f10.4 format
-pub(super) fn fixed_width_position<'inp>(
-    ignore_positions: bool,
+/// Validate that `count` consecutive fields of `width` bytes each contain only whitespace or zeros.
+/// If `skip_unused_fields` is true, validation is skipped and always succeeds.
+#[inline(always)]
+pub(super) fn validate_unused_n<'inp>(
+    input: &'inp [u8],
+    field: &[u8],
+    count: usize,
+    width: usize,
     skip_unused_fields: bool,
-) -> impl Parser<&'inp [u8], Output = Point3D, Error = NomError<&'inp [u8]>> {
-    move |input: &'inp [u8]| {
-        if ignore_positions && skip_unused_fields {
-            let (remaining, _) = take(30usize).parse(input)?;
-            return Ok((remaining, Point3D::zero()));
+) -> Result<(), Err<NomError<&'inp [u8]>>> {
+    if field.len() < count * width {
+        return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+    }
+    if skip_unused_fields || count == 0 || width == 0 {
+        return Ok(());
+    }
+    for i in 0..count {
+        let start = i * width;
+        let end = start + width;
+        if end > field.len() {
+            break;
         }
-
-        let x = fixed_width_float_f10_4::<f64>();
-        let y = fixed_width_float_f10_4::<f64>();
-        let z = fixed_width_float_f10_4::<f64>();
-        let (remaining, position) =
-            map((x, y, z), |(x, y, z)| Point3D::new(x, y, z)).parse(input)?;
-        if ignore_positions {
-            Ok((remaining, Point3D::zero()))
-        } else {
-            Ok((remaining, position))
+        if !is_all_whitespace_or_zeroes(&field[start..end]) {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
         }
     }
-}
-
-/// Parse a single RGroup occurrence.
-pub(super) fn rgroup_occurrence<'inp>(
-) -> impl Parser<&'inp [u8], Output = RGroupOccurrence, Error = NomError<&'inp [u8]>> {
-    alt((
-        map((nom_u8, tag("-"), nom_u8), |(n, _, m)| {
-            RGroupOccurrence::Range(n, m)
-        }),
-        map(nom_u8, RGroupOccurrence::Exactly),
-        map((tag(">"), nom_u8), |(_, n)| {
-            RGroupOccurrence::GreaterThan(n)
-        }),
-        map((tag("<"), nom_u8), |(_, n)| RGroupOccurrence::FewerThan(n)),
-    ))
-}
-
-/// Parse a comma-separated list of RGroup occurrences.
-pub(super) fn rgroup_occurrences<'inp>(
-) -> impl Parser<&'inp [u8], Output = Vec<RGroupOccurrence>, Error = NomError<&'inp [u8]>> {
-    delimited(
-        space0,
-        separated_list1(tag(","), rgroup_occurrence()),
-        space0,
-    )
-    .or(success(vec![RGroupOccurrence::GreaterThan(0)]))
+    Ok(())
 }
 
 #[cfg(test)]

@@ -294,9 +294,9 @@ fn test_extended_bond_input(
 #[case::len_6_too_short(b"  1  2", NomErrorKind::Eof)]
 #[case::bond_type_above_range(b"  1  2  9", NomErrorKind::MapRes)]
 #[case::bond_type_below_range(b"  1  2  0", NomErrorKind::MapRes)]
-#[case::invalid_topology(b"  2  5  2  0  0  4  0", NomErrorKind::MapRes)]
+#[case::invalid_topology(b"  2  5  2  0  0  4  0", NomErrorKind::Verify)]
 #[case::invalid_reacting_center(b"  2  3  1  0  0  0XXX", NomErrorKind::Digit)]
-#[case::extended_reacting_center(b"  2  3  1  0  0  0  6", NomErrorKind::MapRes)]
+#[case::extended_reacting_center(b"  2  3  1  0  0  0  6", NomErrorKind::Verify)]
 fn test_extended_bond_input_invalid(#[case] input: &[u8], #[case] expected_kind: NomErrorKind) {
     let input_str = input.to_str_lossy();
     let mut parser = extended_bond_input(CtabParseFlags::EXTENDED);

@@ -1,10 +1,11 @@
 //! Molecule builder for SMILES parser
 
-use umol_data::Element;
 use std::mem;
 
+use umol_data::Element;
+
 use crate::span::Span;
-use crate::table_ir::{Atom, Bond, AtomPair, BondDirection, BondOrder, Chirality, Molecule, Ring};
+use crate::table_ir::{Atom, AtomPair, Bond, BondDirection, BondOrder, Chirality, Molecule, Ring};
 
 /// Atom event data
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -186,4 +187,3 @@ impl MoleculeBuilder {
         });
     }
 }
-

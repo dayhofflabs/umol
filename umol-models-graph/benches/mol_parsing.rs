@@ -6,7 +6,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use nom::Parser;
 use umol_models_graph::io::ctfile::config::CtabParseFlags;
 use umol_models_graph::io::ctfile::parser::{
-    atom_input, bond_input, counts_input, extended_atom_input, extended_bond_input,
+    atom_input, atom_input_basic69, basic_atom_input69, bond_input, counts_input,
+    extended_atom_input, extended_bond_input,
 };
 
 fn mol_parsing(c: &mut Criterion) {
@@ -66,6 +67,52 @@ fn mol_parsing(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| atom_input(CtabParseFlags::BASIC).parse(black_box(input)))
+            });
+        }
+
+        group.finish();
+    }
+
+    // Benchmark: atom_input_basic69 (old LLM-proposed version, ~60ns)
+    {
+        let mut group = c.benchmark_group("mol_parsing/atom_basic69_old");
+        let test_cases = [
+            (
+                "len69",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  0  0  0  0"[..],
+            ),
+            (
+                "len69_invalid",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  0  0  0  X"[..],
+            ),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| atom_input_basic69().parse(black_box(input)))
+            });
+        }
+
+        group.finish();
+    }
+
+    // Benchmark: basic_atom_input69 (revised version, ~90ns)
+    {
+        let mut group = c.benchmark_group("mol_parsing/atom_basic69_revised");
+        let test_cases = [
+            (
+                "len69",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  0  0  0  0"[..],
+            ),
+            (
+                "len69_invalid",
+                &b"   -0.1234    0.4560    0.7890 C   0  0  0  0  0  0  0  0  0  0  0  X"[..],
+            ),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| basic_atom_input69().parse(black_box(input)))
             });
         }
 

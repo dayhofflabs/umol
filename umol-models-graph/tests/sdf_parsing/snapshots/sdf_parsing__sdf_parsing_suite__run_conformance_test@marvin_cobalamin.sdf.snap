@@ -9,7 +9,7 @@ molecule:
   compound_count: 0
   error:
     error_type: InvalidAtomLine
-    message: "Invalid atom line at line 94, col 31"
+    message: "Invalid atom line at line 94, col 0"
 molecule_lenient:
   success: false
   compound_count: 0
