@@ -2,25 +2,33 @@
 source: umol-models-graph/tests/mol_parsing/mod.rs
 expression: results
 ---
-expected_category: invalid
-category: invalid
+expected_category: molecule_lenient
+category: molecule_lenient
 molecule:
   success: false
   error:
     error_type: InvalidCountsLine
     message: Invalid counts line at line 3
 molecule_lenient:
-  success: false
-  error:
-    error_type: InvalidCountsLine
-    message: Invalid counts line at line 3
+  success: true
+  summary:
+    sum_formula: C3N3O2S
+    atom_count: 9
+    bond_count: 9
+    property_count: 0
 extended_molecule:
   success: false
   error:
     error_type: InvalidCountsLine
     message: Invalid counts line at line 3
 extended_molecule_lenient:
-  success: false
-  error:
-    error_type: InvalidCountsLine
-    message: Invalid counts line at line 3
+  success: true
+  extended_summary:
+    sum_formula: C3N3O2S
+    atom_count: 9
+    bond_count: 9
+    extended_atoms: 0
+    extended_bonds: 0
+    property_count: 0
+    rgroup_count: 0
+    sgroup_count: 0

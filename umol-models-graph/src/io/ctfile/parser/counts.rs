@@ -65,19 +65,15 @@ pub fn counts_input<'inp>(
     move |input: &'inp [u8]| {
         let offset;
 
+        if input.len() < 6 {
+            return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
+        }
+
         // aaa: atom count (0-2)
-        let atom_count: u32 = if input.len() >= 3 {
-            parse_int_opt::<u32>(input, &input[0..3])?.unwrap_or_default()
-        } else {
-            0
-        };
+        let atom_count: u32 = parse_int_opt::<u32>(input, &input[0..3])?.unwrap_or_default();
 
         // bbb: bond count (3-5)
-        let bond_count: u32 = if input.len() >= 6 {
-            parse_int_opt::<u32>(input, &input[3..6])?.unwrap_or_default()
-        } else {
-            0
-        };
+        let bond_count: u32 = parse_int_opt::<u32>(input, &input[3..6])?.unwrap_or_default();
 
         // lll: atom list count (6-8)
         let atom_list_count: u32 = if input.len() >= 9 {
@@ -217,6 +213,7 @@ mod tests {
     #[rstest]
     #[case::no_v2000_tag(b" 28 34                           ")]
     #[case::trailing_characters(b"  2  1  0  0  0  0  0  0  0  0  0    0")]
+    #[case::rxn_header(b"$RXN\n")]
     fn test_counts_block_invalid(#[case] input: &[u8]) {
         let res = counts_block(0, CtabParseFlags::BASIC).parse(input);
         let input_str = input.to_str_lossy();
@@ -356,7 +353,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(b"", Counts { atom_count: 0, bond_count: 0, atom_list_count: 0 }, vec![])]
     #[case::blank(b"                                 ", Counts { atom_count: 0, bond_count: 0, atom_list_count: 0 }, vec![])]
     #[case::padded_blanks(b" 28 34                           ", Counts { atom_count: 28, bond_count: 34, atom_list_count: 0 }, vec![])]
     #[case::padded_zeros(b" 28 34  0  0  0  0  0  0  0  0  0", Counts { atom_count: 28, bond_count: 34, atom_list_count: 0 }, vec![])]
@@ -385,6 +381,24 @@ mod tests {
             properties, expected_properties,
             "{:?} should have parsed properties correctly",
             input_str
+        );
+    }
+
+    #[rstest]
+    #[case::empty(b"", NomErrorKind::Eof)]
+    fn test_counts_input_lenient_invalid(
+        #[case] input: &[u8],
+        #[case] expected_kind: NomErrorKind,
+    ) {
+        let res = counts_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT).parse(input);
+        let input_str = input.to_str_lossy();
+        assert!(res.is_err(), "{:?} should have failed", input_str);
+        assert!(
+            matches!(res.clone(), Err(Err::Error(e)) if e.code == expected_kind),
+            "{:?} should have failed with error kind {:?}, got {:?}",
+            input_str,
+            expected_kind,
+            res.clone().unwrap_err().map(|e| e.code)
         );
     }
 }

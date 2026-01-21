@@ -15,7 +15,7 @@ molecule_lenient:
   compound_count: 0
   error:
     error_type: InvalidBondLine
-    message: "Invalid bond line at line 24, col 6"
+    message: "Invalid bond line at line 24, col 0"
 extended_molecule:
   success: true
   compound_count: 1
