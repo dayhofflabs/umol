@@ -1,7 +1,7 @@
 //! Header parser for MOL files.
 
 use bstr::ByteSlice;
-use nom::Err;
+use nom::{Err, Parser};
 
 use super::utils::LinesWithOffsetExt;
 use crate::io::ctfile::error::ParseError;
@@ -11,7 +11,7 @@ use crate::io::ctfile::error::ParseError;
 /// Returns (Vec of 3 strings, updated line offset)
 pub(super) fn header_block<'inp>(
     line_offset: u32,
-) -> impl FnMut(&'inp [u8]) -> Result<(&'inp [u8], (Vec<String>, u32)), Err<ParseError>> {
+) -> impl Parser<&'inp [u8], Output = (Vec<String>, u32), Error = ParseError> + use<'inp> {
     move |input: &'inp [u8]| {
         let mut lines_iter = input.lines_with_offset();
         let mut headers = Vec::with_capacity(3);

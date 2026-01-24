@@ -7,10 +7,6 @@ use crate::span::Span;
 pub enum ParseError {
     #[error("Invalid whitespace at position {pos}")]
     InvalidWhitespace { pos: usize },
-    #[error("Invalid comment at position {pos}")]
-    InvalidComment { pos: usize },
-    #[error("Unterminated block comment at position {pos}")]
-    UnterminatedBlockComment { pos: usize },
     #[error("Invalid element at position {pos}")]
     InvalidElement { pos: usize },
     #[error("Invalid token at position {pos}")]
@@ -79,14 +75,6 @@ impl From<ParseError> for Diagnostic {
         let (kind, span) = match error {
             InvalidWhitespace { pos } => (
                 SmilesInvalidWhitespace,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            InvalidComment { pos } => (
-                SmilesInvalidComment,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
-            UnterminatedBlockComment { pos } => (
-                SmilesUnterminatedBlockComment,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
             InvalidElement { pos } => (

@@ -14,9 +14,7 @@ use crate::table_ir::RGroup;
 /// Handles:
 /// - "R" / "R#" / "R0" -> No label
 /// - "R1", "R2", etc. -> Label n (n > 0)
-pub(super) fn rgroup_symbol<'inp>(
-    input: &'inp [u8],
-) -> IResult<&'inp [u8], RGroup, NomError<&'inp [u8]>> {
+pub(super) fn rgroup_symbol(input: &[u8]) -> IResult<&[u8], RGroup, NomError<&[u8]>> {
     let (remaining, _) = tag("R").parse(input)?;
     let (remaining, label) = opt(alt((
         value(None, tag("#")),

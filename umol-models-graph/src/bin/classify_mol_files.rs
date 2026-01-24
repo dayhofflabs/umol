@@ -32,7 +32,7 @@ struct ParseResults {
 
 impl ParseResults {
     fn pattern(&self) -> String {
-        let chars = vec![
+        let chars = [
             if self.mol_basic {
                 "+".to_string()
             } else {

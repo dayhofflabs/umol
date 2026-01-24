@@ -282,7 +282,7 @@ pub(super) fn fixed_width_unused<'inp>(
         if skip_unused_fields {
             return Ok((remaining, ()));
         }
-        if !is_all_whitespace_or_zeroes(&unused) {
+        if !is_all_whitespace_or_zeroes(unused) {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
         }
         Ok((remaining, ()))
@@ -294,7 +294,7 @@ pub(super) fn fixed_width_str_partial<'inp>(
     width: usize,
 ) -> impl Parser<&'inp [u8], Output = Option<String>, Error = NomError<&'inp [u8]>> {
     map(fixed_width_partial(width, rest, true), move |opt| {
-        opt.and_then(|s| Some(s.trim_ascii().to_str_lossy().into_owned()))
+        opt.map(|s| s.trim_ascii().to_str_lossy().into_owned())
     })
 }
 
@@ -363,19 +363,17 @@ pub(super) fn is_reserved_atom_symbol(
     }
 
     // Check for R-groups (R, R#, R0, R1, R2, etc.)
-    if !allow_rgroups {
-        if s.starts_with(b"R") {
-            // Check if it's a valid R-group pattern: "R", "R#", or "R" followed by digits
-            if s.len() == 1 {
-                // "R"
-                return true;
-            } else if s == b"R#" {
-                // "R#"
-                return true;
-            } else if s.len() > 1 && s[1..].iter().all(|&b| b.is_ascii_digit()) {
-                // "R0", "R1", "R12", etc.
-                return true;
-            }
+    if !allow_rgroups && s.starts_with(b"R") {
+        // Check if it's a valid R-group pattern: "R", "R#", or "R" followed by digits
+        if s.len() == 1 {
+            // "R"
+            return true;
+        } else if s == b"R#" {
+            // "R#"
+            return true;
+        } else if s.len() > 1 && s[1..].iter().all(|&b| b.is_ascii_digit()) {
+            // "R0", "R1", "R12", etc.
+            return true;
         }
     }
 
@@ -393,7 +391,7 @@ pub(super) fn parse_int_opt<'inp, T: IntParser>(
         return Ok(None);
     }
     match T::nom_parser().parse(trimmed) {
-        Ok((remaining, val)) if remaining.is_empty() => Ok(Some(val)),
+        Ok(([], val)) => Ok(Some(val)),
         Ok(_) => Err(Err::Error(NomError::new(input, NomErrorKind::Eof))), // trailing garbage
         Err(Err::Error(_)) => Err(Err::Error(NomError::new(input, NomErrorKind::Digit))),
         Err(Err::Failure(e)) => Err(Err::Failure(NomError::new(input, e.code))),

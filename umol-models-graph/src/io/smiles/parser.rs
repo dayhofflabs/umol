@@ -8,74 +8,50 @@ mod utils;
 use self::builder::{AtomData, MoleculeBuilder};
 use self::utils::{
     attach_atom, invalid_ring_context, parse_bond, parse_bracket, parse_organic_aliphatic_element,
-    parse_organic_aromatic_element, parse_ring_index, process_ring_closure, truncate_at_eoi, Frame,
-    OpenRing,
+    parse_organic_aromatic_element, parse_ring_index, process_ring_closure, Frame, OpenRing,
 };
-use super::config::{SmilesIoConfig, SmilesParseFlags};
+use super::config::SmilesIoConfig;
 use super::error::ParseError;
 use crate::span::Span;
 use crate::table_ir::{BondDirection, BondOrder, Molecule};
 
-// Parse stage output
 #[derive(Debug, Clone)]
 pub struct ParseOutput {
     pub table_ir: Molecule,
 }
 
-// Public entrypoint for default OpenSMILES parser
+/// Parse SMILES with strict OpenSMILES rules
 pub fn parse_smiles(input: &[u8]) -> Result<Molecule, ParseError> {
-    let config = SmilesIoConfig::strict_opensmiles();
-    parse_smiles_with(input, &config)
+    parse_smiles_with(input, &SmilesIoConfig::strict_opensmiles())
 }
 
-// Public entrypoint for configurable SMILES parser
-pub fn parse_smiles_with(input: &[u8], config: &SmilesIoConfig) -> Result<Molecule, ParseError> {
-    let flags = config.parse_flags;
-    let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
-    let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
-    let use_eoi = flags.contains(SmilesParseFlags::EXPLICIT_EOI);
-
-    let input = if use_eoi {
-        let cut = truncate_at_eoi(input, allow_comments);
-        &input[..cut]
-    } else {
-        input
-    };
-
-    if !allow_ws && !allow_comments {
-        let mut start = 0usize;
-        while start < input.len() && matches!(input[start], b' ' | b'\t' | b'\n' | b'\r') {
-            start += 1;
+/// Parse SMILES with configuration
+pub fn parse_smiles_with(input: &[u8], _config: &SmilesIoConfig) -> Result<Molecule, ParseError> {
+    // Strip leading/trailing whitespace, reject internal whitespace
+    let mut start = 0usize;
+    while start < input.len() && matches!(input[start], b' ' | b'\t' | b'\n' | b'\r') {
+        start += 1;
+    }
+    if start == input.len() {
+        return Ok(Molecule::empty());
+    }
+    if start > 0 {
+        return Err(ParseError::InvalidWhitespace { pos: 0 });
+    }
+    let mut end = input.len();
+    while end > 0 && matches!(input[end - 1], b' ' | b'\t' | b'\n' | b'\r') {
+        end -= 1;
+    }
+    for (k, b) in input[start..end].iter().enumerate() {
+        if matches!(*b, b' ' | b'\t' | b'\n' | b'\r') {
+            return Err(ParseError::InvalidWhitespace { pos: start + k });
         }
-        if start == input.len() {
-            return Ok(Molecule::empty());
-        }
-        if start > 0 {
-            return Err(ParseError::InvalidWhitespace { pos: 0 });
-        }
-        let mut end = input.len();
-        while end > 0 && matches!(input[end - 1], b' ' | b'\t' | b'\n' | b'\r') {
-            end -= 1;
-        }
-        for (k, b) in input[start..end].iter().enumerate() {
-            if matches!(*b, b' ' | b'\t' | b'\n' | b'\r') {
-                return Err(ParseError::InvalidWhitespace { pos: start + k });
-            }
-        }
-        return parse_smiles_to_table_ir(&input[start..end], &flags).map(|o| o.table_ir);
     }
 
-    parse_smiles_to_table_ir(input, &flags).map(|o| o.table_ir)
+    parse_smiles_core(&input[start..end]).map(|o| o.table_ir)
 }
 
-pub fn parse_smiles_to_table_ir(
-    input: &[u8],
-    flags: &SmilesParseFlags,
-) -> Result<ParseOutput, ParseError> {
-    let allow_ws = flags.contains(SmilesParseFlags::EXTENDED_WS);
-    let allow_comments = flags.contains(SmilesParseFlags::ALLOWS_COMMENTS);
-    let no_meta = flags.contains(SmilesParseFlags::NO_METADATA);
-
+fn parse_smiles_core(input: &[u8]) -> Result<ParseOutput, ParseError> {
     let mut i = 0usize;
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
@@ -88,46 +64,12 @@ pub fn parse_smiles_to_table_ir(
 
     while i < n {
         let b0 = input[i];
-        if b0 == b'/' && i + 1 < n {
-            let b1 = input[i + 1];
-            if allow_comments {
-                if b1 == b'/' {
-                    i += 2;
-                    while i < n && input[i] != b'\n' {
-                        i += 1;
-                    }
-                    continue;
-                }
-                if b1 == b'*' {
-                    let start_pos = i;
-                    i += 2;
-                    let mut closed = false;
-                    while i + 1 < n {
-                        if input[i] == b'*' && input[i + 1] == b'/' {
-                            i += 2;
-                            closed = true;
-                            break;
-                        }
-                        i += 1;
-                    }
-                    if !closed {
-                        return Err(ParseError::UnterminatedBlockComment { pos: start_pos });
-                    }
-                    continue;
-                }
-            } else {
-                if b1 == b'/' || b1 == b'*' {
-                    return Err(ParseError::InvalidComment { pos: i });
-                }
-            }
-        }
+
+        // Reject whitespace (already stripped, but catch internal)
         if matches!(b0, b' ' | b'\t' | b'\n' | b'\r') {
-            if allow_ws {
-                i += 1;
-                continue;
-            }
             return Err(ParseError::InvalidWhitespace { pos: i });
         }
+
         if b0 != b'(' {
             just_closed_group = false;
         }
@@ -253,7 +195,6 @@ pub fn parse_smiles_to_table_ir(
                     dir_opt,
                     i,
                     i + 1,
-                    no_meta,
                 )?;
                 i = next_i;
                 continue;
@@ -300,11 +241,7 @@ pub fn parse_smiles_to_table_ir(
                 Some(e) => (e, aromatic),
                 None => (Element::C, false),
             };
-            let (s, e) = if no_meta {
-                (None, None)
-            } else {
-                (Some(i as u32), Some((j) as u32))
-            };
+            let (s, e) = (Some(i as u32), Some(j as u32));
             let atom = AtomData {
                 element,
                 isotope: iso_opt,
@@ -327,7 +264,6 @@ pub fn parse_smiles_to_table_ir(
                 aromatic,
                 i as u32,
                 j as u32,
-                !no_meta,
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
@@ -343,11 +279,7 @@ pub fn parse_smiles_to_table_ir(
         }
         if b0 == b'C' {
             if i + 1 < n && input[i + 1] == b'l' {
-                let (s, e) = if no_meta {
-                    (None, None)
-                } else {
-                    (Some(i as u32), Some((i + 2) as u32))
-                };
+                let (s, e) = (Some(i as u32), Some((i + 2) as u32));
                 let curr = builder.on_atom_fast(Element::Cl, false, s, e);
 
                 attach_atom(
@@ -359,7 +291,6 @@ pub fn parse_smiles_to_table_ir(
                     false,
                     i as u32,
                     (i + 2) as u32,
-                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -373,11 +304,7 @@ pub fn parse_smiles_to_table_ir(
                 i += 2;
                 continue;
             }
-            let (s, e) = if no_meta {
-                (None, None)
-            } else {
-                (Some(i as u32), Some((i + 1) as u32))
-            };
+            let (s, e) = (Some(i as u32), Some((i + 1) as u32));
             let curr = builder.on_atom_fast(Element::C, false, s, e);
 
             attach_atom(
@@ -389,7 +316,6 @@ pub fn parse_smiles_to_table_ir(
                 false,
                 i as u32,
                 (i + 1) as u32,
-                !no_meta,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -405,11 +331,7 @@ pub fn parse_smiles_to_table_ir(
         }
         if b0 == b'B' {
             if i + 1 < n && input[i + 1] == b'r' {
-                let (s, e) = if no_meta {
-                    (None, None)
-                } else {
-                    (Some(i as u32), Some((i + 2) as u32))
-                };
+                let (s, e) = (Some(i as u32), Some((i + 2) as u32));
                 let curr = builder.on_atom_fast(Element::Br, false, s, e);
 
                 attach_atom(
@@ -421,7 +343,6 @@ pub fn parse_smiles_to_table_ir(
                     false,
                     i as u32,
                     (i + 2) as u32,
-                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -435,11 +356,7 @@ pub fn parse_smiles_to_table_ir(
                 i += 2;
                 continue;
             }
-            let (s, e) = if no_meta {
-                (None, None)
-            } else {
-                (Some(i as u32), Some((i + 1) as u32))
-            };
+            let (s, e) = (Some(i as u32), Some((i + 1) as u32));
             let curr = builder.on_atom_fast(Element::B, false, s, e);
 
             attach_atom(
@@ -451,7 +368,6 @@ pub fn parse_smiles_to_table_ir(
                 false,
                 i as u32,
                 (i + 1) as u32,
-                !no_meta,
             );
             last_atom_idx = Some(curr);
             last_aromatic = false;
@@ -468,11 +384,7 @@ pub fn parse_smiles_to_table_ir(
         // Elements
         if b0.is_ascii_alphabetic() {
             if let Some((element, consumed)) = parse_organic_aliphatic_element(input, i) {
-                let (s, e) = if no_meta {
-                    (None, None)
-                } else {
-                    (Some(i as u32), Some((i + consumed) as u32))
-                };
+                let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
                 let curr = builder.on_atom_fast(element, false, s, e);
 
                 attach_atom(
@@ -484,7 +396,6 @@ pub fn parse_smiles_to_table_ir(
                     false,
                     i as u32,
                     (i + consumed) as u32,
-                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = false;
@@ -499,11 +410,7 @@ pub fn parse_smiles_to_table_ir(
                 continue;
             }
             if let Some((element, consumed)) = parse_organic_aromatic_element(input, i) {
-                let (s, e) = if no_meta {
-                    (None, None)
-                } else {
-                    (Some(i as u32), Some((i + consumed) as u32))
-                };
+                let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
                 let curr = builder.on_atom_fast(element, true, s, e);
 
                 attach_atom(
@@ -515,7 +422,6 @@ pub fn parse_smiles_to_table_ir(
                     true,
                     i as u32,
                     (i + consumed) as u32,
-                    !no_meta,
                 );
                 last_atom_idx = Some(curr);
                 last_aromatic = true;

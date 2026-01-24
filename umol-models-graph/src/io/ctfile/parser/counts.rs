@@ -18,12 +18,14 @@ pub(super) fn counts_block<'inp>(
 ) -> impl Parser<&'inp [u8], Output = (Counts, Vec<PropertyEntries>, u32), Error = ParseError> + use<'inp>
 {
     move |input: &'inp [u8]| {
-        let (line, byte_len) = input.lines_with_offset().next().ok_or_else(|| {
-            Err::Error(ParseError::UnexpectedEof {
-                line: line_offset,
-                block: "counts",
-            })
-        })?;
+        let (line, byte_len) =
+            input
+                .lines_with_offset()
+                .next()
+                .ok_or(Err::Error(ParseError::UnexpectedEof {
+                    line: line_offset,
+                    block: "counts",
+                }))?;
 
         let (_, (counts, properties)) = all_consuming(terminated(counts_input(flags), space0))
             .parse(line)

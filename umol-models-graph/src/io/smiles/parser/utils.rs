@@ -31,29 +31,6 @@ pub(super) enum Frame {
 }
 
 #[inline]
-pub(super) fn skip_line_comment(input: &[u8], mut i: usize) -> usize {
-    while i < input.len() && input[i] != b'\n' && input[i] != b'\r' {
-        i += 1;
-    }
-    i
-}
-
-#[inline]
-pub(super) fn skip_block_comment(
-    input: &[u8],
-    mut i: usize,
-    start_pos: usize,
-) -> Result<usize, usize> {
-    while i + 1 < input.len() {
-        if input[i] == b'*' && input[i + 1] == b'/' {
-            return Ok(i + 2);
-        }
-        i += 1;
-    }
-    Err(start_pos)
-}
-
-#[inline]
 pub(super) fn parse_ring_index(
     input: &[u8],
     i: usize,
@@ -89,7 +66,6 @@ pub(super) fn process_ring_closure(
     dir_opt: Option<BondDirection>,
     pos: usize,
     token_end: usize,
-    no_meta: bool,
 ) -> Result<(), ParseError> {
     if ring_table.len() <= idx {
         ring_table.resize_with(idx + 1, || None);
@@ -105,16 +81,12 @@ pub(super) fn process_ring_closure(
                 open_end: token_end,
                 open_aromatic: last_aromatic,
             });
-            let (start, end, aid) = if no_meta {
-                (None, None, None)
-            } else {
-                (
-                    Some(pos as u32),
-                    Some(token_end as u32),
-                    Some(last_atom_idx),
-                )
-            };
-            builder.on_ring_open(idx as u32, start, end, aid);
+            builder.on_ring_open(
+                idx as u32,
+                Some(pos as u32),
+                Some(token_end as u32),
+                Some(last_atom_idx),
+            );
         }
         Some(open) => {
             if let (Some(d1), Some(d2)) = (open.direction, dir_opt) {
@@ -159,26 +131,24 @@ pub(super) fn process_ring_closure(
             if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
                 final_order = BondOrder::Aromatic;
             }
-            let (bs, be) = if no_meta {
-                (None, None)
-            } else {
-                (Some(open.open_pos as u32), Some(open.open_end as u32))
-            };
             builder.on_bond(
                 a,
                 b,
                 BondData {
                     order: final_order,
                     direction: final_dir,
-                    span: Span::from_bytes_opt(bs, be),
+                    span: Span::from_bytes_opt(
+                        Some(open.open_pos as u32),
+                        Some(open.open_end as u32),
+                    ),
                 },
             );
-            let (start, end, aid) = if no_meta {
-                (None, None, None)
-            } else {
-                (Some(pos as u32), Some(token_end as u32), Some(b))
-            };
-            builder.on_ring_close(idx as u32, start, end, aid);
+            builder.on_ring_close(
+                idx as u32,
+                Some(pos as u32),
+                Some(token_end as u32),
+                Some(b),
+            );
         }
     }
     Ok(())
@@ -429,8 +399,8 @@ pub(super) fn pos_in_bracket(base: usize, local: usize) -> usize {
     base + 1 + local
 }
 
-#[allow(clippy::too_many_arguments)]
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn attach_atom(
     builder: &mut MoleculeBuilder,
     last_atom_idx: Option<u32>,
@@ -440,46 +410,35 @@ pub(super) fn attach_atom(
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
-    include_metadata: bool,
 ) {
     if let Some(last) = last_atom_idx {
         if let Some((order, bond_dir, pos)) = pending_bond.take() {
-            let (s, e) = if include_metadata {
-                (Some(pos as u32), Some((pos as u32) + 1))
-            } else {
-                (None, None)
-            };
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order,
                     direction: bond_dir,
-                    span: Span::from_bytes_opt(s, e),
+                    span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
                 },
             );
         } else if last_aromatic && curr_aromatic {
-            let (s, e) = if include_metadata {
-                (Some(curr_atom_start), Some(curr_atom_end))
-            } else {
-                (None, None)
-            };
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order: BondOrder::Aromatic,
                     direction: None,
-                    span: Span::from_bytes_opt(s, e),
+                    span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
                 },
             );
         } else {
-            let (s, e) = if include_metadata {
-                (Some(curr_atom_start), Some(curr_atom_end))
-            } else {
-                (None, None)
-            };
-            builder.on_bond_single_fast(last, curr_atom_idx, s, e);
+            builder.on_bond_single_fast(
+                last,
+                curr_atom_idx,
+                Some(curr_atom_start),
+                Some(curr_atom_end),
+            );
         };
     }
 }
@@ -628,57 +587,4 @@ pub(super) fn parse_bracket(
     }
 
     Ok((element, aromatic, isotope, charge, class_num, hcount, chir))
-}
-
-#[inline]
-pub(super) fn truncate_at_eoi(input: &[u8], allow_comments: bool) -> usize {
-    let n = input.len();
-    let mut i = 0usize;
-    let mut line_start = 0usize;
-    let mut had_content = false;
-    while i < n {
-        let b0 = input[i];
-        if b0 == b' ' || b0 == b'\t' {
-            i += 1;
-            continue;
-        }
-        if allow_comments && b0 == b'/' && i + 1 < n && input[i + 1] == b'/' {
-            i = skip_line_comment(input, i + 2);
-        }
-        if allow_comments && b0 == b'/' && i + 1 < n && input[i + 1] == b'*' {
-            match skip_block_comment(input, i + 2, i) {
-                Ok(next) => {
-                    i = next;
-                }
-                Err(_) => {
-                    i = n;
-                }
-            }
-            continue;
-        }
-        if b0 == b'\r' {
-            if !had_content {
-                return line_start;
-            }
-            i += 1;
-            if i < n && input[i] == b'\n' {
-                i += 1;
-            }
-            line_start = i;
-            had_content = false;
-            continue;
-        }
-        if b0 == b'\n' {
-            if !had_content {
-                return line_start;
-            }
-            i += 1;
-            line_start = i;
-            had_content = false;
-            continue;
-        }
-        had_content = true;
-        i += 1;
-    }
-    n
 }

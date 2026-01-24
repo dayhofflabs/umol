@@ -99,7 +99,7 @@ pub(super) fn convert_atom_stereo_parity_code(code: u8) -> Option<Chirality> {
 pub(super) fn convert_atom_hydrogen_count_code(code: u8) -> Option<u8> {
     match code {
         0 => None,
-        code => Some((code - 1) as u8),
+        code => Some(code - 1),
     }
 }
 

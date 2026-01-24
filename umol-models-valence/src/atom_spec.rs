@@ -65,6 +65,7 @@ pub struct AtomSpec {
 }
 
 impl AtomSpec {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         element: Element,
         charge: i8,

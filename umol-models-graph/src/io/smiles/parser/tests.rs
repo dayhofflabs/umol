@@ -294,7 +294,7 @@ fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::consecutive_bonds_3(b"C-#C", ParseError::ConsecutiveBonds { pos: 2 })]
 #[case::consecutive_bonds_4(b"C-$C", ParseError::ConsecutiveBonds { pos: 2 })]
 #[case::consecutive_bonds_5(b"C-:C", ParseError::ConsecutiveBonds { pos: 2 })]
-#[case::consecutive_stereo_bonds_1(b"C//C", ParseError::InvalidComment { pos: 1 })]
+#[case::consecutive_stereo_bonds_1(b"C//C", ParseError::ConsecutiveBonds { pos: 2 })]
 #[case::consecutive_stereo_bonds_2(b"C\\\\C", ParseError::ConsecutiveBonds { pos: 2 })]
 #[case::consecutive_bond_and_stereo_bond_1(b"C-/C", ParseError::ConsecutiveBonds { pos: 2 })]
 #[case::consecutive_bond_and_stereo_bond_2(b"C=\\C", ParseError::ConsecutiveBonds { pos: 2 })]
@@ -976,8 +976,6 @@ fn whitespace_strict(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::terminator_cr_trailing_structure(b"CC\rCC", ParseError::InvalidWhitespace { pos: 2 })]
 #[case::terminator_newline_trailing_structure(b"CC\nCC", ParseError::InvalidWhitespace { pos: 2 })]
 #[case::terminator_crlf_trailing_structure(b"CC\r\nCC", ParseError::InvalidWhitespace { pos: 2 })]
-#[case::line_comment(b"C//x", ParseError::InvalidComment { pos: 1 })]
-#[case::block_comment(b"C/*x*/", ParseError::InvalidComment { pos: 1 })]
 fn whitespace_strict_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_smiles(input);
     assert!(res.is_err(), "{:?} should have failed", input);
@@ -985,67 +983,5 @@ fn whitespace_strict_invalid(#[case] input: &[u8], #[case] expected: ParseError)
     assert_eq!(err, expected);
 }
 
-#[rstest]
-#[case::ws_intertoken_spaces_flags(b"C C", build_from_graph("C@0 C@2 | 0-1@2"))]
-#[case::ws_intertoken_tabs_flags(b"C\tC", build_from_graph("C@0 C@2 | 0-1@2"))]
-#[case::ws_newlines_flags(b"C\nC", build_from_graph("C@0 C@2 | 0-1@2"))]
-#[case::line_comment_flags(b"C// x\nC", build_from_graph("C@0 C@6 | 0-1@6"))]
-#[case::block_comment_flags(b"C/* x */C", build_from_graph("C@0 C@8 | 0-1@8"))]
-#[case::block_comment_multiline_flags(b"C/* x\n y */C", build_from_graph("C@0 C@11 | 0-1@11"))]
-fn whitespace_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
-    let config = SmilesIoConfig::umol_dialect();
-    let res = parse_smiles_with(input, &config);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
-    let mol = res.unwrap();
-    assert_eq!(mol, expected);
-}
-
-#[rstest]
-#[case::eoi_blank_line(b"C\n\nC", build_from_graph("C@0 |"))]
-#[case::eoi_blank_line_crlf(b"C\r\n\r\nC", build_from_graph("C@0 |"))]
-#[case::eoi_blank_line_with_comment(b"C\n/* comment */\n\nC", build_from_graph("C@0 |"))]
-fn eoi_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
-    let config = SmilesIoConfig {
-        parse_flags: SmilesParseFlags::EXTENDED_WS
-            | SmilesParseFlags::ALLOWS_COMMENTS
-            | SmilesParseFlags::EXPLICIT_EOI,
-        ..Default::default()
-    };
-    let res = parse_smiles_with(input, &config);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
-    let mol = res.unwrap();
-    assert_eq!(mol, expected);
-}
-
-#[rstest]
-#[case::split_halogen_ws(b"C l", ParseError::InvalidElement { pos: 2 })]
-#[case::percent_ring_ws_split(b"C% 12", ParseError::InvalidRingIndex { pos: 1 })]
-#[case::percent_ring_nl_split(b"C%\n12", ParseError::InvalidRingIndex { pos: 1 })]
-#[case::unterminated_block_comment(b"C/* x", ParseError::UnterminatedBlockComment { pos: 1 })]
-#[case::bracket_inner_ws(b"[ C ]", ParseError::InvalidBracket { pos: 1 })]
-fn whitespace_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let config = SmilesIoConfig::umol_dialect();
-    let res = parse_smiles_with(input, &config);
-    assert!(res.is_err(), "{:?} should have failed", input);
-    let err = res.unwrap_err();
-    assert_eq!(err, expected);
-}
-
-#[rstest]
-#[case::chain_c_1(b"C", build_from_graph("C |"))]
-#[case::chain_c_5(b"CCCCC", build_from_graph("C C C C C | 0-1 1-2 2-3 3-4"))]
-#[case::branch_c_211(b"CC(C)C", build_from_graph("C C C C | 0-1 1-2 1-3"))]
-#[case::ring_3(b"C1CC1", build_from_graph("C C C | 0-1 1-2 0-2 | 1"))]
-#[case::single_bond(b"C-C", build_from_graph("C C | 0-1:-"))]
-fn no_metadata(#[case] input: &[u8], #[case] expected: Molecule) {
-    let config = SmilesIoConfig {
-        parse_flags: SmilesParseFlags::NO_METADATA,
-        ..Default::default()
-    };
-    let res = parse_smiles_with(input, &config);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
-    let mol = res.unwrap();
-    assert_eq!(mol, expected);
-}
 
 mod utils;

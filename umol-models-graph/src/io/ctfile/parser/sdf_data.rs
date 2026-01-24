@@ -16,12 +16,14 @@ pub(super) fn sdf_data_header<'inp>(
     line_offset: u32,
 ) -> impl Parser<&'inp [u8], Output = (String, u32), Error = ParseError> + use<'inp> {
     move |input: &'inp [u8]| {
-        let (line, byte_len) = input.lines_with_offset().next().ok_or_else(|| {
-            Err::Error(ParseError::UnexpectedEof {
-                line: line_offset,
-                block: "sdf data",
-            })
-        })?;
+        let (line, byte_len) =
+            input
+                .lines_with_offset()
+                .next()
+                .ok_or(Err::Error(ParseError::UnexpectedEof {
+                    line: line_offset,
+                    block: "sdf data",
+                }))?;
         let mut name_input = map(
             preceded(
                 (tag(">"), is_not("<")),
@@ -40,12 +42,11 @@ pub(super) fn sdf_data_value<'inp>(
     line_offset: u32,
 ) -> impl Parser<&'inp [u8], Output = (String, u32), Error = ParseError> + use<'inp> {
     move |input: &'inp [u8]| {
-        let mut lines_iter = input.lines_with_offset();
         let mut byte_offset = 0;
         let mut line_index = 0;
         let mut value_lines = Vec::new();
 
-        while let Some((line, byte_len)) = lines_iter.next() {
+        for (line, byte_len) in input.lines_with_offset() {
             byte_offset += byte_len;
             line_index += 1;
             if line.trim().is_empty() {
@@ -54,9 +55,7 @@ pub(super) fn sdf_data_value<'inp>(
 
             value_lines.push(line.trim())
         }
-        let value = join(",", value_lines.into_iter())
-            .to_str_lossy()
-            .to_string();
+        let value = join(",", value_lines).to_str_lossy().to_string();
         let remaining = &input[byte_offset..];
         Ok((remaining, (value, line_offset + line_index)))
     }

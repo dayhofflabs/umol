@@ -45,21 +45,18 @@ struct SmilesEntry {
     line_number: usize,
 }
 
-
 fn read_smiles_file(path: &Path) -> io::Result<Vec<SmilesEntry>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut entries = Vec::new();
-    let mut line_number = 0;
 
     let source_file = path
         .file_name()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string_lossy().to_string());
 
-    for line in reader.lines() {
+    for (line_number, line) in reader.lines().enumerate() {
         let line = line?;
-        line_number += 1;
         let trimmed = line.trim();
 
         if trimmed.is_empty() {

@@ -92,8 +92,8 @@ pub fn ctab_block<'inp>(
             properties
         };
 
-        let molecule = build_molecule(atoms, bonds, positions, properties, flags)
-            .map_err(|e| Err::Error(e))?;
+        let molecule =
+            build_molecule(atoms, bonds, positions, properties, flags).map_err(Err::Error)?;
         Ok((remaining, (molecule, line_offset)))
     }
 }
@@ -146,7 +146,7 @@ pub fn extended_ctab_block<'inp>(
         };
 
         let extended = build_extended_molecule(atoms, bonds, positions, properties, flags)
-            .map_err(|e| Err::Error(e))?;
+            .map_err(Err::Error)?;
         Ok((remaining, (extended, line_offset)))
     }
 }
@@ -271,7 +271,7 @@ pub fn parse_mol_bytes_with(input: &[u8], config: &CtfileIoConfig) -> Result<Mol
         Cow::Borrowed(input)
     };
 
-    let (remaining, (comments, line_offset)) = header_block(0)(&*data)?;
+    let (remaining, (comments, line_offset)) = header_block(0).parse(&*data)?;
 
     let (_, (mut molecule, _line_offset)) =
         terminated(ctab_block(line_offset, flags), multispace0).parse(remaining)?;
@@ -318,7 +318,7 @@ pub fn parse_extended_mol_bytes_with(
         Cow::Borrowed(input)
     };
 
-    let (remaining, (comments, line_offset)) = header_block(0)(&*data)?;
+    let (remaining, (comments, line_offset)) = header_block(0).parse(&*data)?;
 
     let (_, (mut molecule, _line_offset)) =
         terminated(extended_ctab_block(line_offset, flags), multispace0).parse(remaining)?;

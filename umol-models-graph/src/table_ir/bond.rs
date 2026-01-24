@@ -247,8 +247,8 @@ impl ExtendedBond {
     pub fn has_extended_features(&self) -> bool {
         self.order.is_query()
             || self.order.is_extended()
-            || self.topology.map_or(false, |t| !t.is_default())
-            || self.reacting_center.map_or(false, |r| !r.is_default())
+            || self.topology.is_some_and(|t| !t.is_default())
+            || self.reacting_center.is_some_and(|r| !r.is_default())
             || !self.properties.is_empty()
     }
 }

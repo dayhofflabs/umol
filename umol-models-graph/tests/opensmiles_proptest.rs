@@ -41,7 +41,7 @@ proptest! {
     // Crash-only: parser should never panic on arbitrary ASCII up to length 256
     #[test]
     fn never_panics_on_ascii(input in smilesish()) {
-        let config = SmilesIoConfig::umol_dialect();
+        let config = SmilesIoConfig::strict_opensmiles();
         let _ = std::panic::catch_unwind(|| {
             let _ = parse_smiles_with(&input, &config);
         }).expect("parse_smiles panicked");
@@ -55,7 +55,6 @@ proptest! {
             let len = input.len();
             let ok = match err {
                 ParseError::InvalidWhitespace { pos }
-                | ParseError::InvalidComment { pos }
                 | ParseError::InvalidToken { pos }
                 | ParseError::InvalidElement { pos }
                 | ParseError::UnbalancedOpenParen { pos }
@@ -78,9 +77,7 @@ proptest! {
                 | ParseError::StrayBracketField { pos }
                 | ParseError::DuplicateBracketField { pos }
                 | ParseError::BracketHwithHcount { pos }
-                | ParseError::ChiralityOutOfRange { pos }
-                | ParseError::UnterminatedBlockComment { pos }
-                 => pos < len,
+                | ParseError::ChiralityOutOfRange { pos } => pos < len,
                 | ParseError::UnbalancedRingIndex { open_pos } => open_pos < len,
                 | ParseError::MismatchedRingBondDirs { pos, open_pos }
                 | ParseError::MismatchedRingBondOrders { pos, open_pos } => pos < len && open_pos < len,

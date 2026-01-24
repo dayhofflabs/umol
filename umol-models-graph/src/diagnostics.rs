@@ -27,10 +27,6 @@ pub enum Category {
 pub enum DiagnosticKind {
     #[strum(message = "Invalid whitespace")]
     SmilesInvalidWhitespace,
-    #[strum(message = "Invalid comment")]
-    SmilesInvalidComment,
-    #[strum(message = "Unterminated block comment")]
-    SmilesUnterminatedBlockComment,
     #[strum(message = "Invalid element")]
     SmilesInvalidElement,
     #[strum(message = "Invalid token")]
@@ -246,11 +242,9 @@ impl DiagnosticKind {
         use DiagnosticKind::*;
 
         match self {
-            SmilesInvalidWhitespace
-            | SmilesInvalidComment
-            | SmilesUnterminatedBlockComment
-            | SmilesInvalidElement
-            | SmilesInvalidToken => Category::Lexical,
+            SmilesInvalidWhitespace | SmilesInvalidElement | SmilesInvalidToken => {
+                Category::Lexical
+            }
 
             SmilesUnbalancedOpenParen
             | SmilesUnbalancedCloseParen
@@ -361,8 +355,6 @@ impl DiagnosticKind {
 
         match self {
             SmilesInvalidWhitespace
-            | SmilesInvalidComment
-            | SmilesUnterminatedBlockComment
             | SmilesInvalidElement
             | SmilesInvalidToken
             | SmilesUnbalancedOpenParen

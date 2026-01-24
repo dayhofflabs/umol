@@ -942,7 +942,7 @@ impl PropertyAccumulator {
         if let Some(ref mut ctfile_data) = molecule.ctfile_data {
             for (&rgroup_label, props) in &self.rgroup_properties {
                 let rgroup = RGroup {
-                    label: Some(rgroup_label as u32),
+                    label: Some(rgroup_label),
                     dependent_label: props.dependent_label,
                     rgroup_or_h: props.rgroup_or_h.unwrap_or(false),
                     occurrence: props.occurrence.clone().unwrap_or_default(),
@@ -973,7 +973,7 @@ impl PropertyAccumulator {
                 .group_type
                 .ok_or(ParseError::SGroupMissingType(sgroup_index))?;
             let mut sgroup = SGroup::new(group_type);
-            sgroup.label = props.label.or(Some(sgroup_index as u32));
+            sgroup.label = props.label.or(Some(sgroup_index));
             sgroup.group_subtype = props.group_subtype;
             sgroup.connectivity = props.connectivity;
             if let Some(expansion) = props.expansion {

@@ -271,23 +271,25 @@ tests/smarts_parsing/
 ### 11. Implementation Status
 
 **Completed (2026-01-23):**
-- Classification binary (`classify_smiles_strings`) with sampling + individual file output
+- Classification binary (`classify_smiles_strings`) with per-file sampling + individual file output
 - Conformance test suite with insta snapshots (`tests/smiles_parsing/`)
 - Molecule summary: sum formula, atom count, bond count
-- Data structure: individual `.smiles` files (one SMILES per file)
-- Sampling: 200 per source (random, seed 0)
+- Data structure: individual `.smiles` files with source comments
+- Sampling: max 200 per input file (random, seed 0)
 - Sources extracted: rdkit, cdk, openbabel, indigo, zinc, gdb
 
 **Current stats (opensmiles_strict parser):**
 | Source | Total | Valid | Invalid | Valid % |
 |--------|-------|-------|---------|---------|
-| cdk | 200 | 199 | 1 | 99.5% |
-| gdb | 200 | 200 | 0 | 100.0% |
-| indigo | 200 | 200 | 0 | 100.0% |
-| openbabel | 200 | 199 | 1 | 99.5% |
-| rdkit | 200 | 195 | 5 | 97.5% |
+| cdk | 854 | 824 | 30 | 96.5% |
+| gdb | 713 | 713 | 0 | 100.0% |
+| indigo | 3,374 | 3,296 | 78 | 97.7% |
+| openbabel | 769 | 760 | 9 | 98.8% |
+| rdkit | 3,542 | 3,186 | 356 | 89.9% |
 | zinc | 200 | 200 | 0 | 100.0% |
-| **Total** | **1200** | **1193** | **7** | **99.4%** |
+| **Total** | **9,452** | **8,979** | **473** | **95.0%** |
+
+**Storage:** 3.6MB compressed (82MB on APFS due to small file overhead)
 
 **Next steps:**
 - Add additional parser configs (opensmiles_lenient, cxsmiles)
