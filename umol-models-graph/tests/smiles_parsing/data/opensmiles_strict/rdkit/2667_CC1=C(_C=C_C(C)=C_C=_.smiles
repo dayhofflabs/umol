@@ -1,0 +1,2 @@
+# GraphMol_MarvinParse_test_data_DoubleBondChain.expected.smi:1
+CC1=C(/C=C/C(C)=C/C=C/C(C)=C\C(O)=O)C(C)(C)CCC1

@@ -1,0 +1,2 @@
+# integration_tests_layout_molecules_macrocycles_test.smi:13
+CC1=CC2=C(O)C(C[NH2+]CCN3CC[NH2+]CCN(CC[NH2+]CC4=CC(C)=CC(C[NH2+]CCN5CC[NH2+]CCN(CC[NH2+]C2)CC5)=C4O)CC3)=C1

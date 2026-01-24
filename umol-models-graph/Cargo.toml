@@ -6,6 +6,9 @@ edition = "2021"
 [dependencies]
 bitflags = { version = "2.9.4", features = ["serde"] }
 bstr = "1.12.0"
+clap = { version = "4", features = ["derive"] }
+rand = "0.9"
+rand_chacha = "0.9"
 fast-float2 = "0.2.3"
 indexmap = { version = "2.11.1", features = ["serde"] }
 map-macro = "0.3.0"
@@ -39,19 +42,23 @@ float-cmp = "0.10.0"
 bench = false
 
 [[bin]]
-name = "classify_mol_files"
-bench = false
-
-[[bin]]
 name = "test_mol_file"
 bench = false
 
 [[bin]]
-name = "parse_smiles"
+name = "classify_mol_files"
 bench = false
 
 [[bin]]
 name = "classify_sdf_files"
+bench = false
+
+[[bin]]
+name = "test_smiles"
+bench = false
+
+[[bin]]
+name = "classify_smiles_strings"
 bench = false
 
 [[bench]]

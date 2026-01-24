@@ -1,0 +1,2 @@
+# inchi_Steffen_PubChem.smi:8
+CC1=CC=C(C=C1)C(C)C.C1CCC(CC1)N2C=CN(C2=[Ru](=CC3=CC=CC=C3)(Cl)Cl)C4CCCCC4.Cl[Ru]Cl

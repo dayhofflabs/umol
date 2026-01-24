@@ -13,8 +13,10 @@
 //!   cargo run --bin classify_mol_files -- --sort # Copy files to data/ directories
 
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
+use std::error::Error;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::{env, fs, process};
 
 use umol_models_graph::io::ctfile::config::CtfileIoConfig;
 use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
@@ -182,9 +184,7 @@ impl ClassificationStats {
     }
 }
 
-fn classify_mol_file(
-    file_path: &Path,
-) -> Result<(Category, ParseResults), Box<dyn std::error::Error>> {
+fn classify_mol_file(file_path: &Path) -> Result<(Category, ParseResults), Box<dyn Error>> {
     let mol_bytes = fs::read(file_path)?;
 
     // For basic parser: BASIC vs BASIC LENIENT (lenient parsing features, no extended atoms/bonds)
@@ -206,7 +206,7 @@ fn classify_mol_file(
     Ok((category, results))
 }
 
-fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn Error>> {
     let categories = [
         "molecule",
         "molecule_lenient",
@@ -236,7 +236,7 @@ fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn std::error::Error
     Ok(())
 }
 
-fn collect_mol_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
+fn collect_mol_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -244,15 +244,15 @@ fn collect_mol_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn std:
 
         if path.is_dir() {
             files.extend(collect_mol_files(&path)?);
-        } else if path.extension() == Some(std::ffi::OsStr::new("mol")) {
+        } else if path.extension() == Some(OsStr::new("mol")) {
             files.push(path);
         }
     }
     Ok(files)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = std::env::args().collect();
+fn main() -> Result<(), Box<dyn Error>> {
+    let args: Vec<String> = env::args().collect();
     if !(args.len() == 1 || args.len() == 2 && args[1] == "--sort") {
         eprintln!(
             "Usage: cargo run --bin classify_mol_files           # Show classification stats"
@@ -260,7 +260,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!(
             "       cargo run --bin classify_mol_files -- --sort # Copy files to data/ directories"
         );
-        std::process::exit(1);
+        process::exit(1);
     }
     let should_sort = args.iter().any(|a| a == "--sort");
 
@@ -271,7 +271,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if !Path::new(&data_raw_path).exists() {
         eprintln!("Error: {} directory not found", data_raw_path);
-        std::process::exit(1);
+        process::exit(1);
     }
 
     if should_sort {

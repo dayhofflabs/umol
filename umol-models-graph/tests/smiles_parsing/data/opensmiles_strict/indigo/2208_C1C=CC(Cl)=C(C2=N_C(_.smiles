@@ -1,0 +1,2 @@
+# integration_tests_inchi_molecules_stereo.smi:400
+C1C=CC(Cl)=C(C2=N/C(/C(O2)=O)=C\C2C=C(Br)C(OCC3C=CC(I)=CC=3)=C(Br)C=2)C=1

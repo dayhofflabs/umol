@@ -1,0 +1,11 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: invalid
+category: invalid
+opensmiles_strict:
+  success: false
+  error:
+    error_type: InvalidToken
+    message: Invalid token at position 18

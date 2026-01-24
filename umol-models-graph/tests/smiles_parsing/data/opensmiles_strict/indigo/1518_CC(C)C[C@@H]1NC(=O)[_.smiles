@@ -1,0 +1,2 @@
+# integration_tests_layout_molecules_macrocycles_test.smi:31
+CC(C)C[C@@H]1NC(=O)[C@H](CCCN)NC(=O)[C@@H](NC(=O)C2CC3CN2C(=O)C(CCC(=O)NC2CC4N(C2)C(=O)C(CCC(=O)N3)NC(=O)[C@H](CC(C)C)NC(=O)[C@H](CCCN)NC(=O)[C@@H](NC(=O)C2CCCN2C(=O)[C@@H](CC2=CC=CC=C2)NC(=O)[C@H](CC(C)C)NC(=O)[C@H](CCCN)NC(=O)[C@@H](NC4=O)C(C)C)C(C)C)NC(=O)[C@H](CC(C)C)NC(=O)[C@H](CCCN)NC(=O)[C@@H](NC(=O)C2CCCN2C(=O)[C@@H](CC2=CC=CC=C2)NC1=O)C(C)C)C(C)C

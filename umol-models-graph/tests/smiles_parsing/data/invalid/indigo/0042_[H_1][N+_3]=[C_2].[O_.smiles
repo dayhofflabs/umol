@@ -1,0 +1,2 @@
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:42
+[H:1][N+:3]=[C:2].[O:8][S:4]([O-:7])(=[O:5])=[O:6]>>[H:1][O:7][S:4]([O:8])(=[O:5])=[O:6].[C:2]=[N:3]

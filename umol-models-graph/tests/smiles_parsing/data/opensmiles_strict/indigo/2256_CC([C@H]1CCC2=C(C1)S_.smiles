@@ -1,0 +1,2 @@
+# integration_tests_inchi_molecules_stereo.smi:1548
+CC([C@H]1CCC2=C(C1)SC(NC(C1C=C(C3C=CC(OC)=CC=3)N=C3C=1C=CC=C3)=O)=C2C(N)=O)(C)C

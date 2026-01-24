@@ -1,0 +1,12 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: opensmiles_strict
+category: opensmiles_strict
+opensmiles_strict:
+  success: true
+  summary:
+    sum_formula: C10F6N4
+    atom_count: 20
+    bond_count: 21

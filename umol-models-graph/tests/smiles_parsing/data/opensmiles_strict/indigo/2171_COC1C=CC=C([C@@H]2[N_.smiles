@@ -1,0 +1,2 @@
+# integration_tests_inchi_molecules_stereo.smi:1603
+COC1C=CC=C([C@@H]2[NH2+][C@H](C3C=CC=C(OC)C=3OC)[C@H]3C(=O)[C@@H]2[C@H]([NH2+][C@H]3C2C=CC=C(OC)C=2OC)C2C=CC=C(OC)C=2OC)C=1OC

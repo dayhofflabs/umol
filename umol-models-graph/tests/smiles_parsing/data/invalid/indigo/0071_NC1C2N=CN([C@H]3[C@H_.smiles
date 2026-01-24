@@ -1,0 +1,2 @@
+# integration_tests_bingo_reactions_smi_queries.smi:11
+NC1C2N=CN([C@H]3[C@H](O)[C@H](O)[C@@H](COP([O-])(OP([O-])([O-])=O)=O)O3)C=2N=CN=1.[H+].C1(O)O[C@H](CO)[C@@H](O[C@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)[C@H](O)[C@H]1O.P(=O)(O)([O-])[O-]>>NC1C2N=CN([C@H]3[C@H](O)[C@H](O)[C@@H](COP([O-])(OP([O-])(OP([O-])([O-])=O)=O)=O)O3)C=2N=CN=1.[H]O[H].C1(O)O[C@H](CO)[C@@H](O[C@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)[C@H](O)[C@H]1O
