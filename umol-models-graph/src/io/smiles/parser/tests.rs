@@ -452,6 +452,7 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::atom_og(b"[Og]", Element::Og, false, None, None, None, None, None)]
 #[case::atom_aromatic_c(b"[c]", Element::C, true, None, None, None, None, None)]
 #[case::atom_aromatic_se(b"[se]", Element::Se, true, None, None, None, None, None)]
+#[case::atom_aromatic_as(b"[as]", Element::As, true, None, None, None, None, None)]
 #[case::isotope_element(b"[13C]", Element::C, false, Some(13), None, None, None, None)]
 #[case::isotope_zero(b"[0C]", Element::C, false, Some(0), None, None, None, None)]
 #[case::isotope_hydrogen_1h(b"[1H]", Element::H, false, Some(1), None, None, None, None)]
@@ -743,8 +744,6 @@ fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = err.unwrap_err();
     assert_eq!(err, expected);
 }
-
-// Wildcard tests removed - wildcards not supported in basic SMILES parser
 
 #[rstest]
 #[case::chirality_1_eq_1(b"N[C@](Br)(O)C", 5, 4)]

@@ -1,7 +1,7 @@
-## OpenSMILES (UMOL) — Grammar and Normative Rules
-Version 0.1 (2025-09-13)
+## OpenSMILES — UMOL Implementation Specification
+Version 0.2 (2026-01-24)
 
-This document specifies the UMOL dialect of the SMILES language. The EBNF grammar and lexical rules in this document are normative. The implementation grammar (e.g., LALRPOP) is non-normative; where any discrepancy exists, this document prevails.
+This document specifies the UMOL implementation of the OpenSMILES specification. The EBNF grammar and lexical rules in this document are normative. The implementation grammar (e.g., LALRPOP) is non-normative; where any discrepancy exists, this document prevails.
 
 ### Versioning and Compatibility
 
@@ -150,9 +150,11 @@ A conforming implementation accepts all valid examples in the accompanying test 
 
 The repository includes a machine‑readable test suite organized into valid, edge, and invalid categories under `umol-models-graph/src/io/smiles/parser/tests/`. Implementations should use these examples to verify conformance.
 
-### Differences from OpenSMILES (UMOL) — informational
+### Implementation Notes — informational
 
-UMOL accepts '0' as a single‑digit ring index. UMOL requires percent ring indices to be exactly two digits and accepts leading‑zero forms as numeric equivalents (e.g., '1' == '%01', '0' == '%00'). When both endpoints are aromatic and a bond is implicit, UMOL defaults that bond to aromatic. UMOL allows dots inside branches to start branch‑local components which may later merge via rings. UMOL recognizes '++' and '--' as charge tokens equal to ±2.
+This implementation accepts '0' as a single‑digit ring index. Percent ring indices must be exactly two digits; leading‑zero forms are accepted as numeric equivalents (e.g., '1' == '%01', '0' == '%00'). When both endpoints are aromatic and a bond is implicit, the bond defaults to aromatic. Dots inside branches start branch‑local components which may later merge via rings. The tokens '++' and '--' are recognized as charge values equal to ±2.
+
+**Note:** Wildcard atoms (`*`) are defined in the grammar but are parsed by `parse_extended_smiles`, not `parse_smiles`. The basic parser rejects wildcards.
 
 ### Invalid Forms — informational
 
