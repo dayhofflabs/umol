@@ -10,7 +10,7 @@ use self::utils::{
     attach_atom, invalid_ring_context, parse_bond, parse_bracket, parse_organic_aliphatic_element,
     parse_organic_aromatic_element, parse_ring_index, process_ring_closure, Frame, OpenRing,
 };
-use super::config::SmilesIoConfig;
+use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
 use crate::span::Span;
 use crate::table_ir::{BondDirection, BondOrder, Molecule};
@@ -20,13 +20,28 @@ pub struct ParseOutput {
     pub table_ir: Molecule,
 }
 
-/// Parse SMILES with strict OpenSMILES rules
-pub fn parse_smiles(input: &[u8]) -> Result<Molecule, ParseError> {
-    parse_smiles_with(input, &SmilesIoConfig::strict_opensmiles())
+/// Parse SMILES string with strict OpenSMILES rules
+pub fn parse_smiles(input: &str) -> Result<Molecule, ParseError> {
+    parse_smiles_bytes(input.as_bytes())
 }
 
-/// Parse SMILES with configuration
-pub fn parse_smiles_with(input: &[u8], _config: &SmilesIoConfig) -> Result<Molecule, ParseError> {
+/// Parse SMILES string with configuration
+pub fn parse_smiles_with(input: &str, config: &SmilesIoConfig) -> Result<Molecule, ParseError> {
+    parse_smiles_bytes_with(input.as_bytes(), config)
+}
+
+/// Parse SMILES bytes with strict OpenSMILES rules
+pub fn parse_smiles_bytes(input: &[u8]) -> Result<Molecule, ParseError> {
+    parse_smiles_bytes_with(input, &SmilesIoConfig::strict_opensmiles())
+}
+
+/// Parse SMILES bytes with configuration
+pub fn parse_smiles_bytes_with(
+    input: &[u8],
+    config: &SmilesIoConfig,
+) -> Result<Molecule, ParseError> {
+    let flags = config.parse_flags;
+
     // Strip leading/trailing whitespace, reject internal whitespace
     let mut start = 0usize;
     while start < input.len() && matches!(input[start], b' ' | b'\t' | b'\n' | b'\r') {
@@ -48,10 +63,10 @@ pub fn parse_smiles_with(input: &[u8], _config: &SmilesIoConfig) -> Result<Molec
         }
     }
 
-    parse_smiles_core(&input[start..end]).map(|o| o.table_ir)
+    parse_smiles_core(&input[start..end], flags).map(|o| o.table_ir)
 }
 
-fn parse_smiles_core(input: &[u8]) -> Result<ParseOutput, ParseError> {
+fn parse_smiles_core(input: &[u8], _flags: SmilesParseFlags) -> Result<ParseOutput, ParseError> {
     let mut i = 0usize;
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));

@@ -26,7 +26,7 @@ use crate::table_ir::{BondDirection, BondOrder, Chirality};
 #[case::organic_s_aromatic(b"s", build_from_graph("S*@0 |"))]
 #[case::organic_p_aromatic(b"p", build_from_graph("P*@0 |"))]
 fn element(#[case] input: &[u8], #[case] expected: Molecule) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -39,7 +39,7 @@ fn element(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::element_q(b"Q", ParseError::InvalidElement { pos: 0 })]
 #[case::element_f_aromatic(b"f", ParseError::InvalidElement { pos: 0 })]
 fn element_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_err(), "{:?} should have failed", input);
     let mol = res.unwrap_err();
     assert_eq!(mol, expected);
@@ -53,7 +53,7 @@ fn element_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::aromatic_c_6(b"cccccc", build_from_graph("C*@0..1 C*@1..2 C*@2..3 C*@3..4 C*@4..5 C*@5..6 | 0-1:@1..2 1-2:@2..3 2-3:@3..4 3-4:@4..5 4-5:@5..6"))]
 #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C@0..1 Cl@1..3 O@3..4 Br@4..6 N@6..7 | 0-1@1..3 1-2@3..4 2-3@4..6 3-4@6..7"))]
 fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -73,7 +73,7 @@ fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::branch_multiple_trailing(b"C(C)(C)", build_from_graph("C@0 C@2 C@5 | 0-1@2 0-2@5"))]
 #[case::branch_nested(b"C(C(C)C)C", build_from_graph("C@0 C@2 C@4 C@6 C@8 | 0-1@2 1-2@4 1-3@6 0-4@8"))]
 fn tree(#[case] input: &[u8], #[case] expected: Molecule) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -93,7 +93,7 @@ fn tree(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::group_before_atom(b"(C)C", ParseError::NonfinalGroup { pos: 2 })]
 #[case::group_before_atom_aromatic(b"(c)c", ParseError::NonfinalGroup { pos: 2 })]
 fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles(input);
+    let err = parse_smiles_bytes(input);
     assert!(err.is_err(), "{:?} should have failed", input);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
@@ -143,7 +143,7 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C*@0 C*@2 C*@4 C*@6 | 0-1:@2 1-2:@4 1-3:@6 0-3:@1 | 1@1-7:0-3"))]
 #[case::substituted_ring_branch(b"C1C(C(C)C)C1", build_from_graph("C@0 C@2 C@4 C@6 C@8 C@10 | 0-1@2 1-2@4 2-3@6 2-4@8 1-5@10 0-5@1 | 1@1-11:0-5"))]
 fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -166,7 +166,7 @@ fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::bad_percent_single_digit_1(b"C%1", ParseError::InvalidRingIndex { pos: 1 })]
 #[case::bad_percent_char(b"C%1a", ParseError::InvalidRingIndex { pos: 1 })]
 fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles(input);
+    let err = parse_smiles_bytes(input);
     assert!(err.is_err(), "{:?} should have failed", input);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
@@ -185,7 +185,7 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_multiple_rings_percent(b"C%12%13CCCCC%12%13", build_from_graph("C@0 C@7 C@8 C@9 C@10 C@11 | 0-1@7 1-2@8 2-3@9 3-4@10 4-5@11 0-5@1 0-5@4 | 12@1-12:0-5 13@4-15:0-5"))]
 fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
     // Expected to pass here, fail in post-parse topology check
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -258,7 +258,7 @@ fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::ring_down_bond_percent_both(b"C\\%12CC\\%12", build_from_graph("C@0 C@5 C@6 | 0-1@5 1-2@6 0-2:\\@2 | 12@2-8:0-2"))]
 #[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C@0 C@2 C@3 C@7 | 0-1@2 1-2@3 0-2@1 2-3@6 | 1@1-5:0-2"))]
 fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -331,7 +331,7 @@ fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", ParseError::MismatchedRingBondDirs { pos: 8, open_pos: 2 })]
 #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", ParseError::MismatchedRingBondDirs { pos: 8, open_pos: 2 })]
 fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles(input);
+    let err = parse_smiles_bytes(input);
     assert!(err.is_err(), "{:?} should have failed", input);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
@@ -379,7 +379,7 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_dir_down_both_percent(b"C\\%12CC\\%12", build_from_graph("C@0 C@5 C@6 | 0-1@5 1-2@6 0-2:\\@2 | 12@2-8:0-2"))]
 #[case::branch_multiple_components(b"C(.C.C)", build_from_graph("C@0 C@3 C@5 |"))]
 fn components(#[case] input: &[u8], #[case] expected: Molecule) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -437,7 +437,7 @@ fn components(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::group_trailing_bond_dot(b"(C-.)", ParseError::TrailingBond { pos: 2 })]
 #[case::branch_trailing_bond_dot(b"C(C-.)", ParseError::TrailingBond { pos: 3 })]
 fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles(input);
+    let err = parse_smiles_bytes(input);
     assert!(err.is_err(), "{:?} should have failed", input);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
@@ -533,7 +533,7 @@ fn bracket(
     #[case] charge: Option<i8>,
     #[case] class_: Option<u32>,
 ) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol.atoms.len(), 1, "expected single atom");
@@ -615,7 +615,7 @@ fn bracket_bonds(
     #[case] expected_order: Option<BondOrder>,
     #[case] expected_dir: Option<BondDirection>,
 ) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     if let Some(bond1) = mol.bonds.first() {
@@ -726,7 +726,7 @@ fn bracket_bonds(
 #[case::duplicate_class_3(b"[C:12:12]", ParseError::DuplicateBracketField { pos: 5 })]
 #[case::duplicate_class_4(b"[C:1:12]", ParseError::DuplicateBracketField { pos: 4 })]
 fn bracket_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles(input);
+    let err = parse_smiles_bytes(input);
     assert!(err.is_err(), "{:?} should have failed", input);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
@@ -739,7 +739,7 @@ fn bracket_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::stray_hcount_field(b"CHC", ParseError::InvalidElement { pos: 1 })]
 #[case::stray_class_field(b"C:1C", ParseError::UnbalancedRingIndex { open_pos: 2 })]
 fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles(input);
+    let err = parse_smiles_bytes(input);
     assert!(err.is_err(), "{:?} should have failed", input);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
@@ -802,7 +802,7 @@ fn stereo(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usize) {
     // Only check that parse succeeds
     // The set chirality/trans/cis/chirality_allene/chirality_tb_X_eq_*
     // represents the same structure for each X
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol.atoms.len(), atoms);
@@ -830,7 +830,7 @@ fn stereo(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usize) {
 #[case::octahedral_zero(b"[C@OH0]", ParseError::ChiralityOutOfRange { pos: 2 })]
 #[case::octahedral_out_of_range(b"[C@OH31]", ParseError::ChiralityOutOfRange { pos: 2 })]
 fn stereo_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
@@ -843,7 +843,7 @@ fn stereo_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 )]
 fn stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecule) {
     // Expected to pass here, but should fail semantics post-parse
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -859,7 +859,7 @@ fn stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::wildcard_trailing_bond(b"*-", ParseError::InvalidElement { pos: 0 })]
 #[case::wildcard_trailing_dot(b"*.", ParseError::InvalidElement { pos: 0 })]
 fn wildcard_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
@@ -893,7 +893,7 @@ fn wildcard_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::greek_omicron(b"C\xCE\xBFC", ParseError::InvalidToken { pos: 1 })]
 #[case::greek_capital_omicron(b"C\xCE\x9FC", ParseError::InvalidToken { pos: 1 })]
 fn token_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
@@ -922,7 +922,7 @@ fn token_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::incomplete_stereo_2(b"C/C=CC", 4, 3)]
 fn style_warnings(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usize) {
     // Verify that parse succeeds, should trigger style warnings in post-parse
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol.atoms.len(), atoms);
@@ -940,7 +940,7 @@ fn style_warnings(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usi
 #[case::named_isotope_t(b"T[CH3]", ParseError::InvalidElement { pos: 0 })]
 fn style_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     // Considered non-standard in OpenSMILES spec, error here
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
@@ -958,7 +958,7 @@ fn style_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::terminator_cr(b"CC\r", build_from_graph("C@0 C@1 | 0-1@1"))]
 #[case::terminator_crlf(b"CC\r\n", build_from_graph("C@0 C@1 | 0-1@1"))]
 fn whitespace_strict(#[case] input: &[u8], #[case] expected: Molecule) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
@@ -976,7 +976,7 @@ fn whitespace_strict(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::terminator_newline_trailing_structure(b"CC\nCC", ParseError::InvalidWhitespace { pos: 2 })]
 #[case::terminator_crlf_trailing_structure(b"CC\r\nCC", ParseError::InvalidWhitespace { pos: 2 })]
 fn whitespace_strict_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let res = parse_smiles(input);
+    let res = parse_smiles_bytes(input);
     assert!(res.is_err(), "{:?} should have failed", input);
     let err = res.unwrap_err();
     assert_eq!(err, expected);

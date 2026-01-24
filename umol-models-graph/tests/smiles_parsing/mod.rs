@@ -123,7 +123,7 @@ fn read_smiles_from_file(path: &Path) -> String {
 }
 
 fn parse_with_strict(smiles: &str) -> ParseResult {
-    match parse_smiles(smiles.as_bytes()) {
+    match parse_smiles(smiles) {
         Ok(mol) => ParseResult {
             success: true,
             summary: Some(MoleculeSummary::from(&mol)),

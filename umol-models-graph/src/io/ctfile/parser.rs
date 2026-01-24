@@ -308,8 +308,6 @@ pub fn parse_extended_mol_bytes_with(
     input: &[u8],
     config: &CtfileIoConfig,
 ) -> Result<ExtendedMolecule, ParseError> {
-    use nom::character::complete::multispace0;
-
     let flags = config.parse_flags;
 
     let data: Cow<'_, [u8]> = if flags.contains(CtabParseFlags::UNICODE) {

@@ -131,7 +131,7 @@ impl ClassificationStats {
 }
 
 fn classify_smiles(smiles: &str) -> Category {
-    match parse_smiles(smiles.as_bytes()) {
+    match parse_smiles(smiles) {
         Ok(_) => Category::OpensmilesStrict,
         Err(_) => Category::Invalid,
     }

@@ -7,7 +7,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
-use umol_models_graph::io::smiles::parse_smiles;
+use umol_models_graph::io::smiles::parse_smiles_bytes;
 
 fn opensmiles_parsing(c: &mut Criterion) {
     // Mixed elements chain (organic-only mix omitting bare H)
@@ -230,7 +230,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_chain.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -243,7 +243,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_tree.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -256,7 +256,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_chain_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -269,7 +269,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_tree_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -282,7 +282,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_cycles.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -295,7 +295,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_fused.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -308,7 +308,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_ring_stereo.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -321,7 +321,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_complex_rings.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -334,7 +334,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_components.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -347,7 +347,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_brackets.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
             b.iter(|| {
                 let input = black_box(input.as_slice());
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -360,7 +360,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_wild.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
             b.iter(|| {
                 let input = black_box(input.as_slice());
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });
@@ -373,7 +373,7 @@ fn opensmiles_parsing(c: &mut Criterion) {
         group_whitespace.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles(input);
+                let result = parse_smiles_bytes(input);
                 assert!(result.is_ok());
             })
         });

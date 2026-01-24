@@ -29,7 +29,7 @@ fn main() {
             continue;
         }
         n += 1;
-        let _ = parse_smiles(smiles.as_bytes()).map(|_| {
+        let _ = parse_smiles(smiles).map(|_| {
             ok += 1;
         });
     }

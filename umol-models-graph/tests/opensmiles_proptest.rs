@@ -4,8 +4,8 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_models_graph::io::smiles::config::SmilesIoConfig;
-use umol_models_graph::io::smiles::parser::parse_smiles_with;
-use umol_models_graph::io::smiles::{parse_smiles, ParseError};
+use umol_models_graph::io::smiles::parser::parse_smiles_bytes_with;
+use umol_models_graph::io::smiles::{parse_smiles_bytes, ParseError};
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".
@@ -43,14 +43,14 @@ proptest! {
     fn never_panics_on_ascii(input in smilesish()) {
         let config = SmilesIoConfig::strict_opensmiles();
         let _ = std::panic::catch_unwind(|| {
-            let _ = parse_smiles_with(&input, &config);
+            let _ = parse_smiles_bytes_with(&input, &config);
         }).expect("parse_smiles panicked");
     }
 
     // Error spans must point within the input bounds
     #[test]
     fn error_positions_within_bounds(input in smilesish()) {
-        let res = parse_smiles(&input);
+        let res = parse_smiles_bytes(&input);
         if let Err(err) = res {
             let len = input.len();
             let ok = match err {
@@ -92,7 +92,7 @@ proptest! {
     // Bonds in successful parses must reference valid, distinct atom indices
     #[test]
     fn bonds_well_formed_on_success(input in smilesish()) {
-        if let Ok(mol) = parse_smiles(&input) {
+        if let Ok(mol) = parse_smiles_bytes(&input) {
             let n = mol.atoms.len() as u32;
             for b in &mol.bonds {
                 let sa = b.start_atom();
