@@ -1,0 +1,17 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: opensmiles
+category: opensmiles
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidBracket
+    message: Invalid bracket at position 25
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C9IN4OS*
+    atom_count: 17
+    bond_count: 18

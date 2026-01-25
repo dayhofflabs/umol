@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:2
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:1
 [O-,S-,Se-,Te-:1][P+;D4:2][O-,S-,Se-,Te-:3]>>[O,S,Se,Te:1]=[P;D5:2][O-,S-,Se-,Te-:3]

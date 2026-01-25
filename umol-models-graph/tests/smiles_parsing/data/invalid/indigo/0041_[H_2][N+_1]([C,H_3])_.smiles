@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:41
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:40
 [H:2][N+:1]([C,H:3])([C:4])[C:5].[F-,Cl-,Br-,I-:6]>>[N:1]([C,H:3])([C:4])[C:5].[H:2][F,Cl,Br,I:6]

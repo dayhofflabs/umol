@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C29Cl2N3O
+    sum_formula: C29Cl2N3OR
     atom_count: 36
     bond_count: 40
     extended_atoms: 1
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C29Cl2N3O
+    sum_formula: C29Cl2N3OR
     atom_count: 36
     bond_count: 40
     extended_atoms: 1

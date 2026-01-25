@@ -137,34 +137,69 @@ impl ExtendedMolecule {
     }
 
     /// Get sum formula in Hill notation (C first, H second, then alphabetically)
+    /// Extended atoms (wildcards, atom lists, R-groups, pseudoatoms, lone pairs) are appended
+    /// after elements using their symbolic representation.
     pub fn sum_formula(&self) -> String {
         let mut atom_counts: BTreeMap<[u8; 2], (Element, usize)> = BTreeMap::new();
         let mut c_count = 0usize;
         let mut h_count = 0usize;
         let mut charge = 0i32;
 
+        // Count extended atom types (in enum variant order)
+        let mut wildcard_count = 0usize;
+        let mut atomlist_count = 0usize;
+        let mut rgroup_count = 0usize;
+        let mut pseudoatom_count = 0usize;
+        let mut lonepair_count = 0usize;
+
         for atom in &self.atoms {
-            let element = match &atom.symbol {
-                AtomSymbol::Element(e) => Some(*e),
-                AtomSymbol::NamedIsotope(i) => Some(i.element()),
-                _ => None,
-            };
-            if let Some(element) = element {
-                match element {
+            match &atom.symbol {
+                AtomSymbol::Element(e) => match e {
+                    Element::C => c_count += 1,
+                    Element::H => h_count += 1,
+                    e => {
+                        let key = element_symbol_key(*e);
+                        atom_counts.entry(key).or_insert((*e, 0)).1 += 1;
+                    }
+                },
+                AtomSymbol::NamedIsotope(i) => match i.element() {
                     Element::C => c_count += 1,
                     Element::H => h_count += 1,
                     e => {
                         let key = element_symbol_key(e);
                         atom_counts.entry(key).or_insert((e, 0)).1 += 1;
                     }
-                }
+                },
+                AtomSymbol::WildcardAtom(_) => wildcard_count += 1,
+                AtomSymbol::AtomList(_) => atomlist_count += 1,
+                AtomSymbol::RGroup(_) => rgroup_count += 1,
+                AtomSymbol::Pseudoatom(_) => pseudoatom_count += 1,
+                AtomSymbol::LonePair => lonepair_count += 1,
             }
             if let Some(ch) = atom.charge {
                 charge += ch as i32;
             }
         }
 
-        format_sum_formula(c_count, h_count, atom_counts, charge)
+        let mut result = format_sum_formula(c_count, h_count, atom_counts, charge);
+
+        // Append extended atom counts (symbol, count with index 1 elided)
+        let extended = [
+            ("*", wildcard_count),
+            ("[L]", atomlist_count),
+            ("R", rgroup_count),
+            ("[Ps]", pseudoatom_count),
+            ("[LP]", lonepair_count),
+        ];
+        for (symbol, count) in extended {
+            if count > 1 {
+                result.push_str(&format!("{}{}", symbol, count));
+            } else if count == 1 {
+                result.push_str(symbol);
+            }
+        }
+
+        result
     }
 
     /// Extract basic molecule (converts ExtendedAtom/ExtendedBond to basic types)

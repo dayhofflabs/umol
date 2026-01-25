@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:33
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:32
 [H:1][S:2][c:3]1[n:8][c:7]([H,*:13])[n:6][c:5]2[c:4]1[n:11][c:10]([H,*:12])[n:9]2>>[H:1][N:8]1[C:7]([H,*:13])=[N:6][C:5]2=[C:4]([N:11]=[C:10]([H,*:12])[N:9]2)[C:3]1=[S:2]

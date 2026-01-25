@@ -4,7 +4,12 @@ expression: results
 ---
 expected_category: invalid
 category: invalid
-opensmiles_strict:
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidElement
+    message: Invalid element at position 2
+opensmiles:
   success: false
   error:
     error_type: InvalidElement

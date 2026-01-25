@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C17+2
+    sum_formula: "C17+2[L]"
     atom_count: 18
     bond_count: 17
     extended_atoms: 1
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C17+2
+    sum_formula: "C17+2[L]"
     atom_count: 18
     bond_count: 17
     extended_atoms: 1

@@ -4,7 +4,12 @@ expression: results
 ---
 expected_category: invalid
 category: invalid
-opensmiles_strict:
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidToken
+    message: Invalid token at position 6
+opensmiles:
   success: false
   error:
     error_type: InvalidToken

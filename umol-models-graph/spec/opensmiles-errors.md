@@ -88,6 +88,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - STYLE_PREFER_IMPLICIT_H (STYLE, Warning): prefer C over [CH4]. Exceptions: charge [H+], [H-], H-H bonds [H][H], bridging H [BH2]1([H])[BH2][H]1, isotopes [2H], [3H]
 - STYLE_PREFER_BRACKET_FIELD_ORDER (STYLE, Warning): prefer [chirality][H][charge][class] ordering in bracket atoms
 - STYLE_PREFER_SIMPLE_CHARGE_SIGN (STYLE, Warning): prefer [+]/[-] over [+1]/[-1]
+- STYLE_AVOID_DOUBLE_CHARGE_SIGN (STYLE, Warning): avoid [++]/[--], use [+2]/[-2] instead
 - STYLE_PREFER_SIMPLE_HCOUNT (STYLE, Warning): prefer H over H1 in bracket H-count
 - STYLE_AVOID_EXPLICIT_SINGLE_BOND (STYLE, Warning): avoid explicit '-' when default applies
 - STYLE_AVOID_EXPLICIT_AROMATIC_BOND (STYLE, Warning): avoid explicit ':' when aromatic default applies

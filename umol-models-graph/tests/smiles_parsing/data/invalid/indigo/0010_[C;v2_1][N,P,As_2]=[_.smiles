@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:10
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:9
 [C;v2:1][N,P,As:2]=[O,S,Se,Te:3]>>[C:1]#[N,P,As:2]=[O,S,Se,Te:3]

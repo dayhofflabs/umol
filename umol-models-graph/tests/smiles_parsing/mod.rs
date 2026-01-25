@@ -4,8 +4,9 @@
 //! Each .smiles file contains a single SMILES string (with optional comment header).
 //!
 //! Files are organized by parse result category:
-//! - opensmiles_strict: passes strict OpenSMILES parser
-//! - invalid: fails parser
+//! - basic_opensmiles: passes strict OpenSMILES parser (no wildcards)
+//! - opensmiles: passes extended OpenSMILES parser (with wildcards)
+//! - invalid: fails all parsers
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,33 +14,37 @@ use std::path::{Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::Serialize;
+use umol_models_graph::io::smiles::config::SmilesIoConfig;
 use umol_models_graph::io::smiles::error::ParseError;
-use umol_models_graph::io::smiles::parse_smiles;
-use umol_models_graph::table_ir::Molecule;
+use umol_models_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles};
+use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum Category {
-    OpensmilesStrict,
+    BasicOpensmiles,
+    Opensmiles,
     Invalid,
-    #[allow(dead_code)] // Placeholder for future configs
     Bug,
 }
 
 impl Category {
     fn from_dir_name(name: &str) -> Option<Self> {
         match name {
-            "opensmiles_strict" => Some(Category::OpensmilesStrict),
+            "basic_opensmiles" => Some(Category::BasicOpensmiles),
+            "opensmiles" => Some(Category::Opensmiles),
             "invalid" => Some(Category::Invalid),
+            "bug" => Some(Category::Bug),
             _ => None,
         }
     }
 
-    fn from_parse_result(strict_ok: bool) -> Self {
-        if strict_ok {
-            Category::OpensmilesStrict
-        } else {
-            Category::Invalid
+    fn from_parse_result(strict_ok: bool, extended_ok: bool) -> Self {
+        match (strict_ok, extended_ok) {
+            (true, true) => Category::BasicOpensmiles,
+            (false, true) => Category::Opensmiles,
+            (false, false) => Category::Invalid,
+            (true, false) => Category::Bug,
         }
     }
 }
@@ -53,6 +58,16 @@ struct MoleculeSummary {
 
 impl From<&Molecule> for MoleculeSummary {
     fn from(mol: &Molecule) -> Self {
+        Self {
+            sum_formula: mol.sum_formula(),
+            atom_count: mol.atom_count(),
+            bond_count: mol.bond_count(),
+        }
+    }
+}
+
+impl From<&ExtendedMolecule> for MoleculeSummary {
+    fn from(mol: &ExtendedMolecule) -> Self {
         Self {
             sum_formula: mol.sum_formula(),
             atom_count: mol.atom_count(),
@@ -80,7 +95,9 @@ struct ParseResult {
 struct FileParseResults {
     expected_category: Category,
     category: Category,
-    opensmiles_strict: ParseResult,
+    basic_opensmiles: ParseResult,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    opensmiles: Option<ParseResult>,
 }
 
 fn error_type_name(e: &ParseError) -> String {
@@ -140,17 +157,48 @@ fn parse_with_strict(smiles: &str) -> ParseResult {
     }
 }
 
+fn parse_with_opensmiles(smiles: &str) -> ParseResult {
+    let config = SmilesIoConfig::opensmiles();
+    match parse_extended_smiles_bytes_with(smiles.as_bytes(), &config) {
+        Ok(mol) => ParseResult {
+            success: true,
+            summary: Some(MoleculeSummary::from(&mol)),
+            error: None,
+        },
+        Err(e) => ParseResult {
+            success: false,
+            summary: None,
+            error: Some(ParseErrorSummary {
+                error_type: error_type_name(&e),
+                message: e.to_string(),
+            }),
+        },
+    }
+}
+
 fn parse_file(path: &Path) -> FileParseResults {
     let expected_category = extract_expected_category(path);
     let smiles = read_smiles_from_file(path);
 
-    let opensmiles_strict = parse_with_strict(&smiles);
-    let category = Category::from_parse_result(opensmiles_strict.success);
+    // Run both parsers to verify parser hierarchy
+    let basic_opensmiles = parse_with_strict(&smiles);
+    let opensmiles_result = parse_with_opensmiles(&smiles);
+
+    let category =
+        Category::from_parse_result(basic_opensmiles.success, opensmiles_result.success);
+
+    // Only include extended result in output if it differs from basic
+    let opensmiles = if basic_opensmiles.success {
+        None
+    } else {
+        Some(opensmiles_result)
+    };
 
     FileParseResults {
         expected_category,
         category,
-        opensmiles_strict,
+        basic_opensmiles,
+        opensmiles,
     }
 }
 

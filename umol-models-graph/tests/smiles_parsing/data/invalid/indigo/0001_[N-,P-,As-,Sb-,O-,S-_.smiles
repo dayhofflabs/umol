@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:1
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:0
 [N-,P-,As-,Sb-,O-,S-,Se-,Te-:1][C:2]=[N+,P+,As+,Sb+,O+,S+,Se+,Te+:3]>>[N,P,As,Sb,O,S,Se,Te:1]=[C:2][N,P,As,Sb,O,S,Se,Te:3]

@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C5
+    sum_formula: C5R2
     atom_count: 7
     bond_count: 6
     extended_atoms: 2
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C5
+    sum_formula: C5R2
     atom_count: 7
     bond_count: 6
     extended_atoms: 2

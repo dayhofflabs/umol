@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C7
+    sum_formula: C7*
     atom_count: 8
     bond_count: 14
     extended_atoms: 1
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C7
+    sum_formula: C7*
     atom_count: 8
     bond_count: 14
     extended_atoms: 1

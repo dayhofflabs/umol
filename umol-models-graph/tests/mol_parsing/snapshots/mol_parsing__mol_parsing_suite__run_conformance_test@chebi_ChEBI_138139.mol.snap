@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C43O6P-
+    sum_formula: C43O6P-R
     atom_count: 51
     bond_count: 50
     extended_atoms: 1
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C43O6P-
+    sum_formula: C43O6P-R
     atom_count: 51
     bond_count: 50
     extended_atoms: 1

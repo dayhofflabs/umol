@@ -1,2 +1,2 @@
-# integration_tests_bingo_reactions_smi_queries.smi:3
+# integration_tests_bingo_reactions_smi_queries.smi:2
 C(C(CCC([O-])=O)=O)([O-])=O.[C@]12(C(O[C@@]3(CCC1)[C@]2([H])[C@H](C([O-])=O)[C@@]12CC(=C)[C@@](O)(C1)CC[C@@]32[H])=O)C.O=O>>C(=O)=O.[C@]12(C(O[C@@]3(CC[C@@H]1O)[C@]2([H])[C@H](C([O-])=O)[C@@]12CC(=C)[C@@](O)(C1)CC[C@@]32[H])=O)C.C(C(=O)[O-])CC(=O)[O-]

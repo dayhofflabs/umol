@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C85N3O4PS4-
+    sum_formula: "C85N3O4PS4-[L]2"
     atom_count: 99
     bond_count: 115
     extended_atoms: 2
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C85N3O4PS4-
+    sum_formula: "C85N3O4PS4-[L]2"
     atom_count: 99
     bond_count: 115
     extended_atoms: 2

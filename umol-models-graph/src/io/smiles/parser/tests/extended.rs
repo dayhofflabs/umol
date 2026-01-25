@@ -765,9 +765,15 @@ fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::chirality_2_eq_2(b"[C@]1(Br)(Cl)CCCC(F)C1", 0, Element::C, Chirality::Clockwise, vec![1, 2, 3, 8])]
 // Tetrahedral chirality with explicit hydrogen
 #[case::chirality_3_eq_1(b"N[C@H](O)C", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3])]
-// Allene chirality
+// Allene chirality (2 double bonds - even)
 #[case::chirality_allene_1(b"NC(Br)=[C@]=C(O)C", 3, Element::C, Chirality::Clockwise, vec![1, 4])]
 #[case::chirality_allene_2(b"NC(Br)=[C@AL1]=C(O)C", 3, Element::C, Chirality::Allenal { arr: 1 }, vec![1, 4])]
+// Extended allene chirality (4 double bonds - even)
+#[case::chirality_cumulene_4_trans(b"NC(Br)=C=[C@]=C=C(O)C", 4, Element::C, Chirality::Clockwise, vec![3, 5])]
+#[case::chirality_cumulene_4_al1(b"NC(Br)=C=[C@AL1]=C=C(O)C", 4, Element::C, Chirality::Allenal { arr: 1 }, vec![3, 5])]
+// Extended allene chirality (6 double bonds - even)
+#[case::chirality_cumulene_6_trans(b"NC(Br)=C=C=[C@]=C=C=C(O)C", 5, Element::C, Chirality::Clockwise, vec![4, 6])]
+#[case::chirality_cumulene_6_al1(b"NC(Br)=C=C=[C@AL1]=C=C=C(O)C", 5, Element::C, Chirality::Allenal { arr: 1 }, vec![4, 6])]
 // Trigonal bipyramidal chirality
 #[case::chirality_tb_1(b"S[As@TB1](F)(Cl)(Br)N", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 1 }, vec![0, 2, 3, 4, 5])]
 #[case::chirality_tb_2(b"S[As@TB5](F)(N)(Cl)Br", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 5 }, vec![0, 2, 3, 4, 5])]
@@ -832,6 +838,12 @@ fn stereo_chiral(
 // Partial stereo specification
 #[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondDirection::Up)]
 #[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondDirection::Up)]
+// Extended cis/trans for cumulenes (3 double bonds - odd)
+#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondDirection::Up)]
+#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondDirection::Up)]
+// Extended cis/trans for cumulenes (5 double bonds - odd)
+#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondDirection::Up)]
+#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondDirection::Up)]
 fn stereo_bonds(
     #[case] input: &[u8],
     #[case] exp_a: u32,

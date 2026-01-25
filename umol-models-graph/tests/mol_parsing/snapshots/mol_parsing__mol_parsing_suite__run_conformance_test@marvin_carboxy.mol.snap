@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: CO2
+    sum_formula: CO2*
     atom_count: 4
     bond_count: 3
     extended_atoms: 1
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: CO2
+    sum_formula: CO2*
     atom_count: 4
     bond_count: 3
     extended_atoms: 1

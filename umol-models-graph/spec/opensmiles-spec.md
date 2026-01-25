@@ -139,7 +139,12 @@ Bracket atoms do not have implicit hydrogens. If an 'H' field is omitted inside 
 
 Directional markers '/' and '\\' attached to single bonds adjacent to a double bond encode relative geometry. The parser collects such markers and classifies double-bond geometry when it is unambiguous; otherwise the geometry remains unknown ("either"). In ring-directed closures where only one side supplies a determinative marker, the geometry is recorded as unknown/either.
 
-For cumulenes, UMOL does not propagate endpoint up/down markers across chains; only the local alkene E/Z rule is applied. Endpoint stereomarkers (up/down) on cumulenes with more than two consecutive double bonds are not interpreted and do not establish geometry. Even-length systems such as allenes may be characterized by allenic stereochemistry via '@ALn' on the central atom; '@' and '@@' are aliased to '@AL1' and '@AL2' when the center has exactly two incident double bonds. Allenic stereomarkers are not available for even-count cumulenes with more than two consecutive double bonds (n > 2). Validation of '@ALn' assignments is performed in the semantic pass.
+Cumulenes (consecutive double bonds) follow the same stereochemistry rules extended across the chain:
+
+- **Odd number of double bonds** (1, 3, 5, ...): Extended cis/trans (E/Z) geometry applies. Directional markers '/' and '\\' on bonds to the terminal atoms establish the relative configuration across the entire cumulene axis. Examples: `F/C=C=C=C/F` (trans-difluorobutatriene), `F/C=C=C=C\F` (cis-difluorobutatriene).
+- **Even number of double bonds** (2, 4, 6, ...): Extended tetrahedral (axial) chirality applies. The '@AL1' and '@AL2' markers on the central atom of the cumulene system specify the configuration; the "neighbor" atoms to which chirality refers are at the ends of the allene system. For simple allenes (2 double bonds), '@' and '@@' are aliased to '@AL1' and '@AL2' when the center has exactly two incident double bonds. Example: `NC(Br)=[C@]=C(O)C`.
+
+Validation of cumulene stereochemistry is performed in the semantic pass.
 
 ### Components and Molecule Finalization
 

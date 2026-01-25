@@ -1,8 +1,9 @@
 //! SMILES string classifier for conformance test organization.
 //!
 //! Classifies SMILES strings into categories based on parser success:
-//! - opensmiles_strict: passes strict OpenSMILES parser
-//! - invalid: fails parser
+//! - basic_opensmiles: passes strict OpenSMILES parser (no wildcards)
+//! - opensmiles: passes extended OpenSMILES parser (with wildcards)
+//! - invalid: fails all parsers
 //!
 //! Usage:
 //!   cargo run --bin classify_smiles_strings                    # Show classification stats
@@ -14,12 +15,14 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::process;
 
 use clap::Parser;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
-use umol_models_graph::io::smiles::parse_smiles;
+use umol_models_graph::io::smiles::config::SmilesIoConfig;
+use umol_models_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles};
 
 #[derive(Parser)]
 #[command(name = "classify_smiles_strings")]
@@ -92,31 +95,39 @@ fn read_smiles_file(path: &Path) -> io::Result<Vec<SmilesEntry>> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Category {
-    OpensmilesStrict,
+    BasicOpensmiles,
+    Opensmiles,
     Invalid,
+    Bug,
 }
 
 impl Category {
     fn dir_name(&self) -> &'static str {
         match self {
-            Category::OpensmilesStrict => "opensmiles_strict",
+            Category::BasicOpensmiles => "basic_opensmiles",
+            Category::Opensmiles => "opensmiles",
             Category::Invalid => "invalid",
+            Category::Bug => "bug",
         }
     }
 }
 
 #[derive(Debug, Default)]
 struct ClassificationStats {
-    opensmiles_strict: usize,
+    basic_opensmiles: usize,
+    opensmiles: usize,
     invalid: usize,
+    bug: usize,
     total: usize,
 }
 
 impl ClassificationStats {
     fn add(&mut self, category: Category) {
         match category {
-            Category::OpensmilesStrict => self.opensmiles_strict += 1,
+            Category::BasicOpensmiles => self.basic_opensmiles += 1,
+            Category::Opensmiles => self.opensmiles += 1,
             Category::Invalid => self.invalid += 1,
+            Category::Bug => self.bug += 1,
         }
         self.total += 1;
     }
@@ -125,15 +136,23 @@ impl ClassificationStats {
         if self.total == 0 {
             0.0
         } else {
-            (self.opensmiles_strict as f64 / self.total as f64) * 100.0
+            ((self.basic_opensmiles + self.opensmiles) as f64 / self.total as f64) * 100.0
         }
     }
 }
 
 fn classify_smiles(smiles: &str) -> Category {
-    match parse_smiles(smiles) {
-        Ok(_) => Category::OpensmilesStrict,
-        Err(_) => Category::Invalid,
+    // Run both parsers to enforce parser hierarchy
+    // extended parser must be a superset of basic parser
+    let basic_ok = parse_smiles(smiles).is_ok();
+    let config = SmilesIoConfig::opensmiles();
+    let extended_ok = parse_extended_smiles_bytes_with(smiles.as_bytes(), &config).is_ok();
+
+    match (basic_ok, extended_ok) {
+        (true, true) => Category::BasicOpensmiles,
+        (false, true) => Category::Opensmiles,
+        (false, false) => Category::Invalid,
+        (true, false) => Category::Bug, // hierarchy violation
     }
 }
 
@@ -156,7 +175,7 @@ fn collect_smi_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
 }
 
 fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn Error>> {
-    let categories = ["opensmiles_strict", "invalid"];
+    let categories = ["basic_opensmiles", "opensmiles", "invalid", "bug"];
 
     for category in categories {
         let category_path = Path::new(data_path).join(category);
@@ -197,7 +216,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if !Path::new(&data_raw_path).exists() {
         eprintln!("Error: {} directory not found", data_raw_path);
-        std::process::exit(1);
+        process::exit(1);
     }
 
     if args.sort {
@@ -308,8 +327,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Print markdown report
     println!("\n# SMILES Classification Results\n");
     println!("Classification based on parser compatibility:");
-    println!("- **opensmiles_strict**: Passes strict OpenSMILES parser");
-    println!("- **invalid**: Fails parser\n");
+    println!("- **basic_opensmiles**: Passes strict OpenSMILES parser (no wildcards)");
+    println!("- **opensmiles**: Passes extended OpenSMILES parser (with wildcards)");
+    println!("- **invalid**: Fails all parsers\n");
 
     if args.max_samples > 0 {
         println!(
@@ -318,8 +338,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
-    println!("| Source | Total | opensmiles_strict | invalid | Valid % |");
-    println!("| --- | --- | --- | --- | --- |");
+    println!("| Source | Total | basic_opensmiles | opensmiles | invalid | bug | Valid % |");
+    println!("| --- | --- | --- | --- | --- | --- | --- |");
 
     let mut sources: Vec<_> = source_stats.iter().collect();
     sources.sort_by_key(|(name, _)| name.as_str());
@@ -328,24 +348,30 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for (source, stats) in &sources {
         println!(
-            "| {} | {} | {} | {} | {:.1}% |",
+            "| {} | {} | {} | {} | {} | {} | {:.1}% |",
             source,
             stats.total,
-            stats.opensmiles_strict,
+            stats.basic_opensmiles,
+            stats.opensmiles,
             stats.invalid,
+            stats.bug,
             stats.valid_percentage()
         );
 
-        totals.opensmiles_strict += stats.opensmiles_strict;
+        totals.basic_opensmiles += stats.basic_opensmiles;
+        totals.opensmiles += stats.opensmiles;
         totals.invalid += stats.invalid;
+        totals.bug += stats.bug;
         totals.total += stats.total;
     }
 
     println!(
-        "| **Total** | **{}** | **{}** | **{}** | **{:.1}%** |",
+        "| **Total** | **{}** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
         totals.total,
-        totals.opensmiles_strict,
+        totals.basic_opensmiles,
+        totals.opensmiles,
         totals.invalid,
+        totals.bug,
         totals.valid_percentage()
     );
 
@@ -355,7 +381,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("- Errors: {} files could not be read", error_files);
     }
     println!(
-        "- {:.1}% of SMILES are valid (parseable with strict OpenSMILES)",
+        "- {:.1}% of SMILES are valid (parseable with OpenSMILES)",
         totals.valid_percentage()
     );
 

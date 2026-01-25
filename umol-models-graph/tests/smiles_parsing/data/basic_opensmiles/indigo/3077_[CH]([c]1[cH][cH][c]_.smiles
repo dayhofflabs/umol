@@ -1,0 +1,2 @@
+# integration_tests_arom_molecules_dearomatization.smi:15
+[CH]([c]1[cH][cH][c]([O][p]2([O][c]3[cH][cH][c]([CH]=[O])[cH][cH]3)[n]([Cl])[p]([O][c]3[cH][cH][c]([CH]=[O])[cH][cH]3)[n]([O][c]3[cH][cH][c]([CH]=[O])[cH][cH]3)[p]([O][c]3[cH][cH][c]([CH]=[O])[cH][cH]3)[n]2)[cH][cH]1)=[O]

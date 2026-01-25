@@ -22,7 +22,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C22N+
+    sum_formula: "C22N+*2[L]2"
     atom_count: 27
     bond_count: 26
     extended_atoms: 4

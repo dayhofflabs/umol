@@ -22,7 +22,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C6
+    sum_formula: "C6*[L]2"
     atom_count: 9
     bond_count: 8
     extended_atoms: 3

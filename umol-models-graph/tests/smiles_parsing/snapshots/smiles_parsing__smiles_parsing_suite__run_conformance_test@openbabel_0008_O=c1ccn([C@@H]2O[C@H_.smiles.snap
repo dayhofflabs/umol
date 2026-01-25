@@ -4,7 +4,12 @@ expression: results
 ---
 expected_category: invalid
 category: invalid
-opensmiles_strict:
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidRingIndex
+    message: Invalid ring index at position 2644
+opensmiles:
   success: false
   error:
     error_type: InvalidRingIndex

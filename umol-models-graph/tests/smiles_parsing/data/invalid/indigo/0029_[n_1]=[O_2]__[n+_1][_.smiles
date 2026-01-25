@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:29
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:28
 [n:1]=[O:2]>>[n+:1][O-:2]

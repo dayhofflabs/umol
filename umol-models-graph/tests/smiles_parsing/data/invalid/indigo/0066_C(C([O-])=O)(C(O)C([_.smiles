@@ -1,2 +1,2 @@
-# integration_tests_bingo_reactions_smi_queries.smi:6
+# integration_tests_bingo_reactions_smi_queries.smi:5
 C(C([O-])=O)(C(O)C([O-])=O)CC([O-])=O>>C(C(O)(CC([O-])=O)CC([O-])=O)([O-])=O

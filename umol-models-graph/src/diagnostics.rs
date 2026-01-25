@@ -103,6 +103,8 @@ pub enum DiagnosticKind {
     SmilesPreferBracketFieldOrder,
     #[strum(message = "Prefer simple charge sign")]
     SmilesPreferSimpleChargeSign,
+    #[strum(message = "Avoid double charge sign")]
+    SmilesAvoidDoubleChargeSign,
     #[strum(message = "Prefer simple H count")]
     SmilesPreferSimpleHcount,
     #[strum(message = "Avoid explicit single bond")]
@@ -282,6 +284,7 @@ impl DiagnosticKind {
             | SmilesPreferImplicitH
             | SmilesPreferBracketFieldOrder
             | SmilesPreferSimpleChargeSign
+            | SmilesAvoidDoubleChargeSign
             | SmilesPreferSimpleHcount
             | SmilesAvoidExplicitSingleBond
             | SmilesAvoidExplicitAromaticBond
@@ -434,6 +437,7 @@ impl DiagnosticKind {
             | SmilesPreferImplicitH
             | SmilesPreferBracketFieldOrder
             | SmilesPreferSimpleChargeSign
+            | SmilesAvoidDoubleChargeSign
             | SmilesPreferSimpleHcount
             | SmilesAvoidExplicitSingleBond
             | SmilesAvoidExplicitAromaticBond

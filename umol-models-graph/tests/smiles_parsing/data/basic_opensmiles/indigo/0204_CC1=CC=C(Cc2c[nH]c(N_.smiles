@@ -1,0 +1,2 @@
+# integration_tests_arom_molecules_basic-generic.smi:4
+CC1=CC=C(Cc2c[nH]c(NCCSCC3=CC=C(CN(C)C)O3)[n]c2=O)C=N1

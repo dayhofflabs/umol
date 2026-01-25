@@ -1,0 +1,2 @@
+# integration_tests_inchi_molecules_stereo.smi:488
+CC1=NN(C2C=CC(Cl)=C(Cl)C=2)C(/C/1=C/C1=CC=C(C2C=CC(C(OC(C)C)=O)=CC=2)O1)=O

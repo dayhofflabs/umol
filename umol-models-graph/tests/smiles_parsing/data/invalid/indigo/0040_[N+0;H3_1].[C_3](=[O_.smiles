@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:40
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:39
 [N+0;H3:1].[C:3](=[O:4])[O:5][H:6]>>[N+1;H4:1].[C:3](=[O:4])[O-:5]

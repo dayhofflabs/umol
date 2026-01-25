@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C15O2
+    sum_formula: C15O2R10
     atom_count: 27
     bond_count: 29
     extended_atoms: 10
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C15O2
+    sum_formula: C15O2R10
     atom_count: 27
     bond_count: 29
     extended_atoms: 10

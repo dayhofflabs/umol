@@ -22,7 +22,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: ""
+    sum_formula: "[L]4"
     atom_count: 4
     bond_count: 3
     extended_atoms: 4

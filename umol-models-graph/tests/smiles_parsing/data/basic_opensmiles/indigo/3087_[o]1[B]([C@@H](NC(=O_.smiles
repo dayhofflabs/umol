@@ -1,0 +1,2 @@
+# integration_tests_arom_molecules_dearomatization.smi:25
+[o]1[B]([C@@H](NC(=O)[C@@H](NC(c2c[n]cc[n]2)=O)Cc2ccccc2)CC(C)C)o[B]([C@@H](NC(=O)[C@@H](NC(c2c[n]cc[n]2)=O)Cc2ccccc2)CC(C)C)[o][B]1[C@@H]([NH][C](=[O])[C@@H]([NH][C]([c]1[cH][n][cH][cH][n]1)=[O])[CH2][c]1[cH][cH][cH][cH][cH]1)[CH2][CH]([CH3])[CH3]

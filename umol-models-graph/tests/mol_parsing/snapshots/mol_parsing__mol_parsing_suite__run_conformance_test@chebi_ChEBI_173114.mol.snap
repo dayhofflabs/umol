@@ -17,7 +17,7 @@ molecule_lenient:
 extended_molecule:
   success: true
   extended_summary:
-    sum_formula: C5HO7P-
+    sum_formula: C5HO7P-R
     atom_count: 15
     bond_count: 15
     extended_atoms: 1
@@ -28,7 +28,7 @@ extended_molecule:
 extended_molecule_lenient:
   success: true
   extended_summary:
-    sum_formula: C5HO7P-
+    sum_formula: C5HO7P-R
     atom_count: 15
     bond_count: 15
     extended_atoms: 1

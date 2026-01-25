@@ -2,9 +2,9 @@
 source: umol-models-graph/tests/smiles_parsing/mod.rs
 expression: results
 ---
-expected_category: opensmiles_strict
-category: opensmiles_strict
-opensmiles_strict:
+expected_category: basic_opensmiles
+category: basic_opensmiles
+basic_opensmiles:
   success: true
   summary:
     sum_formula: C18N2O6

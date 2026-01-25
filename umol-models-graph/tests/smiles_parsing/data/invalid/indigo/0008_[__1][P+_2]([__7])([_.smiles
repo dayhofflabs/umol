@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:8
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:7
 [*:1][P+:2]([*:7])([N:3][*:4])[N:5]([H:6])[*:7]>>[*:1][P:2]([*:7])([N:3][*:4])=[N+:5]([H:6])[*:7]

@@ -1,2 +1,2 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:24
+# integration_tests_rpe_tests_transform_basic_4_rxns.smi:23
 [N-&v2,P-&v2,As-&v2,Sb-&v2:1][O:2][C+&v3:3]>>[N,P,As,Sb:1]=[O:2]=[C:3]

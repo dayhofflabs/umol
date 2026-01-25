@@ -236,6 +236,37 @@ fn test_extended_molecule_sum_formula() {
 }
 
 #[test]
+fn test_extended_molecule_sum_formula_with_wildcards() {
+    use super::super::atom::{AtomSymbol, WildcardAtom};
+
+    let mut ext = ExtendedMolecule::empty();
+    // *C(=O)OCC - ethyl ester with wildcard
+    ext.atoms
+        .push(ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(
+            WildcardAtom::Any,
+        )));
+    ext.atoms.push(ExtendedAtom::from_element(Element::C));
+    ext.atoms.push(ExtendedAtom::from_element(Element::O));
+    ext.atoms.push(ExtendedAtom::from_element(Element::O));
+    ext.atoms.push(ExtendedAtom::from_element(Element::C));
+    ext.atoms.push(ExtendedAtom::from_element(Element::C));
+    assert_eq!(ext.sum_formula(), "C3O2*");
+
+    // Two wildcards
+    let mut ext2 = ExtendedMolecule::empty();
+    ext2.atoms
+        .push(ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(
+            WildcardAtom::Any,
+        )));
+    ext2.atoms.push(ExtendedAtom::from_element(Element::C));
+    ext2.atoms
+        .push(ExtendedAtom::from_atom_symbol(AtomSymbol::WildcardAtom(
+            WildcardAtom::Any,
+        )));
+    assert_eq!(ext2.sum_formula(), "C*2");
+}
+
+#[test]
 fn test_extended_molecule_sgroups() {
     let mut ext = ExtendedMolecule::empty();
     assert!(ext.sgroups().is_empty());
