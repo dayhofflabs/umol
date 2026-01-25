@@ -41,7 +41,7 @@ proptest! {
     // Crash-only: parser should never panic on arbitrary ASCII up to length 256
     #[test]
     fn never_panics_on_ascii(input in smilesish()) {
-        let config = SmilesIoConfig::strict_opensmiles();
+        let config = SmilesIoConfig::basic_opensmiles();
         let _ = std::panic::catch_unwind(|| {
             let _ = parse_smiles_bytes_with(&input, &config);
         }).expect("parse_smiles panicked");

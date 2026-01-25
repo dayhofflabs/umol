@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use regex::Regex;
 use umol_data::Element;
 
-use super::builder::{AtomData, BondData, MoleculeBuilder};
+use super::super::builder::{AtomData, BondData, MoleculeBuilder};
 use crate::span::Span;
 use crate::table_ir::{BondDirection, BondOrder, Molecule, Ring};
 

@@ -3,9 +3,9 @@
 use umol_data::Element;
 
 use super::super::error::ParseError;
-use super::builder::{BondData, MoleculeBuilder};
+use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
-use crate::table_ir::{BondDirection, BondOrder, Chirality};
+use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, Chirality, WildcardAtom};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct OpenRing {
@@ -587,4 +587,275 @@ pub(super) fn parse_bracket(
     }
 
     Ok((element, aromatic, isotope, charge, class_num, hcount, chir))
+}
+
+#[inline]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn process_ring_closure_extended(
+    ring_table: &mut Vec<Option<OpenRing>>,
+    builder: &mut ExtendedMoleculeBuilder,
+    last_aromatic: bool,
+    last_atom_idx: u32,
+    idx: usize,
+    order_opt: Option<BondOrder>,
+    dir_opt: Option<BondDirection>,
+    pos: usize,
+    token_end: usize,
+) -> Result<(), ParseError> {
+    if ring_table.len() <= idx {
+        ring_table.resize_with(idx + 1, || None);
+    }
+    let entry = &mut ring_table[idx];
+    match entry.take() {
+        None => {
+            *entry = Some(OpenRing {
+                atom_id: last_atom_idx,
+                order: order_opt,
+                direction: dir_opt,
+                open_pos: pos,
+                open_end: token_end,
+                open_aromatic: last_aromatic,
+            });
+            builder.on_ring_open(
+                idx as u32,
+                Some(pos as u32),
+                Some(token_end as u32),
+                Some(last_atom_idx),
+            );
+        }
+        Some(open) => {
+            if let (Some(d1), Some(d2)) = (open.direction, dir_opt) {
+                if d1 != d2 {
+                    return Err(ParseError::MismatchedRingBondDirs {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            if let (Some(o1), Some(o2)) = (open.order, order_opt) {
+                if o1 != o2 {
+                    return Err(ParseError::MismatchedRingBondOrders {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            if open.direction.is_some() || dir_opt.is_some() {
+                let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
+                if ord != BondOrder::Single {
+                    return Err(ParseError::MismatchedRingBondOrders {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            let mut final_order = match (open.order, order_opt) {
+                (Some(o1), Some(o2)) => {
+                    if o1 == o2 {
+                        o1
+                    } else {
+                        o2
+                    }
+                }
+                (Some(o), None) | (None, Some(o)) => o,
+                (None, None) => BondOrder::Single,
+            };
+            let final_dir = open.direction.or(dir_opt);
+            let a = open.atom_id;
+            let b = last_atom_idx;
+            if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
+                final_order = BondOrder::Aromatic;
+            }
+            builder.on_bond(
+                a,
+                b,
+                BondData {
+                    order: final_order,
+                    direction: final_dir,
+                    span: Span::from_bytes_opt(
+                        Some(open.open_pos as u32),
+                        Some(open.open_end as u32),
+                    ),
+                },
+            );
+            builder.on_ring_close(
+                idx as u32,
+                Some(pos as u32),
+                Some(token_end as u32),
+                Some(b),
+            );
+        }
+    }
+    Ok(())
+}
+
+#[inline]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn attach_atom_extended(
+    builder: &mut ExtendedMoleculeBuilder,
+    last_atom_idx: Option<u32>,
+    curr_atom_idx: u32,
+    pending_bond: &mut Option<(BondOrder, Option<BondDirection>, usize)>,
+    last_aromatic: bool,
+    curr_aromatic: bool,
+    curr_atom_start: u32,
+    curr_atom_end: u32,
+) {
+    if let Some(last) = last_atom_idx {
+        if let Some((order, bond_dir, pos)) = pending_bond.take() {
+            builder.on_bond(
+                last,
+                curr_atom_idx,
+                BondData {
+                    order,
+                    direction: bond_dir,
+                    span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+                },
+            );
+        } else if last_aromatic && curr_aromatic {
+            builder.on_bond(
+                last,
+                curr_atom_idx,
+                BondData {
+                    order: BondOrder::Aromatic,
+                    direction: None,
+                    span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
+                },
+            );
+        } else {
+            builder.on_bond_single_fast(
+                last,
+                curr_atom_idx,
+                Some(curr_atom_start),
+                Some(curr_atom_end),
+            );
+        };
+    }
+}
+
+#[inline]
+#[allow(clippy::type_complexity)]
+pub(super) fn parse_bracket_extended(
+    input: &[u8],
+    pos_offset: usize,
+) -> Result<
+    (
+        AtomSymbol,
+        bool,
+        Option<u32>,
+        Option<i8>,
+        Option<u32>,
+        Option<u8>,
+        Option<Chirality>,
+    ),
+    ParseError,
+> {
+    let n = input.len();
+    let mut i = 0usize;
+
+    let mut isotope: Option<u32> = None;
+    let start_digits = i;
+    while i < n && input[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i > start_digits {
+        let mut v: u32 = 0;
+        for &b in &input[start_digits..i] {
+            v = v.saturating_mul(10).saturating_add((b - b'0') as u32);
+        }
+        isotope = Some(v);
+    }
+
+    let symbol: AtomSymbol;
+    let aromatic: bool;
+    if i < n && input[i] == b'*' {
+        symbol = AtomSymbol::WildcardAtom(WildcardAtom::Any);
+        aromatic = false;
+        i += 1;
+    } else if i < n && input[i].is_ascii_alphabetic() {
+        if let Some((e, consumed)) = parse_bracket_aliphatic_element(input, i) {
+            symbol = AtomSymbol::Element(e);
+            i += consumed;
+            aromatic = false;
+        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(input, i) {
+            symbol = AtomSymbol::Element(e);
+            i += consumed;
+            aromatic = true;
+        } else {
+            return Err(ParseError::InvalidBracket {
+                pos: pos_offset + 1 + i,
+            });
+        }
+    } else {
+        return Err(ParseError::InvalidBracket {
+            pos: pos_offset + 1 + i,
+        });
+    }
+
+    let mut charge: Option<i8> = None;
+    let mut class_num: Option<u32> = None;
+    let mut hcount: Option<u8> = None;
+    let mut chir: Option<Chirality> = None;
+
+    while i < n {
+        let b0 = input[i];
+        match b0 {
+            b'H' => {
+                if symbol == AtomSymbol::Element(Element::H) {
+                    return Err(ParseError::BracketHwithHcount {
+                        pos: pos_offset + 1 + i,
+                    });
+                }
+                if hcount.is_some() {
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
+                }
+                let mut val: u8 = 1;
+                if i + 1 < n && input[i + 1].is_ascii_digit() {
+                    val = input[i + 1] - b'0';
+                    i += 1;
+                }
+                hcount = Some(val);
+                i += 1;
+            }
+            b'+' | b'-' => {
+                if charge.is_some() {
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
+                }
+                let (val, j2) = parse_charge(input, i, b0);
+                charge = Some(val);
+                i = j2;
+            }
+            b':' => {
+                if class_num.is_some() {
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
+                }
+                let (v, j2) = parse_class_index(input, i, pos_offset)?;
+                class_num = Some(v);
+                i = j2;
+            }
+            b'@' => {
+                if chir.is_some() {
+                    return Err(ParseError::DuplicateBracketField {
+                        pos: pos_offset + 1 + i,
+                    });
+                }
+                let (chir_opt, j2) = parse_chirality(input, i, pos_offset)?;
+                chir = chir_opt;
+                i = j2;
+            }
+            _ => {
+                return Err(ParseError::InvalidBracket {
+                    pos: pos_offset + 1 + i,
+                });
+            }
+        }
+    }
+
+    Ok((symbol, aromatic, isotope, charge, class_num, hcount, chir))
 }

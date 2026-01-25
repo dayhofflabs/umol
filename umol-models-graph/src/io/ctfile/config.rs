@@ -9,8 +9,8 @@ bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct CtabParseFlags: u32 {
         // Parser capabilities
-        const WILDCARDS = 1;                // A, Q, *, X, M (CTFile, SMILES)
-        const CHEMAXON_WILDCARDS = 1 << 1;  // AH, QH, XH, MH (CXSMILES)
+        const WILDCARDS = 1;                // A, Q, *, X, M
+        const CHEMAXON_WILDCARDS = 1 << 1;  // AH, QH, XH, MH
         const ELECTRONS = 1 << 2;           // LP (lone pairs)
         const RGROUPS = 1 << 3;             // APO, AAL, RGP, LOG
         const SGROUPS = 1 << 4;             // STY, SST, SLB, SAL, SBL, SMT, SCN,
@@ -66,7 +66,7 @@ bitflags! {
             Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits() | Self::LEGACY_ATOM_LISTS.bits();
 
         // Strict parser: only additional capabilities of extended parser over basic parser according to spec
-        // Basic strict: STRICT & BASIC = MINIMAL
+        // Basic strict: BASIC & STRICT = MINIMAL
         const STRICT = Self::WILDCARDS.bits() | Self::ELECTRONS.bits() |
             Self::RGROUPS.bits() | Self::SGROUPS.bits() | Self::QUERY_BONDS.bits() | Self::QUERY_PROPERTIES.bits();
 
