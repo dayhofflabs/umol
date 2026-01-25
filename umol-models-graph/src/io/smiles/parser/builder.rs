@@ -77,7 +77,7 @@ impl MoleculeBuilder {
         };
 
         self.atoms.push(atom);
-        self.atoms.len() as u32
+        (self.atoms.len() - 1) as u32
     }
 
     #[inline]
@@ -113,7 +113,7 @@ impl MoleculeBuilder {
             a
         };
         self.atoms.push(atom);
-        self.atoms.len() as u32
+        (self.atoms.len() - 1) as u32
     }
 
     #[inline]
@@ -250,7 +250,7 @@ impl ExtendedMoleculeBuilder {
         };
 
         self.atoms.push(atom);
-        self.atoms.len() as u32
+        (self.atoms.len() - 1) as u32
     }
 
     #[inline]
@@ -297,7 +297,7 @@ impl ExtendedMoleculeBuilder {
             span,
         };
         self.atoms.push(atom);
-        self.atoms.len() as u32
+        (self.atoms.len() - 1) as u32
     }
 
     #[inline]
@@ -336,7 +336,7 @@ impl ExtendedMoleculeBuilder {
             span,
         };
         self.atoms.push(atom);
-        self.atoms.len() as u32
+        (self.atoms.len() - 1) as u32
     }
 
     #[inline]

@@ -7,7 +7,87 @@ use umol_data::Element;
 
 use super::super::builder::{AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, ExtendedMolecule, Molecule, Ring, WildcardAtom};
+use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, Chirality, ExtendedMolecule, Molecule, Ring, WildcardAtom};
+
+/// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
+pub fn get_atom_neighbors(mol: &Molecule, atom_idx: u32) -> Vec<u32> {
+    let mut result = Vec::new();
+    for bond in &mol.bonds {
+        let (a, b) = bond.atoms.as_tuple();
+        if a == atom_idx {
+            result.push(b);
+        } else if b == atom_idx {
+            result.push(a);
+        }
+    }
+    result.sort();
+    result
+}
+
+/// Finds the first chiral atom in a Molecule.
+/// Returns (atom_index, element, chirality, sorted_neighbors) or None if no chiral atom found.
+pub fn find_chiral_center(mol: &Molecule) -> Option<(usize, Element, Chirality, Vec<u32>)> {
+    for (idx, atom) in mol.atoms.iter().enumerate() {
+        if let Some(chir) = atom.chirality {
+            let neighbors = get_atom_neighbors(mol, idx as u32);
+            return Some((idx, atom.element, chir, neighbors));
+        }
+    }
+    None
+}
+
+/// Returns the sorted list of neighbor atom indices for a given atom in an ExtendedMolecule.
+pub fn get_extended_atom_neighbors(mol: &ExtendedMolecule, atom_idx: u32) -> Vec<u32> {
+    let mut result = Vec::new();
+    for bond in &mol.bonds {
+        let (a, b) = bond.atoms.as_tuple();
+        if a == atom_idx {
+            result.push(b);
+        } else if b == atom_idx {
+            result.push(a);
+        }
+    }
+    result.sort();
+    result
+}
+
+/// Finds the first chiral atom in an ExtendedMolecule.
+/// Returns (atom_index, element, chirality, sorted_neighbors) or None if no chiral atom found.
+pub fn find_extended_chiral_center(mol: &ExtendedMolecule) -> Option<(usize, Element, Chirality, Vec<u32>)> {
+    for (idx, atom) in mol.atoms.iter().enumerate() {
+        if let Some(chir) = atom.chirality {
+            if let AtomSymbol::Element(el) = atom.symbol {
+                let neighbors = get_extended_atom_neighbors(mol, idx as u32);
+                return Some((idx, el, chir, neighbors));
+            }
+        }
+    }
+    None
+}
+
+/// Finds the first bond with stereo direction in a Molecule.
+/// Returns (atom1, atom2, direction) or None if no stereo bond found.
+pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondDirection)> {
+    for bond in &mol.bonds {
+        if let Some(dir) = bond.direction {
+            let (a, b) = bond.atoms.as_tuple();
+            return Some((a, b, dir));
+        }
+    }
+    None
+}
+
+/// Finds the first bond with stereo direction in an ExtendedMolecule.
+/// Returns (atom1, atom2, direction) or None if no stereo bond found.
+pub fn find_extended_stereo_bond(mol: &ExtendedMolecule) -> Option<(u32, u32, BondDirection)> {
+    for bond in &mol.bonds {
+        if let Some(dir) = bond.direction {
+            let (a, b) = bond.atoms.as_tuple();
+            return Some((a, b, dir));
+        }
+    }
+    None
+}
 
 fn parse_atom_token(tok: &str) -> (Element, bool, Option<u32>, Option<u32>) {
     // Underscore denotes aromatic variant of the organic subset: C_, N_, O_, P_, S_, B_, ...

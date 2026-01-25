@@ -6,7 +6,7 @@ use rstest::*;
 use umol_data::Element;
 
 use super::super::*;
-use super::utils::build_from_graph;
+use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
 use crate::table_ir::{BondDirection, BondOrder, Chirality};
 
 #[rstest]
@@ -756,72 +756,109 @@ fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[rustfmt::skip]
 #[rstest]
 // Tetrahedral chirality - equivalent representations
-#[case::chirality_1_eq_1(b"N[C@](Br)(O)C")]
-#[case::chirality_1_eq_2(b"N[C@@](Br)(C)O")]
-#[case::chirality_1_eq_3(b"O[C@](Br)(C)N")]
-#[case::chirality_1_eq_4(b"C[C@](Br)(N)O")]
-#[case::chirality_1_eq_5(b"C[C@@](Br)(O)N")]
-#[case::chirality_1_eq_6(b"[C@@](C)(Br)(O)N")]
-#[case::chirality_1_eq_7(b"Br[C@](O)(N)C")]
-#[case::chirality_1_eq_8(b"Br[C@](C)(O)N")]
-#[case::chirality_1_eq_9(b"Br[C@](N)(C)O")]
-#[case::chiraliry_1_eq_10(b"Br[C@@](N)(O)C")]
-#[case::chirality_1_eq_11(b"[C@@](Br)(N)(O)C")]
+// All these represent the same stereochemistry, center is C at index 1
+#[case::chirality_1_eq_1(b"N[C@](Br)(O)C", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_2(b"N[C@@](Br)(C)O", 1, Element::C, Chirality::CounterClockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_3(b"O[C@](Br)(C)N", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_4(b"C[C@](Br)(N)O", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_5(b"C[C@@](Br)(O)N", 1, Element::C, Chirality::CounterClockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_6(b"[C@@](C)(Br)(O)N", 0, Element::C, Chirality::CounterClockwise, vec![1, 2, 3, 4])]
+#[case::chirality_1_eq_7(b"Br[C@](O)(N)C", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_8(b"Br[C@](C)(O)N", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_9(b"Br[C@](N)(C)O", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3, 4])]
+#[case::chiraliry_1_eq_10(b"Br[C@@](N)(O)C", 1, Element::C, Chirality::CounterClockwise, vec![0, 2, 3, 4])]
+#[case::chirality_1_eq_11(b"[C@@](Br)(N)(O)C", 0, Element::C, Chirality::CounterClockwise, vec![1, 2, 3, 4])]
 // Tetrahedral chirality with ring
-#[case::chirality_2_eq_1(b"FC1C[C@](Br)(Cl)CCC1")]
-#[case::chirality_2_eq_2(b"[C@]1(Br)(Cl)CCCC(F)C1")]
+#[case::chirality_2_eq_1(b"FC1C[C@](Br)(Cl)CCC1", 3, Element::C, Chirality::Clockwise, vec![2, 4, 5, 6])]
+#[case::chirality_2_eq_2(b"[C@]1(Br)(Cl)CCCC(F)C1", 0, Element::C, Chirality::Clockwise, vec![1, 2, 3, 8])]
 // Tetrahedral chirality with explicit hydrogen
-#[case::chirality_3_eq_1(b"N[C@H](O)C")]
-// Double bond stereo - trans
-#[case::trans_1_eq_1(b"F/C=C/F")]
-#[case::trans_1_eq_2(b"F\\C=C\\F")]
-#[case::trans_1_eq_3(b"C(\\F)=C/F")]
-// Double bond stereo - cis
-#[case::cis_1_eq_1(b"F\\C=C/F")]
-#[case::cis_1_eq_2(b"F/C=C\\F")]
-#[case::cis_1_eq_3(b"C(/F)=C/F")]
-// Cis with substituents
-#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C")]
-#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F")]
-#[case::cis_2_eq_3(b"C/C(F)=C(/C)F")]
-#[case::cis_2_eq_4(b"CC(/F)=C(/C)F")]
-#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F")]
-#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F")]
+#[case::chirality_3_eq_1(b"N[C@H](O)C", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3])]
 // Allene chirality
-#[case::chirality_allene_1(b"NC(Br)=[C@]=C(O)C")]
-#[case::chirality_allene_2(b"NC(Br)=[C@AL1]=C(O)C")]
+#[case::chirality_allene_1(b"NC(Br)=[C@]=C(O)C", 3, Element::C, Chirality::Clockwise, vec![1, 4])]
+#[case::chirality_allene_2(b"NC(Br)=[C@AL1]=C(O)C", 3, Element::C, Chirality::Allenal { arr: 1 }, vec![1, 4])]
 // Trigonal bipyramidal chirality
-#[case::chirality_tb_1(b"S[As@TB1](F)(Cl)(Br)N")]
-#[case::chirality_tb_2(b"S[As@TB5](F)(N)(Cl)Br")]
-#[case::chirality_tb_3(b"F[As@TB15](Cl)(S)(Br)N")]
-#[case::chirality_tb_4(b"S[As@TB2](Br)(Cl)(F)N")]
-#[case::chirality_tb_5(b"F[As@TB10](S)(Cl)(N)Br")]
-#[case::chirality_tb_6(b"Br[As@TB20](Cl)(S)(F)N")]
+#[case::chirality_tb_1(b"S[As@TB1](F)(Cl)(Br)N", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 1 }, vec![0, 2, 3, 4, 5])]
+#[case::chirality_tb_2(b"S[As@TB5](F)(N)(Cl)Br", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 5 }, vec![0, 2, 3, 4, 5])]
+#[case::chirality_tb_3(b"F[As@TB15](Cl)(S)(Br)N", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 15 }, vec![0, 2, 3, 4, 5])]
+#[case::chirality_tb_4(b"S[As@TB2](Br)(Cl)(F)N", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 2 }, vec![0, 2, 3, 4, 5])]
+#[case::chirality_tb_5(b"F[As@TB10](S)(Cl)(N)Br", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 10 }, vec![0, 2, 3, 4, 5])]
+#[case::chirality_tb_6(b"Br[As@TB20](Cl)(S)(F)N", 1, Element::As, Chirality::TrigonalBipyramidal { arr: 20 }, vec![0, 2, 3, 4, 5])]
 // Octahedral chirality
-#[case::chirality_oh_1(b"C[Co@](F)(Cl)(Br)(I)S")]
-#[case::chirality_oh_2(b"S[Co@OH5](F)(I)(Cl)(C)Br")]
-#[case::chirality_oh_3(b"Br[Co@OH12](Cl)(I)(F)(S)C")]
-#[case::chirality_oh_4(b"Cl[Co@OH19](C)(I)(F)(S)Br")]
-#[case::chirality_oh_5(b"F[Co@@](S)(I)(C)(Cl)Br")]
-#[case::chirality_oh_6(b"Br[Co@OH9](C)(S)(Cl)(F)I")]
-#[case::chirality_oh_7(b"Cl[Co@OH15](C)(Br)(F)(I)S")]
-#[case::chirality_oh_8(b"I[Co@OH27](Cl)(Br)(F)(S)C")]
-// Partial stereo specification
-#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C")]
-#[case::partial_cis_trans_2(b"F/C=C/CC=CC")]
-#[case::partial_chirality_1(b"N1[C@H](Cl)[C@@H](Cl)C(Cl)CC1")]
+#[case::chirality_oh_1(b"C[Co@](F)(Cl)(Br)(I)S", 1, Element::Co, Chirality::Clockwise, vec![0, 2, 3, 4, 5, 6])]
+#[case::chirality_oh_2(b"S[Co@OH5](F)(I)(Cl)(C)Br", 1, Element::Co, Chirality::Octahedral { arr: 5 }, vec![0, 2, 3, 4, 5, 6])]
+#[case::chirality_oh_3(b"Br[Co@OH12](Cl)(I)(F)(S)C", 1, Element::Co, Chirality::Octahedral { arr: 12 }, vec![0, 2, 3, 4, 5, 6])]
+#[case::chirality_oh_4(b"Cl[Co@OH19](C)(I)(F)(S)Br", 1, Element::Co, Chirality::Octahedral { arr: 19 }, vec![0, 2, 3, 4, 5, 6])]
+#[case::chirality_oh_5(b"F[Co@@](S)(I)(C)(Cl)Br", 1, Element::Co, Chirality::CounterClockwise, vec![0, 2, 3, 4, 5, 6])]
+#[case::chirality_oh_6(b"Br[Co@OH9](C)(S)(Cl)(F)I", 1, Element::Co, Chirality::Octahedral { arr: 9 }, vec![0, 2, 3, 4, 5, 6])]
+#[case::chirality_oh_7(b"Cl[Co@OH15](C)(Br)(F)(I)S", 1, Element::Co, Chirality::Octahedral { arr: 15 }, vec![0, 2, 3, 4, 5, 6])]
+#[case::chirality_oh_8(b"I[Co@OH27](Cl)(Br)(F)(S)C", 1, Element::Co, Chirality::Octahedral { arr: 27 }, vec![0, 2, 3, 4, 5, 6])]
+// Partial stereo specification (first chiral center)
+#[case::partial_chirality_1(b"N1[C@H](Cl)[C@@H](Cl)C(Cl)CC1", 1, Element::C, Chirality::Clockwise, vec![0, 2, 3])]
 // Single-atom chirality markers (max values)
-#[case::chirality_tetrahedral_max2(b"[Ni@TH2]")]
-#[case::chirality_allenal_max2(b"[C@AL2]")]
-#[case::chirality_square_planar_max3(b"[Cu@SP3]")]
-#[case::chirality_trigonal_bipyramidal_max20(b"[P@TB20]")]
-#[case::chirality_trigonal_bipyramidal_zero_prefix(b"[P@TB02]")]
-#[case::chirality_octahedral_max30(b"[Co@OH30]")]
-#[case::chirality_octahedral_zero_prefix(b"[Co@OH03]")]
-fn stereo(#[case] input: &[u8]) {
+#[case::chirality_tetrahedral_max2(b"[Ni@TH2]", 0, Element::Ni, Chirality::Tetrahedral { arr: 2 }, vec![])]
+#[case::chirality_allenal_max2(b"[C@AL2]", 0, Element::C, Chirality::Allenal { arr: 2 }, vec![])]
+#[case::chirality_square_planar_max3(b"[Cu@SP3]", 0, Element::Cu, Chirality::SquarePlanar { arr: 3 }, vec![])]
+#[case::chirality_trigonal_bipyramidal_max20(b"[P@TB20]", 0, Element::P, Chirality::TrigonalBipyramidal { arr: 20 }, vec![])]
+#[case::chirality_trigonal_bipyramidal_zero_prefix(b"[P@TB02]", 0, Element::P, Chirality::TrigonalBipyramidal { arr: 2 }, vec![])]
+#[case::chirality_octahedral_max30(b"[Co@OH30]", 0, Element::Co, Chirality::Octahedral { arr: 30 }, vec![])]
+#[case::chirality_octahedral_zero_prefix(b"[Co@OH03]", 0, Element::Co, Chirality::Octahedral { arr: 3 }, vec![])]
+fn stereo_chiral(
+    #[case] input: &[u8],
+    #[case] exp_idx: usize,
+    #[case] exp_element: Element,
+    #[case] exp_chirality: Chirality,
+    #[case] exp_neighbors: Vec<u32>,
+) {
     let res = parse_smiles_bytes(input);
     let input_str = input.to_str_lossy();
     assert!(res.is_ok(), "{:?} should have succeeded: {:?}", input_str, res);
+    let mol = res.unwrap();
+    let (idx, element, chirality, neighbors) = find_chiral_center(&mol)
+        .expect("expected a chiral center");
+    assert_eq!(idx, exp_idx, "chiral center index mismatch for {:?}", input_str);
+    assert_eq!(element, exp_element, "element mismatch for {:?}", input_str);
+    assert_eq!(chirality, exp_chirality, "chirality mismatch for {:?}", input_str);
+    assert_eq!(neighbors, exp_neighbors, "neighbors mismatch for {:?}", input_str);
+}
+
+#[rstest]
+// Double bond stereo - trans
+#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondDirection::Up)]
+#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondDirection::Down)]
+#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondDirection::Down)]
+// Double bond stereo - cis
+#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondDirection::Down)]
+#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondDirection::Up)]
+#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondDirection::Up)]
+// Cis with substituents
+#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondDirection::Up)]
+#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondDirection::Up)]
+#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondDirection::Up)]
+#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondDirection::Up)]
+#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondDirection::Up)]
+#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondDirection::Up)]
+// Partial stereo specification
+#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondDirection::Up)]
+#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondDirection::Up)]
+fn stereo_bonds(
+    #[case] input: &[u8],
+    #[case] exp_a: u32,
+    #[case] exp_b: u32,
+    #[case] exp_dir: BondDirection,
+) {
+    let res = parse_smiles_bytes(input);
+    let input_str = input.to_str_lossy();
+    assert!(
+        res.is_ok(),
+        "{:?} should have succeeded: {:?}",
+        input_str,
+        res
+    );
+    let mol = res.unwrap();
+    let (a, b, dir) = find_stereo_bond(&mol).expect("expected a stereo bond");
+    assert_eq!(a, exp_a, "atom1 mismatch for {:?}", input_str);
+    assert_eq!(b, exp_b, "atom2 mismatch for {:?}", input_str);
+    assert_eq!(dir, exp_dir, "direction mismatch for {:?}", input_str);
 }
 
 #[rstest]
@@ -996,7 +1033,8 @@ fn whitespace(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::terminator_crlf_trailing_structure(b"CC\r\nCC", ParseError::InvalidWhitespace { pos: 2 })]
 fn whitespace_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_smiles_bytes(input);
-    let input_str = input.to_str_lossy();    assert!(res.is_err(), "{:?} should have failed", input_str);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
 }

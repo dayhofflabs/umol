@@ -98,8 +98,8 @@ proptest! {
             for b in &mol.bonds {
                 let sa = b.start_atom();
                 let ea = b.end_atom();
-                // Molecule uses 1-based atom indices in bonds
-                prop_assert!(sa >= 1 && sa <= n && ea >= 1 && ea <= n, "bond endpoints out of bounds: {}-{} / n={}", sa, ea, n);
+                // Bonds use 0-based atom indices
+                prop_assert!(sa < n && ea < n, "bond endpoints out of bounds: {}-{} / n={}", sa, ea, n);
             }
         }
     }
