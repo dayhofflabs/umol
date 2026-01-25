@@ -1,5 +1,6 @@
 #![allow(clippy::too_many_arguments)]
 
+use bstr::ByteSlice;
 use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_data::Element;
@@ -19,15 +20,16 @@ use crate::table_ir::{BondDirection, BondOrder, Chirality};
 #[case::organic_cl(b"Cl", build_from_graph("Cl@0 |"))]
 #[case::organic_br(b"Br", build_from_graph("Br@0 |"))]
 #[case::organic_i(b"I", build_from_graph("I@0 |"))]
-#[case::organic_b_aromatic(b"b", build_from_graph("B*@0 |"))]
-#[case::organic_c_aromatic(b"c", build_from_graph("C*@0 |"))]
-#[case::organic_n_aromatic(b"n", build_from_graph("N*@0 |"))]
-#[case::organic_o_aromatic(b"o", build_from_graph("O*@0 |"))]
-#[case::organic_s_aromatic(b"s", build_from_graph("S*@0 |"))]
-#[case::organic_p_aromatic(b"p", build_from_graph("P*@0 |"))]
+#[case::organic_b_aromatic(b"b", build_from_graph("B_@0 |"))]
+#[case::organic_c_aromatic(b"c", build_from_graph("C_@0 |"))]
+#[case::organic_n_aromatic(b"n", build_from_graph("N_@0 |"))]
+#[case::organic_o_aromatic(b"o", build_from_graph("O_@0 |"))]
+#[case::organic_s_aromatic(b"s", build_from_graph("S_@0 |"))]
+#[case::organic_p_aromatic(b"p", build_from_graph("P_@0 |"))]
 fn element(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
@@ -40,7 +42,8 @@ fn element(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::element_f_aromatic(b"f", ParseError::InvalidElement { pos: 0 })]
 fn element_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_err(), "{:?} should have failed", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_err(), "{:?} should have failed", input_str);
     let mol = res.unwrap_err();
     assert_eq!(mol, expected);
 }
@@ -50,11 +53,12 @@ fn element_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::empty(b"", Molecule::empty())]
 #[case::chain_c_1(b"C", build_from_graph("C@0..1 |"))]
 #[case::chain_c_5(b"CCCCC", build_from_graph("C@0..1 C@1..2 C@2..3 C@3..4 C@4..5 | 0-1@1..2 1-2@2..3 2-3@3..4 3-4@4..5"))]
-#[case::aromatic_c_6(b"cccccc", build_from_graph("C*@0..1 C*@1..2 C*@2..3 C*@3..4 C*@4..5 C*@5..6 | 0-1:@1..2 1-2:@2..3 2-3:@3..4 3-4:@4..5 4-5:@5..6"))]
+#[case::aromatic_c_6(b"cccccc", build_from_graph("C_@0..1 C_@1..2 C_@2..3 C_@3..4 C_@4..5 C_@5..6 | 0-1:@1..2 1-2:@2..3 2-3:@3..4 3-4:@4..5 4-5:@5..6"))]
 #[case::chain_mixed_5(b"CClOBrN", build_from_graph("C@0..1 Cl@1..3 O@3..4 Br@4..6 N@6..7 | 0-1@1..3 1-2@3..4 2-3@4..6 3-4@6..7"))]
 fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
@@ -63,18 +67,19 @@ fn chain(#[case] input: &[u8], #[case] expected: Molecule) {
 #[rstest]
 #[case::empty_group(b"()", Molecule::empty())]
 #[case::group_c_1(b"(C)", build_from_graph("C@1 |"))]
-#[case::group_c_1_aromatic(b"(c)", build_from_graph("C*@1 |"))]
+#[case::group_c_1_aromatic(b"(c)", build_from_graph("C_@1 |"))]
 #[case::group_c_4(b"(CCCC)", build_from_graph("C@1 C@2 C@3 C@4 | 0-1@2 1-2@3 2-3@4"))]
 #[case::group_nested(b"((CC))", build_from_graph("C@2 C@3 | 0-1@3"))]
 #[case::branch_c_211(b"CC(C)C", build_from_graph("C@0 C@1 C@3 C@5 | 0-1@1 1-2@3 1-3@5"))]
-#[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C*@0 C*@1 C*@3 C*@4 C*@6 C*@7 | 0-1:@1 1-2:@3 2-3:@4 1-4:@6 4-5:@7"))]
+#[case::branch_c_222_aromatic(b"cc(cc)cc", build_from_graph("C_@0 C_@1 C_@3 C_@4 C_@6 C_@7 | 0-1:@1 1-2:@3 2-3:@4 1-4:@6 4-5:@7"))]
 #[case::branch_trailing(b"C(CC)", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3"))]
 #[case::branch_multiple(b"CC(C)(C)C", build_from_graph("C@0 C@1 C@3 C@6 C@8 | 0-1@1 1-2@3 1-3@6 1-4@8"))]
 #[case::branch_multiple_trailing(b"C(C)(C)", build_from_graph("C@0 C@2 C@5 | 0-1@2 0-2@5"))]
 #[case::branch_nested(b"C(C(C)C)C", build_from_graph("C@0 C@2 C@4 C@6 C@8 | 0-1@2 1-2@4 1-3@6 0-4@8"))]
 fn tree(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
@@ -94,7 +99,8 @@ fn tree(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::group_before_atom_aromatic(b"(c)c", ParseError::NonfinalGroup { pos: 2 })]
 fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles_bytes(input);
-    assert!(err.is_err(), "{:?} should have failed", input);
+    let input_str = input.to_str_lossy();
+    assert!(err.is_err(), "{:?} should have failed", input_str);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
 }
@@ -104,9 +110,9 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_3(b"C1CC1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2@1 | 1@1-4:0-2"))]
 #[case::ring_6(b"C1CCCCC1", build_from_graph("C@0 C@2 C@3 C@4 C@5 C@6 | 0-1@2 1-2@3 2-3@4 3-4@5 4-5@6 0-5@1 | 1@1-7:0-5"))]
 #[case::ring_10(b"C1CCCCCCCCC1", build_from_graph("C@0 C@2 C@3 C@4 C@5 C@6 C@7 C@8 C@9 C@10 | 0-1@2 1-2@3 2-3@4 3-4@5 4-5@6 5-6@7 6-7@8 7-8@9 8-9@10 0-9@1 | 1@1-11:0-9"))]
-#[case::ring_aromatic(b"c1ccccc1", build_from_graph("C*@0 C*@2 C*@3 C*@4 C*@5 C*@6 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 0-5:@1 | 1@1-7:0-5"))]
-#[case::ring_aromatic_anti(b"c1ccc1", build_from_graph("C*@0 C*@2 C*@3 C*@4 | 0-1:@2 1-2:@3 2-3:@4 0-3:@1 | 1@1-5:0-3"))]
-#[case::ring_aromatic_heteroatom(b"c1occc1", build_from_graph("C*@0 O*@2 C*@3 C*@4 C*@5 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 0-4:@1 | 1@1-6:0-4"))]
+#[case::ring_aromatic(b"c1ccccc1", build_from_graph("C_@0 C_@2 C_@3 C_@4 C_@5 C_@6 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 0-5:@1 | 1@1-7:0-5"))]
+#[case::ring_aromatic_anti(b"c1ccc1", build_from_graph("C_@0 C_@2 C_@3 C_@4 | 0-1:@2 1-2:@3 2-3:@4 0-3:@1 | 1@1-5:0-3"))]
+#[case::ring_aromatic_heteroatom(b"c1occc1", build_from_graph("C_@0 O_@2 C_@3 C_@4 C_@5 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 0-4:@1 | 1@1-6:0-4"))]
 #[case::ring_index_0(b"C0CC0", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2@1 | 0@1-4:0-2"))]
 #[case::ring_index_percent(b"C%12CC%12", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2@1 | 12@1-6:0-2"))]
 #[case::ring_index_percent_zero(b"C%00CC%00", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2@1 | 0@1-6:0-2"))]
@@ -118,16 +124,16 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_indices_single_percent_1(b"C%123CCC%12CC3", build_from_graph("C@0 C@5 C@6 C@7 C@11 C@12 | 0-1@5 1-2@6 2-3@7 0-3@1 3-4@11 4-5@12 0-5@4 | 12@1-8:0-3 3@4-13:0-5"))]
 #[case::ring_indices_single_percent_2(b"C3%12CCC%12CC3", build_from_graph("C@0 C@5 C@6 C@7 C@11 C@12 | 0-1@5 1-2@6 2-3@7 0-3@2 3-4@11 4-5@12 0-5@1 | 3@1-13:0-5 12@2-8:0-3"))]
 #[case::two_rings_bonded_0(b"C1CC1C2CC2", build_from_graph("C@0 C@2 C@3 C@5 C@7 C@8 | 0-1@2 1-2@3 0-2@1 2-3@5 3-4@7 4-5@8 3-5@6 | 1@1-4:0-2 2@6-9:3-5"))]
-#[case::two_rings_bonded_0_aromatic_1(b"c1cc1c2cc2", build_from_graph("C*@0 C*@2 C*@3 C*@5 C*@7 C*@8 | 0-1:@2 1-2:@3 0-2:@1 2-3:@5 3-4:@7 4-5:@8 3-5:@6 | 1@1-4:0-2 2@6-9:3-5"))]
-#[case::two_rings_bonded_0_aromatic_2(b"c1cc1C2CC2", build_from_graph("C*@0 C*@2 C*@3 C@5 C@7 C@8 | 0-1:@2 1-2:@3 0-2:@1 2-3@5 3-4@7 4-5@8 3-5@6 | 1@1-4:0-2 2@6-9:3-5"))]
+#[case::two_rings_bonded_0_aromatic_1(b"c1cc1c2cc2", build_from_graph("C_@0 C_@2 C_@3 C_@5 C_@7 C_@8 | 0-1:@2 1-2:@3 0-2:@1 2-3:@5 3-4:@7 4-5:@8 3-5:@6 | 1@1-4:0-2 2@6-9:3-5"))]
+#[case::two_rings_bonded_0_aromatic_2(b"c1cc1C2CC2", build_from_graph("C_@0 C_@2 C_@3 C@5 C@7 C@8 | 0-1:@2 1-2:@3 0-2:@1 2-3@5 3-4@7 4-5@8 3-5@6 | 1@1-4:0-2 2@6-9:3-5"))]
 #[case::two_rings_index_reused(b"C1CC1C1CC1", build_from_graph("C@0 C@2 C@3 C@5 C@7 C@8 | 0-1@2 1-2@3 0-2@1 2-3@5 3-4@7 4-5@8 3-5@6 | 1@1-4:0-2 1@6-9:3-5"))]
 #[case::two_rings_bonded_2(b"C1CC1CCC2CC2", build_from_graph("C@0 C@2 C@3 C@5 C@6 C@7 C@9 C@10 | 0-1@2 1-2@3 0-2@1 2-3@5 3-4@6 4-5@7 5-6@9 6-7@10 5-7@8 | 1@1-4:0-2 2@8-11:5-7"))]
 #[case::two_rings_spiro(b"C1CC12CC2", build_from_graph("C@0 C@2 C@3 C@6 C@7 | 0-1@2 1-2@3 0-2@1 2-3@6 3-4@7 2-4@5 | 1@1-4:0-2 2@5-8:2-4"))]
 #[case::two_rings_spiro_branch(b"C12(CCCCC1)CCCCC2", build_from_graph("C@0 C@4 C@5 C@6 C@7 C@8 C@11 C@12 C@13 C@14 C@15 | 0-1@4 1-2@5 2-3@6 3-4@7 4-5@8 0-5@1 0-6@11 6-7@12 7-8@13 8-9@14 9-10@15 0-10@2 | 1@1-9:0-5 2@2-16:0-10"))]
 #[case::two_rings_fused(b"C12CC1C2", build_from_graph("C@0 C@3 C@4 C@6 | 0-1@3 1-2@4 0-2@1 2-3@6 0-3@2 | 1@1-5:0-2 2@2-7:0-3"))]
 #[case::two_rings_bridged(b"C12CC(C2)C1", build_from_graph("C@0 C@3 C@4 C@6 C@9 | 0-1@3 1-2@4 2-3@6 0-3@2 2-4@9 0-4@1 | 1@1-10:0-4 2@2-7:0-3"))]
-#[case::two_rings_fused_aromatic(b"c12ccccc1cccc2", build_from_graph("C*@0 C*@3 C*@4 C*@5 C*@6 C*@7 C*@9 C*@10 C*@11 C*@12 | 0-1:@3 1-2:@4 2-3:@5 3-4:@6 4-5:@7 0-5:@1 5-6:@9 6-7:@10 7-8:@11 8-9:@12 0-9:@2 | 1@1-8:0-5 2@2-13:0-9"))]
-#[case::two_rings_fused_aromatic_aliphatic(b"c1ccc2CCCc2c1", build_from_graph("C*@0 C*@2 C*@3 C*@4 C@6 C@7 C@8 C*@9 C*@11 | 0-1:@2 1-2:@3 2-3:@4 3-4@6 4-5@7 5-6@8 6-7@9 3-7:@5 7-8:@11 0-8:@1 | 1@1-12:0-8 2@5-10:3-7"))]
+#[case::two_rings_fused_aromatic(b"c12ccccc1cccc2", build_from_graph("C_@0 C_@3 C_@4 C_@5 C_@6 C_@7 C_@9 C_@10 C_@11 C_@12 | 0-1:@3 1-2:@4 2-3:@5 3-4:@6 4-5:@7 0-5:@1 5-6:@9 6-7:@10 7-8:@11 8-9:@12 0-9:@2 | 1@1-8:0-5 2@2-13:0-9"))]
+#[case::two_rings_fused_aromatic_aliphatic(b"c1ccc2CCCc2c1", build_from_graph("C_@0 C_@2 C_@3 C_@4 C@6 C@7 C@8 C_@9 C_@11 | 0-1:@2 1-2:@3 2-3:@4 3-4@6 4-5@7 5-6@8 6-7@9 3-7:@5 7-8:@11 0-8:@1 | 1@1-12:0-8 2@5-10:3-7"))]
 #[case::two_rings_interleaved_indices(b"N1CC2CCCCC2CC1", build_from_graph("N@0 C@2 C@3 C@5 C@6 C@7 C@8 C@9 C@11 C@12 | 0-1@2 1-2@3 2-3@5 3-4@6 4-5@7 5-6@8 6-7@9 2-7@4 7-8@11 8-9@12 0-9@1 | 1@1-13:0-9 2@4-10:2-7"))]
 #[case::three_rings_fused(b"C12C3C1C32", build_from_graph("C@0 C@3 C@5 C@7 | 0-1@3 1-2@5 0-2@1 2-3@7 1-3@4 0-3@2 | 1@1-6:0-2 2@2-9:0-3 3@4-8:1-3"))]
 #[case::ring_group(b"(C1CC1)", build_from_graph("C@1 C@3 C@4 | 0-1@3 1-2@4 0-2@2 | 1@2-5:0-2"))]
@@ -140,11 +146,12 @@ fn tree_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::substituted_ring_5(b"C1CC(C)1", build_from_graph("C@0 C@2 C@3 C@5 | 0-1@2 1-2@3 2-3@5 0-2@1 | 1@1-7:0-2"))]
 #[case::substituted_ring_6(b"C1CC1C", build_from_graph("C@0 C@2 C@3 C@5 | 0-1@2 1-2@3 0-2@1 2-3@5 | 1@1-4:0-2"))]
 #[case::substituted_ring_7(b"C1CC1(C)", build_from_graph("C@0 C@2 C@3 C@6 | 0-1@2 1-2@3 0-2@1 2-3@6 | 1@1-4:0-2"))]
-#[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C*@0 C*@2 C*@4 C*@6 | 0-1:@2 1-2:@4 1-3:@6 0-3:@1 | 1@1-7:0-3"))]
+#[case::substituted_ring_aromatic(b"c1c(c)c1", build_from_graph("C_@0 C_@2 C_@4 C_@6 | 0-1:@2 1-2:@4 1-3:@6 0-3:@1 | 1@1-7:0-3"))]
 #[case::substituted_ring_branch(b"C1C(C(C)C)C1", build_from_graph("C@0 C@2 C@4 C@6 C@8 C@10 | 0-1@2 1-2@4 2-3@6 2-4@8 1-5@10 0-5@1 | 1@1-11:0-5"))]
 fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
@@ -167,7 +174,8 @@ fn ring(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::bad_percent_char(b"C%1a", ParseError::InvalidRingIndex { pos: 1 })]
 fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles_bytes(input);
-    assert!(err.is_err(), "{:?} should have failed", input);
+    let input_str = input.to_str_lossy();
+    assert!(err.is_err(), "{:?} should have failed", input_str);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
 }
@@ -186,7 +194,8 @@ fn ring_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
     // Expected to pass here, fail in post-parse topology check
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
@@ -200,24 +209,24 @@ fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::aromatic_bond(b"C:C", build_from_graph("C@0 C@2 | 0-1::@1"))]
 #[case::up_bond(b"C/C", build_from_graph("C@0 C@2 | 0-1:/@1"))]
 #[case::down_bond(b"C\\C", build_from_graph("C@0 C@2 | 0-1:\\@1"))]
-#[case::single_bond_aromatic(b"c-c", build_from_graph("C*@0 C*@2 | 0-1:-@1"))]
-#[case::double_bond_aromatic(b"c=c", build_from_graph("C*@0 C*@2 | 0-1:=@1"))]
-#[case::triple_bond_aromatic(b"c#c", build_from_graph("C*@0 C*@2 | 0-1:#@1"))]
-#[case::quadruple_bond_aromatic(b"c$c", build_from_graph("C*@0 C*@2 | 0-1:$@1"))]
-#[case::aromatic_bond_aromatic(b"c:c", build_from_graph("C*@0 C*@2 | 0-1::@1"))]
-#[case::up_bond_aromatic(b"c/c", build_from_graph("C*@0 C*@2 | 0-1:/@1"))]
-#[case::down_bond_aromatic(b"c\\c", build_from_graph("C*@0 C*@2 | 0-1:\\@1"))]
+#[case::single_bond_aromatic(b"c-c", build_from_graph("C_@0 C_@2 | 0-1:-@1"))]
+#[case::double_bond_aromatic(b"c=c", build_from_graph("C_@0 C_@2 | 0-1:=@1"))]
+#[case::triple_bond_aromatic(b"c#c", build_from_graph("C_@0 C_@2 | 0-1:#@1"))]
+#[case::quadruple_bond_aromatic(b"c$c", build_from_graph("C_@0 C_@2 | 0-1:$@1"))]
+#[case::aromatic_bond_aromatic(b"c:c", build_from_graph("C_@0 C_@2 | 0-1::@1"))]
+#[case::up_bond_aromatic(b"c/c", build_from_graph("C_@0 C_@2 | 0-1:/@1"))]
+#[case::down_bond_aromatic(b"c\\c", build_from_graph("C_@0 C_@2 | 0-1:\\@1"))]
 #[case::allene_bonds(b"C=C=C", build_from_graph("C@0 C@2 C@4 | 0-1:=@1 1-2:=@3"))]
 #[case::conjugated_bonds(b"C=CC=C", build_from_graph("C@0 C@2 C@3 C@5 | 0-1:=@1 1-2:-@3 2-3:=@4"))]
 #[case::cumulene_bonds(b"C=C=C=C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:=@1 1-2:=@3 2-3:=@5"))]
-#[case::allene_bonds_aromatic(b"c=c=c", build_from_graph("C*@0 C*@2 C*@4 | 0-1:=@1 1-2:=@3"))]
+#[case::allene_bonds_aromatic(b"c=c=c", build_from_graph("C_@0 C_@2 C_@4 | 0-1:=@1 1-2:=@3"))]
 #[case::trans_bonds_1(b"C/C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:/@5"))]
 #[case::trans_bonds_2(b"C\\C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:\\@5"))]
 #[case::cis_bonds_1(b"C\\C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:/@5"))]
 #[case::cis_bonds_2(b"C/C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:\\@5"))]
 #[case::trans_cumulene_bonds(b"F/C=C=C=C/F", build_from_graph("F@0 C@2 C@4 C@6 C@8 F@10 | 0-1:/@1 1-2:=@3 2-3:=@5 3-4:=@7 4-5:/@9"))]
 #[case::cis_cumulene_bonds(b"F/C=C=C=C\\F", build_from_graph("F@0 C@2 C@4 C@6 C@8 F@10 | 0-1:/@1 1-2:=@3 2-3:=@5 3-4:=@7 4-5:\\@9"))]
-#[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C*@0 C*@2 C*@4 C*@6 | 0-1:=@1 1-2:-@3 2-3:=@5"))]
+#[case::conjugated_bonds_aromatic(b"c=c-c=c", build_from_graph("C_@0 C_@2 C_@4 C_@6 | 0-1:=@1 1-2:-@3 2-3:=@5"))]
 #[case::branch_leading_single_bond(b"CC(-C)C", build_from_graph("C@0 C@1 C@4 C@6 | 0-1@1 1-2@3 1-3@6"))]
 #[case::branch_leading_single_bond_multiple(b"CC(-C)(-C)C", build_from_graph("C@0 C@1 C@4 C@8 C@10 | 0-1@1 1-2@3 1-3@7 1-4@10"))]
 #[case::branch_leading_double_bond(b"CC(=C)C", build_from_graph("C@0 C@1 C@4 C@6 | 0-1@1 1-2:=@3 1-3@6"))]
@@ -226,9 +235,9 @@ fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::branch_internal_double_bond(b"CC(C=C)C", build_from_graph("C@0 C@1 C@3 C@5 C@7 | 0-1@1 1-2@3 2-3:=@4 1-4@7"))]
 #[case::branch_followed_by_bond(b"CC(C)-C", build_from_graph("C@0 C@1 C@3 C@6 | 0-1@1 1-2@3 1-3@5"))]
 #[case::branch_followed_by_double_bond(b"CC(C)=C", build_from_graph("C@0 C@1 C@3 C@6 | 0-1@1 1-2@3 1-3:=@5"))]
-#[case::branch_leading_bond_aromatic(b"cc(:c)c", build_from_graph("C*@0 C*@1 C*@4 C*@6 | 0-1:@1 1-2:@3 1-3:@6"))]
-#[case::branch_internal_bond_aromatic(b"cc(c:c)c", build_from_graph("C*@0 C*@1 C*@3 C*@5 C*@7 | 0-1:@1 1-2:@3 2-3:@4 1-4:@7"))]
-#[case::branch_followed_by_bond_aromatic(b"cc(c):c", build_from_graph("C*@0 C*@1 C*@3 C*@6 | 0-1:@1 1-2:@3 1-3:@5"))]
+#[case::branch_leading_bond_aromatic(b"cc(:c)c", build_from_graph("C_@0 C_@1 C_@4 C_@6 | 0-1:@1 1-2:@3 1-3:@6"))]
+#[case::branch_internal_bond_aromatic(b"cc(c:c)c", build_from_graph("C_@0 C_@1 C_@3 C_@5 C_@7 | 0-1:@1 1-2:@3 2-3:@4 1-4:@7"))]
+#[case::branch_followed_by_bond_aromatic(b"cc(c):c", build_from_graph("C_@0 C_@1 C_@3 C_@6 | 0-1:@1 1-2:@3 1-3:@5"))]
 #[case::branch_trans_double_bond_1(b"C/C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:/@1 1-2:=@3 2-3:/@5"))]
 #[case::branch_trans_double_bond_2(b"C\\C=C\\C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:\\@5"))]
 #[case::branch_cis_double_bond_1(b"C\\C=C/C", build_from_graph("C@0 C@2 C@4 C@6 | 0-1:\\@1 1-2:=@3 2-3:/@5"))]
@@ -246,8 +255,8 @@ fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::ring_double_bond_unilateral_open_2(b"C=1CCCCC1", build_from_graph("C@0 C@3 C@4 C@5 C@6 C@7 | 0-1@3 1-2@4 2-3@5 3-4@6 4-5@7 0-5:=@2 | 1@2-8:0-5"))]
 #[case::ring_triple_bond(b"C1-C-C#1", build_from_graph("C@0 C@3 C@5 | 0-1@2 1-2@4 0-2:#@1 | 1@1-7:0-2"))]
 #[case::ring_quadruple_bond(b"C1-C-C$1", build_from_graph("C@0 C@3 C@5 | 0-1@2 1-2@4 0-2:$@1 | 1@1-7:0-2"))]
-#[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C*@0 C*@3 C*@5 | 0-1:@2 1-2:@4 0-2:@1 | 1@1-7:0-2"))]
-#[case::ring_aromatic_single_bond(b"c1ccccc1-c2ccccc2", build_from_graph("C*@0 C*@2 C*@3 C*@4 C*@5 C*@6 C*@9 C*@11 C*@12 C*@13 C*@14 C*@15 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 0-5:@1 5-6@8 6-7:@11 7-8:@12 8-9:@13 9-10:@14 10-11:@15 6-11:@10 | 1@1-7:0-5 2@10-16:6-11"))]
+#[case::ring_aromatic_bond(b"c1:c:c:1", build_from_graph("C_@0 C_@3 C_@5 | 0-1:@2 1-2:@4 0-2:@1 | 1@1-7:0-2"))]
+#[case::ring_aromatic_single_bond(b"c1ccccc1-c2ccccc2", build_from_graph("C_@0 C_@2 C_@3 C_@4 C_@5 C_@6 C_@9 C_@11 C_@12 C_@13 C_@14 C_@15 | 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 0-5:@1 5-6@8 6-7:@11 7-8:@12 8-9:@13 9-10:@14 10-11:@15 6-11:@10 | 1@1-7:0-5 2@10-16:6-11"))]
 #[case::ring_up_bond_1(b"C1CC/1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2:/@1 | 1@1-5:0-2"))]
 #[case::ring_up_bond_2(b"C/1CC1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2:/@2 | 1@2-5:0-2"))]
 #[case::ring_up_bond_3(b"C/1CC/1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2:/@2 | 1@2-6:0-2"))]
@@ -259,7 +268,8 @@ fn ring_invalid_topology(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::ring_between_bonds(b"C1CC-1-C", build_from_graph("C@0 C@2 C@3 C@7 | 0-1@2 1-2@3 0-2@1 2-3@6 | 1@1-5:0-2"))]
 fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
@@ -344,8 +354,8 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::ring_components_1(b"C1.CC1", build_from_graph("C@0 C@3 C@4 | 1-2@4 0-2@1 | 1@1-5:0-2"))]
 #[case::ring_components_2(b"C%12.CC%12", build_from_graph("C@0 C@5 C@6 | 1-2@6 0-2@1 | 12@1-7:0-2"))]
 #[case::ring_components_3(b"C1.C12.C2", build_from_graph("C@0 C@3 C@7 | 0-1@1 1-2@5 | 1@1-4:0-1 2@5-8:1-2"))]
-#[case::ring_components_aromatic_1(b"c1.ccccc1", build_from_graph("C*@0 C*@3 C*@4 C*@5 C*@6 C*@7 | 1-2:@4 2-3:@5 3-4:@6 4-5:@7 0-5:@1 | 1@1-8:0-5"))]
-#[case::ring_components_aromatic_2(b"c1c2c3c4cc1.Br2.Cl3.Cl4", build_from_graph("C*@0 C*@2 C*@4 C*@6 C*@8 C*@9 Br@12 Cl@16 Cl@20 | 0-1:@2 1-2:@4 2-3:@6 3-4:@8 4-5:@9 0-5:@1 1-6@3 2-7@5 3-8@7 | 1@1-10:0-5 2@3-14:1-6 3@5-18:2-7 4@7-22:3-8"))]
+#[case::ring_components_aromatic_1(b"c1.ccccc1", build_from_graph("C_@0 C_@3 C_@4 C_@5 C_@6 C_@7 | 1-2:@4 2-3:@5 3-4:@6 4-5:@7 0-5:@1 | 1@1-8:0-5"))]
+#[case::ring_components_aromatic_2(b"c1c2c3c4cc1.Br2.Cl3.Cl4", build_from_graph("C_@0 C_@2 C_@4 C_@6 C_@8 C_@9 Br@12 Cl@16 Cl@20 | 0-1:@2 1-2:@4 2-3:@6 3-4:@8 4-5:@9 0-5:@1 1-6@3 2-7@5 3-8@7 | 1@1-10:0-5 2@3-14:1-6 3@5-18:2-7 4@7-22:3-8"))]
 #[case::branch_components(b"C(C.C)", build_from_graph("C@0 C@2 C@4 | 0-1@2"))]
 #[case::branch_leading_dot_1(b"C(.C)", build_from_graph("C@0 C@3 | "))]
 #[case::branch_leading_dot_2(b"C(.C)(C)", build_from_graph("C@0 C@3 C@6 | 0-2@6"))]
@@ -444,7 +454,6 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 }
 
 #[rustfmt::skip]
-
 #[rstest]
 #[case::atom_c(b"[C]", Element::C, false, None, None, None, None, None)]
 #[case::atom_h(b"[H]", Element::H, false, None, None, None, None, None)]
@@ -547,6 +556,7 @@ fn bracket(
     assert_eq!(a.class, class_);
 }
 
+#[rustfmt::skip]
 #[rstest]
 #[case::aliphatic_before(b"C[C]", Some(BondOrder::Single), None)]
 #[case::aliphatic_before_single(b"C-[C]", Some(BondOrder::Single), None)]
@@ -578,11 +588,7 @@ fn bracket(
 #[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single), None)]
 #[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
 #[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aromatic_after_aliphatic_down(
-    b"[C]\\c",
-    Some(BondOrder::Single),
-    Some(BondDirection::Down)
-)]
+#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondDirection::Down))]
 #[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single), None)]
 #[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single), None)]
 #[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single), None)]
@@ -727,7 +733,8 @@ fn bracket_bonds(
 #[case::duplicate_class_4(b"[C:1:12]", ParseError::DuplicateBracketField { pos: 4 })]
 fn bracket_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles_bytes(input);
-    assert!(err.is_err(), "{:?} should have failed", input);
+    let input_str = String::from_utf8_lossy(input);
+    assert!(err.is_err(), "{:?} should have failed", input_str);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
 }
@@ -740,73 +747,81 @@ fn bracket_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::stray_class_field(b"C:1C", ParseError::UnbalancedRingIndex { open_pos: 2 })]
 fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let err = parse_smiles_bytes(input);
-    assert!(err.is_err(), "{:?} should have failed", input);
+    let input_str = String::from_utf8_lossy(input);
+    assert!(err.is_err(), "{:?} should have failed", input_str);
     let err = err.unwrap_err();
     assert_eq!(err, expected);
 }
 
+#[rustfmt::skip]
 #[rstest]
-#[case::chirality_1_eq_1(b"N[C@](Br)(O)C", 5, 4)]
-#[case::chirality_1_eq_2(b"N[C@@](Br)(C)O", 5, 4)]
-#[case::chirality_1_eq_3(b"O[C@](Br)(C)N", 5, 4)]
-#[case::chirality_1_eq_4(b"C[C@](Br)(N)O", 5, 4)]
-#[case::chirality_1_eq_5(b"C[C@@](Br)(O)N", 5, 4)]
-#[case::chirality_1_eq_6(b"[C@@](C)(Br)(O)N", 5, 4)]
-#[case::chirality_1_eq_7(b"Br[C@](O)(N)C", 5, 4)]
-#[case::chirality_1_eq_8(b"Br[C@](C)(O)N", 5, 4)]
-#[case::chirality_1_eq_9(b"Br[C@](N)(C)O", 5, 4)]
-#[case::chiraliry_1_eq_10(b"Br[C@@](N)(O)C", 5, 4)]
-#[case::chirality_1_eq_11(b"[C@@](Br)(N)(O)C", 5, 4)]
-#[case::chirality_2_eq_1(b"FC1C[C@](Br)(Cl)CCC1", 9, 9)]
-#[case::chirality_2_eq_2(b"[C@]1(Br)(Cl)CCCC(F)C1", 9, 9)]
-#[case::chirality_3_eq_1(b"N[C@H](O)C", 4, 3)]
-#[case::trans_1_eq_1(b"F/C=C/F", 4, 3)]
-#[case::trans_1_eq_2(b"F\\C=C\\F", 4, 3)]
-#[case::trans_1_eq_3(b"C(\\F)=C/F", 4, 3)]
-#[case::cis_1_eq_1(b"F\\C=C/F", 4, 3)]
-#[case::cis_1_eq_2(b"F/C=C\\F", 4, 3)]
-#[case::cis_1_eq_3(b"C(/F)=C/F", 4, 3)]
-#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 6, 5)]
-#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 6, 5)]
-#[case::cis_2_eq_2(b"C/C(F)=C(/C)F", 6, 5)]
-#[case::cis_2_eq_2(b"CC(/F)=C(/C)F", 6, 5)]
-#[case::cis_2_eq_2(b"C/C(F)=C(C)\\F", 6, 5)]
-#[case::cis_2_eq_2(b"CC(/F)=C(C)\\F", 6, 5)]
-#[case::chirality_allene_1(b"NC(Br)=[C@]=C(O)C", 7, 6)]
-#[case::chirality_allene_2(b"NC(Br)=[C@AL1]=C(O)C", 7, 6)]
-#[case::chirality_tb_1(b"S[As@TB1](F)(Cl)(Br)N", 6, 5)]
-#[case::chirality_tb_2(b"S[As@TB5](F)(N)(Cl)Br", 6, 5)]
-#[case::chirality_tb_3(b"F[As@TB15](Cl)(S)(Br)N", 6, 5)]
-#[case::chirality_tb_4(b"S[As@TB2](Br)(Cl)(F)N", 6, 5)]
-#[case::chirality_tb_5(b"F[As@TB10](S)(Cl)(N)Br", 6, 5)]
-#[case::chirality_tb_6(b"Br[As@TB20](Cl)(S)(F)N", 6, 5)]
-#[case::chirality_oh_1(b"C[Co@](F)(Cl)(Br)(I)S", 7, 6)]
-#[case::chirality_oh_2(b"S[Co@OH5](F)(I)(Cl)(C)Br", 7, 6)]
-#[case::chirality_oh_3(b"Br[Co@OH12](Cl)(I)(F)(S)C", 7, 6)]
-#[case::chirality_oh_4(b"Cl[Co@OH19](C)(I)(F)(S)Br", 7, 6)]
-#[case::chirality_oh_5(b"F[Co@@](S)(I)(C)(Cl)Br", 7, 6)]
-#[case::chirality_oh_6(b"Br[Co@OH9](C)(S)(Cl)(F)I", 7, 6)]
-#[case::chirality_oh_7(b"Cl[Co@OH15](C)(Br)(F)(I)S", 7, 6)]
-#[case::chirality_oh_8(b"I[Co@OH27](Cl)(Br)(F)(S)C", 7, 6)]
-#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 7, 6)]
-#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 7, 6)]
-#[case::partial_chirality_1(b"N1[C@H](Cl)[C@@H](Cl)C(Cl)CC1", 9, 9)]
-#[case::chirality_tetrahedral_max2(b"[Ni@TH2]", 1, 0)]
-#[case::chirality_allenal_max2(b"[C@AL2]", 1, 0)]
-#[case::chirality_square_planar_max3(b"[Cu@SP3]", 1, 0)]
-#[case::chirality_trigonal_bipyramidal_max20(b"[P@TB20]", 1, 0)]
-#[case::chirality_trigonal_bipyramidal_zero_prefix(b"[P@TB02]", 1, 0)]
-#[case::chirality_octahedral_max30(b"[Co@OH30]", 1, 0)]
-#[case::chirality_octahedral_zero_prefix(b"[Co@OH03]", 1, 0)]
-fn stereo(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usize) {
-    // Only check that parse succeeds
-    // The set chirality/trans/cis/chirality_allene/chirality_tb_X_eq_*
-    // represents the same structure for each X
+// Tetrahedral chirality - equivalent representations
+#[case::chirality_1_eq_1(b"N[C@](Br)(O)C")]
+#[case::chirality_1_eq_2(b"N[C@@](Br)(C)O")]
+#[case::chirality_1_eq_3(b"O[C@](Br)(C)N")]
+#[case::chirality_1_eq_4(b"C[C@](Br)(N)O")]
+#[case::chirality_1_eq_5(b"C[C@@](Br)(O)N")]
+#[case::chirality_1_eq_6(b"[C@@](C)(Br)(O)N")]
+#[case::chirality_1_eq_7(b"Br[C@](O)(N)C")]
+#[case::chirality_1_eq_8(b"Br[C@](C)(O)N")]
+#[case::chirality_1_eq_9(b"Br[C@](N)(C)O")]
+#[case::chiraliry_1_eq_10(b"Br[C@@](N)(O)C")]
+#[case::chirality_1_eq_11(b"[C@@](Br)(N)(O)C")]
+// Tetrahedral chirality with ring
+#[case::chirality_2_eq_1(b"FC1C[C@](Br)(Cl)CCC1")]
+#[case::chirality_2_eq_2(b"[C@]1(Br)(Cl)CCCC(F)C1")]
+// Tetrahedral chirality with explicit hydrogen
+#[case::chirality_3_eq_1(b"N[C@H](O)C")]
+// Double bond stereo - trans
+#[case::trans_1_eq_1(b"F/C=C/F")]
+#[case::trans_1_eq_2(b"F\\C=C\\F")]
+#[case::trans_1_eq_3(b"C(\\F)=C/F")]
+// Double bond stereo - cis
+#[case::cis_1_eq_1(b"F\\C=C/F")]
+#[case::cis_1_eq_2(b"F/C=C\\F")]
+#[case::cis_1_eq_3(b"C(/F)=C/F")]
+// Cis with substituents
+#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C")]
+#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F")]
+#[case::cis_2_eq_3(b"C/C(F)=C(/C)F")]
+#[case::cis_2_eq_4(b"CC(/F)=C(/C)F")]
+#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F")]
+#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F")]
+// Allene chirality
+#[case::chirality_allene_1(b"NC(Br)=[C@]=C(O)C")]
+#[case::chirality_allene_2(b"NC(Br)=[C@AL1]=C(O)C")]
+// Trigonal bipyramidal chirality
+#[case::chirality_tb_1(b"S[As@TB1](F)(Cl)(Br)N")]
+#[case::chirality_tb_2(b"S[As@TB5](F)(N)(Cl)Br")]
+#[case::chirality_tb_3(b"F[As@TB15](Cl)(S)(Br)N")]
+#[case::chirality_tb_4(b"S[As@TB2](Br)(Cl)(F)N")]
+#[case::chirality_tb_5(b"F[As@TB10](S)(Cl)(N)Br")]
+#[case::chirality_tb_6(b"Br[As@TB20](Cl)(S)(F)N")]
+// Octahedral chirality
+#[case::chirality_oh_1(b"C[Co@](F)(Cl)(Br)(I)S")]
+#[case::chirality_oh_2(b"S[Co@OH5](F)(I)(Cl)(C)Br")]
+#[case::chirality_oh_3(b"Br[Co@OH12](Cl)(I)(F)(S)C")]
+#[case::chirality_oh_4(b"Cl[Co@OH19](C)(I)(F)(S)Br")]
+#[case::chirality_oh_5(b"F[Co@@](S)(I)(C)(Cl)Br")]
+#[case::chirality_oh_6(b"Br[Co@OH9](C)(S)(Cl)(F)I")]
+#[case::chirality_oh_7(b"Cl[Co@OH15](C)(Br)(F)(I)S")]
+#[case::chirality_oh_8(b"I[Co@OH27](Cl)(Br)(F)(S)C")]
+// Partial stereo specification
+#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C")]
+#[case::partial_cis_trans_2(b"F/C=C/CC=CC")]
+#[case::partial_chirality_1(b"N1[C@H](Cl)[C@@H](Cl)C(Cl)CC1")]
+// Single-atom chirality markers (max values)
+#[case::chirality_tetrahedral_max2(b"[Ni@TH2]")]
+#[case::chirality_allenal_max2(b"[C@AL2]")]
+#[case::chirality_square_planar_max3(b"[Cu@SP3]")]
+#[case::chirality_trigonal_bipyramidal_max20(b"[P@TB20]")]
+#[case::chirality_trigonal_bipyramidal_zero_prefix(b"[P@TB02]")]
+#[case::chirality_octahedral_max30(b"[Co@OH30]")]
+#[case::chirality_octahedral_zero_prefix(b"[Co@OH03]")]
+fn stereo(#[case] input: &[u8]) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
-    let mol = res.unwrap();
-    assert_eq!(mol.atoms.len(), atoms);
-    assert_eq!(mol.bonds.len(), bonds);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded: {:?}", input_str, res);
 }
 
 #[rstest]
@@ -836,11 +851,9 @@ fn stereo_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     assert_eq!(err, expected);
 }
 
+#[rustfmt::skip]
 #[rstest]
-#[case::conflicting_stereo_bonds(
-    b"C/C(\\F)=C/FC",
-    build_from_graph("C@0 C@2 F@5 C@8 F@10 C@11 | 0-1:/@1 1-2:\\@4 1-3:=@7 3-4:/@9 4-5@11")
-)]
+#[case::conflicting_stereo_bonds( b"C/C(\\F)=C/FC", build_from_graph("C@0 C@2 F@5 C@8 F@10 C@11 | 0-1:/@1 1-2:\\@4 1-3:=@7 3-4:/@9 4-5@11"))]
 fn stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecule) {
     // Expected to pass here, but should fail semantics post-parse
     let res = parse_smiles_bytes(input);
@@ -861,7 +874,8 @@ fn stereo_invalid_semantics(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::wildcard_trailing_dot(b"*.", ParseError::InvalidElement { pos: 0 })]
 fn wildcard_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_err(), "{:?} should have failed", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
 }
@@ -895,7 +909,8 @@ fn wildcard_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::greek_capital_omicron(b"C\xCE\x9FC", ParseError::InvalidToken { pos: 1 })]
 fn token_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_err(), "{:?} should have failed", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
 }
@@ -924,7 +939,8 @@ fn token_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 fn style_warnings(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usize) {
     // Verify that parse succeeds, should trigger style warnings in post-parse
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol.atoms.len(), atoms);
     assert_eq!(mol.bonds.len(), bonds);
@@ -942,7 +958,8 @@ fn style_warnings(#[case] input: &[u8], #[case] atoms: usize, #[case] bonds: usi
 fn style_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     // Considered non-standard in OpenSMILES spec, error here
     let res = parse_smiles_bytes(input);
-    assert!(res.is_err(), "{:?} should have failed", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
 }
@@ -960,7 +977,8 @@ fn style_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::terminator_crlf(b"CC\r\n", build_from_graph("C@0 C@1 | 0-1@1"))]
 fn whitespace(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
@@ -978,7 +996,7 @@ fn whitespace(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::terminator_crlf_trailing_structure(b"CC\r\nCC", ParseError::InvalidWhitespace { pos: 2 })]
 fn whitespace_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_smiles_bytes(input);
-    assert!(res.is_err(), "{:?} should have failed", input);
+    let input_str = input.to_str_lossy();    assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
 }

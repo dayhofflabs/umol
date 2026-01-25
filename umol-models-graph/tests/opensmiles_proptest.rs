@@ -89,7 +89,8 @@ proptest! {
         }
     }
 
-    // Bonds in successful parses must reference valid, distinct atom indices
+    // Bonds in successful parses must reference valid atom indices
+    // Note: self-loop bonds (e.g., C11) are syntactically valid and checked during topology validation
     #[test]
     fn bonds_well_formed_on_success(input in smilesish()) {
         if let Ok(mol) = parse_smiles_bytes(&input) {
@@ -99,7 +100,6 @@ proptest! {
                 let ea = b.end_atom();
                 // Molecule uses 1-based atom indices in bonds
                 prop_assert!(sa >= 1 && sa <= n && ea >= 1 && ea <= n, "bond endpoints out of bounds: {}-{} / n={}", sa, ea, n);
-                prop_assert!(sa != ea, "self-loop bond unexpectedly present");
             }
         }
     }

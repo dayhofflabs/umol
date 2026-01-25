@@ -252,7 +252,7 @@ fn parse_smiles_inner(input: &[u8], _flags: SmilesParseFlags) -> Result<Molecule
                 Some(e) => (e, aromatic),
                 None => (Element::C, false),
             };
-            let (s, e) = (Some(i as u32), Some(j as u32));
+            let (s, e) = (Some(i as u32), Some((j + 1) as u32));
             let atom = AtomData {
                 element,
                 isotope: iso_opt,
@@ -274,7 +274,7 @@ fn parse_smiles_inner(input: &[u8], _flags: SmilesParseFlags) -> Result<Molecule
                 last_aromatic,
                 aromatic,
                 i as u32,
-                j as u32,
+                (j + 1) as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;
@@ -726,7 +726,7 @@ fn parse_extended_smiles_inner(
             let inner = &input[start..j];
             let (symbol, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
                 parse_bracket_extended(inner, i)?;
-            let (s, e) = (Some(i as u32), Some(j as u32));
+            let (s, e) = (Some(i as u32), Some((j + 1) as u32));
             let atom = ExtendedAtomData {
                 symbol,
                 isotope: iso_opt,
@@ -748,7 +748,7 @@ fn parse_extended_smiles_inner(
                 last_aromatic,
                 aromatic,
                 i as u32,
-                j as u32,
+                (j + 1) as u32,
             );
             last_atom_idx = Some(curr);
             last_aromatic = aromatic;

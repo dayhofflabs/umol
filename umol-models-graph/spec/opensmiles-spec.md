@@ -1,0 +1,222 @@
+## OpenSMILES — UMOL Formalization
+Version 1.0 (2026-01-25)
+
+### Preface
+
+This document is not intended as an extension or alternative to the official OpenSMILES specification (http://opensmiles.org/opensmiles.html). Rather, it formalizes aspects of the official spec where the original is ambiguous or lacks formal structure, providing precise lexical rules, grammar, and semantic constraints suitable for implementation.
+
+The EBNF grammar and lexical rules in this document are normative for the UMOL implementation.
+
+### Versioning
+
+This specification is considered stable. Future revisions are limited to bugfixes and clarifications; no new features will be added. Any extensions (e.g., CXSMILES, SMARTS) will be documented as separate addenda rather than modifications to this base specification.
+
+### Conformance
+
+This specification uses the terminology of RFC 2119 and RFC 8174. A conforming parser must accept inputs matching the grammar and token rules herein and must reject inputs that violate the grammar. Semantic constraints are validated in a separate pass after parsing. Specific error messages are not required.
+
+### Document Structure
+
+This specification is organized into three parts:
+1. **Lexical** — character classes, tokens, and lexical conventions
+2. **Syntax** — grammar rules and syntactic constraints
+3. **Semantics** — validation rules applied after parsing
+
+---
+
+## Part 1: Lexical
+
+This section defines the character classes, tokens, and lexical conventions for SMILES strings.
+
+### Lexical Conventions
+
+Input is ASCII and case-sensitive. Tokens are recognized using a maximal-munch policy: at each source position the longest possible token is chosen. If multiple tokens of equal maximal length can begin at a position, the one appearing earlier in the token definition order below is selected. Whitespace (SPACE, TAB, LINEFEED, CARRIAGE_RETURN) may appear as the only content (empty molecule) or as trailing terminator at end of input; inter-token whitespace is not permitted.
+
+### Tokens (normative summary)
+
+| Name | Definition | Notes |
+|---|---|---|
+| DIGIT | 0-9 | |
+| NUMBER | DIGIT+ | Base-10, unsigned |
+| PERCENT_RING | '%' DIGIT DIGIT | Exactly two digits; 00-99; leading zeros allowed |
+| DOT | '.' | Component separator |
+| BOND | '-' '=' '#' '$' ':' '/' '\\' | Bond symbols |
+| BRACKET_OPEN | '[' | |
+| BRACKET_CLOSE | ']' | |
+| CHIRALITY | '@' '@@' '@TH' DIGIT '@AL' DIGIT '@SP' DIGIT '@TB' NUMBER '@OH' NUMBER | Ranges defined below |
+| CHARGE | '+' '-' '++' '--' '+' DIGIT [DIGIT]? '-' DIGIT [DIGIT]? | +/- optionally with one or two digits; '++'/'--' equal +/-2 |
+| WHITESPACE | SPACE TAB LINEFEED CARRIAGE_RETURN | Trailing only |
+| END_OF_STRING | (end sentinel) | Not a character |
+
+---
+
+## Part 2: Syntax
+
+This section defines the grammar rules and syntactic constraints for well-formed SMILES strings. The parser accepts any input conforming to this syntax; semantic validity is checked separately.
+
+### Grammar (normative EBNF)
+
+```ebnf
+DIGIT ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+NUMBER ::= DIGIT+
+PERCENT_RING ::= '%' DIGIT DIGIT
+
+two_digits ::= DIGIT | DIGIT DIGIT
+
+atom ::= bracket_atom | aliphatic_organic | aromatic_organic | '*'
+
+aliphatic_organic ::= 'B' | 'C' | 'N' | 'O' | 'S' | 'P' | 'F' | 'Cl' | 'Br' | 'I'
+aromatic_organic ::= 'b' | 'c' | 'n' | 'o' | 's' | 'p'
+
+bracket_atom ::= '[' isotope? symbol bracket_field* ']'
+bracket_field ::= chiral | hcount | charge | class
+symbol ::= element_symbols | aromatic_symbols | '*'
+isotope ::= NUMBER
+
+element_symbols ::= 'H' | 'He' | 'Li' | 'Be' | 'B' | 'C' | 'N' | 'O' | 'F' | 'Ne' | 'Na' | 'Mg' | 'Al' | 'Si' | 'P' | 'S' | 'Cl' | 'Ar' | 'K' | 'Ca' | 'Sc' | 'Ti' | 'V' | 'Cr' | 'Mn' | 'Fe' | 'Co' | 'Ni' | 'Cu' | 'Zn' | 'Ga' | 'Ge' | 'As' | 'Se' | 'Br' | 'Kr' | 'Rb' | 'Sr' | 'Y' | 'Zr' | 'Nb' | 'Mo' | 'Tc' | 'Ru' | 'Rh' | 'Pd' | 'Ag' | 'Cd' | 'In' | 'Sn' | 'Sb' | 'Te' | 'I' | 'Xe' | 'Cs' | 'Ba' | 'Hf' | 'Ta' | 'W' | 'Re' | 'Os' | 'Ir' | 'Pt' | 'Au' | 'Hg' | 'Tl' | 'Pb' | 'Bi' | 'Po' | 'At' | 'Rn' | 'Fr' | 'Ra' | 'Rf' | 'Db' | 'Sg' | 'Bh' | 'Hs' | 'Mt' | 'Ds' | 'Rg' | 'Cn' | 'Fl' | 'Lv' | 'La' | 'Ce' | 'Pr' | 'Nd' | 'Pm' | 'Sm' | 'Eu' | 'Gd' | 'Tb' | 'Dy' | 'Ho' | 'Er' | 'Tm' | 'Yb' | 'Lu' | 'Ac' | 'Th' | 'Pa' | 'U' | 'Np' | 'Pu' | 'Am' | 'Cm' | 'Bk' | 'Cf' | 'Es' | 'Fm' | 'Md' | 'No' | 'Lr'
+
+aromatic_symbols ::= 'b' | 'c' | 'n' | 'o' | 'p' | 's' | 'se' | 'as'
+
+chiral ::= '@' | '@@' | '@TH' DIGIT | '@AL' DIGIT | '@SP' DIGIT | '@TB' NUMBER | '@OH' NUMBER
+
+hcount ::= 'H' | 'H' DIGIT
+
+charge ::= '+' | '-' | '++' | '--' | '+' two_digits | '-' two_digits
+
+class ::= ':' NUMBER
+
+bond ::= '-' | '=' | '#' | '$' | ':' | '/' | '\\'
+
+ringbond ::= bond? DIGIT | bond? PERCENT_RING
+
+node ::= atom ( ringbond | branch )*
+branch ::= '(' connector? chain ')'   // branch may start with bond/dot (connector)
+connector ::= bond | dot
+group ::= '(' chain ')'               // group cannot start with connector
+chain ::= (node | group) ( connector? (node | group) )*
+
+dot ::= '.'
+
+smiles ::= ws END_OF_STRING | chain ws END_OF_STRING
+ws ::= ( ' ' | '\t' | '\n' | '\r' )*
+```
+
+### Syntactic Constraints
+
+Parentheses have two roles:
+
+- Branch: '(' following an atom opens a branch attached to that atom; ')' closes the branch and restores the attach point. A branch MUST contain at least one atom; empty branches '()' are invalid. An atom may be followed by more than one branch definition.
+- Group: '(' at top level (i.e., when no branch attach point is pending) is grouping only and does not create or remove bonds. Grouping parentheses may nest and may appear wherever a chain may appear. Redundant grouping such as '(CC)' or '((CC))' is valid and connectivity-preserving; implementations MAY warn as a style issue. An empty top-level group '()' is accepted and denotes the empty molecule component.
+
+All parentheses MUST be paired. A ')' without a matching '(' is invalid. At end of input, any unclosed '(' is invalid. Grouping does not alter dot/component semantics; for example, '(CC.CC)' is equivalent to 'CC.CC'. The empty molecule may be represented by the empty input or by an empty top-level group '()'.
+
+In branches, an initial connector (bond or dot) after '(' is permitted and applies to the first edge in the branch. In groups, the first token after '(' MUST be an atom or another group; a leading connector (bond or dot) inside a group is invalid. A connector (bond) at the very start of input or immediately following a top-level group is invalid as there is no attach point; these cases are reported as leading-bond errors.
+
+Ring closures and branches may appear in any order after an atom and may interleave arbitrarily; the grammar `node ::= atom ( ringbond | branch )*` permits both orders and mixtures.
+
+NOTE: UMOL permits redundant grouping parentheses but rejects empty branches and the empty top-level group '()'. The empty molecule is represented only by the empty input. Style guidance may discourage redundant grouping.
+
+A ring index is either a single digit in the range 0-9 or a percent form in the range 00-99. Percent forms are exactly two digits; leading zeros are permitted. Ring indices compare by numeric value (leading zeros ignored), e.g., '1' matches '%01' and '0' matches '%00'. '%0' (percent with a single digit) is invalid. Open rings may be closed across component separators; at the end of input, any unclosed ring causes the input to be rejected. Self-loops (e.g., 'C11') and two-member cycles (e.g., 'C1C1') are syntactically valid but rejected during semantic validation (see Part 3).
+
+When both sides of a ring closure specify a bond direction and they differ, the input is rejected. When directions do not conflict, the closing-side specification takes precedence; otherwise the opening-side specification applies. Consecutive bond tokens without an intervening atom or ring index are invalid, and a trailing bond token at end-of-input is invalid.
+
+Ring bond order semantics:
+
+- If both endpoints of a ring closure specify a bond order and they differ, the input is rejected (RING_BOND_ORDER_CONFLICT).
+- If exactly one endpoint specifies a non-single order, the input is valid; the specified order applies to the ring bond. If both endpoints specify orders, they MUST be the same or the input is rejected (RING_BOND_ORDER_CONFLICT).
+- A ring bond with a non-single order must not carry a direction marker; such combinations are rejected (RING_BOND_ORDER_CONFLICT).
+- Error position convention: report at the closing ring index token (for single-digit rings, the digit; for percent rings, the '%').
+
+### Aromaticity
+
+Lowercase aromatic atom tokens designate aromatic atoms. The '*' token may appear adjacent to or within aromatic systems; its presence does not by itself imply aromaticity. An explicit ':' always produces an aromatic bond without altering atom aromaticity. When a bond is implicit and both adjacent atoms are aromatic, the bond order defaults to aromatic; otherwise the implicit default is single. This defaulting applies during chain growth and ring closure.
+
+### Implicit Hydrogens
+
+Bracket atoms do not have implicit hydrogens. If an 'H' field is omitted inside brackets, the hydrogen count defaults to zero ('H0'). 'H' without a digit sets the hydrogen count to one; 'H' followed by a single digit sets the count to that value (0-9). A bracket atom whose element is hydrogen ('H') MUST NOT include an 'H' count field; such forms are invalid (e.g., '[HH]', '[HH1]'). Outside brackets, the parser does not infer hydrogen counts from valence; an unspecified hydrogen count is treated as zero. Stereochemical validations may consult the bracket hydrogen count when checking neighbor totals.
+
+### Double-Bond Stereochemistry
+
+Directional markers '/' and '\\' attached to single bonds adjacent to a double bond encode relative geometry. The parser collects such markers and classifies double-bond geometry when it is unambiguous; otherwise the geometry remains unknown ("either"). In ring-directed closures where only one side supplies a determinative marker, the geometry is recorded as unknown/either.
+
+For cumulenes, UMOL does not propagate endpoint up/down markers across chains; only the local alkene E/Z rule is applied. Endpoint stereomarkers (up/down) on cumulenes with more than two consecutive double bonds are not interpreted and do not establish geometry. Even-length systems such as allenes may be characterized by allenic stereochemistry via '@ALn' on the central atom; '@' and '@@' are aliased to '@AL1' and '@AL2' when the center has exactly two incident double bonds. Allenic stereomarkers are not available for even-count cumulenes with more than two consecutive double bonds (n > 2). Validation of '@ALn' assignments is performed in the semantic pass.
+
+### Components and Molecule Finalization
+
+A dot separates components. The first atom of a component does not connect to the previous component unless a subsequent ring closure connects them, in which case the components merge into a single molecule. If no rings are open when a component ends, the molecule may be finalized immediately; if rings are open at a component boundary, finalization is deferred until those rings are closed. At end of input, open rings cause rejection.
+
+### Branch-Local Components
+
+Parentheses introduce a branch attached at the current node. Inside a branch, dots separate branch-local components. These components belong to the enclosing molecule. Ring indices inside a branch may connect to atoms outside the branch, and such connections are allowed. Upon leaving a branch, branch-local components that did not merge by bonding or ring closure remain as separate components within the same molecule unless later merged by ring closure.
+
+### Numeric and Bracket Fields
+
+In a bracket atom, the isotope field is a non-negative decimal integer; zero is permitted and does not alter the element identity. The parser does not validate chemical plausibility of isotopes. The chiral, hydrogen-count, charge, and class fields may appear in any order, at most once each. The charge field is one of '+', '-', '++', '--', or a '+' or '-' followed by one or two decimal digits; '+0' and '-0' are accepted as zero. In a bracket atom, 'H' without a digit sets hydrogen_count to one; 'H' followed by a single digit in 0-9 sets it to that value; 'H0' is accepted and yields zero. The class field consists of ':' followed by a non-negative integer; leading zeros are permitted; zero is allowed. If the class field is omitted, the class value defaults to 0.
+
+### Unknown Atom
+
+The '*' token denotes an unknown atom without element assignment and does not imply aromaticity. It is permitted anywhere a normal atom may appear, including in aromatic rings. No implicit hydrogens are inferred for '*' outside brackets. Inside a bracket atom, '*' may carry fields (isotope, chirality, hydrogen count, charge, class) subject to the same syntax as elements; unspecified class defaults to 0.
+
+### Numeric Limits and Overflow
+
+Numeric literals are base-10 and unsigned. Implementations must reject any numeric literal that overflows their supported domain. In UMOL, numeric fields are interpreted as unsigned 32-bit values; values outside the range 0 to 4,294,967,295 are rejected. Ring index ranges are further constrained to 0-9 for single-digit and 00-99 for percent forms (exactly two digits). The hydrogen count after 'H' is a single digit in 0-9.
+
+---
+
+## Part 3: Semantics
+
+This section defines validation rules applied after parsing to ensure chemical and topological validity. These constraints are checked on the parsed molecule structure, not during lexical analysis or grammar parsing.
+
+### Topology Constraints
+
+The following topological structures are syntactically valid but semantically invalid:
+
+- **Self-loops**: A ring closure connecting an atom to itself (e.g., 'C11') is rejected.
+- **Two-member cycles**: A ring closure creating a cycle of length two (e.g., 'C1C1') is rejected. Note that multiple bonds between atoms via separate ring closures (e.g., 'C12C12') are valid and create parallel edges.
+
+### Valence and Hydrogen Validation
+
+_To be specified. Validation of implicit hydrogen counts, valence limits, and charge compatibility._
+
+### Stereochemistry Validation
+
+_To be specified. Validation of chiral center neighbor counts, allene geometry, and cis/trans bond consistency._
+
+### Aromaticity Validation
+
+_To be specified. Validation of aromatic ring membership and Kekulization._
+
+---
+
+## Appendix
+
+### Error Policy and Diagnostics
+
+Any violation of the grammar or a semantic constraint results in rejection. Implementations SHOULD provide structured diagnostics with a stable code, severity, category, span, and message. The canonical diagnostics registry is maintained in `spec/opensmiles-errors.md`.
+
+### Conformance Criteria
+
+A conforming implementation accepts all valid examples in the accompanying test suite and rejects all invalid examples. It enforces the ring, directed-ring, bond, bracket, chirality, aromaticity, hydrogen, and numeric constraints described above.
+
+### Test Suite Reference
+
+The repository includes a machine-readable test suite organized into valid, edge, and invalid categories under `umol-models-graph/src/io/smiles/parser/tests/`. Implementations should use these examples to verify conformance.
+
+### Implementation Notes
+
+This implementation accepts '0' as a single-digit ring index. Percent ring indices must be exactly two digits; leading-zero forms are accepted as numeric equivalents (e.g., '1' == '%01', '0' == '%00'). When both endpoints are aromatic and a bond is implicit, the bond defaults to aromatic. Dots inside branches start branch-local components which may later merge via rings. The tokens '++' and '--' are recognized as charge values equal to +/-2.
+
+**Note:** Wildcard atoms (`*`) are defined in the grammar but are parsed by `parse_extended_smiles`, not `parse_smiles`. The basic parser rejects wildcards.
+
+### Invalid Forms
+
+**Syntactic errors** (rejected during parsing):
+- `%0` — invalid percent ring index (requires exactly two digits)
+- `C1CC` — unclosed ring index
+- `C/1CC\1` — conflicting directions on a ring bond
+- `C-` — trailing bond
+- `C==C` — consecutive bond tokens without an intervening atom or ring index
+
+**Semantic errors** (rejected during validation):
+- `C11` — self-loop ring closure
+- `C1C1` — two-member ring (but `C12C12` is valid: parallel edges)
