@@ -1,2 +1,0 @@
-# integration_tests_rpe_tests_transform_basic_4_rxns.smi:27
-[*:1][N,P,As,Sb:2](=[O,S,Se,Te:3])=[O,S,Se,Te:4]>>[*:1][N+,P+,As+,Sb+:2]([O-,S-,Se-,Te-:3])=[O,S,Se,Te:4]

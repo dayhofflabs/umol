@@ -30,6 +30,9 @@ bitflags! {
         // Default for extended parser
         const EXTENDED = Self::BASIC.bits() | Self::STRICT.bits();
 
+        // Lenient parser: Currently same as extended parser
+        const LENIENT = Self::EXTENDED.bits();
+
         // OpenSMILES parser: BASIC_OPENSMILES | WILDCARDS
         const OPENSMILES = Self::BASIC_OPENSMILES.bits() | Self::WILDCARDS.bits();
     }
@@ -52,18 +55,14 @@ impl fmt::Display for SmilesParseFlags {
             parts.push("EXTENDED");
         } else if *self == SmilesParseFlags::EXTENDED_MAX {
             parts.push("EXTENDED_MAX");
+        } else if *self == SmilesParseFlags::LENIENT {
+            parts.push("LENIENT");
         } else {
             if self.contains(SmilesParseFlags::WILDCARDS) {
                 parts.push("WILDCARDS");
             }
         }
         write!(f, "{}", parts.join(" | "))
-    }
-}
-
-impl SmilesParseFlags {
-    pub fn default() -> Self {
-        Self::BASIC_OPENSMILES
     }
 }
 
@@ -170,6 +169,9 @@ impl SmilesIoConfig {
     }
     pub fn extended_max() -> Self {
         Self::with_parse_flags(SmilesParseFlags::EXTENDED_MAX)
+    }
+    pub fn lenient() -> Self {
+        Self::with_parse_flags(SmilesParseFlags::LENIENT)
     }
     pub fn with_lint_flags(flags: SmilesLintFlags) -> Self {
         Self {

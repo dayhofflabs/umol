@@ -39,6 +39,10 @@ struct Args {
     /// Random seed for sampling
     #[arg(long, default_value = "0")]
     seed: u64,
+
+    /// Number of rows to check for column detection
+    #[arg(long, default_value = "5")]
+    probe_rows: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +52,140 @@ struct SmilesEntry {
     line_number: usize,
 }
 
-fn read_smiles_file(path: &Path) -> io::Result<Vec<SmilesEntry>> {
+/// Detected file format
+#[derive(Debug, Clone)]
+struct FileFormat {
+    delimiter: Option<char>,
+    smiles_column: usize,
+}
+
+impl Default for FileFormat {
+    fn default() -> Self {
+        Self {
+            delimiter: None,
+            smiles_column: 0,
+        }
+    }
+}
+
+/// Check if a string looks like valid SMILES using lenient parser
+fn is_likely_smiles(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let config = SmilesIoConfig::lenient();
+    parse_extended_smiles_bytes_with(s.as_bytes(), &config).is_ok()
+}
+
+/// Split a line by delimiter
+fn split_line(line: &str, delimiter: Option<char>) -> Vec<&str> {
+    match delimiter {
+        Some(d) => line.split(d).collect(),
+        None => vec![line],
+    }
+}
+
+/// Extract SMILES from a line, handling CXSMILES format.
+/// CXSMILES has format: `SMILES |...|` or `SMILES |...| other_data`
+/// Returns the SMILES/CXSMILES portion.
+fn extract_cxsmiles(line: &str) -> Option<&str> {
+    // Look for ` |` which indicates start of CXSMILES extension
+    if let Some(pipe_start) = line.find(" |") {
+        // Find the closing `|`
+        let extension_start = pipe_start + 2; // skip " |"
+        if let Some(rel_end) = line[extension_start..].find('|') {
+            let end = extension_start + rel_end + 1; // include closing |
+            return Some(&line[..end]);
+        }
+    }
+    None
+}
+
+/// Detect file format by probing first N non-empty, non-comment lines
+fn detect_file_format(path: &Path, probe_rows: usize) -> io::Result<FileFormat> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+
+    let mut probe_lines: Vec<String> = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let trimmed = line.trim();
+
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        // Skip header lines
+        if trimmed.to_lowercase().starts_with("smiles") {
+            continue;
+        }
+
+        probe_lines.push(trimmed.to_string());
+        if probe_lines.len() >= probe_rows {
+            break;
+        }
+    }
+
+    if probe_lines.is_empty() {
+        return Ok(FileFormat::default());
+    }
+
+    // Detect delimiter from first line (tab or comma only, not space - space is handled by CXSMILES extraction)
+    let delimiter = if probe_lines[0].contains('\t') {
+        Some('\t')
+    } else if probe_lines[0].contains(',') {
+        Some(',')
+    } else {
+        None
+    };
+
+    // Single column or no delimiter, SMILES is first
+    if delimiter.is_none() {
+        return Ok(FileFormat {
+            delimiter: None,
+            smiles_column: 0,
+        });
+    }
+
+    // Determine number of columns
+    let num_columns = split_line(&probe_lines[0], delimiter).len();
+
+    if num_columns == 1 {
+        return Ok(FileFormat {
+            delimiter,
+            smiles_column: 0,
+        });
+    }
+
+    // Try each column to find SMILES
+    let mut column_scores: Vec<usize> = vec![0; num_columns];
+
+    for line in &probe_lines {
+        let parts = split_line(line, delimiter);
+        for (col_idx, part) in parts.iter().enumerate() {
+            if col_idx < num_columns && is_likely_smiles(part.trim()) {
+                column_scores[col_idx] += 1;
+            }
+        }
+    }
+
+    // Pick column with highest score
+    let smiles_column = column_scores
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, &score)| score)
+        .map(|(idx, _)| idx)
+        .unwrap_or(0);
+
+    Ok(FileFormat {
+        delimiter,
+        smiles_column,
+    })
+}
+
+fn read_smiles_file(path: &Path, probe_rows: usize) -> io::Result<Vec<SmilesEntry>> {
+    let format = detect_file_format(path, probe_rows)?;
+
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut entries = Vec::new();
@@ -62,25 +199,27 @@ fn read_smiles_file(path: &Path) -> io::Result<Vec<SmilesEntry>> {
         let line = line?;
         let trimmed = line.trim();
 
-        if trimmed.is_empty() {
+        if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        if trimmed.starts_with('#') {
-            continue;
-        }
-        if trimmed.starts_with("SMILES")
-            || trimmed.starts_with("smiles")
-            || trimmed.starts_with("Smiles")
-        {
+        // Skip header lines
+        if trimmed.to_lowercase().starts_with("smiles") {
             continue;
         }
 
-        let smiles = if let Some(tab_pos) = trimmed.find('\t') {
-            &trimmed[..tab_pos]
-        } else if let Some(space_pos) = trimmed.find(' ') {
-            &trimmed[..space_pos]
+        // First try CXSMILES extraction (handles space before |...|)
+        let smiles = if let Some(cxsmiles) = extract_cxsmiles(trimmed) {
+            cxsmiles
+        } else if let Some(delimiter) = format.delimiter {
+            // Use column extraction for tab/comma delimited
+            let parts = split_line(trimmed, Some(delimiter));
+            parts
+                .get(format.smiles_column)
+                .map(|s| s.trim())
+                .unwrap_or(trimmed)
         } else {
-            trimmed
+            // No delimiter detected, take everything before first space (or whole line)
+            trimmed.split_once(' ').map(|(s, _)| s).unwrap_or(trimmed)
         };
 
         entries.push(SmilesEntry {
@@ -251,7 +390,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut source_entries: HashMap<Category, Vec<SmilesEntry>> = HashMap::new();
 
         for file_path in &smi_files {
-            let entries = match read_smiles_file(file_path) {
+            let entries = match read_smiles_file(file_path, args.probe_rows) {
                 Ok(e) => e,
                 Err(e) => {
                     eprintln!("Error reading {}: {}", file_path.display(), e);

@@ -1,0 +1,16 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: invalid
+category: invalid
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidWhitespace
+    message: Invalid whitespace at position 56
+opensmiles:
+  success: false
+  error:
+    error_type: InvalidWhitespace
+    message: Invalid whitespace at position 56

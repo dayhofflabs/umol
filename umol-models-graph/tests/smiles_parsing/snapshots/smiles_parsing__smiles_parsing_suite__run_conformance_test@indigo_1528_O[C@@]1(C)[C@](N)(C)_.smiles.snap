@@ -7,6 +7,6 @@ category: basic_opensmiles
 basic_opensmiles:
   success: true
   summary:
-    sum_formula: C38N6O10
+    sum_formula: C36N6O12
     atom_count: 54
     bond_count: 56

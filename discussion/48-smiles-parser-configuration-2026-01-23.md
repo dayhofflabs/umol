@@ -101,8 +101,9 @@ Parser is now a clean OpenSMILES baseline. All 11,483 tests pass.
 Source: RDKit docs, source code, test suite
 
 **Atomic:**
-- [ ] Extended aromatic atoms: `te`, `se` (tellurium, selenium)
-- [ ] Aromatic boron: `b`
+- [ ] Extended aromatic atoms: `te`, `se`, `as` (tellurium, selenium, arsenic)
+- [ ] Aromatic silicon: `si`
+- [ ] Tri-character atoms: `Uu<x>` (<x> = n, b, y, q, p, h, s, o)
 - [ ] Wildcard atom: `*`
 - [ ] Atom class: `[C:1]`
 - [ ] Isotope: `[13C]`
@@ -135,6 +136,7 @@ Source: RDKit docs, source code, test suite
 **Extensions (RDKit-specific):**
 - [ ] CXSMILES support (partial): coordinates, atom labels, radicals
 - [ ] Dative bonds: `->`, `<-`
+- [ ] Query bonds: `~`
 - [ ] Hypervalent atoms accepted
 - [ ] Sanitization can be disabled
 
@@ -255,7 +257,8 @@ SMARTS extends SMILES with query features. Will be implemented as separate parse
 - Atom class, isotope, charge, H count
 
 ### Group 2: Extended Atoms
-- Aromatic `se`, `te`, `b`
+- Aromatic `se`, `te`, `as`, `si`
+- Tri-character `Uu<x>` (<x> = n, b, y, q, p, h, s, o)
 - Wildcard `*`
 
 ### Group 3: Extended Stereo
@@ -341,18 +344,21 @@ Analyzed 473 failing SMILES. Breakdown by category:
 2. Fix double-escaped backslashes (`\\` should be `\`)
 3. Separate reaction SMILES/SMARTS into dedicated test sets
 
-### Phase 3: Extended SMILES Parser + Wildcards
-- [ ] Create `ExtendedMolecule` type (or verify existing structure suffices)
-- [ ] Implement `parse_extended_smiles_bytes_with` and wrappers
-- [ ] Add wildcard `*` support (standalone and `[*:n]` with atom class)
-- [ ] Ensure `From<Molecule> for ExtendedMolecule`
-- [ ] Update conformance suite to test extended parser
+### Phase 3: Extended SMILES Parser + Wildcards ✓ COMPLETE
 
-**Impact:** Fixes 32+ conformance failures (wildcard cases)
+- [x] `ExtendedMolecule` type exists and is compatible
+- [x] Implement `parse_extended_smiles_bytes_with` and all wrapper variants
+- [x] Add wildcard `*` support (standalone and `[*:n]` with atom class)
+- [x] `From<Molecule> for ExtendedMolecule` works
+- [x] Update conformance suite with three categories: basic_opensmiles, opensmiles, invalid
+- [x] Parser hierarchy enforcement: extended parser must be superset of basic parser
+- [x] Classifier and test suite both verify hierarchy invariant
+- [x] Sum formula for `ExtendedMolecule` now includes wildcards (appended as `*`, `*2`, etc.)
+
+**Result:** 32 SMILES now parse as `opensmiles` category (wildcards); 8979 as `basic_opensmiles`
 
 ### Phase 3b: Extended Aromatic Atoms
-- [ ] Add aromatic `se`, `te` (selenium, tellurium) support
-- [ ] Add aromatic `b` (boron) support
+- [ ] Add aromatic `se`, `te`, `as`, `si` (selenium, tellurium, arsenic, silicon) support
 - [ ] Feature gate: `EXTENDED_AROMATICS` (applies to both parsers)
 
 ### Phase 4: Extended Stereo (Group 3)
@@ -477,10 +483,231 @@ Indices refer to positions in the atom table IR (u32 or usize).
 
 ---
 
-## 11. References
+## 11. SMILES Extension Analysis
+
+This section catalogs SMILES extensions from various sources, classified by priority and parser category.
+
+### 11.1 Classification Criteria
+
+**Priority levels:**
+- **P1 (High)**: Required for interoperability with major tools/databases
+- **P2 (Medium)**: Useful for advanced use cases, common in research workflows
+- **P3 (Low)**: Rare, niche, or can be approximated by other means
+
+**Parser category:**
+- **Basic**: Extends `parse_smiles` → `Molecule`
+- **Extended**: Extends `parse_extended_smiles` → `ExtendedMolecule`
+- **Reaction**: For `parse_reaction_smiles` / `parse_reaction_smarts`
+- **SMARTS**: For `parse_smarts` → `ExtendedMolecule` (query)
+- **CXSMILES**: Requires extension block parsing
+
+### 11.2 Open-Source Implementation Features
+
+#### RDKit
+
+| Feature | Status | Priority | Category | Notes |
+|---------|--------|----------|----------|-------|
+| Wildcard `*` | ✓ Done | P1 | Extended | Standalone and `[*:n]` |
+| Aromatic `se`, `te`, `as` | Pending | P2 | Basic | Selenium, tellurium, arsenic |
+| Aromatic  `si` | Pending | P2 | Basic | Silicon |
+| Tri-character `Uun` | Pending | P2 | Basic | Obsolete symbols for Ds--Og |
+| Dative bonds `->` `<-` | Pending | P2 | Basic | Metal complexes |
+| Quadruple bond `$` | Done | P3 | Basic | Very rare (Mo-Mo) |
+| Any bond `~` | N/A | - | SMARTS | Query bond only; in SMILES only via CXSMILES `\|Z:\|` |
+| Extended stereo `@AL`, `@SP`, `@TB`, `@OH` | ✓ Parsed | P2 | Basic | Semantic validation pending |
+| CXSMILES extension block | Pending | P1 | CXSMILES | Coordinates, labels, radicals |
+| Enhanced stereo groups | Pending | P2 | CXSMILES | `^1:`, `^2:` |
+| Atom map numbers `:n` in reactions | Pending | P1 | Reaction | |
+| Hypervalent atoms | N/A | - | - | Semantic layer, not parser |
+| Sanitization disable | N/A | - | - | Semantic layer |
+
+#### OpenBabel
+
+| Feature | Status | Priority | Category | Notes |
+|---------|--------|----------|----------|-------|
+| External bond `&` | Skip | P3 | Extended | Fragment attachment points (`CC&1.C&1`) |
+| Radicals `[CH2.]` | Pending | P2 | Basic | Dot notation for unpaired e- |
+| Extended ring `%(nnn)` | Pending | P3 | Basic | 3+ digit ring indices |
+| Atom typing | N/A | - | - | Semantic layer |
+
+**External bond `&`:** OpenBabel-specific syntax for combinatorial chemistry fragments.
+`CC&1.C&1` connects two fragments at `&1` positions. Creates dummy atoms for unmatched
+attachment points. Low priority - no other toolkit supports this syntax.
+
+#### CDK/Beam
+
+| Feature | Status | Priority | Category | Notes |
+|---------|--------|----------|----------|-------|
+| OpenSMILES-compliant | ✓ Baseline | P1 | Basic | Via Beam library |
+| CXSMILES extensions | Pending | P1 | CXSMILES | Full support (see SmiFlavor) |
+| Extended stereo | Pending | P2 | Basic | SP, TB, OH in SmiFlavor |
+| Explicit H preservation | N/A | - | - | Already preserved in IR |
+
+**SmiFlavor.java** (output flags, implies parsing support):
+- `StereoSquarePlanar`, `StereoTrigonalBipyramidal`, `StereoOctahedral` - extended stereo
+- `CxAtomLabel`, `CxAtomValue`, `CxRadical`, `CxMulticenter`, `CxPolymer` - CXSMILES
+- `CxEnhancedStereo`, `CxLigandOrder`, `CxDataSgroups` - advanced CXSMILES
+- `InChILabelling` - Universal SMILES (with caveats about canonicalization)
+
+#### Indigo
+
+| Feature | Status | Priority | Category | Notes |
+|---------|--------|----------|----------|-------|
+| CXSMILES parsing | Pending | P1 | CXSMILES | Full `\|...\|` block support |
+| Query SMILES/SMARTS | Pending | P2 | SMARTS | Separate `loadSMARTS()` method |
+| Reaction support | Pending | P1 | Reaction | `loadMolecule()` handles reactions |
+| R-group notation | Pending | P2 | Extended | `[R1]`, `[R2]` |
+| Polymer notation | Pending | P2 | CXSMILES | `{...}n` curly brace syntax |
+
+**Note:** `smiles_loader_parsers.cpp` primarily parses CXSMILES extension blocks, not
+Indigo-specific extensions. Features include: `w:` (wiggly stereo), `a:` (absolute),
+`o1:/&1:` (OR/AND groups), `^n:` (radicals), `$...$` (pseudoatoms), `c:` (coords),
+`Sg:` (S-groups).
+
+### 11.3 Daylight/ChemAxon Documentation
+
+#### Daylight (Original Spec)
+
+| Feature | Status | Priority | Category | Notes |
+|---------|--------|----------|----------|-------|
+| Core SMILES | ✓ Done | P1 | Basic | OpenSMILES baseline |
+| Vector binding `&&` | Skip | P3 | - | Obsolete |
+| Unique SMILES | N/A | - | - | Canonicalization, not parsing |
+
+#### ChemAxon (CXSMILES)
+
+| Feature | Status | Priority | Category | Notes |
+|---------|--------|----------|----------|-------|
+| Extension block `\|...\|` | Pending | P1 | CXSMILES | Primary container |
+| 2D/3D coordinates `c:` | Pending | P1 | CXSMILES | Essential for structure |
+| Atom labels `$name$` | Pending | P2 | CXSMILES | Display names |
+| Radicals `^1:`, `^2:` | Pending | P2 | CXSMILES | Radical notation |
+| Enhanced stereo `&1:`, `o1:` | Pending | P2 | CXSMILES | AND/OR groups |
+| S-groups `Sg:` | Pending | P2 | CXSMILES | Polymers, abbreviations |
+| Atom properties `atomProp:` | Pending | P3 | CXSMILES | Generic properties |
+| Ring bond count `rb:` | Skip | P3 | CXSMILES | Query feature |
+| Substitution count `s:` | Skip | P3 | CXSMILES | Query feature |
+| Unsaturation `u:` | Skip | P3 | CXSMILES | Query feature |
+| Atom ordering `o:` | Pending | P3 | CXSMILES | Canonical output |
+| Link nodes `LN:` | Pending | P3 | CXSMILES | Variable attachments |
+| Data S-groups `SgD:` | Pending | P3 | CXSMILES | Embedded data |
+| Hydrogen bonding `H:` | Skip | P3 | CXSMILES | Query feature |
+| Wedge bond info `w:` | Pending | P3 | CXSMILES | Stereo display |
+| Multicenter bonds `m:` | Pending | P3 | CXSMILES | Organometallics |
+
+### 11.4 Uncommon but Interesting Variants
+
+#### DeepSMILES
+
+| Feature | Assessment | Priority | Notes |
+|---------|------------|----------|-------|
+| Ring closure pairs | Interesting | P3 | Removes ambiguity in ring closures |
+| Branch depth encoding | Interesting | P3 | `))` instead of `))` with matching `(` |
+| ML-friendly design | - | - | Designed for sequence models |
+
+**Verdict:** Potentially useful as alternative *output* format for ML applications. Not priority for input parsing since data sources don't use it.
+
+#### SELFIES
+
+| Feature | Assessment | Priority | Notes |
+|---------|------------|----------|-------|
+| 100% syntactically valid | Claimed | - | But semantically invalid molecules common |
+| Token-based design | - | - | For RNN/Transformer input |
+
+**Verdict:** Skip. The "100% valid" claim is misleading - produces syntactically valid but chemically nonsensical structures. No significant data sources use it.
+
+#### Jmol Extensions
+
+| Feature | Assessment | Priority | Notes |
+|---------|------------|----------|-------|
+| 3D coordinate embedding | Interesting | P3 | Inline coordinates |
+| Animation directives | Skip | - | Visualization-specific |
+
+**Verdict:** Low priority. Jmol's SMILES extensions are mostly for visualization, not structure interchange.
+
+#### TwistSMILES / CanonSMILES
+
+| Feature | Assessment | Priority | Notes |
+|---------|------------|----------|-------|
+| Canonical forms | - | - | Canonicalization, not parsing |
+
+**Verdict:** N/A for parser. These are about canonical output, not input parsing.
+
+#### Extended Connectivity Fingerprints (ECFP) in SMILES
+
+Some tools embed ECFP-like atom environments in SMILES-like notation. Not standard; skip.
+
+### 11.5 Commercial Tool Outputs
+
+#### ChemDraw
+
+| Feature | Observed | Priority | Notes |
+|---------|----------|----------|-------|
+| Standard SMILES | Yes | P1 | Usually OpenSMILES-compatible |
+| Abbreviated groups | Sometimes | P2 | `Ph`, `Me`, `Et` as pseudoatoms |
+| Stereochemistry | Yes | P1 | Standard notation |
+
+#### ChemDoodle
+
+| Feature | Observed | Priority | Notes |
+|---------|----------|----------|-------|
+| Standard SMILES | Yes | P1 | OpenSMILES-compatible |
+| 3D export | Optional | P2 | Via CXSMILES or mol2 |
+
+#### Marvin/ChemAxon Tools
+
+| Feature | Observed | Priority | Notes |
+|---------|----------|----------|-------|
+| CXSMILES | Default | P1 | Full CXSMILES support |
+
+### 11.6 Prioritized Feature List
+
+**P1 (High Priority) - Required for interoperability:**
+
+1. ✓ Wildcard atoms `*` (Done)
+2. CXSMILES extension block parsing `|...|`
+3. CXSMILES coordinates `c:x,y,z;...`
+4. Reaction SMILES `>>` splitting
+5. Atom mapping in reactions `[C:1]`
+
+**P2 (Medium Priority) - Common advanced features:**
+
+1. Aromatic `se`, `te`, `b`
+2. Dative bonds `->` `<-`
+3. Radicals (OpenBabel dot notation and CXSMILES `^n:`)
+4. CXSMILES atom labels `$name$`
+5. CXSMILES enhanced stereo groups
+6. CXSMILES S-groups (basic: abbreviations, polymers)
+7. SMARTS query primitives
+8. R-group notation `[R1]`
+
+**P3 (Low Priority) - Rare or niche:**
+
+1. Quadruple bonds `$`
+2. Extended ring closures `%(nnn)`
+3. CXSMILES link nodes, data S-groups
+4. DeepSMILES (as output format only)
+5. Multicenter bonds
+
+**Skip (Not implementing):**
+
+1. SELFIES (misleading validity claims)
+2. Jmol animation directives
+3. CXSMILES query-only features (`rb:`, `s:`, `u:`)
+4. Daylight vector binding `&&`
+5. OpenBabel external bonds `&` (no other toolkit supports)
+6. Any bond `~` in SMILES (SMARTS only; CXSMILES `|Z:|` is different)
+
+---
+
+## 12. References
 
 - OpenSMILES spec: http://opensmiles.org/
-- Daylight theory manual (archived)
-- ChemAxon CXSMILES docs
-- RDKit SMILES parsing docs
+- Daylight theory manual (archived): http://www.daylight.com/dayhtml/doc/theory/
+- ChemAxon CXSMILES docs: https://docs.chemaxon.com/display/docs/chemaxon-extended-smiles-and-smarts-cxsmiles-and-cxsmarts.md
+- RDKit SMILES parsing docs: https://www.rdkit.org/docs/RDKit_Book.html
+- OpenBabel SMILES: http://openbabel.org/wiki/SMILES
+- CDK/Beam: https://github.com/cdk/cdk (Beam integrated)
+- Indigo: https://lifescience.opensource.epam.com/indigo/
+- DeepSMILES paper: https://doi.org/10.26434/chemrxiv.7097960
 - Depth-First blog (ChemCore comparisons)
