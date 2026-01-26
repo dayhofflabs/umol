@@ -15,7 +15,9 @@ use self::utils::{
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
 use crate::span::Span;
-use crate::table_ir::{BondDonation, BondWedge, BondOrder, Molecule, WildcardAtom};
+use crate::table_ir::{
+    BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, WildcardAtom,
+};
 
 /// Parse SMILES string with strict OpenSMILES rules
 pub fn parse_smiles(input: &str) -> Result<Molecule, ParseError> {
@@ -69,6 +71,7 @@ pub fn parse_smiles_bytes_with(
 }
 
 fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
+    let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
@@ -221,7 +224,9 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
             Ok(None) => {}
         }
         // percent branch is handled by parse_ring_index above
-        if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') {
+        if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\')
+            || (extended_bonds && matches!(b0, b'~' | b'<'))
+        {
             if pending_bond.is_some() {
                 return Err(ParseError::ConsecutiveBonds { pos: i });
             }
@@ -234,9 +239,16 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
                 }
                 return Err(ParseError::LeadingBond { pos: i });
             }
-            let (order, bond_dir) = parse_bond(b0);
-            pending_bond = Some((order, bond_dir, None, i));
-            i += 1;
+            // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
+            if extended_bonds {
+                let (order, wedge, donation, consumed) = parse_extended_bond(input, i);
+                pending_bond = Some((order, wedge, donation, i));
+                i += consumed;
+            } else {
+                let (order, bond_dir) = parse_bond(b0);
+                pending_bond = Some((order, bond_dir, None, i));
+                i += 1;
+            }
             continue;
         }
         if b0 == b'[' {
@@ -497,8 +509,6 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
     Ok(mol)
 }
 
-use crate::table_ir::ExtendedMolecule;
-
 /// Parse extended SMILES string with strict OpenSMILES rules
 pub fn parse_extended_smiles(input: &str) -> Result<ExtendedMolecule, ParseError> {
     parse_extended_smiles_bytes(input.as_bytes())
@@ -552,6 +562,7 @@ fn parse_extended_smiles_inner(
     input: &[u8],
     flags: SmilesParseFlags,
 ) -> Result<ExtendedMolecule, ParseError> {
+    let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
     let mut builder = ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
@@ -701,9 +712,9 @@ fn parse_extended_smiles_inner(
             Ok(None) => {}
         }
         // Extended bonds: also match ~ and < (for <- dative)
-        let is_extended_bond_char =
-            flags.contains(SmilesParseFlags::EXTENDED_BONDS) && matches!(b0, b'~' | b'<');
-        if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') || is_extended_bond_char {
+        if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\')
+            || (extended_bonds && matches!(b0, b'~' | b'<'))
+        {
             if pending_bond.is_some() {
                 return Err(ParseError::ConsecutiveBonds { pos: i });
             }
@@ -717,7 +728,7 @@ fn parse_extended_smiles_inner(
                 return Err(ParseError::LeadingBond { pos: i });
             }
             // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
-            if flags.contains(SmilesParseFlags::EXTENDED_BONDS) {
+            if extended_bonds {
                 let (order, wedge, donation, consumed) = parse_extended_bond(input, i);
                 pending_bond = Some((order, wedge, donation, i));
                 i += consumed;

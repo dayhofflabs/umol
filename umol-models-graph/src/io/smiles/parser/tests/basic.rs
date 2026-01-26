@@ -7,7 +7,7 @@ use umol_data::Element;
 
 use super::super::*;
 use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
-use crate::table_ir::{BondWedge, BondOrder, Chirality};
+use crate::table_ir::{BondOrder, BondWedge, Chirality};
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -340,10 +340,45 @@ fn bonds(#[case] input: &[u8], #[case] expected: Molecule) {
 #[case::ring_bond_dir_conflict_2(b"C\\1CC/1", ParseError::MismatchedRingBondDirs { pos: 6, open_pos: 2 })]
 #[case::ring_bond_dir_conflict_3(b"C/%12CC\\%12", ParseError::MismatchedRingBondDirs { pos: 8, open_pos: 2 })]
 #[case::ring_bond_dir_conflict_4(b"C\\%12CC/%12", ParseError::MismatchedRingBondDirs { pos: 8, open_pos: 2 })]
+#[case::extended_bonds_1(b"C~C", ParseError::InvalidToken { pos: 1 })]
+#[case::extended_bonds_2(b"C->N", ParseError::InvalidToken { pos: 2 })]
+#[case::extended_bonds_3(b"C<-N", ParseError::InvalidToken { pos: 1 })]
+#[case::extended_bonds_consecutive(b"C~~C", ParseError::InvalidToken { pos: 1 })]
 fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-    let err = parse_smiles_bytes(input);
-    assert!(err.is_err(), "{:?} should have failed", input);
-    let err = err.unwrap_err();
+    let res = parse_smiles_bytes(input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_err(), "{:?} should have failed", input_str);
+    let err = res.unwrap_err();
+    assert_eq!(err, expected);
+}
+
+#[rstest]
+#[case::any_bond(b"C~C", build_from_graph("C@0 C@2 | 0-1~@1"))]
+#[case::dative_accepting(b"C<-N", build_from_graph("C@0 N@3 | 0-1<-@1"))]
+#[case::dative_donating(b"C->N", build_from_graph("C@0 N@3 | 0-1->@1"))]
+fn bonds_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
+    let res = parse_smiles_bytes_with(
+        input,
+        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT),
+    );
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
+}
+
+#[rstest]
+#[case::extended_bonds_consecutive_1(b"C~~C", ParseError::ConsecutiveBonds { pos: 2 })]
+#[case::extended_bonds_consecutive_2(b"C->->C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::extended_bonds_consecutive_3(b"C~->C", ParseError::ConsecutiveBonds { pos: 2 })]
+#[case::extended_bonds_consecutive_4(b"C<-~C", ParseError::ConsecutiveBonds { pos: 3 })]
+fn bonds_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let res = parse_smiles_bytes_with(
+        input,
+        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT),
+    );
+    let input_str = input.to_str_lossy();
+    assert!(res.is_err(), "{:?} should have failed", input_str);
+    let err = res.unwrap_err();
     assert_eq!(err, expected);
 }
 

@@ -7,7 +7,7 @@ use umol_data::Element;
 
 use super::super::builder::{AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondWedge, BondOrder, Chirality, ExtendedMolecule, Molecule, Ring, WildcardAtom};
+use crate::table_ir::{AtomSymbol, BondDonation, BondWedge, BondOrder, Chirality, ExtendedMolecule, Molecule, Ring, WildcardAtom};
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
 pub fn get_atom_neighbors(mol: &Molecule, atom_idx: u32) -> Vec<u32> {
@@ -138,17 +138,30 @@ fn parse_bond_token(
     usize,
     BondOrder,
     Option<BondWedge>,
+    Option<BondDonation>,
     Option<u32>,
     Option<u32>,
 ) {
     // Token forms:
-    //   i-j
-    //   i-j:<spec> where spec in -,=,#,$,:,/,\
+    //   i-j                     (single bond)
+    //   i-j:<spec>              (with explicit spec)
+    //   i-j<spec>               (spec without colon for ~, ->, <-)
     // Optional '@<start>' or '@<start>..<end>' sets span positions.
-    let (core, pos_opt) = tok
-        .split_once('@')
-        .map_or((tok, None), |(c, p)| (c, Some(p)));
-    let (span_start, span_end) = pos_opt.map_or((None, None), |p| {
+    // Use regex to extract: <idx>-<idx><rest>
+    let re = Regex::new(r"^(\d+)-(\d+)(.*)$").unwrap();
+    let caps = re.captures(tok).expect("edge must match i-j pattern");
+    let i: usize = caps[1].parse().expect("left index");
+    let j: usize = caps[2].parse().expect("right index");
+    let rest = &caps[3];
+
+    // Parse rest: optional ':'<spec> or just <spec>, then optional @<span>
+    let (spec_part, span_part) = if let Some(at_pos) = rest.find('@') {
+        (&rest[..at_pos], Some(&rest[at_pos + 1..]))
+    } else {
+        (rest, None)
+    };
+
+    let (span_start, span_end) = span_part.map_or((None, None), |p| {
         if let Some((s, e)) = p.split_once("..") {
             let ss = s.parse::<u32>().expect("valid u32 span");
             let ee = e.parse::<u32>().expect("valid u32 span");
@@ -157,22 +170,32 @@ fn parse_bond_token(
             (Some(p.parse::<u32>().expect("valid u32 span")), None)
         }
     });
-    let (ends, spec) = core.split_once(':').unwrap_or((core, "-"));
-    let (lhs, rhs) = ends.split_once('-').expect("edge must be i-j");
-    let i = lhs.parse::<usize>().expect("left index");
-    let j = rhs.parse::<usize>().expect("right index");
-    let spec_norm = if spec.is_empty() { ":" } else { spec };
-    let (order, dir) = match spec_norm {
-        "-" => (BondOrder::Single, None),
-        "=" => (BondOrder::Double, None),
-        "#" => (BondOrder::Triple, None),
-        "$" => (BondOrder::Quadruple, None),
-        ":" => (BondOrder::Aromatic, None),
-        "/" => (BondOrder::Single, Some(BondWedge::Up)),
-        "\\" => (BondOrder::Single, Some(BondWedge::Down)),
+
+    // Parse spec: may have leading ':' as separator, or ':' alone means aromatic
+    let spec_norm = if spec_part.is_empty() {
+        "-" // default to single bond
+    } else if spec_part == ":" {
+        ":" // just ':' means aromatic
+    } else if let Some(s) = spec_part.strip_prefix(':') {
+        if s.is_empty() { ":" } else { s }
+    } else {
+        spec_part // no colon prefix
+    };
+
+    let (order, dir, donation) = match spec_norm {
+        "-" => (BondOrder::Single, None, None),
+        "=" => (BondOrder::Double, None, None),
+        "#" => (BondOrder::Triple, None, None),
+        "$" => (BondOrder::Quadruple, None, None),
+        ":" => (BondOrder::Aromatic, None, None),
+        "/" => (BondOrder::Single, Some(BondWedge::Up), None),
+        "\\" => (BondOrder::Single, Some(BondWedge::Down), None),
+        "~" => (BondOrder::Any, None, None),
+        "->" => (BondOrder::Single, None, Some(BondDonation::Donating)),
+        "<-" => (BondOrder::Single, None, Some(BondDonation::Accepting)),
         other => panic!("unknown bond spec: {}", other),
     };
-    (i, j, order, dir, span_start, span_end)
+    (i, j, order, dir, donation, span_start, span_end)
 }
 
 pub fn build_from_graph(spec: &str) -> Molecule {
@@ -236,7 +259,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         ids.push(id);
     }
     for etok in edges {
-        let (i, j, order, dir, span_start, mut span_end) = parse_bond_token(etok);
+        let (i, j, order, dir, donation, span_start, mut span_end) = parse_bond_token(etok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
@@ -248,7 +271,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             BondData {
                 order,
                 wedge: dir,
-                donation: None,
+                donation,
                 span: Span::from_bytes_opt(span_start, span_end),
             },
         );
@@ -460,7 +483,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
         ids.push(id);
     }
     for etok in edges {
-        let (i, j, order, dir, span_start, mut span_end) = parse_bond_token(etok);
+        let (i, j, order, dir, donation, span_start, mut span_end) = parse_bond_token(etok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
@@ -472,7 +495,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
             BondData {
                 order,
                 wedge: dir,
-                donation: None,
+                donation,
                 span: Span::from_bytes_opt(span_start, span_end),
             },
         );
