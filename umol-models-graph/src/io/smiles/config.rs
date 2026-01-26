@@ -11,12 +11,13 @@ bitflags! {
         // Parser capabilities
         const WILDCARDS = 1;               // *
         const EXTENDED_AROMATICS = 1 << 1; // se, te, as, si
+        const EXTENDED_BONDS = 1 << 2;     // ->, <-, ~
 
         // Presets
         const BASIC_OPENSMILES = 0;
 
         // Maximum capabilities for basic parser
-        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits();
+        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits();
@@ -32,7 +33,7 @@ bitflags! {
         const EXTENDED = Self::BASIC.bits() | Self::STRICT.bits();
 
         // Lenient parser: Currently same as extended parser
-        const LENIENT = Self::EXTENDED.bits() | Self::EXTENDED_AROMATICS.bits();
+        const LENIENT = Self::EXTENDED.bits() | Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits();
 
         // OpenSMILES parser: BASIC_OPENSMILES | WILDCARDS
         const OPENSMILES = Self::BASIC_OPENSMILES.bits() | Self::WILDCARDS.bits();

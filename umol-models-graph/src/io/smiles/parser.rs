@@ -8,13 +8,14 @@ mod utils;
 use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use self::utils::{
     attach_atom, attach_atom_extended, invalid_ring_context, parse_bond, parse_bracket,
-    parse_bracket_extended, parse_organic_aliphatic_element, parse_organic_aromatic_element,
-    parse_ring_index, process_ring_closure, process_ring_closure_extended, Frame, OpenRing,
+    parse_bracket_extended, parse_extended_bond, parse_organic_aliphatic_element,
+    parse_organic_aromatic_element, parse_ring_index, process_ring_closure,
+    process_ring_closure_extended, Frame, OpenRing,
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
 use crate::span::Span;
-use crate::table_ir::{BondDirection, BondOrder, Molecule, WildcardAtom};
+use crate::table_ir::{BondDonation, BondWedge, BondOrder, Molecule, WildcardAtom};
 
 /// Parse SMILES string with strict OpenSMILES rules
 pub fn parse_smiles(input: &str) -> Result<Molecule, ParseError> {
@@ -74,7 +75,8 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
     let mut last_atom_idx: Option<u32> = None;
-    let mut pending_bond: Option<(BondOrder, Option<BondDirection>, usize)> = None;
+    let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
+        None;
     let mut last_aromatic: bool = false;
     let mut just_closed_group: bool = false;
 
@@ -90,7 +92,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
             just_closed_group = false;
         }
         if b0 == b'(' {
-            if let Some((_, _, pos)) = pending_bond {
+            if let Some((_, _, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos });
             }
             if just_closed_group {
@@ -117,7 +119,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
             continue;
         }
         if b0 == b')' {
-            if let Some((_, _, pos)) = pending_bond {
+            if let Some((_, _, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos });
             }
             let Some(frame) = branch_stack.pop() else {
@@ -160,7 +162,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
             continue;
         }
         if b0 == b'.' {
-            if let Some((_, _, pos)) = pending_bond {
+            if let Some((_, _, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos });
             }
             if i == 0 {
@@ -200,7 +202,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
                     return Err(ParseError::LeadingRing { pos: 0 });
                 }
                 let bond = pending_bond.take();
-                let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
+                let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _, _)| (Some(o), d));
                 process_ring_closure(
                     &mut ring_table,
                     &mut builder,
@@ -233,7 +235,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
                 return Err(ParseError::LeadingBond { pos: i });
             }
             let (order, bond_dir) = parse_bond(b0);
-            pending_bond = Some((order, bond_dir, i));
+            pending_bond = Some((order, bond_dir, None, i));
             i += 1;
             continue;
         }
@@ -467,7 +469,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
         return Err(ParseError::InvalidToken { pos: i });
     }
 
-    if let Some((_, _, pos)) = pending_bond {
+    if let Some((_, _, _, pos)) = pending_bond {
         return Err(ParseError::TrailingBond { pos });
     }
     if !branch_stack.is_empty() {
@@ -556,7 +558,8 @@ fn parse_extended_smiles_inner(
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
     let mut last_atom_idx: Option<u32> = None;
-    let mut pending_bond: Option<(BondOrder, Option<BondDirection>, usize)> = None;
+    let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
+        None;
     let mut last_aromatic: bool = false;
     let mut just_closed_group: bool = false;
 
@@ -571,7 +574,7 @@ fn parse_extended_smiles_inner(
             just_closed_group = false;
         }
         if b0 == b'(' {
-            if let Some((_, _, pos)) = pending_bond {
+            if let Some((_, _, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos });
             }
             if just_closed_group {
@@ -598,7 +601,7 @@ fn parse_extended_smiles_inner(
             continue;
         }
         if b0 == b')' {
-            if let Some((_, _, pos)) = pending_bond {
+            if let Some((_, _, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos });
             }
             let Some(frame) = branch_stack.pop() else {
@@ -641,7 +644,7 @@ fn parse_extended_smiles_inner(
             continue;
         }
         if b0 == b'.' {
-            if let Some((_, _, pos)) = pending_bond {
+            if let Some((_, _, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos });
             }
             if i == 0 {
@@ -679,7 +682,7 @@ fn parse_extended_smiles_inner(
                     return Err(ParseError::LeadingRing { pos: 0 });
                 }
                 let bond = pending_bond.take();
-                let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _)| (Some(o), d));
+                let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _, _)| (Some(o), d));
                 process_ring_closure_extended(
                     &mut ring_table,
                     &mut builder,
@@ -697,7 +700,10 @@ fn parse_extended_smiles_inner(
             Err(e) => return Err(e),
             Ok(None) => {}
         }
-        if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') {
+        // Extended bonds: also match ~ and < (for <- dative)
+        let is_extended_bond_char =
+            flags.contains(SmilesParseFlags::EXTENDED_BONDS) && matches!(b0, b'~' | b'<');
+        if matches!(b0, b'-' | b'=' | b'#' | b'$' | b':' | b'/' | b'\\') || is_extended_bond_char {
             if pending_bond.is_some() {
                 return Err(ParseError::ConsecutiveBonds { pos: i });
             }
@@ -710,9 +716,16 @@ fn parse_extended_smiles_inner(
                 }
                 return Err(ParseError::LeadingBond { pos: i });
             }
-            let (order, bond_dir) = parse_bond(b0);
-            pending_bond = Some((order, bond_dir, i));
-            i += 1;
+            // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
+            if flags.contains(SmilesParseFlags::EXTENDED_BONDS) {
+                let (order, wedge, donation, consumed) = parse_extended_bond(input, i);
+                pending_bond = Some((order, wedge, donation, i));
+                i += consumed;
+            } else {
+                let (order, bond_dir) = parse_bond(b0);
+                pending_bond = Some((order, bond_dir, None, i));
+                i += 1;
+            }
             continue;
         }
         if b0 == b'[' {
@@ -960,7 +973,7 @@ fn parse_extended_smiles_inner(
         return Err(ParseError::InvalidToken { pos: i });
     }
 
-    if let Some((_, _, pos)) = pending_bond {
+    if let Some((_, _, _, pos)) = pending_bond {
         return Err(ParseError::TrailingBond { pos });
     }
     if !branch_stack.is_empty() {

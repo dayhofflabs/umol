@@ -154,18 +154,11 @@ pub fn extended_ctab_block<'inp>(
 /// Build Molecule
 fn build_molecule(
     atoms: Vec<Atom>,
-    bonds: Vec<(usize, usize, Bond)>,
+    bonds: Vec<Bond>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
     flags: CtabParseFlags,
 ) -> Result<Molecule, ParseError> {
-    let bonds: Vec<Bond> = bonds
-        .into_iter()
-        .map(|(idx1, idx2, mut bond)| {
-            bond.set_atoms(idx1 as u32, idx2 as u32);
-            bond
-        })
-        .collect();
 
     let mut molecule = Molecule {
         atoms,
@@ -189,18 +182,11 @@ fn build_molecule(
 /// Build extended molecule
 fn build_extended_molecule(
     atoms: Vec<ExtendedAtom>,
-    bonds: Vec<(usize, usize, ExtendedBond)>,
+    bonds: Vec<ExtendedBond>,
     positions: Option<Vec<Point3D>>,
     properties: Vec<PropertyEntries>,
     flags: CtabParseFlags,
 ) -> Result<ExtendedMolecule, ParseError> {
-    let bonds: Vec<ExtendedBond> = bonds
-        .into_iter()
-        .map(|(idx1, idx2, mut bond)| {
-            bond.set_atoms(idx1 as u32, idx2 as u32);
-            bond
-        })
-        .collect();
 
     let mut molecule = ExtendedMolecule {
         atoms,

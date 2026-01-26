@@ -6,14 +6,14 @@ use rstest::*;
 
 use super::*;
 use crate::io::ctfile::config::CtabParseFlags;
-use crate::table_ir::{BondDirection, BondOrder, BondReactingCenter, BondStereo, BondTopology};
+use crate::table_ir::{BondWedge, BondOrder, BondReactingCenter, BondStereo, BondTopology};
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondDirection::Down))]
+#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondWedge::Down))]
 #[case::len21(b"  2  5  2  1  0  0  0\n", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case::len18(b"  1  2  1  0  0  0\n", 0, 1, BondOrder::Single, None, None)]
-#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
+#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondWedge::Down))]
 #[case::len12(b"  1  3  2  1\n", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case::len10(b"  1  2  1 \n", 0, 1, BondOrder::Single, None, None)]
 #[case::len9(b"  1  2  1\n", 0, 1, BondOrder::Single, None, None)]
@@ -23,7 +23,7 @@ fn test_bond_block(
     #[case] atom2: usize,
     #[case] order: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] direction: Option<BondDirection>,
+    #[case] direction: Option<BondWedge>,
 ) {
     let flags = CtabParseFlags::BASIC;
     let result = bond_block(1, 0, flags).parse(input);
@@ -32,12 +32,12 @@ fn test_bond_block(
     let (remaining, (bonds, _)) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should consume all input", input_str);
     assert_eq!(bonds.len(), 1);
-    let (a1, a2, bond) = &bonds[0];
-    assert_eq!(*a1, atom1, "{:?} atom1", input_str);
-    assert_eq!(*a2, atom2, "{:?} atom2", input_str);
+    let bond = &bonds[0];
+    assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} atom1", input_str);
+    assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} atom2", input_str);
     assert_eq!(bond.order, order, "{:?} order", input_str);
     assert_eq!(bond.stereo, stereo, "{:?} stereo", input_str);
-    assert_eq!(bond.direction, direction, "{:?} direction", input_str);
+    assert_eq!(bond.wedge, direction, "{:?} direction", input_str);
 }
 
 #[rustfmt::skip]
@@ -61,10 +61,10 @@ fn test_bond_block_invalid(#[case] input: &[u8]) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondDirection::Down))]
+#[case::len22_trailing_whitespace(b" 12  2  1  6  0  0  0 \n", 11, 1, BondOrder::Single, None, Some(BondWedge::Down))]
 #[case::len21(b"  2  5  2  1  0  0  0\n", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case::len18(b"  1  2  1  0  0  0\n", 0, 1, BondOrder::Single, None, None)]
-#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondDirection::Down))]
+#[case::len13(b"  1  3  1  6\n", 0, 2, BondOrder::Single, None, Some(BondWedge::Down))]
 #[case::len12(b"  1  3  2  1\n", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case::len10(b"  1  2  1 \n", 0, 1, BondOrder::Single, None, None)]
 #[case::len9(b"  1  2  1\n", 0, 1, BondOrder::Single, None, None)]
@@ -74,7 +74,7 @@ fn test_extended_bond_block(
     #[case] atom2: usize,
     #[case] order: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] direction: Option<BondDirection>,
+    #[case] direction: Option<BondWedge>,
 ) {
     let flags = CtabParseFlags::EXTENDED;
     let result = extended_bond_block(1, 0, flags).parse(input);
@@ -83,12 +83,12 @@ fn test_extended_bond_block(
     let (remaining, (bonds, _)) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should consume all input", input_str);
     assert_eq!(bonds.len(), 1);
-    let (a1, a2, bond) = &bonds[0];
-    assert_eq!(*a1, atom1, "{:?} atom1", input_str);
-    assert_eq!(*a2, atom2, "{:?} atom2", input_str);
+    let bond = &bonds[0];
+    assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} atom1", input_str);
+    assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} atom2", input_str);
     assert_eq!(bond.order, order, "{:?} order", input_str);
     assert_eq!(bond.stereo, stereo, "{:?} stereo", input_str);
-    assert_eq!(bond.direction, direction, "{:?} direction", input_str);
+    assert_eq!(bond.wedge, direction, "{:?} direction", input_str);
 }
 
 #[rustfmt::skip]
@@ -111,7 +111,7 @@ fn test_extended_bond_block_invalid(#[case] input: &[u8]) {
 #[rustfmt::skip]
 #[rstest]
 #[case::len21_single(b"  2  5  1  0  0  0  0", 1, 4, BondOrder::Single, None, None)]
-#[case::len21_single_wedge(b"  1  2  1  1  0  0  0", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
+#[case::len21_single_wedge(b"  1  2  1  1  0  0  0", 0, 1, BondOrder::Single, None, Some(BondWedge::Up))]
 #[case::len21_double(b"  2  5  2  0  0  0  0", 1, 4, BondOrder::Double, None, None)]
 #[case::len21_double_cis(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None)]
 #[case::len21_double_trans(b"  2  5  2  6  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Trans), None)]
@@ -125,36 +125,36 @@ fn test_extended_bond_block_invalid(#[case] input: &[u8]) {
 #[case::len18_blank(b"  1  2  1  0  0   ", 0, 1, BondOrder::Single, None, None)]
 #[case::len15_blank(b"  1  2  1  0   ", 0, 1, BondOrder::Single, None, None)]
 #[case::len15_zero(b"  1  2  1  0  0", 0, 1, BondOrder::Single, None, None)]
-#[case::len12_single_wedge(b"  1  3  1  1", 0, 2, BondOrder::Single, None, Some(BondDirection::Up))]
+#[case::len12_single_wedge(b"  1  3  1  1", 0, 2, BondOrder::Single, None, Some(BondWedge::Up))]
 #[case::len12_double(b"  2  5  2  0", 1, 4, BondOrder::Double, None, None)]
 #[case::len12_double_cis(b"  1  3  2  1", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None)]
-#[case::len12_single_dash(b"  2  4  1  6", 1, 3, BondOrder::Single, None, Some(BondDirection::Down))]
+#[case::len12_single_dash(b"  2  4  1  6", 1, 3, BondOrder::Single, None, Some(BondWedge::Down))]
 #[case::len12_triple_empty_fields(b"  2  5  3   ", 1, 4, BondOrder::Triple, None, None)]
 #[case::len12_blank(b"  1  2  1   ", 0, 1, BondOrder::Single, None, None)]
 #[case::len9_single(b"  1  2  1", 0, 1, BondOrder::Single, None, None)]
 #[case::len9_double(b"  2  5  2", 1, 4, BondOrder::Double, None, None)]
 #[case::len9_triple(b"  2  5  3", 1, 4, BondOrder::Triple, None, None)]
 #[case::len9_aromatic(b"  2  5  4", 1, 4, BondOrder::Aromatic, None, None)]
-#[case::invalid_unused(b"  1  2  1  1XXX  0  0", 0, 1, BondOrder::Single, None, Some(BondDirection::Up))]
+#[case::invalid_unused(b"  1  2  1  1XXX  0  0", 0, 1, BondOrder::Single, None, Some(BondWedge::Up))]
 fn test_bond_input(
     #[case] input: &[u8],
     #[case] atom1: usize,
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] direction: Option<BondDirection>,
+    #[case] direction: Option<BondWedge>,
 ) {
     let input_str = input.to_str_lossy();
     let mut parser = bond_input(CtabParseFlags::BASIC);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (a1, a2, bond)) = result.unwrap();
+    let (remaining, bond) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} has non-blank remaining", input_str);
-    assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
-    assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
+    assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
+    assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
     assert_eq!(bond.stereo, stereo, "{:?} has returned stereo {:?}, expected {:?}", input_str, bond.stereo, stereo);
-    assert_eq!(bond.direction, direction, "{:?} has returned direction {:?}, expected {:?}", input_str, bond.direction, direction);
+    assert_eq!(bond.wedge, direction, "{:?} has returned direction {:?}, expected {:?}", input_str, bond.wedge, direction);
 }
 
 #[rstest]
@@ -213,15 +213,15 @@ fn test_bond_input_lenient(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] direction: Option<BondDirection>,
+    #[case] direction: Option<BondWedge>,
 ) {
     let input_str = input.to_str_lossy();
     let result = bond_input(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT).parse(input);
     assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input_str, result.clone().unwrap_err());
-    let (remaining, (a1, a2, bond)) = result.unwrap();
+    let (remaining, bond) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input_str, remaining.to_str_lossy());
-    assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
-    assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
+    assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
+    assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
     assert_eq!(
         bond.stereo, stereo,
@@ -229,9 +229,9 @@ fn test_bond_input_lenient(
         input_str, bond.stereo, stereo
     );
     assert_eq!(
-        bond.direction, direction,
+        bond.wedge, direction,
         "{:?} has returned direction {:?}, expected {:?}",
-        input_str, bond.direction, direction
+        input_str, bond.wedge, direction
     );
 }
 
@@ -255,7 +255,7 @@ fn test_bond_input_lenient_invalid(#[case] input: &[u8], #[case] expected_kind: 
 #[rstest]
 #[case::len_9(b"  1  2  1", 0, 1, BondOrder::Single, None, None, None, None)]
 #[case::len_12_double_cis(b"  1  3  2  1", 0, 2, BondOrder::Double, Some(BondStereo::Cis), None, None, None)]
-#[case::len_12_single_dash(b"  1  2  1  6", 0, 1, BondOrder::Single, None, Some(BondDirection::Down), None, None)]
+#[case::len_12_single_dash(b"  1  2  1  6", 0, 1, BondOrder::Single, None, Some(BondWedge::Down), None, None)]
 #[case::len_18(b"  1  2  1  0  0  0", 0, 1, BondOrder::Single, None, None, None, None)]
 #[case::len_21(b"  2  5  2  1  0  0  0", 1, 4, BondOrder::Double, Some(BondStereo::Cis), None, None, None)]
 #[case::len_12_double_either(b"  1  2  2  3", 0, 1, BondOrder::Double, Some(BondStereo::Either), None, None, None)]
@@ -271,7 +271,7 @@ fn test_extended_bond_input(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] direction: Option<BondDirection>,
+    #[case] direction: Option<BondWedge>,
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>,
 ) {
@@ -279,13 +279,13 @@ fn test_extended_bond_input(
     let mut parser = extended_bond_input(CtabParseFlags::EXTENDED);
     let result = parser.parse(input);
     assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-    let (remaining, (a1, a2, bond)) = result.unwrap();
+    let (remaining, bond) = result.unwrap();
     assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-    assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
-    assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
+    assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
+    assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
     assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
     assert_eq!(bond.stereo, stereo, "{:?} has returned stereo {:?}, expected {:?}", input_str, bond.stereo, stereo);
-    assert_eq!(bond.direction, direction, "{:?} has returned direction {:?}, expected {:?}", input_str, bond.direction, direction);
+    assert_eq!(bond.wedge, direction, "{:?} has returned direction {:?}, expected {:?}", input_str, bond.wedge, direction);
     assert_eq!(bond.topology, topology, "{:?} has returned topology {:?}, expected {:?}", input_str, bond.topology, topology);
     assert_eq!(bond.reacting_center, reacting_center, "{:?} has returned reacting_center {:?}, expected {:?}", input_str, bond.reacting_center, reacting_center);
 }
@@ -341,20 +341,20 @@ fn test_extended_bond_input_lenient(
     #[case] atom2: usize,
     #[case] bond_type: BondOrder,
     #[case] stereo: Option<BondStereo>,
-    #[case] direction: Option<BondDirection>,
+    #[case] direction: Option<BondWedge>,
     #[case] topology: Option<BondTopology>,
     #[case] reacting_center: Option<BondReactingCenter>) {
         let input_str = input.to_str_lossy();
         let mut parser = extended_bond_input(CtabParseFlags::LENIENT);
         let result = parser.parse(input);
         assert!(result.is_ok(), "{:?} should have succeeded", input_str);
-        let (remaining, (a1, a2, bond)) = result.unwrap();
+        let (remaining, bond) = result.unwrap();
         assert!(remaining.is_empty(), "{:?} has non-empty remaining", input_str);
-        assert_eq!(a1, atom1, "{:?} has returned atom1 {:?}, expected {:?}", input_str, a1, atom1);
-        assert_eq!(a2, atom2, "{:?} has returned atom2 {:?}, expected {:?}", input_str, a2, atom2);
+        assert_eq!(bond.start_atom(), atom1.min(atom2) as u32, "{:?} has returned atom1", input_str);
+        assert_eq!(bond.end_atom(), atom1.max(atom2) as u32, "{:?} has returned atom2", input_str);
         assert_eq!(bond.order, bond_type, "{:?} has returned bond type {:?}, expected {:?}", input_str, bond.order, bond_type);
         assert_eq!(bond.stereo, stereo, "{:?} has returned stereo {:?}, expected {:?}", input_str, bond.stereo, stereo);
-        assert_eq!(bond.direction, direction, "{:?} has returned direction {:?}, expected {:?}", input_str, bond.direction, direction);
+        assert_eq!(bond.wedge, direction, "{:?} has returned direction {:?}, expected {:?}", input_str, bond.wedge, direction);
         assert_eq!(bond.topology, topology, "{:?} has returned topology {:?}, expected {:?}", input_str, bond.topology, topology);
         assert_eq!(bond.reacting_center, reacting_center, "{:?} has returned reacting_center {:?}, expected {:?}", input_str, bond.reacting_center, reacting_center); 
     }

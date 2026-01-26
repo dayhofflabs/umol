@@ -9,7 +9,7 @@ use super::super::*;
 use super::utils::{
     build_extended_from_graph, find_extended_chiral_center, find_extended_stereo_bond,
 };
-use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, Chirality, ExtendedMolecule};
+use crate::table_ir::{AtomSymbol, BondWedge, BondOrder, Chirality, ExtendedMolecule};
 
 #[rstest]
 #[case::organic_c(b"C", build_extended_from_graph("C@0 |"))]
@@ -690,16 +690,16 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::aliphatic_before_triple(b"C#[C]", Some(BondOrder::Triple), None)]
 #[case::aliphatic_before_quadruple(b"C$[C]", Some(BondOrder::Quadruple), None)]
 #[case::aliphatic_before_aromatic(b"C:[C]", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::aliphatic_after(b"[C]C", Some(BondOrder::Single), None)]
 #[case::aliphatic_after_single(b"[C]-C", Some(BondOrder::Single), None)]
 #[case::aliphatic_after_double(b"[C]=C", Some(BondOrder::Double), None)]
 #[case::aliphatic_after_triple(b"[C]#C", Some(BondOrder::Triple), None)]
 #[case::aliphatic_after_quadruple(b"[C]$C", Some(BondOrder::Quadruple), None)]
 #[case::aliphatic_after_aromatic(b"[C]:C", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::aromatic_before(b"c[c]", Some(BondOrder::Aromatic), None)]
 #[case::aromatic_before_single(b"c-[c]", Some(BondOrder::Single), None)]
 #[case::aromatic_before_aromatic(b"c:[c]", Some(BondOrder::Aromatic), None)]
@@ -713,8 +713,8 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::aromatic_after_aliphatic(b"[C]c", Some(BondOrder::Single), None)]
 #[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single), None)]
 #[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single), None)]
 #[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single), None)]
 #[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single), None)]
@@ -722,8 +722,8 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::bracket_branch_triple(b"C(#[C])", Some(BondOrder::Triple), None)]
 #[case::bracket_branch_quadruple(b"C($[C])", Some(BondOrder::Quadruple), None)]
 #[case::bracket_branch_aromatic(b"C(:[C])", Some(BondOrder::Aromatic), None)]
-#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::bracket_group_1(b"([C]C)", Some(BondOrder::Single), None)]
 #[case::bracket_group_2(b"(C[C])", Some(BondOrder::Single), None)]
 #[case::bracket_ring_1(b"[C]1CC1", Some(BondOrder::Single), None)]
@@ -738,13 +738,13 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::two_brackets_triple_bond(b"[C-]#[O+]", Some(BondOrder::Triple), None)]
 #[case::two_brackets_quadruple_bond(b"[C]$[C]", Some(BondOrder::Quadruple), None)]
 #[case::two_brackets_aromatic_bond(b"[CH]:[CH]", Some(BondOrder::Aromatic), None)]
-#[case::two_brackets_up_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::two_brackets_down_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::two_brackets_up_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::two_brackets_down_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::bracket_before_dot(b"[Na+].[Cl-]", None, None)]
 fn bracket_bonds(
     #[case] input: &[u8],
     #[case] expected_order: Option<BondOrder>,
-    #[case] expected_dir: Option<BondDirection>,
+    #[case] expected_dir: Option<BondWedge>,
 ) {
     let res = parse_extended_smiles_bytes(input);
     let input_str = input.to_str_lossy();
@@ -754,7 +754,7 @@ fn bracket_bonds(
         if let Some(expected_order) = expected_order {
             assert_eq!(bond1.order, expected_order);
         }
-        assert_eq!(bond1.direction, expected_dir);
+        assert_eq!(bond1.wedge, expected_dir);
     }
 }
 
@@ -834,34 +834,34 @@ fn stereo_chiral(
 
 #[rstest]
 // Double bond stereo - trans
-#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondDirection::Up)]
-#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondDirection::Down)]
-#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondDirection::Down)]
+#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondWedge::Up)]
+#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondWedge::Down)]
+#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondWedge::Down)]
 // Double bond stereo - cis
-#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondDirection::Down)]
-#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondDirection::Up)]
-#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondDirection::Up)]
+#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondWedge::Down)]
+#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondWedge::Up)]
+#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondWedge::Up)]
 // Cis with substituents
-#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondDirection::Up)]
-#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondDirection::Up)]
+#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondWedge::Up)]
+#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondWedge::Up)]
 // Partial stereo specification
-#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondDirection::Up)]
-#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondDirection::Up)]
+#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondWedge::Up)]
+#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondWedge::Up)]
 // Extended cis/trans for cumulenes (3 double bonds - odd)
-#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondDirection::Up)]
-#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondDirection::Up)]
+#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondWedge::Up)]
+#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondWedge::Up)]
 // Extended cis/trans for cumulenes (5 double bonds - odd)
-#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondDirection::Up)]
-#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondDirection::Up)]
+#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondWedge::Up)]
+#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondWedge::Up)]
 fn stereo_bonds(
     #[case] input: &[u8],
     #[case] exp_a: u32,
     #[case] exp_b: u32,
-    #[case] exp_dir: BondDirection,
+    #[case] exp_dir: BondWedge,
 ) {
     let res = parse_extended_smiles_bytes(input);
     let input_str = input.to_str_lossy();
@@ -1079,5 +1079,141 @@ fn wildcard_bracket(
     assert_eq!(mol.bond_count(), bonds);
     if let Some(expected_class) = class {
         assert_eq!(mol.atoms[0].class, Some(expected_class));
+    }
+}
+
+// Extended bonds tests (require EXTENDED_BONDS flag)
+mod extended_bonds {
+    use bstr::ByteSlice;
+    use rstest::*;
+
+    use crate::io::smiles::{
+        parse_extended_smiles_bytes, parse_extended_smiles_bytes_with, ParseError, SmilesIoConfig,
+    };
+    use crate::table_ir::{BondDonation, BondOrder, ExtendedMolecule};
+
+    fn parse_with_extended_bonds(input: &[u8]) -> Result<ExtendedMolecule, ParseError> {
+        parse_extended_smiles_bytes_with(input, &SmilesIoConfig::lenient())
+    }
+
+    #[rstest]
+    #[case::any_bond_simple(b"C~C")]
+    #[case::any_bond_in_ring(b"C1~CC~C1")]
+    fn any_bond(#[case] input: &[u8]) {
+        let res = parse_with_extended_bonds(input);
+        let input_str = input.to_str_lossy();
+        assert!(
+            res.is_ok(),
+            "{:?} should have succeeded: {:?}",
+            input_str,
+            res
+        );
+        let mol = res.unwrap();
+        assert!(
+            mol.bonds.iter().any(|b| b.order == BondOrder::Any),
+            "{:?} should have an Any bond",
+            input_str
+        );
+    }
+
+    #[rstest]
+    #[case::dative_forward(b"C->N", BondDonation::Donating)]
+    #[case::dative_backward(b"C<-N", BondDonation::Accepting)]
+    fn dative_bond(#[case] input: &[u8], #[case] expected_donation: BondDonation) {
+        let res = parse_with_extended_bonds(input);
+        let input_str = input.to_str_lossy();
+        assert!(
+            res.is_ok(),
+            "{:?} should have succeeded: {:?}",
+            input_str,
+            res
+        );
+        let mol = res.unwrap();
+        assert_eq!(mol.atom_count(), 2, "{:?} should have 2 atoms", input_str);
+        assert_eq!(mol.bond_count(), 1, "{:?} should have 1 bond", input_str);
+        let bond = &mol.bonds[0];
+        assert_eq!(
+            bond.order,
+            BondOrder::Single,
+            "{:?} dative is single bond",
+            input_str
+        );
+        assert_eq!(
+            bond.donation,
+            Some(expected_donation),
+            "{:?} donation",
+            input_str
+        );
+    }
+
+    #[rstest]
+    #[case::any_without_flag(b"C~C")]
+    fn any_bond_without_flag_fails(#[case] input: &[u8]) {
+        let res = parse_extended_smiles_bytes(input);
+        let input_str = input.to_str_lossy();
+        assert!(
+            res.is_err(),
+            "{:?} should fail without EXTENDED_BONDS flag",
+            input_str
+        );
+    }
+
+    #[rstest]
+    #[case::dative_forward_without_flag(b"C->N")]
+    #[case::dative_backward_without_flag(b"C<-N")]
+    fn dative_without_flag_fails(#[case] input: &[u8]) {
+        let res = parse_extended_smiles_bytes(input);
+        let input_str = input.to_str_lossy();
+        assert!(
+            res.is_err(),
+            "{:?} should fail without EXTENDED_BONDS flag",
+            input_str
+        );
+    }
+
+    #[test]
+    fn dative_bond_semantics() {
+        // Test that C->N means C(0) donates to N(1)
+        // After normalization: AtomPair(0,1), donation should be Donating (from 0's perspective)
+        let res = parse_with_extended_bonds(b"C->N");
+        assert!(res.is_ok());
+        let mol = res.unwrap();
+        let bond = &mol.bonds[0];
+        assert_eq!(bond.start_atom(), 0);
+        assert_eq!(bond.end_atom(), 1);
+        assert_eq!(bond.donation, Some(BondDonation::Donating));
+
+        // Test that C<-N means N(1) donates to C(0), i.e., C accepts from N
+        // After normalization: AtomPair(0,1), donation should be Accepting (from 0's perspective)
+        let res = parse_with_extended_bonds(b"C<-N");
+        assert!(res.is_ok());
+        let mol = res.unwrap();
+        let bond = &mol.bonds[0];
+        assert_eq!(bond.start_atom(), 0);
+        assert_eq!(bond.end_atom(), 1);
+        assert_eq!(bond.donation, Some(BondDonation::Accepting));
+    }
+
+    #[test]
+    fn dative_bond_semantics_reversed_indices() {
+        // Test with a longer chain where dative bond connects higher to lower index
+        // N->C->O: atoms N(0), C(1), O(2), bonds: N->C (0->1), C->O (1->2)
+        let res = parse_with_extended_bonds(b"N->C->O");
+        assert!(res.is_ok());
+        let mol = res.unwrap();
+        assert_eq!(mol.atom_count(), 3);
+        assert_eq!(mol.bond_count(), 2);
+
+        // First bond: N(0)->C(1), 0 donates to 1
+        let bond0 = &mol.bonds[0];
+        assert_eq!(bond0.start_atom(), 0);
+        assert_eq!(bond0.end_atom(), 1);
+        assert_eq!(bond0.donation, Some(BondDonation::Donating));
+
+        // Second bond: C(1)->O(2), 1 donates to 2
+        let bond1 = &mol.bonds[1];
+        assert_eq!(bond1.start_atom(), 1);
+        assert_eq!(bond1.end_atom(), 2);
+        assert_eq!(bond1.donation, Some(BondDonation::Donating));
     }
 }

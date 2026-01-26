@@ -20,8 +20,7 @@ pub(super) fn bond_block<'inp>(
     bond_count: u32,
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<(usize, usize, Bond)>, u32), Error = ParseError> + use<'inp>
-{
+) -> impl Parser<&'inp [u8], Output = (Vec<Bond>, u32), Error = ParseError> + use<'inp> {
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count as usize);
         let mut lines_iter = input.lines_with_offset();
@@ -35,12 +34,12 @@ pub(super) fn bond_block<'inp>(
                 })
             })?;
 
-            let (_, (atom1, atom2, bond)) = all_consuming(terminated(bond_input(flags), space0))
+            let (_, bond) = all_consuming(terminated(bond_input(flags), space0))
                 .parse(line)
                 .map_err(|e| {
                     Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
                 })?;
-            bonds.push((atom1, atom2, bond));
+            bonds.push(bond);
             byte_offset += byte_len;
         }
 
@@ -54,8 +53,7 @@ pub(super) fn extended_bond_block<'inp>(
     bond_count: u32,
     line_offset: u32,
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (Vec<(usize, usize, ExtendedBond)>, u32), Error = ParseError>
-       + use<'inp> {
+) -> impl Parser<&'inp [u8], Output = (Vec<ExtendedBond>, u32), Error = ParseError> + use<'inp> {
     move |input: &'inp [u8]| {
         let mut bonds = Vec::with_capacity(bond_count as usize);
         let mut lines_iter = input.lines_with_offset();
@@ -69,13 +67,12 @@ pub(super) fn extended_bond_block<'inp>(
                 })
             })?;
 
-            let (_, (atom1, atom2, bond)) =
-                all_consuming(terminated(extended_bond_input(flags), space0))
-                    .parse(line)
-                    .map_err(|e| {
-                        Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
-                    })?;
-            bonds.push((atom1, atom2, bond));
+            let (_, bond) = all_consuming(terminated(extended_bond_input(flags), space0))
+                .parse(line)
+                .map_err(|e| {
+                    Err::Error(ParseError::bond_from_nom(e, line_offset + line_index, line))
+                })?;
+            bonds.push(bond);
             byte_offset += byte_len;
         }
 
@@ -117,7 +114,7 @@ pub(super) fn extended_bond_block<'inp>(
 ///
 pub fn bond_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (usize, usize, Bond), Error = NomError<&'inp [u8]>> + use<'inp>
+) -> impl Parser<&'inp [u8], Output = Bond, Error = NomError<&'inp [u8]>> + use<'inp>
 {
     move |input: &'inp [u8]| {
         if input.len() < 9 {
@@ -166,11 +163,11 @@ pub fn bond_input<'inp>(
             validate_unused_n(input, &input[15..15 + count * 3], count, 3, false)?;
         }
 
-        let mut bond = Bond::with_order(order);
+        let mut bond = Bond::new(first_atom as u32, second_atom as u32, order);
         if let (Some(stereo), Some(direction)) = (stereo, direction) {
             match order {
                 BondOrder::Single => {
-                    bond.direction = Some(direction);
+                    bond.wedge = Some(direction);
                 }
                 BondOrder::Double => {
                     bond.stereo = Some(stereo);
@@ -179,7 +176,7 @@ pub fn bond_input<'inp>(
             }
         }
 
-        Ok((&input[offset..], (first_atom, second_atom, bond)))
+        Ok((&input[offset..], bond))
     }
 }
 
@@ -204,8 +201,7 @@ pub fn bond_input<'inp>(
 ///
 pub fn extended_bond_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = (usize, usize, ExtendedBond), Error = NomError<&'inp [u8]>>
-       + use<'inp> {
+) -> impl Parser<&'inp [u8], Output = ExtendedBond, Error = NomError<&'inp [u8]>> + use<'inp> {
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);
     let extended_range = flags.contains(CtabParseFlags::EXTENDED_RANGE);
     let allow_wildcards = flags.contains(CtabParseFlags::WILDCARDS);
@@ -272,11 +268,11 @@ pub fn extended_bond_input<'inp>(
             return Err(Err::Error(NomError::new(input, NomErrorKind::Verify)));
         }
 
-        let mut bond = ExtendedBond::with_order(order);
+        let mut bond = ExtendedBond::new(first_atom as u32, second_atom as u32, order);
         if let (Some(stereo), Some(direction)) = stereo_direction {
             match order {
                 BondOrder::Single => {
-                    bond.direction = Some(direction);
+                    bond.wedge = Some(direction);
                 }
                 BondOrder::Double => {
                     bond.stereo = Some(stereo);
@@ -287,7 +283,7 @@ pub fn extended_bond_input<'inp>(
         bond.topology = topology;
         bond.reacting_center = reacting_center;
 
-        Ok((&input[input.len()..], (first_atom, second_atom, bond)))
+        Ok((&input[input.len()..], bond))
     }
 }
 

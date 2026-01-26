@@ -51,7 +51,8 @@ pub struct Bond {
     pub order: BondOrder,
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
-    pub direction: Option<BondDirection>,
+    pub wedge: Option<BondWedge>,
+    pub donation: Option<BondDonation>,
     pub span: Option<Span>,
 }
 
@@ -62,19 +63,23 @@ impl Bond {
             order,
             ring: None,
             stereo: None,
-            direction: None,
+            wedge: None,
+            donation: None,
             span: None,
         }
     }
 
-    /// Create a bond with just the order (atom indices set to 0, for later update)
-    pub fn with_order(order: BondOrder) -> Self {
+    /// Create a dative bond, adjusting donation direction for AtomPair normalization.
+    /// The donation parameter describes the direction from `a` to `b` before normalization.
+    pub fn new_dative(a: u32, b: u32, order: BondOrder, donation: BondDonation) -> Self {
+        let swapped = a > b;
         Self {
-            atoms: AtomPair::new(0, 0),
+            atoms: AtomPair::new(a, b),
             order,
             ring: None,
             stereo: None,
-            direction: None,
+            wedge: None,
+            donation: Some(if swapped { donation.flip() } else { donation }),
             span: None,
         }
     }
@@ -87,11 +92,6 @@ impl Bond {
     /// Get the end (second/larger) atom index.
     pub fn end_atom(&self) -> u32 {
         self.atoms.second()
-    }
-
-    /// Set the atom indices, normalizing automatically.
-    pub fn set_atoms(&mut self, a: u32, b: u32) {
-        self.atoms = AtomPair::new(a, b);
     }
 }
 
@@ -161,15 +161,35 @@ impl BondOrder {
     }
 }
 
-/// Single bond direction/wedging
+/// Stereo wedge indication for single bonds
 /// In MOL files: Up=Wedge (code 1), Down=Dash (code 6)
 /// The wedge (pointed) end of the stereo bond is at the first atom
 /// In SMILES: Up=/, Down=\
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BondDirection {
+pub enum BondWedge {
     Up,     // MOL: Wedge (code 1), SMILES: /
     Down,   // MOL: Dash (code 6), SMILES: \
     Either, // MOL code 4 (Either)
+}
+
+/// Electron pair donation for dative/coordinate bonds.
+/// Direction is defined from the perspective of the first (smaller-indexed) atom.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BondDonation {
+    Shared,    // Normal covalent bond (both atoms contribute)
+    Donating,  // First atom donates electron pair to second
+    Accepting, // First atom accepts electron pair from second
+}
+
+impl BondDonation {
+    /// Flip the donation direction (used when AtomPair normalizes indices)
+    pub fn flip(self) -> Self {
+        match self {
+            Self::Shared => Self::Shared,
+            Self::Donating => Self::Accepting,
+            Self::Accepting => Self::Donating,
+        }
+    }
 }
 
 /// Double-bond stereochemistry (E/Z) annotation in IR
@@ -190,7 +210,8 @@ pub struct ExtendedBond {
     pub order: BondOrder,
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
-    pub direction: Option<BondDirection>,
+    pub wedge: Option<BondWedge>,
+    pub donation: Option<BondDonation>,
     pub topology: Option<BondTopology>,
     pub reacting_center: Option<BondReactingCenter>,
     pub properties: HashMap<String, String>,
@@ -205,7 +226,8 @@ impl ExtendedBond {
             order,
             ring: None,
             stereo: None,
-            direction: None,
+            wedge: None,
+            donation: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -213,14 +235,17 @@ impl ExtendedBond {
         }
     }
 
-    /// Create a bond with just the order (atom indices set to 0, for later update)
-    pub fn with_order(order: BondOrder) -> Self {
+    /// Create a dative bond, adjusting donation direction for AtomPair normalization.
+    /// The donation parameter describes the direction from `a` to `b` before normalization.
+    pub fn new_dative(a: u32, b: u32, order: BondOrder, donation: BondDonation) -> Self {
+        let swapped = a > b;
         Self {
-            atoms: AtomPair::new(0, 0),
+            atoms: AtomPair::new(a, b),
             order,
             ring: None,
             stereo: None,
-            direction: None,
+            wedge: None,
+            donation: Some(if swapped { donation.flip() } else { donation }),
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -236,11 +261,6 @@ impl ExtendedBond {
     /// Get the end (second/larger) atom index.
     pub fn end_atom(&self) -> u32 {
         self.atoms.second()
-    }
-
-    /// Set the atom indices, normalizing automatically.
-    pub fn set_atoms(&mut self, a: u32, b: u32) {
-        self.atoms = AtomPair::new(a, b);
     }
 
     /// Check if this bond has extended features that would be lost in conversion to basic Bond.
@@ -260,7 +280,8 @@ impl From<Bond> for ExtendedBond {
             order: bond.order,
             ring: bond.ring,
             stereo: bond.stereo,
-            direction: bond.direction,
+            wedge: bond.wedge,
+            donation: bond.donation,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -283,7 +304,8 @@ impl TryFrom<ExtendedBond> for Bond {
             order: extended.order,
             ring: extended.ring,
             stereo: extended.stereo,
-            direction: extended.direction,
+            wedge: extended.wedge,
+            donation: extended.donation,
             span: extended.span,
         })
     }
@@ -368,22 +390,6 @@ mod tests {
     }
 
     #[test]
-    fn test_bond_set_atoms() {
-        let mut bond = Bond::with_order(BondOrder::Single);
-        bond.set_atoms(7, 3);
-        assert_eq!(bond.start_atom(), 3);
-        assert_eq!(bond.end_atom(), 7);
-    }
-
-    #[test]
-    fn test_bond_with_order() {
-        let bond = Bond::with_order(BondOrder::Double);
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 0);
-        assert_eq!(bond.order, BondOrder::Double);
-    }
-
-    #[test]
     fn test_extended_bond_new() {
         let bond = ExtendedBond::new(0, 1, BondOrder::Triple);
         assert_eq!(bond.start_atom(), 0);
@@ -401,20 +407,56 @@ mod tests {
     }
 
     #[test]
-    fn test_extended_bond_set_atoms() {
-        let mut bond = ExtendedBond::with_order(BondOrder::Double);
-        bond.set_atoms(9, 1);
-        assert_eq!(bond.start_atom(), 1);
-        assert_eq!(bond.end_atom(), 9);
+    fn test_bond_donation_flip() {
+        assert_eq!(BondDonation::Shared.flip(), BondDonation::Shared);
+        assert_eq!(BondDonation::Donating.flip(), BondDonation::Accepting);
+        assert_eq!(BondDonation::Accepting.flip(), BondDonation::Donating);
     }
 
     #[test]
-    fn test_extended_bond_with_order() {
-        let bond = ExtendedBond::with_order(BondOrder::Aromatic);
+    fn test_bond_new_dative_no_swap() {
+        // a < b, no swap needed
+        let bond = Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
         assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 0);
-        assert_eq!(bond.order, BondOrder::Aromatic);
-        assert!(!bond.has_extended_features());
+        assert_eq!(bond.end_atom(), 4);
+        assert_eq!(bond.donation, Some(BondDonation::Donating));
+    }
+
+    #[test]
+    fn test_bond_new_dative_with_swap() {
+        // a > b, swap occurs, donation should flip
+        let bond = Bond::new_dative(4, 0, BondOrder::Single, BondDonation::Donating);
+        assert_eq!(bond.start_atom(), 0);
+        assert_eq!(bond.end_atom(), 4);
+        // Original: 4 donates to 0. After swap: 0 accepts from 4.
+        assert_eq!(bond.donation, Some(BondDonation::Accepting));
+    }
+
+    #[test]
+    fn test_bond_new_dative_accepting_with_swap() {
+        // a > b, swap occurs
+        let bond = Bond::new_dative(5, 2, BondOrder::Single, BondDonation::Accepting);
+        assert_eq!(bond.start_atom(), 2);
+        assert_eq!(bond.end_atom(), 5);
+        // Original: 5 accepts from 2. After swap: 2 donates to 5.
+        assert_eq!(bond.donation, Some(BondDonation::Donating));
+    }
+
+    #[test]
+    fn test_extended_bond_new_dative_no_swap() {
+        let bond = ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
+        assert_eq!(bond.start_atom(), 0);
+        assert_eq!(bond.end_atom(), 4);
+        assert_eq!(bond.donation, Some(BondDonation::Donating));
+    }
+
+    #[test]
+    fn test_extended_bond_new_dative_with_swap() {
+        let bond = ExtendedBond::new_dative(4, 0, BondOrder::Single, BondDonation::Accepting);
+        assert_eq!(bond.start_atom(), 0);
+        assert_eq!(bond.end_atom(), 4);
+        // Original: 4 accepts from 0. After swap: 0 donates to 4.
+        assert_eq!(bond.donation, Some(BondDonation::Donating));
     }
 
     #[test]
@@ -424,7 +466,8 @@ mod tests {
             order: BondOrder::Single,
             ring: Some(5),
             stereo: Some(BondStereo::Cis),
-            direction: Some(BondDirection::Up),
+            wedge: Some(BondWedge::Up),
+            donation: None,
             span: None,
         };
 
@@ -434,7 +477,7 @@ mod tests {
         assert_eq!(extended.order, BondOrder::Single);
         assert_eq!(extended.ring, Some(5));
         assert_eq!(extended.stereo, Some(BondStereo::Cis));
-        assert_eq!(extended.direction, Some(BondDirection::Up));
+        assert_eq!(extended.wedge, Some(BondWedge::Up));
         assert!(!extended.has_extended_features());
     }
 
@@ -445,7 +488,8 @@ mod tests {
             order: BondOrder::Double,
             ring: Some(6),
             stereo: Some(BondStereo::Trans),
-            direction: Some(BondDirection::Down),
+            wedge: Some(BondWedge::Down),
+            donation: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -458,7 +502,7 @@ mod tests {
         assert_eq!(bond.order, BondOrder::Double);
         assert_eq!(bond.ring, Some(6));
         assert_eq!(bond.stereo, Some(BondStereo::Trans));
-        assert_eq!(bond.direction, Some(BondDirection::Down));
+        assert_eq!(bond.wedge, Some(BondWedge::Down));
     }
 
     #[test]
@@ -468,7 +512,8 @@ mod tests {
             order: BondOrder::Single,
             ring: None,
             stereo: None,
-            direction: None,
+            wedge: None,
+            donation: None,
             topology: Some(BondTopology::Ring),
             reacting_center: None,
             properties: HashMap::new(),
@@ -486,7 +531,8 @@ mod tests {
             order: BondOrder::Triple,
             ring: Some(5),
             stereo: Some(BondStereo::Cis),
-            direction: Some(BondDirection::Up),
+            wedge: Some(BondWedge::Up),
+            donation: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -503,7 +549,8 @@ mod tests {
             order: BondOrder::Single,
             ring: None,
             stereo: None,
-            direction: None,
+            wedge: None,
+            donation: None,
             topology: Some(BondTopology::Chain),
             reacting_center: None,
             properties: HashMap::new(),
@@ -515,13 +562,13 @@ mod tests {
 
     #[test]
     fn test_has_extended_features_query() {
-        let extended = ExtendedBond::with_order(BondOrder::Any);
+        let extended = ExtendedBond::new(0, 1, BondOrder::Any);
         assert!(extended.has_extended_features());
     }
 
     #[test]
     fn test_has_extended_features_extended_order() {
-        let extended = ExtendedBond::with_order(BondOrder::Zero);
+        let extended = ExtendedBond::new(0, 1, BondOrder::Zero);
         assert!(extended.has_extended_features());
     }
 
@@ -532,7 +579,8 @@ mod tests {
             order: BondOrder::Aromatic,
             ring: Some(6),
             stereo: Some(BondStereo::Either),
-            direction: Some(BondDirection::Either),
+            wedge: Some(BondWedge::Either),
+            donation: None,
             span: None,
         };
 
@@ -544,7 +592,7 @@ mod tests {
         assert_eq!(bond.order, bond2.order);
         assert_eq!(bond.ring, bond2.ring);
         assert_eq!(bond.stereo, bond2.stereo);
-        assert_eq!(bond.direction, bond2.direction);
+        assert_eq!(bond.wedge, bond2.wedge);
         assert_eq!(bond.span, bond2.span);
     }
 }

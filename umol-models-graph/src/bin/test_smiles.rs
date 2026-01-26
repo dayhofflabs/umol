@@ -13,11 +13,11 @@ enum ParserType {
     Opensmiles,
     /// Basic parser with default flags
     Basic,
-    /// Basic parser with BASIC_MAX flags
+    /// Basic lenient parser
     BasicLenient,
     /// Extended parser with default flags
     Extended,
-    /// Extended parser with LENIENT flags
+    /// Extended lenient parser
     Lenient,
 }
 
@@ -52,7 +52,7 @@ fn main() {
         ParserType::Opensmiles => (true, SmilesIoConfig::opensmiles()),
         ParserType::Basic => (false, SmilesIoConfig::basic()),
         ParserType::BasicLenient => {
-            (false, SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX))
+            (false, SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT))
         }
         ParserType::Extended => (true, SmilesIoConfig::extended()),
         ParserType::Lenient => (true, SmilesIoConfig::lenient()),

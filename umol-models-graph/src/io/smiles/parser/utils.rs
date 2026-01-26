@@ -6,13 +6,13 @@ use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, Chirality, WildcardAtom};
+use crate::table_ir::{AtomSymbol, BondDonation, BondWedge, BondOrder, Chirality, WildcardAtom};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct OpenRing {
     pub(super) atom_id: u32,
     pub(super) order: Option<BondOrder>,
-    pub(super) direction: Option<BondDirection>,
+    pub(super) wedge: Option<BondWedge>,
     pub(super) open_pos: usize,
     pub(super) open_end: usize,
     pub(super) open_aromatic: bool,
@@ -64,7 +64,7 @@ pub(super) fn process_ring_closure(
     last_atom_idx: u32,
     idx: usize,
     order_opt: Option<BondOrder>,
-    dir_opt: Option<BondDirection>,
+    dir_opt: Option<BondWedge>,
     pos: usize,
     token_end: usize,
 ) -> Result<(), ParseError> {
@@ -77,7 +77,7 @@ pub(super) fn process_ring_closure(
             *entry = Some(OpenRing {
                 atom_id: last_atom_idx,
                 order: order_opt,
-                direction: dir_opt,
+                wedge: dir_opt,
                 open_pos: pos,
                 open_end: token_end,
                 open_aromatic: last_aromatic,
@@ -90,7 +90,7 @@ pub(super) fn process_ring_closure(
             );
         }
         Some(open) => {
-            if let (Some(d1), Some(d2)) = (open.direction, dir_opt) {
+            if let (Some(d1), Some(d2)) = (open.wedge, dir_opt) {
                 if d1 != d2 {
                     return Err(ParseError::MismatchedRingBondDirs {
                         pos,
@@ -106,7 +106,7 @@ pub(super) fn process_ring_closure(
                     });
                 }
             }
-            if open.direction.is_some() || dir_opt.is_some() {
+            if open.wedge.is_some() || dir_opt.is_some() {
                 let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                 if ord != BondOrder::Single {
                     return Err(ParseError::MismatchedRingBondOrders {
@@ -126,7 +126,7 @@ pub(super) fn process_ring_closure(
                 (Some(o), None) | (None, Some(o)) => o,
                 (None, None) => BondOrder::Single,
             };
-            let final_dir = open.direction.or(dir_opt);
+            let final_dir = open.wedge.or(dir_opt);
             let a = open.atom_id;
             let b = last_atom_idx;
             if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
@@ -137,7 +137,8 @@ pub(super) fn process_ring_closure(
                 b,
                 BondData {
                     order: final_order,
-                    direction: final_dir,
+                    wedge: final_dir,
+                    donation: None,
                     span: Span::from_bytes_opt(
                         Some(open.open_pos as u32),
                         Some(open.open_end as u32),
@@ -419,20 +420,21 @@ pub(super) fn attach_atom(
     builder: &mut MoleculeBuilder,
     last_atom_idx: Option<u32>,
     curr_atom_idx: u32,
-    pending_bond: &mut Option<(BondOrder, Option<BondDirection>, usize)>,
+    pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
     last_aromatic: bool,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
 ) {
     if let Some(last) = last_atom_idx {
-        if let Some((order, bond_dir, pos)) = pending_bond.take() {
+        if let Some((order, wedge, donation, pos)) = pending_bond.take() {
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order,
-                    direction: bond_dir,
+                    wedge,
+                    donation,
                     span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
                 },
             );
@@ -442,7 +444,8 @@ pub(super) fn attach_atom(
                 curr_atom_idx,
                 BondData {
                     order: BondOrder::Aromatic,
-                    direction: None,
+                    wedge: None,
+                    donation: None,
                     span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
                 },
             );
@@ -458,16 +461,42 @@ pub(super) fn attach_atom(
 }
 
 #[inline]
-pub(super) fn parse_bond(b: u8) -> (BondOrder, Option<BondDirection>) {
+pub(super) fn parse_bond(b: u8) -> (BondOrder, Option<BondWedge>) {
     match b {
         b'-' => (BondOrder::Single, None),
         b'=' => (BondOrder::Double, None),
         b'#' => (BondOrder::Triple, None),
         b'$' => (BondOrder::Quadruple, None),
         b':' => (BondOrder::Aromatic, None),
-        b'/' => (BondOrder::Single, Some(BondDirection::Up)),
-        b'\\' => (BondOrder::Single, Some(BondDirection::Down)),
+        b'/' => (BondOrder::Single, Some(BondWedge::Up)),
+        b'\\' => (BondOrder::Single, Some(BondWedge::Down)),
+        b'~' => (BondOrder::Any, None),
         _ => (BondOrder::Single, None),
+    }
+}
+
+/// Parse extended bond tokens including dative bonds (-> and <-).
+/// Returns (order, wedge, donation, bytes_consumed).
+#[inline]
+pub(super) fn parse_extended_bond(
+    input: &[u8],
+    pos: usize,
+) -> (BondOrder, Option<BondWedge>, Option<BondDonation>, usize) {
+    let b0 = input[pos];
+    let next = if pos + 1 < input.len() {
+        Some(input[pos + 1])
+    } else {
+        None
+    };
+
+    match (b0, next) {
+        (b'-', Some(b'>')) => (BondOrder::Single, None, Some(BondDonation::Donating), 2),
+        (b'<', Some(b'-')) => (BondOrder::Single, None, Some(BondDonation::Accepting), 2),
+        (b'~', _) => (BondOrder::Any, None, None, 1),
+        _ => {
+            let (order, wedge) = parse_bond(b0);
+            (order, wedge, None, 1)
+        }
     }
 }
 
@@ -617,7 +646,7 @@ pub(super) fn process_ring_closure_extended(
     last_atom_idx: u32,
     idx: usize,
     order_opt: Option<BondOrder>,
-    dir_opt: Option<BondDirection>,
+    dir_opt: Option<BondWedge>,
     pos: usize,
     token_end: usize,
 ) -> Result<(), ParseError> {
@@ -630,7 +659,7 @@ pub(super) fn process_ring_closure_extended(
             *entry = Some(OpenRing {
                 atom_id: last_atom_idx,
                 order: order_opt,
-                direction: dir_opt,
+                wedge: dir_opt,
                 open_pos: pos,
                 open_end: token_end,
                 open_aromatic: last_aromatic,
@@ -643,7 +672,7 @@ pub(super) fn process_ring_closure_extended(
             );
         }
         Some(open) => {
-            if let (Some(d1), Some(d2)) = (open.direction, dir_opt) {
+            if let (Some(d1), Some(d2)) = (open.wedge, dir_opt) {
                 if d1 != d2 {
                     return Err(ParseError::MismatchedRingBondDirs {
                         pos,
@@ -659,7 +688,7 @@ pub(super) fn process_ring_closure_extended(
                     });
                 }
             }
-            if open.direction.is_some() || dir_opt.is_some() {
+            if open.wedge.is_some() || dir_opt.is_some() {
                 let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                 if ord != BondOrder::Single {
                     return Err(ParseError::MismatchedRingBondOrders {
@@ -679,7 +708,7 @@ pub(super) fn process_ring_closure_extended(
                 (Some(o), None) | (None, Some(o)) => o,
                 (None, None) => BondOrder::Single,
             };
-            let final_dir = open.direction.or(dir_opt);
+            let final_dir = open.wedge.or(dir_opt);
             let a = open.atom_id;
             let b = last_atom_idx;
             if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
@@ -690,7 +719,8 @@ pub(super) fn process_ring_closure_extended(
                 b,
                 BondData {
                     order: final_order,
-                    direction: final_dir,
+                    wedge: final_dir,
+                    donation: None,
                     span: Span::from_bytes_opt(
                         Some(open.open_pos as u32),
                         Some(open.open_end as u32),
@@ -714,20 +744,21 @@ pub(super) fn attach_atom_extended(
     builder: &mut ExtendedMoleculeBuilder,
     last_atom_idx: Option<u32>,
     curr_atom_idx: u32,
-    pending_bond: &mut Option<(BondOrder, Option<BondDirection>, usize)>,
+    pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
     last_aromatic: bool,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
 ) {
     if let Some(last) = last_atom_idx {
-        if let Some((order, bond_dir, pos)) = pending_bond.take() {
+        if let Some((order, wedge, donation, pos)) = pending_bond.take() {
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order,
-                    direction: bond_dir,
+                    wedge,
+                    donation,
                     span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
                 },
             );
@@ -737,7 +768,8 @@ pub(super) fn attach_atom_extended(
                 curr_atom_idx,
                 BondData {
                     order: BondOrder::Aromatic,
-                    direction: None,
+                    wedge: None,
+                    donation: None,
                     span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
                 },
             );

@@ -7,7 +7,7 @@ use umol_data::Element;
 
 use super::super::*;
 use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
-use crate::table_ir::{BondDirection, BondOrder, Chirality};
+use crate::table_ir::{BondWedge, BondOrder, Chirality};
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -703,16 +703,16 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::aliphatic_before_triple(b"C#[C]", Some(BondOrder::Triple), None)]
 #[case::aliphatic_before_quadruple(b"C$[C]", Some(BondOrder::Quadruple), None)]
 #[case::aliphatic_before_aromatic(b"C:[C]", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::aliphatic_after(b"[C]C", Some(BondOrder::Single), None)]
 #[case::aliphatic_after_single(b"[C]-C", Some(BondOrder::Single), None)]
 #[case::aliphatic_after_double(b"[C]=C", Some(BondOrder::Double), None)]
 #[case::aliphatic_after_triple(b"[C]#C", Some(BondOrder::Triple), None)]
 #[case::aliphatic_after_quadruple(b"[C]$C", Some(BondOrder::Quadruple), None)]
 #[case::aliphatic_after_aromatic(b"[C]:C", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::aromatic_before(b"c[c]", Some(BondOrder::Aromatic), None)]
 #[case::aromatic_before_single(b"c-[c]", Some(BondOrder::Single), None)]
 #[case::aromatic_before_aromatic(b"c:[c]", Some(BondOrder::Aromatic), None)]
@@ -726,8 +726,8 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::aromatic_after_aliphatic(b"[C]c", Some(BondOrder::Single), None)]
 #[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single), None)]
 #[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single), None)]
 #[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single), None)]
 #[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single), None)]
@@ -735,9 +735,9 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::bracket_branch_triple(b"C(#[C])", Some(BondOrder::Triple), None)]
 #[case::bracket_branch_quadruple(b"C($[C])", Some(BondOrder::Quadruple), None)]
 #[case::bracket_branch_aromatic(b"C(:[C])", Some(BondOrder::Aromatic), None)]
-#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Down))]
-#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondWedge::Down))]
+#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::bracket_group_1(b"([C]C)", Some(BondOrder::Single), None)]
 #[case::bracket_group_1(b"(C[C])", Some(BondOrder::Single), None)]
 #[case::bracket_ring_1(b"[C]1CC1", Some(BondOrder::Single), None)]
@@ -752,13 +752,13 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 #[case::two_brackets_triple_bond(b"[C-]#[O+]", Some(BondOrder::Triple), None)]
 #[case::two_brackets_quadruple_bond(b"[C]$[C]", Some(BondOrder::Quadruple), None)]
 #[case::two_brackets_aromatic_bond(b"[CH]:[CH]", Some(BondOrder::Aromatic), None)]
-#[case::two_brackets_up_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::two_brackets_down_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::two_brackets_up_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondWedge::Up))]
+#[case::two_brackets_down_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondWedge::Down))]
 #[case::bracket_before_dot(b"[Na+].[Cl-]", None, None)]
 fn bracket_bonds(
     #[case] input: &[u8],
     #[case] expected_order: Option<BondOrder>,
-    #[case] expected_dir: Option<BondDirection>,
+    #[case] expected_dir: Option<BondWedge>,
 ) {
     let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -767,7 +767,7 @@ fn bracket_bonds(
         if let Some(expected_order) = expected_order {
             assert_eq!(bond1.order, expected_order);
         }
-        assert_eq!(bond1.direction, expected_dir);
+        assert_eq!(bond1.wedge, expected_dir);
     }
 }
 
@@ -847,34 +847,34 @@ fn stereo_chiral(
 
 #[rstest]
 // Double bond stereo - trans
-#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondDirection::Up)]
-#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondDirection::Down)]
-#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondDirection::Down)]
+#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondWedge::Up)]
+#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondWedge::Down)]
+#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondWedge::Down)]
 // Double bond stereo - cis
-#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondDirection::Down)]
-#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondDirection::Up)]
-#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondDirection::Up)]
+#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondWedge::Down)]
+#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondWedge::Up)]
+#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondWedge::Up)]
 // Cis with substituents
-#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondDirection::Up)]
-#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondDirection::Up)]
-#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondDirection::Up)]
+#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondWedge::Up)]
+#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondWedge::Up)]
+#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondWedge::Up)]
 // Partial stereo specification
-#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondDirection::Up)]
-#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondDirection::Up)]
+#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondWedge::Up)]
+#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondWedge::Up)]
 // Extended cis/trans for cumulenes (3 double bonds - odd)
-#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondDirection::Up)]
-#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondDirection::Up)]
+#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondWedge::Up)]
+#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondWedge::Up)]
 // Extended cis/trans for cumulenes (5 double bonds - odd)
-#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondDirection::Up)]
-#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondDirection::Up)]
+#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondWedge::Up)]
+#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondWedge::Up)]
 fn stereo_bonds(
     #[case] input: &[u8],
     #[case] exp_a: u32,
     #[case] exp_b: u32,
-    #[case] exp_dir: BondDirection,
+    #[case] exp_dir: BondWedge,
 ) {
     let res = parse_smiles_bytes(input);
     let input_str = input.to_str_lossy();

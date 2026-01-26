@@ -101,8 +101,8 @@ Parser is now a clean OpenSMILES baseline. All 11,483 tests pass.
 Source: RDKit docs, source code, test suite
 
 **Atomic:**
-- [ ] Extended aromatic atoms: `te`, `se`, `as` (tellurium, selenium, arsenic)
-- [ ] Aromatic silicon: `si`
+- [x] Extended aromatic atoms: `se`, `as` (selenium, arsenic) - always enabled
+- [x] Extended aromatic atoms: `si`, `te` (silicon, tellurium) - EXTENDED_AROMATICS flag
 - [ ] Tri-character atoms: `Uu<x>` (<x> = n, b, y, q, p, h, s, o)
 - [ ] Wildcard atom: `*`
 - [ ] Atom class: `[C:1]`
@@ -256,14 +256,16 @@ SMARTS extends SMILES with query features. Will be implemented as separate parse
 - Basic stereo (@, @@, /, \)
 - Atom class, isotope, charge, H count
 
-### Group 2: Extended Atoms
-- Aromatic `se`, `te`, `as`, `si`
-- Tri-character `Uu<x>` (<x> = n, b, y, q, p, h, s, o)
-- Wildcard `*`
+### Group 2: Extended Atoms ✓ COMPLETE
+- Aromatic `se`, `as` (always enabled)
+- Aromatic `si`, `te` (EXTENDED_AROMATICS flag)
+- Wildcard `*` (extended parser)
+- Tri-character `Uu<x>` (<x> = n, b, y, q, p, h, s, o) - pending, low priority
 
-### Group 3: Extended Stereo
+### Group 3: Extended Stereo ✓ COMPLETE (parsing)
 - Allene (@AL), square planar (@SP)
 - Trigonal bipyramidal (@TB), octahedral (@OH)
+- Semantic validation pending (separate pass)
 - Relaxed stereo validation
 
 ### Group 4: Extended Bonds
@@ -344,7 +346,7 @@ Analyzed 473 failing SMILES. Breakdown by category:
 2. Fix double-escaped backslashes (`\\` should be `\`)
 3. Separate reaction SMILES/SMARTS into dedicated test sets
 
-### Phase 3: Extended SMILES Parser + Wildcards ✓ COMPLETE
+### Phase 3: Extended SMILES Parser + Wildcards + Aromatics ✓ COMPLETE
 
 - [x] `ExtendedMolecule` type exists and is compatible
 - [x] Implement `parse_extended_smiles_bytes_with` and all wrapper variants
@@ -354,17 +356,21 @@ Analyzed 473 failing SMILES. Breakdown by category:
 - [x] Parser hierarchy enforcement: extended parser must be superset of basic parser
 - [x] Classifier and test suite both verify hierarchy invariant
 - [x] Sum formula for `ExtendedMolecule` now includes wildcards (appended as `*`, `*2`, etc.)
+- [x] Add aromatic `si`, `te` (silicon, tellurium) support (`se`, `as` already present)
+- [x] Feature gate: `EXTENDED_AROMATICS` (applies to both parsers)
 
 **Result:** 32 SMILES now parse as `opensmiles` category (wildcards); 8979 as `basic_opensmiles`
 
-### Phase 3b: Extended Aromatic Atoms
-- [ ] Add aromatic `se`, `te`, `as`, `si` (selenium, tellurium, arsenic, silicon) support
-- [ ] Feature gate: `EXTENDED_AROMATICS` (applies to both parsers)
+### Phase 4: Extended Stereo ✓ COMPLETE (parsing)
 
-### Phase 4: Extended Stereo (Group 3)
-- [ ] Implement @AL, @SP, @TB, @OH parsing
-- [ ] Relaxed stereo validation mode
-- [ ] Feature gate: `EXTENDED_STEREO`
+Extended stereo types already parsed per OpenSMILES spec:
+- [x] `@AL1`, `@AL2` (allenal/axial chirality)
+- [x] `@SP1`, `@SP2`, `@SP3` (square planar)
+- [x] `@TB1`-`@TB20` (trigonal bipyramidal)
+- [x] `@OH1`-`@OH30` (octahedral)
+- [x] Range validation and error handling
+
+**Pending:** Semantic validation of stereo centers (valence, neighbor count). This is part of the semantic pass, not the parser.
 
 ### Phase 5: Extended Bonds (Group 4)
 - [ ] Dative bonds (`->`, `<-`)
@@ -508,8 +514,8 @@ This section catalogs SMILES extensions from various sources, classified by prio
 | Feature | Status | Priority | Category | Notes |
 |---------|--------|----------|----------|-------|
 | Wildcard `*` | ✓ Done | P1 | Extended | Standalone and `[*:n]` |
-| Aromatic `se`, `te`, `as` | Pending | P2 | Basic | Selenium, tellurium, arsenic |
-| Aromatic  `si` | Pending | P2 | Basic | Silicon |
+| Aromatic `se`, `as` | ✓ Done | P2 | Basic | Selenium, arsenic (always enabled) |
+| Aromatic `si`, `te` | ✓ Done | P2 | Basic | Silicon, tellurium (EXTENDED_AROMATICS flag) |
 | Tri-character `Uun` | Pending | P2 | Basic | Obsolete symbols for Ds--Og |
 | Dative bonds `->` `<-` | Pending | P2 | Basic | Metal complexes |
 | Quadruple bond `$` | Done | P3 | Basic | Very rare (Mo-Mo) |

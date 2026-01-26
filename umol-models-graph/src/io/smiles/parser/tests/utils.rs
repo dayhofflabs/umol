@@ -7,7 +7,7 @@ use umol_data::Element;
 
 use super::super::builder::{AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondDirection, BondOrder, Chirality, ExtendedMolecule, Molecule, Ring, WildcardAtom};
+use crate::table_ir::{AtomSymbol, BondWedge, BondOrder, Chirality, ExtendedMolecule, Molecule, Ring, WildcardAtom};
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
 pub fn get_atom_neighbors(mol: &Molecule, atom_idx: u32) -> Vec<u32> {
@@ -67,9 +67,9 @@ pub fn find_extended_chiral_center(mol: &ExtendedMolecule) -> Option<(usize, Ele
 
 /// Finds the first bond with stereo direction in a Molecule.
 /// Returns (atom1, atom2, direction) or None if no stereo bond found.
-pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondDirection)> {
+pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondWedge)> {
     for bond in &mol.bonds {
-        if let Some(dir) = bond.direction {
+        if let Some(dir) = bond.wedge {
             let (a, b) = bond.atoms.as_tuple();
             return Some((a, b, dir));
         }
@@ -79,9 +79,9 @@ pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondDirection)> {
 
 /// Finds the first bond with stereo direction in an ExtendedMolecule.
 /// Returns (atom1, atom2, direction) or None if no stereo bond found.
-pub fn find_extended_stereo_bond(mol: &ExtendedMolecule) -> Option<(u32, u32, BondDirection)> {
+pub fn find_extended_stereo_bond(mol: &ExtendedMolecule) -> Option<(u32, u32, BondWedge)> {
     for bond in &mol.bonds {
-        if let Some(dir) = bond.direction {
+        if let Some(dir) = bond.wedge {
             let (a, b) = bond.atoms.as_tuple();
             return Some((a, b, dir));
         }
@@ -137,7 +137,7 @@ fn parse_bond_token(
     usize,
     usize,
     BondOrder,
-    Option<BondDirection>,
+    Option<BondWedge>,
     Option<u32>,
     Option<u32>,
 ) {
@@ -168,8 +168,8 @@ fn parse_bond_token(
         "#" => (BondOrder::Triple, None),
         "$" => (BondOrder::Quadruple, None),
         ":" => (BondOrder::Aromatic, None),
-        "/" => (BondOrder::Single, Some(BondDirection::Up)),
-        "\\" => (BondOrder::Single, Some(BondDirection::Down)),
+        "/" => (BondOrder::Single, Some(BondWedge::Up)),
+        "\\" => (BondOrder::Single, Some(BondWedge::Down)),
         other => panic!("unknown bond spec: {}", other),
     };
     (i, j, order, dir, span_start, span_end)
@@ -247,7 +247,8 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             ids[j],
             BondData {
                 order,
-                direction: dir,
+                wedge: dir,
+                donation: None,
                 span: Span::from_bytes_opt(span_start, span_end),
             },
         );
@@ -470,7 +471,8 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
             ids[j],
             BondData {
                 order,
-                direction: dir,
+                wedge: dir,
+                donation: None,
                 span: Span::from_bytes_opt(span_start, span_end),
             },
         );

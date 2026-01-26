@@ -6,7 +6,7 @@ use umol_data::Element;
 
 use crate::span::Span;
 use crate::table_ir::{
-    Atom, AtomPair, AtomSymbol, Bond, BondDirection, BondOrder, Chirality, ExtendedAtom,
+    Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondWedge, BondOrder, Chirality, ExtendedAtom,
     ExtendedBond, ExtendedMolecule, Molecule, Ring, WildcardAtom,
 };
 
@@ -27,7 +27,8 @@ pub(super) struct AtomData {
 /// Bond event data
 pub(super) struct BondData {
     pub order: BondOrder,
-    pub direction: Option<BondDirection>,
+    pub wedge: Option<BondWedge>,
+    pub donation: Option<BondDonation>,
     pub span: Option<Span>,
 }
 
@@ -83,10 +84,17 @@ impl MoleculeBuilder {
     #[inline]
     pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
         let span = b.span;
+        // Adjust donation for AtomPair normalization (swap flips direction)
+        let donation = if start > end {
+            b.donation.map(|d| d.flip())
+        } else {
+            b.donation
+        };
         let bond = Bond {
             atoms: AtomPair::new(start, end),
             order: b.order,
-            direction: b.direction,
+            wedge: b.wedge,
+            donation,
             ring: None,
             stereo: None,
             span,
@@ -256,7 +264,13 @@ impl ExtendedMoleculeBuilder {
     #[inline]
     pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
         let mut bond = ExtendedBond::new(start, end, b.order);
-        bond.direction = b.direction;
+        bond.wedge = b.wedge;
+        // Adjust donation for AtomPair normalization (swap flips direction)
+        bond.donation = if start > end {
+            b.donation.map(|d| d.flip())
+        } else {
+            b.donation
+        };
         bond.span = b.span;
         self.bonds.push(bond);
     }
