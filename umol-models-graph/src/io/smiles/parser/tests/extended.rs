@@ -555,82 +555,6 @@ fn bracket(
     assert_eq!(a.class, class_);
 }
 
-#[rustfmt::skip]
-#[rstest]
-#[case::aliphatic_before(b"C[C]", Some(BondOrder::Single), None)]
-#[case::aliphatic_before_single(b"C-[C]", Some(BondOrder::Single), None)]
-#[case::aliphatic_before_double(b"C=[C]", Some(BondOrder::Double), None)]
-#[case::aliphatic_before_triple(b"C#[C]", Some(BondOrder::Triple), None)]
-#[case::aliphatic_before_quadruple(b"C$[C]", Some(BondOrder::Quadruple), None)]
-#[case::aliphatic_before_aromatic(b"C:[C]", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondDirection::Down))]
-#[case::aliphatic_after(b"[C]C", Some(BondOrder::Single), None)]
-#[case::aliphatic_after_single(b"[C]-C", Some(BondOrder::Single), None)]
-#[case::aliphatic_after_double(b"[C]=C", Some(BondOrder::Double), None)]
-#[case::aliphatic_after_triple(b"[C]#C", Some(BondOrder::Triple), None)]
-#[case::aliphatic_after_quadruple(b"[C]$C", Some(BondOrder::Quadruple), None)]
-#[case::aliphatic_after_aromatic(b"[C]:C", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondDirection::Down))]
-#[case::aromatic_before(b"c[c]", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_before_single(b"c-[c]", Some(BondOrder::Single), None)]
-#[case::aromatic_before_aromatic(b"c:[c]", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after(b"[c]c", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after_single(b"[c]-c", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_before_aromatic(b"C[c]", Some(BondOrder::Single), None)]
-#[case::aliphatic_single_before_aromatic(b"C-[c]", Some(BondOrder::Single), None)]
-#[case::aliphatic_aromatic_before_aromatic(b"C:[c]", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_after_aromatic(b"[c]C", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aliphatic(b"[C]c", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single), None)]
-#[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondDirection::Down))]
-#[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single), None)]
-#[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single), None)]
-#[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single), None)]
-#[case::bracket_branch_double(b"C(=[C])", Some(BondOrder::Double), None)]
-#[case::bracket_branch_triple(b"C(#[C])", Some(BondOrder::Triple), None)]
-#[case::bracket_branch_quadruple(b"C($[C])", Some(BondOrder::Quadruple), None)]
-#[case::bracket_branch_aromatic(b"C(:[C])", Some(BondOrder::Aromatic), None)]
-#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Down))]
-#[case::bracket_group_1(b"([C]C)", Some(BondOrder::Single), None)]
-#[case::bracket_group_2(b"(C[C])", Some(BondOrder::Single), None)]
-#[case::bracket_ring_1(b"[C]1CC1", Some(BondOrder::Single), None)]
-#[case::bracket_ring_2(b"[C]1cc1", Some(BondOrder::Single), None)]
-#[case::bracket_ring_double_1(b"[C]1=cc1", Some(BondOrder::Double), None)]
-#[case::bracket_ring_double_2(b"[C]=1cc1", Some(BondOrder::Single), None)]
-#[case::bracket_aromatic_ring(b"[c]1cc1", Some(BondOrder::Aromatic), None)]
-#[case::two_brackets_h2(b"[H][H]", Some(BondOrder::Single), None)]
-#[case::two_brackets_hcl(b"[Cl][H]", Some(BondOrder::Single), None)]
-#[case::two_brackets_ch4(b"[CH3][H]", Some(BondOrder::Single), None)]
-#[case::two_brackets_double_bond(b"[CH2]=[O]", Some(BondOrder::Double), None)]
-#[case::two_brackets_triple_bond(b"[C-]#[O+]", Some(BondOrder::Triple), None)]
-#[case::two_brackets_quadruple_bond(b"[C]$[C]", Some(BondOrder::Quadruple), None)]
-#[case::two_brackets_aromatic_bond(b"[CH]:[CH]", Some(BondOrder::Aromatic), None)]
-#[case::two_brackets_up_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondDirection::Up))]
-#[case::two_brackets_down_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondDirection::Down))]
-#[case::bracket_before_dot(b"[Na+].[Cl-]", None, None)]
-fn bracket_bonds(
-    #[case] input: &[u8],
-    #[case] expected_order: Option<BondOrder>,
-    #[case] expected_dir: Option<BondDirection>,
-) {
-    let res = parse_extended_smiles_bytes(input);
-    let input_str = input.to_str_lossy();
-    assert!(res.is_ok(), "{:?} should have succeeded: {:?}", input_str, res);
-    let mol = res.unwrap();
-    if let Some(bond1) = mol.bonds.first() {
-        if let Some(expected_order) = expected_order {
-            assert_eq!(bond1.order, expected_order);
-        }
-        assert_eq!(bond1.direction, expected_dir);
-    }
-}
-
 #[rstest]
 #[case::empty_bracket(b"[]", ParseError::EmptyBracket { pos: 0 })]
 #[case::bracket_in_chain_empty(b"C[]", ParseError::EmptyBracket { pos: 1 })]
@@ -743,6 +667,95 @@ fn bracket_fields_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
+}
+
+#[rstest]
+#[case::aromatic_te(b"[te]", Element::Te, true)]
+#[case::aromatic_si(b"[si]", Element::Si, true)]
+fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic: bool) {
+    let res = parse_extended_smiles_bytes_with(input, &SmilesIoConfig::lenient());
+    assert!(res.is_ok(), "{:?} should have succeeded", input);
+    let mol = res.unwrap();
+    assert_eq!(mol.atoms.len(), 1, "expected single atom");
+    let a = &mol.atoms[0];
+    assert_eq!(a.symbol, AtomSymbol::Element(elem));
+    assert_eq!(a.aromatic, Some(aromatic));
+}
+
+#[rustfmt::skip]
+#[rstest]
+#[case::aliphatic_before(b"C[C]", Some(BondOrder::Single), None)]
+#[case::aliphatic_before_single(b"C-[C]", Some(BondOrder::Single), None)]
+#[case::aliphatic_before_double(b"C=[C]", Some(BondOrder::Double), None)]
+#[case::aliphatic_before_triple(b"C#[C]", Some(BondOrder::Triple), None)]
+#[case::aliphatic_before_quadruple(b"C$[C]", Some(BondOrder::Quadruple), None)]
+#[case::aliphatic_before_aromatic(b"C:[C]", Some(BondOrder::Aromatic), None)]
+#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondDirection::Up))]
+#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aliphatic_after(b"[C]C", Some(BondOrder::Single), None)]
+#[case::aliphatic_after_single(b"[C]-C", Some(BondOrder::Single), None)]
+#[case::aliphatic_after_double(b"[C]=C", Some(BondOrder::Double), None)]
+#[case::aliphatic_after_triple(b"[C]#C", Some(BondOrder::Triple), None)]
+#[case::aliphatic_after_quadruple(b"[C]$C", Some(BondOrder::Quadruple), None)]
+#[case::aliphatic_after_aromatic(b"[C]:C", Some(BondOrder::Aromatic), None)]
+#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondDirection::Up))]
+#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::aromatic_before(b"c[c]", Some(BondOrder::Aromatic), None)]
+#[case::aromatic_before_single(b"c-[c]", Some(BondOrder::Single), None)]
+#[case::aromatic_before_aromatic(b"c:[c]", Some(BondOrder::Aromatic), None)]
+#[case::aromatic_after(b"[c]c", Some(BondOrder::Aromatic), None)]
+#[case::aromatic_after_single(b"[c]-c", Some(BondOrder::Single), None)]
+#[case::aromatic_after_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
+#[case::aliphatic_before_aromatic(b"C[c]", Some(BondOrder::Single), None)]
+#[case::aliphatic_single_before_aromatic(b"C-[c]", Some(BondOrder::Single), None)]
+#[case::aliphatic_aromatic_before_aromatic(b"C:[c]", Some(BondOrder::Aromatic), None)]
+#[case::aliphatic_after_aromatic(b"[c]C", Some(BondOrder::Single), None)]
+#[case::aromatic_after_aliphatic(b"[C]c", Some(BondOrder::Single), None)]
+#[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single), None)]
+#[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
+#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondDirection::Up))]
+#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single), None)]
+#[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single), None)]
+#[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single), None)]
+#[case::bracket_branch_double(b"C(=[C])", Some(BondOrder::Double), None)]
+#[case::bracket_branch_triple(b"C(#[C])", Some(BondOrder::Triple), None)]
+#[case::bracket_branch_quadruple(b"C($[C])", Some(BondOrder::Quadruple), None)]
+#[case::bracket_branch_aromatic(b"C(:[C])", Some(BondOrder::Aromatic), None)]
+#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondDirection::Up))]
+#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::bracket_group_1(b"([C]C)", Some(BondOrder::Single), None)]
+#[case::bracket_group_2(b"(C[C])", Some(BondOrder::Single), None)]
+#[case::bracket_ring_1(b"[C]1CC1", Some(BondOrder::Single), None)]
+#[case::bracket_ring_2(b"[C]1cc1", Some(BondOrder::Single), None)]
+#[case::bracket_ring_double_1(b"[C]1=cc1", Some(BondOrder::Double), None)]
+#[case::bracket_ring_double_2(b"[C]=1cc1", Some(BondOrder::Single), None)]
+#[case::bracket_aromatic_ring(b"[c]1cc1", Some(BondOrder::Aromatic), None)]
+#[case::two_brackets_h2(b"[H][H]", Some(BondOrder::Single), None)]
+#[case::two_brackets_hcl(b"[Cl][H]", Some(BondOrder::Single), None)]
+#[case::two_brackets_ch4(b"[CH3][H]", Some(BondOrder::Single), None)]
+#[case::two_brackets_double_bond(b"[CH2]=[O]", Some(BondOrder::Double), None)]
+#[case::two_brackets_triple_bond(b"[C-]#[O+]", Some(BondOrder::Triple), None)]
+#[case::two_brackets_quadruple_bond(b"[C]$[C]", Some(BondOrder::Quadruple), None)]
+#[case::two_brackets_aromatic_bond(b"[CH]:[CH]", Some(BondOrder::Aromatic), None)]
+#[case::two_brackets_up_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondDirection::Up))]
+#[case::two_brackets_down_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondDirection::Down))]
+#[case::bracket_before_dot(b"[Na+].[Cl-]", None, None)]
+fn bracket_bonds(
+    #[case] input: &[u8],
+    #[case] expected_order: Option<BondOrder>,
+    #[case] expected_dir: Option<BondDirection>,
+) {
+    let res = parse_extended_smiles_bytes(input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded: {:?}", input_str, res);
+    let mol = res.unwrap();
+    if let Some(bond1) = mol.bonds.first() {
+        if let Some(expected_order) = expected_order {
+            assert_eq!(bond1.order, expected_order);
+        }
+        assert_eq!(bond1.direction, expected_dir);
+    }
 }
 
 #[rustfmt::skip]

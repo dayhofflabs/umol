@@ -9,13 +9,14 @@ bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Default)]
     pub struct SmilesParseFlags: u32 {
         // Parser capabilities
-        const WILDCARDS = 1; // *
+        const WILDCARDS = 1;               // *
+        const EXTENDED_AROMATICS = 1 << 1; // se, te, as, si
 
         // Presets
         const BASIC_OPENSMILES = 0;
 
         // Maximum capabilities for basic parser
-        const BASIC_MAX = Self::BASIC_OPENSMILES.bits();
+        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits();
@@ -31,7 +32,7 @@ bitflags! {
         const EXTENDED = Self::BASIC.bits() | Self::STRICT.bits();
 
         // Lenient parser: Currently same as extended parser
-        const LENIENT = Self::EXTENDED.bits();
+        const LENIENT = Self::EXTENDED.bits() | Self::EXTENDED_AROMATICS.bits();
 
         // OpenSMILES parser: BASIC_OPENSMILES | WILDCARDS
         const OPENSMILES = Self::BASIC_OPENSMILES.bits() | Self::WILDCARDS.bits();
@@ -60,6 +61,9 @@ impl fmt::Display for SmilesParseFlags {
         } else {
             if self.contains(SmilesParseFlags::WILDCARDS) {
                 parts.push("WILDCARDS");
+            }
+            if self.contains(SmilesParseFlags::EXTENDED_AROMATICS) {
+                parts.push("EXTENDED_AROMATICS");
             }
         }
         write!(f, "{}", parts.join(" | "))

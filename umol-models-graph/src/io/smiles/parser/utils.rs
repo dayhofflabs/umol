@@ -2,6 +2,7 @@
 
 use umol_data::Element;
 
+use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
@@ -236,7 +237,11 @@ pub(super) fn parse_bracket_aliphatic_element(input: &[u8], i: usize) -> Option<
 }
 
 #[inline]
-pub(super) fn parse_bracket_aromatic_element(input: &[u8], i: usize) -> Option<(Element, usize)> {
+pub(super) fn parse_bracket_aromatic_element(
+    input: &[u8],
+    i: usize,
+    extended_aromatics: bool,
+) -> Option<(Element, usize)> {
     let n = input.len();
     if i >= n {
         return None;
@@ -250,8 +255,17 @@ pub(super) fn parse_bracket_aromatic_element(input: &[u8], i: usize) -> Option<(
         b's' => {
             if i + 1 < n && input[i + 1] == b'e' {
                 Some((Element::Se, 2))
+            } else if extended_aromatics && i + 1 < n && input[i + 1] == b'i' {
+                Some((Element::Si, 2))
             } else {
                 Some((Element::S, 1))
+            }
+        }
+        b't' => {
+            if extended_aromatics && i + 1 < n && input[i + 1] == b'e' {
+                Some((Element::Te, 2))
+            } else {
+                None
             }
         }
         b'a' => {
@@ -462,6 +476,7 @@ pub(super) fn parse_bond(b: u8) -> (BondOrder, Option<BondDirection>) {
 pub(super) fn parse_bracket(
     input: &[u8],
     pos_offset: usize,
+    flags: SmilesParseFlags,
 ) -> Result<
     (
         Option<Element>,
@@ -504,7 +519,11 @@ pub(super) fn parse_bracket(
             element = Some(e);
             i += consumed;
             aromatic = false;
-        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(input, i) {
+        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(
+            input,
+            i,
+            flags.contains(SmilesParseFlags::EXTENDED_AROMATICS),
+        ) {
             element = Some(e);
             i += consumed;
             aromatic = true;
@@ -738,6 +757,7 @@ pub(super) fn attach_atom_extended(
 pub(super) fn parse_bracket_extended(
     input: &[u8],
     pos_offset: usize,
+    flags: SmilesParseFlags,
 ) -> Result<
     (
         AtomSymbol,
@@ -777,7 +797,11 @@ pub(super) fn parse_bracket_extended(
             symbol = AtomSymbol::Element(e);
             i += consumed;
             aromatic = false;
-        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(input, i) {
+        } else if let Some((e, consumed)) = parse_bracket_aromatic_element(
+            input,
+            i,
+            flags.contains(SmilesParseFlags::EXTENDED_AROMATICS),
+        ) {
             symbol = AtomSymbol::Element(e);
             i += consumed;
             aromatic = true;

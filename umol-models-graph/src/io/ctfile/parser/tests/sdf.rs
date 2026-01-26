@@ -133,11 +133,9 @@ fn test_parse_sdf_invalid_unicode(sdf_with_unicode_whitespace: &[u8]) {
 
 #[rstest]
 fn test_parse_sdf_lenient(sdf_with_unicode_whitespace: &[u8]) {
-    let config =
-        CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT);
     let result = parse_sdf_with(
         std::str::from_utf8(sdf_with_unicode_whitespace).unwrap(),
-        &config,
+        &CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT),
     );
     assert!(
         result.is_ok(),

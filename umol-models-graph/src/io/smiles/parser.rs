@@ -37,6 +37,11 @@ pub fn parse_smiles_bytes_with(
     config: &SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {
     let flags = config.parse_flags;
+    debug_assert!(
+        SmilesParseFlags::BASIC_MAX.contains(flags),
+        "flags must be a subset of BASIC_MAX, got: {}",
+        flags
+    );
 
     // Strip leading/trailing whitespace, reject internal whitespace
     let mut start = 0usize;
@@ -62,7 +67,7 @@ pub fn parse_smiles_bytes_with(
     parse_smiles_inner(&input[start..end], flags)
 }
 
-fn parse_smiles_inner(input: &[u8], _flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
+fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
     let mut i = 0usize;
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
@@ -247,7 +252,7 @@ fn parse_smiles_inner(input: &[u8], _flags: SmilesParseFlags) -> Result<Molecule
             }
             let inner = &input[start..j];
             let (elem_opt, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
-                parse_bracket(inner, i)?;
+                parse_bracket(inner, i, flags)?;
             let (element, aromatic) = match elem_opt {
                 Some(e) => (e, aromatic),
                 None => (Element::C, false),
@@ -543,12 +548,11 @@ pub fn parse_extended_smiles_bytes_with(
 
 fn parse_extended_smiles_inner(
     input: &[u8],
-    _flags: SmilesParseFlags,
+    flags: SmilesParseFlags,
 ) -> Result<ExtendedMolecule, ParseError> {
     let mut i = 0usize;
     let n = input.len();
-    let mut builder =
-        ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
+    let mut builder = ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
     let mut last_atom_idx: Option<u32> = None;
@@ -725,7 +729,7 @@ fn parse_extended_smiles_inner(
             }
             let inner = &input[start..j];
             let (symbol, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
-                parse_bracket_extended(inner, i)?;
+                parse_bracket_extended(inner, i, flags)?;
             let (s, e) = (Some(i as u32), Some((j + 1) as u32));
             let atom = ExtendedAtomData {
                 symbol,
