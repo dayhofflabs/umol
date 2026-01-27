@@ -11,7 +11,7 @@ This note captures the high-level IR design and post-parse workflow for SMILES i
 #### IRs
 - SimpleIR (SIR)
   - atoms: { element, charge, bracket_h_opt, aromatic_flag, chirality_opt, isotope_opt, class_opt, src_span }
-  - bonds: { a_idx, b_idx, order, dir_opt, aromatic_flag, src_span }
+  - bonds: { a_idx, b_idx, order, wedge_opt, aromatic_flag, src_span }
   - Purpose: stable, format-agnostic exchange; easy to build from SMILES or MOL/SDF; no inference.
 
 - GraphIR (GIR)

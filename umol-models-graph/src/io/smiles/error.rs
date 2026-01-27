@@ -37,6 +37,8 @@ pub enum ParseError {
     MismatchedRingBondDirs { pos: usize, open_pos: usize },
     #[error("Mismatched ring bond orders at position {pos}")]
     MismatchedRingBondOrders { pos: usize, open_pos: usize },
+    #[error("Mismatched ring bond donations at position {pos}")]
+    MismatchedRingBondDonations { pos: usize, open_pos: usize },
     #[error("Leading dot at position {pos}")]
     LeadingDot { pos: usize },
     #[error("Trailing dot at position {pos}")]
@@ -142,7 +144,10 @@ impl From<ParseError> for Diagnostic {
                 SmilesMismatchedRingBondOrders,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-
+            MismatchedRingBondDonations { pos, .. } => (
+                SmilesMismatchedRingBondDonations,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
             LeadingDot { pos } => (
                 SmilesLeadingDot,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),

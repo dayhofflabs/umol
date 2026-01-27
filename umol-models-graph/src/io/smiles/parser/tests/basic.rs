@@ -354,8 +354,19 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 
 #[rstest]
 #[case::any_bond(b"C~C", build_from_graph("C@0 C@2 | 0-1~@1"))]
-#[case::dative_accepting(b"C<-N", build_from_graph("C@0 N@3 | 0-1<-@1"))]
-#[case::dative_donating(b"C->N", build_from_graph("C@0 N@3 | 0-1->@1"))]
+#[case::any_bond_in_ring(b"C1~CC~C1", build_from_graph("C@0 C@3 C@4 C@6 | 0-1~@2 1-2@4 2-3~@5 0-3@1 | 1@1-7:0-3"))]
+#[case::any_ring_bond_1(b"C1CC~1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2~@1 | 1@1-5:0-2"))]
+#[case::any_ring_bond_2(b"C~1CC1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-5:0-2"))]
+#[case::any_ring_bond_3(b"C~1CC~1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-6:0-2"))]
+#[case::dative_accepting_1(b"C<-N", build_from_graph("C@0 N@3 | 0-1<-@1"))]
+#[case::dative_accepting_2(b"N<-C", build_from_graph("N@0 C@3 | 0-1<-@1"))]
+#[case::dative_accepting_multiple(b"C<-N<-O", build_from_graph("C@0 N@3 O@6 | 0-1<-@1 1-2<-@4"))]
+#[case::dative_ring_bond_1(b"C<-1CC1", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-6:0-2"))]
+#[case::dative_ring_bond_2(b"C1CC->1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2<-@1 | 1@1-6:0-2"))]
+#[case::dative_ring_bond_3(b"C<-1CC->1", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-8:0-2"))]
+#[case::dative_donating_1(b"C->N", build_from_graph("C@0 N@3 | 0-1->@1"))]
+#[case::dative_donating_2(b"N->C", build_from_graph("N@0 C@3 | 0-1->@1"))]
+#[case::dative_donating_multiple(b"C->N->O", build_from_graph("C@0 N@3 O@6 | 0-1->@1 1-2->@4"))]
 fn bonds_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
     let res = parse_smiles_bytes_with(
         input,
@@ -367,10 +378,17 @@ fn bonds_lenient(#[case] input: &[u8], #[case] expected: Molecule) {
 }
 
 #[rstest]
-#[case::extended_bonds_consecutive_1(b"C~~C", ParseError::ConsecutiveBonds { pos: 2 })]
-#[case::extended_bonds_consecutive_2(b"C->->C", ParseError::ConsecutiveBonds { pos: 3 })]
-#[case::extended_bonds_consecutive_3(b"C~->C", ParseError::ConsecutiveBonds { pos: 2 })]
-#[case::extended_bonds_consecutive_4(b"C<-~C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::any_bond_consecutive(b"C~~C", ParseError::ConsecutiveBonds { pos: 2 })]
+#[case::dative_bond_consecutive_1(b"C->->C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::dative_bond_consecutive_2(b"C-><-C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::dative_bond_consecutive_3(b"C<-<-C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::dative_bond_consecutive_4(b"C<-->C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::any_dative_bond_consecutive_1(b"C~->C", ParseError::ConsecutiveBonds { pos: 2 })]
+#[case::any_dative_bond_consecutive_2(b"C<-~C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::any_ring_bond_order_conflict_1(b"C~1CC-1", ParseError::MismatchedRingBondOrders { pos: 6, open_pos: 2 })]
+#[case::any_ring_bond_order_conflict_2(b"C-1CC~1", ParseError::MismatchedRingBondOrders { pos: 6, open_pos: 2 })]
+#[case::dative_ring_bond_donation_conflict_1(b"C->1CC->1", ParseError::MismatchedRingBondDonations { pos: 8, open_pos: 3 })]
+#[case::dative_ring_bond_donation_conflict_2(b"C<-1CC<-1", ParseError::MismatchedRingBondDonations { pos: 8, open_pos: 3 })]
 fn bonds_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_smiles_bytes_with(
         input,

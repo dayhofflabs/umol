@@ -57,6 +57,8 @@ pub enum DiagnosticKind {
     SmilesMismatchedRingBondDirs,
     #[strum(message = "Mismatched ring bond orders")]
     SmilesMismatchedRingBondOrders,
+    #[strum(message = "Mismatched ring bond donations")]
+    SmilesMismatchedRingBondDonations,
     #[strum(message = "Leading dot")]
     SmilesLeadingDot,
     #[strum(message = "Trailing dot")]
@@ -261,8 +263,9 @@ impl DiagnosticKind {
             | SmilesLeadingRing
             | SmilesUnbalancedRingIndex
             | SmilesInvalidRingIndex
-            | SmilesMismatchedRingBondDirs
             | SmilesMismatchedRingBondOrders
+            | SmilesMismatchedRingBondDirs
+            | SmilesMismatchedRingBondDonations
             | SmilesLeadingDot
             | SmilesTrailingDot
             | SmilesConsecutiveDots
@@ -374,8 +377,9 @@ impl DiagnosticKind {
             | SmilesLeadingRing
             | SmilesUnbalancedRingIndex
             | SmilesInvalidRingIndex
-            | SmilesMismatchedRingBondDirs
             | SmilesMismatchedRingBondOrders
+            | SmilesMismatchedRingBondDirs
+            | SmilesMismatchedRingBondDonations
             | SmilesLeadingDot
             | SmilesTrailingDot
             | SmilesConsecutiveDots

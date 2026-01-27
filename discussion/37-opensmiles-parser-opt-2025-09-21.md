@@ -229,7 +229,7 @@ Implications:
     - Acceptance: unit tests for tokenization-only surfaces pass (invalid `%`, out-of-place tokens).
   - M3-3: Ring open/close state table
     - Data: `Vec<Option<OpenRing>>` mapping ring index → open entry.
-    - `OpenRing` fields: `atom_id`, `bond_opt`, `pos_open`, `dir_opt`, `aromatic_opt`.
+    - `OpenRing` fields: `atom_id`, `bond_opt`, `pos_open`, `wedge_opt`, `aromatic_opt`.
     - Acceptance: opening stores entry; closing retrieves and clears entry.
   - M3-4: Close logic and bond precedence
     - Combine bond types: if both explicit and equal → use it; if both explicit and different → conflict error; if one explicit → use it; if none → infer default (aliphatic single; aromatic `:` when both atoms aromatic).
@@ -308,7 +308,7 @@ Implications:
 3. Emit `LEX_RING_INDEX_INVALID` for bad `%` forms and `LEX_LEADING_RING` for ring tokens without a current atom.
 4. Capture optional preceding bond/dir and precise positions for ring tokens.
 5. Implement ring table as `Vec<Option<OpenRing>>` for indices 0..99 (including 0).
-6. Record ring open state: `atom_id`, `bond_opt`, `dir_opt`, `pos_open`.
+6. Record ring open state: `atom_id`, `bond_opt`, `wedge_opt`, `pos_open`.
 7. Close rings with bond precedence; default aromatic bond only if both atoms aromatic and no explicit bond.
 8. Validate directional markers across ring closures; emit `RING_DIR_CONFLICT` on mismatch.
 9. Detect self-loop and two-member rings; emit `RING_SELF_LOOP` and `RING_TWO_MEMBER`.

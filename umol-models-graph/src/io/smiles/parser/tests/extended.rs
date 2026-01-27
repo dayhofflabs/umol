@@ -347,10 +347,22 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     assert_eq!(err, expected);
 }
 
+#[rustfmt::skip]
 #[rstest]
 #[case::any_bond(b"C~C", build_extended_from_graph("C@0 C@2 | 0-1~@1"))]
-#[case::dative_accepting(b"C<-N", build_extended_from_graph("C@0 N@3 | 0-1<-@1"))]
-#[case::dative_donating(b"C->N", build_extended_from_graph("C@0 N@3 | 0-1->@1"))]
+#[case::any_bond_in_ring(b"C1~CC~C1", build_extended_from_graph("C@0 C@3 C@4 C@6 | 0-1~@2 1-2@4 2-3~@5 0-3@1 | 1@1-7:0-3"))]
+#[case::any_ring_bond_1(b"C1CC~1", build_extended_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2~@1 | 1@1-5:0-2"))]
+#[case::any_ring_bond_2(b"C~1CC1", build_extended_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-5:0-2"))]
+#[case::any_ring_bond_3(b"C~1CC~1", build_extended_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-6:0-2"))]
+#[case::dative_accepting_1(b"C<-N", build_extended_from_graph("C@0 N@3 | 0-1<-@1"))]
+#[case::dative_accepting_2(b"N<-C", build_extended_from_graph("N@0 C@3 | 0-1<-@1"))]
+#[case::dative_accepting_multiple(b"C<-N<-O", build_extended_from_graph("C@0 N@3 O@6 | 0-1<-@1 1-2<-@4"))]
+#[case::dative_ring_bond_1(b"C<-1CC1", build_extended_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-6:0-2"))]
+#[case::dative_ring_bond_2(b"C1CC->1", build_extended_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2<-@1 | 1@1-6:0-2"))]
+#[case::dative_ring_bond_3(b"C<-1CC->1", build_extended_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-8:0-2"))]
+#[case::dative_donating_1(b"C->N", build_extended_from_graph("C@0 N@3 | 0-1->@1"))]
+#[case::dative_donating_2(b"N->C", build_extended_from_graph("N@0 C@3 | 0-1->@1"))]
+#[case::dative_donating_multiple(b"C->N->O", build_extended_from_graph("C@0 N@3 O@6 | 0-1->@1 1-2->@4"))]
 fn bonds_lenient(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
     let res = parse_extended_smiles_bytes_with(input, &SmilesIoConfig::lenient());
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -359,10 +371,17 @@ fn bonds_lenient(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
 }
 
 #[rstest]
-#[case::extended_bonds_consecutive_1(b"C~~C", ParseError::ConsecutiveBonds { pos: 2 })]
-#[case::extended_bonds_consecutive_2(b"C->->C", ParseError::ConsecutiveBonds { pos: 3 })]
-#[case::extended_bonds_consecutive_3(b"C~->C", ParseError::ConsecutiveBonds { pos: 2 })]
-#[case::extended_bonds_consecutive_4(b"C<-~C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::any_bond_consecutive(b"C~~C", ParseError::ConsecutiveBonds { pos: 2 })]
+#[case::dative_bond_consecutive_1(b"C->->C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::dative_bond_consecutive_2(b"C-><-C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::dative_bond_consecutive_3(b"C<-<-C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::dative_bond_consecutive_4(b"C<-->C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::any_dative_bond_consecutive_1(b"C~->C", ParseError::ConsecutiveBonds { pos: 2 })]
+#[case::any_dative_bond_consecutive_2(b"C<-~C", ParseError::ConsecutiveBonds { pos: 3 })]
+#[case::any_ring_bond_order_conflict_1(b"C~1CC-1", ParseError::MismatchedRingBondOrders { pos: 6, open_pos: 2 })]
+#[case::any_ring_bond_order_conflict_2(b"C-1CC~1", ParseError::MismatchedRingBondOrders { pos: 6, open_pos: 2 })]
+#[case::dative_ring_bond_donation_conflict_1(b"C->1CC->1", ParseError::MismatchedRingBondDonations { pos: 8, open_pos: 3 })]
+#[case::dative_ring_bond_donation_conflict_2(b"C<-1CC<-1", ParseError::MismatchedRingBondDonations { pos: 8, open_pos: 3 })]
 fn bonds_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
     let res = parse_extended_smiles_bytes_with(input, &SmilesIoConfig::lenient());
     let input_str = input.to_str_lossy();
@@ -1107,141 +1126,5 @@ fn wildcard_bracket(
     assert_eq!(mol.bond_count(), bonds);
     if let Some(expected_class) = class {
         assert_eq!(mol.atoms[0].class, Some(expected_class));
-    }
-}
-
-// Extended bonds tests (require EXTENDED_BONDS flag)
-mod extended_bonds {
-    use bstr::ByteSlice;
-    use rstest::*;
-
-    use crate::io::smiles::{
-        parse_extended_smiles_bytes, parse_extended_smiles_bytes_with, ParseError, SmilesIoConfig,
-    };
-    use crate::table_ir::{BondDonation, BondOrder, ExtendedMolecule};
-
-    fn parse_with_extended_bonds(input: &[u8]) -> Result<ExtendedMolecule, ParseError> {
-        parse_extended_smiles_bytes_with(input, &SmilesIoConfig::lenient())
-    }
-
-    #[rstest]
-    #[case::any_bond_simple(b"C~C")]
-    #[case::any_bond_in_ring(b"C1~CC~C1")]
-    fn any_bond(#[case] input: &[u8]) {
-        let res = parse_with_extended_bonds(input);
-        let input_str = input.to_str_lossy();
-        assert!(
-            res.is_ok(),
-            "{:?} should have succeeded: {:?}",
-            input_str,
-            res
-        );
-        let mol = res.unwrap();
-        assert!(
-            mol.bonds.iter().any(|b| b.order == BondOrder::Any),
-            "{:?} should have an Any bond",
-            input_str
-        );
-    }
-
-    #[rstest]
-    #[case::dative_forward(b"C->N", BondDonation::Donating)]
-    #[case::dative_backward(b"C<-N", BondDonation::Accepting)]
-    fn dative_bond(#[case] input: &[u8], #[case] expected_donation: BondDonation) {
-        let res = parse_with_extended_bonds(input);
-        let input_str = input.to_str_lossy();
-        assert!(
-            res.is_ok(),
-            "{:?} should have succeeded: {:?}",
-            input_str,
-            res
-        );
-        let mol = res.unwrap();
-        assert_eq!(mol.atom_count(), 2, "{:?} should have 2 atoms", input_str);
-        assert_eq!(mol.bond_count(), 1, "{:?} should have 1 bond", input_str);
-        let bond = &mol.bonds[0];
-        assert_eq!(
-            bond.order,
-            BondOrder::Single,
-            "{:?} dative is single bond",
-            input_str
-        );
-        assert_eq!(
-            bond.donation,
-            Some(expected_donation),
-            "{:?} donation",
-            input_str
-        );
-    }
-
-    #[rstest]
-    #[case::any_without_flag(b"C~C")]
-    fn any_bond_without_flag_fails(#[case] input: &[u8]) {
-        let res = parse_extended_smiles_bytes(input);
-        let input_str = input.to_str_lossy();
-        assert!(
-            res.is_err(),
-            "{:?} should fail without EXTENDED_BONDS flag",
-            input_str
-        );
-    }
-
-    #[rstest]
-    #[case::dative_forward_without_flag(b"C->N")]
-    #[case::dative_backward_without_flag(b"C<-N")]
-    fn dative_without_flag_fails(#[case] input: &[u8]) {
-        let res = parse_extended_smiles_bytes(input);
-        let input_str = input.to_str_lossy();
-        assert!(
-            res.is_err(),
-            "{:?} should fail without EXTENDED_BONDS flag",
-            input_str
-        );
-    }
-
-    #[test]
-    fn dative_bond_semantics() {
-        // Test that C->N means C(0) donates to N(1)
-        // After normalization: AtomPair(0,1), donation should be Donating (from 0's perspective)
-        let res = parse_with_extended_bonds(b"C->N");
-        assert!(res.is_ok());
-        let mol = res.unwrap();
-        let bond = &mol.bonds[0];
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 1);
-        assert_eq!(bond.donation, Some(BondDonation::Donating));
-
-        // Test that C<-N means N(1) donates to C(0), i.e., C accepts from N
-        // After normalization: AtomPair(0,1), donation should be Accepting (from 0's perspective)
-        let res = parse_with_extended_bonds(b"C<-N");
-        assert!(res.is_ok());
-        let mol = res.unwrap();
-        let bond = &mol.bonds[0];
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 1);
-        assert_eq!(bond.donation, Some(BondDonation::Accepting));
-    }
-
-    #[test]
-    fn dative_bond_semantics_reversed_indices() {
-        // Test with a longer chain where dative bond connects higher to lower index
-        // N->C->O: atoms N(0), C(1), O(2), bonds: N->C (0->1), C->O (1->2)
-        let res = parse_with_extended_bonds(b"N->C->O");
-        assert!(res.is_ok());
-        let mol = res.unwrap();
-        assert_eq!(mol.atom_count(), 3);
-        assert_eq!(mol.bond_count(), 2);
-
-        // First bond: N(0)->C(1), 0 donates to 1
-        let bond0 = &mol.bonds[0];
-        assert_eq!(bond0.start_atom(), 0);
-        assert_eq!(bond0.end_atom(), 1);
-        assert_eq!(bond0.donation, Some(BondDonation::Donating));
-
-        // Second bond: C(1)->O(2), 1 donates to 2
-        let bond1 = &mol.bonds[1];
-        assert_eq!(bond1.start_atom(), 1);
-        assert_eq!(bond1.end_atom(), 2);
-        assert_eq!(bond1.donation, Some(BondDonation::Donating));
     }
 }

@@ -206,7 +206,8 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
                     return Err(ParseError::LeadingRing { pos: 0 });
                 }
                 let bond = pending_bond.take();
-                let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _, _)| (Some(o), d));
+                let (order_opt, wedge_opt, donation_opt) =
+                    bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
                 process_ring_closure(
                     &mut ring_table,
                     &mut builder,
@@ -214,7 +215,8 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
                     last_atom_idx.unwrap(),
                     idx,
                     order_opt,
-                    dir_opt,
+                    wedge_opt,
+                    donation_opt,
                     i,
                     i + 1,
                 )?;
@@ -694,7 +696,8 @@ fn parse_extended_smiles_inner(
                     return Err(ParseError::LeadingRing { pos: 0 });
                 }
                 let bond = pending_bond.take();
-                let (order_opt, dir_opt) = bond.map_or((None, None), |(o, d, _, _)| (Some(o), d));
+                let (order_opt, wedge_opt, donation_opt) =
+                    bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
                 process_ring_closure_extended(
                     &mut ring_table,
                     &mut builder,
@@ -702,7 +705,8 @@ fn parse_extended_smiles_inner(
                     last_atom_idx.unwrap(),
                     idx,
                     order_opt,
-                    dir_opt,
+                    wedge_opt,
+                    donation_opt,
                     i,
                     i + 1,
                 )?;

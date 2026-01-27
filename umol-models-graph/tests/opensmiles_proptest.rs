@@ -80,8 +80,9 @@ proptest! {
                 | ParseError::ChiralityOutOfRange { pos } => pos < len,
                 | ParseError::InvalidCxProperty { pos } => pos < len,
                 | ParseError::UnbalancedRingIndex { open_pos } => open_pos < len,
-                | ParseError::MismatchedRingBondDirs { pos, open_pos }
                 | ParseError::MismatchedRingBondOrders { pos, open_pos } => pos < len && open_pos < len,
+                | ParseError::MismatchedRingBondDirs { pos, open_pos } => pos < len && open_pos < len,
+                | ParseError::MismatchedRingBondDonations { pos, open_pos } => pos < len && open_pos < len,
                 | ParseError::DotBeforeRing { pos } => pos < len,
                 | ParseError::EmptyBracket { pos } => pos < len,
                 | ParseError::MissingChiralityIndex { pos } => pos < len,

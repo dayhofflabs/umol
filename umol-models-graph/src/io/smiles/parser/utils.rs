@@ -13,6 +13,7 @@ pub(super) struct OpenRing {
     pub(super) atom_id: u32,
     pub(super) order: Option<BondOrder>,
     pub(super) wedge: Option<BondWedge>,
+    pub(super) donation: Option<BondDonation>,
     pub(super) open_pos: usize,
     pub(super) open_end: usize,
     pub(super) open_aromatic: bool,
@@ -64,7 +65,8 @@ pub(super) fn process_ring_closure(
     last_atom_idx: u32,
     idx: usize,
     order_opt: Option<BondOrder>,
-    dir_opt: Option<BondWedge>,
+    wedge_opt: Option<BondWedge>,
+    donation_opt: Option<BondDonation>,
     pos: usize,
     token_end: usize,
 ) -> Result<(), ParseError> {
@@ -77,7 +79,8 @@ pub(super) fn process_ring_closure(
             *entry = Some(OpenRing {
                 atom_id: last_atom_idx,
                 order: order_opt,
-                wedge: dir_opt,
+                wedge: wedge_opt,
+                donation: donation_opt,
                 open_pos: pos,
                 open_end: token_end,
                 open_aromatic: last_aromatic,
@@ -90,9 +93,19 @@ pub(super) fn process_ring_closure(
             );
         }
         Some(open) => {
-            if let (Some(d1), Some(d2)) = (open.wedge, dir_opt) {
+            if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
                 if d1 != d2 {
                     return Err(ParseError::MismatchedRingBondDirs {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            // Check for dative bond donation direction conflict
+            // Same direction on both ends = conflict (both donating or both receiving)
+            if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
+                if don1 == don2 {
+                    return Err(ParseError::MismatchedRingBondDonations {
                         pos,
                         open_pos: open.open_pos,
                     });
@@ -106,7 +119,7 @@ pub(super) fn process_ring_closure(
                     });
                 }
             }
-            if open.wedge.is_some() || dir_opt.is_some() {
+            if open.wedge.is_some() || wedge_opt.is_some() {
                 let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                 if ord != BondOrder::Single {
                     return Err(ParseError::MismatchedRingBondOrders {
@@ -126,7 +139,14 @@ pub(super) fn process_ring_closure(
                 (Some(o), None) | (None, Some(o)) => o,
                 (None, None) => BondOrder::Single,
             };
-            let final_dir = open.wedge.or(dir_opt);
+            let final_dir = open.wedge.or(wedge_opt);
+            // For donation: use open's direction (from opening atom's perspective)
+            // If only close specifies, flip it (since it's from closing atom's perspective)
+            let final_donation = match (open.donation, donation_opt) {
+                (Some(d), _) => Some(d),
+                (None, Some(d)) => Some(d.flip()),
+                (None, None) => None,
+            };
             let a = open.atom_id;
             let b = last_atom_idx;
             if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
@@ -138,7 +158,7 @@ pub(super) fn process_ring_closure(
                 BondData {
                     order: final_order,
                     wedge: final_dir,
-                    donation: None,
+                    donation: final_donation,
                     span: Span::from_bytes_opt(
                         Some(open.open_pos as u32),
                         Some(open.open_end as u32),
@@ -646,7 +666,8 @@ pub(super) fn process_ring_closure_extended(
     last_atom_idx: u32,
     idx: usize,
     order_opt: Option<BondOrder>,
-    dir_opt: Option<BondWedge>,
+    wedge_opt: Option<BondWedge>,
+    donation_opt: Option<BondDonation>,
     pos: usize,
     token_end: usize,
 ) -> Result<(), ParseError> {
@@ -659,7 +680,8 @@ pub(super) fn process_ring_closure_extended(
             *entry = Some(OpenRing {
                 atom_id: last_atom_idx,
                 order: order_opt,
-                wedge: dir_opt,
+                wedge: wedge_opt,
+                donation: donation_opt,
                 open_pos: pos,
                 open_end: token_end,
                 open_aromatic: last_aromatic,
@@ -672,9 +694,19 @@ pub(super) fn process_ring_closure_extended(
             );
         }
         Some(open) => {
-            if let (Some(d1), Some(d2)) = (open.wedge, dir_opt) {
+            if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
                 if d1 != d2 {
                     return Err(ParseError::MismatchedRingBondDirs {
+                        pos,
+                        open_pos: open.open_pos,
+                    });
+                }
+            }
+            // Check for dative bond donation direction conflict
+            // Same direction on both ends = conflict (both donating or both receiving)
+            if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
+                if don1 == don2 {
+                    return Err(ParseError::MismatchedRingBondDonations {
                         pos,
                         open_pos: open.open_pos,
                     });
@@ -688,7 +720,7 @@ pub(super) fn process_ring_closure_extended(
                     });
                 }
             }
-            if open.wedge.is_some() || dir_opt.is_some() {
+            if open.wedge.is_some() || wedge_opt.is_some() {
                 let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                 if ord != BondOrder::Single {
                     return Err(ParseError::MismatchedRingBondOrders {
@@ -708,7 +740,14 @@ pub(super) fn process_ring_closure_extended(
                 (Some(o), None) | (None, Some(o)) => o,
                 (None, None) => BondOrder::Single,
             };
-            let final_dir = open.wedge.or(dir_opt);
+            let final_dir = open.wedge.or(wedge_opt);
+            // For donation: use open's direction (from opening atom's perspective)
+            // If only close specifies, flip it (since it's from closing atom's perspective)
+            let final_donation = match (open.donation, donation_opt) {
+                (Some(d), _) => Some(d),
+                (None, Some(d)) => Some(d.flip()),
+                (None, None) => None,
+            };
             let a = open.atom_id;
             let b = last_atom_idx;
             if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
@@ -720,7 +759,7 @@ pub(super) fn process_ring_closure_extended(
                 BondData {
                     order: final_order,
                     wedge: final_dir,
-                    donation: None,
+                    donation: final_donation,
                     span: Span::from_bytes_opt(
                         Some(open.open_pos as u32),
                         Some(open.open_end as u32),
