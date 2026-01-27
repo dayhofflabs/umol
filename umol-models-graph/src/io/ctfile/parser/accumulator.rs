@@ -17,7 +17,8 @@ use crate::table_ir::{
     AtomList, AtomSymbol, AttachmentPointType, BondOrder, CtfileData, ExtendedMolecule,
     LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount, SGroup,
     SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay,
-    SGroupMultiplier, SGroupSubtype, SGroupType, SubstitutionCount, UnsaturatedAtom,
+    SGroupMultiplier, SGroupSubtype, SGroupType, SubstitutionCount, UnpairedElectrons,
+    UnsaturatedAtom,
 };
 
 /// Accumulator for global molecule properties
@@ -32,7 +33,7 @@ pub(super) struct AtomProperties {
     pub label: Option<String>,
     pub value: Option<String>,
     pub charge: Option<i8>,
-    pub unpaired_e: Option<u8>,
+    pub unpaired_electrons: Option<u8>,
     pub isotope_mass: Option<u32>,
     pub hydrogen_count: Option<u8>,
     pub pattern: Option<String>,
@@ -181,7 +182,7 @@ impl PropertyAccumulator {
             PropertyEntries::RadicalEntries(entries) => {
                 for entry in entries {
                     let props = self.atom_properties.entry(entry.atom_index).or_default();
-                    props.unpaired_e = convert_radical_type_code(entry.radical_type)?;
+                    props.unpaired_electrons = convert_radical_type_code(entry.radical_type)?;
                 }
             }
             PropertyEntries::IsotopeEntries(entries) => {
@@ -696,12 +697,12 @@ impl PropertyAccumulator {
             // Apply charge
             if let Some(charge) = props.charge {
                 atom.charge = Some(charge);
-                atom.unpaired_e = None; // charge overrides radical from atom block
+                atom.unpaired_electrons = None; // charge overrides radical from atom block
             }
 
             // Apply radical (unpaired electrons)
-            if let Some(unpaired_e) = props.unpaired_e {
-                atom.unpaired_e = Some(unpaired_e);
+            if let Some(unpaired_electrons) = props.unpaired_electrons {
+                atom.unpaired_electrons = Some(UnpairedElectrons::from_count(unpaired_electrons));
                 atom.charge = None; // radical overrides charge from atom block
             }
 
@@ -764,12 +765,12 @@ impl PropertyAccumulator {
             // Apply charge
             if let Some(charge) = props.charge {
                 atom.charge = Some(charge);
-                atom.unpaired_e = None; // charge overrides radical from atom block
+                atom.unpaired_electrons = None; // charge overrides radical from atom block
             }
 
             // Apply radical (unpaired electrons)
-            if let Some(unpaired_e) = props.unpaired_e {
-                atom.unpaired_e = Some(unpaired_e);
+            if let Some(unpaired_electrons) = props.unpaired_electrons {
+                atom.unpaired_electrons = Some(UnpairedElectrons::from_count(unpaired_electrons));
                 atom.charge = None; // radical overrides charge from atom block
             }
 

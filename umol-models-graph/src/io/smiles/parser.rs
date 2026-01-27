@@ -3,6 +3,7 @@
 use umol_data::Element;
 
 mod builder;
+mod cx;
 mod utils;
 
 use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
@@ -279,7 +280,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
                 hydrogen_count: h_opt,
                 class: class_opt,
                 aromatic,
-                implicit_h: false,
+                implicit_hydrogens: false,
                 chirality: chir_opt,
                 span: Span::from_bytes_opt(s, e),
             };
@@ -762,7 +763,7 @@ fn parse_extended_smiles_inner(
                 hydrogen_count: h_opt,
                 class: class_opt,
                 aromatic,
-                implicit_h: false,
+                implicit_hydrogens: false,
                 chirality: chir_opt,
                 span: Span::from_bytes_opt(s, e),
             };

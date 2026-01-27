@@ -41,11 +41,11 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
         }
 
         if let Some(h) = atom.hydrogens {
-            atom_builder.set_implicit_h(h.into());
+            atom_builder.set_implicit_hydrogens(h.into());
         }
 
         if let Some(radical) = atom.radical {
-            atom_builder.set_unpaired_e(radical.to_unpaired_e().into());
+            atom_builder.set_unpaired_electrons(radical.to_unpaired_electrons().into());
         }
 
         if let Some(aromatic) = atom.aromatic {

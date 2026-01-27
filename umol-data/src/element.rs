@@ -21,7 +21,7 @@ pub enum Element {
 
 // Element data array indexed by atomic number - 1
 // Each tuple contains: (atomic_number, reference_isotope_mass, atomic_weight, symbol, period, group,
-// valence_electrons, max_valence, (min_charge, max_charge), max_unpaired_e, max_implicit_h)
+// valence_electrons, max_valence, (min_charge, max_charge), max_unpaired_electrons, max_implicit_hydrogens)
 #[allow(clippy::type_complexity)]
 static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, (i8, i8), u8, u8); 118] = [
     (1, 1, 1.0080, "H", 1, 1, 1, 2, (-1, 1), 1, 0),    // H
@@ -687,13 +687,13 @@ impl Element {
     }
 
     // Get maximum number of unpaired electrons for element
-    pub const fn max_unpaired_e(&self) -> u8 {
+    pub const fn max_unpaired_electrons(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].9
     }
 
     // Get maximum number of implicit hydrogens for element
-    pub const fn max_implicit_h(&self) -> u8 {
+    pub const fn max_implicit_hydrogens(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].10
     }
@@ -1153,8 +1153,8 @@ mod tests {
         let (actual_min, actual_max) = element.charge_bounds();
         assert_eq!(actual_min, min_charge);
         assert_eq!(actual_max, max_charge);
-        assert_eq!(element.max_unpaired_e(), max_unpaired);
-        assert_eq!(element.max_implicit_h(), max_implicit_hydrogens);
+        assert_eq!(element.max_unpaired_electrons(), max_unpaired);
+        assert_eq!(element.max_implicit_hydrogens(), max_implicit_hydrogens);
     }
 
     #[test]

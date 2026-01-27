@@ -65,6 +65,8 @@ pub enum ParseError {
     BracketHwithHcount { pos: usize },
     #[error("Invalid bracket at position {pos}")]
     InvalidBracket { pos: usize },
+    #[error("Invalid CX property at position {pos}")]
+    InvalidCxProperty { pos: usize },
 }
 
 impl From<ParseError> for Diagnostic {
@@ -196,6 +198,10 @@ impl From<ParseError> for Diagnostic {
             ),
             InvalidBracket { pos } => (
                 SmilesInvalidBracket,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            InvalidCxProperty { pos } => (
+                SmilesInvalidCxProperty,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
         };

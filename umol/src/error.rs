@@ -156,8 +156,8 @@ pub enum DataError {
     #[error("Invalid occupation: {0}")]
     InvalidOccupation(String),
 
-    #[error("Invalid spin state: {0}")]
-    InvalidSpinState(String),
+    #[error("Invalid spin multiplicity: {0}")]
+    InvalidSpinMultiplicity(String),
 
     #[error("Invalid atom: {0}")]
     InvalidAtom(String),

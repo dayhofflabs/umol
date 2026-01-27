@@ -85,6 +85,8 @@ pub enum DiagnosticKind {
     SmilesBracketHwithHcount,
     #[strum(message = "Invalid bracket")]
     SmilesInvalidBracket,
+    #[strum(message = "Invalid CX extension")]
+    SmilesInvalidCxProperty,
     #[strum(message = "Class out of range")]
     SmilesClassOutOfRange,
     #[strum(message = "Hcount out of range")]
@@ -275,6 +277,7 @@ impl DiagnosticKind {
             | SmilesChiralityOutOfRange
             | SmilesBracketHwithHcount
             | SmilesInvalidBracket
+            | SmilesInvalidCxProperty
             | SmilesClassOutOfRange
             | SmilesHcountOutOfRange
             | SmilesChargeOutOfRange
@@ -387,6 +390,7 @@ impl DiagnosticKind {
             | SmilesChiralityOutOfRange
             | SmilesBracketHwithHcount
             | SmilesInvalidBracket
+            | SmilesInvalidCxProperty
             | SmilesClassOutOfRange
             | SmilesHcountOutOfRange
             | SmilesChargeOutOfRange

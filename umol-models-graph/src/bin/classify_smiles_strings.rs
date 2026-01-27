@@ -53,19 +53,10 @@ struct SmilesEntry {
 }
 
 /// Detected file format
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct FileFormat {
     delimiter: Option<char>,
     smiles_column: usize,
-}
-
-impl Default for FileFormat {
-    fn default() -> Self {
-        Self {
-            delimiter: None,
-            smiles_column: 0,
-        }
-    }
 }
 
 /// Check if a string looks like valid SMILES using lenient parser

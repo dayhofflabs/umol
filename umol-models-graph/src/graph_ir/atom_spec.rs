@@ -21,9 +21,9 @@ pub struct AtomSpec {
     lone_pairs: u32,
     donated_pairs: u32,
     accepted_pairs: u32,
-    unpaired_e: u32,
+    unpaired_electrons: u32,
     multiplicity: u32,
-    implicit_h: u32,
+    implicit_hydrogens: u32,
     valence: u32,
 }
 
@@ -35,17 +35,17 @@ impl AtomSpec {
         lone_pairs: u32,
         donated_pairs: u32,
         accepted_pairs: u32,
-        unpaired_e: u32,
+        unpaired_electrons: u32,
         multiplicity: u32,
-        implicit_h: u32,
+        implicit_hydrogens: u32,
         valence: u32,
     ) -> Self {
         debug_assert!(
-            multiplicity >= 1 && multiplicity <= unpaired_e + 1,
+            multiplicity >= 1 && multiplicity <= unpaired_electrons + 1,
             "Multiplicity must be between 1 and unpaired electrons + 1"
         );
         debug_assert!(
-            (unpaired_e + 1 - multiplicity).is_multiple_of(2),
+            (unpaired_electrons + 1 - multiplicity).is_multiple_of(2),
             "Multiplicity must be even"
         );
         debug_assert!(
@@ -57,11 +57,11 @@ impl AtomSpec {
             "Charge must be less than or equal to valence electrons"
         );
         debug_assert!(
-            implicit_h <= element.max_implicit_h() as u32,
+            implicit_hydrogens <= element.max_implicit_hydrogens() as u32,
             "Implicit hydrogens must be less than or equal to max implicit hydrogens"
         );
         debug_assert!(
-            implicit_h <= valence,
+            implicit_hydrogens <= valence,
             "Implicit hydrogens must be less than or equal to valence"
         );
         debug_assert!(
@@ -74,9 +74,9 @@ impl AtomSpec {
             lone_pairs,
             donated_pairs,
             accepted_pairs,
-            unpaired_e,
+            unpaired_electrons,
             multiplicity,
-            implicit_h,
+            implicit_hydrogens,
             valence,
         }
     }
@@ -101,20 +101,20 @@ impl AtomSpec {
         self.accepted_pairs
     }
 
-    pub fn unpaired_e(&self) -> u32 {
-        self.unpaired_e
+    pub fn unpaired_electrons(&self) -> u32 {
+        self.unpaired_electrons
     }
 
     pub fn electron_count(&self) -> u32 {
-        2 * self.lone_pairs + self.unpaired_e
+        2 * self.lone_pairs + self.unpaired_electrons
     }
 
     pub fn multiplicity(&self) -> u32 {
         self.multiplicity
     }
 
-    pub fn implicit_h(&self) -> u32 {
-        self.implicit_h
+    pub fn implicit_hydrogens(&self) -> u32 {
+        self.implicit_hydrogens
     }
 
     pub fn valence(&self) -> u32 {
@@ -151,18 +151,18 @@ impl fmt::Display for AtomSpec {
                 write!(f, "{}", self.accepted_pairs)?;
             }
         }
-        if self.unpaired_e > 0 {
+        if self.unpaired_electrons > 0 {
             write!(f, "^")?;
-            if self.unpaired_e > 1 {
-                write!(f, "{}", self.unpaired_e)?;
+            if self.unpaired_electrons > 1 {
+                write!(f, "{}", self.unpaired_electrons)?;
             }
         }
-        if self.multiplicity != self.unpaired_e + 1 {
+        if self.multiplicity != self.unpaired_electrons + 1 {
             write!(f, "*{}", self.multiplicity)?;
         }
 
-        if self.implicit_h > 0 {
-            write!(f, "H{}", self.implicit_h)?;
+        if self.implicit_hydrogens > 0 {
+            write!(f, "H{}", self.implicit_hydrogens)?;
         }
 
         if self.valence > 0 {
@@ -206,7 +206,7 @@ impl TryFrom<&str> for AtomSpec {
         let mut accepted: Option<u32> = None;
         let mut unpaired: Option<u32> = None;
         let mut multiplicity: Option<u32> = None;
-        let mut implicit_h: Option<u32> = None;
+        let mut implicit_hydrogens: Option<u32> = None;
         let mut valence: Option<u32> = None;
 
         for cap in property_pattern.captures_iter(properties) {
@@ -310,13 +310,13 @@ impl TryFrom<&str> for AtomSpec {
                     }
                 }
                 "H" => {
-                    if implicit_h.is_some() {
+                    if implicit_hydrogens.is_some() {
                         return Err(GraphError::InvalidAtomSpec(
                             "Duplicate implicit hydrogen specification".to_string(),
                         )
                         .into());
                     } else {
-                        implicit_h = if value.is_empty() {
+                        implicit_hydrogens = if value.is_empty() {
                             Some(1)
                         } else {
                             value.parse::<u32>().ok()
@@ -344,7 +344,7 @@ impl TryFrom<&str> for AtomSpec {
         let accepted = accepted.unwrap_or(0);
         let unpaired = unpaired.unwrap_or(0);
         let multiplicity = multiplicity.unwrap_or(unpaired + 1);
-        let implicit_h = implicit_h.unwrap_or(0);
+        let implicit_hydrogens = implicit_hydrogens.unwrap_or(0);
         let valence = valence.unwrap_or(0);
 
         if multiplicity == 0
@@ -368,13 +368,13 @@ impl TryFrom<&str> for AtomSpec {
                 charge
             )));
         }
-        if implicit_h > element.max_implicit_h() as u32 {
+        if implicit_hydrogens > element.max_implicit_hydrogens() as u32 {
             return Err(GraphError::InvalidAtomSpec(format!(
                 "Invalid implicit hydrogens: {}",
-                implicit_h
+                implicit_hydrogens
             )));
         }
-        if implicit_h > valence {
+        if implicit_hydrogens > valence {
             return Err(GraphError::InvalidAtomSpec(format!(
                 "Invalid valence (H): {}",
                 valence
@@ -395,7 +395,7 @@ impl TryFrom<&str> for AtomSpec {
             accepted,
             unpaired,
             multiplicity,
-            implicit_h,
+            implicit_hydrogens,
             valence,
         ))
     }

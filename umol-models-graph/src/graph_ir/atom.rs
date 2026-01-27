@@ -25,8 +25,8 @@ pub struct Atom {
     lone_pairs: u32,
     donated_pairs: u32,
     accepted_pairs: u32,
-    unpaired_e: u32,
-    implicit_h: u32,
+    unpaired_electrons: u32,
+    implicit_hydrogens: u32,
     aromatic: Option<bool>,
     chirality: Option<Chirality>,
     class_num: Option<u32>,
@@ -56,16 +56,16 @@ impl Atom {
         self.accepted_pairs
     }
 
-    pub fn unpaired_e(&self) -> u32 {
-        self.unpaired_e
+    pub fn unpaired_electrons(&self) -> u32 {
+        self.unpaired_electrons
     }
 
     pub fn multiplicity(&self) -> u32 {
         self.multiplicity
     }
 
-    pub fn implicit_h(&self) -> u32 {
-        self.implicit_h
+    pub fn implicit_hydrogens(&self) -> u32 {
+        self.implicit_hydrogens
     }
 
     pub fn valence(&self) -> u32 {
@@ -107,10 +107,10 @@ impl Atom {
             lone_pairs: Some(self.lone_pairs),
             donated_pairs: Some(self.donated_pairs),
             accepted_pairs: Some(self.accepted_pairs),
-            unpaired_e: Some(self.unpaired_e),
+            unpaired_electrons: Some(self.unpaired_electrons),
             multiplicity: Some(self.multiplicity),
             valence: Some(self.valence),
-            implicit_h: Some(self.implicit_h),
+            implicit_hydrogens: Some(self.implicit_hydrogens),
             position: self.position,
             isotope: self.isotope_mass,
             aromatic: self.aromatic,
@@ -127,9 +127,9 @@ impl Atom {
             self.lone_pairs,
             self.donated_pairs,
             self.accepted_pairs,
-            self.unpaired_e,
+            self.unpaired_electrons,
             self.multiplicity,
-            self.implicit_h,
+            self.implicit_hydrogens,
             self.valence,
         )
     }
@@ -157,8 +157,8 @@ pub struct AtomBuilder {
     lone_pairs: Option<u32>,
     donated_pairs: Option<u32>,
     accepted_pairs: Option<u32>,
-    unpaired_e: Option<u32>,
-    implicit_h: Option<u32>,
+    unpaired_electrons: Option<u32>,
+    implicit_hydrogens: Option<u32>,
     position: Option<Point3D>,
     isotope_mass: Option<u32>,
     aromatic: Option<bool>,
@@ -177,8 +177,8 @@ impl AtomBuilder {
             lone_pairs: None,
             donated_pairs: None,
             accepted_pairs: None,
-            unpaired_e: None,
-            implicit_h: None,
+            unpaired_electrons: None,
+            implicit_hydrogens: None,
             position: None,
             isotope: None,
             aromatic: None,
@@ -197,8 +197,8 @@ impl AtomBuilder {
             lone_pairs: Some(atom_spec.lone_pairs()),
             donated_pairs: Some(atom_spec.donated_pairs()),
             accepted_pairs: Some(atom_spec.accepted_pairs()),
-            unpaired_e: Some(atom_spec.unpaired_e()),
-            implicit_h: Some(atom_spec.implicit_h()),
+            unpaired_electrons: Some(atom_spec.unpaired_electrons()),
+            implicit_hydrogens: Some(atom_spec.implicit_hydrogens()),
             position: None,
             isotope: None,
             aromatic: None,
@@ -228,8 +228,8 @@ impl AtomBuilder {
         self.accepted_pairs
     }
 
-    pub fn unpaired_e(&self) -> Option<u32> {
-        self.unpaired_e
+    pub fn unpaired_electrons(&self) -> Option<u32> {
+        self.unpaired_electrons
     }
 
     pub fn multiplicity(&self) -> Option<u32> {
@@ -240,8 +240,8 @@ impl AtomBuilder {
         self.valence
     }
 
-    pub fn implicit_h(&self) -> Option<u32> {
-        self.implicit_h
+    pub fn implicit_hydrogens(&self) -> Option<u32> {
+        self.implicit_hydrogens
     }
 
     pub fn position(&self) -> Option<&Point3D> {
@@ -297,8 +297,8 @@ impl AtomBuilder {
         self
     }
 
-    pub fn set_unpaired_e(&mut self, count: u32) -> &mut Self {
-        self.unpaired_e = Some(count);
+    pub fn set_unpaired_electrons(&mut self, count: u32) -> &mut Self {
+        self.unpaired_electrons = Some(count);
         self
     }
 
@@ -312,8 +312,8 @@ impl AtomBuilder {
         self
     }
 
-    pub fn set_implicit_h(&mut self, count: u32) -> &mut Self {
-        self.implicit_h = Some(count);
+    pub fn set_implicit_hydrogens(&mut self, count: u32) -> &mut Self {
+        self.implicit_hydrogens = Some(count);
         self
     }
 
@@ -377,8 +377,8 @@ impl AtomBuilder {
         self
     }
 
-    pub fn update_unpaired_e(&mut self, f: impl FnOnce(u32) -> u32) -> &mut Self {
-        self.unpaired_e = Some(f(self.unpaired_e.unwrap_or(0)));
+    pub fn update_unpaired_electrons(&mut self, f: impl FnOnce(u32) -> u32) -> &mut Self {
+        self.unpaired_electrons = Some(f(self.unpaired_electrons.unwrap_or(0)));
         self
     }
 
@@ -426,8 +426,8 @@ impl AtomBuilder {
             accepted_pairs: self
                 .accepted_pairs
                 .unwrap_or_else(|| atom_spec.accepted_pairs()),
-            unpaired_e: self.unpaired_e.unwrap_or_else(|| atom_spec.unpaired_e()),
-            implicit_h: self.implicit_h.unwrap_or_else(|| atom_spec.implicit_h()),
+            unpaired_electrons: self.unpaired_electrons.unwrap_or_else(|| atom_spec.unpaired_electrons()),
+            implicit_hydrogens: self.implicit_hydrogens.unwrap_or_else(|| atom_spec.implicit_hydrogens()),
             position: self.position,
             isotope: self.isotope_mass,
             aromatic: self.aromatic,

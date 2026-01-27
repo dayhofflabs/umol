@@ -31,8 +31,8 @@ impl AtomValidator {
                 ));
             }
 
-            let unpaired = atom.unpaired_e();
-            if unpaired > u32::from(element.max_unpaired_e()) {
+            let unpaired = atom.unpaired_electrons();
+            if unpaired > u32::from(element.max_unpaired_electrons()) {
                 return Err(GraphError::ValenceViolation(
                     element,
                     format!("Unpaired electrons {} exceed max", unpaired),
@@ -40,18 +40,18 @@ impl AtomValidator {
             }
 
             let multiplicity = atom.multiplicity();
-            if multiplicity > u32::from(element.max_unpaired_e()) + 1 {
+            if multiplicity > u32::from(element.max_unpaired_electrons()) + 1 {
                 return Err(GraphError::ValenceViolation(
                     element,
                     format!("Multiplicity {} exceeds max", multiplicity),
                 ));
             }
 
-            let implicit_h = atom.implicit_h();
-            if implicit_h > u32::from(element.max_implicit_h()) {
+            let implicit_hydrogens = atom.implicit_hydrogens();
+            if implicit_hydrogens > u32::from(element.max_implicit_hydrogens()) {
                 return Err(GraphError::ValenceViolation(
                     element,
-                    format!("Implicit hydrogens {} exceed max", implicit_h),
+                    format!("Implicit hydrogens {} exceed max", implicit_hydrogens),
                 ));
             }
 

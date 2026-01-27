@@ -22,7 +22,7 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::rgroup::rgroup_symbol;
 use crate::position::{all_zero, Point3D};
-use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, WildcardAtom};
+use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, UnpairedElectrons, WildcardAtom};
 
 /// Parse atom block (basic atoms only)
 pub(super) fn atom_block<'inp>(
@@ -215,7 +215,7 @@ pub fn atom_input<'inp>(
         let (element, isotope_mass) = convert_atom_symbol_mass_diff(&symbol, mass_diff_code);
 
         // Charge/radical (36-38)
-        let (charge, unpaired_e) = if input.len() >= 39 {
+        let (charge, unpaired_count) = if input.len() >= 39 {
             offset = 39;
             let val = parse_int_opt::<u8>(input, &input[36..39])?
                 .filter(|val| (0..=7).contains(val))
@@ -224,6 +224,7 @@ pub fn atom_input<'inp>(
         } else {
             (None, None)
         };
+        let unpaired_electrons = unpaired_count.map(UnpairedElectrons::from_count);
 
         // Stereo parity (39-41)
         let chirality = if input.len() >= 42 {
@@ -319,9 +320,9 @@ pub fn atom_input<'inp>(
                     charge,
                     isotope_mass,
                     hydrogens,
-                    implicit_h: false,
+                    implicit_hydrogens: false,
                     valence,
-                    unpaired_e,
+                    unpaired_electrons,
                     aromatic: None,
                     chirality,
                     class,
@@ -430,7 +431,7 @@ pub fn extended_atom_input<'inp>(
         let isotope_mass = convert_extended_atom_symbol_mass_diff(&symbol, mass_diff_code);
 
         // Charge/radical (36-38)
-        let (charge, unpaired_e) = if input.len() >= 39 {
+        let (charge, unpaired_count) = if input.len() >= 39 {
             offset = 39;
             let val = parse_int_opt::<u8>(input, &input[36..39])?
                 .filter(|val| (0..=7).contains(val))
@@ -439,6 +440,7 @@ pub fn extended_atom_input<'inp>(
         } else {
             (None, None)
         };
+        let unpaired_electrons = unpaired_count.map(UnpairedElectrons::from_count);
 
         // Stereo parity (39-41)
         let chirality = if input.len() >= 42 {
@@ -537,13 +539,13 @@ pub fn extended_atom_input<'inp>(
                     symbol,
                     charge,
                     isotope_mass,
-                    unpaired_e,
+                    unpaired_electrons,
                     hydrogens,
                     stereo_care,
                     valence,
                     inversion_retention,
                     exact_change,
-                    implicit_h: false,
+                    implicit_hydrogens: false,
                     aromatic: None,
                     chirality,
                     class,

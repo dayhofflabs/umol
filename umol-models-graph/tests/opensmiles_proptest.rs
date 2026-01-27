@@ -54,30 +54,31 @@ proptest! {
         if let Err(err) = res {
             let len = input.len();
             let ok = match err {
-                ParseError::InvalidWhitespace { pos }
-                | ParseError::InvalidToken { pos }
-                | ParseError::InvalidElement { pos }
-                | ParseError::UnbalancedOpenParen { pos }
-                | ParseError::UnbalancedCloseParen { pos }
-                | ParseError::EmptyBranch { pos }
-                | ParseError::EmptyGroup { pos }
-                | ParseError::NonfinalGroup { pos }
-                | ParseError::TrailingBond { pos }
-                | ParseError::ConsecutiveBonds { pos }
-                | ParseError::LeadingBond { pos }
-                | ParseError::InvalidRingIndex { pos }
-                | ParseError::LeadingRing { pos }
-                | ParseError::LeadingDot { pos }
-                | ParseError::TrailingDot { pos }
-                | ParseError::ConsecutiveDots { pos }
-                | ParseError::UnbalancedOpenBracket { pos }
-                | ParseError::UnbalancedCloseBracket { pos }
-                | ParseError::InvalidBracket { pos }
-                | ParseError::MissingClassIndex { pos }
-                | ParseError::StrayBracketField { pos }
-                | ParseError::DuplicateBracketField { pos }
-                | ParseError::BracketHwithHcount { pos }
+                ParseError::InvalidWhitespace { pos } => pos < len,
+                | ParseError::InvalidToken { pos } => pos < len,
+                | ParseError::InvalidElement { pos } => pos < len,
+                | ParseError::UnbalancedOpenParen { pos } => pos < len,
+                | ParseError::UnbalancedCloseParen { pos } => pos < len,
+                | ParseError::EmptyBranch { pos } => pos < len,
+                | ParseError::EmptyGroup { pos } => pos < len,
+                | ParseError::NonfinalGroup { pos } => pos < len,
+                | ParseError::TrailingBond { pos } => pos < len,
+                | ParseError::ConsecutiveBonds { pos } => pos < len,
+                | ParseError::LeadingBond { pos } => pos < len,
+                | ParseError::InvalidRingIndex { pos } => pos < len,
+                | ParseError::LeadingRing { pos } => pos < len,
+                | ParseError::LeadingDot { pos } => pos < len,
+                | ParseError::TrailingDot { pos } => pos < len,
+                | ParseError::ConsecutiveDots { pos } => pos < len,
+                | ParseError::UnbalancedOpenBracket { pos } => pos < len,
+                | ParseError::UnbalancedCloseBracket { pos } => pos < len,
+                | ParseError::InvalidBracket { pos } => pos < len,
+                | ParseError::MissingClassIndex { pos } => pos < len,
+                | ParseError::StrayBracketField { pos } => pos < len,
+                | ParseError::DuplicateBracketField { pos } => pos < len,
+                | ParseError::BracketHwithHcount { pos } => pos < len,
                 | ParseError::ChiralityOutOfRange { pos } => pos < len,
+                | ParseError::InvalidCxProperty { pos } => pos < len,
                 | ParseError::UnbalancedRingIndex { open_pos } => open_pos < len,
                 | ParseError::MismatchedRingBondDirs { pos, open_pos }
                 | ParseError::MismatchedRingBondOrders { pos, open_pos } => pos < len && open_pos < len,

@@ -37,9 +37,9 @@ impl AtomMatcher {
                         && Self::matches_count(builder.lone_pairs(), spec.lone_pairs())
                         && Self::matches_count(builder.donated_pairs(), spec.donated_pairs())
                         && Self::matches_count(builder.accepted_pairs(), spec.accepted_pairs())
-                        && Self::matches_count(builder.unpaired_e(), spec.unpaired_e())
+                        && Self::matches_count(builder.unpaired_electrons(), spec.unpaired_electrons())
                         && Self::matches_count(builder.multiplicity(), spec.multiplicity())
-                        && Self::matches_count(builder.implicit_h(), spec.implicit_h())
+                        && Self::matches_count(builder.implicit_hydrogens(), spec.implicit_hydrogens())
                         && Self::matches_count(builder.valence(), spec.valence())
                 })
                 .cloned()
@@ -61,9 +61,9 @@ impl AtomMatcher {
             let lp = builder.lone_pairs().unwrap_or(0);
             let dp = builder.donated_pairs().unwrap_or(0);
             let ap = builder.accepted_pairs().unwrap_or(0);
-            let up = builder.unpaired_e().unwrap_or(0);
+            let up = builder.unpaired_electrons().unwrap_or(0);
             let mult = builder.multiplicity().unwrap_or(up + 1);
-            let ih = builder.implicit_h().unwrap_or(0);
+            let ih = builder.implicit_hydrogens().unwrap_or(0);
             let val = builder.valence().unwrap_or(0);
             Ok(vec![AtomSpec::new(
                 builder.element(),

@@ -94,7 +94,7 @@ impl AtomSpec {
             "Charge must be less than or equal to valence electrons"
         );
         debug_assert!(
-            implicit_hydrogens <= element.max_implicit_h(),
+            implicit_hydrogens <= element.max_implicit_hydrogens(),
             "Implicit hydrogens must be less than or equal to max implicit hydrogens"
         );
         debug_assert!(
@@ -398,7 +398,7 @@ impl TryFrom<&str> for AtomSpec {
         if (element.valence_e() as i8 - charge) < 0 {
             return Err(DataError::InvalidAtomCharge(format!("{}", charge)).into());
         }
-        if implicit_hydrogens > element.max_implicit_h() {
+        if implicit_hydrogens > element.max_implicit_hydrogens() {
             return Err(
                 DataError::InvalidAtomImplicitHydrogens(format!("{}", implicit_hydrogens)).into(),
             );

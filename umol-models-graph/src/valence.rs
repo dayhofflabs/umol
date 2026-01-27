@@ -123,7 +123,7 @@ pub struct ValencePattern {
     pub element: Option<Element>,
     pub bond_sum: Option<u8>,
     pub charge: Option<i8>,
-    pub implicit_h: Option<u8>,
+    pub implicit_hydrogens: Option<u8>,
     pub unpaired: Option<u8>,
 }
 

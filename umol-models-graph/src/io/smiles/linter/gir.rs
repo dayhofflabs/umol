@@ -95,8 +95,8 @@ fn lint_gir_valence(
             .map(|bond| u32::from(bond.order().value()))
             .sum();
 
-        let implicit_h = atom.implicit_h();
-        let effective_valence = bond_sum + implicit_h;
+        let implicit_hydrogens = atom.implicit_hydrogens();
+        let effective_valence = bond_sum + implicit_hydrogens;
 
         if let Some(states) = valence_model.states_for(atom.element()) {
             if !states

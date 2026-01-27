@@ -38,7 +38,7 @@ impl AtomValidator {
                 }
             }
             if let Some(unpaired_electrons) = builder.unpaired_electrons() {
-                if unpaired_electrons > element.max_unpaired_e() {
+                if unpaired_electrons > element.max_unpaired_electrons() {
                     return Err(DataError::InvalidAtomUnpairedElectrons(format!(
                         "Unpaired electrons {} exceed max for element {}",
                         unpaired_electrons, element
@@ -47,7 +47,7 @@ impl AtomValidator {
                 }
             }
             if let Some(multiplicity) = builder.multiplicity() {
-                if multiplicity > element.max_unpaired_e() + 1 {
+                if multiplicity > element.max_unpaired_electrons() + 1 {
                     return Err(DataError::InvalidAtomMultiplicity(format!(
                         "Multiplicity {} exceeds max for element {}",
                         multiplicity, element
@@ -56,7 +56,7 @@ impl AtomValidator {
                 }
             }
             if let Some(implicit_hydrogens) = builder.implicit_hydrogens() {
-                if implicit_hydrogens > element.max_implicit_h() {
+                if implicit_hydrogens > element.max_implicit_hydrogens() {
                     return Err(DataError::InvalidAtomImplicitHydrogens(format!(
                         "Implicit hydrogens {} exceed max for element {}",
                         implicit_hydrogens, element

@@ -2,11 +2,28 @@
 
 use std::collections::HashMap;
 
-use umol_data::{Element, NamedIsotope};
+use umol_data::{Element, NamedIsotope, SpinMultiplicity};
 
 use super::error::ConversionError;
 use super::rgroup::RGroup;
 use crate::span::Span;
+
+/// Unpaired electron configuration
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnpairedElectrons {
+    pub count: u8,
+    pub multiplicity: Option<SpinMultiplicity>,
+}
+
+impl UnpairedElectrons {
+    pub fn new(count: u8, multiplicity: Option<SpinMultiplicity>) -> Self {
+        Self { count, multiplicity }
+    }
+
+    pub fn from_count(count: u8) -> Self {
+        Self { count, multiplicity: None }
+    }
+}
 
 /// Basic Atom IR
 #[derive(Clone, Debug, PartialEq)]
@@ -15,9 +32,9 @@ pub struct Atom {
     pub charge: Option<i8>,
     pub isotope_mass: Option<u32>,
     pub hydrogens: Option<u8>,
-    pub implicit_h: bool,
+    pub implicit_hydrogens: bool,
     pub valence: Option<u8>,
-    pub unpaired_e: Option<u8>,
+    pub unpaired_electrons: Option<UnpairedElectrons>,
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
@@ -34,9 +51,9 @@ impl Atom {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: false,
+            implicit_hydrogens: false,
             valence: None,
-            unpaired_e: None,
+            unpaired_electrons: None,
             aromatic: None,
             chirality: None,
             class: None,
@@ -52,9 +69,9 @@ impl Atom {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: true,
+            implicit_hydrogens: true,
             valence: None,
-            unpaired_e: None,
+            unpaired_electrons: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
@@ -71,9 +88,9 @@ impl Atom {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: true,
+            implicit_hydrogens: true,
             valence: None,
-            unpaired_e: None,
+            unpaired_electrons: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
@@ -90,9 +107,9 @@ impl Atom {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: true,
+            implicit_hydrogens: true,
             valence: None,
-            unpaired_e: None,
+            unpaired_electrons: None,
             aromatic: Some(true),
             chirality: None,
             class: None,
@@ -109,9 +126,9 @@ impl Atom {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: true,
+            implicit_hydrogens: true,
             valence: None,
-            unpaired_e: None,
+            unpaired_electrons: None,
             aromatic: Some(true),
             chirality: None,
             class: None,
@@ -229,9 +246,9 @@ pub struct ExtendedAtom {
     pub charge: Option<i8>,
     pub isotope_mass: Option<u32>,
     pub hydrogens: Option<u8>,
-    pub implicit_h: bool,
+    pub implicit_hydrogens: bool,
     pub valence: Option<u8>,
-    pub unpaired_e: Option<u8>,
+    pub unpaired_electrons: Option<UnpairedElectrons>,
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
@@ -260,8 +277,8 @@ impl ExtendedAtom {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: false,
-            unpaired_e: None,
+            implicit_hydrogens: false,
+            unpaired_electrons: None,
             valence: None,
             aromatic: None,
             chirality: None,
@@ -326,9 +343,9 @@ impl From<Atom> for ExtendedAtom {
             charge: atom.charge,
             isotope_mass: atom.isotope_mass,
             hydrogens: atom.hydrogens,
-            implicit_h: atom.implicit_h,
+            implicit_hydrogens: atom.implicit_hydrogens,
             valence: atom.valence,
-            unpaired_e: atom.unpaired_e,
+            unpaired_electrons: atom.unpaired_electrons,
             aromatic: atom.aromatic,
             chirality: atom.chirality,
             class: atom.class,
@@ -373,9 +390,9 @@ impl TryFrom<ExtendedAtom> for Atom {
             charge: extended.charge,
             isotope_mass: extended.isotope_mass,
             hydrogens: extended.hydrogens,
-            implicit_h: extended.implicit_h,
+            implicit_hydrogens: extended.implicit_hydrogens,
             valence: extended.valence,
-            unpaired_e: extended.unpaired_e,
+            unpaired_electrons: extended.unpaired_electrons,
             aromatic: extended.aromatic,
             chirality: extended.chirality,
             class: extended.class,
@@ -471,7 +488,7 @@ mod tests {
         let atom = Atom::aliphatic_atom(Element::C);
         assert_eq!(atom.element, Element::C);
         assert_eq!(atom.aromatic, Some(false));
-        assert!(atom.implicit_h);
+        assert!(atom.implicit_hydrogens);
     }
 
     #[test]
@@ -479,14 +496,14 @@ mod tests {
         let atom = Atom::aromatic_atom(Element::C);
         assert_eq!(atom.element, Element::C);
         assert_eq!(atom.aromatic, Some(true));
-        assert!(atom.implicit_h);
+        assert!(atom.implicit_hydrogens);
     }
 
     #[test]
     fn test_extended_atom_from_element() {
         let extended = ExtendedAtom::from_element(Element::N);
         assert_eq!(extended.symbol, AtomSymbol::Element(Element::N));
-        assert!(!extended.implicit_h);
+        assert!(!extended.implicit_hydrogens);
         assert!(extended.aromatic.is_none());
         assert!(extended.properties.is_empty());
         assert!(!extended.has_extended_features());
@@ -499,9 +516,9 @@ mod tests {
             charge: Some(1),
             isotope_mass: Some(13),
             hydrogens: Some(3),
-            implicit_h: false,
+            implicit_hydrogens: false,
             valence: Some(3),
-            unpaired_e: Some(1),
+            unpaired_electrons: Some(UnpairedElectrons::from_count(1)),
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
@@ -515,9 +532,9 @@ mod tests {
         assert_eq!(extended.charge, Some(1));
         assert_eq!(extended.isotope_mass, Some(13));
         assert_eq!(extended.hydrogens, Some(3));
-        assert!(!extended.implicit_h);
+        assert!(!extended.implicit_hydrogens);
         assert_eq!(extended.valence, Some(3));
-        assert_eq!(extended.unpaired_e, Some(1));
+        assert_eq!(extended.unpaired_electrons, Some(UnpairedElectrons::from_count(1)));
         assert_eq!(extended.aromatic, Some(true));
         assert_eq!(extended.chirality, Some(Chirality::Clockwise));
         assert_eq!(extended.class, Some(5));
@@ -531,9 +548,9 @@ mod tests {
             charge: Some(-1),
             isotope_mass: None,
             hydrogens: Some(1),
-            implicit_h: true,
+            implicit_hydrogens: true,
             valence: Some(1),
-            unpaired_e: None,
+            unpaired_electrons: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
@@ -558,9 +575,9 @@ mod tests {
         assert_eq!(atom.charge, Some(-1));
         assert_eq!(atom.isotope_mass, None);
         assert_eq!(atom.hydrogens, Some(1));
-        assert_eq!(atom.implicit_h, true);
+        assert!(atom.implicit_hydrogens);
         assert_eq!(atom.valence, Some(1));
-        assert_eq!(atom.unpaired_e, None);
+        assert!(atom.unpaired_electrons.is_none());
         assert_eq!(atom.aromatic, Some(false));
     }
 
@@ -572,9 +589,9 @@ mod tests {
         assert_eq!(atom.element, Element::H);
         assert_eq!(atom.charge, None);
         assert_eq!(atom.isotope_mass, Some(2));
-        assert!(!atom.implicit_h);
+        assert!(!atom.implicit_hydrogens);
         assert_eq!(atom.valence, None);
-        assert_eq!(atom.unpaired_e, None);
+        assert!(atom.unpaired_electrons.is_none());
         assert_eq!(atom.aromatic, None);
     }
 
@@ -585,8 +602,8 @@ mod tests {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: true,
-            unpaired_e: None,
+            implicit_hydrogens: true,
+            unpaired_electrons: None,
             aromatic: None,
             chirality: None,
             class: None,
@@ -622,8 +639,8 @@ mod tests {
             charge: Some(1),
             isotope_mass: Some(13),
             hydrogens: Some(2),
-            implicit_h: false,
-            unpaired_e: Some(1),
+            implicit_hydrogens: false,
+            unpaired_electrons: Some(UnpairedElectrons::from_count(1)),
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
@@ -654,8 +671,8 @@ mod tests {
             charge: None,
             isotope_mass: None,
             hydrogens: None,
-            implicit_h: true,
-            unpaired_e: None,
+            implicit_hydrogens: true,
+            unpaired_electrons: None,
             aromatic: None,
             chirality: None,
             class: None,
@@ -686,9 +703,9 @@ mod tests {
             charge: Some(-1),
             isotope_mass: Some(15),
             hydrogens: Some(2),
-            implicit_h: false,
+            implicit_hydrogens: false,
             valence: Some(3),
-            unpaired_e: None,
+            unpaired_electrons: None,
             aromatic: Some(false),
             chirality: Some(Chirality::CounterClockwise),
             span: None,
@@ -704,9 +721,9 @@ mod tests {
         assert_eq!(atom.charge, atom2.charge);
         assert_eq!(atom.isotope_mass, atom2.isotope_mass);
         assert_eq!(atom.hydrogens, atom2.hydrogens);
-        assert_eq!(atom.implicit_h, atom2.implicit_h);
+        assert_eq!(atom.implicit_hydrogens, atom2.implicit_hydrogens);
         assert_eq!(atom.valence, atom2.valence);
-        assert_eq!(atom.unpaired_e, atom2.unpaired_e);
+        assert_eq!(atom.unpaired_electrons, atom2.unpaired_electrons);
         assert_eq!(atom.aromatic, atom2.aromatic);
         assert_eq!(atom.chirality, atom2.chirality);
         assert_eq!(atom.class, atom2.class);

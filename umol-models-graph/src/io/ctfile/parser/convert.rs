@@ -467,11 +467,11 @@ mod tests {
     fn test_convert_atom_charge_code(
         #[case] code: u8,
         #[case] expected_charge: Option<i8>,
-        #[case] expected_unpaired_e: Option<u8>,
+        #[case] expected_unpaired_electrons: Option<u8>,
     ) {
         assert_eq!(
             convert_atom_charge_code(code),
-            (expected_charge, expected_unpaired_e)
+            (expected_charge, expected_unpaired_electrons)
         );
     }
 

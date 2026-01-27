@@ -245,7 +245,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         let id = b.on_atom(AtomData {
             element: el,
             aromatic: arom,
-            implicit_h: true,
+            implicit_hydrogens: true,
             isotope: None,
             charge: None,
             hydrogen_count: None,
@@ -467,7 +467,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
                 b.on_atom(ExtendedAtomData {
                     symbol: AtomSymbol::Element(el),
                     aromatic: arom,
-                    implicit_h: true,
+                    implicit_hydrogens: true,
                     isotope: None,
                     charge: None,
                     hydrogen_count: None,
