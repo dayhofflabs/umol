@@ -24,12 +24,6 @@ use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
 use crate::table_ir::{BondWedge, UnpairedElectrons};
 
-/// Parse f64, returning 0.0 if no number present (for optional coordinates).
-fn parse_f64(input: &[u8]) -> IResult<&[u8], f64> {
-    let (rest, val) = opt(double).parse(input)?;
-    Ok((rest, val.unwrap_or(0.0)))
-}
-
 /// Stereo group type for enhanced stereochemistry
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StereoGroupType {
@@ -111,22 +105,20 @@ fn parse_cx_block<'inp>(
     }
 }
 
-/// Parse a single atom's coordinates (x,y,z) or empty for missing.
+/// Parse coordinates (x,y) or (x,y,z) for a single atom, or empty for missing.
 fn parse_atom_coordinates(input: &[u8]) -> IResult<&[u8], Point3D> {
-    if input.is_empty() || input[0] == b';' {
+    if input.is_empty() {
         return Ok((input, Point3D::new(f64::NAN, f64::NAN, f64::NAN)));
     }
 
-    let (input, (x, _, y, _, z)) = (
-        parse_f64,
-        opt(char(',')),
-        parse_f64,
-        opt(char(',')),
-        parse_f64,
+    let (remaining, (x, y, z)) = (
+        double,
+        preceded(char(','), double),
+        opt(preceded(char(','), double)),
     )
         .parse(input)?;
 
-    Ok((input, Point3D::new(x, y, z)))
+    Ok((remaining, Point3D::new(x, y, z.unwrap_or(0.0))))
 }
 
 /// Parse coordinates block: `(x,y,z;x,y,z;...)`
