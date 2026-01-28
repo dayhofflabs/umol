@@ -114,8 +114,7 @@ pub(super) fn extended_bond_block<'inp>(
 ///
 pub fn bond_input<'inp>(
     flags: CtabParseFlags,
-) -> impl Parser<&'inp [u8], Output = Bond, Error = NomError<&'inp [u8]>> + use<'inp>
-{
+) -> impl Parser<&'inp [u8], Output = Bond, Error = NomError<&'inp [u8]>> + use<'inp> {
     move |input: &'inp [u8]| {
         if input.len() < 9 {
             return Err(Err::Error(NomError::new(input, NomErrorKind::Eof)));
@@ -142,7 +141,7 @@ pub fn bond_input<'inp>(
         offset = 9;
 
         // Stereo/direction (9-11)
-        let (stereo, direction) = if input.len() >= 12 {
+        let (stereo, wedge) = if input.len() >= 12 {
             offset = 12;
             let stereo_code = parse_int_opt::<u8>(input, &input[9..12])?.unwrap_or(0);
             convert_bond_stereo_direction_code(stereo_code)
@@ -164,10 +163,10 @@ pub fn bond_input<'inp>(
         }
 
         let mut bond = Bond::new(first_atom as u32, second_atom as u32, order);
-        if let (Some(stereo), Some(direction)) = (stereo, direction) {
+        if let (Some(stereo), Some(wedge)) = (stereo, wedge) {
             match order {
                 BondOrder::Single => {
-                    bond.wedge = Some(direction);
+                    bond.wedge = Some(wedge);
                 }
                 BondOrder::Double => {
                     bond.stereo = Some(stereo);
@@ -227,7 +226,7 @@ pub fn extended_bond_input<'inp>(
             .map_err(|_| Err::Error(NomError::new(input, NomErrorKind::MapRes)))?;
 
         // Stereo/direction (9-11)
-        let stereo_direction = if input.len() >= 12 {
+        let (stereo, wedge) = if input.len() >= 12 {
             offset = 12;
             let stereo_code = parse_int_opt::<u8>(input, &input[9..12])?.unwrap_or(0);
             convert_bond_stereo_direction_code(stereo_code)
@@ -269,10 +268,10 @@ pub fn extended_bond_input<'inp>(
         }
 
         let mut bond = ExtendedBond::new(first_atom as u32, second_atom as u32, order);
-        if let (Some(stereo), Some(direction)) = stereo_direction {
+        if let (Some(stereo), Some(wedge)) = (stereo, wedge) {
             match order {
                 BondOrder::Single => {
-                    bond.wedge = Some(direction);
+                    bond.wedge = Some(wedge);
                 }
                 BondOrder::Double => {
                     bond.stereo = Some(stereo);

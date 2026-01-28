@@ -91,7 +91,7 @@ pub fn sir_to_gir(src: &sir::Molecule) -> Result<Molecule> {
         let mut bond_builder = BondBuilder::new(order);
         bond_builder.set_donation(BondDonation::Shared);
         bond_builder.set_sir_order(bond.order);
-        bond_builder.set_direction(bond.direction);
+        bond_builder.set_wedge(bond.wedge);
         bond_builder.set_stereo(bond.stereo);
         bond_builder.set_ring(bond.ring);
         bond_builder.set_span_opt(bond.span);

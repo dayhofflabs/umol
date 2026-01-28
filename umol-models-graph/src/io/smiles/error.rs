@@ -69,6 +69,8 @@ pub enum ParseError {
     InvalidBracket { pos: usize },
     #[error("Invalid CX property at position {pos}")]
     InvalidCxProperty { pos: usize },
+    #[error("Index out of bounds: {0}")]
+    IndexOutOfBounds(u32),
 }
 
 impl From<ParseError> for Diagnostic {
@@ -209,6 +211,7 @@ impl From<ParseError> for Diagnostic {
                 SmilesInvalidCxProperty,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
+            IndexOutOfBounds(_) => (SmilesCxIndexOutOfBounds, None),
         };
 
         Diagnostic {

@@ -1,12 +1,14 @@
 //! Utilities for SMILES parser.
 
+use std::borrow::Cow;
+
 use umol_data::Element;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondDonation, BondWedge, BondOrder, Chirality, WildcardAtom};
+use crate::table_ir::{AtomSymbol, BondDonation, BondOrder, BondWedge, Chirality, WildcardAtom};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct OpenRing {
@@ -101,8 +103,8 @@ pub(super) fn process_ring_closure(
                     });
                 }
             }
-            // Check for dative bond donation direction conflict
-            // Same direction on both ends = conflict (both donating or both receiving)
+            // Check for dative bond donation conflict
+            // Same donation on both ends = conflict (both donating or both receiving)
             if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
                 if don1 == don2 {
                     return Err(ParseError::MismatchedRingBondDonations {
@@ -139,8 +141,8 @@ pub(super) fn process_ring_closure(
                 (Some(o), None) | (None, Some(o)) => o,
                 (None, None) => BondOrder::Single,
             };
-            let final_dir = open.wedge.or(wedge_opt);
-            // For donation: use open's direction (from opening atom's perspective)
+            let final_wedge = open.wedge.or(wedge_opt);
+            // For donation: use open's donation (from opening atom's perspective)
             // If only close specifies, flip it (since it's from closing atom's perspective)
             let final_donation = match (open.donation, donation_opt) {
                 (Some(d), _) => Some(d),
@@ -157,7 +159,7 @@ pub(super) fn process_ring_closure(
                 b,
                 BondData {
                     order: final_order,
-                    wedge: final_dir,
+                    wedge: final_wedge,
                     donation: final_donation,
                     span: Span::from_bytes_opt(
                         Some(open.open_pos as u32),
@@ -702,8 +704,8 @@ pub(super) fn process_ring_closure_extended(
                     });
                 }
             }
-            // Check for dative bond donation direction conflict
-            // Same direction on both ends = conflict (both donating or both receiving)
+            // Check for dative bond donation conflict
+            // Same donation on both ends = conflict (both donating or both receiving)
             if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
                 if don1 == don2 {
                     return Err(ParseError::MismatchedRingBondDonations {
@@ -740,8 +742,8 @@ pub(super) fn process_ring_closure_extended(
                 (Some(o), None) | (None, Some(o)) => o,
                 (None, None) => BondOrder::Single,
             };
-            let final_dir = open.wedge.or(wedge_opt);
-            // For donation: use open's direction (from opening atom's perspective)
+            let final_wedge = open.wedge.or(wedge_opt);
+            // For donation: use open's donation (from opening atom's perspective)
             // If only close specifies, flip it (since it's from closing atom's perspective)
             let final_donation = match (open.donation, donation_opt) {
                 (Some(d), _) => Some(d),
@@ -758,7 +760,7 @@ pub(super) fn process_ring_closure_extended(
                 b,
                 BondData {
                     order: final_order,
-                    wedge: final_dir,
+                    wedge: final_wedge,
                     donation: final_donation,
                     span: Span::from_bytes_opt(
                         Some(open.open_pos as u32),
@@ -953,4 +955,105 @@ pub(super) fn parse_bracket_extended(
     }
 
     Ok((symbol, aromatic, isotope, charge, class_num, hcount, chir))
+}
+
+/// Unescape `&#code;` sequences in a byte string.
+///
+/// CXSMILES uses HTML-style numeric character references to escape special characters.
+/// Returns borrowed data when no escapes are present.
+pub(crate) fn unescape_html_entities(input: &[u8]) -> Cow<'_, [u8]> {
+    if !input.windows(2).any(|w| w == b"&#") {
+        return Cow::Borrowed(input);
+    }
+
+    let mut result = Vec::with_capacity(input.len());
+    let mut i = 0;
+
+    while i < input.len() {
+        if i + 2 < input.len() && input[i] == b'&' && input[i + 1] == b'#' {
+            let mut j = i + 2;
+            while j < input.len() && input[j] != b';' && input[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j < input.len() && input[j] == b';' {
+                if let Ok(s) = std::str::from_utf8(&input[i + 2..j]) {
+                    if let Ok(code) = s.parse::<u8>() {
+                        result.push(code);
+                        i = j + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        result.push(input[i]);
+        i += 1;
+    }
+
+    Cow::Owned(result)
+}
+
+/// Split on semicolons while respecting `&#n;` escape sequences.
+///
+/// In CXSMILES labels, semicolons separate entries, but `&#59;` represents a literal semicolon.
+/// Returns slices into the original input.
+pub(crate) fn split_escaped_semicolons(input: &[u8]) -> Vec<&[u8]> {
+    let mut result = Vec::new();
+    let mut start = 0;
+    let mut i = 0;
+
+    while i < input.len() {
+        if i + 2 < input.len() && input[i] == b'&' && input[i + 1] == b'#' {
+            let mut j = i + 2;
+            while j < input.len() && input[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j < input.len() && input[j] == b';' {
+                i = j + 1;
+                continue;
+            }
+        }
+
+        if input[i] == b';' {
+            result.push(&input[start..i]);
+            i += 1;
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+
+    result.push(&input[start..]);
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    use super::*;
+
+    #[rstest]
+    #[case::plain(b"hello", b"hello")]
+    #[case::semicolon(b"&#59;", b";")]
+    #[case::comma(b"&#44;", b",")]
+    #[case::mixed(b"a&#59;b", b"a;b")]
+    #[case::multiple(b"&#59;&#59;", b";;")]
+    #[case::incomplete(b"&#", b"&#")]
+    #[case::no_semicolon(b"&#65x", b"&#65x")]
+    fn test_unescape_html_entities(#[case] input: &[u8], #[case] expected: &[u8]) {
+        let result = unescape_html_entities(input);
+        assert_eq!(&*result, expected);
+    }
+
+    #[rstest]
+    #[case::single(b"abc", vec![&b"abc"[..]])]
+    #[case::two(b"a;b", vec![&b"a"[..], &b"b"[..]])]
+    #[case::empty_parts(b";", vec![&b""[..], &b""[..]])]
+    #[case::escaped(b"a&#59;b", vec![&b"a&#59;b"[..]])]
+    #[case::mixed(b"a;b&#59;c;d", vec![&b"a"[..], &b"b&#59;c"[..], &b"d"[..]])]
+    fn test_split_escaped_semicolons(#[case] input: &[u8], #[case] expected: Vec<&[u8]>) {
+        let result = split_escaped_semicolons(input);
+        assert_eq!(result, expected);
+    }
 }

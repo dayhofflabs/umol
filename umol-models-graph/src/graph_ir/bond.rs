@@ -18,7 +18,7 @@ pub struct Bond {
     order: BondOrder,
     donation: BondDonation,
     sir_order: Option<sir::BondOrder>,
-    direction: Option<BondWedge>,
+    wedge: Option<BondWedge>,
     stereo: Option<BondStereo>,
     ring: Option<u32>,
     span: Option<Span>,
@@ -37,8 +37,8 @@ impl Bond {
         self.sir_order
     }
 
-    pub fn direction(&self) -> Option<BondWedge> {
-        self.direction
+    pub fn wedge(&self) -> Option<BondWedge> {
+        self.wedge
     }
 
     pub fn stereo(&self) -> Option<BondStereo> {
@@ -62,7 +62,7 @@ impl Bond {
             order: self.order,
             donation: Some(self.donation),
             sir_order: self.sir_order,
-            direction: self.direction,
+            wedge: self.wedge,
             stereo: self.stereo,
             ring: self.ring,
             span: self.span,
@@ -92,7 +92,7 @@ pub struct BondBuilder {
     order: BondOrder,
     donation: Option<BondDonation>,
     sir_order: Option<sir::BondOrder>,
-    direction: Option<BondWedge>,
+    wedge: Option<BondWedge>,
     stereo: Option<BondStereo>,
     ring: Option<u32>,
     span: Option<Span>,
@@ -104,7 +104,7 @@ impl BondBuilder {
             order,
             donation: None,
             sir_order: None,
-            direction: None,
+            wedge: None,
             stereo: None,
             ring: None,
             span: None,
@@ -116,7 +116,7 @@ impl BondBuilder {
             order: bond_spec.order(),
             donation: Some(bond_spec.donation()),
             sir_order: None,
-            direction: None,
+            wedge: None,
             stereo: None,
             ring: None,
             span: None,
@@ -135,8 +135,8 @@ impl BondBuilder {
         self.sir_order
     }
 
-    pub fn direction(&self) -> Option<BondWedge> {
-        self.direction
+    pub fn wedge(&self) -> Option<BondWedge> {
+        self.wedge
     }
 
     pub fn stereo(&self) -> Option<BondStereo> {
@@ -170,8 +170,8 @@ impl BondBuilder {
         self
     }
 
-    pub fn set_direction(&mut self, direction: Option<BondWedge>) -> &mut Self {
-        self.direction = direction;
+    pub fn set_wedge(&mut self, wedge: Option<BondWedge>) -> &mut Self {
+        self.wedge = wedge;
         self
     }
 
@@ -221,7 +221,7 @@ impl BondBuilder {
             order: bond_spec.order(),
             donation: bond_spec.donation(),
             sir_order: self.sir_order,
-            direction: self.direction,
+            wedge: self.wedge,
             stereo: self.stereo,
             ring: self.ring,
             span: self.span,

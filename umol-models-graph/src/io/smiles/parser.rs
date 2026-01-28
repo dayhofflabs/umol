@@ -248,8 +248,8 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
                 pending_bond = Some((order, wedge, donation, i));
                 i += consumed;
             } else {
-                let (order, bond_dir) = parse_bond(b0);
-                pending_bond = Some((order, bond_dir, None, i));
+                let (order, bond_wedge) = parse_bond(b0);
+                pending_bond = Some((order, bond_wedge, None, i));
                 i += 1;
             }
             continue;
@@ -738,8 +738,8 @@ fn parse_extended_smiles_inner(
                 pending_bond = Some((order, wedge, donation, i));
                 i += consumed;
             } else {
-                let (order, bond_dir) = parse_bond(b0);
-                pending_bond = Some((order, bond_dir, None, i));
+                let (order, bond_wedge) = parse_bond(b0);
+                pending_bond = Some((order, bond_wedge, None, i));
                 i += 1;
             }
             continue;

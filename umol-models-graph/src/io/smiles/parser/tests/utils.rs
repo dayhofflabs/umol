@@ -66,24 +66,24 @@ pub fn find_extended_chiral_center(mol: &ExtendedMolecule) -> Option<(usize, Ele
 }
 
 /// Finds the first bond with stereo direction in a Molecule.
-/// Returns (atom1, atom2, direction) or None if no stereo bond found.
+/// Returns (atom1, atom2, wedge) or None if no stereo bond found.
 pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondWedge)> {
     for bond in &mol.bonds {
-        if let Some(dir) = bond.wedge {
+        if let Some(wedge) = bond.wedge {
             let (a, b) = bond.atoms.as_tuple();
-            return Some((a, b, dir));
+            return Some((a, b, wedge));
         }
     }
     None
 }
 
-/// Finds the first bond with stereo direction in an ExtendedMolecule.
-/// Returns (atom1, atom2, direction) or None if no stereo bond found.
+/// Finds the first bond with stereo wedge in an ExtendedMolecule.
+/// Returns (atom1, atom2, wedge) or None if no stereo bond found.
 pub fn find_extended_stereo_bond(mol: &ExtendedMolecule) -> Option<(u32, u32, BondWedge)> {
     for bond in &mol.bonds {
-        if let Some(dir) = bond.wedge {
+        if let Some(wedge) = bond.wedge {
             let (a, b) = bond.atoms.as_tuple();
-            return Some((a, b, dir));
+            return Some((a, b, wedge));
         }
     }
     None
@@ -182,7 +182,7 @@ fn parse_bond_token(
         spec_part // no colon prefix
     };
 
-    let (order, dir, donation) = match spec_norm {
+    let (order, wedge, donation) = match spec_norm {
         "-" => (BondOrder::Single, None, None),
         "=" => (BondOrder::Double, None, None),
         "#" => (BondOrder::Triple, None, None),
@@ -195,13 +195,13 @@ fn parse_bond_token(
         "<-" => (BondOrder::Single, None, Some(BondDonation::Accepting)),
         other => panic!("unknown bond spec: {}", other),
     };
-    (i, j, order, dir, donation, span_start, span_end)
+    (i, j, order, wedge, donation, span_start, span_end)
 }
 
 pub fn build_from_graph(spec: &str) -> Molecule {
     // Format: "atoms... | edges... [| rings...]"
     // atoms: tokens like "C", "Cl", optional aromatic '_' and optional span "@<pos>": e.g. "C_@5"
-    // edges: tokens like "i-j" or with type/dir: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    // edges: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
     // rings (optional third section): tokens encoding ring events with optional positions/atoms.
     // Grammar (examples):
     //   full:      idx@open-close:a-b   e.g. "1@2-7:0-5"
@@ -259,7 +259,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         ids.push(id);
     }
     for etok in edges {
-        let (i, j, order, dir, donation, span_start, mut span_end) = parse_bond_token(etok);
+        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(etok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
@@ -270,7 +270,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             ids[j],
             BondData {
                 order,
-                wedge: dir,
+                wedge,
                 donation,
                 span: Span::from_bytes_opt(span_start, span_end),
             },
@@ -425,7 +425,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
 pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     // Format: "atoms... | edges... [| rings...]"
     // atoms: tokens like "C", "Cl", "*" (wildcard), optional aromatic '_' and span "@<pos>"
-    // edges: tokens like "i-j" or with type/dir: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    // edges: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
     // rings (optional third section): tokens encoding ring events with optional positions/atoms.
     let parts: Vec<_> = spec.split('|').map(|s| s.trim()).collect();
     assert!(parts.len() >= 2, "spec must have at least atoms | edges");
@@ -483,7 +483,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
         ids.push(id);
     }
     for etok in edges {
-        let (i, j, order, dir, donation, span_start, mut span_end) = parse_bond_token(etok);
+        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(etok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
@@ -494,7 +494,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
             ids[j],
             BondData {
                 order,
-                wedge: dir,
+                wedge,
                 donation,
                 span: Span::from_bytes_opt(span_start, span_end),
             },

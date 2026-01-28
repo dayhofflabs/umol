@@ -86,6 +86,7 @@ proptest! {
                 | ParseError::DotBeforeRing { pos } => pos < len,
                 | ParseError::EmptyBracket { pos } => pos < len,
                 | ParseError::MissingChiralityIndex { pos } => pos < len,
+                | ParseError::IndexOutOfBounds(_) => true,
             };
             prop_assert!(ok, "error positions out of bounds: {:?}, len={}", err, len);
         }

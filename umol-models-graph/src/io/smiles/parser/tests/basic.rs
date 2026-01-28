@@ -354,16 +354,37 @@ fn bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 
 #[rstest]
 #[case::any_bond(b"C~C", build_from_graph("C@0 C@2 | 0-1~@1"))]
-#[case::any_bond_in_ring(b"C1~CC~C1", build_from_graph("C@0 C@3 C@4 C@6 | 0-1~@2 1-2@4 2-3~@5 0-3@1 | 1@1-7:0-3"))]
-#[case::any_ring_bond_1(b"C1CC~1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2~@1 | 1@1-5:0-2"))]
-#[case::any_ring_bond_2(b"C~1CC1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-5:0-2"))]
-#[case::any_ring_bond_3(b"C~1CC~1", build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-6:0-2"))]
+#[case::any_bond_in_ring(
+    b"C1~CC~C1",
+    build_from_graph("C@0 C@3 C@4 C@6 | 0-1~@2 1-2@4 2-3~@5 0-3@1 | 1@1-7:0-3")
+)]
+#[case::any_ring_bond_1(
+    b"C1CC~1",
+    build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2~@1 | 1@1-5:0-2")
+)]
+#[case::any_ring_bond_2(
+    b"C~1CC1",
+    build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-5:0-2")
+)]
+#[case::any_ring_bond_3(
+    b"C~1CC~1",
+    build_from_graph("C@0 C@3 C@4 | 0-1@3 1-2@4 0-2~@2 | 1@2-6:0-2")
+)]
 #[case::dative_accepting_1(b"C<-N", build_from_graph("C@0 N@3 | 0-1<-@1"))]
 #[case::dative_accepting_2(b"N<-C", build_from_graph("N@0 C@3 | 0-1<-@1"))]
 #[case::dative_accepting_multiple(b"C<-N<-O", build_from_graph("C@0 N@3 O@6 | 0-1<-@1 1-2<-@4"))]
-#[case::dative_ring_bond_1(b"C<-1CC1", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-6:0-2"))]
-#[case::dative_ring_bond_2(b"C1CC->1", build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2<-@1 | 1@1-6:0-2"))]
-#[case::dative_ring_bond_3(b"C<-1CC->1", build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-8:0-2"))]
+#[case::dative_ring_bond_1(
+    b"C<-1CC1",
+    build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-6:0-2")
+)]
+#[case::dative_ring_bond_2(
+    b"C1CC->1",
+    build_from_graph("C@0 C@2 C@3 | 0-1@2 1-2@3 0-2<-@1 | 1@1-6:0-2")
+)]
+#[case::dative_ring_bond_3(
+    b"C<-1CC->1",
+    build_from_graph("C@0 C@4 C@5 | 0-1@4 1-2@5 0-2<-@3 | 1@3-8:0-2")
+)]
 #[case::dative_donating_1(b"C->N", build_from_graph("C@0 N@3 | 0-1->@1"))]
 #[case::dative_donating_2(b"N->C", build_from_graph("N@0 C@3 | 0-1->@1"))]
 #[case::dative_donating_multiple(b"C->N->O", build_from_graph("C@0 N@3 O@6 | 0-1->@1 1-2->@4"))]
@@ -811,7 +832,7 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 fn bracket_bonds(
     #[case] input: &[u8],
     #[case] expected_order: Option<BondOrder>,
-    #[case] expected_dir: Option<BondWedge>,
+    #[case] expected_wedge: Option<BondWedge>,
 ) {
     let res = parse_smiles_bytes(input);
     assert!(res.is_ok(), "{:?} should have succeeded", input);
@@ -820,7 +841,7 @@ fn bracket_bonds(
         if let Some(expected_order) = expected_order {
             assert_eq!(bond1.order, expected_order);
         }
-        assert_eq!(bond1.wedge, expected_dir);
+        assert_eq!(bond1.wedge, expected_wedge);
     }
 }
 
@@ -927,7 +948,7 @@ fn stereo_bonds(
     #[case] input: &[u8],
     #[case] exp_a: u32,
     #[case] exp_b: u32,
-    #[case] exp_dir: BondWedge,
+    #[case] exp_wedge: BondWedge,
 ) {
     let res = parse_smiles_bytes(input);
     let input_str = input.to_str_lossy();
@@ -938,10 +959,10 @@ fn stereo_bonds(
         res
     );
     let mol = res.unwrap();
-    let (a, b, dir) = find_stereo_bond(&mol).expect("expected a stereo bond");
+    let (a, b, wedge) = find_stereo_bond(&mol).expect("expected a stereo bond");
     assert_eq!(a, exp_a, "atom1 mismatch for {:?}", input_str);
     assert_eq!(b, exp_b, "atom2 mismatch for {:?}", input_str);
-    assert_eq!(dir, exp_dir, "direction mismatch for {:?}", input_str);
+    assert_eq!(wedge, exp_wedge, "wedge mismatch for {:?}", input_str);
 }
 
 #[rstest]

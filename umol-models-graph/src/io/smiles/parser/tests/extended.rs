@@ -791,7 +791,7 @@ fn bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aromatic
 fn bracket_bonds(
     #[case] input: &[u8],
     #[case] expected_order: Option<BondOrder>,
-    #[case] expected_dir: Option<BondWedge>,
+    #[case] expected_wedge: Option<BondWedge>,
 ) {
     let res = parse_extended_smiles_bytes(input);
     let input_str = input.to_str_lossy();
@@ -801,7 +801,7 @@ fn bracket_bonds(
         if let Some(expected_order) = expected_order {
             assert_eq!(bond1.order, expected_order);
         }
-        assert_eq!(bond1.wedge, expected_dir);
+        assert_eq!(bond1.wedge, expected_wedge);
     }
 }
 
@@ -908,7 +908,7 @@ fn stereo_bonds(
     #[case] input: &[u8],
     #[case] exp_a: u32,
     #[case] exp_b: u32,
-    #[case] exp_dir: BondWedge,
+    #[case] exp_wedge: BondWedge,
 ) {
     let res = parse_extended_smiles_bytes(input);
     let input_str = input.to_str_lossy();
@@ -919,10 +919,10 @@ fn stereo_bonds(
         res
     );
     let mol = res.unwrap();
-    let (a, b, dir) = find_extended_stereo_bond(&mol).expect("expected a stereo bond");
+    let (a, b, wedge) = find_extended_stereo_bond(&mol).expect("expected a stereo bond");
     assert_eq!(a, exp_a, "atom1 mismatch for {:?}", input_str);
     assert_eq!(b, exp_b, "atom2 mismatch for {:?}", input_str);
-    assert_eq!(dir, exp_dir, "direction mismatch for {:?}", input_str);
+    assert_eq!(wedge, exp_wedge, "wedge mismatch for {:?}", input_str);
 }
 
 #[rstest]

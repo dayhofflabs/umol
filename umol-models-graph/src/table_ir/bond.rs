@@ -53,6 +53,7 @@ pub struct Bond {
     pub stereo: Option<BondStereo>,
     pub wedge: Option<BondWedge>,
     pub donation: Option<BondDonation>,
+    pub noncovalent: Option<BondNoncovalent>,
     pub span: Option<Span>,
 }
 
@@ -65,12 +66,13 @@ impl Bond {
             stereo: None,
             wedge: None,
             donation: None,
+            noncovalent: None,
             span: None,
         }
     }
 
-    /// Create a dative bond, adjusting donation direction for AtomPair normalization.
-    /// The donation parameter describes the direction from `a` to `b` before normalization.
+    /// Create a dative bond, adjusting donation for AtomPair normalization.
+    /// The donation parameter describes the donation from `a` to `b` before normalization.
     pub fn new_dative(a: u32, b: u32, order: BondOrder, donation: BondDonation) -> Self {
         let swapped = a > b;
         Self {
@@ -80,6 +82,21 @@ impl Bond {
             stereo: None,
             wedge: None,
             donation: Some(if swapped { donation.flip() } else { donation }),
+            noncovalent: None,
+            span: None,
+        }
+    }
+
+    /// Create a non-covalent bond (hydrogen bond, halogen bond, etc.)
+    pub fn new_noncovalent(a: u32, b: u32, noncovalent: BondNoncovalent) -> Self {
+        Self {
+            atoms: AtomPair::new(a, b),
+            order: BondOrder::Zero,
+            ring: None,
+            stereo: None,
+            wedge: None,
+            donation: None,
+            noncovalent: Some(noncovalent),
             span: None,
         }
     }
@@ -162,14 +179,17 @@ impl BondOrder {
 }
 
 /// Stereo wedge indication for single bonds
-/// In MOL files: Up=Wedge (code 1), Down=Dash (code 6)
+/// In MOL files: Wedge (up, code 1), Dash (down, code 6)
 /// The wedge (pointed) end of the stereo bond is at the first atom
-/// In SMILES: Up=/, Down=\
+/// In SMILES: / (up), \ (down)
+/// In CXSMILES: w: (undefined), wU: (undefined, display up), wD: (undefined, display down)
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondWedge {
-    Up,     // MOL: Wedge (code 1), SMILES: /
-    Down,   // MOL: Dash (code 6), SMILES: \
-    Either, // MOL code 4 (Either)
+    Up,         // MOL: Wedge (code 1), SMILES: /
+    Down,       // MOL: Dash (code 6), SMILES: \
+    Either,     // MOL code 4, CXSMILES: w: (stereo undefined)
+    EitherUp,   // CXSMILES: wU: (stereo undefined, display up)
+    EitherDown, // CXSMILES: wD: (stereo undefined, display down)
 }
 
 /// Electron pair donation for dative/coordinate bonds.
@@ -182,7 +202,7 @@ pub enum BondDonation {
 }
 
 impl BondDonation {
-    /// Flip the donation direction (used when AtomPair normalizes indices)
+    /// Flip the donation
     pub fn flip(self) -> Self {
         match self {
             Self::Shared => Self::Shared,
@@ -200,6 +220,15 @@ pub enum BondStereo {
     Either,
 }
 
+/// Non-covalent interaction type for weak bonds (H-bonds, halogen bonds, etc.)
+/// These bonds do not contribute to valence calculations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BondNoncovalent {
+    Hydrogen,
+    Halogen,
+    Chalcogen,
+}
+
 /// Extended bond IR
 /// Temporary container for bond features of generalized molecules.
 /// Includes extended bond fields from CTFile and SMILES parsers.
@@ -212,6 +241,7 @@ pub struct ExtendedBond {
     pub stereo: Option<BondStereo>,
     pub wedge: Option<BondWedge>,
     pub donation: Option<BondDonation>,
+    pub noncovalent: Option<BondNoncovalent>,
     pub topology: Option<BondTopology>,
     pub reacting_center: Option<BondReactingCenter>,
     pub properties: HashMap<String, String>,
@@ -228,6 +258,7 @@ impl ExtendedBond {
             stereo: None,
             wedge: None,
             donation: None,
+            noncovalent: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -235,8 +266,8 @@ impl ExtendedBond {
         }
     }
 
-    /// Create a dative bond, adjusting donation direction for AtomPair normalization.
-    /// The donation parameter describes the direction from `a` to `b` before normalization.
+    /// Create a dative bond, adjusting donation for AtomPair normalization.
+    /// The donation parameter describes the donation from `a` to `b` before normalization.
     pub fn new_dative(a: u32, b: u32, order: BondOrder, donation: BondDonation) -> Self {
         let swapped = a > b;
         Self {
@@ -246,6 +277,24 @@ impl ExtendedBond {
             stereo: None,
             wedge: None,
             donation: Some(if swapped { donation.flip() } else { donation }),
+            noncovalent: None,
+            topology: None,
+            reacting_center: None,
+            properties: HashMap::new(),
+            span: None,
+        }
+    }
+
+    /// Create a non-covalent bond (hydrogen bond, halogen bond, etc.)
+    pub fn new_noncovalent(a: u32, b: u32, noncovalent: BondNoncovalent) -> Self {
+        Self {
+            atoms: AtomPair::new(a, b),
+            order: BondOrder::Zero,
+            ring: None,
+            stereo: None,
+            wedge: None,
+            donation: None,
+            noncovalent: Some(noncovalent),
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -282,6 +331,7 @@ impl From<Bond> for ExtendedBond {
             stereo: bond.stereo,
             wedge: bond.wedge,
             donation: bond.donation,
+            noncovalent: bond.noncovalent,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -306,6 +356,7 @@ impl TryFrom<ExtendedBond> for Bond {
             stereo: extended.stereo,
             wedge: extended.wedge,
             donation: extended.donation,
+            noncovalent: extended.noncovalent,
             span: extended.span,
         })
     }
@@ -468,6 +519,7 @@ mod tests {
             stereo: Some(BondStereo::Cis),
             wedge: Some(BondWedge::Up),
             donation: None,
+            noncovalent: None,
             span: None,
         };
 
@@ -490,6 +542,7 @@ mod tests {
             stereo: Some(BondStereo::Trans),
             wedge: Some(BondWedge::Down),
             donation: None,
+            noncovalent: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -514,6 +567,7 @@ mod tests {
             stereo: None,
             wedge: None,
             donation: None,
+            noncovalent: None,
             topology: Some(BondTopology::Ring),
             reacting_center: None,
             properties: HashMap::new(),
@@ -533,6 +587,7 @@ mod tests {
             stereo: Some(BondStereo::Cis),
             wedge: Some(BondWedge::Up),
             donation: None,
+            noncovalent: None,
             topology: None,
             reacting_center: None,
             properties: HashMap::new(),
@@ -551,6 +606,7 @@ mod tests {
             stereo: None,
             wedge: None,
             donation: None,
+            noncovalent: None,
             topology: Some(BondTopology::Chain),
             reacting_center: None,
             properties: HashMap::new(),
@@ -581,6 +637,7 @@ mod tests {
             stereo: Some(BondStereo::Either),
             wedge: Some(BondWedge::Either),
             donation: None,
+            noncovalent: None,
             span: None,
         };
 

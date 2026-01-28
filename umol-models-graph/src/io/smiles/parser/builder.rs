@@ -84,7 +84,7 @@ impl MoleculeBuilder {
     #[inline]
     pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
         let span = b.span;
-        // Adjust donation for AtomPair normalization (swap flips direction)
+        // Adjust donation for AtomPair normalization (swap flips donation)
         let donation = if start > end {
             b.donation.map(|d| d.flip())
         } else {
@@ -95,6 +95,7 @@ impl MoleculeBuilder {
             order: b.order,
             wedge: b.wedge,
             donation,
+            noncovalent: None,
             ring: None,
             stereo: None,
             span,
@@ -265,7 +266,7 @@ impl ExtendedMoleculeBuilder {
     pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
         let mut bond = ExtendedBond::new(start, end, b.order);
         bond.wedge = b.wedge;
-        // Adjust donation for AtomPair normalization (swap flips direction)
+        // Adjust donation for AtomPair normalization (swap flips donation)
         bond.donation = if start > end {
             b.donation.map(|d| d.flip())
         } else {
