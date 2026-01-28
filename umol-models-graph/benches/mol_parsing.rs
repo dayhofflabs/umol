@@ -7,7 +7,7 @@ use nom::Parser;
 use umol_models_graph::io::ctfile::config::CtabParseFlags;
 use umol_models_graph::io::ctfile::parser::{
     atom_input, bond_input, counts_input, extended_atom_input, extended_bond_input,
-    legacy_atom_list_input, property_input, extended_property_input,
+    extended_property_input, legacy_atom_list_input, property_input,
 };
 
 fn mol_parsing(c: &mut Criterion) {
@@ -74,7 +74,84 @@ fn mol_parsing(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/extended_atom");
+        let mut group = c.benchmark_group("mol_parsing/bond");
+        let test_cases = [
+            ("len21", &b"  1  2  1  1  0  0  0"[..]),
+            ("len21_invalid", &b"  1  2  1  A  0  0  0"[..]),
+            ("len12", &b"  1  3  1  1"[..]),
+            ("len12_invalid", &b"  1  2  1  A"[..]),
+            ("len9", &b"  1  2  1"[..]),
+            ("len9_invalid", &b"  1  2  A"[..]),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| bond_input(CtabParseFlags::BASIC).parse(black_box(input)))
+            });
+        }
+        group.finish();
+    }
+
+    {
+        let mut group = c.benchmark_group("mol_parsing/properties");
+        let test_cases = [
+            ("chg", &b"M  CHG  1   1  -1"[..]),
+            (
+                "chg6",
+                &b"M  CHG  6   1  -1   2   1   3  -1   4   1   5  -1   6   1"[..],
+            ),
+            ("chg_invalid", &b"M  CHG  1   1  -1  a"[..]),
+            ("rad1", &b"M  RAD  1   1   2"[..]),
+            (
+                "rad6",
+                &b"M  RAD  6   1   1   2   2   3   3   4   1   5   2   6   3"[..],
+            ),
+            ("rad_invalid", &b"M  RAD  1   1   4"[..]),
+            ("iso1", &b"M  ISO  1   1  13"[..]),
+            (
+                "iso8",
+                &b"M  ISO  8   1  13   2  14   3  12   4  13   5  14   6  12   7  13   8  14"[..],
+            ),
+            ("iso_invalid", &b"M  ISO  1   1  40"[..]),
+            ("sty1", &b"M  STY  1   1 SUP"[..]),
+            ("sty2", &b"M  STY  2   1 SUP   2 DAT"[..]),
+            ("slb1", &b"M  SLB  1   1   1"[..]),
+            ("slb2", &b"M  SLB  2   1  14   2  15"[..]),
+            ("sal_simple", &b"M  SAL  1  1   5"[..]),
+            ("sal_multi", &b"M  SAL  1  3   1   2   3"[..]),
+            ("sbl_simple", &b"M  SBL  1  1   3"[..]),
+            ("sbl_multi", &b"M  SBL  2  2   1   2"[..]),
+            ("alias_simple", &b"A    1 CF3"[..]),
+            ("alias_long", &b"A   15 Ph"[..]),
+            ("value_simple", &b"V    1 *"[..]),
+            ("value_long", &b"V   15 query"[..]),
+            ("sst1", &b"M  SST  1   1 ALT"[..]),
+            ("sst2", &b"M  SST  2   1 RAN   2 BLO"[..]),
+            ("smt_simple", &b"M  SMT   1 n"[..]),
+            ("smt_long", &b"M  SMT   2 CH2CH2"[..]),
+            ("zbo1", &b"M  ZBO  1   1   0"[..]),
+            ("zbo4", &b"M  ZBO  4   1   0   2   0   3   0   4   0"[..]),
+            ("zch1", &b"M  ZCH  1   1  -1"[..]),
+            ("zch4", &b"M  ZCH  4   1  -1   2   1   3  -1   4   1"[..]),
+            ("hyd1", &b"M  HYD  1   1   3"[..]),
+            (
+                "hyd6",
+                &b"M  HYD  6   1   3   2   2   3   1   4   0   5   3   6   2"[..],
+            ),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| property_input(CtabParseFlags::BASIC).parse(black_box(input)))
+            });
+        }
+        group.finish();
+    }
+}
+
+fn extended_mol_parsing(c: &mut Criterion) {
+    {
+        let mut group = c.benchmark_group("extended_mol_parsing/extended_atom");
 
         let test_cases = [
             (
@@ -136,26 +213,7 @@ fn mol_parsing(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/bond");
-        let test_cases = [
-            ("len21", &b"  1  2  1  1  0  0  0"[..]),
-            ("len21_invalid", &b"  1  2  1  A  0  0  0"[..]),
-            ("len12", &b"  1  3  1  1"[..]),
-            ("len12_invalid", &b"  1  2  1  A"[..]),
-            ("len9", &b"  1  2  1"[..]),
-            ("len9_invalid", &b"  1  2  A"[..]),
-        ];
-
-        for (id, data) in test_cases.iter() {
-            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| bond_input(CtabParseFlags::BASIC).parse(black_box(input)))
-            });
-        }
-        group.finish();
-    }
-
-    {
-        let mut group = c.benchmark_group("mol_parsing/extended_bond");
+        let mut group = c.benchmark_group("extended_mol_parsing/extended_bond");
         let test_cases = [
             ("len21_extended", &b"  1  2  1  0     2  1"[..]),
             ("len21_extended_invalid", &b"  1  2  1  0     4  1"[..]),
@@ -176,7 +234,7 @@ fn mol_parsing(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/legacy_atom_list");
+        let mut group = c.benchmark_group("extended_mol_parsing/legacy_atom_list");
         let test_cases = [
             ("no_exclusion", &b"  1 F    3   9   7   8  "[..]),
             ("exclusion", &b"  1 T    3   9   7   8  "[..]),
@@ -191,63 +249,7 @@ fn mol_parsing(c: &mut Criterion) {
     }
 
     {
-        let mut group = c.benchmark_group("mol_parsing/properties");
-        let test_cases = [
-            ("chg", &b"M  CHG  1   1  -1"[..]),
-            (
-                "chg6",
-                &b"M  CHG  6   1  -1   2   1   3  -1   4   1   5  -1   6   1"[..],
-            ),
-            ("chg_invalid", &b"M  CHG  1   1  -1  a"[..]),
-            ("rad1", &b"M  RAD  1   1   2"[..]),
-            (
-                "rad6",
-                &b"M  RAD  6   1   1   2   2   3   3   4   1   5   2   6   3"[..],
-            ),
-            ("rad_invalid", &b"M  RAD  1   1   4"[..]),
-            ("iso1", &b"M  ISO  1   1  13"[..]),
-            (
-                "iso8",
-                &b"M  ISO  8   1  13   2  14   3  12   4  13   5  14   6  12   7  13   8  14"[..],
-            ),
-            ("iso_invalid", &b"M  ISO  1   1  40"[..]),
-            ("sty1", &b"M  STY  1   1 SUP"[..]),
-            ("sty2", &b"M  STY  2   1 SUP   2 DAT"[..]),
-            ("slb1", &b"M  SLB  1   1   1"[..]),
-            ("slb2", &b"M  SLB  2   1  14   2  15"[..]),
-            ("sal_simple", &b"M  SAL  1  1   5"[..]),
-            ("sal_multi", &b"M  SAL  1  3   1   2   3"[..]),
-            ("sbl_simple", &b"M  SBL  1  1   3"[..]),
-            ("sbl_multi", &b"M  SBL  2  2   1   2"[..]),
-            ("alias_simple", &b"A    1 CF3"[..]),
-            ("alias_long", &b"A   15 Ph"[..]),
-            ("value_simple", &b"V    1 *"[..]),
-            ("value_long", &b"V   15 query"[..]),
-            ("sst1", &b"M  SST  1   1 ALT"[..]),
-            ("sst2", &b"M  SST  2   1 RAN   2 BLO"[..]),
-            ("smt_simple", &b"M  SMT   1 n"[..]),
-            ("smt_long", &b"M  SMT   2 CH2CH2"[..]),
-            ("zbo1", &b"M  ZBO  1   1   0"[..]),
-            ("zbo4", &b"M  ZBO  4   1   0   2   0   3   0   4   0"[..]),
-            ("zch1", &b"M  ZCH  1   1  -1"[..]),
-            ("zch4", &b"M  ZCH  4   1  -1   2   1   3  -1   4   1"[..]),
-            ("hyd1", &b"M  HYD  1   1   3"[..]),
-            (
-                "hyd6",
-                &b"M  HYD  6   1   3   2   2   3   1   4   0   5   3   6   2"[..],
-            ),
-        ];
-
-        for (id, data) in test_cases.iter() {
-            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| property_input(CtabParseFlags::BASIC).parse(black_box(input)))
-            });
-        }
-        group.finish();
-    }
-
-    {
-        let mut group = c.benchmark_group("mol_parsing/extended_properties");
+        let mut group = c.benchmark_group("extended_mol_parsing/extended_properties");
         let test_cases = [
             ("chg1_extended", &b"M  CHG  1   1  -1"[..]),
             (
@@ -333,5 +335,5 @@ fn mol_parsing(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, mol_parsing);
+criterion_group!(benches, mol_parsing, extended_mol_parsing);
 criterion_main!(benches);
