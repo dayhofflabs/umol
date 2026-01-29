@@ -66,5 +66,5 @@ name = "mol_parsing"
 harness = false
 
 [[bench]]
-name = "opensmiles_parsing"
+name = "smiles_parsing"
 harness = false

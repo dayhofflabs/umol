@@ -3,6 +3,7 @@
 pub mod atom;
 pub mod bond;
 pub mod ctfile_data;
+pub mod cx_data;
 pub mod error;
 pub mod molecule;
 pub mod property;
@@ -15,6 +16,7 @@ mod utils;
 pub use atom::*;
 pub use bond::*;
 pub use ctfile_data::*;
+pub use cx_data::*;
 pub use error::*;
 pub use molecule::*;
 pub use property::*;

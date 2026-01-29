@@ -199,6 +199,7 @@ fn build_extended_molecule(
         comments: Vec::new(),
         properties: IndexMap::new(),
         ctfile_data: None,
+        cx_data: None,
         source_format: SourceFormat::MOL,
     };
 

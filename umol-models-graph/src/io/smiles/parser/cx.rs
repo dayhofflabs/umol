@@ -22,7 +22,10 @@ use umol_data::SpinMultiplicity;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
-use crate::table_ir::{BondWedge, UnpairedElectrons};
+use crate::table_ir::{
+    Bond, BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
+    ExtendedBond, ExtendedMolecule, Molecule, StereoMode, StereoSet, UnpairedElectrons,
+};
 
 /// Stereo group type for enhanced stereochemistry
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,6 +84,193 @@ pub fn parse_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError> {
 /// Parse extended CX annotations (for ExtendedMolecule)
 pub fn parse_extended_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError> {
     parse_cx_block(input, parse_extended_entry)
+}
+
+/// Update Molecule with parsed CX entries
+pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) {
+    for entry in entries {
+        match entry {
+            CxEntry::Coordinates(coords) => {
+                mol.positions = Some(coords);
+            }
+            CxEntry::Labels(labels) => {
+                for (idx, label) in labels {
+                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
+                        atom.label = Some(label);
+                    }
+                }
+            }
+            CxEntry::Values(values) => {
+                for (idx, value) in values {
+                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
+                        atom.value = Some(value);
+                    }
+                }
+            }
+            CxEntry::Radicals(radicals) => {
+                for (idx, unpaired) in radicals {
+                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
+                        atom.unpaired_electrons = Some(unpaired);
+                    }
+                }
+            }
+            CxEntry::WigglyBonds(wiggly) => {
+                for (idx, wedge) in wiggly {
+                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
+                        bond.wedge = Some(wedge);
+                    }
+                }
+            }
+            CxEntry::CisBonds(indices) => {
+                for idx in indices {
+                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
+                        bond.stereo = Some(BondStereo::Cis);
+                    }
+                }
+            }
+            CxEntry::TransBonds(indices) => {
+                for idx in indices {
+                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
+                        bond.stereo = Some(BondStereo::Trans);
+                    }
+                }
+            }
+            CxEntry::CoordinateBonds(pairs) => {
+                for (from, to) in pairs {
+                    let mut bond = Bond::new(from, to, BondOrder::Single);
+                    bond.donation = Some(BondDonation::Donating);
+                    mol.bonds.push(bond);
+                }
+            }
+            CxEntry::HydrogenBonds(pairs) => {
+                for (from, to) in pairs {
+                    let mut bond = Bond::new(from, to, BondOrder::Zero);
+                    bond.noncovalent = Some(BondNoncovalent::Hydrogen);
+                    mol.bonds.push(bond);
+                }
+            }
+            // Extended-only entries are ignored for basic Molecule
+            CxEntry::FragmentGroups(_)
+            | CxEntry::StereoGroup(_)
+            | CxEntry::RelativeStereo
+            | CxEntry::AtomProperties(_) => {}
+        }
+    }
+}
+
+/// Update ExtendedMolecule with parsed CX entries
+pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry>) {
+    let mut stereo_sets: Vec<StereoSet> = Vec::new();
+    let mut components: Option<Vec<Vec<u32>>> = None;
+
+    for entry in entries {
+        match entry {
+            CxEntry::Coordinates(coords) => {
+                mol.positions = Some(coords);
+            }
+            CxEntry::Labels(labels) => {
+                for (idx, label) in labels {
+                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
+                        atom.label = Some(label);
+                    }
+                }
+            }
+            CxEntry::Values(values) => {
+                for (idx, value) in values {
+                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
+                        atom.value = Some(value);
+                    }
+                }
+            }
+            CxEntry::Radicals(radicals) => {
+                for (idx, unpaired) in radicals {
+                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
+                        atom.unpaired_electrons = Some(unpaired);
+                    }
+                }
+            }
+            CxEntry::WigglyBonds(wiggly) => {
+                for (idx, wedge) in wiggly {
+                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
+                        bond.wedge = Some(wedge);
+                    }
+                }
+            }
+            CxEntry::CisBonds(indices) => {
+                for idx in indices {
+                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
+                        bond.stereo = Some(BondStereo::Cis);
+                    }
+                }
+            }
+            CxEntry::TransBonds(indices) => {
+                for idx in indices {
+                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
+                        bond.stereo = Some(BondStereo::Trans);
+                    }
+                }
+            }
+            CxEntry::CoordinateBonds(pairs) => {
+                for (from, to) in pairs {
+                    let mut bond = ExtendedBond::new(from, to, BondOrder::Single);
+                    bond.donation = Some(BondDonation::Donating);
+                    mol.bonds.push(bond);
+                }
+            }
+            CxEntry::HydrogenBonds(pairs) => {
+                for (from, to) in pairs {
+                    let mut bond = ExtendedBond::new(from, to, BondOrder::Zero);
+                    bond.noncovalent = Some(BondNoncovalent::Hydrogen);
+                    mol.bonds.push(bond);
+                }
+            }
+            CxEntry::FragmentGroups(groups) => {
+                components = Some(groups);
+            }
+            CxEntry::StereoGroup(sg) => {
+                let mode = match sg.group_type {
+                    StereoGroupType::Absolute => StereoMode::Absolute,
+                    StereoGroupType::Or(n) => StereoMode::Correlated(n),
+                    StereoGroupType::And(n) => StereoMode::Independent(n),
+                };
+                stereo_sets.push(StereoSet {
+                    atoms: sg.atoms,
+                    mode,
+                });
+            }
+            CxEntry::RelativeStereo => {
+                // Treat as all atoms in a single correlated group
+                let all_chiral: Vec<u32> = mol
+                    .atoms
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| a.chirality.is_some())
+                    .map(|(i, _)| i as u32)
+                    .collect();
+                if !all_chiral.is_empty() {
+                    stereo_sets.push(StereoSet {
+                        atoms: all_chiral,
+                        mode: StereoMode::Correlated(0),
+                    });
+                }
+            }
+            CxEntry::AtomProperties(props) => {
+                for (idx, key, value) in props {
+                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
+                        atom.properties.insert(key, value);
+                    }
+                }
+            }
+        }
+    }
+
+    // Store CX-specific data if any
+    if !stereo_sets.is_empty() || components.is_some() {
+        mol.cx_data = Some(CxAnnotationData {
+            stereo_sets,
+            components,
+        });
+    }
 }
 
 fn parse_cx_block<'inp>(
@@ -487,8 +677,40 @@ mod tests {
     use bstr::ByteSlice;
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_data::Element;
 
     use super::*;
+    use crate::table_ir::{Atom, Chirality, ExtendedAtom};
+
+    #[fixture]
+    fn triatomic_molecule() -> Molecule {
+        let mut mol = Molecule::empty();
+        mol.atoms = vec![
+            Atom::from_element(Element::C),
+            Atom::from_element(Element::N),
+            Atom::from_element(Element::O),
+        ];
+        mol.bonds = vec![
+            Bond::new(0, 1, BondOrder::Single),
+            Bond::new(1, 2, BondOrder::Double),
+        ];
+        mol
+    }
+
+    #[fixture]
+    fn triatomic_extended_molecule() -> ExtendedMolecule {
+        let mut mol = ExtendedMolecule::empty();
+        let mut atom0 = ExtendedAtom::from_element(Element::C);
+        atom0.chirality = Some(Chirality::Clockwise);
+        let mut atom1 = ExtendedAtom::from_element(Element::N);
+        atom1.chirality = Some(Chirality::CounterClockwise);
+        mol.atoms = vec![atom0, atom1, ExtendedAtom::from_element(Element::O)];
+        mol.bonds = vec![
+            ExtendedBond::new(0, 1, BondOrder::Single),
+            ExtendedBond::new(1, 2, BondOrder::Double),
+        ];
+        mol
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -575,5 +797,60 @@ mod tests {
             "{:?} should have parsed to {:?}",
             input_str, entries
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::coordinates(vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0)])], |mol: &Molecule| mol.positions == Some(vec![Point3D::new(1.0, 2.0, 3.0)]))]
+    #[case::labels(vec![CxEntry::Labels(vec![(0, "C1".to_string()), (1, "N1".to_string())])], |mol: &Molecule| mol.atoms[0].label == Some("C1".to_string()) && mol.atoms[1].label == Some("N1".to_string()))]
+    #[case::values(vec![CxEntry::Values(vec![(0, "val0".to_string())])], |mol: &Molecule| mol.atoms[0].value == Some("val0".to_string()))]
+    #[case::radicals(vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None })])],
+        |mol: &Molecule| mol.atoms[0].unpaired_electrons == Some(UnpairedElectrons { count: 1, multiplicity: None }))]
+    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, BondWedge::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
+    #[case::cis_bonds(vec![CxEntry::CisBonds(vec![0])], |mol: &Molecule| mol.bonds[0].stereo == Some(BondStereo::Cis))]
+    #[case::trans_bonds(vec![CxEntry::TransBonds(vec![1])], |mol: &Molecule| mol.bonds[1].stereo == Some(BondStereo::Trans))]
+    #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(0, 2)])], |mol: &Molecule| mol.bonds.len() == 3 && mol.bonds[2].donation == Some(BondDonation::Donating))]
+    #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 2)])], |mol: &Molecule| mol.bonds.len() == 3 && mol.bonds[2].noncovalent == Some(BondNoncovalent::Hydrogen))]
+    #[case::extended_entries(vec![CxEntry::FragmentGroups(vec![vec![0, 1]]), CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0] }),
+        CxEntry::RelativeStereo, CxEntry::AtomProperties(vec![(0, "k".to_string(), "v".to_string())])], |mol: &Molecule| mol.atoms[0].label.is_none())]
+    fn test_update_molecule(
+        triatomic_molecule: Molecule,
+        #[case] entries: Vec<CxEntry>,
+        #[case] check: fn(&Molecule) -> bool,
+    ) {
+        let mut mol = triatomic_molecule;
+        update_molecule(&mut mol, entries);
+        assert!(check(&mol));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::coordinates(vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0)])], |mol: &ExtendedMolecule| mol.positions == Some(vec![Point3D::new(1.0, 2.0, 3.0)]))]
+    #[case::labels(vec![CxEntry::Labels(vec![(0, "C1".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].label == Some("C1".to_string()))]
+    #[case::values(vec![CxEntry::Values(vec![(1, "val1".to_string())])], |mol: &ExtendedMolecule| mol.atoms[1].value == Some("val1".to_string()))]
+    #[case::radicals(vec![CxEntry::Radicals(vec![(2, UnpairedElectrons { count: 2, multiplicity: None })])],
+        |mol: &ExtendedMolecule| mol.atoms[2].unpaired_electrons == Some(UnpairedElectrons { count: 2, multiplicity: None }))]
+    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, BondWedge::Either)])], |mol: &ExtendedMolecule| mol.bonds[1].wedge == Some(BondWedge::Either))]
+    #[case::cis_bonds(vec![CxEntry::CisBonds(vec![1])], |mol: &ExtendedMolecule| mol.bonds[1].stereo == Some(BondStereo::Cis))]
+    #[case::trans_bonds(vec![CxEntry::TransBonds(vec![0])], |mol: &ExtendedMolecule| mol.bonds[0].stereo == Some(BondStereo::Trans))]
+    #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(1, 2)])], |mol: &ExtendedMolecule| mol.bonds.len() == 3 && mol.bonds[2].donation == Some(BondDonation::Donating))]
+    #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 2)])], |mol: &ExtendedMolecule| mol.bonds.len() == 3 && mol.bonds[2].noncovalent == Some(BondNoncovalent::Hydrogen))]
+    #[case::fragment_groups(vec![CxEntry::FragmentGroups(vec![vec![0, 1], vec![2]])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| d.components.as_ref()) == Some(Some(&vec![vec![0, 1], vec![2]])))]
+    #[case::stereo_group_absolute(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1] })],
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![0, 1], mode: StereoMode::Absolute }]))]
+    #[case::stereo_group_or(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0] })],
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![0], mode: StereoMode::Correlated(1) }]))]
+    #[case::stereo_group_and(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(2), atoms: vec![1] })],
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![1], mode: StereoMode::Independent(2) }]))]
+    #[case::relative_stereo(vec![CxEntry::RelativeStereo], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![0, 1], mode: StereoMode::Correlated(0) }]))]
+    #[case::atom_properties(vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].properties.get("key") == Some(&"value".to_string()))]
+    fn test_update_extended_molecule(
+        triatomic_extended_molecule: ExtendedMolecule,
+        #[case] entries: Vec<CxEntry>,
+        #[case] check: fn(&ExtendedMolecule) -> bool,
+    ) {
+        let mut mol = triatomic_extended_molecule;
+        update_extended_molecule(&mut mol, entries);
+        assert!(check(&mol));
     }
 }

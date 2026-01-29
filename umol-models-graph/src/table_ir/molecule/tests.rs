@@ -175,6 +175,7 @@ fn test_extended_molecule_direct_construction() {
         comments: vec!["test".to_string()],
         properties: IndexMap::new(),
         ctfile_data: None,
+        cx_data: None,
         source_format: SourceFormat::SMILES,
     };
 

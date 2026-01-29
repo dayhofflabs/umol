@@ -15,6 +15,7 @@ use umol_data::Element;
 use super::atom::{Atom, AtomSymbol, ExtendedAtom};
 use super::bond::{Bond, ExtendedBond};
 use super::ctfile_data::CtfileData;
+use super::cx_data::CxAnnotationData;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
@@ -105,8 +106,9 @@ pub struct ExtendedMolecule {
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
 
-    // Format-specific data for roundtripping (CTFile formats)
+    // Format-specific data for roundtripping
     pub ctfile_data: Option<CtfileData>,
+    pub cx_data: Option<CxAnnotationData>,
 
     pub source_format: SourceFormat,
 }
@@ -124,6 +126,7 @@ impl ExtendedMolecule {
             comments: Vec::new(),
             properties: IndexMap::new(),
             ctfile_data: None,
+            cx_data: None,
             source_format: SourceFormat::UNKNOWN,
         }
     }
@@ -305,6 +308,7 @@ impl From<Molecule> for ExtendedMolecule {
             comments: mol.comments,
             properties: mol.properties,
             ctfile_data: None,
+            cx_data: None,
             source_format: mol.source_format,
         }
     }
