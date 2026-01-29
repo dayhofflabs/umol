@@ -13,6 +13,7 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 
 ##### Lexical / syntactic (during parse)
 
+- LEX_LEADING_WHITESPACE (LEX, Error): whitespace at start of input before SMILES string
 - LEX_INVALID_WHITESPACE (LEX, Error): inter-token whitespace encountered
 - LEX_INVALID_COMMENT (LEX, Error): comment encountered
 - LEX_UNTERMINATED_BLOCK_COMMENT (LEX, Error): block comment not terminated before end of input

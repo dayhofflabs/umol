@@ -10,14 +10,17 @@ bitflags! {
     pub struct SmilesParseFlags: u32 {
         // Parser capabilities
         const WILDCARDS = 1;               // *
+
+        // Format extensions
         const EXTENDED_AROMATICS = 1 << 1; // se, te, as, si
         const EXTENDED_BONDS = 1 << 2;     // ->, <-, ~
+        const CHEMAXON_EXTENSIONS = 1 << 3; // |...| CXSMILES extension block
 
         // Presets
         const BASIC_OPENSMILES = 0;
 
         // Maximum capabilities for basic parser
-        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits();
+        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() | Self::CHEMAXON_EXTENSIONS.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits();
@@ -33,10 +36,17 @@ bitflags! {
         const EXTENDED = Self::BASIC.bits() | Self::STRICT.bits();
 
         // Lenient parser: Currently same as extended parser
-        const LENIENT = Self::EXTENDED.bits() | Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits();
+        const LENIENT = Self::EXTENDED.bits() | Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() |
+            Self::CHEMAXON_EXTENSIONS.bits();
 
         // OpenSMILES parser: BASIC_OPENSMILES | WILDCARDS
         const OPENSMILES = Self::BASIC_OPENSMILES.bits() | Self::WILDCARDS.bits();
+
+        // ChemAxon-compatible basic parser
+        const BASIC_CHEMAXON = Self::BASIC_OPENSMILES.bits() | Self::CHEMAXON_EXTENSIONS.bits();
+
+        // ChemAxon-compatible extended parser
+        const CHEMAXON = Self::EXTENDED.bits() | Self::CHEMAXON_EXTENSIONS.bits();
     }
 }
 
@@ -59,12 +69,19 @@ impl fmt::Display for SmilesParseFlags {
             parts.push("EXTENDED_MAX");
         } else if *self == SmilesParseFlags::LENIENT {
             parts.push("LENIENT");
+        } else if *self == SmilesParseFlags::BASIC_CHEMAXON {
+            parts.push("BASIC_CHEMAXON");
+        } else if *self == SmilesParseFlags::CHEMAXON {
+            parts.push("CHEMAXON");
         } else {
             if self.contains(SmilesParseFlags::WILDCARDS) {
                 parts.push("WILDCARDS");
             }
             if self.contains(SmilesParseFlags::EXTENDED_AROMATICS) {
                 parts.push("EXTENDED_AROMATICS");
+            }
+            if self.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
+                parts.push("CHEMAXON_EXTENSIONS");
             }
         }
         write!(f, "{}", parts.join(" | "))
@@ -177,6 +194,12 @@ impl SmilesIoConfig {
     }
     pub fn lenient() -> Self {
         Self::with_parse_flags(SmilesParseFlags::LENIENT)
+    }
+    pub fn basic_chemaxon() -> Self {
+        Self::with_parse_flags(SmilesParseFlags::BASIC_CHEMAXON)
+    }
+    pub fn chemaxon() -> Self {
+        Self::with_parse_flags(SmilesParseFlags::CHEMAXON)
     }
     pub fn with_lint_flags(flags: SmilesLintFlags) -> Self {
         Self {

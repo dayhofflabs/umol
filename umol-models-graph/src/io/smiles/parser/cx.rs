@@ -5,17 +5,17 @@
 //! - `parse_cx_annotations`: basic annotations only (for Molecule)
 //! - `parse_extended_cx_annotations`: all annotations (for ExtendedMolecule)
 
-#![allow(dead_code)]
+use std::collections::HashMap;
 
 use bstr::ByteSlice;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_while1};
-use nom::character::complete::{char, u32 as nom_u32};
-use nom::combinator::{opt, value};
+use nom::character::complete::{char, satisfy, u32 as nom_u32};
+use nom::combinator::{not, opt, value};
 use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many1, separated_list0};
 use nom::number::complete::double;
-use nom::sequence::{delimited, preceded, separated_pair};
+use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Err, IResult, Parser};
 use umol_data::SpinMultiplicity;
 
@@ -24,7 +24,8 @@ use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
 use crate::table_ir::{
     Bond, BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
-    ExtendedBond, ExtendedMolecule, Molecule, StereoMode, StereoSet, UnpairedElectrons,
+    ExtendedBond, ExtendedMolecule, Molecule, StereoMode, StereoSet, StereoSetMode,
+    UnpairedElectrons,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -160,7 +161,8 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) {
 
 /// Update ExtendedMolecule with parsed CX entries
 pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry>) {
-    let mut stereo_sets: Vec<StereoSet> = Vec::new();
+    let mut stereo_mode: Option<StereoMode> = None;
+    let mut stereo_groups: HashMap<u32, StereoSet> = HashMap::new();
     let mut components: Option<Vec<Vec<u32>>> = None;
 
     for entry in entries {
@@ -227,32 +229,32 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
             CxEntry::FragmentGroups(groups) => {
                 components = Some(groups);
             }
-            CxEntry::StereoGroup(sg) => {
-                let mode = match sg.group_type {
-                    StereoGroupType::Absolute => StereoMode::Absolute,
-                    StereoGroupType::Or(n) => StereoMode::Correlated(n),
-                    StereoGroupType::And(n) => StereoMode::Independent(n),
-                };
-                stereo_sets.push(StereoSet {
-                    atoms: sg.atoms,
-                    mode,
-                });
-            }
-            CxEntry::RelativeStereo => {
-                // Treat as all atoms in a single correlated group
-                let all_chiral: Vec<u32> = mol
-                    .atoms
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, a)| a.chirality.is_some())
-                    .map(|(i, _)| i as u32)
-                    .collect();
-                if !all_chiral.is_empty() {
-                    stereo_sets.push(StereoSet {
-                        atoms: all_chiral,
-                        mode: StereoMode::Correlated(0),
-                    });
+            CxEntry::StereoGroup(sg) => match sg.group_type {
+                StereoGroupType::Absolute => {
+                    // Absolute atoms don't need group storage; stereo_mode captures this
+                    stereo_mode = Some(StereoMode::Absolute);
                 }
+                StereoGroupType::Or(n) => {
+                    stereo_groups
+                        .entry(n)
+                        .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
+                        .or_insert(StereoSet {
+                            atoms: sg.atoms,
+                            mode: StereoSetMode::Correlated,
+                        });
+                }
+                StereoGroupType::And(n) => {
+                    stereo_groups
+                        .entry(n)
+                        .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
+                        .or_insert(StereoSet {
+                            atoms: sg.atoms,
+                            mode: StereoSetMode::Independent,
+                        });
+                }
+            },
+            CxEntry::RelativeStereo => {
+                stereo_mode = Some(StereoMode::Relative);
             }
             CxEntry::AtomProperties(props) => {
                 for (idx, key, value) in props {
@@ -265,9 +267,10 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
     }
 
     // Store CX-specific data if any
-    if !stereo_sets.is_empty() || components.is_some() {
+    if stereo_mode.is_some() || !stereo_groups.is_empty() || components.is_some() {
         mol.cx_data = Some(CxAnnotationData {
-            stereo_sets,
+            stereo_mode,
+            stereo_groups,
             components,
         });
     }
@@ -284,9 +287,7 @@ fn parse_cx_block<'inp>(
     )
     .parse(input)
     {
-        Ok((remaining, options)) if remaining.is_empty() => {
-            Ok(options.into_iter().flatten().collect())
-        }
+        Ok(([], options)) => Ok(options.into_iter().flatten().collect()),
         Ok(_) => Err(ParseError::InvalidToken { pos: 0 }),
         Err(Err::Failure(e)) if e.code == ErrorKind::Verify => {
             Err(ParseError::InvalidCxProperty { pos: 0 })
@@ -295,29 +296,33 @@ fn parse_cx_block<'inp>(
     }
 }
 
-/// Parse coordinates (x,y) or (x,y,z) for a single atom, or empty for missing.
+/// Parse coordinates (x,y) or (x,y,z) for a single atom.
+/// Missing components default to 0.0.
 fn parse_atom_coordinates(input: &[u8]) -> IResult<&[u8], Point3D> {
-    if input.is_empty() {
-        return Ok((input, Point3D::new(f64::NAN, f64::NAN, f64::NAN)));
+    let (input, coords) = separated_list0(char(','), opt(double)).parse(input)?;
+    if coords.is_empty() {
+        return Ok((input, Point3D::zero()));
     }
-
-    let (remaining, (x, y, z)) = (
-        double,
-        preceded(char(','), double),
-        opt(preceded(char(','), double)),
-    )
-        .parse(input)?;
-
-    Ok((remaining, Point3D::new(x, y, z.unwrap_or(0.0))))
+    if coords.len() > 3 {
+        return Err(Err::Failure(NomError::new(input, ErrorKind::Tag)));
+    }
+    let x = coords.first().copied().flatten().unwrap_or(0.0);
+    let y = coords.get(1).copied().flatten().unwrap_or(0.0);
+    let z = coords.get(2).copied().flatten().unwrap_or(0.0);
+    Ok((input, Point3D::new(x, y, z)))
 }
 
 /// Parse coordinates block: `(x,y,z;x,y,z;...)`
+/// Empty parens `()` means no atoms have coordinates.
 fn parse_coordinates(input: &[u8]) -> IResult<&[u8], CxEntry> {
-    let (input, coords) = delimited(
-        char('('),
-        separated_list0(char(';'), parse_atom_coordinates),
-        char(')'),
-    )
+    let (input, coords) = alt((
+        value(vec![], tag("()")),
+        delimited(
+            char('('),
+            separated_list0(char(';'), parse_atom_coordinates),
+            char(')'),
+        ),
+    ))
     .parse(input)?;
 
     Ok((input, CxEntry::Coordinates(coords)))
@@ -598,26 +603,16 @@ fn skip_unknown_entry(input: &[u8]) -> IResult<&[u8], ()> {
 
 /// Parse comma only if not followed by an entry-start character.
 fn comma_not_before_entry(input: &[u8]) -> IResult<&[u8], char> {
-    let (rest, c) = char(',').parse(input)?;
-    if is_entry_start(rest) {
-        Err(Err::Error(NomError::new(input, ErrorKind::Char)))
-    } else {
-        Ok((rest, c))
-    }
-}
-
-fn is_entry_start(input: &[u8]) -> bool {
-    input
-        .first()
-        .map(|&b| is_entry_start_byte(b))
-        .unwrap_or(false)
-}
-
-fn is_entry_start_byte(b: u8) -> bool {
-    matches!(
-        b,
-        b'(' | b'$' | b'^' | b'w' | b'c' | b't' | b'C' | b'H' | b'f' | b'a' | b'o' | b'&' | b'r'
+    terminated(
+        char(','),
+        not(satisfy(|c| {
+            matches!(
+                c,
+                '(' | '$' | '^' | 'w' | 'c' | 't' | 'C' | 'H' | 'f' | 'a' | 'o' | '&' | 'r'
+            )
+        })),
     )
+    .parse(input)
 }
 
 /// Parse a basic CX entry (rejects extended features).
@@ -710,6 +705,56 @@ mod tests {
             ExtendedBond::new(1, 2, BondOrder::Double),
         ];
         mol
+    }
+
+    #[rstest]
+    #[case::blank(b"()", CxEntry::Coordinates(vec![]))]
+    #[case::empty(b"(,,)", CxEntry::Coordinates(vec![Point3D::zero()]))]
+    #[case::atom_2d(b"(1.0,2.0,)", CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 0.0)]))]
+    #[case::atom_2d_nocomma(b"(1,2)", CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 0.0)]))]
+    #[case::atom_3d(b"(1.0,2.0,3.0)", CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0)]))]
+    #[case::atom_x(b"(1.0,,)", CxEntry::Coordinates(vec![Point3D::new(1.0, 0.0, 0.0)]))]
+    #[case::atom_x_nocomma(b"(1)", CxEntry::Coordinates(vec![Point3D::new(1.0, 0.0, 0.0)]))]
+    #[case::atom_y(b"(,2.0,)", CxEntry::Coordinates(vec![Point3D::new(0.0, 2.0, 0.0)]))]
+    #[case::atom_y_nocomma(b"(,2)", CxEntry::Coordinates(vec![Point3D::new(0.0, 2.0, 0.0)]))]
+    #[case::atom_z(b"(,,3.0)", CxEntry::Coordinates(vec![Point3D::new(0.0, 0.0, 3.0)]))]
+    #[case::two_atoms_1(b"(;1,2)", CxEntry::Coordinates(vec![Point3D::new(0.0, 0.0, 0.0), Point3D::new(1.0, 2.0, 0.0)]))]
+    #[case::two_atoms_2(b"(1,2;)", CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 0.0), Point3D::new(0.0, 0.0, 0.0)]))]
+    fn test_parse_coordinates(#[case] input: &[u8], #[case] expected: CxEntry) {
+        let result = parse_coordinates(input);
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded: {:?}",
+            input_str,
+            result
+        );
+        let (_, entries) = result.unwrap();
+        assert_eq!(
+            entries, expected,
+            "{:?} should have parsed to {:?}",
+            input_str, entries
+        );
+    }
+
+    #[rstest]
+    #[case::atom_4d(b"(1.0,2.0,3.0,4.0)", ErrorKind::Tag)]
+    fn test_parse_coordinates_invalid(#[case] input: &[u8], #[case] expected_kind: ErrorKind) {
+        let result = parse_coordinates(input);
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_err(),
+            "{:?} should have failed: {:?}",
+            input_str,
+            result
+        );
+        assert!(
+            matches!(result.clone(), Err(Err::Failure(e)) if e.code == expected_kind),
+            "{:?} should have failed with error kind {:?}, got {:?}",
+            input_str,
+            expected_kind,
+            result.clone().unwrap_err().map(|e| e.code)
+        );
     }
 
     #[rustfmt::skip]
@@ -837,12 +882,13 @@ mod tests {
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 2)])], |mol: &ExtendedMolecule| mol.bonds.len() == 3 && mol.bonds[2].noncovalent == Some(BondNoncovalent::Hydrogen))]
     #[case::fragment_groups(vec![CxEntry::FragmentGroups(vec![vec![0, 1], vec![2]])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| d.components.as_ref()) == Some(Some(&vec![vec![0, 1], vec![2]])))]
     #[case::stereo_group_absolute(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1] })],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![0, 1], mode: StereoMode::Absolute }]))]
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_mode) == Some(StereoMode::Absolute))]
     #[case::stereo_group_or(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0] })],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![0], mode: StereoMode::Correlated(1) }]))]
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&1)) == Some(&StereoSet { atoms: vec![0], mode: StereoSetMode::Correlated }))]
     #[case::stereo_group_and(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(2), atoms: vec![1] })],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![1], mode: StereoMode::Independent(2) }]))]
-    #[case::relative_stereo(vec![CxEntry::RelativeStereo], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| &d.stereo_sets) == Some(&vec![StereoSet { atoms: vec![0, 1], mode: StereoMode::Correlated(0) }]))]
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&2)) == Some(&StereoSet { atoms: vec![1], mode: StereoSetMode::Independent }))]
+    #[case::relative_stereo(vec![CxEntry::RelativeStereo],
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_mode) == Some(StereoMode::Relative))]
     #[case::atom_properties(vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].properties.get("key") == Some(&"value".to_string()))]
     fn test_update_extended_molecule(
         triatomic_extended_molecule: ExtendedMolecule,

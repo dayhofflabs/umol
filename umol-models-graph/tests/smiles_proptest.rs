@@ -54,7 +54,7 @@ proptest! {
         if let Err(err) = res {
             let len = input.len();
             let ok = match err {
-                ParseError::InvalidWhitespace { pos } => pos < len,
+                ParseError::LeadingWhitespace => true,
                 | ParseError::InvalidToken { pos } => pos < len,
                 | ParseError::InvalidElement { pos } => pos < len,
                 | ParseError::UnbalancedOpenParen { pos } => pos < len,

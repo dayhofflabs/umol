@@ -1125,20 +1125,31 @@ fn whitespace(#[case] input: &[u8], #[case] expected: Molecule) {
 }
 
 #[rstest]
-#[case::leading_space(b" CC", ParseError::InvalidWhitespace { pos: 0 })]
-#[case::leading_tab(b"\tCC", ParseError::InvalidWhitespace { pos: 0 })]
-#[case::leading_newline(b"\nCC", ParseError::InvalidWhitespace { pos: 0 })]
-#[case::leading_cr(b"\rCC", ParseError::InvalidWhitespace { pos: 0 })]
-#[case::leading_crlf(b"\r\nCC", ParseError::InvalidWhitespace { pos: 0 })]
-#[case::terminator_space_trailing_structure(b"CC CC", ParseError::InvalidWhitespace { pos: 2 })]
-#[case::terminator_tab_trailing_structure(b"CC\tCC", ParseError::InvalidWhitespace { pos: 2 })]
-#[case::terminator_cr_trailing_structure(b"CC\rCC", ParseError::InvalidWhitespace { pos: 2 })]
-#[case::terminator_newline_trailing_structure(b"CC\nCC", ParseError::InvalidWhitespace { pos: 2 })]
-#[case::terminator_crlf_trailing_structure(b"CC\r\nCC", ParseError::InvalidWhitespace { pos: 2 })]
-fn whitespace_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+#[case::leading_space(b" CC", ParseError::LeadingWhitespace)]
+#[case::leading_tab(b"\tCC", ParseError::LeadingWhitespace)]
+#[case::leading_newline(b"\nCC", ParseError::LeadingWhitespace)]
+#[case::leading_cr(b"\rCC", ParseError::LeadingWhitespace)]
+#[case::leading_crlf(b"\r\nCC", ParseError::LeadingWhitespace)]
+fn whitespace_leading(#[case] input: &[u8], #[case] expected: ParseError) {
+    // Per OpenSMILES spec, leading whitespace is not allowed
     let res = parse_smiles_bytes(input);
     let input_str = input.to_str_lossy();
     assert!(res.is_err(), "{:?} should have failed", input_str);
     let err = res.unwrap_err();
     assert_eq!(err, expected);
+}
+
+#[rstest]
+#[case::terminator_space_trailing_structure(b"CC CC", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_tab_trailing_structure(b"CC\tCC", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_cr_trailing_structure(b"CC\rCC", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_newline_trailing_structure(b"CC\nCC", build_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_crlf_trailing_structure(b"CC\r\nCC", build_from_graph("C@0 C@1 | 0-1@1"))]
+fn whitespace_trailing_content(#[case] input: &[u8], #[case] expected: Molecule) {
+    // Per OpenSMILES spec, data after whitespace is ignored
+    let res = parse_smiles_bytes(input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
 }

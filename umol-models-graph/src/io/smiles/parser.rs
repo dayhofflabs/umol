@@ -7,6 +7,9 @@ mod cx;
 mod utils;
 
 use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
+use self::cx::{
+    parse_cx_annotations, parse_extended_cx_annotations, update_extended_molecule, update_molecule,
+};
 use self::utils::{
     attach_atom, attach_atom_extended, invalid_ring_context, parse_bond, parse_bracket,
     parse_bracket_extended, parse_extended_bond, parse_organic_aliphatic_element,
@@ -47,31 +50,33 @@ pub fn parse_smiles_bytes_with(
         flags
     );
 
-    // Strip leading/trailing whitespace, reject internal whitespace
-    let mut start = 0usize;
-    while start < input.len() && matches!(input[start], b' ' | b'\t' | b'\n' | b'\r') {
-        start += 1;
-    }
-    if start == input.len() {
+    if input.is_empty() {
         return Ok(Molecule::empty());
     }
-    if start > 0 {
-        return Err(ParseError::InvalidWhitespace { pos: 0 });
-    }
-    let mut end = input.len();
-    while end > 0 && matches!(input[end - 1], b' ' | b'\t' | b'\n' | b'\r') {
-        end -= 1;
-    }
-    for (k, b) in input[start..end].iter().enumerate() {
-        if matches!(*b, b' ' | b'\t' | b'\n' | b'\r') {
-            return Err(ParseError::InvalidWhitespace { pos: start + k });
-        }
+
+    let (remaining, mut mol) = parse_smiles_inner(input, flags)?;
+
+    // If no atoms parsed but remaining has non-whitespace, it's leading whitespace error
+    if mol.atoms.is_empty() && !remaining.trim_ascii_start().is_empty() {
+        return Err(ParseError::LeadingWhitespace);
     }
 
-    parse_smiles_inner(&input[start..end], flags)
+    if remaining.is_empty() {
+        return Ok(mol);
+    }
+
+    // Remaining input after SMILES - check for CX block if enabled
+    let trimmed = remaining.trim_ascii_start();
+    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
+        let entries = parse_cx_annotations(trimmed)?;
+        update_molecule(&mut mol, entries);
+    }
+
+    // Per spec, data after whitespace is ignored
+    Ok(mol)
 }
 
-fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule, ParseError> {
+fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<(&[u8], Molecule), ParseError> {
     let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
@@ -87,9 +92,9 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
     while i < n {
         let b0 = input[i];
 
-        // Reject whitespace (already stripped, but catch internal)
+        // Stop at whitespace - return remaining input
         if matches!(b0, b' ' | b'\t' | b'\n' | b'\r') {
-            return Err(ParseError::InvalidWhitespace { pos: i });
+            break;
         }
 
         if b0 != b'(' {
@@ -509,7 +514,7 @@ fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<Molecule,
     }
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_else(Molecule::empty);
-    Ok(mol)
+    Ok((&input[i..], mol))
 }
 
 /// Parse extended SMILES string with strict OpenSMILES rules
@@ -537,34 +542,36 @@ pub fn parse_extended_smiles_bytes_with(
 ) -> Result<ExtendedMolecule, ParseError> {
     let flags = config.parse_flags;
 
-    // Strip leading/trailing whitespace, reject internal whitespace
-    let mut start = 0usize;
-    while start < input.len() && matches!(input[start], b' ' | b'\t' | b'\n' | b'\r') {
-        start += 1;
-    }
-    if start == input.len() {
+    if input.is_empty() {
         return Ok(ExtendedMolecule::empty());
     }
-    if start > 0 {
-        return Err(ParseError::InvalidWhitespace { pos: 0 });
-    }
-    let mut end = input.len();
-    while end > 0 && matches!(input[end - 1], b' ' | b'\t' | b'\n' | b'\r') {
-        end -= 1;
-    }
-    for (k, b) in input[start..end].iter().enumerate() {
-        if matches!(*b, b' ' | b'\t' | b'\n' | b'\r') {
-            return Err(ParseError::InvalidWhitespace { pos: start + k });
-        }
+
+    let (remaining, mut mol) = parse_extended_smiles_inner(input, flags)?;
+
+    // If no atoms parsed but remaining has non-whitespace, it's leading whitespace error
+    if mol.atoms.is_empty() && !remaining.trim_ascii_start().is_empty() {
+        return Err(ParseError::LeadingWhitespace);
     }
 
-    parse_extended_smiles_inner(&input[start..end], flags)
+    if remaining.is_empty() {
+        return Ok(mol);
+    }
+
+    // Remaining input after SMILES - check for CX block if enabled
+    let trimmed = remaining.trim_ascii_start();
+    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
+        let entries = parse_extended_cx_annotations(trimmed)?;
+        update_extended_molecule(&mut mol, entries);
+    }
+
+    // Per spec, data after whitespace is ignored
+    Ok(mol)
 }
 
 fn parse_extended_smiles_inner(
     input: &[u8],
     flags: SmilesParseFlags,
-) -> Result<ExtendedMolecule, ParseError> {
+) -> Result<(&[u8], ExtendedMolecule), ParseError> {
     let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
@@ -580,8 +587,9 @@ fn parse_extended_smiles_inner(
     while i < n {
         let b0 = input[i];
 
+        // Stop at whitespace - return remaining input
         if matches!(b0, b' ' | b'\t' | b'\n' | b'\r') {
-            return Err(ParseError::InvalidWhitespace { pos: i });
+            break;
         }
 
         if b0 != b'(' {
@@ -1014,7 +1022,7 @@ fn parse_extended_smiles_inner(
     }
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
-    Ok(mol)
+    Ok((&input[i..], mol))
 }
 
 #[cfg(test)]

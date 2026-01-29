@@ -7,10 +7,10 @@ category: invalid
 basic_opensmiles:
   success: false
   error:
-    error_type: InvalidWhitespace
-    message: Invalid whitespace at position 59
+    error_type: InvalidCxProperty
+    message: Invalid CX property at position 59
 opensmiles:
   success: false
   error:
-    error_type: InvalidWhitespace
-    message: Invalid whitespace at position 59
+    error_type: InvalidCxProperty
+    message: Invalid CX property at position 59

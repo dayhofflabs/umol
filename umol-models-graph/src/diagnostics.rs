@@ -25,8 +25,8 @@ pub enum Category {
 #[derive(Copy, Clone, Debug, Display, PartialEq, EnumIter, EnumMessage)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum DiagnosticKind {
-    #[strum(message = "Invalid whitespace")]
-    SmilesInvalidWhitespace,
+    #[strum(message = "Leading whitespace")]
+    SmilesLeadingWhitespace,
     #[strum(message = "Invalid element")]
     SmilesInvalidElement,
     #[strum(message = "Invalid token")]
@@ -250,7 +250,7 @@ impl DiagnosticKind {
         use DiagnosticKind::*;
 
         match self {
-            SmilesInvalidWhitespace | SmilesInvalidElement | SmilesInvalidToken => {
+            SmilesLeadingWhitespace | SmilesInvalidElement | SmilesInvalidToken => {
                 Category::Lexical
             }
 
@@ -366,7 +366,7 @@ impl DiagnosticKind {
         use DiagnosticKind::*;
 
         match self {
-            SmilesInvalidWhitespace
+            SmilesLeadingWhitespace
             | SmilesInvalidElement
             | SmilesInvalidToken
             | SmilesUnbalancedOpenParen

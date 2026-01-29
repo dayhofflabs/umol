@@ -1,2 +1,2 @@
-# GraphMol_SynthonSpaceSearch_data_idorsia_toy_space_enum.smi:23820
-Cc1ccc2c(-c3nc(C)nn3C3CCSC3)nn(-c3nc(CN)c(C)s3)c2c1
+# GraphMol_SynthonSpaceSearch_data_idorsia_toy_space_enum.smi:27424
+Cc1ccc2c(-c3nc(C)nn3C(C)CC#N)nn(C3=NC4=NC(=O)NC(=O)C4=N3)c2c1

@@ -6,6 +6,8 @@
 //! Files are organized by parse result category:
 //! - basic_opensmiles: passes strict OpenSMILES parser (no wildcards)
 //! - opensmiles: passes extended OpenSMILES parser (with wildcards)
+//! - basic_chemaxon: requires CHEMAXON_EXTENSIONS (basic parser)
+//! - chemaxon: requires CHEMAXON_EXTENSIONS (extended parser)
 //! - invalid: fails all parsers
 
 use std::fs;
@@ -16,7 +18,9 @@ use rstest::rstest;
 use serde::Serialize;
 use umol_models_graph::io::smiles::config::SmilesIoConfig;
 use umol_models_graph::io::smiles::error::ParseError;
-use umol_models_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles};
+use umol_models_graph::io::smiles::{
+    parse_extended_smiles_bytes_with, parse_smiles, parse_smiles_bytes_with,
+};
 use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -24,6 +28,8 @@ use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
 enum Category {
     BasicOpensmiles,
     Opensmiles,
+    BasicChemaxon,
+    Chemaxon,
     Invalid,
     Bug,
 }
@@ -33,18 +39,41 @@ impl Category {
         match name {
             "basic_opensmiles" => Some(Category::BasicOpensmiles),
             "opensmiles" => Some(Category::Opensmiles),
+            "basic_chemaxon" => Some(Category::BasicChemaxon),
+            "chemaxon" => Some(Category::Chemaxon),
             "invalid" => Some(Category::Invalid),
             "bug" => Some(Category::Bug),
             _ => None,
         }
     }
 
-    fn from_parse_result(strict_ok: bool, extended_ok: bool) -> Self {
-        match (strict_ok, extended_ok) {
-            (true, true) => Category::BasicOpensmiles,
-            (false, true) => Category::Opensmiles,
-            (false, false) => Category::Invalid,
-            (true, false) => Category::Bug,
+    fn from_parse_result(
+        basic_ok: bool,
+        opensmiles_ok: bool,
+        basic_chemaxon_ok: bool,
+        chemaxon_ok: bool,
+    ) -> Self {
+        // Hierarchy has two dimensions:
+        // 1. Wildcards: basic < opensmiles, basic_chemaxon < chemaxon
+        // 2. CX features: basic_chemaxon parses basic CX, chemaxon parses extended CX
+        //
+        // Valid patterns:
+        // - (T,T,T,T): passes all → basic_opensmiles
+        // - (T,T,F,T): SMILES valid, CX has extended features → chemaxon
+        // - (F,T,F,T): needs wildcards → opensmiles
+        // - (F,F,T,T): needs basic CX → basic_chemaxon
+        // - (F,F,F,T): needs wildcards + extended CX → chemaxon
+        // - (F,F,F,F): fails all → invalid
+        // - (T,T,F,F): SMILES valid but CX malformed → bug
+        // Other patterns are hierarchy violations
+        match (basic_ok, opensmiles_ok, basic_chemaxon_ok, chemaxon_ok) {
+            (true, true, true, true) => Category::BasicOpensmiles,
+            (true, true, false, true) => Category::Chemaxon, // extended CX features
+            (false, true, false, true) => Category::Opensmiles,
+            (false, false, true, true) => Category::BasicChemaxon,
+            (false, false, false, true) => Category::Chemaxon,
+            (false, false, false, false) => Category::Invalid,
+            _ => Category::Bug,
         }
     }
 }
@@ -176,16 +205,60 @@ fn parse_with_opensmiles(smiles: &str) -> ParseResult {
     }
 }
 
+fn parse_with_basic_chemaxon(smiles: &str) -> ParseResult {
+    let config = SmilesIoConfig::basic_chemaxon();
+    match parse_smiles_bytes_with(smiles.as_bytes(), &config) {
+        Ok(mol) => ParseResult {
+            success: true,
+            summary: Some(MoleculeSummary::from(&mol)),
+            error: None,
+        },
+        Err(e) => ParseResult {
+            success: false,
+            summary: None,
+            error: Some(ParseErrorSummary {
+                error_type: error_type_name(&e),
+                message: e.to_string(),
+            }),
+        },
+    }
+}
+
+fn parse_with_chemaxon(smiles: &str) -> ParseResult {
+    let config = SmilesIoConfig::chemaxon();
+    match parse_extended_smiles_bytes_with(smiles.as_bytes(), &config) {
+        Ok(mol) => ParseResult {
+            success: true,
+            summary: Some(MoleculeSummary::from(&mol)),
+            error: None,
+        },
+        Err(e) => ParseResult {
+            success: false,
+            summary: None,
+            error: Some(ParseErrorSummary {
+                error_type: error_type_name(&e),
+                message: e.to_string(),
+            }),
+        },
+    }
+}
+
 fn parse_file(path: &Path) -> FileParseResults {
     let expected_category = extract_expected_category(path);
     let smiles = read_smiles_from_file(path);
 
-    // Run both parsers to verify parser hierarchy
+    // Run all parsers to verify parser hierarchy
     let basic_opensmiles = parse_with_strict(&smiles);
     let opensmiles_result = parse_with_opensmiles(&smiles);
+    let basic_chemaxon_result = parse_with_basic_chemaxon(&smiles);
+    let chemaxon_result = parse_with_chemaxon(&smiles);
 
-    let category =
-        Category::from_parse_result(basic_opensmiles.success, opensmiles_result.success);
+    let category = Category::from_parse_result(
+        basic_opensmiles.success,
+        opensmiles_result.success,
+        basic_chemaxon_result.success,
+        chemaxon_result.success,
+    );
 
     // Only include extended result in output if it differs from basic
     let opensmiles = if basic_opensmiles.success {

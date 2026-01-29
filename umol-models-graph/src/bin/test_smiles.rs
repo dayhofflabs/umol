@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
+use std::process;
 
 use clap::{Parser, ValueEnum};
 use umol_models_graph::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
@@ -19,6 +20,10 @@ enum ParserType {
     Extended,
     /// Extended lenient parser
     Lenient,
+    /// Basic parser with CXSMILES support
+    BasicChemaxon,
+    /// Extended parser with CXSMILES support
+    Chemaxon,
 }
 
 #[derive(Parser)]
@@ -34,6 +39,18 @@ struct Args {
     path: String,
 }
 
+/// Extract CXSMILES portion from a line (SMILES + |...|).
+fn extract_cxsmiles(line: &str) -> Option<&str> {
+    if let Some(pipe_start) = line.find(" |") {
+        let extension_start = pipe_start + 2;
+        if let Some(rel_end) = line[extension_start..].find('|') {
+            let end = extension_start + rel_end + 1;
+            return Some(&line[..end]);
+        }
+    }
+    None
+}
+
 fn main() {
     let args = Args::parse();
 
@@ -42,20 +59,26 @@ fn main() {
     } else {
         let file = File::open(&args.path).unwrap_or_else(|e| {
             eprintln!("error: cannot open {}: {}", args.path, e);
-            std::process::exit(2)
+            process::exit(2)
         });
         Box::new(BufReader::new(file))
     };
 
-    let (use_extended, config) = match args.parser {
-        ParserType::BasicOpensmiles => (false, SmilesIoConfig::basic_opensmiles()),
-        ParserType::Opensmiles => (true, SmilesIoConfig::opensmiles()),
-        ParserType::Basic => (false, SmilesIoConfig::basic()),
-        ParserType::BasicLenient => {
-            (false, SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT))
-        }
-        ParserType::Extended => (true, SmilesIoConfig::extended()),
-        ParserType::Lenient => (true, SmilesIoConfig::lenient()),
+    let (use_extended, config, include_chemaxon) = match args.parser {
+        ParserType::BasicOpensmiles => (false, SmilesIoConfig::basic_opensmiles(), false),
+        ParserType::Opensmiles => (true, SmilesIoConfig::opensmiles(), false),
+        ParserType::Basic => (false, SmilesIoConfig::basic(), false),
+        ParserType::BasicLenient => (
+            false,
+            SmilesIoConfig::with_parse_flags(
+                SmilesParseFlags::BASIC_MAX & SmilesParseFlags::LENIENT,
+            ),
+            false,
+        ),
+        ParserType::Extended => (true, SmilesIoConfig::extended(), false),
+        ParserType::Lenient => (true, SmilesIoConfig::lenient(), false),
+        ParserType::BasicChemaxon => (false, SmilesIoConfig::basic_chemaxon(), true),
+        ParserType::Chemaxon => (true, SmilesIoConfig::chemaxon(), true),
     };
 
     let mut n = 0usize;
@@ -65,8 +88,11 @@ fn main() {
             Ok(s) => s,
             Err(_) => continue,
         };
-        // Allow SMILES [tab or space] name
-        let smiles = line.split_whitespace().next().unwrap_or("");
+        let smiles = if include_chemaxon {
+            extract_cxsmiles(&line).unwrap_or_else(|| line.split_whitespace().next().unwrap_or(""))
+        } else {
+            line.split_whitespace().next().unwrap_or("")
+        };
         if smiles.is_empty() {
             continue;
         }

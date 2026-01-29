@@ -5,8 +5,8 @@ use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
-    #[error("Invalid whitespace at position {pos}")]
-    InvalidWhitespace { pos: usize },
+    #[error("Leading whitespace")]
+    LeadingWhitespace,
     #[error("Invalid element at position {pos}")]
     InvalidElement { pos: usize },
     #[error("Invalid token at position {pos}")]
@@ -79,10 +79,7 @@ impl From<ParseError> for Diagnostic {
         use ParseError::*;
 
         let (kind, span) = match error {
-            InvalidWhitespace { pos } => (
-                SmilesInvalidWhitespace,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
+            LeadingWhitespace => (SmilesLeadingWhitespace, Span::from_bytes_opt(Some(0), Some(1))),
             InvalidElement { pos } => (
                 SmilesInvalidElement,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
