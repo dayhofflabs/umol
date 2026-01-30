@@ -19,11 +19,13 @@ use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::LazyLock;
 
 use clap::Parser;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
+use regex::Regex;
 use umol_models_graph::io::smiles::config::SmilesIoConfig;
 use umol_models_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles_bytes_with};
 
@@ -370,7 +372,9 @@ impl ClassificationStats {
 
 /// Check if SMILES has CX annotations (` |...|` block)
 fn has_cx_annotations(smiles: &str) -> bool {
-    smiles.contains(" |") && smiles.contains('|')
+    static CX_ANNOTATIONS_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^\S+\s+\|.*\|").expect("CX annotations regex"));
+    CX_ANNOTATIONS_RE.is_match(smiles)
 }
 
 fn classify_smiles(smiles: &str) -> Result<(Category, ParseResults), Box<dyn Error>> {

@@ -12,8 +12,10 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use insta::{assert_yaml_snapshot, Settings};
+use regex::Regex;
 use rstest::rstest;
 use serde::Serialize;
 use umol_models_graph::io::smiles::config::SmilesIoConfig;
@@ -168,7 +170,9 @@ fn read_smiles_from_file(path: &Path) -> String {
 }
 
 fn has_cx_extensions(smiles: &str) -> bool {
-    smiles.contains('|')
+    static CX_ANNOTATIONS_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^\S+\s+\|.*\|").expect("CX annotations regex"));
+    CX_ANNOTATIONS_RE.is_match(smiles)
 }
 
 fn parse_with_strict(smiles: &str) -> ParseResult {
