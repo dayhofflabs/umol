@@ -5,11 +5,13 @@
 
 use std::collections::HashMap;
 
+use super::stereo::StereoInterpretation;
+
 /// CXSMILES annotation data
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CxAnnotationData {
     /// Molecule-wide stereo interpretation mode
-    pub stereo_mode: Option<StereoMode>,
+    pub stereo_interpretation: Option<StereoInterpretation>,
 
     /// Enhanced stereo groups: index -> set of atoms with their mode
     pub stereo_groups: HashMap<u32, StereoSet>,
@@ -17,15 +19,6 @@ pub struct CxAnnotationData {
     /// Component groupings (atom indices per component)
     /// Used when explicit grouping differs from graph connectivity
     pub components: Option<Vec<Vec<u32>>>,
-}
-
-/// Molecule-wide stereo interpretation
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StereoMode {
-    /// All stereocenters have absolute configuration
-    Absolute,
-    /// All stereocenters have relative configuration (r flag)
-    Relative,
 }
 
 /// A set of stereocenters with a common interpretation mode

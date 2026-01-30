@@ -19,10 +19,11 @@ committing to a fully general “Platonic ideal” of stereochemistry.
   - `Atom.chirality: Option<Chirality>` (SMILES `@`, `@@`, `@TH`, `@AL`, `@SP`, `@TB`, `@OH`; CTFile parity maps here too)
   - `Bond.wedge: Option<BondWedge>` (SMILES `/` `\`; CTFile wedge/dash)
   - `Bond.stereo: Option<BondStereo>` (cis/trans/either, mostly via CXSMILES `c:`/`t:` right now)
-- CTFile **chiral flag** (counts line `ccc`) is currently stored as a string property:
+- CTFile **chiral flag** (counts line `ccc`) is stored as:
   - `molecule.properties["chiral_flag"] = "true"|"false"` (same for `ExtendedMolecule`)
+  - if `true`, `molecule.stereo_interpretation = Some(StereoInterpretation::Absolute)` (same for `ExtendedMolecule`)
 - CXSMILES enhanced stereo metadata is stored in `ExtendedMolecule.cx_data: Option<CxAnnotationData>`:
-  - `stereo_mode: Option<StereoMode>` (`Absolute` or `Relative`)
+  - `stereo_interpretation: Option<StereoInterpretation>` (`Absolute` or `Relative`)
   - `stereo_groups: HashMap<u32, StereoSet>` where each `StereoSet` is `{ atoms, mode }` with `mode` ∈ {`Correlated`, `Independent`}
 
 ### 0.2 GraphIR

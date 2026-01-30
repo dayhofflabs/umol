@@ -104,41 +104,41 @@ Source: RDKit docs, source code, test suite
 - [x] Extended aromatic atoms: `se`, `as` (selenium, arsenic) - always enabled
 - [x] Extended aromatic atoms: `si`, `te` (silicon, tellurium) - EXTENDED_AROMATICS flag
 - [ ] Tri-character atoms: `Uu<x>` (<x> = n, b, y, q, p, h, s, o)
-- [ ] Wildcard atom: `*`
-- [ ] Atom class: `[C:1]`
-- [ ] Isotope: `[13C]`
-- [ ] Charge: `[NH4+]`, `[O-]`
-- [ ] Hydrogen count: `[CH4]`
-- [ ] Chirality: `@`, `@@`, `@TH1`, etc.
-- [ ] Atom map numbers (reactions): `[C:1]`
+- [x] Wildcard atom: `*` (extended parser)
+- [x] Atom class: `[C:1]` (stored as atom class; reaction semantics are separate)
+- [x] Isotope: `[13C]`
+- [x] Charge: `[NH4+]`, `[O-]`
+- [x] Hydrogen count: `[CH4]`
+- [x] Chirality: `@`, `@@`, `@TH1`, etc.
+- [ ] Atom map numbers (reactions): `[C:1]` (requires reaction parser + mapping semantics)
 
 **Bonding:**
-- [ ] Aromatic bonds (implicit in lowercase)
-- [ ] Single/double/triple: `-`, `=`, `#`
-- [ ] Quadruple: `$` (rare)
-- [ ] Aromatic: `:`
-- [ ] Up/down stereo: `/`, `\`
-- [ ] Disconnected components: `.`
+- [x] Aromatic bonds (implicit in lowercase)
+- [x] Single/double/triple: `-`, `=`, `#`
+- [x] Quadruple: `$` (rare)
+- [x] Aromatic: `:`
+- [x] Up/down stereo: `/`, `\`
+- [x] Disconnected components: `.`
 
 **Ring closures:**
-- [ ] Single digit: `C1CCCCC1`
-- [ ] Two-digit: `C%10...%10`
-- [ ] Bond type on closure: `C1=CC=CC=C1` vs `c1ccccc1`
+- [x] Single digit: `C1CCCCC1`
+- [x] Two-digit: `C%10...%10`
+- [x] Bond type on closure: `C1=CC=CC=C1` vs `c1ccccc1`
 
 **Stereo:**
-- [ ] Tetrahedral: `@`, `@@`
-- [ ] Allene-like: `@AL1`, `@AL2`
-- [ ] Square planar: `@SP1`, `@SP2`, `@SP3`
-- [ ] Trigonal bipyramidal: `@TB1`-`@TB20`
-- [ ] Octahedral: `@OH1`-`@OH30`
-- [ ] Double bond: `/`, `\`
+- [x] Tetrahedral: `@`, `@@`
+- [x] Allene-like: `@AL1`, `@AL2`
+- [x] Square planar: `@SP1`, `@SP2`, `@SP3`
+- [x] Trigonal bipyramidal: `@TB1`-`@TB20`
+- [x] Octahedral: `@OH1`-`@OH30`
+- [x] Double bond: `/`, `\`
 
 **Extensions (RDKit-specific):**
-- [ ] CXSMILES support (partial): coordinates, atom labels, radicals
-- [ ] Dative bonds: `->`, `<-`
-- [ ] Query bonds: `~`
-- [ ] Hypervalent atoms accepted
-- [ ] Sanitization can be disabled
+- [x] CXSMILES support: basic/extended CX parsing and application (Phase 6)
+- [x] Dative bonds: `->`, `<-` (behind `EXTENDED_BONDS`)
+- [x] Any bond: `~` (behind `EXTENDED_BONDS`, non-OpenSMILES)
+- [ ] Hypervalent atoms accepted (semantic layer; parser does not do valence checking)
+- [ ] Sanitization can be disabled (not a parser concern)
 
 ### 2.2 CDK/Beam SMILES Features
 
@@ -192,19 +192,25 @@ The original Daylight spec (proprietary, partially documented):
 
 ## 4. CXSMILES Specification
 
-ChemAxon extension format: `SMILES |ext1;ext2;...|`
+ChemAxon extension format: `SMILES<ws>|...|`
 
-**Extension types:**
-- `c:coords` - 2D/3D coordinates
-- `atomProp:` - atom properties
-- `$name$` - atom labels
-- `r:n,radical` - radicals
-- `^n:atoms` - enhanced stereo (absolute, or, and groups)
-- `Sg:` - S-groups (polymers, etc.)
-- `rb:` - ring bond count
-- `s:` - substitution count
-- `u:` - unsaturation
-- `o:` - atom ordering (for canonical output)
+- The SMILES part is parsed up to the first ASCII whitespace character.
+- If the remaining input (after trimming leading ASCII whitespace) starts with `|`, it is treated as
+  a CX annotation block.
+- Inside the `|...|` block, entries are **comma-separated**.
+
+**Common entry types (examples):**
+- Coordinates: `(x,y,z;...)`
+- Atom labels: `$name;name;...$`
+- Atom values: `$_AV:value;value;...$`
+- Radicals: `^n:idx,idx,...`
+- Wiggly bonds: `w:`, `wU:`, `wD:`
+- Bond stereo markers: `c:`, `t:`, `ctu:`
+- Fragment grouping: `f:...`
+- Enhanced stereo: `a:...`, `o<n>:...`, `&<n>:...`
+- Relative stereo: `r` or `r:...`
+- Atom properties: `atomProp:...`
+- Other common CX markers (not all implemented): `Sg:`, `RG:`, `rb:`, `s:`, `u:`, `LN:`, `LO:`
 
 ---
 
@@ -270,6 +276,7 @@ SMARTS extends SMILES with query features. Will be implemented as separate parse
 
 ### Group 4: Extended Bonds ✓  COMPLETE
 - Dative bonds (`->`, `<-`)
+- Any bond (`~`)
 - Quadruple bonds (`$`)
 
 ### Group 5: CXSMILES
@@ -352,14 +359,14 @@ Analyzed 473 failing SMILES. Breakdown by category:
 - [x] Implement `parse_extended_smiles_bytes_with` and all wrapper variants
 - [x] Add wildcard `*` support (standalone and `[*:n]` with atom class)
 - [x] `From<Molecule> for ExtendedMolecule` works
-- [x] Update conformance suite with three categories: basic_opensmiles, opensmiles, invalid
+- [x] Update conformance suite categories: basic_opensmiles, opensmiles, basic_chemaxon, chemaxon, invalid, bug
 - [x] Parser hierarchy enforcement: extended parser must be superset of basic parser
 - [x] Classifier and test suite both verify hierarchy invariant
 - [x] Sum formula for `ExtendedMolecule` now includes wildcards (appended as `*`, `*2`, etc.)
 - [x] Add aromatic `si`, `te` (silicon, tellurium) support (`se`, `as` already present)
 - [x] Feature gate: `EXTENDED_AROMATICS` (applies to both parsers)
 
-**Result:** 32 SMILES now parse as `opensmiles` category (wildcards); 8979 as `basic_opensmiles`
+**Result:** The conformance suite and classifier use the categories listed above.
 
 ### Phase 4: Extended Stereo ✓ COMPLETE (parsing)
 
@@ -381,117 +388,82 @@ Extended stereo types already parsed per OpenSMILES spec:
 - [x] `Bond::new_dative()` constructor handles `AtomPair` normalization correctly
 - [x] Applied to both basic and extended parsers
 
-### Phase 6: CXSMILES (Group 5) - IN PROGRESS
+### Phase 6: CXSMILES (Group 5) ✓ COMPLETE (basic + extended)
 
-#### 6.1 Architecture
+#### 6.1 Integration point: `SMILES<ws>|...|`
 
-The CX annotation block (`|...|`) uses an **accumulator pattern** similar to CTab M-lines.
-A `CxAccumulator` collects properties, then `update_molecule` / `update_extended_molecule`
-applies them to the IR.
+The SMILES parsers stop at the first ASCII whitespace character and return the remaining input.
+If the remainder (after trimming leading ASCII whitespace) starts with `|` and
+`SmilesParseFlags::CHEMAXON_EXTENSIONS` is enabled, the CX block is parsed and applied to the IR.
+Otherwise the remainder is ignored (per the “data after whitespace is ignored” convention).
 
-Two separate parsers (like CTab `properties_block` / `extended_properties_block`):
-- `parse_cx_annotations` - basic properties only, errors on extended
-- `parse_extended_cx_annotations` - all properties
+This yields four “dialects” that are used consistently across classification and conformance:
 
-**Basic annotations (properties of basic molecules):**
-- Coordinates `(x,y,z;...)`
-- Radicals `^1:`, `^2:`, etc.
-- Atom labels `$...;...$`
-- Atom values `$_AV:...$`
-- Wiggly bonds `w:`, `wU:`, `wD:` (undefined stereo indicator)
-- CIS/TRANS markers `c:`, `t:`, `ctu:` (for double bonds in rings)
+- `basic_opensmiles`: SMILES only, no wildcards, ignore CX suffix
+- `opensmiles`: SMILES + wildcards, ignore CX suffix
+- `basic_chemaxon`: SMILES + basic CX parsing
+- `chemaxon`: SMILES + wildcards + extended CX parsing
 
-**Extended annotations (require ExtendedMolecule):**
-- All basic annotations plus:
-- Fragment grouping `f:`
-- Enhanced stereo `a:`, `o<n>:`, `&<n>:`
-- Atom properties `atomProp:`
-- Coordinate/dative bonds `C:`
-- Hydrogen bonds `H:`
-- Relative stereo flag `r`
+#### 6.2 CX block parsing: `CxEntry` + basic/extended split
 
-**Deferred (CTab legacy):**
-- Pseudo/special atoms (`*_p`, `Q_e`, etc.)
-- S-groups, R-groups, link nodes
-- MDL query features (`rb:`, `s:`, `u:`)
-- Ligand order, bicycloalkane stereo, lone pairs
+`io/smiles/parser/cx.rs` defines a `CxEntry` enum and two block parsers:
 
-#### 6.2 IR Changes
+- `parse_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError>`
+  - Accepts the basic subset.
+  - Returns `InvalidCxProperty` on any known extended-only marker (`f:`, `a:`, `o<n>:`, `&<n>:`,
+    standalone `r`, `atomProp:`, ...).
+- `parse_extended_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError>`
+  - Accepts the full subset implemented so far.
 
-- [x] Define `StereoGroup { group_type: StereoGroupType, atoms: Vec<u32> }` (in cx.rs)
-- [x] Define `StereoGroupType { Absolute, Or(u32), And(u32) }` (in cx.rs)
-- [x] Define `UnpairedElectrons { count: u8, multiplicity: Option<SpinMultiplicity> }` (in table_ir/atom.rs)
-- [ ] Add `stereo_groups: Vec<StereoGroup>` to `ExtendedMolecule`
+Both parsers:
+- split entries on commas inside `|...|`
+- skip unknown/unrecognized entries (consume up to next `,` or `|`)
+- support HTML entity escapes for labels/values
 
-#### 6.3 Parser Implementation ✓ MOSTLY COMPLETE
+Coordinate parsing notes:
+- `()` means “no atoms have coordinates” (empty vector)
+- missing components are allowed (`(x,,)`, `(,y,)`, `(,,z)`, `(,,)` etc.)
+- 4D coordinates are rejected as a hard failure
 
-**Step 1: Create module and accumulator** ✓ COMPLETE
-- [x] Create `io/smiles/parser/cx.rs` module
-- [x] Define `CxAccumulator` struct with all fields:
-  - Per-atom: `atom_labels`, `atom_values`, `atom_unpaired_electrons`, `atom_properties`
-  - Per-bond: `wiggly_bonds`, `coordinate_bonds`, `hydrogen_bonds`, `cis_bonds`, `trans_bonds`
-  - Molecule-level: `coordinates`, `stereo_groups`, `relative_stereo`, `fragment_groups`
+#### 6.3 Applying CX entries to TableIR
 
-**Step 2: Tokenizer** ✓ COMPLETE
-- [x] `strip_pipes()` - remove outer `|...|` delimiters
-- [x] `tokenize()` - split on `,` respecting nested `()`, `$...$`
-- [x] `unescape()` - handle `&#code;` sequences (semicolon, comma, etc.)
-- [x] `split_escaped_semicolons()` - split labels/values preserving escape sequences
+Two application functions exist:
 
-**Step 3: Two parser functions** ✓ COMPLETE
-- [x] `parse_cx_annotations(input: &[u8]) -> Result<CxAccumulator, ParseError>`
-  - Handles basic tags only
-  - Returns `InvalidCxProperty` error on extended-only tags
-- [x] `parse_extended_cx_annotations(input: &[u8]) -> Result<CxAccumulator, ParseError>`
-  - Handles all tags
+- `update_molecule(&mut Molecule, entries: Vec<CxEntry>)`
+  - applies positions/labels/values/radicals/bond markers/bond annotations
+  - ignores extended-only entries
+- `update_extended_molecule(&mut ExtendedMolecule, entries: Vec<CxEntry>)`
+  - applies the same per-atom/per-bond data using extended atom/bond types
+  - populates `ExtendedMolecule.cx_data: Option<CxAnnotationData>` when any of:
+    - `stereo_interpretation: Option<StereoInterpretation>` (from `a:` and `r`)
+    - `stereo_groups: HashMap<u32, StereoSet>` (from `o<n>:` and `&<n>:`)
+    - `components: Option<Vec<Vec<u32>>>` (from `f:`)
+  - also sets `ExtendedMolecule.stereo_interpretation: Option<StereoInterpretation>` from the CX data
 
-**Step 4: Tag parsers** ✓ COMPLETE
-Basic tags:
-- [x] Coordinates `(x,y,z;...)` - `parse_coordinates()`
-- [x] Radicals `^1:` through `^7:` - `parse_radicals()` with `convert_radical_code()`
-- [x] Atom labels `$...;...$` - `parse_atom_labels_or_values()`
-- [x] Atom values `$_AV:...$` - `parse_atom_labels_or_values()`
-- [x] Wiggly bonds `w:`, `wU:`, `wD:` - `parse_wiggly_bonds()`
-- [x] CIS/TRANS `c:`, `t:` - `parse_cis_trans()` (ignores `ctu:`)
+Out-of-range atom/bond indices are currently skipped (no error).
 
-Extended-only tags:
-- [x] Fragment grouping `f:` - `parse_fragment_groups()`
-- [x] Enhanced stereo `a:`, `o<n>:`, `&<n>:` - `parse_stereo_absolute()`, `parse_stereo_group()`
-- [x] Atom properties `atomProp:` - `parse_atom_properties()`
-- [x] Coordinate bonds `C:` - `parse_coordinate_bonds()`
-- [x] Hydrogen bonds `H:` - `parse_hydrogen_bonds()`
-- [x] Relative stereo `r` or `r:idx,...` - `parse_relative_stereo()`
+#### 6.4 Conformance + classification details
 
-**Implementation notes:**
-- All parsers use `parse_u32()` for integer parsing (no string allocation)
-- Lenient handling: non-numeric entries and empty entries are skipped (forward compatibility)
-- Overflow errors are propagated (security/data integrity)
-- Exception: `parse_radicals()` is stricter - errors on non-numeric trailing content
+Both the conformance driver and the `classify_smiles_strings` tool treat “has CX annotations”
+as an input property, not a parser outcome. The detection uses this regex:
 
-**Step 5: Apply to IR** (PENDING)
-- [ ] `update_molecule(&mut Molecule)` - basic features only
-- [ ] `update_extended_molecule(&mut ExtendedMolecule)` - all features
-- [ ] Validate atom/bond indices against molecule size
+`^\S+\s+\|.*\|`
 
-**Step 6: Integration with SMILES parser** (PENDING)
-- [ ] Add `CXSMILES` flag to `SmilesParseFlags`
-- [ ] Detect `|...|` suffix after SMILES string
-- [ ] Basic parser calls `parse_cx_annotations`
-- [ ] Extended parser calls `parse_extended_cx_annotations`
+This distinguishes “plain SMILES” from “SMILES + CX suffix” even when OpenSMILES parsers ignore the suffix.
 
-#### 6.4 Testing ✓ MOSTLY COMPLETE
-- [x] Unit tests for each tag parser (111 tests total)
-  - Valid input tests with expected outputs
-  - Invalid input tests (overflow, malformed structure)
-  - Edge cases: non-numeric entries, empty entries, missing parts, trailing commas
-- [ ] Integration tests with real CXSMILES from RDKit/CDK test suites
-- [ ] Conformance suite: add `cxsmiles` category
+Conformance tests are gated behind the `conformance` Cargo feature and do not run under plain `cargo test`.
+Run with `cargo test -p umol-models-graph --features conformance --test smiles_parsing` (and similarly for `mol_parsing` / `sdf_parsing`).
 
-### Phase 7: Presets
-- [ ] `basic_opensmiles` - Group 1 only (current strict baseline)
-- [ ] `opensmiles` - Groups 1-4 (with wildcards, extended aromatics)
-- [ ] `cxsmiles` - Groups 1-5
-- [ ] Tool-specific presets as needed (rdkit_compat, etc.)
+### Phase 7: Presets ✓ IMPLEMENTED
+
+Parsing presets are exposed via `SmilesIoConfig` constructors and map to `SmilesParseFlags`:
+
+- `SmilesIoConfig::basic_opensmiles()` → `BASIC_OPENSMILES`
+- `SmilesIoConfig::opensmiles()` → `OPENSMILES`
+- `SmilesIoConfig::basic_chemaxon()` → `BASIC_CHEMAXON`
+- `SmilesIoConfig::chemaxon()` → `CHEMAXON`
+
+Additional presets exist for testing/debugging (`basic_max`, `extended_max`, `strict`, `extended`, `lenient`).
 
 ### Phase 8: Reaction SMILES Parser
 - [ ] Create `Reaction` type (container for `Molecule` + atom mapping)
@@ -621,11 +593,11 @@ This section catalogs SMILES extensions from various sources, classified by prio
 | Aromatic `se`, `as` | ✓ Done | P2 | Basic | Selenium, arsenic (always enabled) |
 | Aromatic `si`, `te` | ✓ Done | P2 | Basic | Silicon, tellurium (EXTENDED_AROMATICS flag) |
 | Tri-character `Uun` | Pending | P2 | Basic | Obsolete symbols for Ds--Og |
-| Dative bonds `->` `<-` | Pending | P2 | Basic | Metal complexes |
+| Dative bonds `->` `<-` | ✓ Done | P2 | Basic | Behind `EXTENDED_BONDS` |
 | Quadruple bond `$` | Done | P3 | Basic | Very rare (Mo-Mo) |
-| Any bond `~` | N/A | - | SMARTS | Query bond only; in SMILES only via CXSMILES `\|Z:\|` |
+| Any bond `~` | ✓ Done | P3 | Basic | Behind `EXTENDED_BONDS` (non-OpenSMILES) |
 | Extended stereo `@AL`, `@SP`, `@TB`, `@OH` | ✓ Parsed | P2 | Basic | Semantic validation pending |
-| CXSMILES extension block | ✓ Parsed | P1 | CXSMILES | Coordinates, labels, radicals |
+| CXSMILES extension block | ✓ Done | P1 | CXSMILES | Parsed + applied when enabled |
 | Enhanced stereo groups | ✓ Parsed | P2 | CXSMILES | `a:`, `o<n>:`, `&<n>:` |
 | Radicals (CXSMILES) | ✓ Parsed | P2 | CXSMILES | `^1:` through `^7:` |
 | Atom map numbers `:n` in reactions | Pending | P1 | Reaction | |

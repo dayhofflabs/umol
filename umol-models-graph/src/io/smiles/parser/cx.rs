@@ -24,8 +24,8 @@ use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
 use crate::table_ir::{
     Bond, BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
-    ExtendedBond, ExtendedMolecule, Molecule, StereoMode, StereoSet, StereoSetMode,
-    StereoInterpretation, UnpairedElectrons,
+    ExtendedBond, ExtendedMolecule, Molecule, StereoInterpretation, StereoSet, StereoSetMode,
+    UnpairedElectrons,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -161,7 +161,7 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) {
 
 /// Update ExtendedMolecule with parsed CX entries
 pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry>) {
-    let mut stereo_mode: Option<StereoMode> = None;
+    let mut stereo_interpretation: Option<StereoInterpretation> = None;
     let mut stereo_groups: HashMap<u32, StereoSet> = HashMap::new();
     let mut components: Option<Vec<Vec<u32>>> = None;
 
@@ -231,8 +231,8 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
             }
             CxEntry::StereoGroup(sg) => match sg.group_type {
                 StereoGroupType::Absolute => {
-                    // Absolute atoms don't need group storage; stereo_mode captures this
-                    stereo_mode = Some(StereoMode::Absolute);
+                    // Absolute atoms don't need group storage; stereo_interpretation captures this
+                    stereo_interpretation = Some(StereoInterpretation::Absolute);
                 }
                 StereoGroupType::Or(n) => {
                     stereo_groups
@@ -254,7 +254,7 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
                 }
             },
             CxEntry::RelativeStereo => {
-                stereo_mode = Some(StereoMode::Relative);
+                stereo_interpretation = Some(StereoInterpretation::Relative);
             }
             CxEntry::AtomProperties(props) => {
                 for (idx, key, value) in props {
@@ -266,17 +266,12 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
         }
     }
 
-    if let Some(mode) = stereo_mode {
-        mol.stereo_interpretation = Some(match mode {
-            StereoMode::Absolute => StereoInterpretation::Absolute,
-            StereoMode::Relative => StereoInterpretation::Relative,
-        });
-    }
+    mol.stereo_interpretation = stereo_interpretation;
 
     // Store CX-specific data if any
-    if stereo_mode.is_some() || !stereo_groups.is_empty() || components.is_some() {
+    if stereo_interpretation.is_some() || !stereo_groups.is_empty() || components.is_some() {
         mol.cx_data = Some(CxAnnotationData {
-            stereo_mode,
+            stereo_interpretation,
             stereo_groups,
             components,
         });
@@ -889,13 +884,13 @@ mod tests {
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 2)])], |mol: &ExtendedMolecule| mol.bonds.len() == 3 && mol.bonds[2].noncovalent == Some(BondNoncovalent::Hydrogen))]
     #[case::fragment_groups(vec![CxEntry::FragmentGroups(vec![vec![0, 1], vec![2]])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| d.components.as_ref()) == Some(Some(&vec![vec![0, 1], vec![2]])))]
     #[case::stereo_group_absolute(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1] })],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_mode) == Some(StereoMode::Absolute))]
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_interpretation) == Some(StereoInterpretation::Absolute))]
     #[case::stereo_group_or(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0] })],
         |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&1)) == Some(&StereoSet { atoms: vec![0], mode: StereoSetMode::Correlated }))]
     #[case::stereo_group_and(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(2), atoms: vec![1] })],
         |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&2)) == Some(&StereoSet { atoms: vec![1], mode: StereoSetMode::Independent }))]
     #[case::relative_stereo(vec![CxEntry::RelativeStereo],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_mode) == Some(StereoMode::Relative))]
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_interpretation) == Some(StereoInterpretation::Relative))]
     #[case::atom_properties(vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].properties.get("key") == Some(&"value".to_string()))]
     fn test_update_extended_molecule(
         triatomic_extended_molecule: ExtendedMolecule,

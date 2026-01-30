@@ -1089,8 +1089,14 @@ fn whitespace_leading(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::terminator_space_trailing_structure(b"CC CC", build_extended_from_graph("C@0 C@1 | 0-1@1"))]
 #[case::terminator_tab_trailing_structure(b"CC\tCC", build_extended_from_graph("C@0 C@1 | 0-1@1"))]
 #[case::terminator_cr_trailing_structure(b"CC\rCC", build_extended_from_graph("C@0 C@1 | 0-1@1"))]
-#[case::terminator_newline_trailing_structure(b"CC\nCC", build_extended_from_graph("C@0 C@1 | 0-1@1"))]
-#[case::terminator_crlf_trailing_structure(b"CC\r\nCC", build_extended_from_graph("C@0 C@1 | 0-1@1"))]
+#[case::terminator_newline_trailing_structure(
+    b"CC\nCC",
+    build_extended_from_graph("C@0 C@1 | 0-1@1")
+)]
+#[case::terminator_crlf_trailing_structure(
+    b"CC\r\nCC",
+    build_extended_from_graph("C@0 C@1 | 0-1@1")
+)]
 fn whitespace_trailing_content(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
     // Per OpenSMILES spec, data after whitespace is ignored
     let res = parse_extended_smiles_bytes(input);
@@ -1138,4 +1144,15 @@ fn wildcard_bracket(
     if let Some(expected_class) = class {
         assert_eq!(mol.atoms[0].class, Some(expected_class));
     }
+}
+
+#[rstest]
+#[case::cx_coordinates(b"C |(1,2,3)|", build_extended_from_graph("C@0 |"))]
+#[case::cx_radicals(b"C |^1:0|", build_extended_from_graph("C@0 |"))]
+fn cx_annotations(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
+    let res = parse_extended_smiles_bytes(input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
 }

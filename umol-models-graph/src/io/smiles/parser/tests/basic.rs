@@ -1153,3 +1153,14 @@ fn whitespace_trailing_content(#[case] input: &[u8], #[case] expected: Molecule)
     let mol = res.unwrap();
     assert_eq!(mol, expected);
 }
+
+#[rstest]
+#[case::cx_coordinates(b"C |(1,2,3)|", build_from_graph("C@0 |"))]
+#[case::cx_radicals(b"C |^1:0|", build_from_graph("C@0 |"))]
+fn cx_annotations(#[case] input: &[u8], #[case] expected: Molecule) {
+    let res = parse_smiles_bytes(input);
+    let input_str = input.to_str_lossy();
+    assert!(res.is_ok(), "{:?} should have succeeded", input_str);
+    let mol = res.unwrap();
+    assert_eq!(mol, expected);
+}
