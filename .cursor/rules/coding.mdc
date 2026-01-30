@@ -1,6 +1,8 @@
 ---
+description: 
 alwaysApply: true
 ---
+
 ## Do not write code unless explicitly asked
 - **NEVER** proceed with an implementation as a response to a "how?" question.
 - Describe implementation design before coding if it was not discussed before.
@@ -8,24 +10,44 @@ alwaysApply: true
 - Do not "future-proof" code. Ask whether edge cases need to be considered.
 - Avoid superfluous and excessive commenting of the code; make the actual code legible instead.
 
-## Do not take initiative in being the architect
-- **NEVER** change the design based on your internal deliberations
-- Ignore backward compatibility in this project
+## Do not assume, ask
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
 
-## Do not reduce or redefine scope 
+## Do not take initiative in being the architect
+- Write minimum code that solves the problem. Nothing speculative.
+- **NEVER** change the design based on your internal deliberations.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+- Ignore backward compatibility in this project.
+
+## Surgical Changes
+- Touch only what you must. Clean up only your own mess.
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+## Do not reduce or redefine scope
 - **DO NOT** create placeholder code just to cover a task. All coding tasks imply real coding,
   not placeholder code.
 - **DO NOT** mark code tasks as completed based on placeholder code.
 - **DO NOT** remove or simplify code during refactors to keep the tests passing. Break such
   refactor tasks into multiple steps, accepting that tests will not pass after the first step.
 
-## Use modern Rust (edition 2021) and leverage the ecosystem
-- Use <module>.rs for file names instead of <module>/mod.rs
-- Take existing high-quality crates into account for solving a problem.
-  Those are preferable to a homespun solution.
+## Use modern Rust (edition 2021) and leverage the ecosystem.
+- Use <module>.rs for file names instead of <module>/mod.rs.
+- Take existing high-quality crates into account for solving a problem. Prefer high-quality external
+  crates to manual code. If in doubt, ask.
 
 ## Project targets
 - Prefer speed over generality; simple, direct implementations first.
 - Prefer meaningful variable and function names to comments.
-- Respect existing names and modules; avoid churn.
-- Tests should be small, focused, and fast; prefer table tests.
+- Respect existing names and modules; do not invent naming conventions.
+- Tests should be small, focused, and fast; prefer table test.
+- For multi-step tasks, state a brief plan.

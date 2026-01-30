@@ -93,6 +93,21 @@ fn mol_parsing(c: &mut Criterion) {
     }
 
     {
+        let mut group = c.benchmark_group("mol_parsing/legacy_atom_list");
+        let test_cases = [
+            ("no_exclusion", &b"  1 F    3   9   7   8  "[..]),
+            ("exclusion", &b"  1 T    3   9   7   8  "[..]),
+        ];
+
+        for (id, data) in test_cases.iter() {
+            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
+                b.iter(|| legacy_atom_list_input(CtabParseFlags::EXTENDED).parse(black_box(input)))
+            });
+        }
+        group.finish();
+    }
+
+    {
         let mut group = c.benchmark_group("mol_parsing/properties");
         let test_cases = [
             ("chg", &b"M  CHG  1   1  -1"[..]),
@@ -228,21 +243,6 @@ fn extended_mol_parsing(c: &mut Criterion) {
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
                 b.iter(|| extended_bond_input(CtabParseFlags::EXTENDED).parse(black_box(input)))
-            });
-        }
-        group.finish();
-    }
-
-    {
-        let mut group = c.benchmark_group("extended_mol_parsing/legacy_atom_list");
-        let test_cases = [
-            ("no_exclusion", &b"  1 F    3   9   7   8  "[..]),
-            ("exclusion", &b"  1 T    3   9   7   8  "[..]),
-        ];
-
-        for (id, data) in test_cases.iter() {
-            group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| legacy_atom_list_input(CtabParseFlags::EXTENDED).parse(black_box(input)))
             });
         }
         group.finish();

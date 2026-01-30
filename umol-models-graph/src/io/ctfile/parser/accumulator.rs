@@ -17,7 +17,8 @@ use crate::table_ir::{
     AtomList, AtomSymbol, AttachmentPointType, BondOrder, CtfileData, ExtendedMolecule,
     LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount, SGroup,
     SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay,
-    SGroupMultiplier, SGroupSubtype, SGroupType, SubstitutionCount, UnpairedElectrons,
+    SGroupMultiplier, SGroupSubtype, SGroupType, StereoInterpretation, SubstitutionCount,
+    UnpairedElectrons,
     UnsaturatedAtom,
 };
 
@@ -676,6 +677,9 @@ impl PropertyAccumulator {
             molecule
                 .properties
                 .insert("chiral_flag".to_string(), chiral_flag.to_string());
+            if chiral_flag {
+                molecule.stereo_interpretation = Some(StereoInterpretation::Absolute);
+            }
         }
 
         // Apply atom properties (only basic ones compatible with Atom)
@@ -744,6 +748,9 @@ impl PropertyAccumulator {
             molecule
                 .properties
                 .insert("chiral_flag".to_string(), chiral_flag.to_string());
+            if chiral_flag {
+                molecule.stereo_interpretation = Some(StereoInterpretation::Absolute);
+            }
         }
 
         // Apply atom properties

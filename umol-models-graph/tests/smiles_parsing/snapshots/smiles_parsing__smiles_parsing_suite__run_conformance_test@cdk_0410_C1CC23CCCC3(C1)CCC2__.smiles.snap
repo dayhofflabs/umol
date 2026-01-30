@@ -1,0 +1,12 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: basic_chemaxon
+category: basic_chemaxon
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C11
+    atom_count: 11
+    bond_count: 13

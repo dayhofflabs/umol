@@ -29,6 +29,7 @@ fn test_molecule_with_atoms_and_bonds() {
         positions: None,
         comments: vec![],
         properties: IndexMap::new(),
+        stereo_interpretation: None,
         source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.atom_count(), 2);
@@ -49,6 +50,7 @@ fn test_molecule_atom_count() {
         rings: vec![],
         positions: None,
         comments: vec![],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -70,6 +72,7 @@ fn test_molecule_bond_count() {
         rings: vec![],
         positions: None,
         comments: vec![],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -84,6 +87,7 @@ fn test_molecule_sum_formula_simple() {
         rings: vec![],
         positions: None,
         comments: vec![],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -104,6 +108,7 @@ fn test_molecule_sum_formula_with_hydrogen() {
         rings: vec![],
         positions: None,
         comments: vec![],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -120,6 +125,7 @@ fn test_molecule_sum_formula_with_charge() {
         rings: vec![],
         positions: None,
         comments: vec![],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -140,6 +146,7 @@ fn test_molecule_sum_formula_multiple_elements() {
         rings: vec![],
         positions: None,
         comments: vec![],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -173,6 +180,7 @@ fn test_extended_molecule_direct_construction() {
         links: vec![],
         electrons: Some(0),
         comments: vec!["test".to_string()],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         ctfile_data: None,
         cx_data: None,
@@ -196,6 +204,7 @@ fn test_extended_molecule_from_molecule() {
         rings: vec![],
         positions: None,
         comments: vec![],
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         source_format: SourceFormat::MOL,
     };

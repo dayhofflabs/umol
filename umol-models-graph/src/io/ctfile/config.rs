@@ -7,7 +7,7 @@ use bitflags::bitflags;
 bitflags! {
     /// Flags for parsing CTab-based formats
     #[derive(Debug, Clone, Copy, PartialEq)]
-    pub struct CtabParseFlags: u32 {
+pub struct CtabParseFlags: u32 {
         // Parser capabilities
         const WILDCARDS = 1;                // A, Q, *, X, M
         const CHEMAXON_WILDCARDS = 1 << 1;  // AH, QH, XH, MH

@@ -1,9 +1,10 @@
-//! Table IR containing atoms and bonds for graph-base molecular models.
+//! Table IR for molecular data based on tables of atoms and bonds.
 
 pub mod atom;
 pub mod bond;
 pub mod ctfile_data;
 pub mod cx_data;
+pub mod stereo;
 pub mod error;
 pub mod molecule;
 pub mod property;
@@ -17,6 +18,7 @@ pub use atom::*;
 pub use bond::*;
 pub use ctfile_data::*;
 pub use cx_data::*;
+pub use stereo::*;
 pub use error::*;
 pub use molecule::*;
 pub use property::*;

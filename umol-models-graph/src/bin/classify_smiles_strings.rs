@@ -3,7 +3,10 @@
 //! Classifies SMILES strings into categories based on parser success:
 //! - basic_opensmiles: passes strict OpenSMILES parser (no wildcards)
 //! - opensmiles: passes extended OpenSMILES parser (with wildcards)
+//! - basic_chemaxon: passes basic Chemaxon parser (no wildcards)
+//! - chemaxon: passes extended Chemaxon parser (with wildcards)
 //! - invalid: fails all parsers
+//! - bug: hierarchy violation (indicates parser inconsistency)
 //!
 //! Usage:
 //!   cargo run --bin classify_smiles_strings                    # Show classification stats
@@ -223,6 +226,73 @@ fn read_smiles_file(path: &Path, probe_rows: usize) -> io::Result<Vec<SmilesEntr
     Ok(entries)
 }
 
+struct ParseResults {
+    has_cx_annotations: bool,
+    basic_opensmiles: bool,
+    opensmiles: bool,
+    basic_chemaxon: bool,
+    chemaxon: bool,
+}
+
+impl ParseResults {
+    fn pattern(&self) -> String {
+        format!(
+            "{}{}{}{}{}",
+            if self.has_cx_annotations { "+" } else { "-" },
+            if self.basic_opensmiles { "+" } else { "-" },
+            if self.opensmiles { "+" } else { "-" },
+            if self.basic_chemaxon { "+" } else { "-" },
+            if self.chemaxon { "+" } else { "-" },
+        )
+    }
+
+    fn has_hierarchy_violation(&self) -> bool {
+        // basic_opensmiles → opensmiles
+        if self.basic_opensmiles && !self.opensmiles {
+            println!(
+                "basic_opensmiles ({}) -> opensmiles ({})",
+                self.basic_opensmiles, self.opensmiles
+            );
+            return true;
+        }
+        // opensmiles → chemaxon
+        if self.opensmiles && !self.chemaxon {
+            println!(
+                "opensmiles ({}) -> chemaxon ({})",
+                self.opensmiles, self.chemaxon
+            );
+            return true;
+        }
+        // basic_chemaxon → chemaxon
+        if self.basic_chemaxon && !self.chemaxon {
+            println!(
+                "basic_chemaxon ({}) -> chemaxon ({})",
+                self.basic_chemaxon, self.chemaxon
+            );
+            return true;
+        }
+        false
+    }
+
+    fn violation_description(&self) -> Option<String> {
+        let mut violations = Vec::new();
+        if self.basic_opensmiles && !self.opensmiles {
+            violations.push("basic_opensmiles succeeded but opensmiles failed");
+        }
+        if self.opensmiles && !self.chemaxon {
+            violations.push("opensmiles succeeded but chemaxon failed");
+        }
+        if self.basic_chemaxon && !self.chemaxon {
+            violations.push("basic_chemaxon succeeded but chemaxon failed");
+        }
+        if violations.is_empty() {
+            None
+        } else {
+            Some(violations.join("; "))
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Category {
     BasicOpensmiles,
@@ -234,6 +304,23 @@ enum Category {
 }
 
 impl Category {
+    fn from_results(results: &ParseResults) -> Self {
+        if results.has_hierarchy_violation() {
+            return Category::Bug;
+        }
+        match &results.pattern()[..] {
+            "-++++" => Category::BasicOpensmiles,
+            "+++++" => Category::BasicChemaxon,
+            "--+-+" | "+-+-+" => Category::Opensmiles,
+            "+++-+" => Category::Chemaxon,
+            "-----" | "+----" => Category::Invalid,
+            _ => {
+                println!("PATTERN {}", results.pattern());
+                Category::Bug
+            }
+        }
+    }
+
     fn dir_name(&self) -> &'static str {
         match self {
             Category::BasicOpensmiles => "basic_opensmiles",
@@ -281,53 +368,27 @@ impl ClassificationStats {
     }
 }
 
-fn classify_smiles(smiles: &str) -> Category {
-    // Test all four parsers:
-    // - basic parsers (parse_smiles_bytes_with): no wildcards allowed
-    // - extended parsers (parse_extended_smiles_bytes_with): wildcards allowed
+/// Check if SMILES has CX annotations (` |...|` block)
+fn has_cx_annotations(smiles: &str) -> bool {
+    smiles.contains(" |") && smiles.contains('|')
+}
+
+fn classify_smiles(smiles: &str) -> Result<(Category, ParseResults), Box<dyn Error>> {
     let basic_config = SmilesIoConfig::basic();
-    let basic_ok = parse_smiles_bytes_with(smiles.as_bytes(), &basic_config).is_ok();
-
     let opensmiles_config = SmilesIoConfig::opensmiles();
-    let opensmiles_ok =
-        parse_extended_smiles_bytes_with(smiles.as_bytes(), &opensmiles_config).is_ok();
-
     let basic_chemaxon_config = SmilesIoConfig::basic_chemaxon();
-    let basic_chemaxon_ok =
-        parse_smiles_bytes_with(smiles.as_bytes(), &basic_chemaxon_config).is_ok();
-
     let chemaxon_config = SmilesIoConfig::chemaxon();
-    let chemaxon_ok = parse_extended_smiles_bytes_with(smiles.as_bytes(), &chemaxon_config).is_ok();
 
-    // Hierarchy has two dimensions:
-    // 1. Wildcards: basic < opensmiles, basic_chemaxon < chemaxon
-    // 2. CX features: basic_chemaxon parses basic CX, chemaxon parses extended CX
-    //
-    // Valid patterns:
-    // - (T,T,T,T): passes all → basic_opensmiles
-    // - (T,T,F,T): SMILES valid, CX has extended features → chemaxon
-    // - (F,T,F,T): needs wildcards → opensmiles
-    // - (F,F,T,T): needs basic CX → basic_chemaxon
-    // - (F,F,F,T): needs wildcards + extended CX → chemaxon
-    // - (F,F,F,F): fails all → invalid
-    // - (T,T,F,F): SMILES valid but CX malformed → bug
-    // Other patterns are hierarchy violations
-    match (basic_ok, opensmiles_ok, basic_chemaxon_ok, chemaxon_ok) {
-        (true, true, true, true) => Category::BasicOpensmiles,
-        (true, true, false, true) => Category::Chemaxon, // extended CX features
-        (false, true, false, true) => Category::Opensmiles,
-        (false, false, true, true) => Category::BasicChemaxon,
-        (false, false, false, true) => Category::Chemaxon,
-        (false, false, false, false) => Category::Invalid,
-        pattern => {
-            eprintln!(
-                "BUG pattern {:?} for: {}",
-                pattern,
-                smiles.chars().take(80).collect::<String>()
-            );
-            Category::Bug
-        }
-    }
+    let results = ParseResults {
+        has_cx_annotations: has_cx_annotations(smiles),
+        basic_opensmiles: parse_smiles_bytes_with(smiles.as_bytes(), &basic_config).is_ok(),
+        opensmiles: parse_extended_smiles_bytes_with(smiles.as_bytes(), &opensmiles_config).is_ok(),
+        basic_chemaxon: parse_smiles_bytes_with(smiles.as_bytes(), &basic_chemaxon_config).is_ok(),
+        chemaxon: parse_extended_smiles_bytes_with(smiles.as_bytes(), &chemaxon_config).is_ok(),
+    };
+
+    let category = Category::from_results(&results);
+    Ok((category, results))
 }
 
 fn collect_smi_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
@@ -407,8 +468,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut rng = ChaCha8Rng::seed_from_u64(args.seed);
     let mut source_stats: HashMap<String, ClassificationStats> = HashMap::new();
+    let mut bug_smiles: Vec<(String, String, ParseResults)> = Vec::new();
     let mut processed_smiles = 0usize;
     let mut error_files = 0usize;
+    let mut error_smiles = 0usize;
 
     // Collect entries by category for sorting
     let mut categorized: HashMap<String, HashMap<Category, Vec<SmilesEntry>>> = HashMap::new();
@@ -452,16 +515,24 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             for entry in entries_to_process {
-                let category = classify_smiles(&entry.smiles);
-                stats.add(category);
-
-                if args.sort {
-                    source_entries
-                        .entry(category)
-                        .or_default()
-                        .push(entry.clone());
+                match classify_smiles(&entry.smiles) {
+                    Ok((category, results)) => {
+                        stats.add(category);
+                        if category == Category::Bug {
+                            bug_smiles.push((source_name.clone(), entry.smiles.clone(), results));
+                        }
+                        if args.sort {
+                            source_entries
+                                .entry(category)
+                                .or_default()
+                                .push(entry.clone());
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error classifying {}: {}", entry.smiles, e);
+                        error_smiles += 1;
+                    }
                 }
-
                 processed_smiles += 1;
             }
         }
@@ -569,10 +640,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     if error_files > 0 {
         println!("- Errors: {} files could not be read", error_files);
     }
+    if error_smiles > 0 {
+        println!("- Errors: {} SMILES could not be classified", error_smiles);
+    }
     println!(
         "- {:.1}% of SMILES are valid (parseable with OpenSMILES)",
         totals.valid_percentage()
     );
+
+    if !bug_smiles.is_empty() {
+        println!(
+            "\n**WARNING: {} SMILES have parser hierarchy violations!**",
+            bug_smiles.len()
+        );
+        println!("| Source | SMILES | Pattern | Violation |");
+        println!("| --- | --- | --- | --- |");
+        for (source, smiles, results) in &bug_smiles {
+            println!(
+                "| {} | {} | {} | {} |",
+                source,
+                smiles,
+                results.pattern(),
+                results.violation_description().unwrap_or_default()
+            );
+        }
+    }
 
     if !args.sort {
         println!("\n**Note:** Run with `--sort` flag to create individual .smiles files:");

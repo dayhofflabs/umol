@@ -25,7 +25,7 @@ use crate::position::Point3D;
 use crate::table_ir::{
     Bond, BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
     ExtendedBond, ExtendedMolecule, Molecule, StereoMode, StereoSet, StereoSetMode,
-    UnpairedElectrons,
+    StereoInterpretation, UnpairedElectrons,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -264,6 +264,13 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
                 }
             }
         }
+    }
+
+    if let Some(mode) = stereo_mode {
+        mol.stereo_interpretation = Some(match mode {
+            StereoMode::Absolute => StereoInterpretation::Absolute,
+            StereoMode::Relative => StereoInterpretation::Relative,
+        });
     }
 
     // Store CX-specific data if any

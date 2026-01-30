@@ -167,6 +167,7 @@ fn build_molecule(
         positions,
         comments: Vec::new(),
         properties: IndexMap::new(),
+        stereo_interpretation: None,
         source_format: SourceFormat::MOL,
     };
 
@@ -197,6 +198,7 @@ fn build_extended_molecule(
         links: Vec::new(),
         electrons: None,
         comments: Vec::new(),
+        stereo_interpretation: None,
         properties: IndexMap::new(),
         ctfile_data: None,
         cx_data: None,

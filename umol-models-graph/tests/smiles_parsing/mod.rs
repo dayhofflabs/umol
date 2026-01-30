@@ -48,31 +48,30 @@ impl Category {
     }
 
     fn from_parse_result(
+        has_cx: bool,
         basic_ok: bool,
         opensmiles_ok: bool,
         basic_chemaxon_ok: bool,
         chemaxon_ok: bool,
     ) -> Self {
-        // Hierarchy has two dimensions:
-        // 1. Wildcards: basic < opensmiles, basic_chemaxon < chemaxon
-        // 2. CX features: basic_chemaxon parses basic CX, chemaxon parses extended CX
-        //
-        // Valid patterns:
-        // - (T,T,T,T): passes all → basic_opensmiles
-        // - (T,T,F,T): SMILES valid, CX has extended features → chemaxon
-        // - (F,T,F,T): needs wildcards → opensmiles
-        // - (F,F,T,T): needs basic CX → basic_chemaxon
-        // - (F,F,F,T): needs wildcards + extended CX → chemaxon
-        // - (F,F,F,F): fails all → invalid
-        // - (T,T,F,F): SMILES valid but CX malformed → bug
-        // Other patterns are hierarchy violations
-        match (basic_ok, opensmiles_ok, basic_chemaxon_ok, chemaxon_ok) {
-            (true, true, true, true) => Category::BasicOpensmiles,
-            (true, true, false, true) => Category::Chemaxon, // extended CX features
-            (false, true, false, true) => Category::Opensmiles,
-            (false, false, true, true) => Category::BasicChemaxon,
-            (false, false, false, true) => Category::Chemaxon,
-            (false, false, false, false) => Category::Invalid,
+        match (
+            has_cx,
+            basic_ok,
+            opensmiles_ok,
+            basic_chemaxon_ok,
+            chemaxon_ok,
+        ) {
+            (false, true, true, true, true) => Category::BasicOpensmiles,
+            (true, true, true, true, true) => Category::BasicChemaxon,
+            (false, false, true, false, true) | (true, false, true, false, true) => {
+                Category::Opensmiles
+            }
+            (true, true, true, false, true) => Category::Chemaxon,
+            (false, false, false, false, false) | (true, false, false, false, false) => {
+                Category::Invalid
+            }
+
+            // Anything else is either a hierarchy violation or a CX-vs-SMILES inconsistency.
             _ => Category::Bug,
         }
     }
@@ -168,6 +167,10 @@ fn read_smiles_from_file(path: &Path) -> String {
         .unwrap_or_default()
 }
 
+fn has_cx_extensions(smiles: &str) -> bool {
+    smiles.contains('|')
+}
+
 fn parse_with_strict(smiles: &str) -> ParseResult {
     match parse_smiles(smiles) {
         Ok(mol) => ParseResult {
@@ -246,6 +249,7 @@ fn parse_with_chemaxon(smiles: &str) -> ParseResult {
 fn parse_file(path: &Path) -> FileParseResults {
     let expected_category = extract_expected_category(path);
     let smiles = read_smiles_from_file(path);
+    let has_cx = has_cx_extensions(&smiles);
 
     // Run all parsers to verify parser hierarchy
     let basic_opensmiles = parse_with_strict(&smiles);
@@ -254,6 +258,7 @@ fn parse_file(path: &Path) -> FileParseResults {
     let chemaxon_result = parse_with_chemaxon(&smiles);
 
     let category = Category::from_parse_result(
+        has_cx,
         basic_opensmiles.success,
         opensmiles_result.success,
         basic_chemaxon_result.success,

@@ -18,6 +18,7 @@ use super::ctfile_data::CtfileData;
 use super::cx_data::CxAnnotationData;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
+use super::stereo::StereoInterpretation;
 use super::source::SourceFormat;
 use super::topology::{Fragment, Link, Ring};
 use super::utils::{element_symbol_key, format_sum_formula};
@@ -31,6 +32,7 @@ pub struct Molecule {
     pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
     pub comments: Vec<String>,
+    pub stereo_interpretation: Option<StereoInterpretation>,
     pub properties: IndexMap<String, String>,
     pub source_format: SourceFormat,
 }
@@ -43,6 +45,7 @@ impl Molecule {
             rings: Vec::new(),
             positions: None,
             comments: Vec::new(),
+            stereo_interpretation: None,
             properties: IndexMap::new(),
             source_format: SourceFormat::UNKNOWN,
         }
@@ -104,6 +107,7 @@ pub struct ExtendedMolecule {
 
     // Properties and metadata
     pub comments: Vec<String>,
+    pub stereo_interpretation: Option<StereoInterpretation>,
     pub properties: IndexMap<String, String>,
 
     // Format-specific data for roundtripping
@@ -124,6 +128,7 @@ impl ExtendedMolecule {
             links: Vec::new(),
             electrons: None,
             comments: Vec::new(),
+            stereo_interpretation: None,
             properties: IndexMap::new(),
             ctfile_data: None,
             cx_data: None,
@@ -221,6 +226,7 @@ impl ExtendedMolecule {
             rings: self.rings.clone(),
             positions: self.positions.clone(),
             comments: self.comments.clone(),
+            stereo_interpretation: self.stereo_interpretation,
             properties: self.properties.clone(),
             source_format: self.source_format,
         })
@@ -306,6 +312,7 @@ impl From<Molecule> for ExtendedMolecule {
             links: Vec::new(),
             electrons: None,
             comments: mol.comments,
+            stereo_interpretation: mol.stereo_interpretation,
             properties: mol.properties,
             ctfile_data: None,
             cx_data: None,

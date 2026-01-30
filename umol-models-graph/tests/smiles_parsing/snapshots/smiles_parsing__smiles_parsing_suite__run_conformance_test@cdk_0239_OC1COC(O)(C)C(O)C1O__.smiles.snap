@@ -2,15 +2,11 @@
 source: umol-models-graph/tests/smiles_parsing/mod.rs
 expression: results
 ---
-expected_category: invalid
-category: invalid
+expected_category: basic_chemaxon
+category: basic_chemaxon
 basic_opensmiles:
-  success: false
-  error:
-    error_type: InvalidCxProperty
-    message: Invalid CX property at position 19
-opensmiles:
-  success: false
-  error:
-    error_type: InvalidCxProperty
-    message: Invalid CX property at position 19
+  success: true
+  summary:
+    sum_formula: C6O5
+    atom_count: 11
+    bond_count: 11
