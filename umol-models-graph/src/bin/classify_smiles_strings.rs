@@ -23,6 +23,7 @@ use std::process;
 use std::sync::LazyLock;
 
 use clap::Parser;
+use murmur3::murmur3_32;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -586,8 +587,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let truncated = entry.smiles.len() > 20;
                     let smiles_prefix: String = entry.smiles.chars().take(20).collect();
                     let prefix_suffix = if truncated { "_" } else { "" };
-                    let hash =
-                        murmur3::murmur3_32(&mut Cursor::new(entry.smiles.as_bytes()), 0).unwrap();
+                    let hash = murmur3_32(&mut Cursor::new(entry.smiles.as_bytes()), 0).unwrap();
                     let filename = format!(
                         "{:04}_{}{}_{:04x}.smiles",
                         idx,
