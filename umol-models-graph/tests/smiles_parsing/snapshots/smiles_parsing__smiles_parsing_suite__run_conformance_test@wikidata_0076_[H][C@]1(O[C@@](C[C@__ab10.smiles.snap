@@ -1,0 +1,17 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon
+category: chemaxon
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidBracket
+    message: Invalid bracket at position 175
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C67H2N4O39*
+    atom_count: 113
+    bond_count: 118

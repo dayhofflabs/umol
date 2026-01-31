@@ -1,0 +1,17 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon
+category: chemaxon
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidBracket
+    message: Invalid bracket at position 29
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C11O5*
+    atom_count: 17
+    bond_count: 17

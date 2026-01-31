@@ -88,9 +88,13 @@ pub enum DiagnosticKind {
     #[strum(message = "Invalid bracket")]
     SmilesInvalidBracket,
     #[strum(message = "Invalid CX extension")]
-    SmilesInvalidCxProperty,
-    #[strum(message = "CX index out of bounds")]
-    SmilesCxIndexOutOfBounds,
+    SmilesInvalidCxTag,
+    #[strum(message = "Atom index out of bounds")]
+    SmilesAtomIndexOutOfBounds,
+    #[strum(message = "Bond index out of bounds")]
+    SmilesBondIndexOutOfBounds,
+    #[strum(message = "Mismatched atom/bond indices")]
+    SmilesMismatchedAtomBondIndices,
     #[strum(message = "Class out of range")]
     SmilesClassOutOfRange,
     #[strum(message = "Hcount out of range")]
@@ -282,8 +286,10 @@ impl DiagnosticKind {
             | SmilesChiralityOutOfRange
             | SmilesBracketHwithHcount
             | SmilesInvalidBracket
-            | SmilesInvalidCxProperty
-            | SmilesCxIndexOutOfBounds
+            | SmilesInvalidCxTag
+            | SmilesAtomIndexOutOfBounds
+            | SmilesBondIndexOutOfBounds
+            | SmilesMismatchedAtomBondIndices
             | SmilesClassOutOfRange
             | SmilesHcountOutOfRange
             | SmilesChargeOutOfRange
@@ -397,8 +403,10 @@ impl DiagnosticKind {
             | SmilesChiralityOutOfRange
             | SmilesBracketHwithHcount
             | SmilesInvalidBracket
-            | SmilesInvalidCxProperty
-            | SmilesCxIndexOutOfBounds
+            | SmilesInvalidCxTag
+            | SmilesAtomIndexOutOfBounds
+            | SmilesBondIndexOutOfBounds
+            | SmilesMismatchedAtomBondIndices
             | SmilesClassOutOfRange
             | SmilesHcountOutOfRange
             | SmilesChargeOutOfRange

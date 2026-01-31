@@ -1,0 +1,17 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon_invalid
+category: chemaxon_invalid
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidBracket
+    message: Invalid bracket at position 1
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C62N2O4S2*2
+    atom_count: 72
+    bond_count: 77

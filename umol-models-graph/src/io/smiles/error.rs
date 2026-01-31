@@ -33,10 +33,10 @@ pub enum ParseError {
     UnbalancedRingIndex { open_pos: usize },
     #[error("Invalid ring index at position {pos}")]
     InvalidRingIndex { pos: usize },
-    #[error("Mismatched ring bond directions at position {pos}")]
-    MismatchedRingBondDirs { pos: usize, open_pos: usize },
     #[error("Mismatched ring bond orders at position {pos}")]
     MismatchedRingBondOrders { pos: usize, open_pos: usize },
+    #[error("Mismatched ring bond directions at position {pos}")]
+    MismatchedRingBondDirs { pos: usize, open_pos: usize },
     #[error("Mismatched ring bond donations at position {pos}")]
     MismatchedRingBondDonations { pos: usize, open_pos: usize },
     #[error("Leading dot at position {pos}")]
@@ -67,10 +67,14 @@ pub enum ParseError {
     BracketHwithHcount { pos: usize },
     #[error("Invalid bracket at position {pos}")]
     InvalidBracket { pos: usize },
-    #[error("Invalid CX property at position {pos}")]
-    InvalidCxProperty { pos: usize },
-    #[error("Index out of bounds: {0}")]
-    IndexOutOfBounds(u32),
+    #[error("Invalid CX tag at position {pos}")]
+    InvalidCxTag { pos: usize },
+    #[error("Atom index out of bounds: {atom_idx}")]
+    AtomIndexOutOfBounds { atom_idx: u32 },
+    #[error("Bond index out of bounds: {bond_idx}")]
+    BondIndexOutOfBounds { bond_idx: u32 },
+    #[error("Mismatched atom/bond indices: atom {atom_idx} is not incident on bond {bond_idx}")]
+    MismatchedAtomBondIndices { atom_idx: u32, bond_idx: u32 },
 }
 
 impl From<ParseError> for Diagnostic {
@@ -79,7 +83,10 @@ impl From<ParseError> for Diagnostic {
         use ParseError::*;
 
         let (kind, span) = match error {
-            LeadingWhitespace => (SmilesLeadingWhitespace, Span::from_bytes_opt(Some(0), Some(1))),
+            LeadingWhitespace => (
+                SmilesLeadingWhitespace,
+                Span::from_bytes_opt(Some(0), Some(1)),
+            ),
             InvalidElement { pos } => (
                 SmilesInvalidElement,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
@@ -88,7 +95,6 @@ impl From<ParseError> for Diagnostic {
                 SmilesInvalidToken,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-
             UnbalancedOpenParen { pos } => (
                 SmilesUnbalancedOpenParen,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
@@ -109,7 +115,6 @@ impl From<ParseError> for Diagnostic {
                 SmilesNonfinalGroup,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-
             LeadingBond { pos } => (
                 SmilesLeadingBond,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
@@ -122,7 +127,6 @@ impl From<ParseError> for Diagnostic {
                 SmilesConsecutiveBonds,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-
             LeadingRing { pos } => (
                 SmilesLeadingRing,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
@@ -135,12 +139,12 @@ impl From<ParseError> for Diagnostic {
                 SmilesInvalidRingIndex,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-            MismatchedRingBondDirs { pos, .. } => (
-                SmilesMismatchedRingBondDirs,
-                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
-            ),
             MismatchedRingBondOrders { pos, .. } => (
                 SmilesMismatchedRingBondOrders,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            MismatchedRingBondDirs { pos, .. } => (
+                SmilesMismatchedRingBondDirs,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
             MismatchedRingBondDonations { pos, .. } => (
@@ -163,7 +167,6 @@ impl From<ParseError> for Diagnostic {
                 SmilesDotBeforeRing,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-
             EmptyBracket { pos } => (
                 SmilesEmptyBracket,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
@@ -204,11 +207,13 @@ impl From<ParseError> for Diagnostic {
                 SmilesInvalidBracket,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-            InvalidCxProperty { pos } => (
-                SmilesInvalidCxProperty,
+            InvalidCxTag { pos } => (
+                SmilesInvalidCxTag,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
-            IndexOutOfBounds(_) => (SmilesCxIndexOutOfBounds, None),
+            AtomIndexOutOfBounds { .. } => (SmilesAtomIndexOutOfBounds, None),
+            BondIndexOutOfBounds { .. } => (SmilesBondIndexOutOfBounds, None),
+            MismatchedAtomBondIndices { .. } => (SmilesMismatchedAtomBondIndices, None),
         };
 
         Diagnostic {

@@ -47,6 +47,23 @@ fn cx_coordinates(#[case] input: &[u8], #[case] expected: Option<Vec<Point3D>>) 
     assert_eq!(mol.positions, expected);
 }
 
+#[rstest]
+#[case::too_many_coords(
+    b"C |(0,0;1,1)|",
+    ParseError::AtomIndexOutOfBounds { atom_idx: 1 }
+)]
+fn cx_coordinates_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+}
+
 #[rustfmt::skip]
 #[rstest]
 #[case::two_labels(b"CC |$C1;N1$|", vec![Some("C1".to_string()), Some("N1".to_string())])]
@@ -75,6 +92,20 @@ fn cx_atom_labels(#[case] input: &[u8], #[case] expected: Vec<Option<String>>) {
     let mol = res.unwrap();
     let labels: Vec<_> = mol.atoms.iter().map(|a| a.label.clone()).collect();
     assert_eq!(labels, expected);
+}
+
+#[rstest]
+#[case::label_out_of_range(b"C |$a;b$|", ParseError::AtomIndexOutOfBounds { atom_idx: 1 })]
+fn cx_atom_labels_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
 }
 
 #[rustfmt::skip]
@@ -136,9 +167,26 @@ fn cx_radicals(#[case] input: &[u8], #[case] expected: UnpairedElectrons) {
 }
 
 #[rstest]
+#[case::atom_index_out_of_range(
+    b"C |^1:1|",
+    ParseError::AtomIndexOutOfBounds { atom_idx: 1 }
+)]
+fn cx_radicals_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+}
+
+#[rstest]
 #[case::either(b"CCC |w:0.0|", 0usize, BondWedge::Either)]
-#[case::either_up(b"CCC |wU:1.0|", 1usize, BondWedge::EitherUp)]
-#[case::either_down(b"CCC |wD:0.0|", 0usize, BondWedge::EitherDown)]
+#[case::either_up(b"CCC |wU:1.0|", 0usize, BondWedge::EitherUp)]
+#[case::either_down(b"CCC |wD:2.1|", 1usize, BondWedge::EitherDown)]
 fn cx_wiggly_bonds(#[case] input: &[u8], #[case] bond_idx: usize, #[case] wedge: BondWedge) {
     let input_str = input.to_str_lossy();
 
@@ -161,6 +209,20 @@ fn cx_wiggly_bonds(#[case] input: &[u8], #[case] bond_idx: usize, #[case] wedge:
     );
     let mol = res.unwrap();
     assert_eq!(mol.bonds[bond_idx].wedge, Some(wedge));
+}
+
+#[rstest]
+#[case::atom_not_in_bond(b"CCC |w:0.1|", ParseError::MismatchedAtomBondIndices { atom_idx: 0, bond_idx: 1 })]
+fn cx_wiggly_bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
 }
 
 #[rstest]
@@ -190,6 +252,23 @@ fn cx_cis_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
 }
 
 #[rstest]
+#[case::bond_index_out_of_range(
+    b"C=C |c:1|",
+    ParseError::BondIndexOutOfBounds { bond_idx: 1 }
+)]
+fn cx_cis_bonds_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+}
+
+#[rstest]
 #[case::trans(b"C=C |t:0|", 0usize)]
 fn cx_trans_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
     let input_str = input.to_str_lossy();
@@ -216,8 +295,8 @@ fn cx_trans_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
 }
 
 #[rstest]
-#[case::dative_bond(b"CCC |C:0.2|", (0u32, 2u32))]
-fn cx_coordinate_bonds(#[case] input: &[u8], #[case] atoms: (u32, u32)) {
+#[case::unspec(b"C=C |ctu:0|", 0usize)]
+fn cx_unspec_bonds(#[case] input: &[u8], #[case] bond_idx: usize) {
     let input_str = input.to_str_lossy();
 
     let res = parse_basic_cxsmiles(input);
@@ -228,11 +307,7 @@ fn cx_coordinate_bonds(#[case] input: &[u8], #[case] atoms: (u32, u32)) {
         res
     );
     let mol = res.unwrap();
-    assert_eq!(mol.bonds.len(), 3);
-    let b = mol.bonds.last().expect("dative bond appended");
-    assert_eq!(b.order, BondOrder::Single);
-    assert_eq!(b.donation, Some(BondDonation::Donating));
-    assert_eq!(b.atoms.as_tuple(), atoms);
+    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Either));
 
     let res = parse_extended_cxsmiles(input);
     assert!(
@@ -242,45 +317,129 @@ fn cx_coordinate_bonds(#[case] input: &[u8], #[case] atoms: (u32, u32)) {
         res
     );
     let mol = res.unwrap();
-    assert_eq!(mol.bonds.len(), 3);
-    let b = mol.bonds.last().expect("dative bond appended");
-    assert_eq!(b.order, BondOrder::Single);
-    assert_eq!(b.donation, Some(BondDonation::Donating));
-    assert_eq!(b.atoms.as_tuple(), atoms);
+    assert_eq!(mol.bonds[bond_idx].stereo, Some(BondStereo::Either));
 }
 
 #[rstest]
-#[case::hbond(b"CCC |H:0.2|", (0u32, 2u32))]
-fn cx_hydrogen_bonds(#[case] input: &[u8], #[case] atoms: (u32, u32)) {
+#[case::donating(b"CC |C:0.0|", Ok(Some(BondDonation::Donating)))]
+#[case::accepting(b"CC |C:1.0|", Ok(Some(BondDonation::Accepting)))]
+#[case::bond_out_of_range(b"CC |C:0.1|", Err(ParseError::BondIndexOutOfBounds { bond_idx: 1 }))]
+fn cx_coordinate_bonds(
+    #[case] input: &[u8],
+    #[case] expected: Result<Option<BondDonation>, ParseError>,
+) {
     let input_str = input.to_str_lossy();
 
     let res = parse_basic_cxsmiles(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should have succeeded: {:?}",
-        input_str,
-        res
-    );
-    let mol = res.unwrap();
-    assert_eq!(mol.bonds.len(), 3);
-    let b = mol.bonds.last().expect("hydrogen bond appended");
-    assert_eq!(b.order, BondOrder::Zero);
-    assert_eq!(b.noncovalent, Some(BondNoncovalent::Hydrogen));
-    assert_eq!(b.atoms.as_tuple(), atoms);
+    match expected.clone() {
+        Ok(expected_donation) => {
+            assert!(
+                res.is_ok(),
+                "{:?} should have succeeded: {:?}",
+                input_str,
+                res
+            );
+            let mol = res.unwrap();
+            assert_eq!(mol.bonds.len(), 1);
+            assert_eq!(mol.bonds[0].order, BondOrder::Single);
+            assert_eq!(mol.bonds[0].donation, expected_donation);
+        }
+        Err(expected_err) => {
+            assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+            assert_eq!(res.unwrap_err(), expected_err);
+        }
+    }
 
     let res = parse_extended_cxsmiles(input);
-    assert!(
-        res.is_ok(),
-        "{:?} should have succeeded: {:?}",
-        input_str,
-        res
-    );
-    let mol = res.unwrap();
-    assert_eq!(mol.bonds.len(), 3);
-    let b = mol.bonds.last().expect("hydrogen bond appended");
-    assert_eq!(b.order, BondOrder::Zero);
-    assert_eq!(b.noncovalent, Some(BondNoncovalent::Hydrogen));
-    assert_eq!(b.atoms.as_tuple(), atoms);
+    match expected {
+        Ok(expected_donation) => {
+            assert!(
+                res.is_ok(),
+                "{:?} should have succeeded: {:?}",
+                input_str,
+                res
+            );
+            let mol = res.unwrap();
+            assert_eq!(mol.bonds.len(), 1);
+            assert_eq!(mol.bonds[0].order, BondOrder::Single);
+            assert_eq!(mol.bonds[0].donation, expected_donation);
+        }
+        Err(expected_err) => {
+            assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+            assert_eq!(res.unwrap_err(), expected_err);
+        }
+    }
+}
+
+#[rstest]
+#[case::hbond(b"CC |H:0.0|", Ok((BondOrder::Zero, Some(BondNoncovalent::Hydrogen))))]
+#[case::bond_out_of_range(b"CC |H:0.1|", Err(ParseError::BondIndexOutOfBounds { bond_idx: 1 }))]
+fn cx_hydrogen_bonds(
+    #[case] input: &[u8],
+    #[case] expected: Result<(BondOrder, Option<BondNoncovalent>), ParseError>,
+) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    match expected.clone() {
+        Ok((expected_order, expected_noncovalent)) => {
+            assert!(
+                res.is_ok(),
+                "{:?} should have succeeded: {:?}",
+                input_str,
+                res
+            );
+            let mol = res.unwrap();
+            assert_eq!(mol.bonds.len(), 1);
+            assert_eq!(mol.bonds[0].order, expected_order);
+            assert_eq!(mol.bonds[0].noncovalent, expected_noncovalent);
+        }
+        Err(expected_err) => {
+            assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+            assert_eq!(res.unwrap_err(), expected_err);
+        }
+    }
+
+    let res = parse_extended_cxsmiles(input);
+    match expected {
+        Ok((expected_order, expected_noncovalent)) => {
+            assert!(
+                res.is_ok(),
+                "{:?} should have succeeded: {:?}",
+                input_str,
+                res
+            );
+            let mol = res.unwrap();
+            assert_eq!(mol.bonds.len(), 1);
+            assert_eq!(mol.bonds[0].order, expected_order);
+            assert_eq!(mol.bonds[0].noncovalent, expected_noncovalent);
+        }
+        Err(expected_err) => {
+            assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+            assert_eq!(res.unwrap_err(), expected_err);
+        }
+    }
+}
+
+#[rstest]
+#[case::atom_not_in_bond(
+    b"CCC |C:0.1|",
+    ParseError::MismatchedAtomBondIndices { atom_idx: 0, bond_idx: 1 }
+)]
+#[case::atom_not_in_hbond(
+    b"CCC |H:0.1|",
+    ParseError::MismatchedAtomBondIndices { atom_idx: 0, bond_idx: 1 }
+)]
+fn cx_bond_indexed_tags_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(res.is_err(), "{:?} should have failed: {:?}", input_str, res);
+    assert_eq!(res.unwrap_err(), expected);
 }
 
 #[rstest]
@@ -295,7 +454,7 @@ fn cx_fragment_groups(#[case] input: &[u8], #[case] expected: Vec<Vec<u32>>) {
         input_str,
         res
     );
-    assert_eq!(res.unwrap_err(), ParseError::InvalidCxProperty { pos: 0 });
+    assert_eq!(res.unwrap_err(), ParseError::InvalidCxTag { pos: 0 });
 
     let res = parse_extended_cxsmiles(input);
     assert!(
@@ -311,6 +470,33 @@ fn cx_fragment_groups(#[case] input: &[u8], #[case] expected: Vec<Vec<u32>>) {
         .and_then(|d| d.components.as_ref())
         .cloned();
     assert_eq!(components, Some(expected));
+}
+
+#[rstest]
+#[case::atom_index_out_of_range(
+    b"CCC |f:0.3|",
+    ParseError::AtomIndexOutOfBounds { atom_idx: 3 }
+)]
+fn cx_fragment_groups_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
+    );
+    assert_eq!(res.unwrap_err(), ParseError::InvalidCxTag { pos: 0 });
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
+    );
+    assert_eq!(res.unwrap_err(), expected);
 }
 
 #[rustfmt::skip]
@@ -332,7 +518,7 @@ fn cx_stereo_groups(
         input_str,
         res
     );
-    assert_eq!(res.unwrap_err(), ParseError::InvalidCxProperty { pos: 0 });
+    assert_eq!(res.unwrap_err(), ParseError::InvalidCxTag { pos: 0 });
 
     let res = parse_extended_cxsmiles(input);
     assert!(
@@ -344,18 +530,51 @@ fn cx_stereo_groups(
     let mol = res.unwrap();
     assert_eq!(mol.stereo_interpretation, expected_interpretation);
 
-    let cx_data = mol.cx_data.as_ref().expect("cx_data should be present");
-    assert_eq!(cx_data.stereo_interpretation, expected_interpretation);
     if let Some((idx, set)) = expected_group {
+        let cx_data = mol.cx_data.as_ref().expect("cx_data should be present");
         assert_eq!(cx_data.stereo_groups.get(&idx), Some(&set));
     } else {
-        assert!(cx_data.stereo_groups.is_empty());
+        assert!(mol.cx_data.is_none());
     }
 }
 
 #[rstest]
+#[case::absolute_atom_index_out_of_range(
+    b"CC |a:0,2|",
+    ParseError::AtomIndexOutOfBounds { atom_idx: 2 }
+)]
+#[case::or_group_atom_index_out_of_range(
+    b"CC |o1:2|",
+    ParseError::AtomIndexOutOfBounds { atom_idx: 2 }
+)]
+#[case::and_group_atom_index_out_of_range(
+    b"CC |&1:2|",
+    ParseError::AtomIndexOutOfBounds { atom_idx: 2 }
+)]
+fn cx_stereo_groups_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
+    );
+    assert_eq!(res.unwrap_err(), ParseError::InvalidCxTag { pos: 0 });
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
+    );
+    assert_eq!(res.unwrap_err(), expected);
+}
+
+#[rstest]
 #[case::relative(b"C |r|")]
-#[case::relative_with_components(b"C |r:0|")]
 fn cx_relative_stereo(#[case] input: &[u8]) {
     let input_str = input.to_str_lossy();
 
@@ -366,7 +585,7 @@ fn cx_relative_stereo(#[case] input: &[u8]) {
         input_str,
         res
     );
-    assert_eq!(res.unwrap_err(), ParseError::InvalidCxProperty { pos: 0 });
+    assert_eq!(res.unwrap_err(), ParseError::InvalidCxTag { pos: 0 });
 
     let res = parse_extended_cxsmiles(input);
     assert!(
@@ -380,10 +599,31 @@ fn cx_relative_stereo(#[case] input: &[u8]) {
         mol.stereo_interpretation,
         Some(StereoInterpretation::Relative)
     );
-    assert_eq!(
-        mol.cx_data.as_ref().and_then(|d| d.stereo_interpretation),
-        Some(StereoInterpretation::Relative)
+    assert_eq!(mol.cx_data, None);
+}
+
+#[rstest]
+#[case::with_component_list(b"C |r:0|", ParseError::InvalidCxTag { pos: 0 })]
+fn cx_relative_stereo_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
     );
+    assert_eq!(res.unwrap_err(), expected);
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
+    );
+    assert_eq!(res.unwrap_err(), expected);
 }
 
 #[rstest]
@@ -398,7 +638,7 @@ fn cx_atom_properties(#[case] input: &[u8], #[case] key: &str, #[case] value: &s
         input_str,
         res
     );
-    assert_eq!(res.unwrap_err(), ParseError::InvalidCxProperty { pos: 0 });
+    assert_eq!(res.unwrap_err(), ParseError::InvalidCxTag { pos: 0 });
 
     let res = parse_extended_cxsmiles(input);
     assert!(
@@ -410,4 +650,31 @@ fn cx_atom_properties(#[case] input: &[u8], #[case] key: &str, #[case] value: &s
     let mol = res.unwrap();
     assert_eq!(mol.cx_data, None, "atomProp does not populate cx_data");
     assert_eq!(mol.atoms[0].properties.get(key), Some(&value.to_string()));
+}
+
+#[rstest]
+#[case::atom_index_out_of_range(
+    b"C |atomProp:1.key.value|",
+    ParseError::AtomIndexOutOfBounds { atom_idx: 1 }
+)]
+fn cx_atom_properties_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
+    let input_str = input.to_str_lossy();
+
+    let res = parse_basic_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
+    );
+    assert_eq!(res.unwrap_err(), ParseError::InvalidCxTag { pos: 0 });
+
+    let res = parse_extended_cxsmiles(input);
+    assert!(
+        res.is_err(),
+        "{:?} should have failed: {:?}",
+        input_str,
+        res
+    );
+    assert_eq!(res.unwrap_err(), expected);
 }

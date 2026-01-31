@@ -56,7 +56,8 @@ pub fn parse_smiles_bytes_with(
 
     let (remaining, mut mol) = parse_smiles_inner(input, flags)?;
 
-    // If no atoms parsed but remaining has non-whitespace, it's leading whitespace error
+    // Inner parser stops at whitespace. Leading whitespace is not allowed
+    // (exception: whitespace-only input is allowed)
     if mol.atoms.is_empty() && !remaining.trim_ascii_start().is_empty() {
         return Err(ParseError::LeadingWhitespace);
     }
@@ -65,18 +66,20 @@ pub fn parse_smiles_bytes_with(
         return Ok(mol);
     }
 
-    // Remaining input after SMILES - check for CX block if enabled
+    // Chemaxon extensions
     let trimmed = remaining.trim_ascii_start();
     if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
-        let entries = parse_cx_annotations(trimmed)?;
-        update_molecule(&mut mol, entries);
+        let entries = parse_cx_annotations(trimmed, flags)?;
+        update_molecule(&mut mol, entries)?;
     }
 
-    // Per spec, data after whitespace is ignored
     Ok(mol)
 }
 
-fn parse_smiles_inner(input: &[u8], flags: SmilesParseFlags) -> Result<(&[u8], Molecule), ParseError> {
+fn parse_smiles_inner(
+    input: &[u8],
+    flags: SmilesParseFlags,
+) -> Result<(&[u8], Molecule), ParseError> {
     let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
@@ -548,7 +551,8 @@ pub fn parse_extended_smiles_bytes_with(
 
     let (remaining, mut mol) = parse_extended_smiles_inner(input, flags)?;
 
-    // If no atoms parsed but remaining has non-whitespace, it's leading whitespace error
+    // Inner parser stops at whitespace. Leading whitespace is not allowed
+    // (exception: whitespace-only input is allowed)
     if mol.atoms.is_empty() && !remaining.trim_ascii_start().is_empty() {
         return Err(ParseError::LeadingWhitespace);
     }
@@ -557,14 +561,13 @@ pub fn parse_extended_smiles_bytes_with(
         return Ok(mol);
     }
 
-    // Remaining input after SMILES - check for CX block if enabled
+    // Chemaxon extensions
     let trimmed = remaining.trim_ascii_start();
     if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
-        let entries = parse_extended_cx_annotations(trimmed)?;
-        update_extended_molecule(&mut mol, entries);
+        let entries = parse_extended_cx_annotations(trimmed, flags)?;
+        update_extended_molecule(&mut mol, entries)?;
     }
 
-    // Per spec, data after whitespace is ignored
     Ok(mol)
 }
 

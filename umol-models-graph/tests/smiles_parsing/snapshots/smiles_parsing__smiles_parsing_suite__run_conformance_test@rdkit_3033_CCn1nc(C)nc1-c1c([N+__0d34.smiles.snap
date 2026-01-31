@@ -1,0 +1,12 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: basic_opensmiles
+category: basic_opensmiles
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C16FN6O2S
+    atom_count: 26
+    bond_count: 28

@@ -1,0 +1,12 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon_invalid
+category: chemaxon_invalid
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C32F2N4O4
+    atom_count: 42
+    bond_count: 47

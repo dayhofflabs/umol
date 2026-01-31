@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 use bstr::ByteSlice;
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till1, take_while1};
-use nom::character::complete::{char, satisfy, u32 as nom_u32};
+use nom::bytes::complete::{tag, take_while1};
+use nom::character::complete::{char, one_of, satisfy, u32 as nom_u32};
 use nom::combinator::{not, opt, value};
 use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many1, separated_list0};
@@ -19,13 +19,13 @@ use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Err, IResult, Parser};
 use umol_data::SpinMultiplicity;
 
+use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
 use crate::table_ir::{
-    Bond, BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
-    ExtendedBond, ExtendedMolecule, Molecule, StereoInterpretation, StereoSet, StereoSetMode,
-    UnpairedElectrons,
+    BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
+    ExtendedMolecule, Molecule, StereoInterpretation, StereoSet, StereoSetMode, UnpairedElectrons,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -57,110 +57,177 @@ pub enum CxEntry {
     Values(Vec<(u32, String)>),
     /// Radical electrons: ^n:idx,idx,...
     Radicals(Vec<(u32, UnpairedElectrons)>),
-    /// Wiggly bonds: w:, wU:, wD:
-    WigglyBonds(Vec<(u32, BondWedge)>),
+    /// Wiggly bonds: w:, wU:, wD: encoded as `<atom_idx>.<bond_idx>`
+    WigglyBonds(Vec<(u32, u32, BondWedge)>),
     /// Cis double bonds: c:
     CisBonds(Vec<u32>),
     /// Trans double bonds: t:
     TransBonds(Vec<u32>),
-    /// Coordinate (dative) bonds: C:
+    /// Unspecified (either) double bonds: ctu:
+    UnspecBonds(Vec<u32>),
+    /// Coordinate (dative) bonds: C: encoded as `<first_atom_idx>.<bond_idx>`
     CoordinateBonds(Vec<(u32, u32)>),
-    /// Hydrogen bonds: H:
+    /// Hydrogen bonds: H: encoded as `<first_atom_idx>.<bond_idx>`
     HydrogenBonds(Vec<(u32, u32)>),
     /// Fragment grouping: f: (extended only)
     FragmentGroups(Vec<Vec<u32>>),
     /// Enhanced stereo group: a:, o<n>:, &<n>: (extended only)
     StereoGroup(StereoGroup),
-    /// Relative stereo marker: r (extended only)
+    /// Relative stereo tag: r (extended only)
     RelativeStereo,
     /// Atom properties: atomProp: (extended only)
     AtomProperties(Vec<(u32, String, String)>),
 }
 
 /// Parse basic CX annotations (for Molecule)
-pub fn parse_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError> {
-    parse_cx_block(input, parse_basic_entry)
+pub fn parse_cx_annotations(
+    input: &[u8],
+    flags: SmilesParseFlags,
+) -> Result<Vec<CxEntry>, ParseError> {
+    let skip_unknown_cx_tags = flags.contains(SmilesParseFlags::SKIP_UNKNOWN_CHEMAXON_TAGS);
+    parse_cx_block(input, |i| parse_basic_entry(i, skip_unknown_cx_tags))
 }
 
 /// Parse extended CX annotations (for ExtendedMolecule)
-pub fn parse_extended_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError> {
-    parse_cx_block(input, parse_extended_entry)
+pub fn parse_extended_cx_annotations(
+    input: &[u8],
+    flags: SmilesParseFlags,
+) -> Result<Vec<CxEntry>, ParseError> {
+    let skip_unknown_cx_tags = flags.contains(SmilesParseFlags::SKIP_UNKNOWN_CHEMAXON_TAGS);
+    parse_cx_block(input, |i| parse_extended_entry(i, skip_unknown_cx_tags))
 }
 
 /// Update Molecule with parsed CX entries
-pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) {
+pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), ParseError> {
     for entry in entries {
         match entry {
             CxEntry::Coordinates(coords) => {
+                if coords.len() > mol.atoms.len() {
+                    return Err(ParseError::AtomIndexOutOfBounds {
+                        atom_idx: mol.atoms.len() as u32,
+                    });
+                }
                 mol.positions = Some(coords);
             }
             CxEntry::Labels(labels) => {
                 for (idx, label) in labels {
-                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
-                        atom.label = Some(label);
-                    }
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.label = Some(label);
                 }
             }
             CxEntry::Values(values) => {
                 for (idx, value) in values {
-                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
-                        atom.value = Some(value);
-                    }
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.value = Some(value);
                 }
             }
             CxEntry::Radicals(radicals) => {
                 for (idx, unpaired) in radicals {
-                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
-                        atom.unpaired_electrons = Some(unpaired);
-                    }
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.unpaired_electrons = Some(unpaired);
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
-                for (idx, wedge) in wiggly {
-                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
-                        bond.wedge = Some(wedge);
+                for (atom_idx, bond_idx, wedge) in wiggly {
+                    if atom_idx as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
                     }
+                    let Some(bond) = mol.bonds.get_mut(bond_idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    let (a, b) = bond.atoms.as_tuple();
+                    if atom_idx != a && atom_idx != b {
+                        return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
+                    }
+                    bond.wedge = Some(wedge);
                 }
             }
             CxEntry::CisBonds(indices) => {
                 for idx in indices {
-                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
-                        bond.stereo = Some(BondStereo::Cis);
-                    }
+                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    bond.stereo = Some(BondStereo::Cis);
                 }
             }
             CxEntry::TransBonds(indices) => {
                 for idx in indices {
-                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
-                        bond.stereo = Some(BondStereo::Trans);
-                    }
+                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    bond.stereo = Some(BondStereo::Trans);
+                }
+            }
+            CxEntry::UnspecBonds(indices) => {
+                for idx in indices {
+                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    bond.stereo = Some(BondStereo::Either);
                 }
             }
             CxEntry::CoordinateBonds(pairs) => {
-                for (from, to) in pairs {
-                    let mut bond = Bond::new(from, to, BondOrder::Single);
-                    bond.donation = Some(BondDonation::Donating);
-                    mol.bonds.push(bond);
+                for (first_atom, bond_idx) in pairs {
+                    if first_atom as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds {
+                            atom_idx: first_atom,
+                        });
+                    }
+                    let Some(bond) = mol.bonds.get_mut(bond_idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    let (a, b) = bond.atoms.as_tuple();
+                    if first_atom == a {
+                        bond.donation = Some(BondDonation::Donating);
+                    } else if first_atom == b {
+                        bond.donation = Some(BondDonation::Accepting);
+                    } else {
+                        return Err(ParseError::MismatchedAtomBondIndices {
+                            atom_idx: first_atom,
+                            bond_idx,
+                        });
+                    }
                 }
             }
             CxEntry::HydrogenBonds(pairs) => {
-                for (from, to) in pairs {
-                    let mut bond = Bond::new(from, to, BondOrder::Zero);
+                for (first_atom, bond_idx) in pairs {
+                    if first_atom as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds {
+                            atom_idx: first_atom,
+                        });
+                    }
+                    let Some(bond) = mol.bonds.get_mut(bond_idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    let (a, b) = bond.atoms.as_tuple();
+                    if first_atom != a && first_atom != b {
+                        return Err(ParseError::MismatchedAtomBondIndices {
+                            atom_idx: first_atom,
+                            bond_idx,
+                        });
+                    }
+                    bond.order = BondOrder::Zero;
                     bond.noncovalent = Some(BondNoncovalent::Hydrogen);
-                    mol.bonds.push(bond);
                 }
             }
-            // Extended-only entries are ignored for basic Molecule
-            CxEntry::FragmentGroups(_)
-            | CxEntry::StereoGroup(_)
-            | CxEntry::RelativeStereo
-            | CxEntry::AtomProperties(_) => {}
+            _ => {}
         }
     }
+
+    Ok(())
 }
 
 /// Update ExtendedMolecule with parsed CX entries
-pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry>) {
+pub fn update_extended_molecule(
+    mol: &mut ExtendedMolecule,
+    entries: Vec<CxEntry>,
+) -> Result<(), ParseError> {
     let mut stereo_interpretation: Option<StereoInterpretation> = None;
     let mut stereo_groups: HashMap<u32, StereoSet> = HashMap::new();
     let mut components: Option<Vec<Vec<u32>>> = None;
@@ -168,99 +235,171 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
     for entry in entries {
         match entry {
             CxEntry::Coordinates(coords) => {
+                if coords.len() > mol.atoms.len() {
+                    return Err(ParseError::AtomIndexOutOfBounds {
+                        atom_idx: mol.atoms.len() as u32,
+                    });
+                }
                 mol.positions = Some(coords);
             }
             CxEntry::Labels(labels) => {
                 for (idx, label) in labels {
-                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
-                        atom.label = Some(label);
-                    }
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.label = Some(label);
                 }
             }
             CxEntry::Values(values) => {
                 for (idx, value) in values {
-                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
-                        atom.value = Some(value);
-                    }
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.value = Some(value);
                 }
             }
             CxEntry::Radicals(radicals) => {
                 for (idx, unpaired) in radicals {
-                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
-                        atom.unpaired_electrons = Some(unpaired);
-                    }
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.unpaired_electrons = Some(unpaired);
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
-                for (idx, wedge) in wiggly {
-                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
-                        bond.wedge = Some(wedge);
+                for (atom_idx, bond_idx, wedge) in wiggly {
+                    if atom_idx as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
                     }
+                    let Some(bond) = mol.bonds.get_mut(bond_idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    let (a, b) = bond.atoms.as_tuple();
+                    if atom_idx != a && atom_idx != b {
+                        return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
+                    }
+                    bond.wedge = Some(wedge);
                 }
             }
             CxEntry::CisBonds(indices) => {
                 for idx in indices {
-                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
-                        bond.stereo = Some(BondStereo::Cis);
-                    }
+                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    bond.stereo = Some(BondStereo::Cis);
                 }
             }
             CxEntry::TransBonds(indices) => {
                 for idx in indices {
-                    if let Some(bond) = mol.bonds.get_mut(idx as usize) {
-                        bond.stereo = Some(BondStereo::Trans);
-                    }
+                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    bond.stereo = Some(BondStereo::Trans);
+                }
+            }
+            CxEntry::UnspecBonds(indices) => {
+                for idx in indices {
+                    let Some(bond) = mol.bonds.get_mut(idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    bond.stereo = Some(BondStereo::Either);
                 }
             }
             CxEntry::CoordinateBonds(pairs) => {
-                for (from, to) in pairs {
-                    let mut bond = ExtendedBond::new(from, to, BondOrder::Single);
-                    bond.donation = Some(BondDonation::Donating);
-                    mol.bonds.push(bond);
+                for (first_atom, bond_idx) in pairs {
+                    if first_atom as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds {
+                            atom_idx: first_atom,
+                        });
+                    }
+                    let Some(bond) = mol.bonds.get_mut(bond_idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    let (a, b) = bond.atoms.as_tuple();
+                    if first_atom == a {
+                        bond.donation = Some(BondDonation::Donating);
+                    } else if first_atom == b {
+                        bond.donation = Some(BondDonation::Accepting);
+                    } else {
+                        return Err(ParseError::MismatchedAtomBondIndices {
+                            atom_idx: first_atom,
+                            bond_idx,
+                        });
+                    }
                 }
             }
             CxEntry::HydrogenBonds(pairs) => {
-                for (from, to) in pairs {
-                    let mut bond = ExtendedBond::new(from, to, BondOrder::Zero);
+                for (first_atom, bond_idx) in pairs {
+                    if first_atom as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds {
+                            atom_idx: first_atom,
+                        });
+                    }
+                    let Some(bond) = mol.bonds.get_mut(bond_idx as usize) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    let (a, b) = bond.atoms.as_tuple();
+                    if first_atom != a && first_atom != b {
+                        return Err(ParseError::MismatchedAtomBondIndices {
+                            atom_idx: first_atom,
+                            bond_idx,
+                        });
+                    }
+                    bond.order = BondOrder::Zero;
                     bond.noncovalent = Some(BondNoncovalent::Hydrogen);
-                    mol.bonds.push(bond);
                 }
             }
             CxEntry::FragmentGroups(groups) => {
+                for group in &groups {
+                    for &atom_idx in group {
+                        if atom_idx as usize >= mol.atoms.len() {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                        }
+                    }
+                }
                 components = Some(groups);
             }
-            CxEntry::StereoGroup(sg) => match sg.group_type {
-                StereoGroupType::Absolute => {
-                    // Absolute atoms don't need group storage; stereo_interpretation captures this
-                    stereo_interpretation = Some(StereoInterpretation::Absolute);
+            CxEntry::StereoGroup(sg) => {
+                for &atom_idx in &sg.atoms {
+                    if atom_idx as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    }
                 }
-                StereoGroupType::Or(n) => {
-                    stereo_groups
-                        .entry(n)
-                        .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
-                        .or_insert(StereoSet {
-                            atoms: sg.atoms,
-                            mode: StereoSetMode::Correlated,
-                        });
+
+                match sg.group_type {
+                    StereoGroupType::Absolute => {
+                        // Absolute atoms don't need group storage; stereo_interpretation captures this
+                        stereo_interpretation = Some(StereoInterpretation::Absolute);
+                    }
+                    StereoGroupType::Or(n) => {
+                        stereo_groups
+                            .entry(n)
+                            .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
+                            .or_insert(StereoSet {
+                                atoms: sg.atoms,
+                                mode: StereoSetMode::Correlated,
+                            });
+                    }
+                    StereoGroupType::And(n) => {
+                        stereo_groups
+                            .entry(n)
+                            .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
+                            .or_insert(StereoSet {
+                                atoms: sg.atoms,
+                                mode: StereoSetMode::Independent,
+                            });
+                    }
                 }
-                StereoGroupType::And(n) => {
-                    stereo_groups
-                        .entry(n)
-                        .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
-                        .or_insert(StereoSet {
-                            atoms: sg.atoms,
-                            mode: StereoSetMode::Independent,
-                        });
-                }
-            },
+            }
             CxEntry::RelativeStereo => {
                 stereo_interpretation = Some(StereoInterpretation::Relative);
             }
             CxEntry::AtomProperties(props) => {
                 for (idx, key, value) in props {
-                    if let Some(atom) = mol.atoms.get_mut(idx as usize) {
-                        atom.properties.insert(key, value);
-                    }
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.properties.insert(key, value);
                 }
             }
         }
@@ -269,13 +408,14 @@ pub fn update_extended_molecule(mol: &mut ExtendedMolecule, entries: Vec<CxEntry
     mol.stereo_interpretation = stereo_interpretation;
 
     // Store CX-specific data if any
-    if stereo_interpretation.is_some() || !stereo_groups.is_empty() || components.is_some() {
+    if !stereo_groups.is_empty() || components.is_some() {
         mol.cx_data = Some(CxAnnotationData {
-            stereo_interpretation,
             stereo_groups,
             components,
         });
     }
+
+    Ok(())
 }
 
 fn parse_cx_block<'inp>(
@@ -292,9 +432,87 @@ fn parse_cx_block<'inp>(
         Ok(([], options)) => Ok(options.into_iter().flatten().collect()),
         Ok(_) => Err(ParseError::InvalidToken { pos: 0 }),
         Err(Err::Failure(e)) if e.code == ErrorKind::Verify => {
-            Err(ParseError::InvalidCxProperty { pos: 0 })
+            Err(ParseError::InvalidCxTag { pos: 0 })
         }
         Err(_) => Err(ParseError::InvalidToken { pos: 0 }),
+    }
+}
+
+/// Parse a basic CX entry.
+///
+/// Supported tags:
+/// - coordinates
+/// - labels / values
+/// - radicals
+/// - wiggly bonds
+/// - cis/trans/unspec (ctu)
+/// - coordinate bonds
+/// - hydrogen bonds
+fn parse_basic_entry(input: &[u8], skip_unknown_cx_tags: bool) -> IResult<&[u8], Option<CxEntry>> {
+    if input.is_empty() {
+        return Err(Err::Error(NomError::new(input, ErrorKind::Tag)));
+    }
+    if input.first() == Some(&b'|') {
+        // End of CX block.
+        return Err(Err::Error(NomError::new(input, ErrorKind::Tag)));
+    }
+
+    match alt((
+        parse_coordinates,
+        parse_labels,
+        parse_radicals,
+        parse_wiggly_bonds,
+        parse_cis_trans,
+        parse_coordinate_bonds,
+        parse_hydrogen_bonds,
+    ))
+    .parse(input)
+    {
+        Ok((rest, entry)) => Ok((rest, Some(entry))),
+        Err(Err::Error(_)) => parse_unknown_entry(input, skip_unknown_cx_tags),
+        Err(e) => Err(e),
+    }
+}
+
+/// Parse an extended CX entry.
+///
+/// Supported tags:
+/// - all basic tags, plus
+/// - fragment groups
+/// - enhanced stereo groups
+/// - relative stereo tag
+/// - atom properties
+fn parse_extended_entry(
+    input: &[u8],
+    skip_unknown_cx_tags: bool,
+) -> IResult<&[u8], Option<CxEntry>> {
+    if input.is_empty() {
+        return Err(Err::Error(NomError::new(input, ErrorKind::Tag)));
+    }
+    if input.first() == Some(&b'|') {
+        // End of CX block.
+        return Err(Err::Error(NomError::new(input, ErrorKind::Tag)));
+    }
+
+    match alt((
+        parse_coordinates,
+        parse_labels,
+        parse_radicals,
+        parse_wiggly_bonds,
+        parse_cis_trans,
+        parse_coordinate_bonds,
+        parse_hydrogen_bonds,
+        parse_fragment_groups,
+        parse_stereo_absolute,
+        parse_stereo_or_and,
+        parse_atom_properties,
+        parse_relative_stereo,
+    ))
+    .parse(input)
+    {
+        Ok((rest, entry)) => Ok((rest, Some(entry))),
+        Err(Err::Error(_)) => parse_unknown_entry(input, skip_unknown_cx_tags),
+        Err(e) => Err(e),
     }
 }
 
@@ -376,12 +594,7 @@ fn convert_radical_code(code: u8) -> UnpairedElectrons {
 
 /// Parse a single radical group: `^n:idx,idx,...`
 fn parse_radical_group(input: &[u8]) -> IResult<&[u8], (u8, Vec<u32>)> {
-    let (input, code) = delimited(
-        char('^'),
-        nom::character::complete::one_of("1234567"),
-        char(':'),
-    )
-    .parse(input)?;
+    let (input, code) = delimited(char('^'), one_of("1234567"), char(':')).parse(input)?;
     let (input, indices) = separated_list0(comma_not_before_entry, nom_u32).parse(input)?;
     Ok((input, (code as u8 - b'0', indices)))
 }
@@ -416,25 +629,29 @@ fn parse_wiggly_bonds(input: &[u8]) -> IResult<&[u8], CxEntry> {
     )
     .parse(input)?;
 
-    let result: Vec<_> = pairs.into_iter().map(|(a, _b)| (a, wedge_type)).collect();
+    let result: Vec<_> = pairs
+        .into_iter()
+        .map(|(atom_idx, bond_idx)| (atom_idx, bond_idx, wedge_type))
+        .collect();
     Ok((input, CxEntry::WigglyBonds(result)))
 }
 
 /// Parse cis/trans bond annotations: `c:`, `t:`, `ctu:`.
 fn parse_cis_trans(input: &[u8]) -> IResult<&[u8], CxEntry> {
-    let (input, is_cis) = alt((
-        value(None, tag("ctu:")),
-        value(Some(true), tag("c:")),
-        value(Some(false), tag("t:")),
+    let (input, kind) = alt((
+        value('u', tag("ctu:")),
+        value('c', tag("c:")),
+        value('t', tag("t:")),
     ))
     .parse(input)?;
 
     let (input, indices) = separated_list0(comma_not_before_entry, nom_u32).parse(input)?;
 
-    match is_cis {
-        Some(true) => Ok((input, CxEntry::CisBonds(indices))),
-        Some(false) => Ok((input, CxEntry::TransBonds(indices))),
-        None => Ok((input, CxEntry::CisBonds(Vec::new()))),
+    match kind {
+        'c' => Ok((input, CxEntry::CisBonds(indices))),
+        't' => Ok((input, CxEntry::TransBonds(indices))),
+        'u' => Ok((input, CxEntry::UnspecBonds(indices))),
+        _ => unreachable!("unknown cis/trans/ctu tag"),
     }
 }
 
@@ -547,126 +764,84 @@ fn parse_atom_properties(input: &[u8]) -> IResult<&[u8], CxEntry> {
     Ok((input, CxEntry::AtomProperties(props)))
 }
 
-/// Parse relative stereo marker: `r` or `r:idx,idx,...`
+/// Parse relative stereo tag: `r`.
 fn parse_relative_stereo(input: &[u8]) -> IResult<&[u8], CxEntry> {
-    let (input, _) = char('r').parse(input)?;
-
-    if input.first() == Some(&b':') {
-        let (input, _) = preceded(char(':'), separated_list0(char(','), nom_u32)).parse(input)?;
-        Ok((input, CxEntry::RelativeStereo))
-    } else {
-        Ok((input, CxEntry::RelativeStereo))
-    }
-}
-
-/// Check for extended-only feature markers.
-fn parse_extended_marker(input: &[u8]) -> IResult<&[u8], ()> {
-    value(
-        (),
-        alt((
-            tag("f:"),
-            tag("a:"),
-            tag("atomProp:"),
-            tag("Sg:"),
-            tag("RG:"),
-            tag("rb:"),
-            tag("s:"),
-            tag("u:"),
-            tag("LN:"),
-            tag("LO:"),
-        )),
-    )
-    .parse(input)
-}
-
-/// Check for `r` as standalone extended marker.
-fn parse_extended_r(input: &[u8]) -> IResult<&[u8], ()> {
     let (rest, _) = char('r').parse(input)?;
-    if rest.is_empty() || matches!(rest[0], b',' | b'|' | b':') {
-        Ok((rest, ()))
-    } else {
-        Err(Err::Error(NomError::new(input, ErrorKind::Tag)))
+
+    // Only accept `r` as a standalone tag (`r` or `r:...`), not as the start of
+    // another tag (e.g. `rb:`).
+    if !rest.is_empty() && !matches!(rest[0], b':' | b',' | b'|') {
+        return Err(Err::Error(NomError::new(input, ErrorKind::Tag)));
     }
+
+    // `r:...` is used for reaction/multicomponent cases to list the fragment indices with relative
+    // configuration. This isn't meaningful in our (molecule) TableIR parsing, so reject it.
+    if rest.first() == Some(&b':') {
+        return Err(Err::Failure(NomError::new(input, ErrorKind::Verify)));
+    }
+
+    Ok((rest, CxEntry::RelativeStereo))
 }
 
-/// Check for `o<n>:` or `&<n>:` extended markers.
-fn parse_extended_o_and(input: &[u8]) -> IResult<&[u8], ()> {
-    let (rest, _) = alt((char('o'), char('&'))).parse(input)?;
-    let (rest, _) = nom_u32(rest)?;
-    let (rest, _) = char(':').parse(rest)?;
-    Ok((rest, ()))
-}
-
-/// Skip over an unknown/unrecognized entry until next delimiter.
-fn skip_unknown_entry(input: &[u8]) -> IResult<&[u8], ()> {
-    let (input, _) = take_till1(|b| b == b',' || b == b'|').parse(input)?;
-    Ok((input, ()))
+/// Check whether a character can start a CX entry/tag.
+fn is_cx_tag_start(c: char) -> bool {
+    c.is_ascii_alphabetic() || matches!(c, '(' | '$' | '^' | '&')
 }
 
 /// Parse comma only if not followed by an entry-start character.
 fn comma_not_before_entry(input: &[u8]) -> IResult<&[u8], char> {
-    terminated(
-        char(','),
-        not(satisfy(|c| {
-            matches!(
-                c,
-                '(' | '$' | '^' | 'w' | 'c' | 't' | 'C' | 'H' | 'f' | 'a' | 'o' | '&' | 'r'
-            )
-        })),
-    )
-    .parse(input)
+    terminated(char(','), not(satisfy(is_cx_tag_start))).parse(input)
+}
+
+/// Skip over an unknown/unrecognized CX entry.
+///
+/// CXSMILES uses commas as both list separators *within* an entry and as entry separators.
+/// We stop at:
+/// - the closing `|`, or
+/// - a comma that is followed by the start of another CX entry.
+fn skip_unknown_entry(input: &[u8]) -> IResult<&[u8], ()> {
+    if input.is_empty() {
+        return Ok((input, ()));
+    }
+
+    let mut i = 0usize;
+    while i < input.len() {
+        match input[i] {
+            b',' => {
+                // A comma starts a new entry iff the next non-whitespace char looks like an entry start.
+                let mut j = i + 1;
+                while j < input.len() && input[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if j < input.len() {
+                    let next = input[j] as char;
+                    if is_cx_tag_start(next) {
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    if i == 0 {
+        return Err(Err::Error(NomError::new(input, ErrorKind::TakeTill1)));
+    }
+    Ok((&input[i..], ()))
 }
 
 /// Parse a basic CX entry (rejects extended features).
-fn parse_basic_entry(input: &[u8]) -> IResult<&[u8], Option<CxEntry>> {
-    if let Ok((rest, entry)) = alt((
-        parse_coordinates,
-        parse_labels,
-        parse_radicals,
-        parse_wiggly_bonds,
-        parse_cis_trans,
-        parse_coordinate_bonds,
-        parse_hydrogen_bonds,
-    ))
-    .parse(input)
-    {
-        return Ok((rest, Some(entry)));
+fn parse_unknown_entry(
+    input: &[u8],
+    skip_unknown_cx_tags: bool,
+) -> IResult<&[u8], Option<CxEntry>> {
+    if skip_unknown_cx_tags {
+        let (rest, _) = skip_unknown_entry(input)?;
+        Ok((rest, None))
+    } else {
+        Err(Err::Failure(NomError::new(input, ErrorKind::Verify)))
     }
-
-    if parse_extended_marker(input).is_ok()
-        || parse_extended_r(input).is_ok()
-        || parse_extended_o_and(input).is_ok()
-    {
-        return Err(Err::Failure(NomError::new(input, ErrorKind::Verify)));
-    }
-
-    let (rest, _) = skip_unknown_entry(input)?;
-    Ok((rest, None))
-}
-
-/// Parse an extended CX entry (all features allowed).
-fn parse_extended_entry(input: &[u8]) -> IResult<&[u8], Option<CxEntry>> {
-    if let Ok((rest, entry)) = alt((
-        parse_coordinates,
-        parse_labels,
-        parse_radicals,
-        parse_wiggly_bonds,
-        parse_cis_trans,
-        parse_coordinate_bonds,
-        parse_hydrogen_bonds,
-        parse_fragment_groups,
-        parse_stereo_absolute,
-        parse_stereo_or_and,
-        parse_atom_properties,
-        parse_relative_stereo,
-    ))
-    .parse(input)
-    {
-        return Ok((rest, Some(entry)));
-    }
-
-    let (rest, _) = skip_unknown_entry(input)?;
-    Ok((rest, None))
 }
 
 #[cfg(test)]
@@ -677,7 +852,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::table_ir::{Atom, Chirality, ExtendedAtom};
+    use crate::table_ir::{Atom, Bond, Chirality, ExtendedAtom, ExtendedBond};
 
     #[fixture]
     fn triatomic_molecule() -> Molecule {
@@ -767,7 +942,7 @@ mod tests {
     #[case::hydrogen_bond(b"|H:1.2|", vec![CxEntry::HydrogenBonds(vec![(1, 2)])])]
     #[case::radicals_multiple_atoms(b"|^1:0,1,2|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None }),
         (1, UnpairedElectrons { count: 1, multiplicity: None }), (2, UnpairedElectrons { count: 1, multiplicity: None })])])]
-    #[case::wiggly_bonds(b"|w:0.1,2.3|", vec![CxEntry::WigglyBonds(vec![(0, BondWedge::Either), (2, BondWedge::Either)])])]
+    #[case::wiggly_bonds(b"|w:0.1,2.3|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondWedge::Either), (2, 3, BondWedge::Either)])])]
     #[case::cis_trans(b"|c:0,1|", vec![CxEntry::CisBonds(vec![0, 1])])]
     #[case::trans_trans(b"|t:0,1|", vec![CxEntry::TransBonds(vec![0, 1])])]
     #[case::atom_labels(b"|$label1;label2;label3$|", vec![CxEntry::Labels(vec![(0, "label1".to_string()), (1, "label2".to_string()), (2, "label3".to_string())])])]
@@ -776,10 +951,8 @@ mod tests {
     #[case::coordinates_3d(b"|(1,2,3;4,5,6)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0), Point3D::new(4.0, 5.0, 6.0)])])]
     #[case::combined_entries(b"|^1:0,1,(1.0,2.0;3.0,4.0),C:2.3|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None }),
         (1, UnpairedElectrons { count: 1, multiplicity: None })]), CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 0.0), Point3D::new(3.0, 4.0, 0.0)]), CxEntry::CoordinateBonds(vec![(2, 3)])])]
-    #[case::unknown_tag_skipped(b"|xyz:123,C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
-    #[case::unknown_tag_only(b"|unknown|", vec![])]
     fn test_parse_cx_annotations(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
-        let result = parse_cx_annotations(input);
+        let result = parse_cx_annotations(input, SmilesParseFlags::default());
         let input_str = input.to_str_lossy();
         assert!(result.is_ok(), "{:?} should have succeeded: {:?}", input_str, result);
         let entries = result.unwrap();
@@ -787,14 +960,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::extended_feature_f(b"|f:0.1|", ParseError::InvalidCxProperty { pos: 0 })]
-    #[case::extended_feature_a(b"|a:0,1|", ParseError::InvalidCxProperty { pos: 0 })]
-    #[case::extended_feature_o(b"|o1:0,1|", ParseError::InvalidCxProperty { pos: 0 })]
-    #[case::extended_feature_and(b"|&1:0,1|", ParseError::InvalidCxProperty { pos: 0 })]
-    #[case::extended_feature_r(b"|r|", ParseError::InvalidCxProperty { pos: 0 })]
-    #[case::extended_feature_atomprop(b"|atomProp:0.key.value|", ParseError::InvalidCxProperty { pos: 0 })]
+    #[case::unknown_and_known_tag(b"|xyz:123,C:0.1|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::unknown_tag(b"|unknown|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::extended_feature_f(b"|f:0.1|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::extended_feature_a(b"|a:0,1|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::extended_feature_o(b"|o1:0,1|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::extended_feature_and(b"|&1:0,1|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::extended_feature_r(b"|r|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::extended_feature_atomprop(b"|atomProp:0.key.value|", ParseError::InvalidCxTag { pos: 0 })]
     fn test_parse_cx_annotations_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
-        let result = parse_cx_annotations(input);
+        let result = parse_cx_annotations(input, SmilesParseFlags::default());
         let input_str = input.to_str_lossy();
         assert!(
             result.is_err(),
@@ -810,27 +985,12 @@ mod tests {
         );
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::empty(b"||", vec![])]
-    #[case::coordinate_bond(b"|C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
-    #[case::hydrogen_bond(b"|H:1.2|", vec![CxEntry::HydrogenBonds(vec![(1, 2)])])]
-    #[case::radicals(b"|^1:0|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None })])])]
-    #[case::wiggly_bonds(b"|w:0.1|", vec![CxEntry::WigglyBonds(vec![(0, BondWedge::Either)])])]
-    #[case::cis_bonds(b"|c:0|", vec![CxEntry::CisBonds(vec![0])])]
-    #[case::trans_bonds(b"|t:0|", vec![CxEntry::TransBonds(vec![0])])]
-    #[case::atom_labels(b"|$label$|", vec![CxEntry::Labels(vec![(0, "label".to_string())])])]
-    #[case::fragment_groups(b"|f:0.1.2,3.4|", vec![CxEntry::FragmentGroups(vec![vec![0, 1, 2], vec![3, 4]])])]
-    #[case::stereo_absolute(b"|a:0,1,2|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1, 2] })])]
-    #[case::stereo_or(b"|o1:0,1|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0, 1] })])]
-    #[case::stereo_and(b"|&1:0,1|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(1), atoms: vec![0, 1] })])]
-    #[case::relative_stereo(b"|r|", vec![CxEntry::RelativeStereo])]
-    #[case::atom_properties(b"|atomProp:0.key.value|", vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])])]
-    #[case::unknown_tag_skipped(b"|xyz:123,C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
-    #[case::coordinates_2d(b"|(1.5,2.5;3.5,4.5)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.5, 2.5, 0.0), Point3D::new(3.5, 4.5, 0.0)])])]
-    #[case::coordinates_3d(b"|(1,2,3;4,5,6)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0), Point3D::new(4.0, 5.0, 6.0)])])]
-    fn test_parse_extended_cx_annotations(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
-        let result = parse_extended_cx_annotations(input);
+    #[case::unknown_and_known_tag(b"|xyz:123,C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
+    #[case::unknown_tag(b"|unknown|", vec![])]
+    fn test_parse_cx_annotations_lenient(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
+        let flags = SmilesParseFlags::LENIENT;
+        let result = parse_cx_annotations(input, flags);
         let input_str = input.to_str_lossy();
         assert!(
             result.is_ok(),
@@ -848,16 +1008,115 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::empty(b"||", vec![])]
+    #[case::coordinate_bond(b"|C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
+    #[case::hydrogen_bond(b"|H:1.2|", vec![CxEntry::HydrogenBonds(vec![(1, 2)])])]
+    #[case::radicals(b"|^1:0|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None })])])]
+    #[case::wiggly_bonds(b"|w:0.1|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondWedge::Either)])])]
+    #[case::cis_bonds(b"|c:0|", vec![CxEntry::CisBonds(vec![0])])]
+    #[case::trans_bonds(b"|t:0|", vec![CxEntry::TransBonds(vec![0])])]
+    #[case::atom_labels(b"|$label$|", vec![CxEntry::Labels(vec![(0, "label".to_string())])])]
+    #[case::fragment_groups(b"|f:0.1.2,3.4|", vec![CxEntry::FragmentGroups(vec![vec![0, 1, 2], vec![3, 4]])])]
+    #[case::stereo_absolute(b"|a:0,1,2|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1, 2] })])]
+    #[case::stereo_or(b"|o1:0,1|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0, 1] })])]
+    #[case::stereo_and(b"|&1:0,1|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(1), atoms: vec![0, 1] })])]
+    #[case::relative_stereo(b"|r|", vec![CxEntry::RelativeStereo])]
+    #[case::atom_properties(b"|atomProp:0.key.value|", vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])])]
+    #[case::coordinates_2d(b"|(1.5,2.5;3.5,4.5)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.5, 2.5, 0.0), Point3D::new(3.5, 4.5, 0.0)])])]
+    #[case::coordinates_3d(b"|(1,2,3;4,5,6)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0), Point3D::new(4.0, 5.0, 6.0)])])]
+    fn test_parse_extended_cx_annotations(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
+        let result = parse_extended_cx_annotations(input, SmilesParseFlags::default());
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded: {:?}",
+            input_str,
+            result
+        );
+        let entries = result.unwrap();
+        assert_eq!(
+            entries, expected,
+            "{:?} should have parsed to {:?}",
+            input_str, entries
+        );
+    }
+
+    #[rstest]
+    #[case::unknown_and_known_tag(b"|xyz:123,C:0.1|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::unknown_tag(b"|unknown|", ParseError::InvalidCxTag { pos: 0 })]
+    #[case::relative_stereo_with_fragment_list(b"|r:0|", ParseError::InvalidCxTag { pos: 0 })]
+    fn test_parse_extended_cx_annotations_invalid(
+        #[case] input: &[u8],
+        #[case] expected: ParseError,
+    ) {
+        let result = parse_extended_cx_annotations(input, SmilesParseFlags::default());
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_err(),
+            "{:?} should have failed: {:?}",
+            input_str,
+            result
+        );
+        let error = result.unwrap_err();
+        assert_eq!(
+            error, expected,
+            "{:?} should have returned an error: {:?}",
+            input_str, expected
+        );
+    }
+
+    #[rstest]
+    #[case::unknown_and_known_tag(b"|xyz:123,C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
+    #[case::unknown_tag(b"|unknown|", vec![])]
+    fn test_parse_extended_cx_annotations_lenient(
+        #[case] input: &[u8],
+        #[case] expected: Vec<CxEntry>,
+    ) {
+        let flags = SmilesParseFlags::LENIENT;
+        let result = parse_extended_cx_annotations(input, flags);
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_ok(),
+            "{:?} should have succeeded: {:?}",
+            input_str,
+            result
+        );
+        let entries = result.unwrap();
+        assert_eq!(
+            entries, expected,
+            "{:?} should have parsed to {:?}",
+            input_str, entries
+        );
+    }
+
+    #[rstest]
+    #[case::relative_stereo_with_fragment_list(b"|r:0|", SmilesParseFlags::LENIENT)]
+    fn test_parse_extended_cx_annotations_lenient_invalid(
+        #[case] input: &[u8],
+        #[case] flags: SmilesParseFlags,
+    ) {
+        let result = parse_extended_cx_annotations(input, flags);
+        let input_str = input.to_str_lossy();
+        assert!(
+            result.is_err(),
+            "{:?} should have failed: {:?}",
+            input_str,
+            result
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::coordinates(vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0)])], |mol: &Molecule| mol.positions == Some(vec![Point3D::new(1.0, 2.0, 3.0)]))]
     #[case::labels(vec![CxEntry::Labels(vec![(0, "C1".to_string()), (1, "N1".to_string())])], |mol: &Molecule| mol.atoms[0].label == Some("C1".to_string()) && mol.atoms[1].label == Some("N1".to_string()))]
     #[case::values(vec![CxEntry::Values(vec![(0, "val0".to_string())])], |mol: &Molecule| mol.atoms[0].value == Some("val0".to_string()))]
     #[case::radicals(vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None })])],
         |mol: &Molecule| mol.atoms[0].unpaired_electrons == Some(UnpairedElectrons { count: 1, multiplicity: None }))]
-    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, BondWedge::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
+    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, 0, BondWedge::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
     #[case::cis_bonds(vec![CxEntry::CisBonds(vec![0])], |mol: &Molecule| mol.bonds[0].stereo == Some(BondStereo::Cis))]
     #[case::trans_bonds(vec![CxEntry::TransBonds(vec![1])], |mol: &Molecule| mol.bonds[1].stereo == Some(BondStereo::Trans))]
-    #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(0, 2)])], |mol: &Molecule| mol.bonds.len() == 3 && mol.bonds[2].donation == Some(BondDonation::Donating))]
-    #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 2)])], |mol: &Molecule| mol.bonds.len() == 3 && mol.bonds[2].noncovalent == Some(BondNoncovalent::Hydrogen))]
+    #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].donation == Some(BondDonation::Donating))]
+    #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
     #[case::extended_entries(vec![CxEntry::FragmentGroups(vec![vec![0, 1]]), CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0] }),
         CxEntry::RelativeStereo, CxEntry::AtomProperties(vec![(0, "k".to_string(), "v".to_string())])], |mol: &Molecule| mol.atoms[0].label.is_none())]
     fn test_update_molecule(
@@ -866,7 +1125,7 @@ mod tests {
         #[case] check: fn(&Molecule) -> bool,
     ) {
         let mut mol = triatomic_molecule;
-        update_molecule(&mut mol, entries);
+        update_molecule(&mut mol, entries).unwrap();
         assert!(check(&mol));
     }
 
@@ -877,20 +1136,20 @@ mod tests {
     #[case::values(vec![CxEntry::Values(vec![(1, "val1".to_string())])], |mol: &ExtendedMolecule| mol.atoms[1].value == Some("val1".to_string()))]
     #[case::radicals(vec![CxEntry::Radicals(vec![(2, UnpairedElectrons { count: 2, multiplicity: None })])],
         |mol: &ExtendedMolecule| mol.atoms[2].unpaired_electrons == Some(UnpairedElectrons { count: 2, multiplicity: None }))]
-    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, BondWedge::Either)])], |mol: &ExtendedMolecule| mol.bonds[1].wedge == Some(BondWedge::Either))]
+    #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, 0, BondWedge::Either)])], |mol: &ExtendedMolecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
     #[case::cis_bonds(vec![CxEntry::CisBonds(vec![1])], |mol: &ExtendedMolecule| mol.bonds[1].stereo == Some(BondStereo::Cis))]
     #[case::trans_bonds(vec![CxEntry::TransBonds(vec![0])], |mol: &ExtendedMolecule| mol.bonds[0].stereo == Some(BondStereo::Trans))]
-    #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(1, 2)])], |mol: &ExtendedMolecule| mol.bonds.len() == 3 && mol.bonds[2].donation == Some(BondDonation::Donating))]
-    #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 2)])], |mol: &ExtendedMolecule| mol.bonds.len() == 3 && mol.bonds[2].noncovalent == Some(BondNoncovalent::Hydrogen))]
+    #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(1, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].donation == Some(BondDonation::Accepting))]
+    #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
     #[case::fragment_groups(vec![CxEntry::FragmentGroups(vec![vec![0, 1], vec![2]])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| d.components.as_ref()) == Some(Some(&vec![vec![0, 1], vec![2]])))]
     #[case::stereo_group_absolute(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1] })],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_interpretation) == Some(StereoInterpretation::Absolute))]
+        |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Absolute) && mol.cx_data.is_none())]
     #[case::stereo_group_or(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0] })],
         |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&1)) == Some(&StereoSet { atoms: vec![0], mode: StereoSetMode::Correlated }))]
     #[case::stereo_group_and(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(2), atoms: vec![1] })],
         |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&2)) == Some(&StereoSet { atoms: vec![1], mode: StereoSetMode::Independent }))]
     #[case::relative_stereo(vec![CxEntry::RelativeStereo],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_interpretation) == Some(StereoInterpretation::Relative))]
+        |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Relative) && mol.cx_data.is_none())]
     #[case::atom_properties(vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].properties.get("key") == Some(&"value".to_string()))]
     fn test_update_extended_molecule(
         triatomic_extended_molecule: ExtendedMolecule,
@@ -898,7 +1157,7 @@ mod tests {
         #[case] check: fn(&ExtendedMolecule) -> bool,
     ) {
         let mut mol = triatomic_extended_molecule;
-        update_extended_molecule(&mut mol, entries);
+        update_extended_molecule(&mut mol, entries).unwrap();
         assert!(check(&mol));
     }
 }

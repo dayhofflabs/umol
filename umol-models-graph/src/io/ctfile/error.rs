@@ -9,6 +9,16 @@ use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::span::Span;
 use crate::table_ir::SGroupType;
 
+// TODO: Fix error hierarchy:
+// - Remove Incomplete variant -> we never used streaming parsing
+// - Remove NomError variant -> This is  a weird artifact of the recoding from nom -> ParseError
+// - Probably need to keep the nom-based composition at the level of blocks
+// - But need to use some generic ParseError vaariant in nom::ParseError trait impl for ParseError,
+//   weird boilerplate right now
+// - Verify that all ParseError::<Variant> variants map to DiagnosticKind::Ctfile<Variant>
+//   not the case atm
+
+
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
     #[error("Invalid header block at line {line}")]

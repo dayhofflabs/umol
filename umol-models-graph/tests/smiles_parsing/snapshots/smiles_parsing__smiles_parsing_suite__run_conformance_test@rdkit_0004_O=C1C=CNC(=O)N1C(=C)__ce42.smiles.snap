@@ -1,0 +1,12 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon
+category: chemaxon
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C13BrClFN2O2
+    atom_count: 20
+    bond_count: 20

@@ -204,13 +204,17 @@ ChemAxon extension format: `SMILES<ws>|...|`
 - Atom labels: `$name;name;...$`
 - Atom values: `$_AV:value;value;...$`
 - Radicals: `^n:idx,idx,...`
+- Lone pairs: `LP:...`, `lp:...`
 - Wiggly bonds: `w:`, `wU:`, `wD:`
 - Bond stereo markers: `c:`, `t:`, `ctu:`
+- Local parity: `@:...`, `@@:...`
+- Local bicyclo stereo: `THB:...`, `TLB:...`, `TEB:...`
 - Fragment grouping: `f:...`
 - Enhanced stereo: `a:...`, `o<n>:...`, `&<n>:...`
-- Relative stereo: `r` or `r:...`
+- Relative stereo: `r` (flag); `r:...` (fragment indices in reaction/multicomponent cases)
 - Atom properties: `atomProp:...`
-- Other common CX markers (not all implemented): `Sg:`, `RG:`, `rb:`, `s:`, `u:`, `LN:`, `LO:`
+- Polymer/data/Markush: `Sg:...`, `SgD:...`, `SgH:...`, `m:...`, `RG:...`, `LOG:...`, `LO:...`
+- Query-only features (CXSMARTS / query SMILES): `rb:...`, `s:...`, `u:...`
 
 ---
 
@@ -359,9 +363,11 @@ Analyzed 473 failing SMILES. Breakdown by category:
 - [x] Implement `parse_extended_smiles_bytes_with` and all wrapper variants
 - [x] Add wildcard `*` support (standalone and `[*:n]` with atom class)
 - [x] `From<Molecule> for ExtendedMolecule` works
-- [x] Update conformance suite categories: basic_opensmiles, opensmiles, basic_chemaxon, chemaxon, invalid, bug
-- [x] Parser hierarchy enforcement: extended parser must be superset of basic parser
-- [x] Classifier and test suite both verify hierarchy invariant
+- [x] Update conformance suite categories: basic_opensmiles, opensmiles, basic_chemaxon, chemaxon, chemaxon_invalid, invalid, bug
+- [x] Parser hierarchy enforcement:
+  - basic_opensmiles ⊆ opensmiles
+  - basic_chemaxon ⊆ chemaxon
+  - opensmiles ⊆ chemaxon only when there is no CX block (otherwise CX failures are classified as `chemaxon_invalid`)
 - [x] Sum formula for `ExtendedMolecule` now includes wildcards (appended as `*`, `*2`, etc.)
 - [x] Add aromatic `si`, `te` (silicon, tellurium) support (`se`, `as` already present)
 - [x] Feature gate: `EXTENDED_AROMATICS` (applies to both parsers)
@@ -388,7 +394,7 @@ Extended stereo types already parsed per OpenSMILES spec:
 - [x] `Bond::new_dative()` constructor handles `AtomPair` normalization correctly
 - [x] Applied to both basic and extended parsers
 
-### Phase 6: CXSMILES (Group 5) ✓ COMPLETE (basic + extended)
+### Phase 6: CXSMILES (Group 5) ✓ COMPLETE (core subset)
 
 #### 6.1 Integration point: `SMILES<ws>|...|`
 
@@ -404,20 +410,25 @@ This yields four “dialects” that are used consistently across classification
 - `basic_chemaxon`: SMILES + basic CX parsing
 - `chemaxon`: SMILES + wildcards + extended CX parsing
 
+The classifier/conformance suite also uses:
+- `chemaxon_invalid`: SMILES part parses, but CX block is invalid/unhandled in strict CX mode
+
 #### 6.2 CX block parsing: `CxEntry` + basic/extended split
 
 `io/smiles/parser/cx.rs` defines a `CxEntry` enum and two block parsers:
 
-- `parse_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError>`
+- `parse_cx_annotations(input: &[u8], flags: SmilesParseFlags) -> Result<Vec<CxEntry>, ParseError>`
   - Accepts the basic subset.
-  - Returns `InvalidCxProperty` on any known extended-only marker (`f:`, `a:`, `o<n>:`, `&<n>:`,
-    standalone `r`, `atomProp:`, ...).
-- `parse_extended_cx_annotations(input: &[u8]) -> Result<Vec<CxEntry>, ParseError>`
+  - Returns `InvalidCxTag` on any CX tag that is not part of the basic subset (including extended-only tags),
+    unless `flags` contains `SKIP_UNKNOWN_CHEMAXON_TAGS` (then the tag is ignored).
+- `parse_extended_cx_annotations(input: &[u8], flags: SmilesParseFlags) -> Result<Vec<CxEntry>, ParseError>`
   - Accepts the full subset implemented so far.
 
 Both parsers:
 - split entries on commas inside `|...|`
-- skip unknown/unrecognized entries (consume up to next `,` or `|`)
+- if `flags` contains `SKIP_UNKNOWN_CHEMAXON_TAGS`: skip unknown/unrecognized entries (consume up to the next
+  entry boundary)
+- do **not** skip malformed *known* tags, even with `SKIP_UNKNOWN_CHEMAXON_TAGS` enabled
 - support HTML entity escapes for labels/values
 
 Coordinate parsing notes:
@@ -434,15 +445,81 @@ Two application functions exist:
   - ignores extended-only entries
 - `update_extended_molecule(&mut ExtendedMolecule, entries: Vec<CxEntry>)`
   - applies the same per-atom/per-bond data using extended atom/bond types
+  - sets `ExtendedMolecule.stereo_interpretation: Option<StereoInterpretation>` directly from:
+    - `a:` → `Absolute`
+    - `r` → `Relative`
   - populates `ExtendedMolecule.cx_data: Option<CxAnnotationData>` when any of:
-    - `stereo_interpretation: Option<StereoInterpretation>` (from `a:` and `r`)
     - `stereo_groups: HashMap<u32, StereoSet>` (from `o<n>:` and `&<n>:`)
     - `components: Option<Vec<Vec<u32>>>` (from `f:`)
-  - also sets `ExtendedMolecule.stereo_interpretation: Option<StereoInterpretation>` from the CX data
 
-Out-of-range atom/bond indices are currently skipped (no error).
+Out-of-range atom/bond indices are **hard errors** (no skipping):
+- `AtomIndexOutOfBounds`
+- `BondIndexOutOfBounds`
+- `MismatchedAtomBondIndices` (bond-indexed tags where the referenced atom is not incident on the bond)
 
-#### 6.4 Conformance + classification details
+#### 6.4 CXSMILES completeness + correctness work plan (pending)
+
+The implementation above covers the “common” CX blocks seen in typical datasets.
+ChemAxon’s CXSMILES spec includes additional tags, and a few tags we parse today need a
+spec-correct interpretation.
+
+**Correctness fixes (implemented):**
+
+- `C:` / `H:`:
+  - **Spec**: list of `<first_atom_idx>.<bond_idx>` pairs referring to an existing bond in the SMILES part.
+  - **Implemented**: apply by mutating the referenced bond (set `donation` for `C:`, set
+    `noncovalent=Hydrogen` and `order=Zero` for `H:`).
+- `w:` / `wU:` / `wD:`:
+  - **Spec**: list of `<atom_idx>.<bond_idx>` pairs.
+  - **Implemented**: apply wedge to the referenced bond. (TableIR stores wedges relative to the first
+    atom of the normalized `AtomPair`; we may be unable to preserve the “wedge endpoint” if the
+    CX atom index is not that first atom.)
+- `ctu:`:
+  - **Spec**: bond indices with UNSPEC ring double-bond stereo.
+  - **Implemented**: apply as `BondStereo::Either` for the listed bonds.
+- `r` / `r:...`:
+  - **Spec**: `r` marks relative stereoconfiguration; `r:...` lists fragment indices with relative configuration
+    in reaction/multicomponent cases.
+  - **Implemented**: accept standalone `r` for molecule parsing; reject `r:...` as `InvalidCxTag` (not meaningful
+    for `ExtendedMolecule` parsing).
+
+**Additional CXSMILES tags to implement (extended CX only):**
+
+- `Sg:` / `SgD:` / `SgH:`:
+  - **MOL-equivalent**: yes (maps naturally to `ExtendedMolecule.ctfile_data.sgroups: BTreeMap<u32, SGroup>`).
+  - **Plan**: parse S-groups in CX order, assign sequential S-group indices, store into `ctfile_data`.
+- `LN:` link nodes:
+  - **Mostly MOL-equivalent**: partially (closest match is `ExtendedAtom.link_atom: Option<LinkAtom>`).
+  - **Plan**: parse min/max repetition + outer atoms. If needed, extend `LinkAtom` to store
+    both min and max (CTFile currently only stores an upper repeat count).
+- `LO:` ligand order:
+  - **MOL-equivalent**: partially (port/ligand ordering metadata).
+  - **Plan**: store an ordered neighbor list on the central atom (either via `attachment_order` or a
+    dedicated field).
+- `rb:` / `s:` / `u:` query features:
+  - **MOL-equivalent**: yes (maps to `ExtendedAtom.ring_bond_count`, `substitution_count`, `unsaturated`).
+- `LP:` / `lp:` lone electron pairs:
+  - **MOL-equivalent**: partially (`AtomSymbol::LonePair` exists, but the CX tags also encode counts).
+  - **Plan**: implement a typed representation (avoid stuffing into generic properties), then apply.
+- `m:` multicenter bonds / variable attachment:
+  - **Requires additional work**: TableIR currently has no bond-level representation for
+    “variable attachment / end-points” (CTFile analogue: bond ENDPTS/ATTACH).
+  - **Plan**: add a typed bond attachment/endpoints field to `ExtendedBond`, then apply `m:`.
+- `RG:` / `LOG:` Markush:
+  - **LOG** is MOL-equivalent (maps to `ctfile_data.rgroups` metadata).
+  - **RG** requires additional representation for member structures (embedded `{...}` CXSMILES blocks).
+- `@:` / `@@:` and `THB:` / `TLB:` / `TEB:`:
+  - **Requires additional work**: additional stereo metadata not currently represented in TableIR.
+  - **Plan**: parse and preserve in typed CX metadata first (roundtripping), then decide on semantic mapping.
+
+**Suggested implementation order:**
+
+1) Done: Fix `C:`/`H:`/`w:`/`ctu:` semantics + update unit tests.
+2) Implement atom-level query/order tags (`rb:`/`s:`/`u:`, `LO:`, `LN:`) + tests.
+3) Implement S-groups (`Sg:`/`SgD:`/`SgH:`) + tests.
+4) Implement remaining heavy features (`LP:`/`lp:`, `m:`, `RG:`/`LOG:`, `@:`/`@@:`, `THB:`/`TLB:`/`TEB:`).
+
+#### 6.5 Conformance + classification details
 
 Both the conformance driver and the `classify_smiles_strings` tool treat “has CX annotations”
 as an input property, not a parser outcome. The detection uses this regex:
@@ -667,21 +744,27 @@ Indigo-specific extensions. Features include: `w:` (wiggly stereo), `a:` (absolu
 | Atom values `$_AV:...$` | ✓ Parsed | P2 | CXSMILES | Atom values |
 | Radicals `^1:` through `^7:` | ✓ Parsed | P2 | CXSMILES | With spin multiplicity |
 | Enhanced stereo `a:`, `o<n>:`, `&<n>:` | ✓ Parsed | P2 | CXSMILES | Absolute/OR/AND groups |
-| Wiggly bonds `w:`, `wU:`, `wD:` | ✓ Parsed | P2 | CXSMILES | Undefined stereo |
-| CIS/TRANS `c:`, `t:` | ✓ Parsed | P2 | CXSMILES | Double bond stereo |
+| Wiggly bonds `w:`, `wU:`, `wD:` | ✓ Parsed + applied | P2 | CXSMILES | Indexed by bond in spec |
+| CIS/TRANS `c:`, `t:`, `ctu:` | ✓ Parsed + applied | P2 | CXSMILES | Ring double bond stereo |
 | Fragment groups `f:` | ✓ Parsed | P2 | CXSMILES | Fragment grouping |
 | Atom properties `atomProp:` | ✓ Parsed | P3 | CXSMILES | Generic properties |
-| Coordinate bonds `C:` | ✓ Parsed | P3 | CXSMILES | Dative bonds |
-| Hydrogen bonds `H:` | ✓ Parsed | P3 | CXSMILES | H-bond annotation |
-| Relative stereo `r` | ✓ Parsed | P3 | CXSMILES | Relative stereo flag |
+| Coordinate bonds `C:` | ✓ Parsed + applied | P3 | CXSMILES | Indexed by bond in spec |
+| Hydrogen bonds `H:` | ✓ Parsed + applied | P3 | CXSMILES | Indexed by bond in spec |
+| Relative stereo `r` | ✓ Parsed | P3 | CXSMILES | Flag-only (`r`); `r:...` (fragment indices) rejected in molecule parsing |
+| Lone pairs `LP:`, `lp:` | Pending | P3 | CXSMILES | Electron pairs / explicit counts |
+| Local parity `@:`, `@@:` | Pending | P3 | CXSMILES | Additional stereo metadata |
+| Local bicyclo stereo `THB:`, `TLB:`, `TEB:` | Pending | P3 | CXSMILES | Additional stereo metadata |
 | S-groups `Sg:` | Pending | P2 | CXSMILES | Polymers, abbreviations |
-| Ring bond count `rb:` | Skip | P3 | CXSMILES | Query feature |
-| Substitution count `s:` | Skip | P3 | CXSMILES | Query feature |
-| Unsaturation `u:` | Skip | P3 | CXSMILES | Query feature |
-| Atom ordering `o:` | Pending | P3 | CXSMILES | Canonical output |
-| Link nodes `LN:` | Pending | P3 | CXSMILES | Variable attachments |
 | Data S-groups `SgD:` | Pending | P3 | CXSMILES | Embedded data |
-| Multicenter bonds `m:` | Pending | P3 | CXSMILES | Organometallics |
+| S-group hierarchy `SgH:` | Pending | P3 | CXSMILES | Parent-child relations (CX order) |
+| Ligand order `LO:` | Pending | P3 | CXSMILES | Ligand/port ordering metadata |
+| Link nodes `LN:` | Pending | P3 | CXSMILES | Link nodes (repeat ranges) |
+| Ring bond count `rb:` | Pending | P3 | CXSMILES | Query feature (MDL query) |
+| Substitution count `s:` | Pending | P3 | CXSMILES | Query feature (MDL query) |
+| Unsaturation `u:` | Pending | P3 | CXSMILES | Query feature (MDL query) |
+| Multicenter bonds `m:` | Pending | P3 | CXSMILES | Variable attachment / organometallics |
+| R-groups `RG:` | Pending | P2 | CXSMILES | Markush definitions |
+| R-logic `LOG:` | Pending | P2 | CXSMILES | Markush logic / occurrence ranges |
 
 ### 11.4 Uncommon but Interesting Variants
 

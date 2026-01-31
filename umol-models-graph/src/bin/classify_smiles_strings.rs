@@ -5,8 +5,9 @@
 //! - opensmiles: passes extended OpenSMILES parser (with wildcards)
 //! - basic_chemaxon: passes basic Chemaxon parser (no wildcards)
 //! - chemaxon: passes extended Chemaxon parser (with wildcards)
+//! - chemaxon_invalid: SMILES part parses, but CX block is invalid/unhandled
 //! - invalid: fails all parsers
-//! - bug: hierarchy violation (indicates parser inconsistency)
+//! - bug: unexpected parser outcome (indicates parser inconsistency)
 //!
 //! Usage:
 //!   cargo run --bin classify_smiles_strings                    # Show classification stats
@@ -16,7 +17,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::LazyLock;
@@ -242,8 +243,8 @@ impl ParseResults {
             "{}{}{}{}{}",
             if self.has_cx_annotations { "+" } else { "-" },
             if self.basic_opensmiles { "+" } else { "-" },
-            if self.opensmiles { "+" } else { "-" },
             if self.basic_chemaxon { "+" } else { "-" },
+            if self.opensmiles { "+" } else { "-" },
             if self.chemaxon { "+" } else { "-" },
         )
     }
@@ -257,8 +258,16 @@ impl ParseResults {
             );
             return true;
         }
-        // opensmiles → chemaxon
-        if self.opensmiles && !self.chemaxon {
+        // If there's no CX block, basic_chemaxon should behave like basic_opensmiles
+        // and chemaxon should behave like opensmiles.
+        if !self.has_cx_annotations && self.basic_chemaxon && !self.basic_opensmiles {
+            println!(
+                "basic_chemaxon ({}) -> basic_opensmiles ({})",
+                self.basic_chemaxon, self.chemaxon
+            );
+            return true;
+        }
+        if !self.has_cx_annotations && self.opensmiles && !self.chemaxon {
             println!(
                 "opensmiles ({}) -> chemaxon ({})",
                 self.opensmiles, self.chemaxon
@@ -281,7 +290,7 @@ impl ParseResults {
         if self.basic_opensmiles && !self.opensmiles {
             violations.push("basic_opensmiles succeeded but opensmiles failed");
         }
-        if self.opensmiles && !self.chemaxon {
+        if !self.has_cx_annotations && self.opensmiles && !self.chemaxon {
             violations.push("opensmiles succeeded but chemaxon failed");
         }
         if self.basic_chemaxon && !self.chemaxon {
@@ -301,6 +310,7 @@ enum Category {
     Opensmiles,
     BasicChemaxon,
     Chemaxon,
+    ChemaxonInvalid,
     Invalid,
     Bug,
 }
@@ -311,10 +321,17 @@ impl Category {
             return Category::Bug;
         }
         match &results.pattern()[..] {
+            // Pattern: XABCD
+            // X: has_cx
+            // A: basic_opensmiles
+            // B: basic_chemaxon
+            // C: opensmiles
+            // D: chemaxon
             "-++++" => Category::BasicOpensmiles,
+            "---++" => Category::Opensmiles,
             "+++++" => Category::BasicChemaxon,
-            "--+-+" | "+-+-+" => Category::Opensmiles,
-            "+++-+" => Category::Chemaxon,
+            "++-++" | "+--++" => Category::Chemaxon,
+            "++-+-" | "+--+-" => Category::ChemaxonInvalid,
             "-----" | "+----" => Category::Invalid,
             _ => {
                 println!("PATTERN {}", results.pattern());
@@ -330,6 +347,7 @@ impl Category {
             Category::BasicChemaxon => "basic_chemaxon",
             Category::Chemaxon => "chemaxon",
             Category::Invalid => "invalid",
+            Category::ChemaxonInvalid => "chemaxon_invalid",
             Category::Bug => "bug",
         }
     }
@@ -341,6 +359,7 @@ struct ClassificationStats {
     opensmiles: usize,
     basic_chemaxon: usize,
     chemaxon: usize,
+    chemaxon_invalid: usize,
     invalid: usize,
     bug: usize,
     total: usize,
@@ -353,6 +372,7 @@ impl ClassificationStats {
             Category::Opensmiles => self.opensmiles += 1,
             Category::BasicChemaxon => self.basic_chemaxon += 1,
             Category::Chemaxon => self.chemaxon += 1,
+            Category::ChemaxonInvalid => self.chemaxon_invalid += 1,
             Category::Invalid => self.invalid += 1,
             Category::Bug => self.bug += 1,
         }
@@ -405,7 +425,7 @@ fn collect_smi_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
             files.extend(collect_smi_files(&path)?);
         } else {
             let ext = path.extension().and_then(|e| e.to_str());
-            if ext == Some("smi") || ext == Some("smiles") {
+            if ext == Some("smi") || ext == Some("smiles") || ext == Some("cxsmi") {
                 files.push(path);
             }
         }
@@ -419,6 +439,7 @@ fn clean_existing_files(data_path: &str) -> Result<(), Box<dyn Error>> {
         "opensmiles",
         "basic_chemaxon",
         "chemaxon",
+        "chemaxon_invalid",
         "invalid",
         "bug",
     ];
@@ -560,15 +581,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 fs::create_dir_all(&dest_dir)?;
 
                 for (idx, entry) in entries.iter().enumerate() {
-                    // Create filename from index and sanitized SMILES prefix (max 20 chars)
+                    // Create filename from index, sanitized SMILES prefix (max 20 chars),
+                    // and a stable hash suffix to ensure uniqueness for different CX variants
                     let truncated = entry.smiles.len() > 20;
                     let smiles_prefix: String = entry.smiles.chars().take(20).collect();
-                    let suffix = if truncated { "_" } else { "" };
+                    let prefix_suffix = if truncated { "_" } else { "" };
+                    let hash =
+                        murmur3::murmur3_32(&mut Cursor::new(entry.smiles.as_bytes()), 0).unwrap();
                     let filename = format!(
-                        "{:04}_{}{}.smiles",
+                        "{:04}_{}{}_{:04x}.smiles",
                         idx,
                         sanitize_filename(&smiles_prefix),
-                        suffix
+                        prefix_suffix,
+                        (hash & 0xFFFF) as u16
                     );
                     let dest_file = dest_dir.join(&filename);
 
@@ -588,6 +613,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("- **basic_chemaxon**: Requires CHEMAXON_EXTENSIONS (basic parser)");
     println!("- **chemaxon**: Requires CHEMAXON_EXTENSIONS (extended parser)");
     println!("- **invalid**: Fails all parsers\n");
+    println!("- **chemaxon_invalid**: SMILES parses but CX block is invalid/unhandled");
 
     if args.max_samples > 0 {
         println!(
@@ -596,8 +622,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
-    println!("| Source | Total | basic_opensmiles | opensmiles | basic_chemaxon | chemaxon | invalid | bug | Valid % |");
-    println!("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+    println!("| Source | Total | basic_opensmiles | opensmiles | basic_chemaxon | chemaxon | invalid | chemaxon_invalid | bug | Valid % |");
+    println!("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
 
     let mut sources: Vec<_> = source_stats.iter().collect();
     sources.sort_by_key(|(name, _)| name.as_str());
@@ -606,7 +632,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for (source, stats) in &sources {
         println!(
-            "| {} | {} | {} | {} | {} | {} | {} | {} | {:.1}% |",
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {:.1}% |",
             source,
             stats.total,
             stats.basic_opensmiles,
@@ -614,6 +640,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             stats.basic_chemaxon,
             stats.chemaxon,
             stats.invalid,
+            stats.chemaxon_invalid,
             stats.bug,
             stats.valid_percentage()
         );
@@ -622,18 +649,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         totals.opensmiles += stats.opensmiles;
         totals.basic_chemaxon += stats.basic_chemaxon;
         totals.chemaxon += stats.chemaxon;
+        totals.chemaxon_invalid += stats.chemaxon_invalid;
         totals.invalid += stats.invalid;
         totals.bug += stats.bug;
         totals.total += stats.total;
     }
 
     println!(
-        "| **Total** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
+        "| **Total** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{:.1}%** |",
         totals.total,
         totals.basic_opensmiles,
         totals.opensmiles,
         totals.basic_chemaxon,
         totals.chemaxon,
+        totals.chemaxon_invalid,
         totals.invalid,
         totals.bug,
         totals.valid_percentage()

@@ -12,6 +12,7 @@ rand_chacha = "0.9"
 fast-float2 = "0.2.3"
 indexmap = { version = "2.11.1", features = ["serde"] }
 map-macro = "0.3.0"
+murmur3 = "0.5"
 nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
 nom = { version = "8.0.0" }
 num = "0.4.3"

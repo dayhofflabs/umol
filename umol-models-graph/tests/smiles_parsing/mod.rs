@@ -8,6 +8,7 @@
 //! - opensmiles: passes extended OpenSMILES parser (with wildcards)
 //! - basic_chemaxon: requires CHEMAXON_EXTENSIONS (basic parser)
 //! - chemaxon: requires CHEMAXON_EXTENSIONS (extended parser)
+//! - chemaxon_invalid: SMILES part parses, but CX block is invalid/unhandled
 //! - invalid: fails all parsers
 
 use std::fs;
@@ -33,6 +34,7 @@ enum Category {
     BasicChemaxon,
     Chemaxon,
     Invalid,
+    ChemaxonInvalid,
     Bug,
 }
 
@@ -44,6 +46,7 @@ impl Category {
             "basic_chemaxon" => Some(Category::BasicChemaxon),
             "chemaxon" => Some(Category::Chemaxon),
             "invalid" => Some(Category::Invalid),
+            "chemaxon_invalid" => Some(Category::ChemaxonInvalid),
             "bug" => Some(Category::Bug),
             _ => None,
         }
@@ -65,12 +68,15 @@ impl Category {
         ) {
             (false, true, true, true, true) => Category::BasicOpensmiles,
             (true, true, true, true, true) => Category::BasicChemaxon,
-            (false, false, true, false, true) | (true, false, true, false, true) => {
-                Category::Opensmiles
+            (false, false, true, false, true) => Category::Opensmiles,
+            (true, true, true, false, true) | (true, false, true, false, true) => {
+                Category::Chemaxon
             }
-            (true, true, true, false, true) => Category::Chemaxon,
             (false, false, false, false, false) | (true, false, false, false, false) => {
                 Category::Invalid
+            }
+            (true, true, true, false, false) | (true, false, true, false, false) => {
+                Category::ChemaxonInvalid
             }
 
             // Anything else is either a hierarchy violation or a CX-vs-SMILES inconsistency.

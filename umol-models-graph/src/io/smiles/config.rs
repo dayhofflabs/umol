@@ -16,11 +16,15 @@ bitflags! {
         const EXTENDED_BONDS = 1 << 2;     // ->, <-, ~
         const CHEMAXON_EXTENSIONS = 1 << 3; // |...| CXSMILES extension block
 
+        // Input validation strictness
+        const SKIP_UNKNOWN_CHEMAXON_TAGS = 1 << 10; // Skip unknown ChemAxon tags
+
         // Presets
         const BASIC_OPENSMILES = 0;
 
         // Maximum capabilities for basic parser
-        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() | Self::CHEMAXON_EXTENSIONS.bits();
+        const BASIC_MAX =  Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() | Self::CHEMAXON_EXTENSIONS.bits() |
+            Self::SKIP_UNKNOWN_CHEMAXON_TAGS.bits();
 
         // Maximum capabilities for extended parser (everything)
         const EXTENDED_MAX = Self::BASIC_MAX.bits() | Self::WILDCARDS.bits();
@@ -35,9 +39,9 @@ bitflags! {
         // Default for extended parser
         const EXTENDED = Self::BASIC.bits() | Self::STRICT.bits();
 
-        // Lenient parser: Currently same as extended parser
+        // Lenient parser
         const LENIENT = Self::EXTENDED.bits() | Self::EXTENDED_AROMATICS.bits() | Self::EXTENDED_BONDS.bits() |
-            Self::CHEMAXON_EXTENSIONS.bits();
+            Self::CHEMAXON_EXTENSIONS.bits() | Self::SKIP_UNKNOWN_CHEMAXON_TAGS.bits();
 
         // OpenSMILES parser: BASIC_OPENSMILES | WILDCARDS
         const OPENSMILES = Self::BASIC_OPENSMILES.bits() | Self::WILDCARDS.bits();
