@@ -25,7 +25,8 @@ use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
 use crate::table_ir::{
     BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
-    ExtendedMolecule, Molecule, StereoInterpretation, StereoSet, StereoSetMode, UnpairedElectrons,
+    ExtendedMolecule, Molecule, MulticenterBond, MulticenterSet, StereoInterpretation, StereoSet,
+    StereoSetMode, UnpairedElectrons,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -77,6 +78,10 @@ pub enum CxEntry {
     RelativeStereo,
     /// Atom properties: atomProp: (extended only)
     AtomProperties(Vec<(u32, String, String)>),
+    /// Lone pairs: LP:idx,idx,... or lp:idx:count,...
+    LonePairs(Vec<(u32, u8)>),
+    /// Multicenter bonds: m:central:ligand.ligand,...
+    MulticenterBonds(Vec<(u32, Vec<u32>)>),
 }
 
 /// Parse basic CX annotations (for Molecule)
@@ -214,6 +219,31 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                     }
                     bond.order = BondOrder::Zero;
                     bond.noncovalent = Some(BondNoncovalent::Hydrogen);
+                }
+            }
+            CxEntry::LonePairs(pairs) => {
+                for (idx, count) in pairs {
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.lone_pairs = Some(count);
+                }
+            }
+            CxEntry::MulticenterBonds(bonds) => {
+                for (center, ligands) in bonds {
+                    if center as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: center });
+                    }
+                    for &ligand in &ligands {
+                        if ligand as usize >= mol.atoms.len() {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx: ligand });
+                        }
+                    }
+                    let bond = MulticenterBond::new(vec![
+                        MulticenterSet::new(ligands, 0),
+                        MulticenterSet::single(center, 0),
+                    ]);
+                    mol.multicenter_bonds.push(bond);
                 }
             }
             _ => {}
@@ -402,6 +432,31 @@ pub fn update_extended_molecule(
                     atom.properties.insert(key, value);
                 }
             }
+            CxEntry::LonePairs(pairs) => {
+                for (idx, count) in pairs {
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.lone_pairs = Some(count);
+                }
+            }
+            CxEntry::MulticenterBonds(bonds) => {
+                for (center, ligands) in bonds {
+                    if center as usize >= mol.atoms.len() {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: center });
+                    }
+                    for &ligand in &ligands {
+                        if ligand as usize >= mol.atoms.len() {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx: ligand });
+                        }
+                    }
+                    let bond = MulticenterBond::new(vec![
+                        MulticenterSet::new(ligands, 0),
+                        MulticenterSet::single(center, 0),
+                    ]);
+                    mol.multicenter_bonds.push(bond);
+                }
+            }
         }
     }
 
@@ -465,6 +520,8 @@ fn parse_basic_entry(input: &[u8], skip_unknown_cx_tags: bool) -> IResult<&[u8],
         parse_cis_trans,
         parse_coordinate_bonds,
         parse_hydrogen_bonds,
+        parse_lone_pairs,
+        parse_multicenter,
     ))
     .parse(input)
     {
@@ -502,6 +559,8 @@ fn parse_extended_entry(
         parse_cis_trans,
         parse_coordinate_bonds,
         parse_hydrogen_bonds,
+        parse_lone_pairs,
+        parse_multicenter,
         parse_fragment_groups,
         parse_stereo_absolute,
         parse_stereo_or_and,
@@ -681,6 +740,44 @@ fn parse_hydrogen_bonds(input: &[u8]) -> IResult<&[u8], CxEntry> {
     .parse(input)?;
 
     Ok((input, CxEntry::HydrogenBonds(pairs)))
+}
+
+/// Parse lone pairs: `LP:idx,idx,...` (unspecified count) or `lp:idx:count,...` (explicit count).
+fn parse_lone_pairs(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    // Try lp: format first (has explicit counts)
+    if let Ok((input, _)) = tag::<_, _, NomError<&[u8]>>("lp:")(input) {
+        let parse_entry = separated_pair(nom_u32, char(':'), nom_u32);
+        let (input, entries) =
+            separated_list0(comma_not_before_entry, parse_entry).parse(input)?;
+        let result: Vec<_> = entries
+            .into_iter()
+            .map(|(idx, count)| (idx, count as u8))
+            .collect();
+        return Ok((input, CxEntry::LonePairs(result)));
+    }
+
+    // LP: format (implicit count, treated as 1 per atom)
+    let (input, indices) =
+        preceded(tag("LP:"), separated_list0(comma_not_before_entry, nom_u32)).parse(input)?;
+    let result: Vec<_> = indices.into_iter().map(|idx| (idx, 1u8)).collect();
+    Ok((input, CxEntry::LonePairs(result)))
+}
+
+/// Parse multicenter bonds: `m:central:ligand.ligand,...`
+fn parse_multicenter(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let (input, _) = tag("m:").parse(input)?;
+
+    let parse_entry = |i| {
+        let (i, center) = nom_u32.parse(i)?;
+        let (i, _) = char(':').parse(i)?;
+        let (i, ligands) = separated_list0(char('.'), nom_u32).parse(i)?;
+        Ok((i, (center, ligands)))
+    };
+
+    let (input, entries) =
+        separated_list0(comma_not_before_entry, parse_entry).parse(input)?;
+
+    Ok((input, CxEntry::MulticenterBonds(entries)))
 }
 
 /// Parse fragment groups: `f:atom.atom.atom,...`
