@@ -4,8 +4,8 @@ use umol_data::Element;
 
 use super::*;
 use crate::table_ir::{
-    Atom, AtomStereoCare, Bond, BondOrder, ConversionError, ExtendedAtom, ExtendedBond, RGroup,
-    RGroupOccurrence, SGroup, SGroupType, SourceFormat,
+    Atom, AtomStereoCare, Bond, BondOrder, ConversionError, ExtendedAtom, ExtendedBond,
+    MulticenterSet, RGroup, RGroupOccurrence, SGroup, SGroupType, SourceFormat,
 };
 
 #[test]
@@ -27,9 +27,10 @@ fn test_molecule_with_atoms_and_bonds() {
         bonds: vec![Bond::new(0, 1, BondOrder::Single)],
         rings: vec![],
         positions: None,
+        multicenter_bonds: vec![],
+        stereo_interpretation: None,
         comments: vec![],
         properties: IndexMap::new(),
-        stereo_interpretation: None,
         source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.atom_count(), 2);
@@ -49,8 +50,9 @@ fn test_molecule_atom_count() {
         bonds: vec![],
         rings: vec![],
         positions: None,
-        comments: vec![],
+        multicenter_bonds: vec![],
         stereo_interpretation: None,
+        comments: vec![],
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -71,12 +73,39 @@ fn test_molecule_bond_count() {
         ],
         rings: vec![],
         positions: None,
-        comments: vec![],
+        multicenter_bonds: vec![],
         stereo_interpretation: None,
+        comments: vec![],
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
     assert_eq!(mol.bond_count(), 2);
+}
+
+#[test]
+fn test_molecule_multicenter_bond_count() {
+    let mol = Molecule {
+        atoms: vec![
+            Atom::aliphatic_atom(Element::C),
+            Atom::aliphatic_atom(Element::C),
+            Atom::aliphatic_atom(Element::C),
+        ],
+        bonds: vec![
+            Bond::new(0, 1, BondOrder::Single),
+            Bond::new(1, 2, BondOrder::Single),
+        ],
+        rings: vec![],
+        positions: None,
+        multicenter_bonds: vec![
+            MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 2], 3)]),
+            MulticenterBond::new(vec![MulticenterSet::new(vec![3, 4, 5], 2)]),
+        ],
+        stereo_interpretation: None,
+        comments: vec![],
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
+    };
+    assert_eq!(mol.multicenter_bond_count(), 2);
 }
 
 #[test]
@@ -86,8 +115,9 @@ fn test_molecule_sum_formula_simple() {
         bonds: vec![],
         rings: vec![],
         positions: None,
-        comments: vec![],
+        multicenter_bonds: vec![],
         stereo_interpretation: None,
+        comments: vec![],
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -107,8 +137,9 @@ fn test_molecule_sum_formula_with_hydrogen() {
         bonds: vec![],
         rings: vec![],
         positions: None,
-        comments: vec![],
+        multicenter_bonds: vec![],
         stereo_interpretation: None,
+        comments: vec![],
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -124,8 +155,9 @@ fn test_molecule_sum_formula_with_charge() {
         bonds: vec![],
         rings: vec![],
         positions: None,
-        comments: vec![],
+        multicenter_bonds: vec![],
         stereo_interpretation: None,
+        comments: vec![],
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -145,8 +177,9 @@ fn test_molecule_sum_formula_multiple_elements() {
         bonds: vec![],
         rings: vec![],
         positions: None,
-        comments: vec![],
+        multicenter_bonds: vec![],
         stereo_interpretation: None,
+        comments: vec![],
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
@@ -160,8 +193,12 @@ fn test_extended_molecule_empty() {
     assert!(ext.atoms.is_empty());
     assert!(ext.bonds.is_empty());
     assert!(ext.rings.is_empty());
+    assert!(ext.positions.is_none());
+    assert!(ext.multicenter_bonds.is_empty());
     assert!(ext.fragments.is_empty());
     assert!(ext.links.is_empty());
+    assert!(ext.electrons.is_none());
+    assert!(ext.stereo_interpretation.is_none());
     assert!(ext.properties.is_empty());
     assert!(ext.comments.is_empty());
     assert_eq!(ext.source_format, SourceFormat::UNKNOWN);
@@ -176,11 +213,12 @@ fn test_extended_molecule_direct_construction() {
         bonds: vec![ExtendedBond::new(0, 0, BondOrder::Single)],
         rings: vec![],
         positions: None,
+        multicenter_bonds: vec![],
         fragments: vec![],
         links: vec![],
         electrons: Some(0),
-        comments: vec!["test".to_string()],
         stereo_interpretation: None,
+        comments: vec!["test".to_string()],
         properties: IndexMap::new(),
         ctfile_data: None,
         cx_data: None,
@@ -203,8 +241,9 @@ fn test_extended_molecule_from_molecule() {
         bonds: vec![Bond::new(0, 1, BondOrder::Double)],
         rings: vec![],
         positions: None,
-        comments: vec![],
+        multicenter_bonds: vec![],
         stereo_interpretation: None,
+        comments: vec![],
         properties: IndexMap::new(),
         source_format: SourceFormat::MOL,
     };
@@ -232,6 +271,22 @@ fn test_extended_molecule_bond_count() {
     ext.bonds.push(ExtendedBond::new(0, 1, BondOrder::Single));
     ext.bonds.push(ExtendedBond::new(1, 2, BondOrder::Double));
     assert_eq!(ext.bond_count(), 2);
+}
+
+#[test]
+fn test_extended_molecule_multicenter_bond_count() {
+    let mut ext = ExtendedMolecule::empty();
+    ext.multicenter_bonds
+        .push(MulticenterBond::new(vec![MulticenterSet::new(
+            vec![0, 1, 2],
+            3,
+        )]));
+    ext.multicenter_bonds
+        .push(MulticenterBond::new(vec![MulticenterSet::new(
+            vec![3, 4, 5],
+            2,
+        )]));
+    assert_eq!(ext.multicenter_bond_count(), 2);
 }
 
 #[test]

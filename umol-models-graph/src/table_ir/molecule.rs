@@ -16,10 +16,11 @@ use super::atom::{Atom, AtomSymbol, ExtendedAtom};
 use super::bond::{Bond, ExtendedBond};
 use super::ctfile_data::CtfileData;
 use super::cx_data::CxAnnotationData;
+use super::multicenter::MulticenterBond;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
-use super::stereo::StereoInterpretation;
 use super::source::SourceFormat;
+use super::stereo::StereoInterpretation;
 use super::topology::{Fragment, Link, Ring};
 use super::utils::{element_symbol_key, format_sum_formula};
 use crate::position::Point3D;
@@ -31,8 +32,9 @@ pub struct Molecule {
     pub bonds: Vec<Bond>,
     pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
-    pub comments: Vec<String>,
+    pub multicenter_bonds: Vec<MulticenterBond>,
     pub stereo_interpretation: Option<StereoInterpretation>,
+    pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
     pub source_format: SourceFormat,
 }
@@ -44,8 +46,9 @@ impl Molecule {
             bonds: Vec::new(),
             rings: Vec::new(),
             positions: None,
-            comments: Vec::new(),
+            multicenter_bonds: Vec::new(),
             stereo_interpretation: None,
+            comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::UNKNOWN,
         }
@@ -57,6 +60,10 @@ impl Molecule {
 
     pub fn bond_count(&self) -> usize {
         self.bonds.len()
+    }
+
+    pub fn multicenter_bond_count(&self) -> usize {
+        self.multicenter_bonds.len()
     }
 
     /// Get sum formula in Hill notation (C first, H second, then alphabetically)
@@ -94,23 +101,20 @@ impl Molecule {
 /// This is a flat structure using ExtendedAtom and ExtendedBond.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExtendedMolecule {
-    // Core structure with extended atom/bond types
     pub atoms: Vec<ExtendedAtom>,
     pub bonds: Vec<ExtendedBond>,
     pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
+    pub multicenter_bonds: Vec<MulticenterBond>,
 
-    // Additional structure
     pub fragments: Vec<Fragment>,
     pub links: Vec<Link>,
     pub electrons: Option<u32>,
 
-    // Properties and metadata
-    pub comments: Vec<String>,
     pub stereo_interpretation: Option<StereoInterpretation>,
+    pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
 
-    // Format-specific data for roundtripping
     pub ctfile_data: Option<CtfileData>,
     pub cx_data: Option<CxAnnotationData>,
 
@@ -124,11 +128,12 @@ impl ExtendedMolecule {
             bonds: Vec::new(),
             rings: Vec::new(),
             positions: None,
+            multicenter_bonds: Vec::new(),
             fragments: Vec::new(),
             links: Vec::new(),
             electrons: None,
-            comments: Vec::new(),
             stereo_interpretation: None,
+            comments: Vec::new(),
             properties: IndexMap::new(),
             ctfile_data: None,
             cx_data: None,
@@ -142,6 +147,10 @@ impl ExtendedMolecule {
 
     pub fn bond_count(&self) -> usize {
         self.bonds.len()
+    }
+
+    pub fn multicenter_bond_count(&self) -> usize {
+        self.multicenter_bonds.len()
     }
 
     /// Get sum formula in Hill notation (C first, H second, then alphabetically)
@@ -225,6 +234,7 @@ impl ExtendedMolecule {
                 .collect::<Result<Vec<_>, _>>()?,
             rings: self.rings.clone(),
             positions: self.positions.clone(),
+            multicenter_bonds: self.multicenter_bonds.clone(),
             comments: self.comments.clone(),
             stereo_interpretation: self.stereo_interpretation,
             properties: self.properties.clone(),
@@ -308,11 +318,12 @@ impl From<Molecule> for ExtendedMolecule {
             bonds: mol.bonds.into_iter().map(ExtendedBond::from).collect(),
             rings: mol.rings,
             positions: mol.positions,
+            multicenter_bonds: mol.multicenter_bonds,
             fragments: Vec::new(),
             links: Vec::new(),
             electrons: None,
-            comments: mol.comments,
             stereo_interpretation: mol.stereo_interpretation,
+            comments: mol.comments,
             properties: mol.properties,
             ctfile_data: None,
             cx_data: None,
