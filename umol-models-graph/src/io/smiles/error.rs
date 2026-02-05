@@ -75,6 +75,8 @@ pub enum ParseError {
     BondIndexOutOfBounds { bond_idx: u32 },
     #[error("Mismatched atom/bond indices: atom {atom_idx} is not incident on bond {bond_idx}")]
     MismatchedAtomBondIndices { atom_idx: u32, bond_idx: u32 },
+    #[error("S-group index out of bounds: {sgroup_idx}")]
+    SgroupIndexOutOfBounds { sgroup_idx: u32 },
 }
 
 impl From<ParseError> for Diagnostic {
@@ -214,6 +216,7 @@ impl From<ParseError> for Diagnostic {
             AtomIndexOutOfBounds { .. } => (SmilesAtomIndexOutOfBounds, None),
             BondIndexOutOfBounds { .. } => (SmilesBondIndexOutOfBounds, None),
             MismatchedAtomBondIndices { .. } => (SmilesMismatchedAtomBondIndices, None),
+            SgroupIndexOutOfBounds { .. } => (SmilesInvalidCxTag, None),
         };
 
         Diagnostic {

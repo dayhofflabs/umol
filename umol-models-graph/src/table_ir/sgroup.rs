@@ -66,10 +66,13 @@ pub enum SGroupMultiplier {
 }
 
 /// SGroup bracket coordinates
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SGroupBracketCoords {
     pub bracket1: (f64, f64),
     pub bracket2: (f64, f64),
+    /// Additional points for 4-coordinate bracket (CXSMILES field 8). None for 2-point (CTFile SDI).
+    pub bracket3: Option<(f64, f64)>,
+    pub bracket4: Option<(f64, f64)>,
 }
 
 /// SGroup connecting bond
@@ -82,8 +85,21 @@ pub struct SGroupConnectingBond {
 /// SGroup bracket style
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SGroupBracketStyle {
-    Default, // 0 = default brackets
-    Curved,  // 1 = curved (parenthetic) brackets
+    Default, // 0 = default brackets, CX: b
+    Curved,  // 1 = curved (parenthetic) brackets, CX: c
+    /// CXSMILES type r (exact mapping TBD)
+    TypeR,
+    /// CXSMILES type s (exact mapping TBD)
+    TypeS,
+}
+
+/// SGroup bracket orientation (CXSMILES field 8)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SGroupBracketOrientation {
+    /// CX: s
+    Straight,
+    /// CX: d
+    Down,
 }
 
 /// SGroup data type
@@ -155,6 +171,8 @@ pub struct SGroup {
     pub hierarchy_parent: Option<u32>,
     pub component_number: Option<u32>,
     pub bracket_style: Option<SGroupBracketStyle>,
+    pub bracket_orientation: Option<SGroupBracketOrientation>,
+    pub connectivity_flip: Option<bool>,
     pub data: Option<SGroupData>,
     pub multiplier: Option<SGroupMultiplier>,
     pub bracket_coords: Option<SGroupBracketCoords>,
@@ -178,6 +196,8 @@ impl SGroup {
             hierarchy_parent: None,
             component_number: None,
             bracket_style: None,
+            bracket_orientation: None,
+            connectivity_flip: None,
             data: None,
             multiplier: None,
             bracket_coords: None,

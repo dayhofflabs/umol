@@ -5,9 +5,14 @@ use std::collections::HashMap;
 use regex::Regex;
 use umol_data::Element;
 
-use super::super::builder::{AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
+use super::super::builder::{
+    AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,
+};
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondDonation, BondWedge, BondOrder, Chirality, ExtendedMolecule, Molecule, Ring, WildcardAtom};
+use crate::table_ir::{
+    AtomSymbol, BondDonation, BondOrder, BondWedge, Chirality, ExtendedMolecule, Molecule, Ring,
+    WildcardAtom,
+};
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
 pub fn get_atom_neighbors(mol: &Molecule, atom_idx: u32) -> Vec<u32> {
@@ -53,7 +58,9 @@ pub fn get_extended_atom_neighbors(mol: &ExtendedMolecule, atom_idx: u32) -> Vec
 
 /// Finds the first chiral atom in an ExtendedMolecule.
 /// Returns (atom_index, element, chirality, sorted_neighbors) or None if no chiral atom found.
-pub fn find_extended_chiral_center(mol: &ExtendedMolecule) -> Option<(usize, Element, Chirality, Vec<u32>)> {
+pub fn find_extended_chiral_center(
+    mol: &ExtendedMolecule,
+) -> Option<(usize, Element, Chirality, Vec<u32>)> {
     for (idx, atom) in mol.atoms.iter().enumerate() {
         if let Some(chir) = atom.chirality {
             if let AtomSymbol::Element(el) = atom.symbol {
@@ -177,7 +184,11 @@ fn parse_bond_token(
     } else if spec_part == ":" {
         ":" // just ':' means aromatic
     } else if let Some(s) = spec_part.strip_prefix(':') {
-        if s.is_empty() { ":" } else { s }
+        if s.is_empty() {
+            ":"
+        } else {
+            s
+        }
     } else {
         spec_part // no colon prefix
     };
@@ -460,22 +471,18 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
             }
         }
         let id = match sym {
-            ExtendedAtomSymbol::Wildcard => {
-                b.on_wildcard(WildcardAtom::Any, None, start, end)
-            }
-            ExtendedAtomSymbol::Element(el) => {
-                b.on_atom(ExtendedAtomData {
-                    symbol: AtomSymbol::Element(el),
-                    aromatic: arom,
-                    implicit_hydrogens: true,
-                    isotope: None,
-                    charge: None,
-                    hydrogen_count: None,
-                    class: None,
-                    chirality: None,
-                    span: Span::from_bytes_opt(start, end),
-                })
-            }
+            ExtendedAtomSymbol::Wildcard => b.on_wildcard(WildcardAtom::Any, None, start, end),
+            ExtendedAtomSymbol::Element(el) => b.on_atom(ExtendedAtomData {
+                symbol: AtomSymbol::Element(el),
+                aromatic: arom,
+                implicit_hydrogens: true,
+                isotope: None,
+                charge: None,
+                hydrogen_count: None,
+                class: None,
+                chirality: None,
+                span: Span::from_bytes_opt(start, end),
+            }),
         };
         if let (Some(s), Some(e)) = (start, end) {
             atom_span_map.insert(s, e);

@@ -89,6 +89,7 @@ proptest! {
                 | ParseError::AtomIndexOutOfBounds { .. } => true,
                 | ParseError::BondIndexOutOfBounds { .. } => true,
                 | ParseError::MismatchedAtomBondIndices { .. } => true,
+                | ParseError::SgroupIndexOutOfBounds { .. } => true,
             };
             prop_assert!(ok, "error positions out of bounds: {:?}, len={}", err, len);
         }

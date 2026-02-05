@@ -6,7 +6,7 @@ use umol_data::Element;
 
 use crate::span::Span;
 use crate::table_ir::{
-    Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondWedge, BondOrder, Chirality, ExtendedAtom,
+    Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, Chirality, ExtendedAtom,
     ExtendedBond, ExtendedMolecule, Molecule, Ring, WildcardAtom,
 };
 
@@ -252,6 +252,7 @@ impl ExtendedMoleculeBuilder {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
@@ -307,6 +308,7 @@ impl ExtendedMoleculeBuilder {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
@@ -347,6 +349,7 @@ impl ExtendedMoleculeBuilder {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,

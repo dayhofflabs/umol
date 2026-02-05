@@ -25,6 +25,42 @@ use super::topology::{Fragment, Link, Ring};
 use super::utils::{element_symbol_key, format_sum_formula};
 use crate::position::Point3D;
 
+/// View over SGroups from ctfile_data and cx_data, chained for iteration.
+#[derive(Clone, Debug)]
+pub struct SgroupsView<'a> {
+    ctfile: Option<&'a BTreeMap<u32, SGroup>>,
+    cx: Option<&'a BTreeMap<u32, SGroup>>,
+}
+
+impl<'a> SgroupsView<'a> {
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.ctfile.map(|m| m.len()).unwrap_or(0) + self.cx.map(|m| m.len()).unwrap_or(0)
+    }
+
+    pub fn get(&self, key: &u32) -> Option<&'a SGroup> {
+        self.ctfile
+            .and_then(|m| m.get(key))
+            .or_else(|| self.cx.and_then(|m| m.get(key)))
+    }
+
+    pub fn contains_key(&self, key: &u32) -> bool {
+        self.ctfile.map_or(false, |m| m.contains_key(key))
+            || self.cx.map_or(false, |m| m.contains_key(key))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (u32, &'a SGroup)> {
+        self.ctfile
+            .into_iter()
+            .flat_map(|m| m.iter())
+            .chain(self.cx.into_iter().flat_map(|m| m.iter()))
+            .map(|(k, v)| (*k, v))
+    }
+}
+
 /// Basic molecule IR
 #[derive(Clone, Debug, PartialEq)]
 pub struct Molecule {
@@ -242,24 +278,26 @@ impl ExtendedMolecule {
         })
     }
 
-    /// Get reference to SGroups (CTFile-specific)
-    /// Returns empty map if ctfile_data is not present
-    pub fn sgroups(&self) -> &BTreeMap<u32, SGroup> {
-        static EMPTY: LazyLock<BTreeMap<u32, SGroup>> = LazyLock::new(BTreeMap::new);
-
-        self.ctfile_data
-            .as_ref()
-            .map(|d| &d.sgroups)
-            .unwrap_or(&*EMPTY)
+    /// View over SGroups from both ctfile_data and cx_data.
+    /// Iteration yields ctfile sgroups first, then cx sgroups.
+    /// Lookup checks ctfile first, then cx.
+    pub fn sgroups(&self) -> SgroupsView<'_> {
+        SgroupsView {
+            ctfile: self.ctfile_data.as_ref().map(|d| &d.sgroups),
+            cx: self.cx_data.as_ref().map(|c| &c.sgroups),
+        }
     }
 
-    /// Get mutable reference to SGroups (CTFile-specific)
-    /// Initializes ctfile_data if not present
+    /// Get mutable reference to SGroups
+    /// Uses ctfile_data if present, else cx_data (creating it if needed)
     pub fn sgroups_mut(&mut self) -> &mut BTreeMap<u32, SGroup> {
-        if self.ctfile_data.is_none() {
-            self.ctfile_data = Some(CtfileData::default());
+        if self.ctfile_data.is_some() {
+            return &mut self.ctfile_data.as_mut().unwrap().sgroups;
         }
-        &mut self.ctfile_data.as_mut().unwrap().sgroups
+        if self.cx_data.is_none() {
+            self.cx_data = Some(CxAnnotationData::default());
+        }
+        &mut self.cx_data.as_mut().unwrap().sgroups
     }
 
     /// Get reference to RGroups (CTFile-specific)

@@ -7,8 +7,8 @@ use umol_data::{Element, Isotope};
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomSymbol, AttachmentPointType,
-    BondWedge, BondOrder, BondReactingCenter, BondStereo, BondTopology, Chirality,
-    RingBondCount, SubstitutionCount, UnsaturatedAtom,
+    BondOrder, BondReactingCenter, BondStereo, BondTopology, BondWedge, Chirality, RingBondCount,
+    SubstitutionCount, UnsaturatedAtom,
 };
 
 /// Convert atom symbol and mass difference to element and isotope mass

@@ -159,7 +159,6 @@ fn build_molecule(
     properties: Vec<PropertyEntries>,
     flags: CtabParseFlags,
 ) -> Result<Molecule, ParseError> {
-
     let mut molecule = Molecule {
         atoms,
         bonds,
@@ -189,7 +188,6 @@ fn build_extended_molecule(
     properties: Vec<PropertyEntries>,
     flags: CtabParseFlags,
 ) -> Result<ExtendedMolecule, ParseError> {
-
     let mut molecule = ExtendedMolecule {
         atoms,
         bonds,

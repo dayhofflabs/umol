@@ -18,8 +18,7 @@ use crate::table_ir::{
     LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount, SGroup,
     SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay,
     SGroupMultiplier, SGroupSubtype, SGroupType, StereoInterpretation, SubstitutionCount,
-    UnpairedElectrons,
-    UnsaturatedAtom,
+    UnpairedElectrons, UnsaturatedAtom,
 };
 
 /// Accumulator for global molecule properties
@@ -221,6 +220,7 @@ impl PropertyAccumulator {
                         )));
                     }
                     props.link_atom = Some(LinkAtom {
+                        min_repeat: 0,
                         repeat_count: entry.repeat_count,
                         subs_index1: entry.subs_index1,
                         subs_index2: entry.subs_index2,
@@ -409,6 +409,8 @@ impl PropertyAccumulator {
                 props.bracket_coords = Some(SGroupBracketCoords {
                     bracket1: (entry.bracket_coords[0], entry.bracket_coords[1]),
                     bracket2: (entry.bracket_coords[2], entry.bracket_coords[3]),
+                    bracket3: None,
+                    bracket4: None,
                 });
             }
             PropertyEntries::SGroupConnectingBondEntry(entry) => {

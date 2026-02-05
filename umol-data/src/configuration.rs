@@ -3,9 +3,9 @@ use std::cmp;
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::Deref;
+use std::sync::LazyLock;
 
 use map_macro::hash_map;
-use std::sync::LazyLock;
 
 use crate::{e, occ, Element, Occupation, MAX_UNPAIRED_ELECTRONS};
 

@@ -487,7 +487,15 @@ spec-correct interpretation.
 
 - `Sg:` / `SgD:` / `SgH:`:
   - **MOL-equivalent**: yes (maps naturally to `ExtendedMolecule.ctfile_data.sgroups: BTreeMap<u32, SGroup>`).
-  - **Plan**: parse S-groups in CX order, assign sequential S-group indices, store into `ctfile_data`.
+  - **Implemented**: parse S-groups in CX order, assign sequential S-group indices, store into `ctfile_data`.
+  - **Stored**: Sg: type, subtype, atoms, subscript, connectivity, bond_indices (head+tail), bracket_orientation, bracket_style, bracket_coords (2 or 4 points), connectivity_flip. SgD: atoms, field_name, data_content, query_operator, field_units, query_identifier, bracket_coords (when numeric). SgH: hierarchy_parent on child S-groups.
+  - **For discussion**:
+    - SgD coords `(-1)` — atom-attached: we do not set `bracket_coords` and do not store that it was `(-1)` vs absent. Round-trip or display may need an explicit flag.
+    - `SGroupBracketStyle::TypeR` and `TypeS` (CX bracket types `r`/`s`): exact semantics TBD; stored as-is.
+    - Sg type keywords for Superatom (SUP) and MultipleGroup (MUL): not mapped; unknown keywords rejected.
+    - Connectivity flip format: parsed as `ht,1` / `ht,flip` / `ht,0`; ChemAxon format not confirmed.
+    - SgD multi-line `data_content`: spec allows it; we use `Some(vec![s])`; multi-line would need different delimiter/escaping.
+    - `take_until_entry_boundary`: now requires `:` after tag name (e.g. `,Sg:`) so bracket coords `s,b,1,2,3,4` are not split at `,b`; any CX tag with comma+letter without `:` could be affected.
 - `LN:` link nodes:
   - **Mostly MOL-equivalent**: partially (closest match is `ExtendedAtom.link_atom: Option<LinkAtom>`).
   - **Plan**: parse min/max repetition + outer atoms. If needed, extend `LinkAtom` to store
@@ -516,7 +524,7 @@ spec-correct interpretation.
 
 1) Done: Fix `C:`/`H:`/`w:`/`ctu:` semantics + update unit tests.
 2) Implement atom-level query/order tags (`rb:`/`s:`/`u:`, `LO:`, `LN:`) + tests.
-3) Implement S-groups (`Sg:`/`SgD:`/`SgH:`) + tests.
+3) Done: S-groups (`Sg:`/`SgD:`/`SgH:`) + tests.
 4) Implement remaining heavy features (`LP:`/`lp:`, `m:`, `RG:`/`LOG:`, `@:`/`@@:`, `THB:`/`TLB:`/`TEB:`).
 
 #### 6.5 Conformance + classification details

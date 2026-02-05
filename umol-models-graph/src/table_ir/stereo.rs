@@ -12,4 +12,3 @@ pub enum StereoInterpretation {
     /// Stereochemistry is intended to be relative (relationships without absolute assignment).
     Relative,
 }
-

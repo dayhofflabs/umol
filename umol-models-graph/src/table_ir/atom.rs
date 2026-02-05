@@ -17,11 +17,17 @@ pub struct UnpairedElectrons {
 
 impl UnpairedElectrons {
     pub fn new(count: u8, multiplicity: Option<SpinMultiplicity>) -> Self {
-        Self { count, multiplicity }
+        Self {
+            count,
+            multiplicity,
+        }
     }
 
     pub fn from_count(count: u8) -> Self {
-        Self { count, multiplicity: None }
+        Self {
+            count,
+            multiplicity: None,
+        }
     }
 }
 
@@ -267,6 +273,7 @@ pub struct ExtendedAtom {
     pub exact_change: Option<AtomExactChange>,
     pub attachment_point: Option<AttachmentPointType>,
     pub attachment_order: Option<Vec<(u32, u8)>>,
+    pub ligand_order: Option<Vec<(u32, u8)>>,
     pub ring_bond_count: Option<RingBondCount>,
     pub substitution_count: Option<SubstitutionCount>,
     pub unsaturated: Option<UnsaturatedAtom>,
@@ -299,6 +306,7 @@ impl ExtendedAtom {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
@@ -329,6 +337,7 @@ impl ExtendedAtom {
             || self.exact_change.is_some()
             || self.attachment_point.is_some()
             || self.attachment_order.is_some()
+            || self.ligand_order.is_some()
             || self.ring_bond_count.is_some()
             || self.substitution_count.is_some()
             || self.unsaturated.is_some()
@@ -366,6 +375,7 @@ impl From<Atom> for ExtendedAtom {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
@@ -484,6 +494,7 @@ pub struct UnsaturatedAtom;
 /// CTFile extension
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LinkAtom {
+    pub min_repeat: u8,
     pub repeat_count: u8,
     pub subs_index1: u32,
     pub subs_index2: Option<u32>,
@@ -546,7 +557,10 @@ mod tests {
         assert!(!extended.implicit_hydrogens);
         assert_eq!(extended.valence, Some(3));
         assert_eq!(extended.lone_pairs, None);
-        assert_eq!(extended.unpaired_electrons, Some(UnpairedElectrons::from_count(1)));
+        assert_eq!(
+            extended.unpaired_electrons,
+            Some(UnpairedElectrons::from_count(1))
+        );
         assert_eq!(extended.aromatic, Some(true));
         assert_eq!(extended.chirality, Some(Chirality::Clockwise));
         assert_eq!(extended.class, Some(5));
@@ -575,6 +589,7 @@ mod tests {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
@@ -632,6 +647,7 @@ mod tests {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
@@ -670,6 +686,7 @@ mod tests {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,
@@ -703,6 +720,7 @@ mod tests {
             exact_change: None,
             attachment_point: None,
             attachment_order: None,
+            ligand_order: None,
             ring_bond_count: None,
             substitution_count: None,
             unsaturated: None,

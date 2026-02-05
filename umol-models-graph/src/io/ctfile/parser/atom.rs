@@ -561,6 +561,7 @@ pub fn extended_atom_input<'inp>(
                     link_atom: None,
                     attachment_point: None,
                     attachment_order: None,
+                    ligand_order: None,
                     properties: std::collections::HashMap::new(),
                 },
                 position,

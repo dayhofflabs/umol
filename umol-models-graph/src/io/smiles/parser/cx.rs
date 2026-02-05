@@ -5,15 +5,15 @@
 //! - `parse_cx_annotations`: basic annotations only (for Molecule)
 //! - `parse_extended_cx_annotations`: all annotations (for ExtendedMolecule)
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use bstr::ByteSlice;
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take_while1};
+use nom::bytes::complete::{tag, take_while, take_while1};
 use nom::character::complete::{char, one_of, satisfy, u32 as nom_u32};
-use nom::combinator::{not, opt, value};
+use nom::combinator::{not, opt, peek, value};
 use nom::error::{Error as NomError, ErrorKind};
-use nom::multi::{many1, separated_list0};
+use nom::multi::{count, many1, separated_list0};
 use nom::number::complete::double;
 use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Err, IResult, Parser};
@@ -25,8 +25,10 @@ use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
 use crate::table_ir::{
     BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
-    ExtendedMolecule, Molecule, MulticenterBond, MulticenterSet, StereoInterpretation, StereoSet,
-    StereoSetMode, UnpairedElectrons,
+    ExtendedMolecule, LinkAtom, Molecule, MulticenterBond, MulticenterSet, RingBondCount, SGroup,
+    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
+    SGroupData, SGroupDataType, SGroupSubtype, SGroupType, StereoInterpretation, StereoSet,
+    StereoSetMode, SubstitutionCount, UnpairedElectrons, UnsaturatedAtom,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -82,6 +84,22 @@ pub enum CxEntry {
     LonePairs(Vec<(u32, u8)>),
     /// Multicenter bonds: m:central:ligand.ligand,...
     MulticenterBonds(Vec<(u32, Vec<u32>)>),
+    /// Ring bond count query: rb:idx:value,...
+    RingBondCount(Vec<(u32, RingBondCount)>),
+    /// Substitution count query: s:idx:value,...
+    SubstitutionCount(Vec<(u32, SubstitutionCount)>),
+    /// Unsaturated atom query: u:idx,idx,...
+    Unsaturated(Vec<u32>),
+    /// Ligand order: LO:centerIdx:idx1.idx2.idx3,...
+    LigandOrder(Vec<(u32, Vec<u32>)>),
+    /// Link nodes: LN:atom:min.max or LN:atom:min.max.outer1.outer2
+    LinkNodes(Vec<(u32, LinkAtom)>),
+    /// Polymer S-group: Sg:type:subtype:atoms:subscript:...
+    Sgroup(SGroup),
+    /// Data S-group: SgD:atomIndices:name:data:queryOp:unit:tag:coords
+    SgroupData(SGroup),
+    /// S-group hierarchy: SgH:parent:child.child,...
+    SgroupHierarchy(Vec<(u32, Vec<u32>)>),
 }
 
 /// Parse basic CX annotations (for Molecule)
@@ -259,8 +277,10 @@ pub fn update_extended_molecule(
     entries: Vec<CxEntry>,
 ) -> Result<(), ParseError> {
     let mut stereo_interpretation: Option<StereoInterpretation> = None;
-    let mut stereo_groups: HashMap<u32, StereoSet> = HashMap::new();
+    let mut stereo_groups: BTreeMap<u32, StereoSet> = BTreeMap::new();
     let mut components: Option<Vec<Vec<u32>>> = None;
+    let mut sgroups: BTreeMap<u32, SGroup> = BTreeMap::new();
+    let mut sgroup_index: u32 = 0;
 
     for entry in entries {
         match entry {
@@ -457,20 +477,119 @@ pub fn update_extended_molecule(
                     mol.multicenter_bonds.push(bond);
                 }
             }
+            CxEntry::RingBondCount(entries) => {
+                for (idx, rbc) in entries {
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.ring_bond_count = Some(rbc);
+                }
+            }
+            CxEntry::SubstitutionCount(entries) => {
+                for (idx, sc) in entries {
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.substitution_count = Some(sc);
+                }
+            }
+            CxEntry::Unsaturated(indices) => {
+                for idx in indices {
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.unsaturated = Some(UnsaturatedAtom);
+                }
+            }
+            CxEntry::LinkNodes(entries) => {
+                for (idx, link) in entries {
+                    let Some(atom) = mol.atoms.get_mut(idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    atom.link_atom = Some(link);
+                }
+            }
+            CxEntry::LigandOrder(entries) => {
+                let atom_count = mol.atoms.len();
+                for (center_idx, neighbors) in entries {
+                    for &neighbor_idx in &neighbors {
+                        if neighbor_idx as usize >= atom_count {
+                            return Err(ParseError::AtomIndexOutOfBounds {
+                                atom_idx: neighbor_idx,
+                            });
+                        }
+                    }
+                    let Some(atom) = mol.atoms.get_mut(center_idx as usize) else {
+                        return Err(ParseError::AtomIndexOutOfBounds {
+                            atom_idx: center_idx,
+                        });
+                    };
+                    let order: Vec<_> = neighbors
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, n)| (n, (i + 1) as u8))
+                        .collect();
+                    atom.ligand_order = Some(order);
+                }
+            }
+            CxEntry::Sgroup(sgroup) => {
+                let atom_count = mol.atoms.len();
+                for &idx in &sgroup.atom_indices {
+                    if idx as usize >= atom_count {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    }
+                }
+                sgroups.insert(sgroup_index, sgroup);
+                sgroup_index += 1;
+            }
+            CxEntry::SgroupData(sgroup) => {
+                let atom_count = mol.atoms.len();
+                for &idx in &sgroup.atom_indices {
+                    if idx as usize >= atom_count {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    }
+                }
+                sgroups.insert(sgroup_index, sgroup);
+                sgroup_index += 1;
+            }
+            CxEntry::SgroupHierarchy(pairs) => {
+                for (parent_idx, children) in &pairs {
+                    if !sgroups.contains_key(parent_idx) {
+                        return Err(ParseError::SgroupIndexOutOfBounds {
+                            sgroup_idx: *parent_idx,
+                        });
+                    }
+                    for &child_idx in children {
+                        if let Some(sg) = sgroups.get_mut(&child_idx) {
+                            sg.hierarchy_parent = Some(*parent_idx);
+                        } else {
+                            return Err(ParseError::SgroupIndexOutOfBounds {
+                                sgroup_idx: child_idx,
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 
     mol.stereo_interpretation = stereo_interpretation;
 
     // Store CX-specific data if any
-    if !stereo_groups.is_empty() || components.is_some() {
+    if !stereo_groups.is_empty() || components.is_some() || !sgroups.is_empty() {
         mol.cx_data = Some(CxAnnotationData {
             stereo_groups,
             components,
+            sgroups,
         });
     }
 
     Ok(())
+}
+
+/// Parse comma only when followed by an entry-start character (separator between CX entries).
+fn comma_before_entry(input: &[u8]) -> IResult<&[u8], char> {
+    terminated(char(','), peek(satisfy(is_cx_tag_start))).parse(input)
 }
 
 fn parse_cx_block<'inp>(
@@ -479,7 +598,7 @@ fn parse_cx_block<'inp>(
 ) -> Result<Vec<CxEntry>, ParseError> {
     match delimited(
         opt(char('|')),
-        separated_list0(char(','), entry_parser),
+        separated_list0(comma_before_entry, entry_parser),
         opt(char('|')),
     )
     .parse(input)
@@ -565,6 +684,12 @@ fn parse_extended_entry(
         parse_stereo_absolute,
         parse_stereo_or_and,
         parse_atom_properties,
+        parse_ring_bond_count,
+        parse_substitution_count,
+        parse_unsaturated,
+        parse_ligand_order,
+        parse_link_nodes,
+        alt((parse_sgroup_data, parse_sgroup, parse_sgroup_hierarchy)),
         parse_relative_stereo,
     ))
     .parse(input)
@@ -747,8 +872,7 @@ fn parse_lone_pairs(input: &[u8]) -> IResult<&[u8], CxEntry> {
     // Try lp: format first (has explicit counts)
     if let Ok((input, _)) = tag::<_, _, NomError<&[u8]>>("lp:")(input) {
         let parse_entry = separated_pair(nom_u32, char(':'), nom_u32);
-        let (input, entries) =
-            separated_list0(comma_not_before_entry, parse_entry).parse(input)?;
+        let (input, entries) = separated_list0(comma_not_before_entry, parse_entry).parse(input)?;
         let result: Vec<_> = entries
             .into_iter()
             .map(|(idx, count)| (idx, count as u8))
@@ -774,8 +898,7 @@ fn parse_multicenter(input: &[u8]) -> IResult<&[u8], CxEntry> {
         Ok((i, (center, ligands)))
     };
 
-    let (input, entries) =
-        separated_list0(comma_not_before_entry, parse_entry).parse(input)?;
+    let (input, entries) = separated_list0(comma_not_before_entry, parse_entry).parse(input)?;
 
     Ok((input, CxEntry::MulticenterBonds(entries)))
 }
@@ -861,6 +984,466 @@ fn parse_atom_properties(input: &[u8]) -> IResult<&[u8], CxEntry> {
     Ok((input, CxEntry::AtomProperties(props)))
 }
 
+/// Parse rb value: * (AsDrawn), -2, -1, 0, 2, 3, 4.
+fn parse_rb_value(value: &[u8]) -> Result<Option<RingBondCount>, ()> {
+    match value {
+        b"*" | b"\\*" => Ok(Some(RingBondCount::AsDrawn)),
+        b"-2" => Ok(Some(RingBondCount::AsDrawn)),
+        b"-1" => Ok(Some(RingBondCount::NoRingBonds)),
+        b"0" => Ok(None),
+        b"2" => Ok(Some(RingBondCount::R2)),
+        b"3" => Ok(Some(RingBondCount::R3)),
+        b"4" => Ok(Some(RingBondCount::R4Plus)),
+        _ => Err(()),
+    }
+}
+
+/// Parse s value: * (AsDrawn), -2, -1, 0, 1-10.
+fn parse_s_value(value: &[u8]) -> Result<Option<SubstitutionCount>, ()> {
+    match value {
+        b"*" | b"\\*" => Ok(Some(SubstitutionCount::AsDrawn)),
+        b"-2" => Ok(Some(SubstitutionCount::AsDrawn)),
+        b"-1" => Ok(Some(SubstitutionCount::NoSubstitution)),
+        b"0" => Ok(None),
+        b"1" => Ok(Some(SubstitutionCount::S1)),
+        b"2" => Ok(Some(SubstitutionCount::S2)),
+        b"3" => Ok(Some(SubstitutionCount::S3)),
+        b"4" => Ok(Some(SubstitutionCount::S4)),
+        b"5" => Ok(Some(SubstitutionCount::S5)),
+        b"6" => Ok(Some(SubstitutionCount::S6Plus)),
+        b"7" => Ok(Some(SubstitutionCount::S7)),
+        b"8" => Ok(Some(SubstitutionCount::S8)),
+        b"9" => Ok(Some(SubstitutionCount::S9)),
+        b"10" => Ok(Some(SubstitutionCount::S10)),
+        _ => Err(()),
+    }
+}
+
+/// Parse ring bond count: `rb:idx:value,idx:value,...`
+fn parse_ring_bond_count(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let (input, pairs) = preceded(
+        tag("rb:"),
+        separated_list0(
+            comma_not_before_entry,
+            separated_pair(nom_u32, char(':'), take_while1(|b| b != b',' && b != b'|')),
+        ),
+    )
+    .parse(input)?;
+
+    let mut result = Vec::new();
+    for (idx, val) in pairs {
+        match parse_rb_value(val) {
+            Ok(Some(rbc)) => result.push((idx, rbc)),
+            Ok(None) => {}
+            Err(()) => return Err(Err::Failure(NomError::new(input, ErrorKind::Verify))),
+        }
+    }
+
+    Ok((input, CxEntry::RingBondCount(result)))
+}
+
+/// Parse substitution count: `s:idx:value,idx:value,...`
+fn parse_substitution_count(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let (input, pairs) = preceded(
+        tag("s:"),
+        separated_list0(
+            comma_not_before_entry,
+            separated_pair(nom_u32, char(':'), take_while1(|b| b != b',' && b != b'|')),
+        ),
+    )
+    .parse(input)?;
+
+    let mut result = Vec::new();
+    for (idx, val) in pairs {
+        match parse_s_value(val) {
+            Ok(Some(sc)) => result.push((idx, sc)),
+            Ok(None) => {}
+            Err(()) => return Err(Err::Failure(NomError::new(input, ErrorKind::Verify))),
+        }
+    }
+
+    Ok((input, CxEntry::SubstitutionCount(result)))
+}
+
+/// Parse unsaturated atoms: `u:idx,idx,...`
+fn parse_unsaturated(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let (input, indices) =
+        preceded(tag("u:"), separated_list0(comma_not_before_entry, nom_u32)).parse(input)?;
+
+    Ok((input, CxEntry::Unsaturated(indices)))
+}
+
+/// Parse ligand order: `LO:centerIdx:idx1.idx2.idx3,centerIdx2:idx1.idx2...`
+fn parse_ligand_order(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let parse_entry = |i| {
+        let (i, center) = nom_u32.parse(i)?;
+        let (i, _) = char(':').parse(i)?;
+        let (i, neighbors) = separated_list0(char('.'), nom_u32).parse(i)?;
+        Ok((i, (center, neighbors)))
+    };
+
+    let (input, entries) = preceded(
+        tag("LO:"),
+        separated_list0(comma_not_before_entry, parse_entry),
+    )
+    .parse(input)?;
+
+    Ok((input, CxEntry::LigandOrder(entries)))
+}
+
+/// Parse link nodes: `LN:atom:min.max` or `LN:atom:min.max.outer1.outer2`
+fn parse_link_nodes(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let parse_entry = |i| {
+        let (i, atom_idx) = nom_u32.parse(i)?;
+        let (i, _) = char(':').parse(i)?;
+        let (i, values) = separated_list0(char('.'), nom_u32).parse(i)?;
+        if values.len() != 2 && values.len() != 4 {
+            return Err(Err::Failure(NomError::new(i, ErrorKind::Verify)));
+        }
+        let min_repeat = values[0].min(255) as u8;
+        let repeat_count = values[1].min(255) as u8;
+        let (subs_index1, subs_index2) = if values.len() == 4 {
+            (values[2], Some(values[3]))
+        } else {
+            (0u32, None)
+        };
+        let link = LinkAtom {
+            min_repeat,
+            repeat_count,
+            subs_index1,
+            subs_index2,
+        };
+        Ok((i, (atom_idx, link)))
+    };
+
+    let (input, entries) = preceded(
+        tag("LN:"),
+        separated_list0(comma_not_before_entry, parse_entry),
+    )
+    .parse(input)?;
+
+    Ok((input, CxEntry::LinkNodes(entries)))
+}
+
+/// Parse data S-group: `SgD:atomIndices:name:data:queryOp:unit:tag:coords`
+fn parse_sgroup_data(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let (input, _) = tag("SgD:").parse(input)?;
+
+    let parse_field = take_while(|b| b != b':');
+    let (input, field_colons) = count((parse_field, char(':')), 7).parse(input)?;
+    let (input, last_field) = take_until_entry_boundary(input)?;
+
+    let mut segments: Vec<&[u8]> = field_colons.into_iter().map(|(s, _)| s).collect();
+    segments.push(last_field);
+
+    let atoms_input = segments[0];
+    let atom_indices: Vec<u32> = atoms_input
+        .split_str(",")
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| {
+            let s = s.to_str_lossy();
+            s.trim().parse::<u32>().ok()
+        })
+        .collect();
+    if atom_indices.is_empty() {
+        return Err(Err::Failure(NomError::new(input, ErrorKind::Verify)));
+    }
+
+    let str_field = |i: usize| {
+        unescape_html_entities(segments.get(i).copied().unwrap_or(&[]))
+            .to_str_lossy()
+            .into_owned()
+    };
+
+    let name = str_field(1);
+    let data_content = str_field(2);
+    let query_op = str_field(3);
+    let unit = str_field(4);
+    let tag_str = str_field(5);
+
+    let data = SGroupData {
+        field_type: SGroupDataType::Text,
+        field_name: name,
+        field_units: if unit.is_empty() { None } else { Some(unit) },
+        query_identifier: if tag_str.is_empty() {
+            None
+        } else {
+            Some(tag_str)
+        },
+        data_query_operator: if query_op.is_empty() {
+            None
+        } else {
+            Some(query_op)
+        },
+        data_content: if data_content.is_empty() {
+            None
+        } else {
+            Some(vec![data_content])
+        },
+    };
+
+    let mut sgroup = SGroup::new(SGroupType::Data);
+    sgroup.atom_indices = atom_indices;
+    sgroup.data = Some(data);
+
+    if let Some(coords) = segments.get(7) {
+        if !coords.is_empty() && coords != b"(-1)" {
+            let nums: Vec<f64> = coords
+                .split_str(",")
+                .filter_map(|p| p.to_str_lossy().trim().parse::<f64>().ok())
+                .collect();
+            if nums.len() == 4 {
+                sgroup.bracket_coords = Some(SGroupBracketCoords {
+                    bracket1: (nums[0], nums[1]),
+                    bracket2: (nums[2], nums[3]),
+                    bracket3: None,
+                    bracket4: None,
+                });
+            } else if nums.len() == 8 {
+                sgroup.bracket_coords = Some(SGroupBracketCoords {
+                    bracket1: (nums[0], nums[1]),
+                    bracket2: (nums[2], nums[3]),
+                    bracket3: Some((nums[4], nums[5])),
+                    bracket4: Some((nums[6], nums[7])),
+                });
+            }
+        }
+    }
+
+    Ok((input, CxEntry::SgroupData(sgroup)))
+}
+
+fn parse_sgroup_type(s: &[u8]) -> Option<SGroupType> {
+    match s {
+        b"n" => Some(SGroupType::RepeatingUnit),
+        b"mon" => Some(SGroupType::Monomer),
+        b"mer" => Some(SGroupType::Mer),
+        b"co" => Some(SGroupType::Copolymer),
+        b"xl" => Some(SGroupType::Crosslink),
+        b"mod" => Some(SGroupType::Modification),
+        b"mix" => Some(SGroupType::Mixture),
+        b"f" => Some(SGroupType::Formulation),
+        b"any" => Some(SGroupType::AnyPolymer),
+        b"gen" => Some(SGroupType::Generic),
+        b"c" => Some(SGroupType::Component),
+        b"grf" => Some(SGroupType::Graft),
+        _ => None,
+    }
+}
+
+fn parse_sgroup_subtype(s: &[u8]) -> Option<SGroupSubtype> {
+    match s {
+        b"alt" => Some(SGroupSubtype::Alternating),
+        b"ran" => Some(SGroupSubtype::Random),
+        b"blk" => Some(SGroupSubtype::Block),
+        _ => None,
+    }
+}
+
+fn parse_sgroup_connectivity(s: &[u8]) -> Option<SGroupConnectivity> {
+    let base = s.split_str(",").next().unwrap_or(s);
+    match base {
+        b"hh" => Some(SGroupConnectivity::HeadToHead),
+        b"ht" => Some(SGroupConnectivity::HeadToTail),
+        b"eu" => Some(SGroupConnectivity::EitherUnknown),
+        _ => None,
+    }
+}
+
+fn parse_connectivity_flip(s: &[u8]) -> Option<bool> {
+    let parts: Vec<&[u8]> = s.split_str(",").collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let flip_part = parts[1].to_str_lossy();
+    match flip_part.trim() {
+        "1" | "flip" | "true" => Some(true),
+        "0" | "false" => Some(false),
+        _ => None,
+    }
+}
+
+fn parse_atom_list(s: &[u8]) -> Option<Vec<u32>> {
+    let indices: Vec<u32> = s
+        .split_str(",")
+        .filter(|p| !p.is_empty())
+        .filter_map(|p| p.to_str_lossy().trim().parse::<u32>().ok())
+        .collect();
+    if indices.is_empty() {
+        None
+    } else {
+        Some(indices)
+    }
+}
+
+fn parse_bond_list(s: &[u8]) -> Vec<u32> {
+    s.split_str(".")
+        .filter(|p| !p.is_empty())
+        .filter_map(|p| p.to_str_lossy().trim().parse::<u32>().ok())
+        .collect()
+}
+
+fn parse_bracket_orientation(s: &[u8]) -> Option<SGroupBracketOrientation> {
+    match s {
+        b"s" => Some(SGroupBracketOrientation::Straight),
+        b"d" => Some(SGroupBracketOrientation::Down),
+        _ => None,
+    }
+}
+
+fn parse_bracket_style(s: &[u8]) -> Option<SGroupBracketStyle> {
+    match s {
+        b"b" => Some(SGroupBracketStyle::Default),
+        b"c" => Some(SGroupBracketStyle::Curved),
+        b"r" => Some(SGroupBracketStyle::TypeR),
+        b"s" => Some(SGroupBracketStyle::TypeS),
+        _ => None,
+    }
+}
+
+fn parse_bracket_info(
+    seg: &[u8],
+) -> Option<(
+    Option<SGroupBracketOrientation>,
+    Option<SGroupBracketStyle>,
+    Option<SGroupBracketCoords>,
+)> {
+    let parts: Vec<&[u8]> = seg.split(|&b| b == b',').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let orientation = parse_bracket_orientation(parts[0]);
+    let style = parse_bracket_style(parts[1]);
+    let coords = if parts.len() >= 6 {
+        let nums: Vec<f64> = parts[2..]
+            .iter()
+            .take(8)
+            .filter_map(|p| p.to_str_lossy().trim().parse::<f64>().ok())
+            .collect();
+        if nums.len() == 8 {
+            Some(SGroupBracketCoords {
+                bracket1: (nums[0], nums[1]),
+                bracket2: (nums[2], nums[3]),
+                bracket3: Some((nums[4], nums[5])),
+                bracket4: Some((nums[6], nums[7])),
+            })
+        } else if nums.len() == 4 {
+            Some(SGroupBracketCoords {
+                bracket1: (nums[0], nums[1]),
+                bracket2: (nums[2], nums[3]),
+                bracket3: None,
+                bracket4: None,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    if orientation.is_some() || style.is_some() || coords.is_some() {
+        Some((orientation, style, coords))
+    } else {
+        None
+    }
+}
+
+/// Parse polymer S-group: `Sg:type:subtype:atoms:subscript:connectivity:head:tail:bracket`
+fn parse_sgroup(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let (input, _) = tag("Sg:").parse(input)?;
+    let (input, content) = take_until_entry_boundary(input)?;
+
+    let segments: Vec<&[u8]> = content.split(|&b| b == b':').collect();
+    if segments.len() < 2 {
+        return Err(Err::Failure(NomError::new(input, ErrorKind::Verify)));
+    }
+
+    let group_type = parse_sgroup_type(segments[0])
+        .ok_or_else(|| Err::Failure(NomError::new(input, ErrorKind::Verify)))?;
+
+    let mut atoms_idx = 1usize;
+    let mut subtype = None;
+    if segments.len() > 2 {
+        if let Some(st) = parse_sgroup_subtype(segments[1]) {
+            subtype = Some(st);
+            atoms_idx = 2;
+        } else if parse_atom_list(segments[1]).is_some() {
+            atoms_idx = 1;
+        }
+    }
+
+    let atom_indices = parse_atom_list(segments.get(atoms_idx).copied().unwrap_or(&[]))
+        .ok_or_else(|| Err::Failure(NomError::new(input, ErrorKind::Verify)))?;
+
+    let mut sgroup = SGroup::new(group_type);
+    sgroup.group_subtype = subtype;
+    sgroup.atom_indices = atom_indices;
+
+    let mut idx = atoms_idx + 1;
+
+    if idx < segments.len() {
+        let seg = segments[idx];
+        if let Some(conn) = parse_sgroup_connectivity(seg) {
+            sgroup.connectivity = Some(conn);
+            sgroup.connectivity_flip = parse_connectivity_flip(seg);
+            idx += 1;
+        } else {
+            let s = unescape_html_entities(seg).to_str_lossy().into_owned();
+            if !s.is_empty() {
+                sgroup.subscript = Some(s);
+            }
+            idx += 1;
+        }
+    }
+
+    if idx < segments.len() {
+        let seg = segments[idx];
+        if let Some(conn) = parse_sgroup_connectivity(seg) {
+            sgroup.connectivity = Some(conn);
+            if sgroup.connectivity_flip.is_none() {
+                sgroup.connectivity_flip = parse_connectivity_flip(seg);
+            }
+            idx += 1;
+        }
+    }
+
+    if idx < segments.len() {
+        let head = parse_bond_list(segments[idx]);
+        idx += 1;
+        if idx < segments.len() {
+            let tail = parse_bond_list(segments[idx]);
+            sgroup.bond_indices = head.into_iter().chain(tail).collect();
+            idx += 1;
+        } else {
+            sgroup.bond_indices = head;
+        }
+    }
+
+    if idx < segments.len() {
+        if let Some((orientation, style, coords)) = parse_bracket_info(segments[idx]) {
+            sgroup.bracket_orientation = orientation;
+            sgroup.bracket_style = style;
+            sgroup.bracket_coords = coords;
+        }
+    }
+
+    Ok((input, CxEntry::Sgroup(sgroup)))
+}
+
+/// Parse S-group hierarchy: `SgH:parentIdx1:child1.child2,parentIdx2:child1`
+fn parse_sgroup_hierarchy(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    let parse_parent_children =
+        separated_pair(nom_u32, char(':'), separated_list0(char('.'), nom_u32));
+    let (input, pairs) = preceded(
+        tag("SgH:"),
+        separated_list0(comma_not_before_entry, parse_parent_children),
+    )
+    .parse(input)?;
+    if pairs.is_empty() {
+        return Err(Err::Failure(NomError::new(input, ErrorKind::Verify)));
+    }
+    Ok((input, CxEntry::SgroupHierarchy(pairs)))
+}
+
 /// Parse relative stereo tag: `r`.
 fn parse_relative_stereo(input: &[u8]) -> IResult<&[u8], CxEntry> {
     let (rest, _) = char('r').parse(input)?;
@@ -883,6 +1466,36 @@ fn parse_relative_stereo(input: &[u8]) -> IResult<&[u8], CxEntry> {
 /// Check whether a character can start a CX entry/tag.
 fn is_cx_tag_start(c: char) -> bool {
     c.is_ascii_alphabetic() || matches!(c, '(' | '$' | '^' | '&')
+}
+
+/// Take bytes until entry boundary: pipe, or comma followed by tag start and colon.
+/// Requires ":" after the tag name so "s,b,1,2" (bracket coords) is not split at ",b".
+fn take_until_entry_boundary(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    let mut i = 0;
+    while i < input.len() {
+        match input[i] {
+            b'|' => return Ok((&input[i..], &input[..i])),
+            b',' => {
+                let mut j = i + 1;
+                while j < input.len() && input[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if j < input.len() && is_cx_tag_start(input[j] as char) {
+                    let mut k = j + 1;
+                    while k < input.len() && (input[k].is_ascii_alphanumeric() || input[k] == b'_')
+                    {
+                        k += 1;
+                    }
+                    if k < input.len() && input[k] == b':' {
+                        return Ok((&input[i..], &input[..i]));
+                    }
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    Ok((&input[i..], &input[..i]))
 }
 
 /// Parse comma only if not followed by an entry-start character.

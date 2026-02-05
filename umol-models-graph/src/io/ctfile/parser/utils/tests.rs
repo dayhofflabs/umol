@@ -688,11 +688,7 @@ fn test_validate_unused_n(
     let result = validate_unused_n(input, input, count, width, skip_unused_fields);
     let input_str = input.to_str_lossy();
     if expected_success {
-        assert!(
-            result.is_ok(),
-            "{:?} should have succeeded",
-            input_str
-        );
+        assert!(result.is_ok(), "{:?} should have succeeded", input_str);
     } else {
         assert!(result.is_err(), "{:?} should have failed", input_str);
     }

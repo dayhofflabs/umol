@@ -137,7 +137,10 @@ mod tests {
     #[case(0, SpinMultiplicity::Singlet)]
     #[case(1, SpinMultiplicity::Doublet)]
     #[case(2, SpinMultiplicity::Triplet)]
-    fn test_from_unpaired_electrons(#[case] unpaired_electrons: u8, #[case] expected: SpinMultiplicity) {
+    fn test_from_unpaired_electrons(
+        #[case] unpaired_electrons: u8,
+        #[case] expected: SpinMultiplicity,
+    ) {
         assert_eq!(
             SpinMultiplicity::from_unpaired_electrons(unpaired_electrons).unwrap(),
             expected

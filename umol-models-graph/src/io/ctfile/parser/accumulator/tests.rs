@@ -342,7 +342,10 @@ fn test_apply_radical(mut single_atom: Molecule) {
         .unwrap();
 
     let atom = &single_atom.atoms[0];
-    assert_eq!(atom.unpaired_electrons, Some(UnpairedElectrons::from_count(1)));
+    assert_eq!(
+        atom.unpaired_electrons,
+        Some(UnpairedElectrons::from_count(1))
+    );
     assert_eq!(atom.charge, None);
 }
 
@@ -381,7 +384,10 @@ fn test_apply_radical_overwrite(mut with_properties: Molecule) {
         .unwrap();
 
     let atom = &with_properties.atoms[0];
-    assert_eq!(atom.unpaired_electrons, Some(UnpairedElectrons::from_count(0))); // Singlet: 0 unpaired electrons
+    assert_eq!(
+        atom.unpaired_electrons,
+        Some(UnpairedElectrons::from_count(0))
+    ); // Singlet: 0 unpaired electrons
     assert_eq!(atom.charge, None);
 }
 
@@ -694,7 +700,10 @@ fn test_apply_extended_radical(mut single_extended_atom: ExtendedMolecule) {
         .unwrap();
 
     let atom = &single_extended_atom.atoms[0];
-    assert_eq!(atom.unpaired_electrons, Some(UnpairedElectrons::from_count(1)));
+    assert_eq!(
+        atom.unpaired_electrons,
+        Some(UnpairedElectrons::from_count(1))
+    );
     assert_eq!(atom.charge, None);
 }
 
@@ -733,7 +742,10 @@ fn test_apply_extended_radical_overwrite(mut with_extended_properties: ExtendedM
         .unwrap();
 
     let atom = &with_extended_properties.atoms[0];
-    assert_eq!(atom.unpaired_electrons, Some(UnpairedElectrons::from_count(0))); // Singlet: 0 unpaired electrons
+    assert_eq!(
+        atom.unpaired_electrons,
+        Some(UnpairedElectrons::from_count(0))
+    ); // Singlet: 0 unpaired electrons
     assert_eq!(atom.charge, None);
 }
 
@@ -1297,7 +1309,9 @@ fn test_apply_extended_sgroup_display_info(
         sgroup.bracket_coords,
         Some(SGroupBracketCoords {
             bracket1: (1.0, 2.0),
-            bracket2: (3.0, 4.0)
+            bracket2: (3.0, 4.0),
+            bracket3: None,
+            bracket4: None,
         })
     );
 }
@@ -1824,6 +1838,7 @@ fn test_apply_extended_link_atom(mut single_extended_atom: ExtendedMolecule) {
     assert_eq!(
         single_extended_atom.atoms[0].link_atom,
         Some(LinkAtom {
+            min_repeat: 0,
             repeat_count: 2,
             subs_index1: 1,
             subs_index2: None

@@ -18,7 +18,6 @@ use crate::table_ir::SGroupType;
 // - Verify that all ParseError::<Variant> variants map to DiagnosticKind::Ctfile<Variant>
 //   not the case atm
 
-
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
     #[error("Invalid header block at line {line}")]
