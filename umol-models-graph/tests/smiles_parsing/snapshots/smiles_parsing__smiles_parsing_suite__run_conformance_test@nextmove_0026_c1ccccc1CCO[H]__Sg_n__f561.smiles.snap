@@ -1,0 +1,12 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon
+category: chemaxon
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C8HO
+    atom_count: 10
+    bond_count: 10

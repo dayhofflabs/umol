@@ -1,0 +1,17 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon
+category: chemaxon
+basic_opensmiles:
+  success: false
+  error:
+    error_type: InvalidElement
+    message: Invalid element at position 19
+opensmiles:
+  success: true
+  summary:
+    sum_formula: C9HO2*
+    atom_count: 13
+    bond_count: 12

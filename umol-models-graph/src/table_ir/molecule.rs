@@ -7,7 +7,6 @@
 //!   defined structures.
 
 use std::collections::BTreeMap;
-use std::sync::LazyLock;
 
 use indexmap::IndexMap;
 use umol_data::Element;
@@ -24,42 +23,6 @@ use super::stereo::StereoInterpretation;
 use super::topology::{Fragment, Link, Ring};
 use super::utils::{element_symbol_key, format_sum_formula};
 use crate::position::Point3D;
-
-/// View over SGroups from ctfile_data and cx_data, chained for iteration.
-#[derive(Clone, Debug)]
-pub struct SgroupsView<'a> {
-    ctfile: Option<&'a BTreeMap<u32, SGroup>>,
-    cx: Option<&'a BTreeMap<u32, SGroup>>,
-}
-
-impl<'a> SgroupsView<'a> {
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.ctfile.map(|m| m.len()).unwrap_or(0) + self.cx.map(|m| m.len()).unwrap_or(0)
-    }
-
-    pub fn get(&self, key: &u32) -> Option<&'a SGroup> {
-        self.ctfile
-            .and_then(|m| m.get(key))
-            .or_else(|| self.cx.and_then(|m| m.get(key)))
-    }
-
-    pub fn contains_key(&self, key: &u32) -> bool {
-        self.ctfile.map_or(false, |m| m.contains_key(key))
-            || self.cx.map_or(false, |m| m.contains_key(key))
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (u32, &'a SGroup)> {
-        self.ctfile
-            .into_iter()
-            .flat_map(|m| m.iter())
-            .chain(self.cx.into_iter().flat_map(|m| m.iter()))
-            .map(|(k, v)| (*k, v))
-    }
-}
 
 /// Basic molecule IR
 #[derive(Clone, Debug, PartialEq)]
@@ -300,24 +263,25 @@ impl ExtendedMolecule {
         &mut self.cx_data.as_mut().unwrap().sgroups
     }
 
-    /// Get reference to RGroups (CTFile-specific)
-    /// Returns empty map if ctfile_data is not present
-    pub fn rgroups(&self) -> &BTreeMap<u32, RGroup> {
-        static EMPTY: LazyLock<BTreeMap<u32, RGroup>> = LazyLock::new(BTreeMap::new);
-
-        self.ctfile_data
-            .as_ref()
-            .map(|d| &d.rgroups)
-            .unwrap_or(&*EMPTY)
+    /// View over RGroups from both ctfile_data and cx_data.
+    /// Iteration yields ctfile rgroups first, then cx rgroups.
+    pub fn rgroups(&self) -> RgroupsView<'_> {
+        RgroupsView {
+            ctfile: self.ctfile_data.as_ref().map(|d| &d.rgroups),
+            cx: self.cx_data.as_ref().map(|c| &c.rgroups),
+        }
     }
 
-    /// Get mutable reference to RGroups (CTFile-specific)
-    /// Initializes ctfile_data if not present
+    /// Get mutable reference to RGroups.
+    /// Uses ctfile_data if present, else cx_data (creating it if needed)
     pub fn rgroups_mut(&mut self) -> &mut BTreeMap<u32, RGroup> {
-        if self.ctfile_data.is_none() {
-            self.ctfile_data = Some(CtfileData::default());
+        if self.ctfile_data.is_some() {
+            return &mut self.ctfile_data.as_mut().unwrap().rgroups;
         }
-        &mut self.ctfile_data.as_mut().unwrap().rgroups
+        if self.cx_data.is_none() {
+            self.cx_data = Some(CxAnnotationData::default());
+        }
+        &mut self.cx_data.as_mut().unwrap().rgroups
     }
 
     /// Count of SDF/MOL properties
@@ -367,6 +331,78 @@ impl From<Molecule> for ExtendedMolecule {
             cx_data: None,
             source_format: mol.source_format,
         }
+    }
+}
+
+/// View over SGroups from ctfile_data and cx_data, chained for iteration.
+#[derive(Clone, Debug)]
+pub struct SgroupsView<'a> {
+    ctfile: Option<&'a BTreeMap<u32, SGroup>>,
+    cx: Option<&'a BTreeMap<u32, SGroup>>,
+}
+
+impl<'a> SgroupsView<'a> {
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.ctfile.map(|m| m.len()).unwrap_or(0) + self.cx.map(|m| m.len()).unwrap_or(0)
+    }
+
+    pub fn get(&self, key: &u32) -> Option<&'a SGroup> {
+        self.ctfile
+            .and_then(|m| m.get(key))
+            .or_else(|| self.cx.and_then(|m| m.get(key)))
+    }
+
+    pub fn contains_key(&self, key: &u32) -> bool {
+        self.ctfile.map_or(false, |m| m.contains_key(key))
+            || self.cx.map_or(false, |m| m.contains_key(key))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (u32, &'a SGroup)> {
+        self.ctfile
+            .into_iter()
+            .flat_map(|m| m.iter())
+            .chain(self.cx.into_iter().flat_map(|m| m.iter()))
+            .map(|(k, v)| (*k, v))
+    }
+}
+
+/// View over RGroups from ctfile_data and cx_data, chained for iteration.
+#[derive(Clone, Debug)]
+pub struct RgroupsView<'a> {
+    ctfile: Option<&'a BTreeMap<u32, RGroup>>,
+    cx: Option<&'a BTreeMap<u32, RGroup>>,
+}
+
+impl<'a> RgroupsView<'a> {
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.ctfile.map(|m| m.len()).unwrap_or(0) + self.cx.map(|m| m.len()).unwrap_or(0)
+    }
+
+    pub fn get(&self, key: &u32) -> Option<&'a RGroup> {
+        self.ctfile
+            .and_then(|m| m.get(key))
+            .or_else(|| self.cx.and_then(|m| m.get(key)))
+    }
+
+    pub fn contains_key(&self, key: &u32) -> bool {
+        self.ctfile.map_or(false, |m| m.contains_key(key))
+            || self.cx.map_or(false, |m| m.contains_key(key))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (u32, &'a RGroup)> {
+        self.ctfile
+            .into_iter()
+            .flat_map(|m| m.iter())
+            .chain(self.cx.into_iter().flat_map(|m| m.iter()))
+            .map(|(k, v)| (*k, v))
     }
 }
 

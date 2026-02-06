@@ -23,6 +23,7 @@ use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
 use crate::position::Point3D;
+use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
 use crate::table_ir::{
     BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
     ExtendedMolecule, LinkAtom, Molecule, MulticenterBond, MulticenterSet, RingBondCount, SGroup,
@@ -100,6 +101,8 @@ pub enum CxEntry {
     SgroupData(SGroup),
     /// S-group hierarchy: SgH:parent:child.child,...
     SgroupHierarchy(Vec<(u32, Vec<u32>)>),
+    /// Bicyclo stereo: THB:/TLB:/TEB:ligand:connection:lower:higher (one tag can have multiple entries)
+    BicycloStereo(Vec<BicycloStereo>),
 }
 
 /// Parse basic CX annotations (for Molecule)
@@ -281,6 +284,7 @@ pub fn update_extended_molecule(
     let mut components: Option<Vec<Vec<u32>>> = None;
     let mut sgroups: BTreeMap<u32, SGroup> = BTreeMap::new();
     let mut sgroup_index: u32 = 0;
+    let mut bicyclo_stereo: Vec<BicycloStereo> = vec![];
 
     for entry in entries {
         match entry {
@@ -570,17 +574,30 @@ pub fn update_extended_molecule(
                     }
                 }
             }
+            CxEntry::BicycloStereo(entries) => {
+                bicyclo_stereo.extend(entries);
+            }
         }
     }
 
     mol.stereo_interpretation = stereo_interpretation;
 
     // Store CX-specific data if any
-    if !stereo_groups.is_empty() || components.is_some() || !sgroups.is_empty() {
+    if !stereo_groups.is_empty()
+        || components.is_some()
+        || !sgroups.is_empty()
+        || !bicyclo_stereo.is_empty()
+    {
         mol.cx_data = Some(CxAnnotationData {
             stereo_groups,
             components,
             sgroups,
+            bicyclo_stereo: if bicyclo_stereo.is_empty() {
+                None
+            } else {
+                Some(bicyclo_stereo)
+            },
+            ..Default::default()
         });
     }
 
@@ -674,23 +691,28 @@ fn parse_extended_entry(
         parse_coordinates,
         parse_labels,
         parse_radicals,
-        parse_wiggly_bonds,
-        parse_cis_trans,
-        parse_coordinate_bonds,
-        parse_hydrogen_bonds,
-        parse_lone_pairs,
-        parse_multicenter,
+        alt((
+            parse_wiggly_bonds,
+            parse_cis_trans,
+            parse_coordinate_bonds,
+            parse_hydrogen_bonds,
+        )),
+        alt((parse_lone_pairs, parse_multicenter)),
         parse_fragment_groups,
-        parse_stereo_absolute,
-        parse_stereo_or_and,
+        alt((
+            parse_stereo_absolute,
+            parse_stereo_or_and,
+            parse_relative_stereo,
+        )),
         parse_atom_properties,
-        parse_ring_bond_count,
-        parse_substitution_count,
-        parse_unsaturated,
-        parse_ligand_order,
-        parse_link_nodes,
+        alt((
+            parse_ring_bond_count,
+            parse_substitution_count,
+            parse_unsaturated,
+        )),
+        alt((parse_ligand_order, parse_link_nodes)),
         alt((parse_sgroup_data, parse_sgroup, parse_sgroup_hierarchy)),
-        parse_relative_stereo,
+        parse_bicyclo_stereo,
     ))
     .parse(input)
     {
@@ -1076,9 +1098,11 @@ fn parse_unsaturated(input: &[u8]) -> IResult<&[u8], CxEntry> {
 /// Parse ligand order: `LO:centerIdx:idx1.idx2.idx3,centerIdx2:idx1.idx2...`
 fn parse_ligand_order(input: &[u8]) -> IResult<&[u8], CxEntry> {
     let parse_entry = |i| {
-        let (i, center) = nom_u32.parse(i)?;
-        let (i, _) = char(':').parse(i)?;
-        let (i, neighbors) = separated_list0(char('.'), nom_u32).parse(i)?;
+        let (i, (center, neighbors)) = (
+            terminated(nom_u32, char(':')),
+            separated_list0(char('.'), nom_u32),
+        )
+            .parse(i)?;
         Ok((i, (center, neighbors)))
     };
 
@@ -1094,9 +1118,11 @@ fn parse_ligand_order(input: &[u8]) -> IResult<&[u8], CxEntry> {
 /// Parse link nodes: `LN:atom:min.max` or `LN:atom:min.max.outer1.outer2`
 fn parse_link_nodes(input: &[u8]) -> IResult<&[u8], CxEntry> {
     let parse_entry = |i| {
-        let (i, atom_idx) = nom_u32.parse(i)?;
-        let (i, _) = char(':').parse(i)?;
-        let (i, values) = separated_list0(char('.'), nom_u32).parse(i)?;
+        let (i, (atom_idx, values)) = (
+            terminated(nom_u32, char(':')),
+            separated_list0(char('.'), nom_u32),
+        )
+            .parse(i)?;
         if values.len() != 2 && values.len() != 4 {
             return Err(Err::Failure(NomError::new(i, ErrorKind::Verify)));
         }
@@ -1444,6 +1470,57 @@ fn parse_sgroup_hierarchy(input: &[u8]) -> IResult<&[u8], CxEntry> {
     Ok((input, CxEntry::SgroupHierarchy(pairs)))
 }
 
+/// Parse THB:/TLB:/TEB: tag. Format: THB:ligand:connection:lower:higher (comma-separated entries)
+fn parse_bicyclo_stereo(input: &[u8]) -> IResult<&[u8], CxEntry> {
+    fn parse_one(i: &[u8]) -> IResult<&[u8], BicycloStereoData> {
+        let (i, ligand) = nom_u32.parse(i)?;
+        let (i, _) = char(':').parse(i)?;
+        let (i, connection) = nom_u32.parse(i)?;
+        let (i, _) = char(':').parse(i)?;
+        let (i, lower) = separated_list0(char('.'), nom_u32).parse(i)?;
+        let (i, _) = char(':').parse(i)?;
+        let (i, higher) = separated_list0(char('.'), nom_u32).parse(i)?;
+        Ok((
+            i,
+            BicycloStereoData {
+                ligand_atom: ligand,
+                connection_atom: connection,
+                lower_bridge_atoms: lower,
+                higher_bridge_atoms: higher,
+            },
+        ))
+    }
+
+    let (input, (tag_bytes, entries)) = alt((
+        (
+            tag("THB:"),
+            separated_list0(comma_not_before_entry, parse_one),
+        ),
+        (
+            tag("TLB:"),
+            separated_list0(comma_not_before_entry, parse_one),
+        ),
+        (
+            tag("TEB:"),
+            separated_list0(comma_not_before_entry, parse_one),
+        ),
+    ))
+    .parse(input)?;
+
+    let variant = match tag_bytes {
+        b"THB:" => BicycloStereo::TowardsHigherBridge,
+        b"TLB:" => BicycloStereo::TowardsLowerBridge,
+        b"TEB:" => BicycloStereo::TowardsEitherBridge,
+        _ => return Err(Err::Failure(NomError::new(input, ErrorKind::Tag))),
+    };
+
+    let entries: Vec<BicycloStereo> = entries.into_iter().map(variant).collect();
+    if entries.is_empty() {
+        return Err(Err::Failure(NomError::new(input, ErrorKind::Verify)));
+    }
+    Ok((input, CxEntry::BicycloStereo(entries)))
+}
+
 /// Parse relative stereo tag: `r`.
 fn parse_relative_stereo(input: &[u8]) -> IResult<&[u8], CxEntry> {
     let (rest, _) = char('r').parse(input)?;
@@ -1562,6 +1639,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
+    use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
     use crate::table_ir::{Atom, Bond, Chirality, ExtendedAtom, ExtendedBond};
 
     #[fixture]
@@ -1734,6 +1812,10 @@ mod tests {
     #[case::atom_properties(b"|atomProp:0.key.value|", vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])])]
     #[case::coordinates_2d(b"|(1.5,2.5;3.5,4.5)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.5, 2.5, 0.0), Point3D::new(3.5, 4.5, 0.0)])])]
     #[case::coordinates_3d(b"|(1,2,3;4,5,6)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0), Point3D::new(4.0, 5.0, 6.0)])])]
+    #[case::bicyclo_thb(b"|THB:12:11:2.4.3:7.10.8|", vec![CxEntry::BicycloStereo(vec![BicycloStereo::TowardsHigherBridge(BicycloStereoData {ligand_atom: 12, connection_atom: 11,
+        lower_bridge_atoms: vec![2, 4, 3], higher_bridge_atoms: vec![7, 10, 8]})])])]
+    #[case::bicyclo_tlb(b"|TLB:13:11:2.4.3:7.10.8|", vec![CxEntry::BicycloStereo(vec![BicycloStereo::TowardsLowerBridge(BicycloStereoData {ligand_atom: 13, connection_atom: 11,
+        lower_bridge_atoms: vec![2, 4, 3], higher_bridge_atoms: vec![7, 10, 8]})])])]
     fn test_parse_extended_cx_annotations(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
         let result = parse_extended_cx_annotations(input, SmilesParseFlags::default());
         let input_str = input.to_str_lossy();
@@ -1861,6 +1943,8 @@ mod tests {
     #[case::relative_stereo(vec![CxEntry::RelativeStereo],
         |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Relative) && mol.cx_data.is_none())]
     #[case::atom_properties(vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].properties.get("key") == Some(&"value".to_string()))]
+    #[case::bicyclo_stereo(vec![CxEntry::BicycloStereo(vec![BicycloStereo::TowardsHigherBridge(BicycloStereoData{ligand_atom: 12, connection_atom: 11,
+        lower_bridge_atoms: vec![2, 4, 3], higher_bridge_atoms: vec![7, 10, 8], }), ])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.bicyclo_stereo.as_ref()).map(|v| v.len()) == Some(1))]
     fn test_update_extended_molecule(
         triatomic_extended_molecule: ExtendedMolecule,
         #[case] entries: Vec<CxEntry>,

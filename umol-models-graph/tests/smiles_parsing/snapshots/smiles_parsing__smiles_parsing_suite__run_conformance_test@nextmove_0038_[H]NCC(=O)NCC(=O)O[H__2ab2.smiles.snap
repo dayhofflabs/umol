@@ -1,0 +1,12 @@
+---
+source: umol-models-graph/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: chemaxon
+category: chemaxon
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C4H2N2O3
+    atom_count: 11
+    bond_count: 10

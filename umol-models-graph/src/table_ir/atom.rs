@@ -235,6 +235,23 @@ impl AtomList {
     }
 }
 
+/// Bicyclic bridge stereo (CXSMILES THB/TLB/TEB).
+/// Describes the configuration at a bridgehead in a bicyclic system.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BicycloStereoData {
+    pub ligand_atom: u32,
+    pub connection_atom: u32,
+    pub lower_bridge_atoms: Vec<u32>,
+    pub higher_bridge_atoms: Vec<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BicycloStereo {
+    TowardsHigherBridge(BicycloStereoData),
+    TowardsLowerBridge(BicycloStereoData),
+    TowardsEitherBridge(BicycloStereoData),
+}
+
 /// Chirality
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Chirality {

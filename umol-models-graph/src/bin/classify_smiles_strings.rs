@@ -677,7 +677,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("- Errors: {} SMILES could not be classified", error_smiles);
     }
     println!(
-        "- {:.1}% of SMILES are valid (parseable with OpenSMILES)",
+        "- {:.1}% of SMILES are valid",
         totals.valid_percentage()
     );
 

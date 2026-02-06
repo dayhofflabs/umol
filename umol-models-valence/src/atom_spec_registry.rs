@@ -32,6 +32,7 @@ impl AtomSpecRegistry {
 }
 
 // Atom specs for atom typing, nested by Element then charge
+#[rustfmt::skip]
 static ATOM_SPEC_DATA: LazyLock<HashMap<Element, HashMap<i8, Vec<AtomSpec>>>> =
     LazyLock::new(|| {
         let mut data = HashMap::new();
@@ -53,60 +54,16 @@ static ATOM_SPEC_DATA: LazyLock<HashMap<Element, HashMap<i8, Vec<AtomSpec>>>> =
         insert_specs!(data, e!(Li), 1, [a!("[Li+1v0]")]);
         insert_specs!(data, e!(Be), 0, [a!("[Be+0v2]"), a!("[Be+0/1v0]")]);
         insert_specs!(data, e!(Be), 2, [a!("[Be+2v0]")]);
-        insert_specs!(
-            data,
-            e!(B),
-            0,
-            [
-                a!("[B+0v3]"),
-                a!("[B+0^1v2]"),
-                a!("[B+0/1v1]"),
-                a!("[B+0/1^1v0]")
-            ]
-        );
+        insert_specs!(data, e!(B), 0, [ a!("[B+0v3]"), a!("[B+0^1v2]"), a!("[B+0/1v1]"), a!("[B+0/1^1v0]")]);
         insert_specs!(data, e!(B), -1, [a!("[B-1v4]")]);
-        insert_specs!(
-            data,
-            e!(C),
-            0,
-            [
-                a!("[C+0v4]"),
-                a!("[C+0^1v3]"),
-                a!("[C+0/1^2v2]"),
-                a!("[C+0/1^2*1v2]"),
-                a!("[C+0/1^2v0]"),
-                a!("[C+0/1^2*1v0]")
-            ]
-        );
+        insert_specs!(data, e!(C), 0, [a!("[C+0v4]"), a!("[C+0^1v3]"), a!("[C+0/1^2v2]"), a!("[C+0/1^2*1v2]"), a!("[C+0/1^2v0]"), a!("[C+0/1^2*1v0]")]);
         insert_specs!(data, e!(C), 1, [a!("[C+1^3v3]")]);
         insert_specs!(data, e!(C), -1, [a!("[C-1/1v3]")]);
-        insert_specs!(
-            data,
-            e!(N),
-            0,
-            [
-                a!("[N+0/1v3]"),
-                a!("[N+0/1^1v2]"),
-                a!("[N+0/2^2*3v1]"),
-                a!("[N+0/2^2*1v1]"),
-                a!("[N+0/1^3v0]"),
-                a!("[N+0/1^3*2v0]")
-            ]
-        );
+        insert_specs!(data, e!(N), 0, [a!("[N+0/1v3]"), a!("[N+0/1^1v2]"), a!("[N+0/2^2*3v1]"), a!("[N+0/2^2*1v1]"), a!("[N+0/1^3v0]"), a!("[N+0/1^3*2v0]")]);
         insert_specs!(data, e!(N), 1, [a!("[N+1v4]"), a!("[N+1/1v2]")]);
         insert_specs!(data, e!(N), -1, [a!("[N-1/2v2]")]);
         insert_specs!(data, e!(N), -3, [a!("[N-3/4v0]")]);
-        insert_specs!(
-            data,
-            e!(O),
-            0,
-            [
-                a!("[O+0/2v2]"),
-                a!("[O+0/2^1v1]"),
-                a!("[O+0/2^2v0]"),
-                a!("[O+0/2^2*1v0]")
-            ]
-        );
+        insert_specs!(data, e!(O), 0, [a!("[O+0/2v2]"), a!("[O+0/2^1v1]"), a!("[O+0/2^2v0]"), a!("[O+0/2^2*1v0]")]);
         insert_specs!(data, e!(O), 1, [a!("[O+1/1v3]"), a!("[O+1/2v1]")]);
         insert_specs!(data, e!(O), -1, [a!("[O-1/3v1]")]);
         insert_specs!(data, e!(O), -2, [a!("[O-2/4v0]")]);

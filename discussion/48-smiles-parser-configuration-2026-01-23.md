@@ -457,7 +457,7 @@ Out-of-range atom/bond indices are **hard errors** (no skipping):
 - `BondIndexOutOfBounds`
 - `MismatchedAtomBondIndices` (bond-indexed tags where the referenced atom is not incident on the bond)
 
-#### 6.4 CXSMILES completeness + correctness work plan (pending)
+#### 6.4 CXSMILES completeness + correctness work plan
 
 The implementation above covers the “common” CX blocks seen in typical datasets.
 ChemAxon’s CXSMILES spec includes additional tags, and a few tags we parse today need a
@@ -498,34 +498,36 @@ spec-correct interpretation.
     - `take_until_entry_boundary`: now requires `:` after tag name (e.g. `,Sg:`) so bracket coords `s,b,1,2,3,4` are not split at `,b`; any CX tag with comma+letter without `:` could be affected.
 - `LN:` link nodes:
   - **Mostly MOL-equivalent**: partially (closest match is `ExtendedAtom.link_atom: Option<LinkAtom>`).
-  - **Plan**: parse min/max repetition + outer atoms. If needed, extend `LinkAtom` to store
-    both min and max (CTFile currently only stores an upper repeat count).
+  - **Implemented**: parse min/max repetition + outer atoms; store in `ExtendedAtom.link_atom`.
 - `LO:` ligand order:
   - **MOL-equivalent**: partially (port/ligand ordering metadata).
-  - **Plan**: store an ordered neighbor list on the central atom (either via `attachment_order` or a
-    dedicated field).
+  - **Implemented**: store ordered neighbor list in `ExtendedAtom.ligand_order`.
 - `rb:` / `s:` / `u:` query features:
   - **MOL-equivalent**: yes (maps to `ExtendedAtom.ring_bond_count`, `substitution_count`, `unsaturated`).
+  - **Implemented**: apply to `ExtendedAtom.ring_bond_count`, `substitution_count`, `unsaturated`.
 - `LP:` / `lp:` lone electron pairs:
   - **MOL-equivalent**: partially (`AtomSymbol::LonePair` exists, but the CX tags also encode counts).
-  - **Plan**: implement a typed representation (avoid stuffing into generic properties), then apply.
+  - **Implemented**: store count in `ExtendedAtom.lone_pairs`.
 - `m:` multicenter bonds / variable attachment:
-  - **Requires additional work**: TableIR currently has no bond-level representation for
-    “variable attachment / end-points” (CTFile analogue: bond ENDPTS/ATTACH).
-  - **Plan**: add a typed bond attachment/endpoints field to `ExtendedBond`, then apply `m:`.
+  - **Implemented**: parse and store in `ExtendedMolecule.multicenter_bonds` as `MulticenterBond` (center + ligand sets).
 - `RG:` / `LOG:` Markush:
   - **LOG** is MOL-equivalent (maps to `ctfile_data.rgroups` metadata).
   - **RG** requires additional representation for member structures (embedded `{...}` CXSMILES blocks).
-- `@:` / `@@:` and `THB:` / `TLB:` / `TEB:`:
+  - **Status**: Removed from parser (code quality insufficient); pending reimplementation.
+- `@:` / `@@:` (Local parity):
   - **Requires additional work**: additional stereo metadata not currently represented in TableIR.
   - **Plan**: parse and preserve in typed CX metadata first (roundtripping), then decide on semantic mapping.
+- `THB:` / `TLB:` / `TEB:` (bicyclo stereo):
+  - **Implemented**: parse and store in `ExtendedAtom.bicyclo_stereo` as `BicycloStereoData`.
 
 **Suggested implementation order:**
 
 1) Done: Fix `C:`/`H:`/`w:`/`ctu:` semantics + update unit tests.
-2) Implement atom-level query/order tags (`rb:`/`s:`/`u:`, `LO:`, `LN:`) + tests.
+2) Done: Atom-level query/order tags (`rb:`/`s:`/`u:`, `LO:`, `LN:`) + tests.
 3) Done: S-groups (`Sg:`/`SgD:`/`SgH:`) + tests.
-4) Implement remaining heavy features (`LP:`/`lp:`, `m:`, `RG:`/`LOG:`, `@:`/`@@:`, `THB:`/`TLB:`/`TEB:`).
+4) Done: Lone pairs (`LP:`/`lp:`), multicenter bonds (`m:`).
+5) Done: Bicyclo stereo (`THB:`/`TLB:`/`TEB:`).
+6) Implement remaining: Markush (`RG:`/`LOG:`), local parity (`@:`/`@@:`).
 
 #### 6.5 Conformance + classification details
 
@@ -759,20 +761,20 @@ Indigo-specific extensions. Features include: `w:` (wiggly stereo), `a:` (absolu
 | Coordinate bonds `C:` | ✓ Parsed + applied | P3 | CXSMILES | Indexed by bond in spec |
 | Hydrogen bonds `H:` | ✓ Parsed + applied | P3 | CXSMILES | Indexed by bond in spec |
 | Relative stereo `r` | ✓ Parsed | P3 | CXSMILES | Flag-only (`r`); `r:...` (fragment indices) rejected in molecule parsing |
-| Lone pairs `LP:`, `lp:` | Pending | P3 | CXSMILES | Electron pairs / explicit counts |
+| Lone pairs `LP:`, `lp:` | ✓ Parsed | P3 | CXSMILES | Electron pairs / explicit counts |
 | Local parity `@:`, `@@:` | Pending | P3 | CXSMILES | Additional stereo metadata |
-| Local bicyclo stereo `THB:`, `TLB:`, `TEB:` | Pending | P3 | CXSMILES | Additional stereo metadata |
-| S-groups `Sg:` | Pending | P2 | CXSMILES | Polymers, abbreviations |
-| Data S-groups `SgD:` | Pending | P3 | CXSMILES | Embedded data |
-| S-group hierarchy `SgH:` | Pending | P3 | CXSMILES | Parent-child relations (CX order) |
-| Ligand order `LO:` | Pending | P3 | CXSMILES | Ligand/port ordering metadata |
-| Link nodes `LN:` | Pending | P3 | CXSMILES | Link nodes (repeat ranges) |
-| Ring bond count `rb:` | Pending | P3 | CXSMILES | Query feature (MDL query) |
-| Substitution count `s:` | Pending | P3 | CXSMILES | Query feature (MDL query) |
-| Unsaturation `u:` | Pending | P3 | CXSMILES | Query feature (MDL query) |
-| Multicenter bonds `m:` | Pending | P3 | CXSMILES | Variable attachment / organometallics |
-| R-groups `RG:` | Pending | P2 | CXSMILES | Markush definitions |
-| R-logic `LOG:` | Pending | P2 | CXSMILES | Markush logic / occurrence ranges |
+| Local bicyclo stereo `THB:`, `TLB:`, `TEB:` | ✓ Parsed | P3 | CXSMILES | Bicyclo stereo metadata |
+| S-groups `Sg:` | ✓ Parsed | P2 | CXSMILES | Polymers, abbreviations |
+| Data S-groups `SgD:` | ✓ Parsed | P3 | CXSMILES | Embedded data |
+| S-group hierarchy `SgH:` | ✓ Parsed | P3 | CXSMILES | Parent-child relations (CX order) |
+| Ligand order `LO:` | ✓ Parsed | P3 | CXSMILES | Ligand/port ordering metadata |
+| Link nodes `LN:` | ✓ Parsed | P3 | CXSMILES | Link nodes (repeat ranges) |
+| Ring bond count `rb:` | ✓ Parsed | P3 | CXSMILES | Query feature (MDL query) |
+| Substitution count `s:` | ✓ Parsed | P3 | CXSMILES | Query feature (MDL query) |
+| Unsaturation `u:` | ✓ Parsed | P3 | CXSMILES | Query feature (MDL query) |
+| Multicenter bonds `m:` | ✓ Parsed | P3 | CXSMILES | Variable attachment / organometallics |
+| R-groups `RG:` | Pending | P2 | CXSMILES | Markush definitions (removed; pending reimplementation) |
+| R-logic `LOG:` | Pending | P2 | CXSMILES | Markush logic (removed; pending reimplementation) |
 
 ### 11.4 Uncommon but Interesting Variants
 
@@ -856,7 +858,7 @@ Some tools embed ECFP-like atom environments in SMILES-like notation. Not standa
 3. ✓ Radicals CXSMILES `^n:` (Parsed); OpenBabel dot notation pending
 4. ✓ CXSMILES atom labels `$name$` (Parsed)
 5. ✓ CXSMILES enhanced stereo groups (Parsed)
-6. CXSMILES S-groups (basic: abbreviations, polymers) - pending
+6. ✓ CXSMILES S-groups (basic: abbreviations, polymers) (Parsed)
 7. SMARTS query primitives
 8. R-group notation `[R1]`
 
@@ -864,18 +866,17 @@ Some tools embed ECFP-like atom environments in SMILES-like notation. Not standa
 
 1. Quadruple bonds `$`
 2. Extended ring closures `%(nnn)`
-3. CXSMILES link nodes, data S-groups
+3. ✓ CXSMILES link nodes, data S-groups (Parsed)
 4. DeepSMILES (as output format only)
-5. Multicenter bonds
+5. ✓ Multicenter bonds (Parsed)
 
 **Skip (Not implementing):**
 
 1. SELFIES (misleading validity claims)
 2. Jmol animation directives
-3. CXSMILES query-only features (`rb:`, `s:`, `u:`)
-4. Daylight vector binding `&&`
-5. OpenBabel external bonds `&` (no other toolkit supports)
-6. Any bond `~` in SMILES (SMARTS only; CXSMILES `|Z:|` is different)
+3. Daylight vector binding `&&`
+4. OpenBabel external bonds `&` (no other toolkit supports)
+5. Any bond `~` in SMILES (SMARTS only; CXSMILES `|Z:|` is different)
 
 ---
 
