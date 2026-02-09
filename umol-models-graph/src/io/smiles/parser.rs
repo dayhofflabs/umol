@@ -1,5 +1,8 @@
 //! SMILES parser
 
+use std::collections::BTreeMap;
+
+use indexmap::IndexMap;
 use umol_data::Element;
 
 mod builder;
@@ -20,10 +23,11 @@ use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
 use crate::span::Span;
 use crate::table_ir::{
-    BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, WildcardAtom,
+    BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, Reaction, SourceFormat,
+    WildcardAtom,
 };
 
-/// Parse SMILES string with strict OpenSMILES rules
+/// Parse SMILES string with basic OpenSMILES rules
 pub fn parse_smiles(input: &str) -> Result<Molecule, ParseError> {
     parse_smiles_bytes(input.as_bytes())
 }
@@ -33,7 +37,7 @@ pub fn parse_smiles_with(input: &str, config: &SmilesIoConfig) -> Result<Molecul
     parse_smiles_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse SMILES bytes with strict OpenSMILES rules
+/// Parse SMILES bytes with basic OpenSMILES rules
 pub fn parse_smiles_bytes(input: &[u8]) -> Result<Molecule, ParseError> {
     parse_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
 }
@@ -54,7 +58,7 @@ pub fn parse_smiles_bytes_with(
         return Ok(Molecule::empty());
     }
 
-    let (remaining, mut mol) = parse_smiles_inner(input, flags)?;
+    let (remaining, (mut mol, _)) = parse_smiles_inner(input, 0, false, flags)?;
 
     // Inner parser stops at whitespace. Leading whitespace is not allowed
     // (exception: whitespace-only input is allowed)
@@ -76,10 +80,140 @@ pub fn parse_smiles_bytes_with(
     Ok(mol)
 }
 
+/// Parse reaction SMILES with basic OpenSMILES rules
+pub fn parse_reaction_smiles(input: &str) -> Result<Reaction, ParseError> {
+    parse_reaction_smiles_bytes(input.as_bytes())
+}
+
+/// Parse reaction SMILES string with configuration
+pub fn parse_reaction_smiles_with(
+    input: &str,
+    config: &SmilesIoConfig,
+) -> Result<Reaction, ParseError> {
+    parse_reaction_smiles_bytes_with(input.as_bytes(), config)
+}
+
+/// Parse reaction SMILES bytes with basic OpenSMILES rules
+pub fn parse_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ParseError> {
+    parse_reaction_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
+}
+
+/// Parse reaction SMILES bytes with configuration
+pub fn parse_reaction_smiles_bytes_with(
+    input: &[u8],
+    config: &SmilesIoConfig,
+) -> Result<Reaction, ParseError> {
+    let flags = config.parse_flags;
+    debug_assert!(
+        SmilesParseFlags::BASIC_MAX.contains(flags),
+        "flags must be a subset of BASIC_MAX"
+    );
+
+    let mut reactants = Vec::new();
+    let mut agents = Vec::new();
+    let mut products = Vec::new();
+    let mut remaining = input;
+    let mut offset = 0usize;
+
+    // Parse reactants until ">"
+    loop {
+        let (rest, (mol, new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
+        offset = new_offset;
+        if !mol.atoms.is_empty() {
+            reactants.push(mol);
+        }
+        remaining = rest;
+        if remaining.is_empty() {
+            break;
+        }
+        if remaining.starts_with(b">") {
+            break;
+        }
+        if remaining.starts_with(b".") {
+            if remaining.len() > 1 && remaining[1] == b'.' {
+                return Err(ParseError::ConsecutiveDots { pos: offset });
+            }
+            remaining = &remaining[1..];
+            offset += 1;
+            continue;
+        }
+        return Err(ParseError::MissingReactionArrow { pos: offset });
+    }
+
+    // Consume ">" or ">>"
+    if remaining.starts_with(b">>") {
+        remaining = &remaining[2..];
+        offset += 2;
+    } else if remaining.starts_with(b">") {
+        remaining = &remaining[1..];
+        offset += 1;
+
+        // Parse agents until ">"
+        while !remaining.is_empty() && !remaining.starts_with(b">") {
+            let (rest, (mol, new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
+            offset = new_offset;
+            if !mol.atoms.is_empty() {
+                agents.push(mol);
+            }
+            remaining = rest;
+            if remaining.starts_with(b".") {
+                if remaining.len() > 1 && remaining[1] == b'.' {
+                    return Err(ParseError::ConsecutiveDots { pos: offset });
+                }
+                remaining = &remaining[1..];
+                offset += 1;
+            } else {
+                break;
+            }
+        }
+
+        if !remaining.starts_with(b">") {
+            return Err(ParseError::MissingReactionArrow { pos: offset });
+        }
+        remaining = &remaining[1..];
+        offset += 1;
+    } else {
+        return Err(ParseError::MissingReactionArrow { pos: offset });
+    }
+
+    // Parse products until EOF/whitespace
+    while !remaining.is_empty() && !remaining.trim_ascii_start().is_empty() {
+        let (rest, (mol, new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
+        offset = new_offset;
+        if !mol.atoms.is_empty() {
+            products.push(mol);
+        }
+        remaining = rest;
+        if remaining.starts_with(b".") {
+            if remaining.len() > 1 && remaining[1] == b'.' {
+                return Err(ParseError::ConsecutiveDots { pos: offset });
+            }
+            remaining = &remaining[1..];
+            offset += 1;
+        } else {
+            break;
+        }
+    }
+
+    let mut reaction = Reaction {
+        reactants,
+        products,
+        agents,
+        atom_mapping: BTreeMap::new(),
+        comments: Vec::new(),
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
+    };
+    collect_atom_mapping(&mut reaction);
+    Ok(reaction)
+}
+
 fn parse_smiles_inner(
     input: &[u8],
+    offset: usize,
+    as_reaction: bool,
     flags: SmilesParseFlags,
-) -> Result<(&[u8], Molecule), ParseError> {
+) -> Result<(&[u8], (Molecule, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
@@ -96,7 +230,10 @@ fn parse_smiles_inner(
         let b0 = input[i];
 
         // Stop at whitespace - return remaining input
-        if matches!(b0, b' ' | b'\t' | b'\n' | b'\r') {
+        if b0.is_ascii_whitespace() {
+            break;
+        }
+        if as_reaction && (b0 == b'.' || b0 == b'>') {
             break;
         }
 
@@ -105,7 +242,7 @@ fn parse_smiles_inner(
         }
         if b0 == b'(' {
             if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos });
+                return Err(ParseError::TrailingBond { pos: offset + pos });
             }
             if just_closed_group {
                 last_atom_idx = None;
@@ -132,15 +269,15 @@ fn parse_smiles_inner(
         }
         if b0 == b')' {
             if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos });
+                return Err(ParseError::TrailingBond { pos: offset + pos });
             }
             let Some(frame) = branch_stack.pop() else {
-                return Err(ParseError::UnbalancedCloseParen { pos: i });
+                return Err(ParseError::UnbalancedCloseParen { pos: offset + i });
             };
             match frame {
                 Frame::Branch { base, had_atom, .. } => {
                     if !had_atom {
-                        return Err(ParseError::EmptyBranch { pos: i });
+                        return Err(ParseError::EmptyBranch { pos: offset + i });
                     }
                     last_atom_idx = Some(base);
                 }
@@ -149,13 +286,13 @@ fn parse_smiles_inner(
                 } => {
                     if !had_atom {
                         if i + 1 != n {
-                            return Err(ParseError::EmptyGroup { pos: i });
+                            return Err(ParseError::EmptyGroup { pos: offset + i });
                         }
                         if i > 0 && input[i - 1] == b'.' {
-                            return Err(ParseError::LeadingDot { pos: i - 1 });
+                            return Err(ParseError::LeadingDot { pos: offset + i - 1 });
                         }
                         if open_pos != 0 {
-                            return Err(ParseError::EmptyGroup { pos: i });
+                            return Err(ParseError::EmptyGroup { pos: offset + i });
                         }
                         last_atom_idx = None;
                         just_closed_group = false;
@@ -164,7 +301,7 @@ fn parse_smiles_inner(
                         if branch_stack.is_empty() && i + 1 != n {
                             let next = input[i + 1];
                             if next != b'.' {
-                                return Err(ParseError::NonfinalGroup { pos: i });
+                                return Err(ParseError::NonfinalGroup { pos: offset + i });
                             }
                         }
                     }
@@ -175,43 +312,43 @@ fn parse_smiles_inner(
         }
         if b0 == b'.' {
             if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos });
+                return Err(ParseError::TrailingBond { pos: offset + pos });
             }
             if i == 0 {
-                return Err(ParseError::LeadingDot { pos: i });
+                return Err(ParseError::LeadingDot { pos: offset + i });
             }
             if let Some(Frame::Group {
                 had_atom: false, ..
             }) = branch_stack.last()
             {
-                return Err(ParseError::LeadingDot { pos: i });
+                return Err(ParseError::LeadingDot { pos: offset + i });
             }
             if i + 1 == n {
-                return Err(ParseError::TrailingDot { pos: i });
+                return Err(ParseError::TrailingDot { pos: offset + i });
             }
             if input[i + 1] == b'.' {
-                return Err(ParseError::ConsecutiveDots { pos: i });
+                return Err(ParseError::ConsecutiveDots { pos: offset + i });
             }
             // Detect dot before ring (single digit ring index)
             if input[i + 1].is_ascii_digit() {
-                return Err(ParseError::DotBeforeRing { pos: i });
+                return Err(ParseError::DotBeforeRing { pos: offset + i });
             }
             // Detect dot before percent ring index
             if input[i + 1] == b'%' {
-                return Err(ParseError::DotBeforeRing { pos: i });
+                return Err(ParseError::DotBeforeRing { pos: offset + i });
             }
             last_atom_idx = None;
             last_aromatic = false;
             i += 1;
             continue;
         }
-        match parse_ring_index(input, i) {
+        match parse_ring_index(input, i, offset) {
             Ok(Some((idx, next_i, _percent))) => {
                 if last_atom_idx.is_none() {
-                    return Err(ParseError::LeadingRing { pos: i });
+                    return Err(ParseError::LeadingRing { pos: offset + i });
                 }
                 if invalid_ring_context(&branch_stack) {
-                    return Err(ParseError::LeadingRing { pos: 0 });
+                    return Err(ParseError::LeadingRing { pos: offset });
                 }
                 let bond = pending_bond.take();
                 let (order_opt, wedge_opt, donation_opt) =
@@ -227,6 +364,7 @@ fn parse_smiles_inner(
                     donation_opt,
                     i,
                     i + 1,
+                    offset,
                 )?;
                 i = next_i;
                 continue;
@@ -239,16 +377,16 @@ fn parse_smiles_inner(
             || (extended_bonds && matches!(b0, b'~' | b'<'))
         {
             if pending_bond.is_some() {
-                return Err(ParseError::ConsecutiveBonds { pos: i });
+                return Err(ParseError::ConsecutiveBonds { pos: offset + i });
             }
             if last_atom_idx.is_none() {
                 if let Some(Frame::Group {
                     had_atom: false, ..
                 }) = branch_stack.last()
                 {
-                    return Err(ParseError::LeadingBond { pos: i });
+                    return Err(ParseError::LeadingBond { pos: offset + i });
                 }
-                return Err(ParseError::LeadingBond { pos: i });
+                return Err(ParseError::LeadingBond { pos: offset + i });
             }
             // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
             if extended_bonds {
@@ -269,15 +407,15 @@ fn parse_smiles_inner(
                 j += 1;
             }
             if j >= n {
-                return Err(ParseError::UnbalancedOpenBracket { pos: i });
+                return Err(ParseError::UnbalancedOpenBracket { pos: offset + i });
             }
             // Empty bracket []
             if j == start {
-                return Err(ParseError::EmptyBracket { pos: i });
+                return Err(ParseError::EmptyBracket { pos: offset + i });
             }
             let inner = &input[start..j];
             let (elem_opt, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
-                parse_bracket(inner, i, flags)?;
+                parse_bracket(inner, offset + i, flags)?;
             let (element, aromatic) = match elem_opt {
                 Some(e) => (e, aromatic),
                 None => (Element::C, false),
@@ -476,30 +614,30 @@ fn parse_smiles_inner(
                 i += consumed;
                 continue;
             }
-            return Err(ParseError::InvalidElement { pos: i });
+            return Err(ParseError::InvalidElement { pos: offset + i });
         }
         if b0 == b'*' {
             // Wildcards not supported in basic SMILES parser
-            return Err(ParseError::InvalidElement { pos: i });
+            return Err(ParseError::InvalidElement { pos: offset + i });
         }
         if b0 == b']' {
-            return Err(ParseError::UnbalancedCloseBracket { pos: i });
+            return Err(ParseError::UnbalancedCloseBracket { pos: offset + i });
         }
         // Bracket-only fields outside bracket
         if b0 == b'@' || b0 == b'+' {
-            return Err(ParseError::StrayBracketField { pos: i });
+            return Err(ParseError::StrayBracketField { pos: offset + i });
         }
-        return Err(ParseError::InvalidToken { pos: i });
+        return Err(ParseError::InvalidToken { pos: offset + i });
     }
 
     if let Some((_, _, _, pos)) = pending_bond {
-        return Err(ParseError::TrailingBond { pos });
+        return Err(ParseError::TrailingBond { pos: offset + pos });
     }
     if !branch_stack.is_empty() {
         let pos = match branch_stack.last().unwrap() {
             Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
         };
-        return Err(ParseError::UnbalancedOpenParen { pos });
+        return Err(ParseError::UnbalancedOpenParen { pos: offset + pos });
     }
     let mut last_open: Option<usize> = None;
     for entry in ring_table.iter().flatten() {
@@ -513,11 +651,12 @@ fn parse_smiles_inner(
         }
     }
     if let Some(pos_open) = last_open {
-        return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
+        return Err(ParseError::UnbalancedRingIndex { open_pos: offset + pos_open });
     }
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_else(Molecule::empty);
-    Ok((&input[i..], mol))
+    let new_offset = offset + i;
+    Ok((&input[i..], (mol, new_offset)))
 }
 
 /// Parse extended SMILES string with strict OpenSMILES rules
@@ -549,7 +688,7 @@ pub fn parse_extended_smiles_bytes_with(
         return Ok(ExtendedMolecule::empty());
     }
 
-    let (remaining, mut mol) = parse_extended_smiles_inner(input, flags)?;
+    let (remaining, (mut mol, _)) = parse_extended_smiles_inner(input, 0, false, flags)?;
 
     // Inner parser stops at whitespace. Leading whitespace is not allowed
     // (exception: whitespace-only input is allowed)
@@ -561,7 +700,7 @@ pub fn parse_extended_smiles_bytes_with(
         return Ok(mol);
     }
 
-    // Chemaxon extensions
+    // Chemaxon annotations
     let trimmed = remaining.trim_ascii_start();
     if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
         let entries = parse_extended_cx_annotations(trimmed, flags)?;
@@ -573,8 +712,10 @@ pub fn parse_extended_smiles_bytes_with(
 
 fn parse_extended_smiles_inner(
     input: &[u8],
+    offset: usize,
+    as_reaction: bool,
     flags: SmilesParseFlags,
-) -> Result<(&[u8], ExtendedMolecule), ParseError> {
+) -> Result<(&[u8], (ExtendedMolecule, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
@@ -591,7 +732,10 @@ fn parse_extended_smiles_inner(
         let b0 = input[i];
 
         // Stop at whitespace - return remaining input
-        if matches!(b0, b' ' | b'\t' | b'\n' | b'\r') {
+        if b0.is_ascii_whitespace() {
+            break;
+        }
+        if as_reaction && (b0 == b'.' || b0 == b'>') {
             break;
         }
 
@@ -600,7 +744,7 @@ fn parse_extended_smiles_inner(
         }
         if b0 == b'(' {
             if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos });
+                return Err(ParseError::TrailingBond { pos: offset + pos });
             }
             if just_closed_group {
                 last_atom_idx = None;
@@ -627,15 +771,15 @@ fn parse_extended_smiles_inner(
         }
         if b0 == b')' {
             if let Some((_, _, _, pos)) = pending_bond {
-                return Err(ParseError::TrailingBond { pos });
+                return Err(ParseError::TrailingBond { pos: offset + pos });
             }
             let Some(frame) = branch_stack.pop() else {
-                return Err(ParseError::UnbalancedCloseParen { pos: i });
+                return Err(ParseError::UnbalancedCloseParen { pos: offset + i });
             };
             match frame {
                 Frame::Branch { base, had_atom, .. } => {
                     if !had_atom {
-                        return Err(ParseError::EmptyBranch { pos: i });
+                        return Err(ParseError::EmptyBranch { pos: offset + i });
                     }
                     last_atom_idx = Some(base);
                 }
@@ -644,13 +788,13 @@ fn parse_extended_smiles_inner(
                 } => {
                     if !had_atom {
                         if i + 1 != n {
-                            return Err(ParseError::EmptyGroup { pos: i });
+                            return Err(ParseError::EmptyGroup { pos: offset + i });
                         }
                         if i > 0 && input[i - 1] == b'.' {
-                            return Err(ParseError::LeadingDot { pos: i - 1 });
+                            return Err(ParseError::LeadingDot { pos: offset + i - 1 });
                         }
                         if open_pos != 0 {
-                            return Err(ParseError::EmptyGroup { pos: i });
+                            return Err(ParseError::EmptyGroup { pos: offset + i });
                         }
                         last_atom_idx = None;
                         just_closed_group = false;
@@ -659,7 +803,7 @@ fn parse_extended_smiles_inner(
                         if branch_stack.is_empty() && i + 1 != n {
                             let next = input[i + 1];
                             if next != b'.' {
-                                return Err(ParseError::NonfinalGroup { pos: i });
+                                return Err(ParseError::NonfinalGroup { pos: offset + i });
                             }
                         }
                     }
@@ -685,26 +829,26 @@ fn parse_extended_smiles_inner(
                 return Err(ParseError::TrailingDot { pos: i });
             }
             if input[i + 1] == b'.' {
-                return Err(ParseError::ConsecutiveDots { pos: i });
+                return Err(ParseError::ConsecutiveDots { pos: offset + i });
             }
             if input[i + 1].is_ascii_digit() {
-                return Err(ParseError::DotBeforeRing { pos: i });
+                return Err(ParseError::DotBeforeRing { pos: offset + i });
             }
             if input[i + 1] == b'%' {
-                return Err(ParseError::DotBeforeRing { pos: i });
+                return Err(ParseError::DotBeforeRing { pos: offset + i });
             }
             last_atom_idx = None;
             last_aromatic = false;
             i += 1;
             continue;
         }
-        match parse_ring_index(input, i) {
+        match parse_ring_index(input, i, offset) {
             Ok(Some((idx, next_i, _percent))) => {
                 if last_atom_idx.is_none() {
-                    return Err(ParseError::LeadingRing { pos: i });
+                    return Err(ParseError::LeadingRing { pos: offset + i });
                 }
                 if invalid_ring_context(&branch_stack) {
-                    return Err(ParseError::LeadingRing { pos: 0 });
+                    return Err(ParseError::LeadingRing { pos: offset });
                 }
                 let bond = pending_bond.take();
                 let (order_opt, wedge_opt, donation_opt) =
@@ -720,6 +864,7 @@ fn parse_extended_smiles_inner(
                     donation_opt,
                     i,
                     i + 1,
+                    offset,
                 )?;
                 i = next_i;
                 continue;
@@ -732,16 +877,16 @@ fn parse_extended_smiles_inner(
             || (extended_bonds && matches!(b0, b'~' | b'<'))
         {
             if pending_bond.is_some() {
-                return Err(ParseError::ConsecutiveBonds { pos: i });
+                return Err(ParseError::ConsecutiveBonds { pos: offset + i });
             }
             if last_atom_idx.is_none() {
                 if let Some(Frame::Group {
                     had_atom: false, ..
                 }) = branch_stack.last()
                 {
-                    return Err(ParseError::LeadingBond { pos: i });
+                    return Err(ParseError::LeadingBond { pos: offset + i });
                 }
-                return Err(ParseError::LeadingBond { pos: i });
+                return Err(ParseError::LeadingBond { pos: offset + i });
             }
             // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
             if extended_bonds {
@@ -762,14 +907,14 @@ fn parse_extended_smiles_inner(
                 j += 1;
             }
             if j >= n {
-                return Err(ParseError::UnbalancedOpenBracket { pos: i });
+                return Err(ParseError::UnbalancedOpenBracket { pos: offset + i });
             }
             if j == start {
-                return Err(ParseError::EmptyBracket { pos: i });
+                return Err(ParseError::EmptyBracket { pos: offset + i });
             }
             let inner = &input[start..j];
             let (symbol, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
-                parse_bracket_extended(inner, i, flags)?;
+                parse_bracket_extended(inner, offset + i, flags)?;
             let (s, e) = (Some(i as u32), Some((j + 1) as u32));
             let atom = ExtendedAtomData {
                 symbol,
@@ -963,7 +1108,7 @@ fn parse_extended_smiles_inner(
                 i += consumed;
                 continue;
             }
-            return Err(ParseError::InvalidElement { pos: i });
+            return Err(ParseError::InvalidElement { pos: offset + i });
         }
         if b0 == b'*' {
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
@@ -992,22 +1137,22 @@ fn parse_extended_smiles_inner(
             continue;
         }
         if b0 == b']' {
-            return Err(ParseError::UnbalancedCloseBracket { pos: i });
+            return Err(ParseError::UnbalancedCloseBracket { pos: offset + i });
         }
         if b0 == b'@' || b0 == b'+' {
-            return Err(ParseError::StrayBracketField { pos: i });
+            return Err(ParseError::StrayBracketField { pos: offset + i });
         }
-        return Err(ParseError::InvalidToken { pos: i });
+        return Err(ParseError::InvalidToken { pos: offset + i });
     }
 
     if let Some((_, _, _, pos)) = pending_bond {
-        return Err(ParseError::TrailingBond { pos });
+        return Err(ParseError::TrailingBond { pos: offset + pos });
     }
     if !branch_stack.is_empty() {
         let pos = match branch_stack.last().unwrap() {
             Frame::Branch { open_pos, .. } | Frame::Group { open_pos, .. } => *open_pos,
         };
-        return Err(ParseError::UnbalancedOpenParen { pos });
+        return Err(ParseError::UnbalancedOpenParen { pos: offset + pos });
     }
     let mut last_open: Option<usize> = None;
     for entry in ring_table.iter().flatten() {
@@ -1021,11 +1166,40 @@ fn parse_extended_smiles_inner(
         }
     }
     if let Some(pos_open) = last_open {
-        return Err(ParseError::UnbalancedRingIndex { open_pos: pos_open });
+        return Err(ParseError::UnbalancedRingIndex { open_pos: offset + pos_open });
     }
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
-    Ok((&input[i..], mol))
+    let new_offset = offset + i;
+    Ok((&input[i..], (mol, new_offset)))
+}
+
+fn collect_atom_mapping(reaction: &mut Reaction) {
+    for (mol_idx, mol) in reaction.reactants.iter().enumerate() {
+        for (at_idx, atom) in mol.atoms.iter().enumerate() {
+            if let Some(class) = atom.class {
+                reaction
+                    .atom_mapping
+                    .entry(class)
+                    .or_default()
+                    .0
+                    .push((mol_idx, at_idx));
+            }
+        }
+    }
+
+    for (mol_idx, mol) in reaction.products.iter().enumerate() {
+        for (at_idx, atom) in mol.atoms.iter().enumerate() {
+            if let Some(class) = atom.class {
+                reaction
+                    .atom_mapping
+                    .entry(class)
+                    .or_default()
+                    .1
+                    .push((mol_idx, at_idx));
+            }
+        }
+    }
 }
 
 #[cfg(test)]

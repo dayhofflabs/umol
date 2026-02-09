@@ -89,6 +89,8 @@ pub enum DiagnosticKind {
     SmilesInvalidBracket,
     #[strum(message = "Invalid CX extension")]
     SmilesInvalidCxTag,
+    #[strum(message = "Missing reaction arrow")]
+    SmilesMissingReactionArrow,
     #[strum(message = "Atom index out of bounds")]
     SmilesAtomIndexOutOfBounds,
     #[strum(message = "Bond index out of bounds")]
@@ -287,6 +289,7 @@ impl DiagnosticKind {
             | SmilesBracketHwithHcount
             | SmilesInvalidBracket
             | SmilesInvalidCxTag
+            | SmilesMissingReactionArrow
             | SmilesAtomIndexOutOfBounds
             | SmilesBondIndexOutOfBounds
             | SmilesMismatchedAtomBondIndices
@@ -404,6 +407,7 @@ impl DiagnosticKind {
             | SmilesBracketHwithHcount
             | SmilesInvalidBracket
             | SmilesInvalidCxTag
+            | SmilesMissingReactionArrow
             | SmilesAtomIndexOutOfBounds
             | SmilesBondIndexOutOfBounds
             | SmilesMismatchedAtomBondIndices

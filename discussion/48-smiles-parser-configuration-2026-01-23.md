@@ -83,7 +83,7 @@ Tool-specific presets combine logical groups as needed for compatibility.
 
 ---
 
-## 1. Current State (COMPLETED)
+## 1. Current State
 
 **Cleanup completed 2026-01-23.** Removed all speculative flags:
 - `EXTENDED_WS`, `ALLOWS_COMMENTS`, `EXPLICIT_EOI`, `UMOL_DIALECT`, `LENIENT` - removed
@@ -374,7 +374,7 @@ Analyzed 473 failing SMILES. Breakdown by category:
 
 **Result:** The conformance suite and classifier use the categories listed above.
 
-### Phase 4: Extended Stereo ✓ COMPLETE (parsing)
+### Phase 4: Extended Stereo ✓ COMPLETE
 
 Extended stereo types already parsed per OpenSMILES spec:
 - [x] `@AL1`, `@AL2` (allenal/axial chirality)
@@ -394,7 +394,7 @@ Extended stereo types already parsed per OpenSMILES spec:
 - [x] `Bond::new_dative()` constructor handles `AtomPair` normalization correctly
 - [x] Applied to both basic and extended parsers
 
-### Phase 6: CXSMILES (Group 5) ✓ COMPLETE (core subset)
+### Phase 6: CXSMILES (Group 5) ✓ COMPLETE
 
 #### 6.1 Integration point: `SMILES<ws>|...|`
 
@@ -483,7 +483,7 @@ spec-correct interpretation.
   - **Implemented**: accept standalone `r` for molecule parsing; reject `r:...` as `InvalidCxTag` (not meaningful
     for `ExtendedMolecule` parsing).
 
-**Additional CXSMILES tags to implement (extended CX only):**
+**Added CXSMILES tags (implemented):**
 
 - `Sg:` / `SgD:` / `SgH:`:
   - **MOL-equivalent**: yes (maps naturally to `ExtendedMolecule.ctfile_data.sgroups: BTreeMap<u32, SGroup>`).
@@ -510,24 +510,20 @@ spec-correct interpretation.
   - **Implemented**: store count in `ExtendedAtom.lone_pairs`.
 - `m:` multicenter bonds / variable attachment:
   - **Implemented**: parse and store in `ExtendedMolecule.multicenter_bonds` as `MulticenterBond` (center + ligand sets).
-- `RG:` / `LOG:` Markush:
-  - **LOG** is MOL-equivalent (maps to `ctfile_data.rgroups` metadata).
-  - **RG** requires additional representation for member structures (embedded `{...}` CXSMILES blocks).
-  - **Status**: Removed from parser (code quality insufficient); pending reimplementation.
-- `@:` / `@@:` (Local parity):
-  - **Requires additional work**: additional stereo metadata not currently represented in TableIR.
-  - **Plan**: parse and preserve in typed CX metadata first (roundtripping), then decide on semantic mapping.
 - `THB:` / `TLB:` / `TEB:` (bicyclo stereo):
   - **Implemented**: parse and store in `ExtendedAtom.bicyclo_stereo` as `BicycloStereoData`.
 
-**Suggested implementation order:**
+**Remaining CXSMILES tags (todo):**
 
-1) Done: Fix `C:`/`H:`/`w:`/`ctu:` semantics + update unit tests.
-2) Done: Atom-level query/order tags (`rb:`/`s:`/`u:`, `LO:`, `LN:`) + tests.
-3) Done: S-groups (`Sg:`/`SgD:`/`SgH:`) + tests.
-4) Done: Lone pairs (`LP:`/`lp:`), multicenter bonds (`m:`).
-5) Done: Bicyclo stereo (`THB:`/`TLB:`/`TEB:`).
-6) Implement remaining: Markush (`RG:`/`LOG:`), local parity (`@:`/`@@:`).
+- `RG:` / `LOG:` Markush:
+  - **LOG** is MOL-equivalent (maps to `cx_data.rgroups` metadata).
+      The `RGroup` struct has: `label`, `dependent_label`, `rgroup_or_h`, `occurrence`
+  - **RG** requires additional representation for member structures (embedded `{...}` CXSMILES blocks).
+      CXSMILES embeds member structures as `{...}` blocks (SMILES strings). Store as raw strings for roundtripping.
+  - **Status**: Removed from parser (code quality insufficient); pending reimplementation.
+- `@:` / `@@:` (Local parity):
+  - CXSMILES spec is ambiguous, no examples found.
+  - **Status**: Implementation postponed until format can be established
 
 #### 6.5 Conformance + classification details
 
@@ -541,7 +537,7 @@ This distinguishes “plain SMILES” from “SMILES + CX suffix” even when Op
 Conformance tests are gated behind the `conformance` Cargo feature and do not run under plain `cargo test`.
 Run with `cargo test -p umol-models-graph --features conformance --test smiles_parsing` (and similarly for `mol_parsing` / `sdf_parsing`).
 
-### Phase 7: Presets ✓ IMPLEMENTED
+### Phase 7: Presets ✓ COMPLETE
 
 Parsing presets are exposed via `SmilesIoConfig` constructors and map to `SmilesParseFlags`:
 
@@ -552,7 +548,10 @@ Parsing presets are exposed via `SmilesIoConfig` constructors and map to `Smiles
 
 Additional presets exist for testing/debugging (`basic_max`, `extended_max`, `strict`, `extended`, `lenient`).
 
-### Phase 8: Reaction SMILES Parser
+### Phase 8: Reaction SMILES Parser (Group 6)
+
+Design research: [50-reaction-design-research-2026-01-29.md](50-reaction-design-research-2026-01-29.md)
+
 - [ ] Create `Reaction` type (container for `Molecule` + atom mapping)
 - [ ] Implement `parse_reaction_smiles`
 - [ ] Split on `>>` (reactants >> products) and `>` (agents)

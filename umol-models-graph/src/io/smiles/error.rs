@@ -69,6 +69,8 @@ pub enum ParseError {
     InvalidBracket { pos: usize },
     #[error("Invalid CX tag at position {pos}")]
     InvalidCxTag { pos: usize },
+    #[error("Missing reaction arrow at position {pos}")]
+    MissingReactionArrow { pos: usize },
     #[error("Atom index out of bounds: {atom_idx}")]
     AtomIndexOutOfBounds { atom_idx: u32 },
     #[error("Bond index out of bounds: {bond_idx}")]
@@ -211,6 +213,10 @@ impl From<ParseError> for Diagnostic {
             ),
             InvalidCxTag { pos } => (
                 SmilesInvalidCxTag,
+                Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
+            ),
+            MissingReactionArrow { pos } => (
+                SmilesMissingReactionArrow,
                 Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
             ),
             AtomIndexOutOfBounds { .. } => (SmilesAtomIndexOutOfBounds, None),

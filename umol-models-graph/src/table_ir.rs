@@ -1,4 +1,4 @@
-//! Table IR for molecular data based on tables of atoms and bonds.
+//! Table IR for molecule and reaction data based on tables of atoms and bonds.
 
 pub mod atom;
 pub mod bond;
@@ -8,6 +8,7 @@ pub mod error;
 pub mod molecule;
 pub mod multicenter;
 pub mod property;
+pub mod reaction;
 pub mod rgroup;
 pub mod sgroup;
 pub mod source;
@@ -23,6 +24,7 @@ pub use error::*;
 pub use molecule::*;
 pub use multicenter::*;
 pub use property::*;
+pub use reaction::*;
 pub use rgroup::*;
 pub use sgroup::*;
 pub use source::*;

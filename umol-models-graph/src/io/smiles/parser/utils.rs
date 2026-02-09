@@ -38,6 +38,7 @@ pub(super) enum Frame {
 pub(super) fn parse_ring_index(
     input: &[u8],
     i: usize,
+    offset: usize,
 ) -> Result<Option<(usize, usize, bool)>, ParseError> {
     let n = input.len();
     if i >= n {
@@ -50,7 +51,7 @@ pub(super) fn parse_ring_index(
     }
     if b0 == b'%' {
         if i + 2 >= n || !input[i + 1].is_ascii_digit() || !input[i + 2].is_ascii_digit() {
-            return Err(ParseError::InvalidRingIndex { pos: i });
+            return Err(ParseError::InvalidRingIndex { pos: offset + i });
         }
         let idx = ((input[i + 1] - b'0') as usize) * 10 + (input[i + 2] - b'0') as usize;
         return Ok(Some((idx, i + 3, true)));
@@ -71,6 +72,7 @@ pub(super) fn process_ring_closure(
     donation_opt: Option<BondDonation>,
     pos: usize,
     token_end: usize,
+    offset: usize,
 ) -> Result<(), ParseError> {
     if ring_table.len() <= idx {
         ring_table.resize_with(idx + 1, || None);
@@ -98,8 +100,8 @@ pub(super) fn process_ring_closure(
             if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
                 if d1 != d2 {
                     return Err(ParseError::MismatchedRingBondDirs {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
@@ -108,16 +110,16 @@ pub(super) fn process_ring_closure(
             if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
                 if don1 == don2 {
                     return Err(ParseError::MismatchedRingBondDonations {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
             if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                 if o1 != o2 {
                     return Err(ParseError::MismatchedRingBondOrders {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
@@ -125,8 +127,8 @@ pub(super) fn process_ring_closure(
                 let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                 if ord != BondOrder::Single {
                     return Err(ParseError::MismatchedRingBondOrders {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
@@ -672,6 +674,7 @@ pub(super) fn process_ring_closure_extended(
     donation_opt: Option<BondDonation>,
     pos: usize,
     token_end: usize,
+    offset: usize,
 ) -> Result<(), ParseError> {
     if ring_table.len() <= idx {
         ring_table.resize_with(idx + 1, || None);
@@ -699,8 +702,8 @@ pub(super) fn process_ring_closure_extended(
             if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
                 if d1 != d2 {
                     return Err(ParseError::MismatchedRingBondDirs {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
@@ -709,16 +712,16 @@ pub(super) fn process_ring_closure_extended(
             if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
                 if don1 == don2 {
                     return Err(ParseError::MismatchedRingBondDonations {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
             if let (Some(o1), Some(o2)) = (open.order, order_opt) {
                 if o1 != o2 {
                     return Err(ParseError::MismatchedRingBondOrders {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
@@ -726,8 +729,8 @@ pub(super) fn process_ring_closure_extended(
                 let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
                 if ord != BondOrder::Single {
                     return Err(ParseError::MismatchedRingBondOrders {
-                        pos,
-                        open_pos: open.open_pos,
+                        pos: offset + pos,
+                        open_pos: offset + open.open_pos,
                     });
                 }
             }
