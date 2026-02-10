@@ -58,20 +58,20 @@ pub fn parse_smiles_bytes_with(
         return Ok(Molecule::empty());
     }
 
-    let (remaining, (mut mol, _)) = parse_smiles_inner(input, 0, false, flags)?;
-
-    // Inner parser stops at whitespace. Leading whitespace is not allowed
-    // (exception: whitespace-only input is allowed)
-    if mol.atoms.is_empty() && !remaining.trim_ascii_start().is_empty() {
+    // Leading whitespace is not allowed (exception: whitespace-only input is allowed)
+    if !input.is_empty() && input[0].is_ascii_whitespace() && !input.trim_ascii_start().is_empty() {
         return Err(ParseError::LeadingWhitespace);
     }
 
-    if remaining.is_empty() {
+    let (remaining, (mut mol, _)) = parse_smiles_inner(input, 0, false, flags)?;
+
+    // Inner parser stops at whitespace.
+    let trimmed = remaining.trim_ascii_start();
+    if trimmed.is_empty() {
         return Ok(mol);
     }
 
     // Chemaxon extensions
-    let trimmed = remaining.trim_ascii_start();
     if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
         let entries = parse_cx_annotations(trimmed, flags)?;
         update_molecule(&mut mol, entries)?;
@@ -115,32 +115,38 @@ pub fn parse_reaction_smiles_bytes_with(
     let mut remaining = input;
     let mut offset = 0usize;
 
-    // Parse reactants until ">"
-    loop {
+    // Reactants: parse molecules separated by '.', stop at '>'.
+    if remaining.starts_with(b".") {
+        return Err(ParseError::LeadingDot { pos: 0 });
+    }
+
+    // Leading whitespace is not allowed
+    if !input.is_empty() && input[0].is_ascii_whitespace() {
+        return Err(ParseError::LeadingWhitespace);
+    }
+
+    while !remaining.is_empty() && !remaining.starts_with(b">") {
         let (rest, (mol, new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
         offset = new_offset;
-        if !mol.atoms.is_empty() {
-            reactants.push(mol);
-        }
         remaining = rest;
-        if remaining.is_empty() {
-            break;
-        }
-        if remaining.starts_with(b">") {
-            break;
+        if remaining.len() < 2{
+            return Err(ParseError::MissingReactionArrow { pos: offset });
         }
         if remaining.starts_with(b".") {
-            if remaining.len() > 1 && remaining[1] == b'.' {
+            if remaining[1] == b'>' {
+                return Err(ParseError::TrailingDot { pos: offset });
+            }
+            if remaining[1] == b'.' {
                 return Err(ParseError::ConsecutiveDots { pos: offset });
             }
             remaining = &remaining[1..];
             offset += 1;
-            continue;
         }
-        return Err(ParseError::MissingReactionArrow { pos: offset });
+        if !mol.atoms.is_empty() {
+            reactants.push(mol);
+        }
     }
 
-    // Consume ">" or ">>"
     if remaining.starts_with(b">>") {
         remaining = &remaining[2..];
         offset += 2;
@@ -148,18 +154,32 @@ pub fn parse_reaction_smiles_bytes_with(
         remaining = &remaining[1..];
         offset += 1;
 
-        // Parse agents until ">"
+        // Agents: parse until '>'.
+        if remaining.starts_with(b".") {
+            return Err(ParseError::LeadingDot { pos: offset });
+        }
         while !remaining.is_empty() && !remaining.starts_with(b">") {
             let (rest, (mol, new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
             offset = new_offset;
+            remaining = rest;
+            let continue_loop = if !remaining.starts_with(b".") {
+                false
+            } else {
+                if remaining.len() == 1 {
+                    return Err(ParseError::MissingReactionArrow { pos: offset });
+                }
+                if remaining[1] == b'.' {
+                    return Err(ParseError::ConsecutiveDots { pos: offset });
+                }
+                if remaining[1] == b'>' {
+                    return Err(ParseError::TrailingDot { pos: offset });
+                }
+                true
+            };
             if !mol.atoms.is_empty() {
                 agents.push(mol);
             }
-            remaining = rest;
-            if remaining.starts_with(b".") {
-                if remaining.len() > 1 && remaining[1] == b'.' {
-                    return Err(ParseError::ConsecutiveDots { pos: offset });
-                }
+            if continue_loop {
                 remaining = &remaining[1..];
                 offset += 1;
             } else {
@@ -176,18 +196,32 @@ pub fn parse_reaction_smiles_bytes_with(
         return Err(ParseError::MissingReactionArrow { pos: offset });
     }
 
-    // Parse products until EOF/whitespace
+    // Products: parse until EOF/whitespace.
+    if remaining.starts_with(b".") {
+        return Err(ParseError::LeadingDot { pos: offset });
+    }
     while !remaining.is_empty() && !remaining.trim_ascii_start().is_empty() {
         let (rest, (mol, new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
         offset = new_offset;
+        remaining = rest;
+        let continue_loop = if !remaining.starts_with(b".") {
+            false
+        } else {
+            if mol.atoms.is_empty() {
+                return Err(ParseError::LeadingDot { pos: offset });
+            }
+            if remaining.len() == 1 || remaining.get(1) == Some(&b'>') {
+                return Err(ParseError::TrailingDot { pos: offset });
+            }
+            if remaining[1] == b'.' {
+                return Err(ParseError::ConsecutiveDots { pos: offset });
+            }
+            true
+        };
         if !mol.atoms.is_empty() {
             products.push(mol);
         }
-        remaining = rest;
-        if remaining.starts_with(b".") {
-            if remaining.len() > 1 && remaining[1] == b'.' {
-                return Err(ParseError::ConsecutiveDots { pos: offset });
-            }
+        if continue_loop {
             remaining = &remaining[1..];
             offset += 1;
         } else {
@@ -289,7 +323,9 @@ fn parse_smiles_inner(
                             return Err(ParseError::EmptyGroup { pos: offset + i });
                         }
                         if i > 0 && input[i - 1] == b'.' {
-                            return Err(ParseError::LeadingDot { pos: offset + i - 1 });
+                            return Err(ParseError::LeadingDot {
+                                pos: offset + i - 1,
+                            });
                         }
                         if open_pos != 0 {
                             return Err(ParseError::EmptyGroup { pos: offset + i });
@@ -651,7 +687,9 @@ fn parse_smiles_inner(
         }
     }
     if let Some(pos_open) = last_open {
-        return Err(ParseError::UnbalancedRingIndex { open_pos: offset + pos_open });
+        return Err(ParseError::UnbalancedRingIndex {
+            open_pos: offset + pos_open,
+        });
     }
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_else(Molecule::empty);
@@ -791,7 +829,9 @@ fn parse_extended_smiles_inner(
                             return Err(ParseError::EmptyGroup { pos: offset + i });
                         }
                         if i > 0 && input[i - 1] == b'.' {
-                            return Err(ParseError::LeadingDot { pos: offset + i - 1 });
+                            return Err(ParseError::LeadingDot {
+                                pos: offset + i - 1,
+                            });
                         }
                         if open_pos != 0 {
                             return Err(ParseError::EmptyGroup { pos: offset + i });
@@ -1166,7 +1206,9 @@ fn parse_extended_smiles_inner(
         }
     }
     if let Some(pos_open) = last_open {
-        return Err(ParseError::UnbalancedRingIndex { open_pos: offset + pos_open });
+        return Err(ParseError::UnbalancedRingIndex {
+            open_pos: offset + pos_open,
+        });
     }
     let mut mols = builder.finish();
     let mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
