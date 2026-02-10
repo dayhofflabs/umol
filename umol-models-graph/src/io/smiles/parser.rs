@@ -115,7 +115,6 @@ pub fn parse_reaction_smiles_bytes_with(
     let mut remaining = input;
     let mut offset = 0usize;
 
-    // Reactants: parse molecules separated by '.', stop at '>'.
     if remaining.starts_with(b".") {
         return Err(ParseError::LeadingDot { pos: 0 });
     }
@@ -125,11 +124,12 @@ pub fn parse_reaction_smiles_bytes_with(
         return Err(ParseError::LeadingWhitespace);
     }
 
+    // Reactants: parse molecules separated by '.', stop at '>'.
     while !remaining.is_empty() && !remaining.starts_with(b">") {
         let (rest, (mol, new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
         offset = new_offset;
         remaining = rest;
-        if remaining.len() < 2{
+        if remaining.len() < 2 {
             return Err(ParseError::MissingReactionArrow { pos: offset });
         }
         if remaining.starts_with(b".") {
