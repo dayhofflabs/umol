@@ -23,11 +23,11 @@ use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
 use crate::span::Span;
 use crate::table_ir::{
-    BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, Reaction, SourceFormat,
-    WildcardAtom,
+    BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
+    SourceFormat, WildcardAtom,
 };
 
-/// Parse SMILES string with basic OpenSMILES rules
+/// Parse SMILES string with basic OpenSMILES configuration
 pub fn parse_smiles(input: &str) -> Result<Molecule, ParseError> {
     parse_smiles_bytes(input.as_bytes())
 }
@@ -80,7 +80,7 @@ pub fn parse_smiles_bytes_with(
     Ok(mol)
 }
 
-/// Parse reaction SMILES with basic OpenSMILES rules
+/// Parse reaction SMILES with basic OpenSMILES configuration
 pub fn parse_reaction_smiles(input: &str) -> Result<Reaction, ParseError> {
     parse_reaction_smiles_bytes(input.as_bytes())
 }
@@ -93,7 +93,7 @@ pub fn parse_reaction_smiles_with(
     parse_reaction_smiles_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse reaction SMILES bytes with basic OpenSMILES rules
+/// Parse reaction SMILES bytes with basic OpenSMILES configuration
 pub fn parse_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ParseError> {
     parse_reaction_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
 }
@@ -697,7 +697,7 @@ fn parse_smiles_inner(
     Ok((&input[i..], (mol, new_offset)))
 }
 
-/// Parse extended SMILES string with strict OpenSMILES rules
+/// Parse extended SMILES string with basic OpenSMILES configuration
 pub fn parse_extended_smiles(input: &str) -> Result<ExtendedMolecule, ParseError> {
     parse_extended_smiles_bytes(input.as_bytes())
 }
@@ -710,7 +710,7 @@ pub fn parse_extended_smiles_with(
     parse_extended_smiles_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse extended SMILES bytes with strict OpenSMILES rules
+/// Parse extended SMILES bytes with basic OpenSMILES configuration
 pub fn parse_extended_smiles_bytes(input: &[u8]) -> Result<ExtendedMolecule, ParseError> {
     parse_extended_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
 }
@@ -746,6 +746,165 @@ pub fn parse_extended_smiles_bytes_with(
     }
 
     Ok(mol)
+}
+
+/// Parse extended reaction SMILES string with basic OpenSMILES configuration
+pub fn parse_extended_reaction_smiles(input: &str) -> Result<ExtendedReaction, ParseError> {
+    parse_extended_reaction_smiles_bytes(input.as_bytes())
+}
+
+/// Parse extended reaction SMILES string with configuration
+pub fn parse_extended_reaction_smiles_with(
+    input: &str,
+    config: &SmilesIoConfig,
+) -> Result<ExtendedReaction, ParseError> {
+    parse_extended_reaction_smiles_bytes_with(input.as_bytes(), config)
+}
+
+/// Parse extended reaction SMILES bytes with basic OpenSMILES configuration
+pub fn parse_extended_reaction_smiles_bytes(input: &[u8]) -> Result<ExtendedReaction, ParseError> {
+    parse_extended_reaction_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
+}
+
+/// Parse extended reaction SMILES bytes with configuration
+pub fn parse_extended_reaction_smiles_bytes_with(
+    input: &[u8],
+    config: &SmilesIoConfig,
+) -> Result<ExtendedReaction, ParseError> {
+    let flags = config.parse_flags;
+
+    let mut reactants = Vec::new();
+    let mut agents = Vec::new();
+    let mut products = Vec::new();
+    let mut remaining = input;
+    let mut offset = 0usize;
+
+    if remaining.starts_with(b".") {
+        return Err(ParseError::LeadingDot { pos: 0 });
+    }
+
+    if !input.is_empty() && input[0].is_ascii_whitespace() {
+        return Err(ParseError::LeadingWhitespace);
+    }
+
+    // Reactants: parse molecules separated by '.', stop at '>'.
+    while !remaining.is_empty() && !remaining.starts_with(b">") {
+        let (rest, (mol, new_offset)) =
+            parse_extended_smiles_inner(remaining, offset, true, flags)?;
+        offset = new_offset;
+        remaining = rest;
+        if remaining.len() < 2 {
+            return Err(ParseError::MissingReactionArrow { pos: offset });
+        }
+        if remaining.starts_with(b".") {
+            if remaining[1] == b'>' {
+                return Err(ParseError::TrailingDot { pos: offset });
+            }
+            if remaining[1] == b'.' {
+                return Err(ParseError::ConsecutiveDots { pos: offset });
+            }
+            remaining = &remaining[1..];
+            offset += 1;
+        }
+        if !mol.atoms.is_empty() {
+            reactants.push(mol);
+        }
+    }
+
+    if remaining.starts_with(b">>") {
+        remaining = &remaining[2..];
+        offset += 2;
+    } else if remaining.starts_with(b">") {
+        remaining = &remaining[1..];
+        offset += 1;
+
+        if remaining.starts_with(b".") {
+            return Err(ParseError::LeadingDot { pos: offset });
+        }
+        while !remaining.is_empty() && !remaining.starts_with(b">") {
+            let (rest, (mol, new_offset)) =
+                parse_extended_smiles_inner(remaining, offset, true, flags)?;
+            offset = new_offset;
+            remaining = rest;
+            let continue_loop = if !remaining.starts_with(b".") {
+                false
+            } else {
+                if remaining.len() == 1 {
+                    return Err(ParseError::MissingReactionArrow { pos: offset });
+                }
+                if remaining[1] == b'.' {
+                    return Err(ParseError::ConsecutiveDots { pos: offset });
+                }
+                if remaining[1] == b'>' {
+                    return Err(ParseError::TrailingDot { pos: offset });
+                }
+                true
+            };
+            if !mol.atoms.is_empty() {
+                agents.push(mol);
+            }
+            if continue_loop {
+                remaining = &remaining[1..];
+                offset += 1;
+            } else {
+                break;
+            }
+        }
+
+        if !remaining.starts_with(b">") {
+            return Err(ParseError::MissingReactionArrow { pos: offset });
+        }
+        remaining = &remaining[1..];
+        offset += 1;
+    } else {
+        return Err(ParseError::MissingReactionArrow { pos: offset });
+    }
+
+    // Products: parse until EOF/whitespace.
+    if remaining.starts_with(b".") {
+        return Err(ParseError::LeadingDot { pos: offset });
+    }
+    while !remaining.is_empty() && !remaining.trim_ascii_start().is_empty() {
+        let (rest, (mol, new_offset)) =
+            parse_extended_smiles_inner(remaining, offset, true, flags)?;
+        offset = new_offset;
+        remaining = rest;
+        let continue_loop = if !remaining.starts_with(b".") {
+            false
+        } else {
+            if mol.atoms.is_empty() {
+                return Err(ParseError::LeadingDot { pos: offset });
+            }
+            if remaining.len() == 1 || remaining.get(1) == Some(&b'>') {
+                return Err(ParseError::TrailingDot { pos: offset });
+            }
+            if remaining[1] == b'.' {
+                return Err(ParseError::ConsecutiveDots { pos: offset });
+            }
+            true
+        };
+        if !mol.atoms.is_empty() {
+            products.push(mol);
+        }
+        if continue_loop {
+            remaining = &remaining[1..];
+            offset += 1;
+        } else {
+            break;
+        }
+    }
+
+    let mut reaction = ExtendedReaction {
+        reactants,
+        products,
+        agents,
+        atom_mapping: BTreeMap::new(),
+        comments: Vec::new(),
+        properties: IndexMap::new(),
+        source_format: SourceFormat::SMILES,
+    };
+    collect_extended_atom_mapping(&mut reaction);
+    Ok(reaction)
 }
 
 fn parse_extended_smiles_inner(
@@ -1217,6 +1376,34 @@ fn parse_extended_smiles_inner(
 }
 
 fn collect_atom_mapping(reaction: &mut Reaction) {
+    for (mol_idx, mol) in reaction.reactants.iter().enumerate() {
+        for (at_idx, atom) in mol.atoms.iter().enumerate() {
+            if let Some(class) = atom.class {
+                reaction
+                    .atom_mapping
+                    .entry(class)
+                    .or_default()
+                    .0
+                    .push((mol_idx, at_idx));
+            }
+        }
+    }
+
+    for (mol_idx, mol) in reaction.products.iter().enumerate() {
+        for (at_idx, atom) in mol.atoms.iter().enumerate() {
+            if let Some(class) = atom.class {
+                reaction
+                    .atom_mapping
+                    .entry(class)
+                    .or_default()
+                    .1
+                    .push((mol_idx, at_idx));
+            }
+        }
+    }
+}
+
+fn collect_extended_atom_mapping(reaction: &mut ExtendedReaction) {
     for (mol_idx, mol) in reaction.reactants.iter().enumerate() {
         for (at_idx, atom) in mol.atoms.iter().enumerate() {
             if let Some(class) = atom.class {
