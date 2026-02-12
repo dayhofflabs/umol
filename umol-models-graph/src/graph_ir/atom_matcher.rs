@@ -5,18 +5,18 @@ use std::sync::LazyLock;
 use super::atom::AtomBuilder;
 use super::atom_spec::AtomSpec;
 use super::atom_spec_registry::AtomSpecRegistry;
-use super::error::GraphError;
-
-type Result<T> = std::result::Result<T, GraphError>;
+use super::error::ResolutionError;
 
 /// Matchers for atom typing. Default matcher uses the `AtomSpecRegistry` but custom
 /// matchers can be used.
 pub struct AtomMatcher {
-    matcher: Box<dyn Fn(&AtomBuilder) -> Result<Vec<AtomSpec>> + Send + Sync>,
+    matcher: Box<dyn Fn(&AtomBuilder) -> Result<Vec<AtomSpec>, ResolutionError> + Send + Sync>,
 }
 
 impl AtomMatcher {
-    pub fn new(matcher: Box<dyn Fn(&AtomBuilder) -> Result<Vec<AtomSpec>> + Send + Sync>) -> Self {
+    pub fn new(
+        matcher: Box<dyn Fn(&AtomBuilder) -> Result<Vec<AtomSpec>, ResolutionError> + Send + Sync>,
+    ) -> Self {
         Self { matcher }
     }
 
@@ -37,9 +37,15 @@ impl AtomMatcher {
                         && Self::matches_count(builder.lone_pairs(), spec.lone_pairs())
                         && Self::matches_count(builder.donated_pairs(), spec.donated_pairs())
                         && Self::matches_count(builder.accepted_pairs(), spec.accepted_pairs())
-                        && Self::matches_count(builder.unpaired_electrons(), spec.unpaired_electrons())
+                        && Self::matches_count(
+                            builder.unpaired_electrons(),
+                            spec.unpaired_electrons(),
+                        )
                         && Self::matches_count(builder.multiplicity(), spec.multiplicity())
-                        && Self::matches_count(builder.implicit_hydrogens(), spec.implicit_hydrogens())
+                        && Self::matches_count(
+                            builder.implicit_hydrogens(),
+                            spec.implicit_hydrogens(),
+                        )
                         && Self::matches_count(builder.valence(), spec.valence())
                 })
                 .cloned()
@@ -81,13 +87,13 @@ impl AtomMatcher {
 
     pub fn with_matcher(
         mut self,
-        matcher: impl Fn(&AtomBuilder) -> Result<Vec<AtomSpec>> + Send + Sync + 'static,
+        matcher: impl Fn(&AtomBuilder) -> Result<Vec<AtomSpec>, ResolutionError> + Send + Sync + 'static,
     ) -> Self {
         self.matcher = Box::new(matcher);
         self
     }
 
-    pub fn find(&self, builder: &AtomBuilder) -> Result<Vec<AtomSpec>> {
+    pub fn find(&self, builder: &AtomBuilder) -> Result<Vec<AtomSpec>, ResolutionError> {
         (self.matcher)(builder)
     }
 

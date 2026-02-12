@@ -8,11 +8,9 @@ use map_macro::hash_map;
 use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use crate::graph_ir::error::GraphError;
+use crate::graph_ir::error::ResolutionError;
 
-type Result<T> = std::result::Result<T, GraphError>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BondOrder {
     Zero,
     Single,

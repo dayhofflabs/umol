@@ -1,18 +1,19 @@
 //! Atom validator infrastructure copied from `umol-models-valence`.
 
 use std::sync::LazyLock;
-use super::atom::Atom;
-use super::error::GraphError;
 
-type Result<T> = std::result::Result<T, GraphError>;
+use super::atom::Atom;
+use super::error::ResolutionError;
 
 pub struct AtomValidator {
     #[allow(clippy::type_complexity)]
-    validators: Vec<Box<dyn Fn(&Atom) -> Result<()> + Send + Sync>>,
+    validators: Vec<Box<dyn Fn(&Atom) -> Result<(), ResolutionError> + Send + Sync>>,
 }
 
 impl AtomValidator {
-    pub fn new(validators: Vec<Box<dyn Fn(&Atom) -> Result<()> + Send + Sync>>) -> Self {
+    pub fn new(
+        validators: Vec<Box<dyn Fn(&Atom) -> Result<(), ResolutionError> + Send + Sync>>,
+    ) -> Self {
         Self { validators }
     }
 
@@ -25,7 +26,7 @@ impl AtomValidator {
 
             let charge = atom.charge();
             if charge < min_charge || charge > max_charge {
-                return Err(GraphError::ValenceViolation(
+                return Err(ResolutionError::ValenceViolation(
                     element,
                     format!("Charge {} is out of bounds", charge),
                 ));
@@ -33,7 +34,7 @@ impl AtomValidator {
 
             let unpaired = atom.unpaired_electrons();
             if unpaired > u32::from(element.max_unpaired_electrons()) {
-                return Err(GraphError::ValenceViolation(
+                return Err(ResolutionError::ValenceViolation(
                     element,
                     format!("Unpaired electrons {} exceed max", unpaired),
                 ));
@@ -41,7 +42,7 @@ impl AtomValidator {
 
             let multiplicity = atom.multiplicity();
             if multiplicity > u32::from(element.max_unpaired_electrons()) + 1 {
-                return Err(GraphError::ValenceViolation(
+                return Err(ResolutionError::ValenceViolation(
                     element,
                     format!("Multiplicity {} exceeds max", multiplicity),
                 ));
@@ -49,7 +50,7 @@ impl AtomValidator {
 
             let implicit_hydrogens = atom.implicit_hydrogens();
             if implicit_hydrogens > u32::from(element.max_implicit_hydrogens()) {
-                return Err(GraphError::ValenceViolation(
+                return Err(ResolutionError::ValenceViolation(
                     element,
                     format!("Implicit hydrogens {} exceed max", implicit_hydrogens),
                 ));
@@ -57,7 +58,7 @@ impl AtomValidator {
 
             let valence = atom.valence();
             if valence > u32::from(element.max_valence()) {
-                return Err(GraphError::ValenceViolation(
+                return Err(ResolutionError::ValenceViolation(
                     element,
                     format!("Valence {} exceeds max", valence),
                 ));
@@ -77,13 +78,13 @@ impl AtomValidator {
 
     pub fn with_validator(
         mut self,
-        validator: impl Fn(&Atom) -> Result<()> + Send + Sync + 'static,
+        validator: impl Fn(&Atom) -> Result<(), ResolutionError> + Send + Sync + 'static,
     ) -> Self {
         self.validators.push(Box::new(validator));
         self
     }
 
-    pub fn validate(&self, atom: &Atom) -> Result<()> {
+    pub fn validate(&self, atom: &Atom) -> Result<(), ResolutionError> {
         for validator in &self.validators {
             validator(atom)?;
         }

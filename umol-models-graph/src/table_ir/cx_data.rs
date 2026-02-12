@@ -3,11 +3,12 @@
 //! Contains format-specific data that doesn't have clean semantic representation
 //! but is needed for faithful roundtripping of CXSMILES.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::atom::{BicycloStereo, Chirality};
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
+use crate::table_ir::BicycloStereoData;
 
 /// Local parity entry (@: / @@:). Chiral center with ordered substituents.
 #[derive(Clone, Debug, PartialEq)]
@@ -57,4 +58,159 @@ pub enum StereoSetMode {
     Correlated,
     /// Centers flip independently (mixture)
     Independent,
+}
+
+impl CxAnnotationData {
+    pub fn update_atoms_bonds(
+        &self,
+        atom_index_map: &HashMap<u32, u32>,
+        bond_index_map: &HashMap<u32, u32>,
+    ) -> Option<Self> {
+        let mut stereo_groups = BTreeMap::new();
+        for (idx, set) in &self.stereo_groups {
+            let atoms = set
+                .atoms
+                .iter()
+                .map(|a| atom_index_map.get(a).copied())
+                .collect::<Option<Vec<u32>>>();
+            if let Some(atoms) = atoms {
+                stereo_groups.insert(
+                    *idx,
+                    StereoSet {
+                        atoms,
+                        mode: set.mode,
+                    },
+                );
+            }
+        }
+
+        let components = self.components.as_ref().and_then(|groups| {
+            let remapped = groups
+                .iter()
+                .filter_map(|g| {
+                    g.iter()
+                        .map(|a| atom_index_map.get(a).copied())
+                        .collect::<Option<Vec<u32>>>()
+                })
+                .collect::<Vec<Vec<u32>>>();
+            if remapped.is_empty() {
+                None
+            } else {
+                Some(remapped)
+            }
+        });
+
+        let mut sgroups = BTreeMap::new();
+        for (label, sgroup) in &self.sgroups {
+            if let Some(remapped) = sgroup.remap_indices(atom_index_map, bond_index_map) {
+                sgroups.insert(*label, remapped);
+            }
+        }
+
+        let local_parity = self
+            .local_parity
+            .as_ref()
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|entry| {
+                        let center = atom_index_map.get(&entry.center).copied()?;
+                        let substituents = entry
+                            .substituents
+                            .iter()
+                            .map(|s| atom_index_map.get(s).copied())
+                            .collect::<Option<Vec<u32>>>()?;
+                        Some(LocalParityEntry {
+                            center,
+                            substituents,
+                            chirality: entry.chirality,
+                        })
+                    })
+                    .collect::<Vec<LocalParityEntry>>()
+            })
+            .and_then(|entries| {
+                if entries.is_empty() {
+                    None
+                } else {
+                    Some(entries)
+                }
+            });
+
+        let bicyclo_stereo = self
+            .bicyclo_stereo
+            .as_ref()
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|entry| update_bicyclo_atoms(entry, atom_index_map))
+                    .collect::<Vec<BicycloStereo>>()
+            })
+            .and_then(|entries| {
+                if entries.is_empty() {
+                    None
+                } else {
+                    Some(entries)
+                }
+            });
+
+        let data = Self {
+            stereo_groups,
+            components,
+            sgroups,
+            rgroups: self.rgroups.clone(),
+            rgroup_members: self.rgroup_members.clone(),
+            local_parity,
+            bicyclo_stereo,
+        };
+        if data.stereo_groups.is_empty()
+            && data.components.is_none()
+            && data.sgroups.is_empty()
+            && data.rgroups.is_empty()
+            && data.rgroup_members.is_empty()
+            && data.local_parity.is_none()
+            && data.bicyclo_stereo.is_none()
+        {
+            None
+        } else {
+            Some(data)
+        }
+    }
+}
+
+fn update_bicyclo_atoms(
+    entry: &BicycloStereo,
+    atom_index_map: &HashMap<u32, u32>,
+) -> Option<BicycloStereo> {
+    let update_atoms = |data: &BicycloStereoData| -> Option<BicycloStereoData> {
+        let ligand_atom = atom_index_map.get(&data.ligand_atom).copied()?;
+        let connection_atom = atom_index_map.get(&data.connection_atom).copied()?;
+        let lower_bridge_atoms = data
+            .lower_bridge_atoms
+            .iter()
+            .map(|a| atom_index_map.get(a).copied())
+            .collect::<Option<Vec<u32>>>()?;
+        let higher_bridge_atoms = data
+            .higher_bridge_atoms
+            .iter()
+            .map(|a| atom_index_map.get(a).copied())
+            .collect::<Option<Vec<u32>>>()?;
+        Some(BicycloStereoData {
+            ligand_atom,
+            connection_atom,
+            lower_bridge_atoms,
+            higher_bridge_atoms,
+        })
+    };
+
+    match entry {
+        BicycloStereo::TowardsHigherBridge(data) => {
+            Some(BicycloStereo::TowardsHigherBridge(update_atoms(data)?))
+        }
+        BicycloStereo::TowardsLowerBridge(data) => {
+            Some(BicycloStereo::TowardsLowerBridge(update_atoms(data)?))
+        }
+        BicycloStereo::TowardsEitherBridge(data) => {
+            Some(BicycloStereo::TowardsEitherBridge(update_atoms(data)?))
+        }
+    }
 }

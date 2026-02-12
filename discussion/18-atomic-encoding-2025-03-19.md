@@ -169,7 +169,7 @@ static EL_CONF_CODES = Lazy<HashMap<Element, u8>> = Lazy({||hash_map! {
 }});
 
 static BONDING_CODES: Lazy<HashMap<Element, u8>> = Lazy({||hash_map! {
-    // >= quadruple: 2 bits, double and triple: 2 bits, single: 4 bits using Gray coding
+    // <= quadruple: 2 bits, double and triple: 2 bits, single: 4 bits using Gray coding
     Bonding::Zero                    => 0b00_00_0000u8,
     Bonding::Single                  => 0b00_00_0001u8,
     Bonding::Double                  => 0b00_01_0000u8,

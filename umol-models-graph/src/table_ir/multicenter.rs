@@ -23,6 +23,8 @@
 //! contributions: [([0], 2), ([1], 1), ([2], 1)]
 //! ```
 
+use std::collections::HashMap;
+
 /// A set of atoms contributing to a multi-center bond.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MulticenterSet {
@@ -74,10 +76,30 @@ impl MulticenterBond {
             .flat_map(|c| c.atoms.iter().copied())
             .collect()
     }
+
+    /// Return a multicenter bond with remapped atom indices.
+    /// Returns `None` when at least one atom has no mapping.
+    pub fn update_atoms(&self, index_map: &HashMap<u32, u32>) -> Option<Self> {
+        let contributions = self
+            .contributions
+            .iter()
+            .map(|contribution| {
+                contribution
+                    .atoms
+                    .iter()
+                    .map(|old_idx| index_map.get(old_idx).copied())
+                    .collect::<Option<Vec<u32>>>()
+                    .map(|atoms| MulticenterSet::new(atoms, contribution.electrons))
+            })
+            .collect::<Option<Vec<MulticenterSet>>>()?;
+
+        Some(Self::new(contributions))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use map_macro::hash_map;
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -96,5 +118,36 @@ mod tests {
         assert_eq!(bond.electron_count(), expected_electron_count);
         assert_eq!(bond.atom_count(), expected_atom_count);
         assert_eq!(bond.all_atoms(), expected_atoms);
+    }
+
+    #[test]
+    fn test_multicenter_bond_update_atoms() {
+        let bond = MulticenterBond::new(vec![
+            MulticenterSet::new(vec![2, 3], 4),
+            MulticenterSet::single(5, 0),
+        ]);
+        let map = hash_map! {
+            2u32 => 0u32,
+            3u32 => 1u32,
+            5u32 => 2u32,
+        };
+
+        let updated = bond.update_atoms(&map).unwrap();
+        assert_eq!(
+            updated,
+            MulticenterBond::new(vec![
+                MulticenterSet::new(vec![0, 1], 4),
+                MulticenterSet::single(2, 0),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_multicenter_bond_update_atoms_missing() {
+        let bond = MulticenterBond::new(vec![MulticenterSet::new(vec![2, 3], 4)]);
+        let map = hash_map! {
+            2u32 => 0u32,
+        };
+        assert!(bond.update_atoms(&map).is_none());
     }
 }

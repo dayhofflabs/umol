@@ -28,7 +28,7 @@ impl From<ValenceError> for Diagnostic {
     fn from(error: ValenceError) -> Self {
         use DiagnosticKind::*;
         let (kind, details) = match error {
-            ValenceError::Io(ref e) => (GraphValenceError, Some(e.to_string())),
+            ValenceError::Io(ref e) => (phValenceError, Some(e.to_string())),
             ValenceError::Toml(ref e) => (GraphValenceError, Some(e.to_string())),
             ValenceError::NoMatch(ref s) => (GraphNoMatch, Some(s.clone())),
             ValenceError::AmbiguousMatch(ref s) => (GraphAmbiguousMatch, Some(s.clone())),

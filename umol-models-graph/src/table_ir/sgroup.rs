@@ -1,6 +1,7 @@
 //! SGroup for TableIR.
 // These are temporary types inherited from CTFile
 // TODO: Replace by semantically defined structures that SGroup type combines.
+use std::collections::HashMap;
 
 /// SGroup type
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -203,5 +204,58 @@ impl SGroup {
             bracket_coords: None,
             display: None,
         }
+    }
+
+    pub fn remap_indices(
+        &self,
+        atom_index_map: &HashMap<u32, u32>,
+        bond_index_map: &HashMap<u32, u32>,
+    ) -> Option<Self> {
+        let atom_indices = self
+            .atom_indices
+            .iter()
+            .map(|idx| atom_index_map.get(idx).copied())
+            .collect::<Option<Vec<u32>>>()?;
+        let bond_indices = self
+            .bond_indices
+            .iter()
+            .map(|idx| bond_index_map.get(idx).copied())
+            .collect::<Option<Vec<u32>>>()?;
+        let parent_atom_indices = match self.parent_atom_indices.as_ref() {
+            Some(indices) => Some(
+                indices
+                    .iter()
+                    .map(|idx| atom_index_map.get(idx).copied())
+                    .collect::<Option<Vec<u32>>>()?,
+            ),
+            None => None,
+        };
+        let correspondence = match self.correspondence.as_ref() {
+            Some(indices) => Some(
+                indices
+                    .iter()
+                    .map(|idx| bond_index_map.get(idx).copied())
+                    .collect::<Option<Vec<u32>>>()?,
+            ),
+            None => None,
+        };
+        let connecting_bond = self.connecting_bond.and_then(|cb| {
+            bond_index_map
+                .get(&cb.bond_index)
+                .copied()
+                .map(|bond_index| SGroupConnectingBond { bond_index, ..cb })
+        });
+        if self.connecting_bond.is_some() && connecting_bond.is_none() {
+            return None;
+        }
+
+        Some(Self {
+            atom_indices,
+            bond_indices,
+            parent_atom_indices,
+            correspondence,
+            connecting_bond,
+            ..self.clone()
+        })
     }
 }

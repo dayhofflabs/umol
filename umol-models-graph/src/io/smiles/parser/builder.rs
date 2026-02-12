@@ -50,14 +50,6 @@ impl MoleculeBuilder {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn clear_reuse(&mut self) {
-        self.atoms.clear();
-        self.bonds.clear();
-        self.rings.clear();
-        self.molecules.clear();
-    }
-
     #[inline]
     pub(crate) fn on_atom(&mut self, a: AtomData) -> u32 {
         let span = a.span;

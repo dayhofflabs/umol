@@ -15,10 +15,10 @@ use super::source::SourceFormat;
 /// Basic reaction IR
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reaction {
-    pub reactants: Vec<Molecule>,
-    pub products: Vec<Molecule>,
-    pub agents: Vec<Molecule>,
-    pub atom_mapping: BTreeMap<u32, (Vec<(usize, usize)>, Vec<(usize, usize)>)>,
+    pub reactants: Molecule,
+    pub products: Molecule,
+    pub agents: Molecule,
+    pub atom_mapping: BTreeMap<u32, (Vec<u32>, Vec<u32>)>,
 
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
@@ -28,9 +28,9 @@ pub struct Reaction {
 impl Reaction {
     pub fn empty() -> Self {
         Self {
-            reactants: Vec::new(),
-            products: Vec::new(),
-            agents: Vec::new(),
+            reactants: Molecule::empty(),
+            products: Molecule::empty(),
+            agents: Molecule::empty(),
             atom_mapping: BTreeMap::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
@@ -39,9 +39,9 @@ impl Reaction {
     }
 
     pub fn from_molecules(
-        reactants: Vec<Molecule>,
-        products: Vec<Molecule>,
-        agents: Vec<Molecule>,
+        reactants: Molecule,
+        products: Molecule,
+        agents: Molecule,
     ) -> Self {
         Self {
             reactants,
@@ -54,38 +54,15 @@ impl Reaction {
         }
     }
 
-    pub fn reactant_count(&self) -> usize {
-        self.reactants.len()
-    }
-
-    pub fn product_count(&self) -> usize {
-        self.products.len()
-    }
-
-    pub fn agent_count(&self) -> usize {
-        self.agents.len()
-    }
-
-    pub fn add_reactant(&mut self, molecule: Molecule) {
-        self.reactants.push(molecule);
-    }
-
-    pub fn add_product(&mut self, molecule: Molecule) {
-        self.products.push(molecule);
-    }
-
-    pub fn add_agent(&mut self, molecule: Molecule) {
-        self.agents.push(molecule);
-    }
 }
 
 /// Extended reaction IR
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExtendedReaction {
-    pub reactants: Vec<ExtendedMolecule>,
-    pub products: Vec<ExtendedMolecule>,
-    pub agents: Vec<ExtendedMolecule>,
-    pub atom_mapping: BTreeMap<u32, (Vec<(usize, usize)>, Vec<(usize, usize)>)>,
+    pub reactants: ExtendedMolecule,
+    pub products: ExtendedMolecule,
+    pub agents: ExtendedMolecule,
+    pub atom_mapping: BTreeMap<u32, (Vec<u32>, Vec<u32>)>,
 
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
@@ -95,9 +72,9 @@ pub struct ExtendedReaction {
 impl ExtendedReaction {
     pub fn empty() -> Self {
         Self {
-            reactants: Vec::new(),
-            products: Vec::new(),
-            agents: Vec::new(),
+            reactants: ExtendedMolecule::empty(),
+            products: ExtendedMolecule::empty(),
+            agents: ExtendedMolecule::empty(),
             atom_mapping: BTreeMap::new(),
             comments: Vec::new(),
             properties: IndexMap::new(),
@@ -106,9 +83,9 @@ impl ExtendedReaction {
     }
 
     pub fn from_extended_molecules(
-        reactants: Vec<ExtendedMolecule>,
-        products: Vec<ExtendedMolecule>,
-        agents: Vec<ExtendedMolecule>,
+        reactants: ExtendedMolecule,
+        products: ExtendedMolecule,
+        agents: ExtendedMolecule,
     ) -> Self {
         Self {
             reactants,
@@ -121,27 +98,4 @@ impl ExtendedReaction {
         }
     }
 
-    pub fn reactant_count(&self) -> usize {
-        self.reactants.len()
-    }
-
-    pub fn product_count(&self) -> usize {
-        self.products.len()
-    }
-
-    pub fn agent_count(&self) -> usize {
-        self.agents.len()
-    }
-
-    pub fn add_reactant(&mut self, molecule: ExtendedMolecule) {
-        self.reactants.push(molecule);
-    }
-
-    pub fn add_product(&mut self, molecule: ExtendedMolecule) {
-        self.products.push(molecule);
-    }
-
-    pub fn add_agent(&mut self, molecule: ExtendedMolecule) {
-        self.agents.push(molecule);
-    }
 }

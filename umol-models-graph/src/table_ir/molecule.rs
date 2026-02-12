@@ -1,4 +1,4 @@
-//! Molecule IR for TableIR.
+//! Molecule types for TableIR.
 //!
 //! `Molecule` is TableIR molecule representation for molecules with fixed composition
 //! `ExtendedMolecule` is temporary container for generalized molecules (query molecules, molecule
@@ -6,21 +6,24 @@
 //!   (Query features, SGroups, RGroups, etc.). It is supposed to be split into multiple semantically
 //!   defined structures.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use indexmap::IndexMap;
+use itertools::Itertools;
+use petgraph::unionfind::UnionFind;
 use umol_data::Element;
 
 use super::atom::{Atom, AtomSymbol, ExtendedAtom};
 use super::bond::{Bond, ExtendedBond};
 use super::ctfile_data::CtfileData;
 use super::cx_data::CxAnnotationData;
+use super::error::JoinError;
 use super::multicenter::MulticenterBond;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
 use super::stereo::StereoInterpretation;
-use super::topology::{Fragment, Link, Ring};
+use super::topology::Ring;
 use super::utils::{element_symbol_key, format_sum_formula};
 use crate::position::Point3D;
 
@@ -65,6 +68,200 @@ impl Molecule {
         self.multicenter_bonds.len()
     }
 
+    /// Count of molecular properties (from SDF/MOL properties or CXSMILES annotations)
+    pub fn property_count(&self) -> usize {
+        self.properties.len()
+    }
+
+    /// Component labels per atom
+    fn component_labels(&self) -> Vec<u32> {
+        let mut union_find = UnionFind::new(self.atom_count());
+        for bond in &self.bonds {
+            let (first, second) = bond.atoms.as_tuple();
+            union_find.union(first, second);
+        }
+        for multicenter_bond in &self.multicenter_bonds {
+            let indices: Vec<u32> = multicenter_bond
+                .contributions
+                .iter()
+                .flat_map(|c| c.atoms.iter().copied())
+                .collect();
+            for (first, second) in indices.into_iter().tuple_combinations() {
+                union_find.union(first, second);
+            }
+        }
+        union_find.into_labeling()
+    }
+
+    /// Count of connected components in the molecule
+    pub fn component_count(&self) -> u32 {
+        self.component_labels().iter().collect::<HashSet<_>>().len() as u32
+    }
+
+    /// Atom indices in each connected component
+    pub fn component_atom_indices(&self) -> Vec<Vec<u32>> {
+        let mut components = BTreeMap::new();
+        for (atom_index, component_label) in self.component_labels().into_iter().enumerate() {
+            components
+                .entry(component_label)
+                .or_insert_with(Vec::new)
+                .push(atom_index as u32);
+        }
+        components.into_values().collect()
+    }
+
+    /// Split molecule into connected components with remapped atom indices.
+    pub fn split_components(&self) -> Vec<Molecule> {
+        let mut components = Vec::new();
+        for component_atoms in self.component_atom_indices() {
+            let index_map: HashMap<u32, u32> = component_atoms
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(new_idx, old_idx)| (old_idx, new_idx as u32))
+                .collect();
+
+            let atoms = component_atoms
+                .iter()
+                .map(|&old_idx| self.atoms[old_idx as usize].clone())
+                .collect();
+
+            let bonds = self
+                .bonds
+                .iter()
+                .filter_map(|bond| {
+                    let (a, b) = bond.atoms.as_tuple();
+                    let new_a = *index_map.get(&a)?;
+                    let new_b = *index_map.get(&b)?;
+                    Some(bond.update_atoms(new_a, new_b))
+                })
+                .collect();
+
+            let rings =
+                self.rings
+                    .iter()
+                    .filter_map(|ring| {
+                        let new_start = match ring.start_atom {
+                            Some(old_idx) => Some(*index_map.get(&old_idx)?),
+                            None => None,
+                        };
+                        let new_end = match ring.end_atom {
+                            Some(old_idx) => Some(*index_map.get(&old_idx)?),
+                            None => None,
+                        };
+                        if new_start.is_none() && new_end.is_none() {
+                            return None;
+                        }
+                        Some(ring.update_atoms(
+                            new_start.unwrap_or_default(),
+                            new_end.unwrap_or_default(),
+                        ))
+                    })
+                    .collect();
+
+            let positions = self.positions.as_ref().map(|positions| {
+                component_atoms
+                    .iter()
+                    .filter_map(|&old_idx| positions.get(old_idx as usize).copied())
+                    .collect()
+            });
+
+            let multicenter_bonds = self
+                .multicenter_bonds
+                .iter()
+                .filter_map(|multicenter| multicenter.update_atoms(&index_map))
+                .collect();
+
+            components.push(Molecule {
+                atoms,
+                bonds,
+                rings,
+                positions,
+                multicenter_bonds,
+                stereo_interpretation: self.stereo_interpretation,
+                comments: self.comments.clone(),
+                properties: self.properties.clone(),
+                source_format: self.source_format,
+            });
+        }
+        components
+    }
+
+    /// Combine a list of molecules into one molecule.
+    pub fn join_components(components: &[Molecule]) -> Molecule {
+        if components.is_empty() {
+            return Molecule::empty();
+        }
+
+        let mut atoms = Vec::new();
+        let mut bonds = Vec::new();
+        let mut rings = Vec::new();
+        let mut multicenter_bonds = Vec::new();
+        let mut comments = Vec::new();
+        let mut properties = IndexMap::new();
+        let mut all_positions = true;
+        let mut positions_acc = Vec::new();
+        let source_format = components[0].source_format;
+        let stereo_interpretation = components[0].stereo_interpretation;
+
+        for mol in components {
+            let atom_offset = atoms.len() as u32;
+            atoms.extend(mol.atoms.iter().cloned());
+
+            for bond in &mol.bonds {
+                let (a, b) = bond.atoms.as_tuple();
+                bonds.push(bond.update_atoms(a + atom_offset, b + atom_offset));
+            }
+
+            for ring in &mol.rings {
+                let new_start = ring.start_atom.map(|idx| idx + atom_offset);
+                let new_end = ring.end_atom.map(|idx| idx + atom_offset);
+                if new_start.is_none() && new_end.is_none() {
+                    continue;
+                }
+                rings.push(
+                    ring.update_atoms(new_start.unwrap_or_default(), new_end.unwrap_or_default()),
+                );
+            }
+
+            let index_map: HashMap<u32, u32> = (0..mol.atom_count() as u32)
+                .map(|idx| (idx, idx + atom_offset))
+                .collect();
+            multicenter_bonds.extend(
+                mol.multicenter_bonds
+                    .iter()
+                    .filter_map(|multicenter| multicenter.update_atoms(&index_map)),
+            );
+
+            if let Some(component_positions) = mol.positions.as_ref() {
+                positions_acc.extend(component_positions.iter().copied());
+            } else {
+                all_positions = false;
+            }
+
+            comments.extend(mol.comments.iter().cloned());
+            for (key, value) in &mol.properties {
+                properties.insert(key.clone(), value.clone());
+            }
+        }
+
+        Molecule {
+            atoms,
+            bonds,
+            rings,
+            positions: if all_positions {
+                Some(positions_acc)
+            } else {
+                None
+            },
+            multicenter_bonds,
+            stereo_interpretation,
+            comments,
+            properties,
+            source_format,
+        }
+    }
+
     /// Get sum formula in Hill notation (C first, H second, then alphabetically)
     pub fn sum_formula(&self) -> String {
         let mut atom_counts: BTreeMap<[u8; 2], (Element, usize)> = BTreeMap::new();
@@ -89,11 +286,6 @@ impl Molecule {
 
         format_sum_formula(c_count, h_count, atom_counts, charge)
     }
-
-    /// Count of SDF/MOL properties
-    pub fn property_count(&self) -> usize {
-        self.properties.len()
-    }
 }
 
 /// Extended molecule IR - includes MDL extensions (SGroups, RGroups, etc.)
@@ -105,10 +297,6 @@ pub struct ExtendedMolecule {
     pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
-
-    pub fragments: Vec<Fragment>,
-    pub links: Vec<Link>,
-    pub electrons: Option<u32>,
 
     pub stereo_interpretation: Option<StereoInterpretation>,
     pub comments: Vec<String>,
@@ -128,9 +316,6 @@ impl ExtendedMolecule {
             rings: Vec::new(),
             positions: None,
             multicenter_bonds: Vec::new(),
-            fragments: Vec::new(),
-            links: Vec::new(),
-            electrons: None,
             stereo_interpretation: None,
             comments: Vec::new(),
             properties: IndexMap::new(),
@@ -311,6 +496,310 @@ impl ExtendedMolecule {
     pub fn sgroup_count(&self) -> usize {
         self.sgroups().len()
     }
+
+    fn component_labels(&self) -> Vec<u32> {
+        let mut union_find = UnionFind::new(self.atom_count());
+        for bond in &self.bonds {
+            let (first, second) = bond.atoms.as_tuple();
+            union_find.union(first, second);
+        }
+        for multicenter_bond in &self.multicenter_bonds {
+            let indices: Vec<u32> = multicenter_bond
+                .contributions
+                .iter()
+                .flat_map(|c| c.atoms.iter().copied())
+                .collect();
+            for (first, second) in indices.into_iter().tuple_combinations() {
+                union_find.union(first, second);
+            }
+        }
+        union_find.into_labeling()
+    }
+
+    pub fn component_atom_indices(&self) -> Vec<Vec<u32>> {
+        let mut components = BTreeMap::new();
+        for (atom_index, component_label) in self.component_labels().into_iter().enumerate() {
+            components
+                .entry(component_label)
+                .or_insert_with(Vec::new)
+                .push(atom_index as u32);
+        }
+        components.into_values().collect()
+    }
+
+    pub fn split_components(&self) -> Vec<ExtendedMolecule> {
+        let mut components = Vec::new();
+        for component_atoms in self.component_atom_indices() {
+            let atom_index_map: HashMap<u32, u32> = component_atoms
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(new_idx, old_idx)| (old_idx, new_idx as u32))
+                .collect();
+
+            let atoms = component_atoms
+                .iter()
+                .map(|&old_idx| self.atoms[old_idx as usize].clone())
+                .collect();
+
+            let mut bonds = Vec::new();
+            let mut bond_index_map: HashMap<u32, u32> = HashMap::new();
+            for (old_bond_idx, bond) in self.bonds.iter().enumerate() {
+                let (a, b) = bond.atoms.as_tuple();
+                if let (Some(new_a), Some(new_b)) =
+                    (atom_index_map.get(&a).copied(), atom_index_map.get(&b).copied())
+                {
+                    let new_bond_idx = bonds.len() as u32;
+                    bonds.push(bond.update_atoms(new_a, new_b));
+                    bond_index_map.insert(old_bond_idx as u32, new_bond_idx);
+                }
+            }
+
+            let rings = self
+                .rings
+                .iter()
+                .filter_map(|ring| {
+                    let new_start = match ring.start_atom {
+                        Some(old_idx) => Some(*atom_index_map.get(&old_idx)?),
+                        None => None,
+                    };
+                    let new_end = match ring.end_atom {
+                        Some(old_idx) => Some(*atom_index_map.get(&old_idx)?),
+                        None => None,
+                    };
+                    if new_start.is_none() && new_end.is_none() {
+                        return None;
+                    }
+                    Some(ring.update_atoms(
+                        new_start.unwrap_or_default(),
+                        new_end.unwrap_or_default(),
+                    ))
+                })
+                .collect();
+
+            let positions = self.positions.as_ref().map(|positions| {
+                component_atoms
+                    .iter()
+                    .filter_map(|&old_idx| positions.get(old_idx as usize).copied())
+                    .collect()
+            });
+
+            let multicenter_bonds = self
+                .multicenter_bonds
+                .iter()
+                .filter_map(|multicenter| multicenter.update_atoms(&atom_index_map))
+                .collect();
+
+            let ctfile_data = self
+                .ctfile_data
+                .as_ref()
+                .and_then(|d| d.update_atoms_bonds(&atom_index_map, &bond_index_map));
+            let cx_data = self
+                .cx_data
+                .as_ref()
+                .and_then(|d| d.update_atoms_bonds(&atom_index_map, &bond_index_map));
+
+            components.push(ExtendedMolecule {
+                atoms,
+                bonds,
+                rings,
+                positions,
+                multicenter_bonds,
+                stereo_interpretation: self.stereo_interpretation,
+                comments: self.comments.clone(),
+                properties: self.properties.clone(),
+                ctfile_data,
+                cx_data,
+                source_format: self.source_format,
+            });
+        }
+        components
+    }
+
+    pub fn join_components(components: &[ExtendedMolecule]) -> ExtendedMolecule {
+        Self::join_components_inner(components, false).unwrap()
+    }
+
+    pub fn try_join_components(
+        components: &[ExtendedMolecule],
+    ) -> Result<ExtendedMolecule, JoinError> {
+        Self::join_components_inner(components, true)
+    }
+
+    fn join_components_inner(
+        components: &[ExtendedMolecule],
+        fail_on_collision: bool,
+    ) -> Result<ExtendedMolecule, JoinError> {
+        if components.is_empty() {
+            return Ok(ExtendedMolecule::empty());
+        }
+
+        let mut atoms = Vec::new();
+        let mut bonds = Vec::new();
+        let mut rings = Vec::new();
+        let mut multicenter_bonds = Vec::new();
+        let mut comments = Vec::new();
+        let mut properties = IndexMap::new();
+        let mut all_positions = true;
+        let mut positions_acc = Vec::new();
+        let source_format = components[0].source_format;
+        let stereo_interpretation = components[0].stereo_interpretation;
+
+        let mut merged_ctfile_data = CtfileData::default();
+        let mut has_ctfile_data = false;
+        let mut merged_cx_data = CxAnnotationData::default();
+        let mut has_cx_data = false;
+
+        for mol in components {
+            let atom_offset = atoms.len() as u32;
+            atoms.extend(mol.atoms.iter().cloned());
+
+            let mut bond_index_map: HashMap<u32, u32> = HashMap::new();
+            for (old_bond_idx, bond) in mol.bonds.iter().enumerate() {
+                let (a, b) = bond.atoms.as_tuple();
+                bond_index_map.insert(old_bond_idx as u32, bonds.len() as u32);
+                bonds.push(bond.update_atoms(a + atom_offset, b + atom_offset));
+            }
+
+            for ring in &mol.rings {
+                let new_start = ring.start_atom.map(|idx| idx + atom_offset);
+                let new_end = ring.end_atom.map(|idx| idx + atom_offset);
+                if new_start.is_none() && new_end.is_none() {
+                    continue;
+                }
+                rings.push(
+                    ring.update_atoms(new_start.unwrap_or_default(), new_end.unwrap_or_default()),
+                );
+            }
+
+            let atom_index_map: HashMap<u32, u32> = (0..mol.atom_count() as u32)
+                .map(|idx| (idx, idx + atom_offset))
+                .collect();
+            multicenter_bonds.extend(
+                mol.multicenter_bonds
+                    .iter()
+                    .filter_map(|multicenter| multicenter.update_atoms(&atom_index_map)),
+            );
+
+            if let Some(component_positions) = mol.positions.as_ref() {
+                positions_acc.extend(component_positions.iter().copied());
+            } else {
+                all_positions = false;
+            }
+
+            comments.extend(mol.comments.iter().cloned());
+            for (key, value) in &mol.properties {
+                properties.insert(key.clone(), value.clone());
+            }
+
+            if let Some(data) = mol
+                .ctfile_data
+                .as_ref()
+                .and_then(|d| d.update_atoms_bonds(&atom_index_map, &bond_index_map))
+            {
+                has_ctfile_data = true;
+                merge_ctfile_data(&mut merged_ctfile_data, data, fail_on_collision)?;
+            }
+
+            if let Some(data) = mol
+                .cx_data
+                .as_ref()
+                .and_then(|d| d.update_atoms_bonds(&atom_index_map, &bond_index_map))
+            {
+                has_cx_data = true;
+                merge_cx_data(&mut merged_cx_data, data, fail_on_collision)?;
+            }
+        }
+
+        Ok(ExtendedMolecule {
+            atoms,
+            bonds,
+            rings,
+            positions: if all_positions {
+                Some(positions_acc)
+            } else {
+                None
+            },
+            multicenter_bonds,
+            stereo_interpretation,
+            comments,
+            properties,
+            ctfile_data: if has_ctfile_data {
+                Some(merged_ctfile_data)
+            } else {
+                None
+            },
+            cx_data: if has_cx_data { Some(merged_cx_data) } else { None },
+            source_format,
+        })
+    }
+}
+
+fn merge_ctfile_data(
+    target: &mut CtfileData,
+    source: CtfileData,
+    fail_on_collision: bool,
+) -> Result<(), JoinError> {
+    for (key, value) in source.sgroups {
+        if fail_on_collision && target.sgroups.contains_key(&key) {
+            return Err(JoinError::CtfileSgroupCollision { label: key });
+        }
+        target.sgroups.insert(key, value);
+    }
+    for (key, value) in source.rgroups {
+        if fail_on_collision && target.rgroups.contains_key(&key) {
+            return Err(JoinError::CtfileRgroupCollision { label: key });
+        }
+        target.rgroups.insert(key, value);
+    }
+    target
+        .legacy_group_abbreviations
+        .extend(source.legacy_group_abbreviations);
+    Ok(())
+}
+
+fn merge_cx_data(
+    target: &mut CxAnnotationData,
+    source: CxAnnotationData,
+    fail_on_collision: bool,
+) -> Result<(), JoinError> {
+    for (key, value) in source.stereo_groups {
+        target.stereo_groups.insert(key, value);
+    }
+    if let Some(groups) = source.components {
+        target
+            .components
+            .get_or_insert_with(Vec::new)
+            .extend(groups);
+    }
+    for (key, value) in source.sgroups {
+        if fail_on_collision && target.sgroups.contains_key(&key) {
+            return Err(JoinError::CxSgroupCollision { label: key });
+        }
+        target.sgroups.insert(key, value);
+    }
+    for (key, value) in source.rgroups {
+        if fail_on_collision && target.rgroups.contains_key(&key) {
+            return Err(JoinError::CxRgroupCollision { label: key });
+        }
+        target.rgroups.insert(key, value);
+    }
+    for (key, value) in source.rgroup_members {
+        target.rgroup_members.insert(key, value);
+    }
+    if let Some(entries) = source.local_parity {
+        target
+            .local_parity
+            .get_or_insert_with(Vec::new)
+            .extend(entries);
+    }
+    if let Some(entries) = source.bicyclo_stereo {
+        target
+            .bicyclo_stereo
+            .get_or_insert_with(Vec::new)
+            .extend(entries);
+    }
+    Ok(())
 }
 
 impl From<Molecule> for ExtendedMolecule {
@@ -321,9 +810,6 @@ impl From<Molecule> for ExtendedMolecule {
             rings: mol.rings,
             positions: mol.positions,
             multicenter_bonds: mol.multicenter_bonds,
-            fragments: Vec::new(),
-            links: Vec::new(),
-            electrons: None,
             stereo_interpretation: mol.stereo_interpretation,
             comments: mol.comments,
             properties: mol.properties,

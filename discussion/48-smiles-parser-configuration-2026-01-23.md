@@ -70,11 +70,10 @@ Parser-specific logic:
 - **Reaction SMILES**: split on `>>` or `>agent>`, validate atom mapping consistency
 - **Reaction SMARTS**: same splitting, parse components as SMARTS
 
-### No SMIRKS Support
-
-SMIRKS and reaction SMARTS have converged. Both use atom mapping, and reaction SMARTS 
-covers the same ground with clearer semantics. RDKit, CDK, and OpenBabel all use 
-reaction SMARTS. No major database provides SMIRKS exclusively.
+Previous decision: No SMIRKS support since it's been absorbed into reaction SMARTS. 
+Should reconsider and include more explicit support for SMIRKS-like semantics (1:1 atom mapping).
+See discussion/50-reaction-design-research-2026-02-08.md and
+discussion/51-reaction-design-research-claude-2026-02-08.md for more details.
 
 ### Feature Grouping Philosophy
 

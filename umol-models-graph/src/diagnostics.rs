@@ -176,75 +176,61 @@ pub enum DiagnosticKind {
     #[strum(message = "Unknown parser error")]
     CtfileParserError,
     #[strum(message = "GraphIR conversion failed")]
-    GraphConversionFailed,
-    #[strum(message = "Self-loop ring")]
-    GraphSelfLoopRing,
+    TopologySelfLoopRing,
     #[strum(message = "Parallel edges")]
-    GraphParallelEdges,
-    #[strum(message = "Unknown topology error")]
-    GraphTopologyError,
+    TopologyParallelEdges,
     #[strum(message = "Out of element range")]
-    GraphOutOfElementRange,
+    ValenceOutOfElementRange,
     #[strum(message = "H count out of element range")]
-    GraphHcountOutOfElementRange,
+    ValenceHcountOutOfElementRange,
     #[strum(message = "Charge out of element range")]
-    GraphChargeOutOfElementRange,
+    ValenceChargeOutOfElementRange,
     #[strum(message = "H count mismatch")]
-    GraphHcountMismatch,
+    ValenceHcountMismatch,
     #[strum(message = "No match")]
-    GraphNoMatch,
+    ValenceNoMatch,
     #[strum(message = "Ambiguous match")]
-    GraphAmbiguousMatch,
+    ValenceAmbiguousMatch,
     #[strum(message = "No known valence states")]
-    GraphNoKnownValenceStates,
+    ValenceNoKnownValenceStates,
     #[strum(message = "Valence unknown bond order")]
-    GraphUnknownBondOrder,
+    ValenceUnknownBondOrder,
     #[strum(message = "Missing bracket H")]
-    GraphMissingBracketH,
-    #[strum(message = "Unknown valence error")]
-    GraphValenceError,
+    ValenceMissingBracketH,
     #[strum(message = "Aromatic atom not in ring")]
-    GraphAromaticAtomNotInRing,
+    AromaticityAtomNotInRing,
     #[strum(message = "Aromatic bond not in ring")]
-    GraphAromaticBondNotInRing,
+    AromaticityBondNotInRing,
     #[strum(message = "No matching aromatic atom config")]
-    GraphNoMatchingAromaticAtomConfig,
+    AromaticityNoMatchingAtomConfig,
     #[strum(message = "Invalid aromatic atom")]
-    GraphInvalidAromaticAtom,
+    AromaticityInvalidAtom,
     #[strum(message = "Invalid aromatic bond atom")]
-    GraphInvalidAromaticBondAtom,
+    AromaticityInvalidBondAtom,
     #[strum(message = "Aromatic bond order mismatch")]
-    GraphAromaticBondOrderMismatch,
+    AromaticityBondOrderMismatch,
     #[strum(message = "Kekule inconsistent")]
-    GraphKekuleInconsistent,
+    AromaticityKekuleInconsistent,
     #[strum(message = "Huckel failed")]
-    GraphHuckelFailed,
-    #[strum(message = "Unknown aromaticity error")]
-    GraphAromaticityError,
+    AromaticityHuckelFailed,
     #[strum(message = "Avoid mixed aromaticity")]
-    GraphAvoidMixedAromaticity,
+    AromaticityAvoidMixedAromaticity,
     #[strum(message = "Avoid inconsistent aromaticity")]
-    GraphAvoidInconsistentAromaticity,
+    AromaticityAvoidInconsistentAromaticity,
     #[strum(message = "Huckel inconsistent")]
-    GraphHuckelInconsistent,
-    #[strum(message = "Unknown aromaticity warning")]
-    GraphAromaticityWarning,
+    AromaticityHuckelInconsistent,
     #[strum(message = "Double conflict")]
-    GraphStereoDoubleConflict,
+    StereoDoubleConflict,
     #[strum(message = "Double insufficient")]
-    GraphStereoDoubleInsufficient,
-    #[strum(message = "Unknown stereo error")]
-    GraphStereoError,
+    StereoDoubleInsufficient,
     #[strum(message = "Avoid unnecessary stereo descriptor")]
-    GraphAvoidUnnecessaryStereoDescriptor,
-    #[strum(message = "Unsupported central chirality element")]
-    GraphUnsupportedCentralChiralityElement,
+    StereoAvoidUnnecessaryDescriptor,
+    #[strum(message = "Unsupported central element")]
+    StereoUnsupportedCentralElement,
     #[strum(message = "Chirality substituent mismatch")]
-    GraphChiralitySubstituentMismatch,
-    #[strum(message = "Non chiral annotated")]
-    GraphNonChiralAnnotated,
-    #[strum(message = "Unknown stereo warning")]
-    GraphStereoWarning,
+    StereoSubstituentMismatch,
+    #[strum(message = "Not chiral annotated")]
+    StereoNotChiralAnnotated,
 }
 
 impl DiagnosticKind {
@@ -333,41 +319,34 @@ impl DiagnosticKind {
             | CtfileIncomplete
             | CtfileParserError => Category::Syntactic,
 
-            GraphConversionFailed
-            | GraphSelfLoopRing
-            | GraphParallelEdges
-            | GraphTopologyError
-            | GraphOutOfElementRange
-            | GraphHcountOutOfElementRange
-            | GraphChargeOutOfElementRange
-            | GraphHcountMismatch
-            | GraphNoMatch
-            | GraphAmbiguousMatch
-            | GraphNoKnownValenceStates
-            | GraphUnknownBondOrder
-            | GraphMissingBracketH
-            | GraphValenceError
-            | GraphAromaticAtomNotInRing
-            | GraphAromaticBondNotInRing
-            | GraphNoMatchingAromaticAtomConfig
-            | GraphInvalidAromaticAtom
-            | GraphInvalidAromaticBondAtom
-            | GraphAromaticBondOrderMismatch
-            | GraphKekuleInconsistent
-            | GraphHuckelFailed
-            | GraphAromaticityError
-            | GraphAvoidMixedAromaticity
-            | GraphAvoidInconsistentAromaticity
-            | GraphHuckelInconsistent
-            | GraphAromaticityWarning
-            | GraphStereoDoubleConflict
-            | GraphStereoDoubleInsufficient
-            | GraphStereoError
-            | GraphAvoidUnnecessaryStereoDescriptor
-            | GraphUnsupportedCentralChiralityElement
-            | GraphChiralitySubstituentMismatch
-            | GraphNonChiralAnnotated
-            | GraphStereoWarning => Category::Semantic,
+            TopologySelfLoopRing
+            | TopologyParallelEdges
+            | ValenceOutOfElementRange
+            | ValenceHcountOutOfElementRange
+            | ValenceChargeOutOfElementRange
+            | ValenceHcountMismatch
+            | ValenceNoMatch
+            | ValenceAmbiguousMatch
+            | ValenceNoKnownValenceStates
+            | ValenceUnknownBondOrder
+            | ValenceMissingBracketH
+            | AromaticityAtomNotInRing
+            | AromaticityBondNotInRing
+            | AromaticityNoMatchingAtomConfig
+            | AromaticityInvalidAtom
+            | AromaticityInvalidBondAtom
+            | AromaticityBondOrderMismatch
+            | AromaticityKekuleInconsistent
+            | AromaticityHuckelFailed
+            | AromaticityAvoidMixedAromaticity
+            | AromaticityAvoidInconsistentAromaticity
+            | AromaticityHuckelInconsistent
+            | StereoDoubleConflict
+            | StereoDoubleInsufficient
+            | StereoAvoidUnnecessaryDescriptor
+            | StereoUnsupportedCentralElement
+            | StereoSubstituentMismatch
+            | StereoNotChiralAnnotated => Category::Semantic,
         }
     }
 
@@ -430,32 +409,30 @@ impl DiagnosticKind {
             | CtfileUnexpectedEof
             | CtfileIncomplete
             | CtfileParserError
-            | GraphConversionFailed
-            | GraphSelfLoopRing
-            | GraphParallelEdges
-            | GraphTopologyError
-            | GraphOutOfElementRange
-            | GraphHcountOutOfElementRange
-            | GraphChargeOutOfElementRange
-            | GraphHcountMismatch
-            | GraphNoMatch
-            | GraphAmbiguousMatch
-            | GraphNoKnownValenceStates
-            | GraphUnknownBondOrder
-            | GraphMissingBracketH
-            | GraphValenceError
-            | GraphAromaticAtomNotInRing
-            | GraphAromaticBondNotInRing
-            | GraphNoMatchingAromaticAtomConfig
-            | GraphInvalidAromaticAtom
-            | GraphInvalidAromaticBondAtom
-            | GraphAromaticBondOrderMismatch
-            | GraphKekuleInconsistent
-            | GraphHuckelFailed
-            | GraphAromaticityError
-            | GraphStereoDoubleConflict
-            | GraphStereoDoubleInsufficient
-            | GraphStereoError => Severity::Error,
+            | TopologySelfLoopRing
+            | TopologyParallelEdges
+            | ValenceOutOfElementRange
+            | ValenceHcountOutOfElementRange
+            | ValenceChargeOutOfElementRange
+            | ValenceHcountMismatch
+            | ValenceNoMatch
+            | ValenceAmbiguousMatch
+            | ValenceNoKnownValenceStates
+            | ValenceUnknownBondOrder
+            | ValenceMissingBracketH
+            | AromaticityAtomNotInRing
+            | AromaticityBondNotInRing
+            | AromaticityNoMatchingAtomConfig
+            | AromaticityInvalidAtom
+            | AromaticityInvalidBondAtom
+            | AromaticityBondOrderMismatch
+            | AromaticityKekuleInconsistent
+            | AromaticityHuckelFailed
+            | AromaticityAvoidMixedAromaticity
+            | AromaticityAvoidInconsistentAromaticity
+            | AromaticityHuckelInconsistent
+            | StereoDoubleConflict
+            | StereoDoubleInsufficient => Severity::Error,
 
             SmilesPreferBareOrganicAtom
             | SmilesPreferImplicitH
@@ -477,15 +454,10 @@ impl DiagnosticKind {
             | SmilesPreferBondSymbolAtRingOpen
             | SmilesAvoidRingClosureAcrossDot
             | SmilesPreferAromaticForm
-            | GraphAvoidMixedAromaticity
-            | GraphAvoidInconsistentAromaticity
-            | GraphHuckelInconsistent
-            | GraphAromaticityWarning
-            | GraphAvoidUnnecessaryStereoDescriptor
-            | GraphUnsupportedCentralChiralityElement
-            | GraphChiralitySubstituentMismatch
-            | GraphNonChiralAnnotated
-            | GraphStereoWarning => Severity::Warning,
+            | StereoAvoidUnnecessaryDescriptor
+            | StereoUnsupportedCentralElement
+            | StereoSubstituentMismatch
+            | StereoNotChiralAnnotated => Severity::Warning,
         }
     }
 

@@ -1,4 +1,4 @@
-//! Bond IR for Table IR.
+//! Bond types for Table IR.
 
 use std::collections::HashMap;
 
@@ -42,6 +42,23 @@ impl AtomPair {
     pub fn as_tuple(&self) -> (u32, u32) {
         (self.first, self.second)
     }
+
+
+    /// Check if this bond contains the given atom index.
+    pub fn contains(&self, index: u32) -> bool {
+        self.first == index || self.second == index
+    }
+
+    /// Get the other atom index.
+    pub fn other(&self, index: u32) -> Option<u32> {
+        if self.first == index {
+            Some(self.second)
+        } else if self.second == index {
+            Some(self.first)
+        } else {
+            None
+        }
+    }
 }
 
 // Basic Bond IR
@@ -58,9 +75,9 @@ pub struct Bond {
 }
 
 impl Bond {
-    pub fn new(start_atom: u32, end_atom: u32, order: BondOrder) -> Self {
+    pub fn new(a: u32, b: u32, order: BondOrder) -> Self {
         Self {
-            atoms: AtomPair::new(start_atom, end_atom),
+            atoms: AtomPair::new(a, b),
             order,
             ring: None,
             stereo: None,
@@ -110,10 +127,21 @@ impl Bond {
     pub fn end_atom(&self) -> u32 {
         self.atoms.second()
     }
+
+    /// Return a bond with updated atom indices while preserving donation semantics.
+    pub fn update_atoms(&self, a: u32, b: u32) -> Self {
+        let mut updated = self.clone();
+        updated.atoms = AtomPair::new(a, b);
+        if a > b {
+            updated.donation = updated.donation.map(|d| d.flip());
+        }
+        updated
+    }
+
 }
 
 /// Bond order
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BondOrder {
     Zero,
     Single,
@@ -183,7 +211,7 @@ impl BondOrder {
 /// The wedge (pointed) end of the stereo bond is at the first atom
 /// In SMILES: / (up), \ (down)
 /// In CXSMILES: w: (undefined), wU: (undefined, display up), wD: (undefined, display down)
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BondWedge {
     Up,         // MOL: Wedge (code 1), SMILES: /
     Down,       // MOL: Dash (code 6), SMILES: \
@@ -213,7 +241,7 @@ impl BondDonation {
 }
 
 /// Double-bond stereochemistry (E/Z) annotation in IR
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum BondStereo {
     Cis,
     Trans,
@@ -310,6 +338,16 @@ impl ExtendedBond {
     /// Get the end (second/larger) atom index.
     pub fn end_atom(&self) -> u32 {
         self.atoms.second()
+    }
+
+    /// Return a bond with updated atom indices while preserving donation semantics.
+    pub fn update_atoms(&self, a: u32, b: u32) -> Self {
+        let mut updated = self.clone();
+        updated.atoms = AtomPair::new(a, b);
+        if a > b {
+            updated.donation = updated.donation.map(|d| d.flip());
+        }
+        updated
     }
 
     /// Check if this bond has extended features that would be lost in conversion to basic Bond.
@@ -425,6 +463,14 @@ mod tests {
     }
 
     #[test]
+    fn test_atom_pair_other() {
+        let p1 = AtomPair::new(0, 1);
+        assert_eq!(p1.other(0), Some(1));
+        assert_eq!(p1.other(1), Some(0));
+        assert_eq!(p1.other(2), None);
+    }
+
+    #[test]
     fn test_bond_new() {
         let bond = Bond::new(0, 1, BondOrder::Single);
         assert_eq!(bond.start_atom(), 0);
@@ -494,6 +540,24 @@ mod tests {
     }
 
     #[test]
+    fn test_bond_update_atoms_no_swap() {
+        let bond = Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
+        let updated = bond.update_atoms(1, 3);
+        assert_eq!(updated.start_atom(), 1);
+        assert_eq!(updated.end_atom(), 3);
+        assert_eq!(updated.donation, Some(BondDonation::Donating));
+    }
+
+    #[test]
+    fn test_bond_update_atoms_with_swap() {
+        let bond = Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
+        let updated = bond.update_atoms(3, 1);
+        assert_eq!(updated.start_atom(), 1);
+        assert_eq!(updated.end_atom(), 3);
+        assert_eq!(updated.donation, Some(BondDonation::Accepting));
+    }
+
+    #[test]
     fn test_extended_bond_new_dative_no_swap() {
         let bond = ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
         assert_eq!(bond.start_atom(), 0);
@@ -508,6 +572,24 @@ mod tests {
         assert_eq!(bond.end_atom(), 4);
         // Original: 4 accepts from 0. After swap: 0 donates to 4.
         assert_eq!(bond.donation, Some(BondDonation::Donating));
+    }
+
+    #[test]
+    fn test_extended_bond_update_atoms_no_swap() {
+        let bond = ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
+        let updated = bond.update_atoms(1, 3);
+        assert_eq!(updated.start_atom(), 1);
+        assert_eq!(updated.end_atom(), 3);
+        assert_eq!(updated.donation, Some(BondDonation::Donating));
+    }
+
+    #[test]
+    fn test_extended_bond_update_atoms_with_swap() {
+        let bond = ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
+        let updated = bond.update_atoms(3, 1);
+        assert_eq!(updated.start_atom(), 1);
+        assert_eq!(updated.end_atom(), 3);
+        assert_eq!(updated.donation, Some(BondDonation::Accepting));
     }
 
     #[test]

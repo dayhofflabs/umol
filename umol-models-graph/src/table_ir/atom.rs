@@ -1,4 +1,4 @@
-//! Atom IR for TableIR.
+//! Atom types for TableIR.
 
 use std::collections::HashMap;
 
@@ -35,8 +35,8 @@ impl UnpairedElectrons {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Atom {
     pub element: Element,
-    pub charge: Option<i8>,
     pub isotope_mass: Option<u32>,
+    pub charge: Option<i8>,
     pub hydrogens: Option<u8>,
     pub implicit_hydrogens: bool,
     pub valence: Option<u8>,
@@ -55,8 +55,8 @@ impl Atom {
     pub fn from_element(element: Element) -> Self {
         Self {
             element,
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: false,
             valence: None,
@@ -74,8 +74,8 @@ impl Atom {
     pub fn aliphatic_atom(element: Element) -> Self {
         Self {
             element,
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: true,
             valence: None,
@@ -94,8 +94,8 @@ impl Atom {
     pub fn aliphatic_atom_with_span(element: Element, span: Span) -> Self {
         Self {
             element,
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: true,
             valence: None,
@@ -114,8 +114,8 @@ impl Atom {
     pub fn aromatic_atom(element: Element) -> Self {
         Self {
             element,
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: true,
             valence: None,
@@ -134,8 +134,8 @@ impl Atom {
     pub fn aromatic_atom_with_span(element: Element, span: Span) -> Self {
         Self {
             element,
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: true,
             valence: None,
@@ -272,8 +272,8 @@ pub enum Chirality {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExtendedAtom {
     pub symbol: AtomSymbol,
-    pub charge: Option<i8>,
     pub isotope_mass: Option<u32>,
+    pub charge: Option<i8>,
     pub hydrogens: Option<u8>,
     pub implicit_hydrogens: bool,
     pub valence: Option<u8>,
@@ -305,8 +305,8 @@ impl ExtendedAtom {
     pub fn from_atom_symbol(symbol: AtomSymbol) -> Self {
         Self {
             symbol,
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: false,
             valence: None,
@@ -374,8 +374,8 @@ impl From<Atom> for ExtendedAtom {
     fn from(atom: Atom) -> Self {
         Self {
             symbol: AtomSymbol::Element(atom.element),
-            charge: atom.charge,
             isotope_mass: atom.isotope_mass,
+            charge: atom.charge,
             hydrogens: atom.hydrogens,
             implicit_hydrogens: atom.implicit_hydrogens,
             valence: atom.valence,
@@ -423,8 +423,8 @@ impl TryFrom<ExtendedAtom> for Atom {
 
         Ok(Self {
             element,
-            charge: extended.charge,
             isotope_mass: extended.isotope_mass,
+            charge: extended.charge,
             hydrogens: extended.hydrogens,
             implicit_hydrogens: extended.implicit_hydrogens,
             valence: extended.valence,
@@ -551,8 +551,8 @@ mod tests {
     fn test_from_atom_to_extended_atom() {
         let atom = Atom {
             element: Element::C,
-            charge: Some(1),
             isotope_mass: Some(13),
+            charge: Some(1),
             hydrogens: Some(3),
             implicit_hydrogens: false,
             valence: Some(3),
@@ -568,8 +568,8 @@ mod tests {
 
         let extended: ExtendedAtom = atom.into();
         assert_eq!(extended.symbol, AtomSymbol::Element(Element::C));
-        assert_eq!(extended.charge, Some(1));
         assert_eq!(extended.isotope_mass, Some(13));
+        assert_eq!(extended.charge, Some(1));
         assert_eq!(extended.hydrogens, Some(3));
         assert!(!extended.implicit_hydrogens);
         assert_eq!(extended.valence, Some(3));
@@ -588,8 +588,8 @@ mod tests {
     fn test_try_from_extended_atom_to_atom_element() {
         let extended = ExtendedAtom {
             symbol: AtomSymbol::Element(Element::O),
-            charge: Some(-1),
             isotope_mass: None,
+            charge: Some(-1),
             hydrogens: Some(1),
             implicit_hydrogens: true,
             valence: Some(1),
@@ -617,8 +617,8 @@ mod tests {
 
         let atom: Atom = extended.try_into().unwrap();
         assert_eq!(atom.element, Element::O);
-        assert_eq!(atom.charge, Some(-1));
         assert_eq!(atom.isotope_mass, None);
+        assert_eq!(atom.charge, Some(-1));
         assert_eq!(atom.hydrogens, Some(1));
         assert!(atom.implicit_hydrogens);
         assert_eq!(atom.valence, Some(1));
@@ -633,8 +633,8 @@ mod tests {
         let extended = ExtendedAtom::from_named_isotope(named_isotope);
         let atom: Atom = extended.try_into().unwrap();
         assert_eq!(atom.element, Element::H);
-        assert_eq!(atom.charge, None);
         assert_eq!(atom.isotope_mass, Some(2));
+        assert_eq!(atom.charge, None);
         assert!(!atom.implicit_hydrogens);
         assert_eq!(atom.valence, None);
         assert_eq!(atom.lone_pairs, None);
@@ -646,8 +646,8 @@ mod tests {
     fn test_try_from_extended_atom_to_atom_invalid() {
         let extended = ExtendedAtom {
             symbol: AtomSymbol::WildcardAtom(WildcardAtom::Any),
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: true,
             valence: None,
@@ -685,8 +685,8 @@ mod tests {
     fn test_has_extended_features_basic() {
         let extended = ExtendedAtom {
             symbol: AtomSymbol::Element(Element::C),
-            charge: Some(1),
             isotope_mass: Some(13),
+            charge: Some(1),
             hydrogens: Some(2),
             implicit_hydrogens: false,
             valence: None,
@@ -719,8 +719,8 @@ mod tests {
     fn test_has_extended_features_extended() {
         let extended = ExtendedAtom {
             symbol: AtomSymbol::Element(Element::C),
-            charge: None,
             isotope_mass: None,
+            charge: None,
             hydrogens: None,
             implicit_hydrogens: true,
             valence: None,
@@ -753,8 +753,8 @@ mod tests {
     fn test_roundtrip_atom_to_extended_atom_to_atom() {
         let atom = Atom {
             element: Element::N,
-            charge: Some(-1),
             isotope_mass: Some(15),
+            charge: Some(-1),
             hydrogens: Some(2),
             implicit_hydrogens: false,
             valence: Some(3),
@@ -772,8 +772,8 @@ mod tests {
         let atom2: Atom = extended.try_into().unwrap();
 
         assert_eq!(atom.element, atom2.element);
-        assert_eq!(atom.charge, atom2.charge);
         assert_eq!(atom.isotope_mass, atom2.isotope_mass);
+        assert_eq!(atom.charge, atom2.charge);
         assert_eq!(atom.hydrogens, atom2.hydrogens);
         assert_eq!(atom.implicit_hydrogens, atom2.implicit_hydrogens);
         assert_eq!(atom.valence, atom2.valence);

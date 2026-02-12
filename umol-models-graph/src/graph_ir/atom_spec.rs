@@ -4,17 +4,14 @@ use std::fmt;
 use std::str::FromStr;
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use umol_data::Element;
 
-use super::error::GraphError;
-
-type Result<T> = std::result::Result<T, GraphError>;
+use super::error::ResolutionError;
 
 /// AtomSpec is a generalization of the atomic valence state for modeling
 /// covalent and dative bonding by molecular graphs.
 /// Does not uniquely define an atomic term symbol for quantum chemical calculations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AtomSpec {
     element: Element,
     charge: i32,
@@ -176,22 +173,22 @@ impl fmt::Display for AtomSpec {
 }
 
 impl TryFrom<&str> for AtomSpec {
-    type Error = GraphError;
+    type Error = ResolutionError;
 
-    fn try_from(s: &str) -> Result<Self> {
+    fn try_from(s: &str) -> Result<Self, ResolutionError> {
         if s.is_empty() {
-            return Err(GraphError::InvalidAtomSpec("Empty atom spec".into()));
+            return Err(ResolutionError::InvalidAtomSpec("Empty atom spec".into()));
         }
 
         let val_state_pattern = Regex::new(r"^\[([A-Z][a-z]?)((?:[-+/<>*Hv^]\d*)*)]$").unwrap();
         if !val_state_pattern.is_match(s) {
-            return Err(GraphError::InvalidAtomSpec(s.to_string()));
+            return Err(ResolutionError::InvalidAtomSpec(s.to_string()));
         }
 
         let caps = val_state_pattern.captures(s).unwrap();
         let element = caps[1]
             .parse::<Element>()
-            .map_err(|e| GraphError::InvalidAtomSpec(format!("Invalid element: {}", e)))?;
+            .map_err(|e| ResolutionError::InvalidAtomSpec(format!("Invalid element: {}", e)))?;
         let properties = caps.get(2);
         if properties.is_none() {
             return Ok(AtomSpec::new(element, 0, 0, 0, 0, 0, 1, 0, 0));
@@ -215,7 +212,7 @@ impl TryFrom<&str> for AtomSpec {
             match property {
                 "+" => {
                     if pos_charge.is_some() || neg_charge.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate charge definition".to_string(),
                         )
                         .into());
@@ -229,7 +226,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "-" => {
                     if neg_charge.is_some() || pos_charge.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate charge definition".to_string(),
                         )
                         .into());
@@ -243,7 +240,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "/" => {
                     if lone_pairs.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate lone pair definition".to_string(),
                         )
                         .into());
@@ -257,7 +254,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 ">" => {
                     if donated.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate donated pair definition".to_string(),
                         )
                         .into());
@@ -271,7 +268,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "<" => {
                     if accepted.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate accepted pair definition".to_string(),
                         )
                         .into());
@@ -285,7 +282,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "^" => {
                     if unpaired.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate unpaired electron specification".to_string(),
                         )
                         .into());
@@ -299,7 +296,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "*" => {
                     multiplicity = if multiplicity.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate multiplicity".to_string(),
                         )
                         .into());
@@ -311,7 +308,7 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "H" => {
                     if implicit_hydrogens.is_some() {
-                        return Err(GraphError::InvalidAtomSpec(
+                        return Err(ResolutionError::InvalidAtomSpec(
                             "Duplicate implicit hydrogen specification".to_string(),
                         )
                         .into());
@@ -325,11 +322,15 @@ impl TryFrom<&str> for AtomSpec {
                 }
                 "v" => {
                     valence = if valence.is_some() {
-                        return Err(
-                            GraphError::InvalidAtomSpec("Duplicate valence".to_string()).into()
-                        );
+                        return Err(ResolutionError::InvalidAtomSpec(
+                            "Duplicate valence".to_string(),
+                        )
+                        .into());
                     } else if value.is_empty() {
-                        Some(0)
+                        return Err(ResolutionError::InvalidAtomSpec(
+                            "Duplicate valence".to_string(),
+                        )
+                        .into());
                     } else {
                         value.parse::<u32>().ok()
                     }
@@ -351,37 +352,37 @@ impl TryFrom<&str> for AtomSpec {
             || multiplicity > unpaired + 1
             || (unpaired + 1 - multiplicity) % 2 != 0
         {
-            return Err(GraphError::InvalidAtomSpec(format!(
+            return Err(ResolutionError::InvalidAtomSpec(format!(
                 "Invalid multiplicity: {}",
                 multiplicity
             )));
         }
         if donated > lone_pairs {
-            return Err(GraphError::InvalidAtomSpec(format!(
+            return Err(ResolutionError::InvalidAtomSpec(format!(
                 "Invalid donated pairs: {}",
                 donated
             )));
         }
         if (element.valence_e() as i32 - charge) < 0 {
-            return Err(GraphError::InvalidAtomSpec(format!(
+            return Err(ResolutionError::InvalidAtomSpec(format!(
                 "Invalid charge: {}",
                 charge
             )));
         }
         if implicit_hydrogens > element.max_implicit_hydrogens() as u32 {
-            return Err(GraphError::InvalidAtomSpec(format!(
+            return Err(ResolutionError::InvalidAtomSpec(format!(
                 "Invalid implicit hydrogens: {}",
                 implicit_hydrogens
             )));
         }
         if implicit_hydrogens > valence {
-            return Err(GraphError::InvalidAtomSpec(format!(
+            return Err(ResolutionError::InvalidAtomSpec(format!(
                 "Invalid valence (H): {}",
                 valence
             )));
         }
         if valence > element.max_valence() as u32 {
-            return Err(GraphError::InvalidAtomSpec(format!(
+            return Err(ResolutionError::InvalidAtomSpec(format!(
                 "Invalid valence: {}",
                 valence
             )));
@@ -401,17 +402,11 @@ impl TryFrom<&str> for AtomSpec {
     }
 }
 
-impl FromStr for AtomSpec {
-    type Err = GraphError;
+// impl FromStr for AtomSpec {
+//     type Error = ResolutionError;
 
-    fn from_str(s: &str) -> Result<Self> {
-        Self::try_from(s)
-    }
-}
-
-#[macro_export]
-macro_rules! a {
-    ($s:expr) => {
-        $s.parse::<$crate::graph_ir::AtomSpec>().unwrap()
-    };
-}
+//     fn from_str(s: &str) -> Result<Self, Self::Error> {
+//         let atom_spec = Self::try_from(s).map_err(|e| e.into())?;
+//         Ok(atom_spec)
+//     }
+// }

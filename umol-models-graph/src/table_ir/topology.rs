@@ -1,11 +1,9 @@
 //! Topology types for TableIR.
 
-use super::atom::Atom;
-use super::bond::Bond;
 use crate::span::Span;
 
 /// Ring type for TableIR
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Ring {
     pub ring_idx: u32,
     pub start_atom: Option<u32>,
@@ -14,16 +12,15 @@ pub struct Ring {
     pub close_span: Option<Span>,
 }
 
-/// Fragment type for TableIR
-#[derive(Clone, Debug, PartialEq)]
-pub struct Fragment {
-    pub atoms: Vec<Atom>,
-    pub bonds: Vec<Bond>,
-}
+impl Ring {
+    pub fn is_closed(&self) -> bool {
+        self.start_atom.is_some() && self.end_atom.is_some()
+    }
 
-/// Link type for TableIR
-#[derive(Clone, Debug, PartialEq)]
-pub struct Link {
-    pub atoms: Vec<Atom>,
-    pub bonds: Vec<Bond>,
+    pub fn update_atoms(&self, a: u32, b: u32) -> Self {
+        let mut updated = self.clone();
+        updated.start_atom = self.start_atom.map(|_| a);
+        updated.end_atom = self.end_atom.map(|_| b);
+        updated
+    }
 }
