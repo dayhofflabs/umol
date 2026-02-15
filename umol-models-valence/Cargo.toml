@@ -4,7 +4,8 @@ version = "0.1.0"
 authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rappoport/umol"
-keywords = ["chemistry", "cheminformatics", "molecular parsing"]
+keywords = ["chemistry", "cheminformatics", "computational chemistry", "molecular modeling", "molecular representation"]
+description = "Valence models for graph-based molecular models for umol."
 edition = "2021"
 
 [dependencies]
@@ -14,9 +15,9 @@ petgraph = "0.8.2"
 regex = "1.11.2"
 serde = { version = "1.0.223", features = ["derive"] }
 serde_json = "1.0.145"
-umol = { path = "../umol" }
-umol-data = { path = "../umol-data" }
-umol-macros = { path = "../umol-macros" }
+umol = { path = "../umol", version = "0.1.0" }
+umol-data = { path = "../umol-data", version = "0.1.0" }
+umol-macros = { path = "../umol-macros", version = "0.1.0" }
 
 [dev-dependencies]
 rstest = "0.26.1"
