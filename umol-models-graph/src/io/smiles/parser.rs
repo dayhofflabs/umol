@@ -11,7 +11,8 @@ mod utils;
 
 use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use self::cx::{
-    parse_cx_annotations, parse_extended_cx_annotations, update_extended_molecule, update_molecule,
+    parse_cx_annotations, parse_extended_cx_annotations, split_reaction_cx_entries,
+    update_extended_molecule, update_extended_reaction, update_molecule, update_reaction,
 };
 use self::utils::{
     attach_atom, attach_atom_extended, invalid_ring_context, parse_bond, parse_bracket,
@@ -152,7 +153,7 @@ pub fn parse_reaction_smiles_bytes_with(
     }
 
     // Products: parse one side-supermolecule until EOF/whitespace.
-    let (_rest, (products, _new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
+    let (rest, (products, _new_offset)) = parse_smiles_inner(remaining, offset, true, flags)?;
 
     let mut reaction = Reaction {
         reactants,
@@ -163,6 +164,20 @@ pub fn parse_reaction_smiles_bytes_with(
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
+    let trimmed = rest.trim_ascii_start();
+    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
+        let entries = parse_cx_annotations(trimmed, flags)?;
+        let split = split_reaction_cx_entries(
+            entries,
+            reaction.reactants.atom_count(),
+            reaction.reactants.bond_count(),
+            reaction.agents.atom_count(),
+            reaction.agents.bond_count(),
+            reaction.products.atom_count(),
+            reaction.products.bond_count(),
+        )?;
+        update_reaction(&mut reaction, split)?;
+    }
     collect_atom_mapping(&mut reaction);
     Ok(reaction)
 }
@@ -743,7 +758,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
     }
 
     // Products: parse one side-supermolecule until EOF/whitespace.
-    let (_rest, (products, _new_offset)) =
+    let (rest, (products, _new_offset)) =
         parse_extended_smiles_inner(remaining, offset, true, flags)?;
 
     let mut reaction = ExtendedReaction {
@@ -755,6 +770,20 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
+    let trimmed = rest.trim_ascii_start();
+    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
+        let entries = parse_extended_cx_annotations(trimmed, flags)?;
+        let split = split_reaction_cx_entries(
+            entries,
+            reaction.reactants.atom_count(),
+            reaction.reactants.bond_count(),
+            reaction.agents.atom_count(),
+            reaction.agents.bond_count(),
+            reaction.products.atom_count(),
+            reaction.products.bond_count(),
+        )?;
+        update_extended_reaction(&mut reaction, split)?;
+    }
     collect_extended_atom_mapping(&mut reaction);
     Ok(reaction)
 }

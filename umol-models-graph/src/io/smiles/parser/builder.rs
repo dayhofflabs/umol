@@ -33,6 +33,7 @@ pub(super) struct BondData {
 }
 
 /// Molecule builder
+/// TODO: Consider removing Vec allocation and always return a single Molecule object
 pub(super) struct MoleculeBuilder {
     atoms: Vec<Atom>,
     bonds: Vec<Bond>,
@@ -205,6 +206,7 @@ pub(super) struct ExtendedAtomData {
     pub span: Option<Span>,
 }
 
+/// TODO: Consider removing Vec allocation and always return a single Molecule object
 pub(super) struct ExtendedMoleculeBuilder {
     atoms: Vec<ExtendedAtom>,
     bonds: Vec<ExtendedBond>,

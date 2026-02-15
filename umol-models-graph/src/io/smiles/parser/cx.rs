@@ -26,10 +26,11 @@ use crate::position::Point3D;
 use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
 use crate::table_ir::{
     BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
-    ExtendedMolecule, LinkAtom, Molecule, MulticenterBond, MulticenterSet, RingBondCount, SGroup,
-    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
-    SGroupData, SGroupDataType, SGroupSubtype, SGroupType, StereoInterpretation, StereoSet,
-    StereoSetMode, SubstitutionCount, UnpairedElectrons, UnsaturatedAtom,
+    ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule, MulticenterBond, MulticenterSet,
+    Reaction, RingBondCount, SGroup, SGroupBracketCoords, SGroupBracketOrientation,
+    SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType, SGroupSubtype, SGroupType,
+    StereoInterpretation, StereoSet, StereoSetMode, SubstitutionCount, UnpairedElectrons,
+    UnsaturatedAtom,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -602,6 +603,665 @@ pub fn update_extended_molecule(
     }
 
     Ok(())
+}
+
+pub fn update_reaction(
+    reaction: &mut Reaction,
+    split: (Vec<CxEntry>, Vec<CxEntry>, Vec<CxEntry>),
+) -> Result<(), ParseError> {
+    let (reactant_entries, agent_entries, product_entries) = split;
+    if !reactant_entries.is_empty() {
+        update_molecule(&mut reaction.reactants, reactant_entries)?;
+    }
+    if !agent_entries.is_empty() {
+        update_molecule(&mut reaction.agents, agent_entries)?;
+    }
+    if !product_entries.is_empty() {
+        update_molecule(&mut reaction.products, product_entries)?;
+    }
+    Ok(())
+}
+
+pub fn update_extended_reaction(
+    reaction: &mut ExtendedReaction,
+    split: (Vec<CxEntry>, Vec<CxEntry>, Vec<CxEntry>),
+) -> Result<(), ParseError> {
+    let (reactant_entries, agent_entries, product_entries) = split;
+    if !reactant_entries.is_empty() {
+        update_extended_molecule(&mut reaction.reactants, reactant_entries)?;
+    }
+    if !agent_entries.is_empty() {
+        update_extended_molecule(&mut reaction.agents, agent_entries)?;
+    }
+    if !product_entries.is_empty() {
+        update_extended_molecule(&mut reaction.products, product_entries)?;
+    }
+    Ok(())
+}
+
+pub fn split_reaction_cx_entries(
+    entries: Vec<CxEntry>,
+    reactant_atom_count: usize,
+    reactant_bond_count: usize,
+    agent_atom_count: usize,
+    agent_bond_count: usize,
+    product_atom_count: usize,
+    product_bond_count: usize,
+) -> Result<(Vec<CxEntry>, Vec<CxEntry>, Vec<CxEntry>), ParseError> {
+    let atom_starts = [
+        0u32,
+        reactant_atom_count as u32,
+        (reactant_atom_count + agent_atom_count) as u32,
+    ];
+    let atom_ends = [
+        reactant_atom_count as u32,
+        (reactant_atom_count + agent_atom_count) as u32,
+        (reactant_atom_count + agent_atom_count + product_atom_count) as u32,
+    ];
+    let bond_starts = [
+        0u32,
+        reactant_bond_count as u32,
+        (reactant_bond_count + agent_bond_count) as u32,
+    ];
+    let bond_ends = [
+        reactant_bond_count as u32,
+        (reactant_bond_count + agent_bond_count) as u32,
+        (reactant_bond_count + agent_bond_count + product_bond_count) as u32,
+    ];
+
+    let atom_side = |idx: u32| -> Option<(usize, u32)> {
+        for side in 0..3 {
+            if idx >= atom_starts[side] && idx < atom_ends[side] {
+                return Some((side, idx - atom_starts[side]));
+            }
+        }
+        None
+    };
+    let bond_side = |idx: u32| -> Option<(usize, u32)> {
+        for side in 0..3 {
+            if idx >= bond_starts[side] && idx < bond_ends[side] {
+                return Some((side, idx - bond_starts[side]));
+            }
+        }
+        None
+    };
+
+    let mut out = (Vec::new(), Vec::new(), Vec::new());
+    let mut push_for_side = |side: usize, entry: CxEntry| match side {
+        0 => out.0.push(entry),
+        1 => out.1.push(entry),
+        _ => out.2.push(entry),
+    };
+
+    for entry in entries {
+        match entry {
+            CxEntry::Coordinates(coords) => {
+                for side in 0..3 {
+                    let start = atom_starts[side] as usize;
+                    let end = atom_ends[side] as usize;
+                    if start < coords.len() {
+                        let side_coords = coords[start..coords.len().min(end)].to_vec();
+                        if !side_coords.is_empty() {
+                            push_for_side(side, CxEntry::Coordinates(side_coords));
+                        }
+                    }
+                }
+            }
+            CxEntry::Labels(pairs) => {
+                let mut side_pairs = [Vec::new(), Vec::new(), Vec::new()];
+                for (idx, value) in pairs {
+                    let Some((side, local_idx)) = atom_side(idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    side_pairs[side].push((local_idx, value));
+                }
+                for (side, pairs) in side_pairs.into_iter().enumerate() {
+                    if !pairs.is_empty() {
+                        push_for_side(side, CxEntry::Labels(pairs));
+                    }
+                }
+            }
+            CxEntry::Values(pairs) => {
+                let mut side_pairs = [Vec::new(), Vec::new(), Vec::new()];
+                for (idx, value) in pairs {
+                    let Some((side, local_idx)) = atom_side(idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    side_pairs[side].push((local_idx, value));
+                }
+                for (side, pairs) in side_pairs.into_iter().enumerate() {
+                    if !pairs.is_empty() {
+                        push_for_side(side, CxEntry::Values(pairs));
+                    }
+                }
+            }
+            CxEntry::Radicals(pairs) => {
+                let mut side_pairs = [Vec::new(), Vec::new(), Vec::new()];
+                for (idx, value) in pairs {
+                    let Some((side, local_idx)) = atom_side(idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
+                    };
+                    side_pairs[side].push((local_idx, value));
+                }
+                for (side, pairs) in side_pairs.into_iter().enumerate() {
+                    if !pairs.is_empty() {
+                        push_for_side(side, CxEntry::Radicals(pairs));
+                    }
+                }
+            }
+            CxEntry::WigglyBonds(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, bond_idx, wedge) in items {
+                    let Some((atom_side_idx, local_atom)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    let Some((bond_side_idx, local_bond)) = bond_side(bond_idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    if atom_side_idx != bond_side_idx {
+                        return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
+                    }
+                    side_items[atom_side_idx].push((local_atom, local_bond, wedge));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::WigglyBonds(items));
+                    }
+                }
+            }
+            CxEntry::CisBonds(indices) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for idx in indices {
+                    let Some((side, local_idx)) = bond_side(idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    side_items[side].push(local_idx);
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::CisBonds(items));
+                    }
+                }
+            }
+            CxEntry::TransBonds(indices) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for idx in indices {
+                    let Some((side, local_idx)) = bond_side(idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    side_items[side].push(local_idx);
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::TransBonds(items));
+                    }
+                }
+            }
+            CxEntry::UnspecBonds(indices) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for idx in indices {
+                    let Some((side, local_idx)) = bond_side(idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: idx });
+                    };
+                    side_items[side].push(local_idx);
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::UnspecBonds(items));
+                    }
+                }
+            }
+            CxEntry::CoordinateBonds(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, bond_idx) in items {
+                    let Some((atom_side_idx, local_atom)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    let Some((bond_side_idx, local_bond)) = bond_side(bond_idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    if atom_side_idx != bond_side_idx {
+                        return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
+                    }
+                    side_items[atom_side_idx].push((local_atom, local_bond));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::CoordinateBonds(items));
+                    }
+                }
+            }
+            CxEntry::HydrogenBonds(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, bond_idx) in items {
+                    let Some((atom_side_idx, local_atom)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    let Some((bond_side_idx, local_bond)) = bond_side(bond_idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx });
+                    };
+                    if atom_side_idx != bond_side_idx {
+                        return Err(ParseError::MismatchedAtomBondIndices { atom_idx, bond_idx });
+                    }
+                    side_items[atom_side_idx].push((local_atom, local_bond));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::HydrogenBonds(items));
+                    }
+                }
+            }
+            CxEntry::LonePairs(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, count) in items {
+                    let Some((side, local_idx)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    side_items[side].push((local_idx, count));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::LonePairs(items));
+                    }
+                }
+            }
+            CxEntry::MulticenterBonds(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (center, ligands) in items {
+                    let Some((side, local_center)) = atom_side(center) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: center });
+                    };
+                    let mut local_ligands = Vec::with_capacity(ligands.len());
+                    for ligand in ligands {
+                        let Some((lig_side, local_lig)) = atom_side(ligand) else {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx: ligand });
+                        };
+                        if lig_side != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                        local_ligands.push(local_lig);
+                    }
+                    side_items[side].push((local_center, local_ligands));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::MulticenterBonds(items));
+                    }
+                }
+            }
+            CxEntry::FragmentGroups(groups) => {
+                let mut side_groups = [Vec::new(), Vec::new(), Vec::new()];
+                for group in groups {
+                    let mut local = Vec::with_capacity(group.len());
+                    let mut side_opt = None;
+                    for atom_idx in group {
+                        let Some((side, local_idx)) = atom_side(atom_idx) else {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                        };
+                        if let Some(existing) = side_opt {
+                            if existing != side {
+                                return Err(ParseError::InvalidCxTag { pos: 0 });
+                            }
+                        } else {
+                            side_opt = Some(side);
+                        }
+                        local.push(local_idx);
+                    }
+                    if let Some(side) = side_opt {
+                        side_groups[side].push(local);
+                    }
+                }
+                for (side, groups) in side_groups.into_iter().enumerate() {
+                    if !groups.is_empty() {
+                        push_for_side(side, CxEntry::FragmentGroups(groups));
+                    }
+                }
+            }
+            CxEntry::StereoGroup(mut sg) => {
+                let mut side_opt = None;
+                for atom in &mut sg.atoms {
+                    let Some((side, local_idx)) = atom_side(*atom) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: *atom });
+                    };
+                    if let Some(existing) = side_opt {
+                        if existing != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                    } else {
+                        side_opt = Some(side);
+                    }
+                    *atom = local_idx;
+                }
+                if let Some(side) = side_opt {
+                    push_for_side(side, CxEntry::StereoGroup(sg));
+                }
+            }
+            CxEntry::RelativeStereo => {
+                for side in 0..3 {
+                    if atom_ends[side] > atom_starts[side] {
+                        push_for_side(side, CxEntry::RelativeStereo);
+                    }
+                }
+            }
+            CxEntry::AtomProperties(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, k, v) in items {
+                    let Some((side, local_idx)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    side_items[side].push((local_idx, k, v));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::AtomProperties(items));
+                    }
+                }
+            }
+            CxEntry::RingBondCount(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, value) in items {
+                    let Some((side, local_idx)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    side_items[side].push((local_idx, value));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::RingBondCount(items));
+                    }
+                }
+            }
+            CxEntry::SubstitutionCount(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, value) in items {
+                    let Some((side, local_idx)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    side_items[side].push((local_idx, value));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::SubstitutionCount(items));
+                    }
+                }
+            }
+            CxEntry::Unsaturated(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for atom_idx in items {
+                    let Some((side, local_idx)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    side_items[side].push(local_idx);
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::Unsaturated(items));
+                    }
+                }
+            }
+            CxEntry::LigandOrder(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (center, neigh) in items {
+                    let Some((side, local_center)) = atom_side(center) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: center });
+                    };
+                    let mut local_neigh = Vec::with_capacity(neigh.len());
+                    for atom_idx in neigh {
+                        let Some((s, local_idx)) = atom_side(atom_idx) else {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                        };
+                        if s != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                        local_neigh.push(local_idx);
+                    }
+                    side_items[side].push((local_center, local_neigh));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::LigandOrder(items));
+                    }
+                }
+            }
+            CxEntry::LinkNodes(items) => {
+                let mut side_items = [Vec::new(), Vec::new(), Vec::new()];
+                for (atom_idx, link) in items {
+                    let Some((side, local_idx)) = atom_side(atom_idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx });
+                    };
+                    side_items[side].push((local_idx, link));
+                }
+                for (side, items) in side_items.into_iter().enumerate() {
+                    if !items.is_empty() {
+                        push_for_side(side, CxEntry::LinkNodes(items));
+                    }
+                }
+            }
+            CxEntry::Sgroup(mut sg) => {
+                let mut side_opt = None;
+                for idx in &mut sg.atom_indices {
+                    let Some((side, local_idx)) = atom_side(*idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: *idx });
+                    };
+                    if let Some(existing) = side_opt {
+                        if existing != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                    } else {
+                        side_opt = Some(side);
+                    }
+                    *idx = local_idx;
+                }
+                for idx in &mut sg.bond_indices {
+                    let Some((side, local_idx)) = bond_side(*idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: *idx });
+                    };
+                    if let Some(existing) = side_opt {
+                        if existing != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                    } else {
+                        side_opt = Some(side);
+                    }
+                    *idx = local_idx;
+                }
+                if let Some(indices) = &mut sg.parent_atom_indices {
+                    for idx in indices {
+                        let Some((side, local_idx)) = atom_side(*idx) else {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx: *idx });
+                        };
+                        if let Some(existing) = side_opt {
+                            if existing != side {
+                                return Err(ParseError::InvalidCxTag { pos: 0 });
+                            }
+                        } else {
+                            side_opt = Some(side);
+                        }
+                        *idx = local_idx;
+                    }
+                }
+                if let Some(indices) = &mut sg.correspondence {
+                    for idx in indices {
+                        let Some((side, local_idx)) = bond_side(*idx) else {
+                            return Err(ParseError::BondIndexOutOfBounds { bond_idx: *idx });
+                        };
+                        if let Some(existing) = side_opt {
+                            if existing != side {
+                                return Err(ParseError::InvalidCxTag { pos: 0 });
+                            }
+                        } else {
+                            side_opt = Some(side);
+                        }
+                        *idx = local_idx;
+                    }
+                }
+                if let Some(cb) = sg.connecting_bond.as_mut() {
+                    let Some((side, local_idx)) = bond_side(cb.bond_index) else {
+                        return Err(ParseError::BondIndexOutOfBounds {
+                            bond_idx: cb.bond_index,
+                        });
+                    };
+                    if let Some(existing) = side_opt {
+                        if existing != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                    } else {
+                        side_opt = Some(side);
+                    }
+                    cb.bond_index = local_idx;
+                }
+                if let Some(side) = side_opt {
+                    push_for_side(side, CxEntry::Sgroup(sg));
+                }
+            }
+            CxEntry::SgroupData(mut sg) => {
+                let mut side_opt = None;
+                for idx in &mut sg.atom_indices {
+                    let Some((side, local_idx)) = atom_side(*idx) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: *idx });
+                    };
+                    if let Some(existing) = side_opt {
+                        if existing != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                    } else {
+                        side_opt = Some(side);
+                    }
+                    *idx = local_idx;
+                }
+                for idx in &mut sg.bond_indices {
+                    let Some((side, local_idx)) = bond_side(*idx) else {
+                        return Err(ParseError::BondIndexOutOfBounds { bond_idx: *idx });
+                    };
+                    if let Some(existing) = side_opt {
+                        if existing != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                    } else {
+                        side_opt = Some(side);
+                    }
+                    *idx = local_idx;
+                }
+                if let Some(indices) = &mut sg.parent_atom_indices {
+                    for idx in indices {
+                        let Some((side, local_idx)) = atom_side(*idx) else {
+                            return Err(ParseError::AtomIndexOutOfBounds { atom_idx: *idx });
+                        };
+                        if let Some(existing) = side_opt {
+                            if existing != side {
+                                return Err(ParseError::InvalidCxTag { pos: 0 });
+                            }
+                        } else {
+                            side_opt = Some(side);
+                        }
+                        *idx = local_idx;
+                    }
+                }
+                if let Some(indices) = &mut sg.correspondence {
+                    for idx in indices {
+                        let Some((side, local_idx)) = bond_side(*idx) else {
+                            return Err(ParseError::BondIndexOutOfBounds { bond_idx: *idx });
+                        };
+                        if let Some(existing) = side_opt {
+                            if existing != side {
+                                return Err(ParseError::InvalidCxTag { pos: 0 });
+                            }
+                        } else {
+                            side_opt = Some(side);
+                        }
+                        *idx = local_idx;
+                    }
+                }
+                if let Some(cb) = sg.connecting_bond.as_mut() {
+                    let Some((side, local_idx)) = bond_side(cb.bond_index) else {
+                        return Err(ParseError::BondIndexOutOfBounds {
+                            bond_idx: cb.bond_index,
+                        });
+                    };
+                    if let Some(existing) = side_opt {
+                        if existing != side {
+                            return Err(ParseError::InvalidCxTag { pos: 0 });
+                        }
+                    } else {
+                        side_opt = Some(side);
+                    }
+                    cb.bond_index = local_idx;
+                }
+                if let Some(side) = side_opt {
+                    push_for_side(side, CxEntry::SgroupData(sg));
+                }
+            }
+            CxEntry::SgroupHierarchy(pairs) => {
+                for side in 0..3 {
+                    if atom_ends[side] > atom_starts[side] {
+                        push_for_side(side, CxEntry::SgroupHierarchy(pairs.clone()));
+                    }
+                }
+            }
+            CxEntry::BicycloStereo(entries) => {
+                let mut per_side = [Vec::new(), Vec::new(), Vec::new()];
+                for entry in entries {
+                    let (lig, con, lo, hi) = match &entry {
+                        BicycloStereo::TowardsHigherBridge(d)
+                        | BicycloStereo::TowardsLowerBridge(d)
+                        | BicycloStereo::TowardsEitherBridge(d) => (
+                            d.ligand_atom,
+                            d.connection_atom,
+                            d.lower_bridge_atoms.clone(),
+                            d.higher_bridge_atoms.clone(),
+                        ),
+                    };
+                    let Some((side, lig_local)) = atom_side(lig) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: lig });
+                    };
+                    let Some((side2, con_local)) = atom_side(con) else {
+                        return Err(ParseError::AtomIndexOutOfBounds { atom_idx: con });
+                    };
+                    if side != side2 {
+                        return Err(ParseError::InvalidCxTag { pos: 0 });
+                    }
+                    let map_vec = |v: Vec<u32>| -> Result<Vec<u32>, ParseError> {
+                        let mut out = Vec::with_capacity(v.len());
+                        for a in v {
+                            let Some((s, local)) = atom_side(a) else {
+                                return Err(ParseError::AtomIndexOutOfBounds { atom_idx: a });
+                            };
+                            if s != side {
+                                return Err(ParseError::InvalidCxTag { pos: 0 });
+                            }
+                            out.push(local);
+                        }
+                        Ok(out)
+                    };
+                    let lower = map_vec(lo)?;
+                    let higher = map_vec(hi)?;
+                    let data = BicycloStereoData {
+                        ligand_atom: lig_local,
+                        connection_atom: con_local,
+                        lower_bridge_atoms: lower,
+                        higher_bridge_atoms: higher,
+                    };
+                    let remapped = match entry {
+                        BicycloStereo::TowardsHigherBridge(_) => {
+                            BicycloStereo::TowardsHigherBridge(data)
+                        }
+                        BicycloStereo::TowardsLowerBridge(_) => BicycloStereo::TowardsLowerBridge(data),
+                        BicycloStereo::TowardsEitherBridge(_) => {
+                            BicycloStereo::TowardsEitherBridge(data)
+                        }
+                    };
+                    per_side[side].push(remapped);
+                }
+                for (side, entries) in per_side.into_iter().enumerate() {
+                    if !entries.is_empty() {
+                        push_for_side(side, CxEntry::BicycloStereo(entries));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(out)
 }
 
 /// Parse comma only when followed by an entry-start character (separator between CX entries).

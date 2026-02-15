@@ -207,3 +207,42 @@ fn parse_extended_reaction_smiles_atom_mapping(
     let rxn = res.unwrap();
     assert_eq!(rxn.atom_mapping, expected);
 }
+
+#[test]
+fn parse_reaction_smiles_trailing_cx_labels_global_indices() {
+    let rxn = parse_reaction_smiles_bytes_with(
+        b"C>CC>C |$r;a0;a1;p$|",
+        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
+    )
+    .unwrap();
+    assert_eq!(rxn.reactants.atoms[0].label.as_deref(), Some("r"));
+    assert_eq!(rxn.agents.atoms[0].label.as_deref(), Some("a0"));
+    assert_eq!(rxn.agents.atoms[1].label.as_deref(), Some("a1"));
+    assert_eq!(rxn.products.atoms[0].label.as_deref(), Some("p"));
+}
+
+#[test]
+fn parse_reaction_smiles_trailing_cx_invalid_index() {
+    let err = parse_reaction_smiles_bytes_with(
+        b"C>>C |$a;b;c$|",
+        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
+    )
+    .unwrap_err();
+    assert_eq!(err, ParseError::AtomIndexOutOfBounds { atom_idx: 2 });
+}
+
+#[test]
+fn parse_extended_reaction_smiles_trailing_cx_fragment_groups() {
+    let rxn = parse_extended_reaction_smiles_bytes_with(
+        b"C.C>>C |f:0.1|",
+        &SmilesIoConfig::with_parse_flags(SmilesParseFlags::BASIC_MAX),
+    )
+    .unwrap();
+    let components = rxn
+        .reactants
+        .cx_data
+        .as_ref()
+        .and_then(|d| d.components.clone())
+        .unwrap();
+    assert_eq!(components, vec![vec![0, 1]]);
+}
