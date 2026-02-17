@@ -6,8 +6,8 @@ use umol_data::{Element, SpinMultiplicity};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Atom {
     element: Element,
-    charge: i8,
     isotope_mass: Option<u32>,
+    charge: i8,
     hydrogens: u8,
     valence: u8,
     lone_pairs: u8,
@@ -23,12 +23,11 @@ impl Atom {
         self.element
     }
 
-    pub fn charge(&self) -> i8 {
-        self.charge
-    }
-
     pub fn isotope_mass(&self) -> Option<u32> {
         self.isotope_mass
+    }
+    pub fn charge(&self) -> i8 {
+        self.charge
     }
 
     pub fn hydrogens(&self) -> u8 {

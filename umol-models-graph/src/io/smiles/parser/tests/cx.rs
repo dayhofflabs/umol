@@ -4,9 +4,10 @@ use rstest::*;
 use umol_data::SpinMultiplicity;
 
 use super::super::*;
+use crate::bond::{BondDonation, BondNoncovalent};
 use crate::position::Point3D;
 use crate::table_ir::{
-    BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, LinkAtom, RingBondCount,
+    BondOrder, BondStereo, BondWedge, LinkAtom, RingBondCount,
     SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
     SGroupDataType, SGroupType, StereoInterpretation, StereoSet, StereoSetMode, SubstitutionCount,
     UnpairedElectrons, UnsaturatedAtom,
@@ -839,9 +840,29 @@ fn cx_multicenter_bonds(
     assert_eq!(mol.multicenter_bond_count(), expected_count);
     for (i, (center, ligands)) in expected_bonds.iter().enumerate() {
         let bond = &mol.multicenter_bonds[i];
-        assert_eq!(bond.contributions.len(), 2, "bond {} contributions", i);
-        assert_eq!(bond.contributions[0].atoms, *ligands, "ligands for bond {}", i);
-        assert_eq!(bond.contributions[1].atoms, vec![*center], "center for bond {}", i);
+        assert_eq!(bond.contributions().len(), 2, "bond {} contributions", i);
+        let ligand_contribution = bond
+            .contributions()
+            .iter()
+            .find(|contribution| contribution.atoms().len() > 1)
+            .unwrap();
+        let center_contribution = bond
+            .contributions()
+            .iter()
+            .find(|contribution| contribution.atoms().len() == 1)
+            .unwrap();
+        assert_eq!(
+            ligand_contribution.atoms(),
+            ligands.as_slice(),
+            "ligands for bond {}",
+            i
+        );
+        assert_eq!(
+            center_contribution.atoms(),
+            [*center].as_slice(),
+            "center for bond {}",
+            i
+        );
     }
 
     let res = parse_extended_cxsmiles(input);

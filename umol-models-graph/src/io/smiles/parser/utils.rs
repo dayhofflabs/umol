@@ -7,8 +7,9 @@ use umol_data::Element;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
+use crate::bond::BondDonation;
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondDonation, BondOrder, BondWedge, Chirality, WildcardAtom};
+use crate::table_ir::{AtomSymbol, BondOrder, BondWedge, Chirality, WildcardAtom};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct OpenRing {

@@ -38,11 +38,7 @@ impl Reaction {
         }
     }
 
-    pub fn from_molecules(
-        reactants: Molecule,
-        products: Molecule,
-        agents: Molecule,
-    ) -> Self {
+    pub fn from_molecules(reactants: Molecule, products: Molecule, agents: Molecule) -> Self {
         Self {
             reactants,
             products,
@@ -53,7 +49,6 @@ impl Reaction {
             source_format: SourceFormat::UNKNOWN,
         }
     }
-
 }
 
 /// Extended reaction IR
@@ -97,5 +92,4 @@ impl ExtendedReaction {
             source_format: SourceFormat::UNKNOWN,
         }
     }
-
 }

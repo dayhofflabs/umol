@@ -2,8 +2,6 @@
 
 mod gir;
 
-use serde::{Deserialize, Serialize};
-
 use self::gir::lint_gir;
 use crate::diagnostics::{Diagnostic, DiagnosticKind, DiagnosticList};
 use crate::edits::EditList;
@@ -12,7 +10,7 @@ use crate::io::smiles::config::SmilesIoConfig;
 use crate::io::smiles::parser::parse_smiles_to_sir;
 use crate::valence::ValenceModel;
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct LintOutput {
     pub diagnostics: DiagnosticList,
     pub edits: EditList,

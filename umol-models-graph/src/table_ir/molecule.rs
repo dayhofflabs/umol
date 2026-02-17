@@ -18,13 +18,13 @@ use super::bond::{Bond, ExtendedBond};
 use super::ctfile_data::CtfileData;
 use super::cx_data::CxAnnotationData;
 use super::error::JoinError;
-use super::multicenter::MulticenterBond;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
 use super::stereo::StereoInterpretation;
 use super::topology::Ring;
 use super::utils::{element_symbol_key, format_sum_formula};
+use crate::multicenter::MulticenterBond;
 use crate::position::Point3D;
 
 /// Basic molecule IR
@@ -82,9 +82,9 @@ impl Molecule {
         }
         for multicenter_bond in &self.multicenter_bonds {
             let indices: Vec<u32> = multicenter_bond
-                .contributions
+                .contributions()
                 .iter()
-                .flat_map(|c| c.atoms.iter().copied())
+                .flat_map(|c| c.atoms().iter().copied())
                 .collect();
             for (first, second) in indices.into_iter().tuple_combinations() {
                 union_find.union(first, second);
@@ -505,9 +505,9 @@ impl ExtendedMolecule {
         }
         for multicenter_bond in &self.multicenter_bonds {
             let indices: Vec<u32> = multicenter_bond
-                .contributions
+                .contributions()
                 .iter()
-                .flat_map(|c| c.atoms.iter().copied())
+                .flat_map(|c| c.atoms().iter().copied())
                 .collect();
             for (first, second) in indices.into_iter().tuple_combinations() {
                 union_find.union(first, second);
@@ -546,36 +546,37 @@ impl ExtendedMolecule {
             let mut bond_index_map: HashMap<u32, u32> = HashMap::new();
             for (old_bond_idx, bond) in self.bonds.iter().enumerate() {
                 let (a, b) = bond.atoms.as_tuple();
-                if let (Some(new_a), Some(new_b)) =
-                    (atom_index_map.get(&a).copied(), atom_index_map.get(&b).copied())
-                {
+                if let (Some(new_a), Some(new_b)) = (
+                    atom_index_map.get(&a).copied(),
+                    atom_index_map.get(&b).copied(),
+                ) {
                     let new_bond_idx = bonds.len() as u32;
                     bonds.push(bond.update_atoms(new_a, new_b));
                     bond_index_map.insert(old_bond_idx as u32, new_bond_idx);
                 }
             }
 
-            let rings = self
-                .rings
-                .iter()
-                .filter_map(|ring| {
-                    let new_start = match ring.start_atom {
-                        Some(old_idx) => Some(*atom_index_map.get(&old_idx)?),
-                        None => None,
-                    };
-                    let new_end = match ring.end_atom {
-                        Some(old_idx) => Some(*atom_index_map.get(&old_idx)?),
-                        None => None,
-                    };
-                    if new_start.is_none() && new_end.is_none() {
-                        return None;
-                    }
-                    Some(ring.update_atoms(
-                        new_start.unwrap_or_default(),
-                        new_end.unwrap_or_default(),
-                    ))
-                })
-                .collect();
+            let rings =
+                self.rings
+                    .iter()
+                    .filter_map(|ring| {
+                        let new_start = match ring.start_atom {
+                            Some(old_idx) => Some(*atom_index_map.get(&old_idx)?),
+                            None => None,
+                        };
+                        let new_end = match ring.end_atom {
+                            Some(old_idx) => Some(*atom_index_map.get(&old_idx)?),
+                            None => None,
+                        };
+                        if new_start.is_none() && new_end.is_none() {
+                            return None;
+                        }
+                        Some(ring.update_atoms(
+                            new_start.unwrap_or_default(),
+                            new_end.unwrap_or_default(),
+                        ))
+                    })
+                    .collect();
 
             let positions = self.positions.as_ref().map(|positions| {
                 component_atoms
@@ -729,7 +730,11 @@ impl ExtendedMolecule {
             } else {
                 None
             },
-            cx_data: if has_cx_data { Some(merged_cx_data) } else { None },
+            cx_data: if has_cx_data {
+                Some(merged_cx_data)
+            } else {
+                None
+            },
             source_format,
         })
     }

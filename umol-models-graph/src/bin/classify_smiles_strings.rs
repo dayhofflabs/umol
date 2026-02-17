@@ -676,10 +676,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if error_smiles > 0 {
         println!("- Errors: {} SMILES could not be classified", error_smiles);
     }
-    println!(
-        "- {:.1}% of SMILES are valid",
-        totals.valid_percentage()
-    );
+    println!("- {:.1}% of SMILES are valid", totals.valid_percentage());
 
     if !bug_smiles.is_empty() {
         println!(

@@ -12,10 +12,26 @@ use crate::table_ir::BicycloStereoData;
 
 /// Local parity entry (@: / @@:). Chiral center with ordered substituents.
 #[derive(Clone, Debug, PartialEq)]
-pub struct LocalParityEntry {
+pub struct LocalParityCenter {
     pub center: u32,
     pub substituents: Vec<u32>,
     pub chirality: Chirality,
+}
+
+/// A set of stereocenters with a common interpretation mode
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StereoSet {
+    pub atoms: Vec<u32>,
+    pub mode: StereoSetMode,
+}
+
+/// How to interpret a group of stereocenters
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StereoSetMode {
+    /// Centers flip together (racemate-like)
+    Correlated,
+    /// Centers flip independently (mixture)
+    Independent,
 }
 
 /// CXSMILES annotation data
@@ -38,26 +54,10 @@ pub struct CxAnnotationData {
     pub rgroup_members: BTreeMap<u32, Vec<String>>,
 
     /// Local parity from @: / @@: (chiral center, ordered substituents, chirality)
-    pub local_parity: Option<Vec<LocalParityEntry>>,
+    pub local_parity: Option<Vec<LocalParityCenter>>,
 
     /// Bicyclic stereo from THB: / TLB: / TEB:
     pub bicyclo_stereo: Option<Vec<BicycloStereo>>,
-}
-
-/// A set of stereocenters with a common interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StereoSet {
-    pub atoms: Vec<u32>,
-    pub mode: StereoSetMode,
-}
-
-/// How to interpret a group of stereocenters
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StereoSetMode {
-    /// Centers flip together (racemate-like)
-    Correlated,
-    /// Centers flip independently (mixture)
-    Independent,
 }
 
 impl CxAnnotationData {
@@ -120,13 +120,13 @@ impl CxAnnotationData {
                             .iter()
                             .map(|s| atom_index_map.get(s).copied())
                             .collect::<Option<Vec<u32>>>()?;
-                        Some(LocalParityEntry {
+                        Some(LocalParityCenter {
                             center,
                             substituents,
                             chirality: entry.chirality,
                         })
                     })
-                    .collect::<Vec<LocalParityEntry>>()
+                    .collect::<Vec<LocalParityCenter>>()
             })
             .and_then(|entries| {
                 if entries.is_empty() {

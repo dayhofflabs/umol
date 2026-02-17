@@ -3,12 +3,14 @@ use pretty_assertions::assert_eq;
 use umol_data::Element;
 
 use super::*;
+use crate::bond::BondDonation;
+use crate::multicenter::MulticenterSet;
 use crate::position::Point3D;
 use crate::table_ir::{
-    Atom, AtomStereoCare, BicycloStereo, BicycloStereoData, Bond, BondDonation, BondOrder,
-    ConversionError, CxAnnotationData, CtfileData, ExtendedAtom, ExtendedBond, JoinError,
-    LegacyGroupAbbreviation, LocalParityEntry, MulticenterSet, RGroup, RGroupOccurrence, SGroup,
-    SGroupType, SourceFormat, StereoSet, StereoSetMode, Chirality,
+    Atom, AtomStereoCare, BicycloStereo, BicycloStereoData, Bond, BondOrder, Chirality,
+    ConversionError, CtfileData, CxAnnotationData, ExtendedAtom, ExtendedBond, JoinError,
+    LegacyGroupAbbreviation, LocalParityCenter, RGroup, RGroupOccurrence, SGroup, SGroupType,
+    SourceFormat, StereoSet, StereoSetMode,
 };
 
 #[test]
@@ -228,7 +230,7 @@ fn test_molecule_split_components_remaps_indices() {
     );
     assert_eq!(c1.multicenter_bond_count(), 1);
     assert_eq!(
-        c1.multicenter_bonds[0].contributions[0],
+        c1.multicenter_bonds[0].contributions()[0],
         MulticenterSet::new(vec![0, 1], 2)
     );
 }
@@ -562,7 +564,10 @@ fn test_extended_molecule_split_join_components_core() {
         Point3D::new(2.0, 0.0, 0.0),
         Point3D::new(3.0, 0.0, 0.0),
     ]);
-    ext.multicenter_bonds = vec![MulticenterBond::new(vec![MulticenterSet::new(vec![2, 3], 2)])];
+    ext.multicenter_bonds = vec![MulticenterBond::new(vec![MulticenterSet::new(
+        vec![2, 3],
+        2,
+    )])];
 
     let split = ext.split_components();
     assert_eq!(split.len(), 2);
@@ -652,17 +657,19 @@ fn test_extended_molecule_split_join_cx_data() {
         rgroup_members: vec![(9u32, vec!["[*:1]C".to_string()])]
             .into_iter()
             .collect(),
-        local_parity: Some(vec![LocalParityEntry {
+        local_parity: Some(vec![LocalParityCenter {
             center: 2,
             substituents: vec![3],
             chirality: Chirality::Clockwise,
         }]),
-        bicyclo_stereo: Some(vec![BicycloStereo::TowardsEitherBridge(BicycloStereoData {
-            ligand_atom: 2,
-            connection_atom: 3,
-            lower_bridge_atoms: vec![2],
-            higher_bridge_atoms: vec![3],
-        })]),
+        bicyclo_stereo: Some(vec![BicycloStereo::TowardsEitherBridge(
+            BicycloStereoData {
+                ligand_atom: 2,
+                connection_atom: 3,
+                lower_bridge_atoms: vec![2],
+                higher_bridge_atoms: vec![3],
+            },
+        )]),
     });
 
     let split = ext.split_components();

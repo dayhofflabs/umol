@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml::de::Error as TomlError;
 use umol_data::Element;
@@ -118,7 +117,7 @@ impl ValenceModel {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ValencePattern {
     pub element: Option<Element>,
     pub bond_sum: Option<u8>,
@@ -127,7 +126,7 @@ pub struct ValencePattern {
     pub unpaired: Option<u8>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ValencePatternTable {
     pub patterns: Vec<ValencePattern>,
 }

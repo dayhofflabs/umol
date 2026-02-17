@@ -22,15 +22,16 @@ use umol_data::SpinMultiplicity;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
+use crate::bond::{BondDonation, BondNoncovalent};
+use crate::multicenter::{MulticenterBond, MulticenterSet};
 use crate::position::Point3D;
 use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
 use crate::table_ir::{
-    BondDonation, BondNoncovalent, BondOrder, BondStereo, BondWedge, CxAnnotationData,
-    ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule, MulticenterBond, MulticenterSet,
-    Reaction, RingBondCount, SGroup, SGroupBracketCoords, SGroupBracketOrientation,
-    SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType, SGroupSubtype, SGroupType,
-    StereoInterpretation, StereoSet, StereoSetMode, SubstitutionCount, UnpairedElectrons,
-    UnsaturatedAtom,
+    BondOrder, BondStereo, BondWedge, CxAnnotationData, ExtendedMolecule, ExtendedReaction,
+    LinkAtom, Molecule, Reaction, RingBondCount, SGroup, SGroupBracketCoords,
+    SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType,
+    SGroupSubtype, SGroupType, StereoInterpretation, StereoSet, StereoSetMode, SubstitutionCount,
+    UnpairedElectrons, UnsaturatedAtom,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -1245,7 +1246,9 @@ pub fn split_reaction_cx_entries(
                         BicycloStereo::TowardsHigherBridge(_) => {
                             BicycloStereo::TowardsHigherBridge(data)
                         }
-                        BicycloStereo::TowardsLowerBridge(_) => BicycloStereo::TowardsLowerBridge(data),
+                        BicycloStereo::TowardsLowerBridge(_) => {
+                            BicycloStereo::TowardsLowerBridge(data)
+                        }
                         BicycloStereo::TowardsEitherBridge(_) => {
                             BicycloStereo::TowardsEitherBridge(data)
                         }

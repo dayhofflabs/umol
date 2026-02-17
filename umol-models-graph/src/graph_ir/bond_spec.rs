@@ -7,7 +7,6 @@ use std::str::FromStr;
 use map_macro::hash_map;
 use std::sync::LazyLock;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use crate::graph_ir::error::ResolutionError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -121,7 +120,7 @@ impl fmt::Display for BondOrder {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BondDonation {
     Shared,
     Donating,
@@ -199,7 +198,7 @@ impl FromStr for BondDonation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BondSpec {
     order: BondOrder,
     donation: BondDonation,

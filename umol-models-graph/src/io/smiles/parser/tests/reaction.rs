@@ -88,7 +88,10 @@ fn parse_reaction_smiles_invalid(#[case] input: &[u8], #[case] expected: ParseEr
 }
 
 #[rstest]
-#[case::dative_bond(b"N->B>>N.B", reaction_from_sides("N@0 B@3 | 0-1->@1", "N@0 B@1 |", "|"))]
+#[case::dative_bond(
+    b"N->B>>N.B",
+    reaction_from_sides("N@0 B@3 | 0-1->@1", "N@0 B@1 |", "|")
+)]
 fn parse_reaction_smiles_bytes_lenient(#[case] input: &[u8], #[case] expected: Reaction) {
     let res = parse_reaction_smiles_bytes_with(
         input,
@@ -126,8 +129,14 @@ fn parse_reaction_smiles_atom_mapping(
 #[case::wildcard(b"*>>*", extended_reaction_from_sides("*@0 |", "*@0 |", "|"))]
 #[case::two_reactants(b"C.C>>C", extended_reaction_from_sides("C@0 C@1 |", "C@0 |", "|"))]
 #[case::two_products(b"C>>C.C", extended_reaction_from_sides("C@0 |", "C@0 C@1 |", "|"))]
-#[case::with_agent(b"C>CC>C", extended_reaction_from_sides("C@0 |", "C@0 |", "C@0 C@1 | 0-1@2"))]
-#[case::agents_empty(b"C>>CC", extended_reaction_from_sides("C@0 |", "C@0 C@1 | 0-1@2", "|"))]
+#[case::with_agent(
+    b"C>CC>C",
+    extended_reaction_from_sides("C@0 |", "C@0 |", "C@0 C@1 | 0-1@2")
+)]
+#[case::agents_empty(
+    b"C>>CC",
+    extended_reaction_from_sides("C@0 |", "C@0 C@1 | 0-1@2", "|")
+)]
 fn parse_extended_reaction_smiles(#[case] input: &[u8], #[case] expected: ExtendedReaction) {
     let res = parse_extended_reaction_smiles_bytes(input);
     assert!(
@@ -175,7 +184,10 @@ fn parse_extended_reaction_smiles_invalid(#[case] input: &[u8], #[case] expected
 }
 
 #[rstest]
-#[case::dative_bond(b"N->B>>N.B", extended_reaction_from_sides("N@0 B@3 | 0-1->@1", "N@0 B@1 |", "|"))]
+#[case::dative_bond(
+    b"N->B>>N.B",
+    extended_reaction_from_sides("N@0 B@3 | 0-1->@1", "N@0 B@1 |", "|")
+)]
 fn parse_extended_reaction_smiles_bytes_lenient(
     #[case] input: &[u8],
     #[case] expected: ExtendedReaction,
