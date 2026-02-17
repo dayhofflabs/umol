@@ -1,4 +1,4 @@
-# Molecule Validation Scheme
+# Molecule Validation Scheme - Opus Extended 4.6
 
 ## Prompt
 
@@ -141,3 +141,86 @@ The combinatorial explosion people fear is a myth for practical chemistry. For a
 The hard part is **haptic ligands**, because they break the 1-edge-per-interaction assumption. But this is a representation problem you solve once: a haptic group annotation (η⁵-Cp is `L₂X`, η⁶-arene is `L₃`) collapses the multi-edge subgraph into a single CBC contribution. Your graph needs a hyperedge or group annotation for this — individual M–C edges without it are simply not enough information to validate against.
 
 So the honest answer to your earlier question: no, you don't need δ-bond or dative-bond edge types as separate primitives. You need **CBC-typed edges** (L/X/Z) and **haptic group annotations**, and then the same candidate-set narrowing pipeline works for TMs as for organic molecules, just with a different rule set per phase.
+
+---
+
+## Intermediate data structures for the resolution pipeline
+
+The resolution pipeline (`resolve_molecule_with`) transforms a `TableMolecule` into a `Molecule` through four phases. Each phase fills in more information. Two design options were considered:
+
+### Option A: Generic molecule parameterized by atom type
+
+Distinct atom types per phase, with the molecule parameterized by `<A>`:
+
+```
+TopologyAtom → ValenceAtom → Atom (final)
+ResolvingMolecule<TopologyAtom> → ResolvingMolecule<ValenceAtom> → Molecule
+```
+
+- **TopologyAtom**: element, isotope, charge (`Option<i8>`), hydrogens (`Option<u8>`), aromatic hint, chirality hint, unpaired electrons, lone pairs — all optional/raw from input.
+- **ValenceAtom**: element, isotope, + `SmallVec<[ValenceCandidate; 4]>` of surviving candidate states, aromatic hint passed through.
+- **ValenceCandidate**: charge (`i8`), hydrogens, lone_pairs, donated_pairs, accepted_pairs, unpaired_electrons, multiplicity, valence (σ), aromatic_valence (π contribution), multicenter_valence.
+- **Atom**: final, all fields definite.
+
+Pros: compile-time phase enforcement; each type reflects exactly what's known.
+Cons: 3 atom types + generic molecule; can't reuse for manual construction; more boilerplate.
+
+### Option B: Builder pattern (selected)
+
+Single `AtomBuilder` type with `Option<T>` fields + candidates field. The graph carries `AtomBuilder` nodes during resolution; `build()` at the end produces `Atom`. Same builder used for manual construction.
+
+```
+AtomBuilder (Optional fields, candidates) → build() → Atom
+StableGraph<AtomBuilder, Bond> → build all → StableGraph<Atom, Bond> → Molecule
+```
+
+Three kinds of state on the builder:
+1. **Fixed fields** — always known from input: `element`, `isotope_mass`.
+2. **Optional fields** — known from input or filled by a phase: `charge`, `hydrogens`, `lone_pairs`, `unpaired_electrons`, `multiplicity`, `aromatic_hint`, `chirality_hint`.
+3. **Candidate field** — populated by valence phase, narrowed by aromaticity: `candidates: SmallVec<[ValenceCandidate; 4]>`.
+
+`build()` validates: candidates narrowed to exactly one, all required fields resolved. Produces `Atom` or `ResolutionError`.
+
+Pros: fewer types; reuse for manual construction; simpler plumbing.
+Cons: no compile-time phase enforcement (caught at runtime by `build()`); builder is permissive.
+
+**Decision: Option B.** Phase ordering is enforced structurally by the pipeline functions. `build()` catches incomplete resolution. If the permissiveness becomes a problem, can revisit.
+
+Bond does not need a builder: order is known from topology (σ-skeleton), donation is resolved during valence. `Bond` is used directly throughout.
+
+### Implementation plan
+
+The intermediate structure during resolution is `MoleculeBuilder`, which wraps a `StableGraph<AtomBuilder, Bond>` plus molecule-level layers. It serves both resolution from TableIR and manual construction. `build()` runs the resolution phases and produces `Molecule`.
+
+```
+TableMolecule → populate MoleculeBuilder → resolve phases → Molecule
+MoleculeBuilder::new() → add atoms/bonds → resolve phases → Molecule
+```
+
+1. **`ValenceCandidate`** in `graph_ir::atom`.
+   - All fields definite: `charge: i8`, `hydrogens: u8`, `lone_pairs: u8`, `donated_pairs: u8`, `accepted_pairs: u8`, `unpaired_electrons: u8`, `multiplicity: SpinMultiplicity`, `valence: u8`, `aromatic_valence: u8`, `multicenter_valence: u8`.
+   - Derived `Eq`, `Hash` for deduplication.
+
+2. **`AtomBuilder`** in `graph_ir::atom` (same file as `Atom`).
+   - Fixed: `element: Element`, `isotope_mass: Option<u32>`.
+   - Optional: `charge: Option<i8>`, `hydrogens: Option<u8>`, `lone_pairs: Option<u8>`, `donated_pairs: Option<u8>`, `accepted_pairs: Option<u8>`, `unpaired_electrons: Option<u8>`, `multiplicity: Option<SpinMultiplicity>`, `aromatic_hint: Option<bool>`, `chirality_hint: Option<table_ir::Chirality>`.
+   - Candidates: `candidates: SmallVec<[ValenceCandidate; 4]>`.
+   - Constructor: `AtomBuilder::new(element)`, `AtomBuilder::from_table_atom(&table_ir::Atom)`.
+   - Setters: `set_charge`, `set_hydrogens`, etc. (chainable `&mut Self`).
+   - `build() -> Result<Atom, ResolutionError>`: checks all required fields present, exactly one candidate, produces `Atom`.
+   - `Atom::to_builder() -> AtomBuilder`: round-trip for mutation.
+
+3. **`Bond` constructors** in `graph_ir::bond`.
+   - `Bond::new(order: u8) -> Self` (donation = None).
+   - `Bond::new_dative(order: u8, donation: BondDonation) -> Self`.
+
+4. **`MoleculeBuilder`** in `graph_ir::molecule` (same file as `Molecule`).
+   - Wraps `StableGraph<AtomBuilder, Bond, Undirected, u32>` + molecule-level layers (multicenter bonds, noncovalent bonds, positions, etc.).
+   - `MoleculeBuilder::new() -> Self` (empty).
+   - `MoleculeBuilder::from_table_molecule(&TableMolecule) -> Result<Self, ResolutionError>` (populates from TableIR, validates topology).
+   - Atom/bond mutation: `add_atom(AtomBuilder) -> AtomIndex`, `add_bond(a, b, Bond) -> BondIndex`, etc.
+   - `build(config: &ResolveConfig) -> Result<Molecule, ResolutionError>`: runs valence/aromaticity/stereo phases on the builder graph, builds each `AtomBuilder` into `Atom`, produces `Molecule`.
+
+5. **Update `resolver.rs`**:
+   - `resolve_molecule_with`: constructs `MoleculeBuilder::from_table_molecule`, calls `builder.build(config)`.
+   - Phase functions become methods on `MoleculeBuilder` or free functions taking `&mut MoleculeBuilder`.

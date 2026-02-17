@@ -56,6 +56,7 @@
 | 50-reaction-design-research-2026-02-08.md                      | Informational | 2026-02-17   |
 | 51-reaction-design-research-claude-2026-02-08.md               | Informational | 2026-02-17   |
 | 52-graph-ir-2026-02-11.md                                      | Active        | 2026-02-17   |
-| 53-molecule-validation-phases-2026-02-17.md                    | Active        | 2026-02-17   |
+| 53-molecule-validation-scheme-2026-02-17.md                    | Active        | 2026-02-17   |
+| 54-molecule-validation-phases-2026-02-17.md                    | Active        | 2026-02-17   |
 
 

@@ -1,8 +1,29 @@
-//! Atom type for GraphIR.
+//! Atom type and builder for GraphIR.
 
+use smallvec::SmallVec;
 use umol_data::{Element, SpinMultiplicity};
 
-/// Basic atom IR
+use super::error::ResolutionError;
+use crate::table_ir::atom::Chirality;
+
+/// A single candidate valence state for an atom. Populated by the valence
+/// resolution phase, narrowed by aromaticity resolution. All fields definite.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ValenceCandidate {
+    pub charge: i8,
+    pub hydrogens: u8,
+    pub lone_pairs: u8,
+    pub donated_pairs: u8,
+    pub accepted_pairs: u8,
+    pub unpaired_electrons: u8,
+    pub multiplicity: SpinMultiplicity,
+    pub valence: u8,
+    pub aromatic_valence: u8,
+    pub multicenter_valence: u8,
+}
+
+/// Resolved atom in GraphIR. All fields are definite.
+/// Created via `AtomBuilder::build()` after resolution phases complete.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Atom {
     element: Element,
@@ -27,6 +48,7 @@ impl Atom {
     pub fn isotope_mass(&self) -> Option<u32> {
         self.isotope_mass
     }
+
     pub fn charge(&self) -> i8 {
         self.charge
     }
@@ -54,6 +76,7 @@ impl Atom {
     pub fn multiplicity(&self) -> SpinMultiplicity {
         self.multiplicity
     }
+
     pub fn valence(&self) -> u8 {
         self.valence
     }
@@ -64,5 +87,241 @@ impl Atom {
 
     pub fn multicenter_valence(&self) -> u8 {
         self.multicenter_valence
+    }
+
+    pub fn to_builder(&self) -> AtomBuilder {
+        AtomBuilder {
+            element: self.element,
+            isotope_mass: self.isotope_mass,
+            charge: Some(self.charge),
+            hydrogens: Some(self.hydrogens),
+            lone_pairs: Some(self.lone_pairs),
+            donated_pairs: Some(self.donated_pairs),
+            accepted_pairs: Some(self.accepted_pairs),
+            unpaired_electrons: Some(self.unpaired_electrons),
+            multiplicity: Some(self.multiplicity),
+            aromatic_hint: None,
+            chirality_hint: None,
+            candidates: SmallVec::from_elem(
+                ValenceCandidate {
+                    charge: self.charge,
+                    hydrogens: self.hydrogens,
+                    lone_pairs: self.lone_pairs,
+                    donated_pairs: self.donated_pairs,
+                    accepted_pairs: self.accepted_pairs,
+                    unpaired_electrons: self.unpaired_electrons,
+                    multiplicity: self.multiplicity,
+                    valence: self.valence,
+                    aromatic_valence: self.aromatic_valence,
+                    multicenter_valence: self.multicenter_valence,
+                },
+                1,
+            ),
+        }
+    }
+}
+
+/// Builder for constructing `Atom` values. Used as graph node weights during
+/// resolution phases and for manual molecule construction. Fields progress
+/// from `None` (unknown) to `Some` as resolution phases fill them in.
+#[derive(Debug, Clone)]
+pub struct AtomBuilder {
+    element: Element,
+    isotope_mass: Option<u32>,
+    charge: Option<i8>,
+    hydrogens: Option<u8>,
+    lone_pairs: Option<u8>,
+    donated_pairs: Option<u8>,
+    accepted_pairs: Option<u8>,
+    unpaired_electrons: Option<u8>,
+    multiplicity: Option<SpinMultiplicity>,
+    aromatic_hint: Option<bool>,
+    chirality_hint: Option<Chirality>,
+    candidates: SmallVec<[ValenceCandidate; 4]>,
+}
+
+impl AtomBuilder {
+    pub fn new(element: Element) -> Self {
+        Self {
+            element,
+            isotope_mass: None,
+            charge: None,
+            hydrogens: None,
+            lone_pairs: None,
+            donated_pairs: None,
+            accepted_pairs: None,
+            unpaired_electrons: None,
+            multiplicity: None,
+            aromatic_hint: None,
+            chirality_hint: None,
+            candidates: SmallVec::new(),
+        }
+    }
+
+    pub fn from_table_atom(atom: &crate::table_ir::atom::Atom) -> Self {
+        Self {
+            element: atom.element,
+            isotope_mass: atom.isotope_mass,
+            charge: atom.charge,
+            hydrogens: atom.hydrogens,
+            lone_pairs: atom.lone_pairs,
+            donated_pairs: None,
+            accepted_pairs: None,
+            unpaired_electrons: atom.unpaired_electrons.map(|u| u.count),
+            multiplicity: atom
+                .unpaired_electrons
+                .and_then(|u| u.multiplicity),
+            aromatic_hint: atom.aromatic,
+            chirality_hint: atom.chirality.clone(),
+            candidates: SmallVec::new(),
+        }
+    }
+
+    pub fn element(&self) -> Element {
+        self.element
+    }
+
+    pub fn isotope_mass(&self) -> Option<u32> {
+        self.isotope_mass
+    }
+
+    pub fn charge(&self) -> Option<i8> {
+        self.charge
+    }
+
+    pub fn hydrogens(&self) -> Option<u8> {
+        self.hydrogens
+    }
+
+    pub fn lone_pairs(&self) -> Option<u8> {
+        self.lone_pairs
+    }
+
+    pub fn donated_pairs(&self) -> Option<u8> {
+        self.donated_pairs
+    }
+
+    pub fn accepted_pairs(&self) -> Option<u8> {
+        self.accepted_pairs
+    }
+
+    pub fn unpaired_electrons(&self) -> Option<u8> {
+        self.unpaired_electrons
+    }
+
+    pub fn multiplicity(&self) -> Option<SpinMultiplicity> {
+        self.multiplicity
+    }
+
+    pub fn aromatic_hint(&self) -> Option<bool> {
+        self.aromatic_hint
+    }
+
+    pub fn chirality_hint(&self) -> Option<&Chirality> {
+        self.chirality_hint.as_ref()
+    }
+
+    pub fn candidates(&self) -> &[ValenceCandidate] {
+        &self.candidates
+    }
+
+    pub fn set_isotope_mass(&mut self, isotope_mass: u32) -> &mut Self {
+        self.isotope_mass = Some(isotope_mass);
+        self
+    }
+
+    pub fn set_charge(&mut self, charge: i8) -> &mut Self {
+        self.charge = Some(charge);
+        self
+    }
+
+    pub fn set_hydrogens(&mut self, hydrogens: u8) -> &mut Self {
+        self.hydrogens = Some(hydrogens);
+        self
+    }
+
+    pub fn set_lone_pairs(&mut self, lone_pairs: u8) -> &mut Self {
+        self.lone_pairs = Some(lone_pairs);
+        self
+    }
+
+    pub fn set_donated_pairs(&mut self, donated_pairs: u8) -> &mut Self {
+        self.donated_pairs = Some(donated_pairs);
+        self
+    }
+
+    pub fn set_accepted_pairs(&mut self, accepted_pairs: u8) -> &mut Self {
+        self.accepted_pairs = Some(accepted_pairs);
+        self
+    }
+
+    pub fn set_unpaired_electrons(&mut self, unpaired_electrons: u8) -> &mut Self {
+        self.unpaired_electrons = Some(unpaired_electrons);
+        self
+    }
+
+    pub fn set_multiplicity(&mut self, multiplicity: SpinMultiplicity) -> &mut Self {
+        self.multiplicity = Some(multiplicity);
+        self
+    }
+
+    pub fn set_aromatic_hint(&mut self, aromatic: bool) -> &mut Self {
+        self.aromatic_hint = Some(aromatic);
+        self
+    }
+
+    pub fn set_chirality_hint(&mut self, chirality: Chirality) -> &mut Self {
+        self.chirality_hint = Some(chirality);
+        self
+    }
+
+    pub fn set_candidates(&mut self, candidates: SmallVec<[ValenceCandidate; 4]>) -> &mut Self {
+        self.candidates = candidates;
+        self
+    }
+
+    pub fn add_candidate(&mut self, candidate: ValenceCandidate) -> &mut Self {
+        if !self.candidates.contains(&candidate) {
+            self.candidates.push(candidate);
+        }
+        self
+    }
+
+    /// Build the final `Atom` from the builder state.
+    ///
+    /// Requires exactly one valence candidate remaining (resolution phases
+    /// must have narrowed the set). All fields on that candidate become the
+    /// definite atom properties.
+    pub fn build(&self) -> Result<Atom, ResolutionError> {
+        let candidate = match self.candidates.len() {
+            0 => {
+                return Err(ResolutionError::InvalidAtomSpec(format!(
+                    "no valence candidates for {:?}",
+                    self.element
+                )))
+            }
+            1 => &self.candidates[0],
+            n => {
+                return Err(ResolutionError::InvalidAtomSpec(format!(
+                    "{} unresolved valence candidates for {:?}",
+                    n, self.element
+                )))
+            }
+        };
+
+        Ok(Atom {
+            element: self.element,
+            isotope_mass: self.isotope_mass,
+            charge: candidate.charge,
+            hydrogens: candidate.hydrogens,
+            lone_pairs: candidate.lone_pairs,
+            donated_pairs: candidate.donated_pairs,
+            accepted_pairs: candidate.accepted_pairs,
+            unpaired_electrons: candidate.unpaired_electrons,
+            multiplicity: candidate.multiplicity,
+            valence: candidate.valence,
+            aromatic_valence: candidate.aromatic_valence,
+            multicenter_valence: candidate.multicenter_valence,
+        })
     }
 }

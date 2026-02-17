@@ -159,7 +159,7 @@ pub(super) fn convert_bond_type_code(
         4 => Ok(BondOrder::Aromatic),
         _ => {
             if extended_range && (code == 0 || (9..=11).contains(&code)) {
-                // TODO: In RDKit: 9 is Dative
+                // TODO: In RDKit: 9 is Dative, implement configuration option
                 match code {
                     0 => Ok(BondOrder::Zero),
                     9 => Ok(BondOrder::Quadruple),
@@ -230,7 +230,7 @@ pub(super) fn convert_bond_stereo_direction_code(
     match code {
         0 => (None, None),
         1 => (Some(BondStereo::Cis), Some(BondWedge::Up)),
-        // TODO: In RDKit: 3 is "either" double bond
+        // TODO: In RDKit: 3 is "either" double bond, implement configuration option
         // 4 is "either" single bond
         3 | 4 => (Some(BondStereo::Either), Some(BondWedge::Either)),
         6 => (Some(BondStereo::Trans), Some(BondWedge::Down)),

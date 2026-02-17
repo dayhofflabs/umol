@@ -2,6 +2,7 @@
 
 use super::config::ResolveConfig;
 use super::error::ResolutionError;
+use super::molecule::MoleculeBuilder;
 use super::Molecule;
 use crate::table_ir::Molecule as TableMolecule;
 
@@ -12,10 +13,11 @@ pub fn resolve_molecule(molecule: &TableMolecule) -> Result<Molecule, Resolution
 
 /// Resolve a TableIR molecule to a GraphIR molecule with the given configuration.
 ///
-/// Resolution proceeds in four phases, each narrowing the set of valid
-/// interpretations without backtracking:
+/// Populates a `MoleculeBuilder` from the TableIR data, runs the resolution
+/// phases in order, then builds the final `Molecule`.
 ///
-/// 1. **Topology** — index validity, self-loops, parallel edges, connectivity.
+/// 1. **Topology** — build graph from TableIR, validate indices, self-loops,
+///    parallel edges, connectivity.
 /// 2. **Valence** — match atoms against valid valence states; for aromatic atoms,
 ///    enumerate candidate states with σ-bond sum and π-contribution.
 /// 3. **Aromaticity** — select from valence candidates by ring membership and
@@ -26,37 +28,37 @@ pub fn resolve_molecule_with(
     molecule: &TableMolecule,
     config: &ResolveConfig,
 ) -> Result<Molecule, ResolutionError> {
-    let resolved = resolve_topology_with(molecule, config)?;
-    let resolved = resolve_valence_with(resolved, config)?;
-    let resolved = resolve_aromaticity_with(resolved, config)?;
-    let resolved = resolve_stereo_with(resolved, config)?;
-    Ok(resolved)
+    let mut builder = resolve_topology_with(molecule, config)?;
+    resolve_valence_with(&mut builder, config)?;
+    resolve_aromaticity_with(&mut builder, config)?;
+    resolve_stereo_with(&mut builder, config)?;
+    builder.build(config)
 }
 
 fn resolve_topology_with(
     _molecule: &TableMolecule,
     _config: &ResolveConfig,
-) -> Result<Molecule, ResolutionError> {
+) -> Result<MoleculeBuilder, ResolutionError> {
     todo!()
 }
 
 fn resolve_valence_with(
-    _molecule: Molecule,
+    _builder: &mut MoleculeBuilder,
     _config: &ResolveConfig,
-) -> Result<Molecule, ResolutionError> {
+) -> Result<(), ResolutionError> {
     todo!()
 }
 
 fn resolve_aromaticity_with(
-    _molecule: Molecule,
+    _builder: &mut MoleculeBuilder,
     _config: &ResolveConfig,
-) -> Result<Molecule, ResolutionError> {
+) -> Result<(), ResolutionError> {
     todo!()
 }
 
 fn resolve_stereo_with(
-    _molecule: Molecule,
+    _builder: &mut MoleculeBuilder,
     _config: &ResolveConfig,
-) -> Result<Molecule, ResolutionError> {
+) -> Result<(), ResolutionError> {
     todo!()
 }

@@ -3,63 +3,70 @@
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
-use petgraph::visit::EdgeRef;
+use petgraph::visit::{EdgeRef, NodeIndexable};
 
-use super::atom::Atom;
+use super::aromatic::AromaticSystem;
+use super::atom::{Atom, AtomBuilder};
 use super::bond::Bond;
+use super::config::ResolveConfig;
+use super::error::ResolutionError;
+use super::multicenter::MulticenterBond;
 
 pub type AtomIndex = NodeIndex<u32>;
 pub type BondIndex = EdgeIndex<u32>;
 
+/// Resolved molecule in GraphIR. All atoms and bonds are fully validated.
 #[derive(Debug, Clone)]
 pub struct Molecule {
-    data: StableGraph<Atom, Bond, Undirected, u32>,
+    graph: StableGraph<Atom, Bond, Undirected, u32>,
+    aromatic_systems: Vec<AromaticSystem>,
+    multicenter_bonds: Vec<MulticenterBond>,
 }
 
 impl Molecule {
     pub fn atom_count(&self) -> usize {
-        self.data.node_count()
+        self.graph.node_count()
     }
 
     pub fn atoms<'graph>(&'graph self) -> impl Iterator<Item = &'graph Atom> + 'graph {
-        self.data.node_weights()
+        self.graph.node_weights()
     }
 
     pub fn atom(&self, index: AtomIndex) -> Option<&Atom> {
-        self.data.node_weight(index)
+        self.graph.node_weight(index)
     }
 
     pub fn bond_count(&self) -> usize {
-        self.data.edge_count()
+        self.graph.edge_count()
     }
 
     pub fn bonds<'graph>(&'graph self) -> impl Iterator<Item = &'graph Bond> + 'graph {
-        self.data.edge_weights()
+        self.graph.edge_weights()
     }
 
     pub fn bond(&self, index: BondIndex) -> Option<&Bond> {
-        self.data.edge_weight(index)
+        self.graph.edge_weight(index)
     }
 
     pub fn atom_indices(&self) -> impl Iterator<Item = AtomIndex> + '_ {
-        self.data.node_indices()
+        self.graph.node_indices()
     }
 
     pub fn bond_indices(&self) -> impl Iterator<Item = BondIndex> + '_ {
-        self.data.edge_indices()
+        self.graph.edge_indices()
     }
 
     pub fn bond_atoms(&self, index: BondIndex) -> Option<(&Atom, &Atom)> {
-        self.data.edge_endpoints(index).map(|(a, b)| {
+        self.graph.edge_endpoints(index).map(|(a, b)| {
             (
-                self.data.node_weight(a).unwrap(),
-                self.data.node_weight(b).unwrap(),
+                self.graph.node_weight(a).unwrap(),
+                self.graph.node_weight(b).unwrap(),
             )
         })
     }
 
     pub fn bond_atom_indices(&self, index: BondIndex) -> Option<(AtomIndex, AtomIndex)> {
-        self.data.edge_endpoints(index)
+        self.graph.edge_endpoints(index)
     }
 
     pub fn bonds_between<'graph>(
@@ -67,49 +74,57 @@ impl Molecule {
         a: AtomIndex,
         b: AtomIndex,
     ) -> impl Iterator<Item = BondIndex> + 'graph {
-        self.data.edges_connecting(a, b).map(|edge| edge.id())
+        self.graph.edges_connecting(a, b).map(|edge| edge.id())
     }
 
     pub fn atom_bonds<'graph>(
         &'graph self,
         index: AtomIndex,
     ) -> impl Iterator<Item = &'graph Bond> + 'graph {
-        self.data.edges(index).map(|e| e.weight())
+        self.graph.edges(index).map(|e| e.weight())
     }
 
     pub fn atom_bond_indices<'graph>(
         &'graph self,
         index: AtomIndex,
     ) -> impl Iterator<Item = BondIndex> + 'graph {
-        self.data.edges(index).map(|e| e.id())
+        self.graph.edges(index).map(|e| e.id())
     }
 
     pub fn atom_neighbors<'graph>(
         &'graph self,
         index: AtomIndex,
     ) -> impl Iterator<Item = &'graph Atom> + 'graph {
-        self.data
+        self.graph
             .neighbors(index)
-            .map(|n| self.data.node_weight(n).unwrap())
+            .map(|n| self.graph.node_weight(n).unwrap())
     }
 
     pub fn atom_neighbor_indices<'graph>(
         &'graph self,
         index: AtomIndex,
     ) -> impl Iterator<Item = AtomIndex> + 'graph {
-        self.data.neighbors(index)
+        self.graph.neighbors(index)
+    }
+
+    pub fn aromatic_systems(&self) -> &[AromaticSystem] {
+        &self.aromatic_systems
+    }
+
+    pub fn multicenter_bonds(&self) -> &[MulticenterBond] {
+        &self.multicenter_bonds
     }
 
     pub fn add_atom(&mut self, atom: Atom) -> AtomIndex {
-        self.data.add_node(atom)
+        self.graph.add_node(atom)
     }
 
     pub fn remove_atom(&mut self, index: AtomIndex) -> Option<Atom> {
-        self.data.remove_node(index)
+        self.graph.remove_node(index)
     }
 
     pub fn replace_atom(&mut self, index: AtomIndex, atom: Atom) -> Option<Atom> {
-        if let Some(slot) = self.data.node_weight_mut(index) {
+        if let Some(slot) = self.graph.node_weight_mut(index) {
             let old = std::mem::replace(slot, atom);
             Some(old)
         } else {
@@ -118,18 +133,18 @@ impl Molecule {
     }
 
     pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: Bond) -> Option<BondIndex> {
-        if !self.data.contains_node(a) || !self.data.contains_node(b) {
+        if !self.graph.contains_node(a) || !self.graph.contains_node(b) {
             return None;
         }
-        Some(self.data.add_edge(a, b, bond))
+        Some(self.graph.add_edge(a, b, bond))
     }
 
     pub fn remove_bond(&mut self, index: BondIndex) -> Option<Bond> {
-        self.data.remove_edge(index)
+        self.graph.remove_edge(index)
     }
 
     pub fn replace_bond(&mut self, index: BondIndex, bond: Bond) -> Option<Bond> {
-        if let Some(slot) = self.data.edge_weight_mut(index) {
+        if let Some(slot) = self.graph.edge_weight_mut(index) {
             let old = std::mem::replace(slot, bond);
             Some(old)
         } else {
@@ -138,203 +153,135 @@ impl Molecule {
     }
 }
 
-// pub struct MoleculeBuilder {
-//     atom_builders: HashMap<usize, AtomBuilder>,
-//     bond_builders: Vec<(usize, usize, BondBuilder)>,
-// }
+/// Builder for constructing a `Molecule`. Carries `AtomBuilder` nodes during
+/// resolution phases; `build()` finalizes each atom and produces a `Molecule`.
+///
+/// Used both by the resolution pipeline (from TableIR) and for manual
+/// molecule construction.
+#[derive(Debug, Clone)]
+pub struct MoleculeBuilder {
+    graph: StableGraph<AtomBuilder, Bond, Undirected, u32>,
+    aromatic_systems: Vec<AromaticSystem>,
+    multicenter_bonds: Vec<MulticenterBond>,
+}
 
-// impl MoleculeBuilder {
-//     pub fn new() -> Self {
-//         Self {
-//             atom_builders: HashMap::new(),
-//             bond_builders: Vec::new(),
-//         }
-//     }
+impl MoleculeBuilder {
+    pub fn new() -> Self {
+        Self {
+            graph: StableGraph::default(),
+            aromatic_systems: Vec::new(),
+            multicenter_bonds: Vec::new(),
+        }
+    }
 
-//     pub fn with_capacity(atom_capacity: usize, bond_capacity: usize) -> Self {
-//         Self {
-//             atom_builders: HashMap::with_capacity(atom_capacity),
-//             bond_builders: Vec::with_capacity(bond_capacity),
-//         }
-//     }
+    pub fn with_capacity(atom_capacity: usize, bond_capacity: usize) -> Self {
+        Self {
+            graph: StableGraph::with_capacity(atom_capacity, bond_capacity),
+            aromatic_systems: Vec::new(),
+            multicenter_bonds: Vec::new(),
+        }
+    }
 
-//     pub fn create_atom<A: Into<AtomBuilder>>(&mut self, atom: A) -> (usize, &mut AtomBuilder) {
-//         let builder = atom.into();
-//         let idx = self.atom_builders.len();
-//         self.atom_builders.insert(idx, builder);
-//         (idx, self.atom_builders.get_mut(&idx).unwrap())
-//     }
+    pub fn atom_count(&self) -> usize {
+        self.graph.node_count()
+    }
 
-//     pub fn create_atoms<A: Into<AtomBuilder>>(
-//         &mut self,
-//         atoms: impl IntoIterator<Item = A>,
-//     ) -> impl Iterator<Item = usize> {
-//         let builders_iter = atoms.into_iter().map(|atom| atom.into());
-//         let (lbound, _) = builders_iter.size_hint();
-//         let offset = self.atom_builders.len();
-//         let indices = builders_iter.enumerate().fold(
-//             Vec::with_capacity(lbound),
-//             |mut acc, (idx, builder)| {
-//                 self.atom_builders.insert(offset + idx, builder);
-//                 acc.push(offset + idx);
-//                 acc
-//             },
-//         );
-//         indices.into_iter()
-//     }
+    pub fn bond_count(&self) -> usize {
+        self.graph.edge_count()
+    }
 
-//     pub fn add_atom<A: Into<AtomBuilder>>(
-//         &mut self,
-//         idx: usize,
-//         atom: A,
-//     ) -> Result<(usize, &mut AtomBuilder), ResolutionError> {
-//         let builder = atom.into();
-//         if self.atom_builders.contains_key(&idx) {
-//             return Err(ResolutionError::DuplicateAtom(AtomIndex::new(idx)));
-//         }
-//         self.atom_builders.insert(idx, builder);
-//         Ok((idx, self.atom_builders.get_mut(&idx).unwrap()))
-//     }
+    pub fn atom_builder(&self, index: AtomIndex) -> Option<&AtomBuilder> {
+        self.graph.node_weight(index)
+    }
 
-//     pub fn add_atoms<A: Into<AtomBuilder>>(
-//         &mut self,
-//         atoms: impl IntoIterator<Item = (usize, A)>,
-//     ) -> Result<impl Iterator<Item = usize>, ResolutionError> {
-//         let staged_atoms: Vec<(usize, AtomBuilder)> = atoms
-//             .into_iter()
-//             .map(|(idx, atom)| (idx, atom.into()))
-//             .collect();
-//         let mut seen_indices = HashSet::with_capacity(staged_atoms.len());
-//         for (idx, _) in &staged_atoms {
-//             if !seen_indices.insert(*idx) {
-//                 return Err(ResolutionError::DuplicateAtom(AtomIndex::new(*idx)));
-//             }
-//             if self.atom_builders.contains_key(idx) {
-//                 return Err(ResolutionError::DuplicateAtom(AtomIndex::new(*idx)));
-//             }
-//         }
+    pub fn atom_builder_mut(&mut self, index: AtomIndex) -> Option<&mut AtomBuilder> {
+        self.graph.node_weight_mut(index)
+    }
 
-//         let mut indices = Vec::with_capacity(staged_atoms.len());
-//         for (idx, builder) in staged_atoms {
-//             self.atom_builders.insert(idx, builder);
-//             indices.push(idx);
-//         }
+    pub fn bond(&self, index: BondIndex) -> Option<&Bond> {
+        self.graph.edge_weight(index)
+    }
 
-//         Ok(indices.into_iter())
-//     }
+    pub fn atom_indices(&self) -> impl Iterator<Item = AtomIndex> + '_ {
+        self.graph.node_indices()
+    }
 
-//     pub fn add_bond<B: Into<BondBuilder>>(
-//         &mut self,
-//         idx1: usize,
-//         idx2: usize,
-//         bond: B,
-//     ) -> Result<(usize, usize, &mut BondBuilder), ResolutionError> {
-//         if !self.atom_builders.contains_key(&idx1) {
-//             return Err(ResolutionError::AtomNotFound(AtomIndex::new(idx1)));
-//         }
-//         if !self.atom_builders.contains_key(&idx2) {
-//             return Err(ResolutionError::AtomNotFound(AtomIndex::new(idx2)));
-//         }
+    pub fn bond_indices(&self) -> impl Iterator<Item = BondIndex> + '_ {
+        self.graph.edge_indices()
+    }
 
-//         let builder = bond.into();
-//         self.bond_builders.push((idx1, idx2, builder));
-//         let (_, _, inserted) = self
-//             .bond_builders
-//             .last_mut()
-//             .expect("bond_builders should contain the just-inserted bond");
-//         Ok((idx1, idx2, inserted))
-//     }
+    pub fn bond_atom_indices(&self, index: BondIndex) -> Option<(AtomIndex, AtomIndex)> {
+        self.graph.edge_endpoints(index)
+    }
 
-//     pub fn add_bonds<B: Into<BondBuilder>>(
-//         &mut self,
-//         bonds: impl IntoIterator<Item = (usize, usize, B)>,
-//     ) -> Result<impl Iterator<Item = (usize, usize)>, ResolutionError> {
-//         let staged_bonds: Vec<(usize, usize, BondBuilder)> = bonds
-//             .into_iter()
-//             .map(|(idx1, idx2, bond)| (idx1, idx2, bond.into()))
-//             .collect();
-//         for (idx1, idx2, _) in &staged_bonds {
-//             if !self.atom_builders.contains_key(idx1) {
-//                 return Err(ResolutionError::AtomNotFound(AtomIndex::new(*idx1)));
-//             }
-//             if !self.atom_builders.contains_key(idx2) {
-//                 return Err(ResolutionError::AtomNotFound(AtomIndex::new(*idx2)));
-//             }
-//         }
+    pub fn atom_bond_indices<'graph>(
+        &'graph self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = BondIndex> + 'graph {
+        self.graph.edges(index).map(|e| e.id())
+    }
 
-//         let mut indices = Vec::with_capacity(staged_bonds.len());
-//         for (idx1, idx2, builder) in staged_bonds {
-//             self.bond_builders.push((idx1, idx2, builder));
-//             indices.push((idx1, idx2));
-//         }
+    pub fn atom_neighbor_indices<'graph>(
+        &'graph self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = AtomIndex> + 'graph {
+        self.graph.neighbors(index)
+    }
 
-//         Ok(indices.into_iter())
-//     }
+    pub fn add_atom(&mut self, atom: AtomBuilder) -> AtomIndex {
+        self.graph.add_node(atom)
+    }
 
-//     pub fn build(self) -> Result<Molecule, ResolutionError> {
-//         self.build_with(
-//             &STRICT_ATOM_VALIDATOR,
-//             &STRICT_ATOM_MATCHER,
-//             &STRICT_BOND_MATCHER,
-//         )
-//     }
+    pub fn add_bond(
+        &mut self,
+        a: AtomIndex,
+        b: AtomIndex,
+        bond: Bond,
+    ) -> Option<BondIndex> {
+        if !self.graph.contains_node(a) || !self.graph.contains_node(b) {
+            return None;
+        }
+        Some(self.graph.add_edge(a, b, bond))
+    }
 
-//     pub fn build_with(
-//         self,
-//         atom_validator: &AtomValidator,
-//         atom_matcher: &AtomMatcher,
-//         bond_matcher: &BondMatcher,
-//     ) -> Result<Molecule, ResolutionError> {
-//         let mut atom_builders = self.atom_builders;
-//         let bond_builders = self.bond_builders;
-//         let mut built_bonds = Vec::with_capacity(bond_builders.len());
-//         let mut observed_valence: HashMap<usize, u32> = HashMap::with_capacity(atom_builders.len());
+    pub fn remove_atom(&mut self, index: AtomIndex) -> Option<AtomBuilder> {
+        self.graph.remove_node(index)
+    }
 
-//         for (idx1, idx2, bond_builder) in bond_builders {
-//             let bond = bond_builder.build_with(bond_matcher)?;
-//             let valence = u32::from(bond.order().value());
-//             built_bonds.push((idx1, idx2, bond));
-//             observed_valence
-//                 .entry(idx1)
-//                 .and_modify(|v| *v = v.saturating_add(valence))
-//                 .or_insert(valence);
-//             observed_valence
-//                 .entry(idx2)
-//                 .and_modify(|v| *v = v.saturating_add(valence))
-//                 .or_insert(valence);
-//         }
+    pub fn remove_bond(&mut self, index: BondIndex) -> Option<Bond> {
+        self.graph.remove_edge(index)
+    }
 
-//         for (idx, observed) in observed_valence {
-//             if let Some(builder) = atom_builders.get_mut(&idx) {
-//                 if builder.valence().is_none() {
-//                     builder.set_valence(observed);
-//                 }
-//             }
-//         }
+    /// Build the final `Molecule` by finalizing each `AtomBuilder` into an `Atom`.
+    ///
+    /// Requires all atom builders to have exactly one valence candidate
+    /// remaining (i.e., resolution phases must have been run).
+    pub fn build(self, _config: &ResolveConfig) -> Result<Molecule, ResolutionError> {
+        let mut resolved_graph =
+            StableGraph::with_capacity(self.graph.node_count(), self.graph.edge_count());
 
-//         let mut built_atoms = IndexMap::with_capacity(atom_builders.len());
-//         for (idx, atom_builder) in atom_builders {
-//             let atom = atom_builder.build_with(atom_validator, atom_matcher)?;
-//             built_atoms.insert(idx, atom);
-//         }
+        let mut index_map = Vec::with_capacity(self.graph.node_bound());
+        index_map.resize(self.graph.node_bound(), None);
 
-//         let mut graph = StableGraph::with_capacity(built_atoms.len(), built_bonds.len());
-//         let mut atom_indices = HashMap::with_capacity(built_atoms.len());
-//         for (idx, atom) in built_atoms {
-//             let node_index = graph.add_node(atom);
-//             atom_indices.insert(idx, node_index);
-//         }
+        for old_idx in self.graph.node_indices() {
+            let builder = self.graph.node_weight(old_idx).unwrap();
+            let atom = builder.build()?;
+            let new_idx = resolved_graph.add_node(atom);
+            index_map[old_idx.index()] = Some(new_idx);
+        }
 
-//         for (idx1, idx2, bond) in built_bonds {
-//             let node1 = *atom_indices
-//                 .get(&idx1)
-//                 .expect("Node index map missing mapping for idx1");
-//             let node2 = *atom_indices
-//                 .get(&idx2)
-//                 .expect("Node index map missing mapping for idx2");
-//             graph.add_edge(node1, node2, bond);
-//         }
+        for old_edge in self.graph.edge_indices() {
+            let (a, b) = self.graph.edge_endpoints(old_edge).unwrap();
+            let bond = self.graph.edge_weight(old_edge).unwrap().clone();
+            let new_a = index_map[a.index()].unwrap();
+            let new_b = index_map[b.index()].unwrap();
+            resolved_graph.add_edge(new_a, new_b, bond);
+        }
 
-//         Ok(Molecule { data: graph })
-//     }
-// }
+        Ok(Molecule {
+            graph: resolved_graph,
+            aromatic_systems: self.aromatic_systems,
+            multicenter_bonds: self.multicenter_bonds,
+        })
+    }
+}
