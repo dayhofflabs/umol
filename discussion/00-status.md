@@ -1,57 +1,61 @@
 # Status of discussion documents
 
+
 | Name                                                           | Status        | Last Checked |
 | -------------------------------------------------------------- | ------------- | ------------ |
-| 01-design-chat-2025-02-14.md                                   | Informational |              |
-| 02-design-summary-2025-02-16.md                                |               |              |
-| 03-alternative-stacks-2025-03-01.md                            |               |              |
-| 04-implementation-start-2025-03-01.md                          |               |              |
-| 05-mutability-2025-03-01.md                                    |               |              |
-| 06-atom-bond-identity-iteration-2025-03-01.md                  |               |              |
-| 07-molecule-slices-2025-03-01.md                               |               |              |
-| 08-molecule-builder-api-2025-03-01.md                          |               |              |
-| 09-torch-api-design-inspiration-2025-03-02.md                  |               |              |
-| 10-diesel-api-design-inspiration.md                            |               |              |
-| 11-cheminformatics-libraries.md                                |               |              |
-| 12-molecular-representations-2025-03-01.md                     |               |              |
-| 13-substructure-match-2025-03-02.md                            |               |              |
-| 14-aromaticity-2025-03-08.md                                   |               |              |
-| 15-semantic-model-2025-03-10.md                                |               |              |
-| 16-hypergraphs-2025-03-10.md                                   |               |              |
-| 17-molecular-builder-api-2025-03-15.md                         |               |              |
-| 18-atomic-encoding-2025-03-19.md                               |               |              |
-| 19-molecular-builder-impl-2025-04-04.md                        |               |              |
-| 20-core-traits-impl-2025-04-04.md                              |               |              |
-| 21-core-traits-update-2025-04-07.md                            |               |              |
-| 22-capability-traits-2025-04-09.md                             |               |              |
-| 23-valence-states-2025-04-19.md                                |               |              |
-| 24-mol-file-parsing-2025-06-16.md                              |               |              |
-| 25-ctab-properties-2025-07-03.md                               |               |              |
-| 25-geometric-models-2025-06-29.md                              |               |              |
-| 26-ctab-parser-status-2025-07-03.md                            |               |              |
-| 27-ctab-parser-todos-2025-07-03.md                             |               |              |
-| 28-intermediate-representation-2025-08-18.md                   |               |              |
-| 29-mol-parsing-ir-impl-2025-08-24.md                           |               |              |
-| 30-mol-compliance-suite-2025-09-01.md                          |               |              |
-| 31-mol-compliance-errors-2025-09-02.md                         |               |              |
-| 32-project-status-2025-09-10.md                                |               |              |
-| 33-opensmiles-impl-status-2025-09-11.md                        |               |              |
-| 34-opensmiles-formal-grammar-2025-09-13.md                     |               |              |
-| 35-opensmiles-missing-specs-2025-09-13.md                      |               |              |
-| 36-opensmiles-linting-2025-09-14.md                            |               |              |
-| 37-opensmiles-parser-opt-2025-09-21.md                         |               |              |
-| 38-opensmiles-conformance-strategy-2025-09-30.md               |               |              |
-| 39-opensmiles-semantic-issues-2025-09-30.md                    |               |              |
-| 40-opensmiles-ir-modeling-2025-09-30.md                        |               |              |
-| 41-opensmiles-aromaticity-2025-10-01.md                        |               |              |
-| 42-relational-molecular-structure-representation-2025-11-23.md |               |              |
-| 43-mutative-efficient-serializable-undoable-mutation.md        |               |              |
-| 44-unified-ir-graph-models-2026-01-14.md                       |               |              |
-| 45-mol-file-parsing-benchmarks-2026-01-14.md                   |               |              |
-| 46-mol-parser-performance-analysis-2026-01-14.md               |               |              |
-| 47-smiles-conformance-suite-2026-01-21.md                      |               |              |
-| 48-smiles-parser-configuration-2026-01-23.md                   |               |              |
-| 49-stereochemistry-encoding-2026-01-29.md                      |               |              |
-| 50-reaction-design-research-2026-02-08.md                      |               |              |
-| 51-reaction-design-research-claude-2026-02-08.md               |               |              |
-| 52-graph-ir-2026-02-11.md                                      |               |              |
+| 01-design-chat-2025-02-14.md                                   | Informational | 2026-02-17   |
+| 02-design-summary-2025-02-16.md                                | Informational | 2026-02-17   |
+| 03-alternative-stacks-2025-03-01.md                            | Informational | 2026-02-17   |
+| 04-implementation-start-2025-03-01.md                          | Outdated      | 2026-02-17   |
+| 05-mutability-2025-03-01.md                                    | Informational | 2026-02-17   |
+| 06-atom-bond-identity-iteration-2025-03-01.md                  | Informational | 2026-02-17   |
+| 07-molecule-slices-2025-03-01.md                               | Informational | 2026-02-17   |
+| 08-molecule-builder-api-2025-03-01.md                          | Active        | 2026-02-17   |
+| 09-torch-api-design-inspiration-2025-03-02.md                  | Informational | 2026-02-17   |
+| 10-diesel-api-design-inspiration.md                            | Informational | 2026-02-17   |
+| 11-cheminformatics-libraries.md                                | Informational | 2026-02-17   |
+| 12-molecular-representations-2025-03-01.md                     | Informational | 2026-02-17   |
+| 13-substructure-match-2025-03-02.md                            | Informational | 2026-02-17   |
+| 14-aromaticity-2025-03-08.md                                   | Informational | 2026-02-17   |
+| 15-semantic-model-2025-03-10.md                                | Active        | 2026-02-17   |
+| 16-hypergraphs-2025-03-10.md                                   | Informational | 2026-02-17   |
+| 17-molecular-builder-api-2025-03-15.md                         | Informational | 2026-02-17   |
+| 18-atomic-encoding-2025-03-19.md                               | Outdated      | 2026-02-17   |
+| 19-molecular-builder-impl-2025-04-04.md                        | Outdated      | 2026-02-17   |
+| 20-core-traits-impl-2025-04-04.md                              | Active        | 2026-02-17   |
+| 21-core-traits-update-2025-04-07.md                            | Active        | 2026-02-17   |
+| 22-capability-traits-2025-04-09.md                             | Active        | 2026-02-17   |
+| 23-valence-states-2025-04-19.md                                | Active        | 2026-02-17   |
+| 24-mol-file-parsing-2025-06-16.md                              | Completed     | 2026-02-17   |
+| 25-ctab-properties-2025-07-03.md                               | Completed     | 2026-02-17   |
+| 25-geometric-models-2025-06-29.md                              | Active        | 2026-02-17   |
+| 26-ctab-parser-status-2025-07-03.md                            | Completed     | 2026-02-17   |
+| 27-ctab-parser-todos-2025-07-03.md                             | Completed     | 2026-02-17   |
+| 28-intermediate-representation-2025-08-18.md                   | Active        | 2026-02-17   |
+| 29-mol-parsing-ir-impl-2025-08-24.md                           | Outdated      | 2026-02-17   |
+| 30-mol-compliance-suite-2025-09-01.md                          | Completed     | 2026-02-17   |
+| 31-mol-compliance-errors-2025-09-02.md                         | Outdated      | 2026-02-17   |
+| 32-project-status-2025-09-10.md                                | Outdated      | 2026-02-17   |
+| 33-opensmiles-impl-status-2025-09-11.md                        | Outdated      | 2026-02-17   |
+| 34-opensmiles-formal-grammar-2025-09-13.md                     | Completed     | 2026-02-17   |
+| 35-opensmiles-missing-specs-2025-09-13.md                      | Outdated      | 2026-02-17   |
+| 36-opensmiles-linting-2025-09-14.md                            | Outdated      | 2026-02-17   |
+| 37-opensmiles-parser-opt-2025-09-21.md                         | Completed     | 2026-02-17   |
+| 38-opensmiles-conformance-strategy-2025-09-30.md               | Completed     | 2026-02-17   |
+| 39-opensmiles-semantic-issues-2025-09-30.md                    | Active        | 2026-02-17   |
+| 40-opensmiles-ir-modeling-2025-09-30.md                        | Active        | 2026-02-17   |
+| 41-opensmiles-aromaticity-2025-10-01.md                        | Informational | 2026-02-17   |
+| 42-relational-molecular-structure-representation-2025-11-23.md | Informational | 2026-02-17   |
+| 43-mutative-efficient-serializable-undoable-mutation.md        | Informational | 2026-02-17   |
+| 44-unified-ir-graph-models-2026-01-14.md                       | Active        | 2026-02-17   |
+| 45-mol-file-parsing-benchmarks-2026-01-14.md                   | Completed     | 2026-02-17   |
+| 46-mol-parser-performance-analysis-2026-01-14.md               | Informational | 2026-02-17   |
+| 47-smiles-conformance-suite-2026-01-21.md                      | Completed     | 2026-02-17   |
+| 48-smiles-parser-configuration-2026-01-23.md                   | Active        | 2026-02-17   |
+| 49-stereochemistry-encoding-2026-01-29.md                      | Active        | 2026-02-17   |
+| 50-reaction-design-research-2026-02-08.md                      | Informational | 2026-02-17   |
+| 51-reaction-design-research-claude-2026-02-08.md               | Informational | 2026-02-17   |
+| 52-graph-ir-2026-02-11.md                                      | Active        | 2026-02-17   |
+| 53-molecule-validation-phases-2026-02-17.md                    | Active        | 2026-02-17   |
+
+

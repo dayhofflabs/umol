@@ -18,13 +18,13 @@ use super::bond::{Bond, ExtendedBond};
 use super::ctfile_data::CtfileData;
 use super::cx_data::CxAnnotationData;
 use super::error::JoinError;
+use super::multicenter::MulticenterBond;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
 use super::stereo::StereoInterpretation;
 use super::topology::Ring;
 use super::utils::{element_symbol_key, format_sum_formula};
-use crate::multicenter::MulticenterBond;
 use crate::position::Point3D;
 
 /// Basic molecule IR

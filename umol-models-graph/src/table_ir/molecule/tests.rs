@@ -4,13 +4,12 @@ use umol_data::Element;
 
 use super::*;
 use crate::bond::BondDonation;
-use crate::multicenter::MulticenterSet;
 use crate::position::Point3D;
 use crate::table_ir::{
     Atom, AtomStereoCare, BicycloStereo, BicycloStereoData, Bond, BondOrder, Chirality,
     ConversionError, CtfileData, CxAnnotationData, ExtendedAtom, ExtendedBond, JoinError,
-    LegacyGroupAbbreviation, LocalParityCenter, RGroup, RGroupOccurrence, SGroup, SGroupType,
-    SourceFormat, StereoSet, StereoSetMode,
+    LegacyGroupAbbreviation, LocalParityCenter, MulticenterBond, MulticenterSet, RGroup,
+    RGroupOccurrence, SGroup, SGroupType, SourceFormat, StereoSet, StereoSetMode,
 };
 
 #[test]

@@ -551,10 +551,10 @@ Additional presets exist for testing/debugging (`basic_max`, `extended_max`, `st
 
 Design research: [50-reaction-design-research-2026-01-29.md](50-reaction-design-research-2026-01-29.md)
 
-- [ ] Create `Reaction` type (container for `Molecule` + atom mapping)
-- [ ] Implement `parse_reaction_smiles`
-- [ ] Split on `>>` (reactants >> products) and `>` (agents)
-- [ ] Parse components using `parse_smiles`
+- [x] Create `Reaction` type (container for `Molecule` + atom mapping)
+- [x] Implement `parse_reaction_smiles`
+- [x] Split on `>>` (reactants >> products) and `>` (agents)
+- [x] Parse components using `parse_smiles`
 - [ ] Validate atom mapping consistency
 
 ### Phase 9: SMARTS Parser

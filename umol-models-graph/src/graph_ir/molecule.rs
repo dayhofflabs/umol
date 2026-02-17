@@ -6,17 +6,14 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
 
 use super::atom::Atom;
-// use super::atom_matcher::{AtomMatcher, STRICT_ATOM_MATCHER};
-// use super::atom_validator::{AtomValidator, STRICT_ATOM_VALIDATOR};
 use super::bond::Bond;
-// use super::bond_matcher::{BondMatcher, STRICT_BOND_MATCHER};
 
-pub type AtomIndex = NodeIndex<usize>;
-pub type BondIndex = EdgeIndex<usize>;
+pub type AtomIndex = NodeIndex<u32>;
+pub type BondIndex = EdgeIndex<u32>;
 
 #[derive(Debug, Clone)]
 pub struct Molecule {
-    data: StableGraph<Atom, Bond, Undirected, usize>,
+    data: StableGraph<Atom, Bond, Undirected, u32>,
 }
 
 impl Molecule {

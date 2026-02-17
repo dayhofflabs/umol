@@ -1,4 +1,4 @@
-//! Table IR for molecule and reaction data based on tables of atoms and bonds.
+//! Table-based molecular intermediate representation.
 
 pub mod atom;
 pub mod bond;
@@ -6,6 +6,7 @@ pub mod ctfile_data;
 pub mod cx_data;
 pub mod error;
 pub mod molecule;
+pub mod multicenter;
 pub mod property;
 pub mod reaction;
 pub mod rgroup;
@@ -21,6 +22,7 @@ pub use ctfile_data::*;
 pub use cx_data::*;
 pub use error::*;
 pub use molecule::*;
+pub use multicenter::*;
 pub use property::*;
 pub use reaction::*;
 pub use rgroup::*;
