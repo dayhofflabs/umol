@@ -1,173 +1,95 @@
-//! Bond type and builder copied from `umol-models-valence`.
+//! Bond type for GraphIR.
 
-// use super::bond_matcher::{BondMatcher, DEFAULT_BOND_MATCHER};
-// use super::bond_spec::{BondDonation, BondOrder, BondSpec};
+use crate::bond::BondDonation;
 
 /// Valence bond type including strict typing.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Bond {}
-
-impl Bond {
-    // pub fn to_builder(self) -> BondBuilder {
-    //     BondBuilder {
-    //         order: self.order,
-    //         donation: Some(self.donation),
-    //         wedge: self.wedge,
-    //         stereo: self.stereo,
-    //         ring: self.ring,
-    //         span: self.span,
-    //     }
-    // }
-
-    // pub fn to_spec(&self) -> BondSpec {
-    //     BondSpec::new(self.order, self.donation)
-    // }
+pub struct Bond {
+    order: u8,
+    donation: Option<BondDonation>,
 }
 
-// impl From<Bond> for BondBuilder {
-//     fn from(bond: Bond) -> Self {
-//         bond.to_builder()
-//     }
-// }
+impl Bond {
+    pub fn order(&self) -> u8 {
+        self.order
+    }
 
-// /// Builder type for creating and mutating `Bond` types including strict typing.
-// #[derive(Debug)]
-// pub struct BondBuilder {
-//     order: BondOrder,
-//     donation: Option<BondDonation>,
-//     wedge: Option<BondWedge>,
-//     stereo: Option<BondStereo>,
-//     ring: Option<u32>,
-//     span: Option<Span>,
-// }
+    pub fn donation(&self) -> Option<BondDonation> {
+        self.donation
+    }
+}
 
-// impl BondBuilder {
-//     pub fn new(order: BondOrder) -> Self {
-//         Self {
-//             order,
-//             donation: None,
-//             wedge: None,
-//             stereo: None,
-//             ring: None,
-//             span: None,
-//         }
-//     }
+impl From<Bond> for BondBuilder {
+    fn from(bond: Bond) -> Self {
+        Self {
+            order: bond.order,
+            donation: bond.donation,
+        }
+    }
+}
 
-//     pub fn from_spec(bond_spec: BondSpec) -> Self {
-//         Self {
-//             order: bond_spec.order(),
-//             donation: Some(bond_spec.donation()),
-//             wedge: None,
-//             stereo: None,
-//             ring: None,
-//             span: None,
-//         }
-//     }
+/// Builder type for creating and mutating `Bond` types including strict typing.
+#[derive(Debug)]
+pub struct BondBuilder {
+    order: u8,
+    donation: Option<BondDonation>,
+}
 
-//     pub fn order(&self) -> BondOrder {
-//         self.order
-//     }
+impl BondBuilder {
+    pub fn new(order: u8) -> Self {
+        Self {
+            order,
+            donation: None,
+        }
+    }
 
-//     pub fn donation(&self) -> Option<BondDonation> {
-//         self.donation
-//     }
+    pub fn order(&self) -> u8 {
+        self.order
+    }
 
-//     pub fn wedge(&self) -> Option<BondWedge> {
-//         self.wedge
-//     }
+    pub fn donation(&self) -> Option<BondDonation> {
+        self.donation
+    }
 
-//     pub fn stereo(&self) -> Option<BondStereo> {
-//         self.stereo
-//     }
+    pub fn set_order(&mut self, order: u8) -> &mut Self {
+        self.order = order;
+        self
+    }
 
-//     pub fn ring(&self) -> Option<u32> {
-//         self.ring
-//     }
+    pub fn set_donation(&mut self, donation: Option<BondDonation>) -> &mut Self {
+        self.donation = donation;
+        self
+    }
 
-//     pub fn span(&self) -> Option<Span> {
-//         self.span
-//     }
+    pub fn update_order(&mut self, f: impl FnOnce(u8) -> u8) -> &mut Self {
+        self.order = f(self.order);
+        self
+    }
 
-//     pub fn span_bytes(&self) -> Option<(u32, u32)> {
-//         self.span.and_then(|s| s.bytes_range())
-//     }
+    pub fn update_donation(&mut self, f: impl FnOnce(BondDonation) -> BondDonation) -> &mut Self {
+        self.donation = Some(f(self.donation.unwrap_or(BondDonation::Shared)));
+        self
+    }
 
-//     pub fn set_order(&mut self, order: BondOrder) -> &mut Self {
-//         self.order = order;
-//         self
-//     }
+    //     pub fn build(self) -> Result<Bond, ResolutionError> {
+    //         self.build_with(&DEFAULT_BOND_MATCHER)
+    //     }
 
-//     pub fn set_donation(&mut self, donation: BondDonation) -> &mut Self {
-//         self.donation = Some(donation);
-//         self
-//     }
-
-//     pub fn set_wedge(&mut self, wedge: Option<BondWedge>) -> &mut Self {
-//         self.wedge = wedge;
-//         self
-//     }
-
-//     pub fn set_stereo(&mut self, stereo: Option<BondStereo>) -> &mut Self {
-//         self.stereo = stereo;
-//         self
-//     }
-
-//     pub fn set_ring(&mut self, ring: Option<u32>) -> &mut Self {
-//         self.ring = ring;
-//         self
-//     }
-
-//     pub fn set_span(&mut self, start: Option<u32>, end: Option<u32>) -> &mut Self {
-//         self.span = Span::from_bytes_opt(start, end);
-//         self
-//     }
-
-//     pub fn set_span_opt(&mut self, span: Option<Span>) -> &mut Self {
-//         self.span = span;
-//         self
-//     }
-
-//     pub fn update_order(&mut self, f: impl FnOnce(BondOrder) -> BondOrder) -> &mut Self {
-//         self.order = f(self.order);
-//         self
-//     }
-
-//     pub fn update_donation(&mut self, f: impl FnOnce(BondDonation) -> BondDonation) -> &mut Self {
-//         self.donation = Some(f(self.donation.unwrap_or(BondDonation::Shared)));
-//         self
-//     }
-
-//     pub fn build(self) -> Result<Bond, ResolutionError> {
-//         self.build_with(&DEFAULT_BOND_MATCHER)
-//     }
-
-//     pub fn build_with(self, matcher: &BondMatcher) -> Result<Bond, ResolutionError> {
-//         let bond_specs = matcher.find(&self)?;
-//         if bond_specs.is_empty() {
-//             return Err(ResolutionError::InvalidBondSpec(format!("{:?}", self)));
-//         } else if bond_specs.len() > 1 {
-//             return Err(ResolutionError::InvalidBondSpec(format!("{:?}", self)));
-//         }
-//         let bond_spec = bond_specs.first().unwrap();
-//         Ok(Bond {
-//             order: bond_spec.order(),
-//             donation: bond_spec.donation(),
-//             wedge: self.wedge,
-//             stereo: self.stereo,
-//             ring: self.ring,
-//             span: self.span,
-//         })
-//     }
-// }
-
-// impl From<BondSpec> for BondBuilder {
-//     fn from(bond_spec: BondSpec) -> Self {
-//         BondBuilder::from_spec(bond_spec)
-//     }
-// }
-
-// impl From<BondOrder> for BondBuilder {
-//     fn from(order: BondOrder) -> Self {
-//         BondBuilder::new(order)
-//     }
-// }
+    //     pub fn build_with(self, matcher: &BondMatcher) -> Result<Bond, ResolutionError> {
+    //         let bond_specs = matcher.find(&self)?;
+    //         if bond_specs.is_empty() {
+    //             return Err(ResolutionError::InvalidBondSpec(format!("{:?}", self)));
+    //         } else if bond_specs.len() > 1 {
+    //             return Err(ResolutionError::InvalidBondSpec(format!("{:?}", self)));
+    //         }
+    //         let bond_spec = bond_specs.first().unwrap();
+    //         Ok(Bond {
+    //             order: bond_spec.order(),
+    //             donation: bond_spec.donation(),
+    //             wedge: self.wedge,
+    //             stereo: self.stereo,
+    //             ring: self.ring,
+    //             span: self.span,
+    //         })
+    //     }
+}
