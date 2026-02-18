@@ -4,7 +4,7 @@ use smallvec::SmallVec;
 use umol_data::{Element, SpinMultiplicity};
 
 use super::error::ResolutionError;
-use crate::table_ir::atom::Chirality;
+use crate::table_ir::atom::{Atom as TableAtom, Chirality};
 
 /// A single candidate valence state for an atom. Populated by the valence
 /// resolution phase, narrowed by aromaticity resolution. All fields definite.
@@ -158,7 +158,7 @@ impl AtomBuilder {
         }
     }
 
-    pub fn from_table_atom(atom: &crate::table_ir::atom::Atom) -> Self {
+    pub fn from_table_atom(atom: &TableAtom) -> Self {
         Self {
             element: atom.element,
             isotope_mass: atom.isotope_mass,
@@ -168,9 +168,7 @@ impl AtomBuilder {
             donated_pairs: None,
             accepted_pairs: None,
             unpaired_electrons: atom.unpaired_electrons.map(|u| u.count),
-            multiplicity: atom
-                .unpaired_electrons
-                .and_then(|u| u.multiplicity),
+            multiplicity: atom.unpaired_electrons.and_then(|u| u.multiplicity),
             aromatic_hint: atom.aromatic,
             chirality_hint: atom.chirality.clone(),
             candidates: SmallVec::new(),
@@ -295,15 +293,15 @@ impl AtomBuilder {
     pub fn build(&self) -> Result<Atom, ResolutionError> {
         let candidate = match self.candidates.len() {
             0 => {
-                return Err(ResolutionError::InvalidAtomSpec(format!(
-                    "no valence candidates for {:?}",
+                return Err(ResolutionError::ValenceNoMatch(format!(
+                    "no valence match for {:?}",
                     self.element
                 )))
             }
             1 => &self.candidates[0],
             n => {
-                return Err(ResolutionError::InvalidAtomSpec(format!(
-                    "{} unresolved valence candidates for {:?}",
+                return Err(ResolutionError::ValenceAmbiguous(format!(
+                    "{} valence matches for {:?}",
                     n, self.element
                 )))
             }

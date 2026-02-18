@@ -224,3 +224,59 @@ MoleculeBuilder::new() → add atoms/bonds → resolve phases → Molecule
 5. **Update `resolver.rs`**:
    - `resolve_molecule_with`: constructs `MoleculeBuilder::from_table_molecule`, calls `builder.build(config)`.
    - Phase functions become methods on `MoleculeBuilder` or free functions taking `&mut MoleculeBuilder`.
+
+---
+
+## Cross-reference: RDKit and OpenBabel approaches
+
+Checked against RDKit (`materials/codes/rdkit`) and OpenBabel (`materials/codes/openbabel`) to verify that the builder/candidate-set design accommodates conventional validation strategies.
+
+### RDKit sanitization flow
+
+```
+cleanUp → updatePropertyCache (valence check #1)
+  → symmetrizeSSSR (ring detection)
+  → Kekulize (backtracking DFS: aromatic bonds → SINGLE/DOUBLE)
+  → setAromaticity (electron donor types + Hückel 4n+2)
+  → adjustHs
+  → updatePropertyCache (valence check #2)
+```
+
+Key details:
+- **Valence**: `calcExplicitValence` = Σ(bond orders) + explicit H. `calcImplicitValence` finds implicit H from `PeriodicTable::getValenceList(atomicNum)` (allowed valence lists). Special handling for aromatic atoms (1.5 tolerance), hypervalent P/S, charged atoms.
+- **Aromaticity**: `ElectronDonorType` enum (`OneElectron`, `TwoElectron`, `OneOrTwo`, `Any`, `No`). Formula: `(defaultValence - degree) + lonePairs - radicals`. Ring-based, Hückel check per ring/fused system.
+- **Kekulization**: Happens *before* aromaticity detection. Backtracking DFS to assign double bonds. `maxBackTracks` parameter.
+- **Two valence checks**: Before Kekulization (catch gross errors) and after (verify assignment).
+
+### OpenBabel flow
+
+```
+Read → implicit H (format-specific valence model)
+  → FindSSSR (ring detection)
+  → AssignAromaticFlags (pattern-based min/max π electrons + Hückel)
+  → OBKekulize (greedy + augmenting paths) if needed
+```
+
+Key details:
+- **Valence**: Format-specific models — `SmilesValence()` vs `MDLValence()`. Different allowed valence lists per format.
+- **Aromaticity**: `AssignOBAromaticityModel()` determines min/max pi electrons per atom based on element, charge, valence, degree, exocyclic bonds. `TraverseCycle()` DFS with Hückel check.
+- **Kekulization**: Two-phase: greedy matching (degree-1 atoms first), then augmenting-path backtracking.
+- **Opposite order from RDKit**: Aromaticity detection *before* Kekulization.
+
+### Mapping to our design
+
+| Conventional concept | Our equivalent |
+|---|---|
+| Allowed valence lists | `ValenceCandidate` set generated from valence lists (conventional scheme) |
+| State table matching | `ValenceCandidate` set generated from `AtomSpec` table (spec-based scheme) |
+| `ElectronDonorType::OneOrTwo` | Two `ValenceCandidate`s: one with `aromatic_valence=1`, one with `aromatic_valence=2` |
+| Two-pass valence check | Single pass: candidates enumerate all valid states; aromaticity narrows; empty set = error |
+| Kekulize before/after aromaticity | Sidestepped: bond orders are always σ-skeleton; π-contribution tracked per-atom in candidates |
+
+**Conclusion**: The `ValenceCandidate` is the unifying abstraction. Whether candidates are generated from a state table (our primary approach) or from allowed-valence-list counting (conventional approach), the downstream aromaticity and stereo phases work identically. `ResolveConfig.valence.scheme` selects the strategy.
+
+### Open items
+
+1. **Ring information**: Both RDKit and OpenBabel require SSSR ring detection before aromaticity. `table_ir::Molecule` has `rings: Vec<Ring>`. The `MoleculeBuilder` does not currently carry ring info. Options: (a) compute from graph topology in aromaticity phase, (b) carry from table_ir during topology phase. Lean toward (a) — rings are derived from topology.
+2. **Kekulé assignment algorithm**: The candidate-set approach eliminates per-atom backtracking, but checking Kekulé feasibility across a ring system is still a matching/constraint-satisfaction problem. RDKit: backtracking DFS. OpenBabel: greedy + augmenting paths. Algorithm choice is an implementation concern for the aromaticity phase; does not affect the data structures.
+3. **Format-specific valence models**: OpenBabel uses different valence rules for SMILES vs MDL. Handled by `ResolveConfig.valence.scheme`.

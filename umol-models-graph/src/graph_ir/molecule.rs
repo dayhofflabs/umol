@@ -28,7 +28,7 @@ impl Molecule {
         self.graph.node_count()
     }
 
-    pub fn atoms<'graph>(&'graph self) -> impl Iterator<Item = &'graph Atom> + 'graph {
+    pub fn atoms(&self) -> impl Iterator<Item = &Atom> + '_ {
         self.graph.node_weights()
     }
 
@@ -40,7 +40,7 @@ impl Molecule {
         self.graph.edge_count()
     }
 
-    pub fn bonds<'graph>(&'graph self) -> impl Iterator<Item = &'graph Bond> + 'graph {
+    pub fn bonds(&self) -> impl Iterator<Item = &Bond> + '_ {
         self.graph.edge_weights()
     }
 
@@ -69,41 +69,29 @@ impl Molecule {
         self.graph.edge_endpoints(index)
     }
 
-    pub fn bonds_between<'graph>(
-        &'graph self,
+    pub fn bonds_between(
+        &self,
         a: AtomIndex,
         b: AtomIndex,
-    ) -> impl Iterator<Item = BondIndex> + 'graph {
+    ) -> impl Iterator<Item = BondIndex> + '_ {
         self.graph.edges_connecting(a, b).map(|edge| edge.id())
     }
 
-    pub fn atom_bonds<'graph>(
-        &'graph self,
-        index: AtomIndex,
-    ) -> impl Iterator<Item = &'graph Bond> + 'graph {
+    pub fn atom_bonds(&self, index: AtomIndex) -> impl Iterator<Item = &Bond> + '_ {
         self.graph.edges(index).map(|e| e.weight())
     }
 
-    pub fn atom_bond_indices<'graph>(
-        &'graph self,
-        index: AtomIndex,
-    ) -> impl Iterator<Item = BondIndex> + 'graph {
+    pub fn atom_bond_indices(&self, index: AtomIndex) -> impl Iterator<Item = BondIndex> + '_ {
         self.graph.edges(index).map(|e| e.id())
     }
 
-    pub fn atom_neighbors<'graph>(
-        &'graph self,
-        index: AtomIndex,
-    ) -> impl Iterator<Item = &'graph Atom> + 'graph {
+    pub fn atom_neighbors(&self, index: AtomIndex) -> impl Iterator<Item = &Atom> + '_ {
         self.graph
             .neighbors(index)
             .map(|n| self.graph.node_weight(n).unwrap())
     }
 
-    pub fn atom_neighbor_indices<'graph>(
-        &'graph self,
-        index: AtomIndex,
-    ) -> impl Iterator<Item = AtomIndex> + 'graph {
+    pub fn atom_neighbor_indices(&self, index: AtomIndex) -> impl Iterator<Item = AtomIndex> + '_ {
         self.graph.neighbors(index)
     }
 
@@ -214,17 +202,11 @@ impl MoleculeBuilder {
         self.graph.edge_endpoints(index)
     }
 
-    pub fn atom_bond_indices<'graph>(
-        &'graph self,
-        index: AtomIndex,
-    ) -> impl Iterator<Item = BondIndex> + 'graph {
+    pub fn atom_bond_indices(&self, index: AtomIndex) -> impl Iterator<Item = BondIndex> + '_ {
         self.graph.edges(index).map(|e| e.id())
     }
 
-    pub fn atom_neighbor_indices<'graph>(
-        &'graph self,
-        index: AtomIndex,
-    ) -> impl Iterator<Item = AtomIndex> + 'graph {
+    pub fn atom_neighbor_indices(&self, index: AtomIndex) -> impl Iterator<Item = AtomIndex> + '_ {
         self.graph.neighbors(index)
     }
 
@@ -232,12 +214,7 @@ impl MoleculeBuilder {
         self.graph.add_node(atom)
     }
 
-    pub fn add_bond(
-        &mut self,
-        a: AtomIndex,
-        b: AtomIndex,
-        bond: Bond,
-    ) -> Option<BondIndex> {
+    pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: Bond) -> Option<BondIndex> {
         if !self.graph.contains_node(a) || !self.graph.contains_node(b) {
             return None;
         }
