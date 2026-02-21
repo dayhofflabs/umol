@@ -280,3 +280,35 @@ Key details:
 1. **Ring information**: Both RDKit and OpenBabel require SSSR ring detection before aromaticity. `table_ir::Molecule` has `rings: Vec<Ring>`. The `MoleculeBuilder` does not currently carry ring info. Options: (a) compute from graph topology in aromaticity phase, (b) carry from table_ir during topology phase. Lean toward (a) — rings are derived from topology.
 2. **Kekulé assignment algorithm**: The candidate-set approach eliminates per-atom backtracking, but checking Kekulé feasibility across a ring system is still a matching/constraint-satisfaction problem. RDKit: backtracking DFS. OpenBabel: greedy + augmenting paths. Algorithm choice is an implementation concern for the aromaticity phase; does not affect the data structures.
 3. **Format-specific valence models**: OpenBabel uses different valence rules for SMILES vs MDL. Handled by `ResolveConfig.valence.scheme`.
+
+---
+
+## Valence narrowing: uniqueness and charges
+
+Two design questions that affect the candidate-set approach:
+
+1. Is it always possible (or desirable) to pick exactly one valence candidate per atom?
+2. Are we allowed to adjust atomic charges, or must we accept the charges given by the input?
+
+### Examples motivating the questions
+
+**Phosphorous ylide** can be written as Ph₃P⁺–CH₂⁻ (charge-separated) or Ph₃P=CH₂ (neutral, pentavalent P). Pentavalent P is chemically reasonable (octet relaxed for third-row elements); we need to accept it when it appears.
+
+**Nitromethane** can be written as CH₃–N⁺(=O)(O⁻) (charge-separated) or CH₃–N(=O)=O (pentavalent N). Pentavalent N violates the octet rule for second-row elements; one can take the position that the second structure is incorrect. Older texts still use it. We need a way to handle both: accept for representation, but allow stricter checks to flag or correct.
+
+### Decisions
+
+**Exactly one candidate per atom**
+
+- **Desirable**: Yes. The pipeline assumes that after the aromaticity phase we have exactly one candidate per atom; `AtomBuilder::build()` requires it. That yields a single, well-defined graph.
+- **Always possible**: Not guaranteed. For a given input (charges, bond orders, aromatic flags) and a fixed valence rule set, candidate sets might narrow to one each (success), to zero for some atom (hard error), or to more than one for some atom (currently treated as error at `build()`). So: we *want* exactly one, we *enforce* it at build time, and we accept that in practice we may find inputs where the rule set yields ambiguity; we can add a policy (e.g. prefer charge-separated, prefer minimal formal charge, or configurable “pick first” / “fail if ambiguous”) if needed. The candidate-set representation already supports that; only the policy and where it runs need to be chosen. Absence of a counterexample now is not evidence that ambiguity cannot occur — testing will tell.
+
+**Charges: no implicit adjustment**
+
+- The resolver treats charges as part of the input. Each charge pattern (e.g. Ph₃P⁺–CH₂⁻ vs Ph₃P=CH₂, or CH₃–N⁺(=O)(O⁻) vs CH₃–N(=O)=O) corresponds to a different set of valence states. The resolver only checks that *some* allowed state matches the given charges (and bonds, etc.); it does not flip charges to produce a “preferred” structure.
+- Any “correction” (e.g. nitro normalization, ylide rewriting, as in RDKit-style patterns) belongs in a separate step — a standardizer or correction layer — that may rewrite the molecule (including charges) *before* resolution. Pipeline: **input → [optional corrections] → resolver**. The resolver remains explicit and predictable.
+
+**Strict vs lenient: resolver vs linter**
+
+- Resolver and linter can use different rule sets (e.g. different `ValenceConfig` or different state tables). Resolver answers: “Can we assign a valid state to this?” (lenient if the table allows e.g. pentavalent N). Linter answers: “Does this match our preferred/strict rules?” (e.g. warn on pentavalent N).
+- That gives: **linter (detect) → standardizer (correct) → resolver (graph)**, or **resolver only (accept as-drawn)**. Nitromethane drawn as CH₃–N(=O)=O: resolver can accept if pentavalent N is in the allowed set; linter can warn. Phosphorous ylide with pentavalent P: if that state is allowed, both resolver and linter can accept.

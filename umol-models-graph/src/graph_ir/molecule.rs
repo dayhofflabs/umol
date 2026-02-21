@@ -262,3 +262,9 @@ impl MoleculeBuilder {
         })
     }
 }
+
+impl Default for MoleculeBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}

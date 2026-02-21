@@ -642,6 +642,7 @@ pub fn update_extended_reaction(
     Ok(())
 }
 
+#[allow(clippy::type_complexity)]
 pub fn split_reaction_cx_entries(
     entries: Vec<CxEntry>,
     reactant_atom_count: usize,
@@ -2258,21 +2259,18 @@ fn skip_unknown_entry(input: &[u8]) -> IResult<&[u8], ()> {
 
     let mut i = 0usize;
     while i < input.len() {
-        match input[i] {
-            b',' => {
-                // A comma starts a new entry iff the next non-whitespace char looks like an entry start.
-                let mut j = i + 1;
-                while j < input.len() && input[j].is_ascii_whitespace() {
-                    j += 1;
-                }
-                if j < input.len() {
-                    let next = input[j] as char;
-                    if is_cx_tag_start(next) {
-                        break;
-                    }
+        if input[i] == b',' {
+            // A comma starts a new entry iff the next non-whitespace char looks like an entry start.
+            let mut j = i + 1;
+            while j < input.len() && input[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            if j < input.len() {
+                let next = input[j] as char;
+                if is_cx_tag_start(next) {
+                    break;
                 }
             }
-            _ => {}
         }
         i += 1;
     }

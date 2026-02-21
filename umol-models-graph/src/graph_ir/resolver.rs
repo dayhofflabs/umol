@@ -1,9 +1,11 @@
 //! Resolution of TableIR molecules to GraphIR molecules.
 
-use super::config::ResolveConfig;
+use std::collections::HashMap;
+
+use super::config::{ResolveConfig, TopologyResolveFlags};
 use super::error::ResolutionError;
-use super::molecule::MoleculeBuilder;
-use super::Molecule;
+use super::molecule::{AtomIndex, MoleculeBuilder};
+use super::{AtomBuilder, Bond, Molecule};
 use crate::table_ir::Molecule as TableMolecule;
 
 /// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
@@ -36,10 +38,61 @@ pub fn resolve_molecule_with(
 }
 
 fn resolve_topology_with(
-    _molecule: &TableMolecule,
-    _config: &ResolveConfig,
+    molecule: &TableMolecule,
+    config: &ResolveConfig,
 ) -> Result<MoleculeBuilder, ResolutionError> {
-    todo!()
+    if config.topology.enabled {
+        if !config
+            .topology
+            .flags
+            .contains(TopologyResolveFlags::DISCONNECTED_MOLECULES)
+            && molecule.component_count() > 1
+        {
+            return Err(ResolutionError::TopologyDisconnected);
+        }
+
+        for (i, bond) in molecule.bonds.iter().enumerate() {
+            if bond.atoms.first() == bond.atoms.second() {
+                return Err(ResolutionError::TopologySelfLoop(i as u32));
+            }
+        }
+
+        let mut pair_to_bonds: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
+        for (i, bond) in molecule.bonds.iter().enumerate() {
+            let key = (bond.atoms.first(), bond.atoms.second());
+            pair_to_bonds.entry(key).or_default().push(i as u32);
+        }
+        for (_pair, indices) in pair_to_bonds {
+            if indices.len() >= 2 {
+                return Err(ResolutionError::TopologyParallelEdges(
+                    indices[0], indices[1],
+                ));
+            }
+        }
+    }
+
+    let n = molecule.atom_count();
+    let m = molecule.bond_count();
+    let mut builder = MoleculeBuilder::with_capacity(n, m);
+    let mut node_indices: Vec<AtomIndex> = Vec::with_capacity(n);
+    for atom in &molecule.atoms {
+        node_indices.push(builder.add_atom(AtomBuilder::from_table_atom(atom)));
+    }
+    for bond in &molecule.bonds {
+        let a = bond.atoms.first();
+        let b = bond.atoms.second();
+        let graph_bond = Bond::from_table_bond(bond)?;
+        builder
+            .add_bond(
+                node_indices[a as usize],
+                node_indices[b as usize],
+                graph_bond,
+            )
+            .ok_or_else(|| {
+                ResolutionError::InvalidBondSpec("bond endpoint index out of range".to_string())
+            })?;
+    }
+    Ok(builder)
 }
 
 fn resolve_valence_with(

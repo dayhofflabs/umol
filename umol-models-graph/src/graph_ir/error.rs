@@ -2,9 +2,12 @@ use thiserror::Error;
 use umol_data::Element;
 
 use crate::diagnostics::Diagnostic;
+use crate::table_ir::bond::BondOrder;
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ResolutionError {
+    #[error("Invalid bond order: {0}")]
+    InvalidBondOrder(BondOrder),
     #[error("Invalid atom specification: {0}")]
     InvalidAtomSpec(String),
     #[error("Invalid bond specification: {0}")]
@@ -15,6 +18,13 @@ pub enum ResolutionError {
     ValenceNoMatch(String),
     #[error("Valence ambiguous for {0}")]
     ValenceAmbiguous(String),
+
+    #[error("Molecule has more than one connected component")]
+    TopologyDisconnected,
+    #[error("Self-loop on bond {0}")]
+    TopologySelfLoop(u32),
+    #[error("Parallel bonds {0} and {1}")]
+    TopologyParallelEdges(u32, u32),
 }
 
 impl From<ResolutionError> for Diagnostic {

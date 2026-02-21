@@ -170,7 +170,7 @@ impl AtomBuilder {
             unpaired_electrons: atom.unpaired_electrons.map(|u| u.count),
             multiplicity: atom.unpaired_electrons.and_then(|u| u.multiplicity),
             aromatic_hint: atom.aromatic,
-            chirality_hint: atom.chirality.clone(),
+            chirality_hint: atom.chirality,
             candidates: SmallVec::new(),
         }
     }

@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use strum::{Display, EnumString};
+
 use super::error::ConversionError;
 use crate::bond::{AtomPair, BondDonation, BondNoncovalent};
 use crate::span::Span;
@@ -85,7 +87,8 @@ impl Bond {
 }
 
 /// Bond order
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Display, EnumString)]
+#[strum(serialize_all = "snake_case")]
 pub enum BondOrder {
     Zero,
     Single,
@@ -102,6 +105,25 @@ pub enum BondOrder {
 }
 
 impl BondOrder {
+    /// Get the value of the bond order if well-defined
+    /// Returns None for query bonds and aromatic bonds.
+    pub fn value(&self) -> Option<u8> {
+        match self {
+            BondOrder::Zero => Some(0),
+            BondOrder::Single => Some(1),
+            BondOrder::Double => Some(2),
+            BondOrder::Triple => Some(3),
+            BondOrder::Quadruple => Some(4),
+            BondOrder::Quintuple => Some(5),
+            BondOrder::Sextuple => Some(6),
+            BondOrder::Aromatic => None,
+            BondOrder::SingleOrDouble => None,
+            BondOrder::SingleOrAromatic => None,
+            BondOrder::DoubleOrAromatic => None,
+            BondOrder::Any => None,
+        }
+    }
+
     pub fn from_value(value: u8) -> Option<Self> {
         match value {
             0 => Some(BondOrder::Zero),

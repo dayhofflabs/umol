@@ -439,13 +439,12 @@ impl ExtendedMolecule {
     /// Get mutable reference to SGroups
     /// Uses ctfile_data if present, else cx_data (creating it if needed)
     pub fn sgroups_mut(&mut self) -> &mut BTreeMap<u32, SGroup> {
-        if self.ctfile_data.is_some() {
-            return &mut self.ctfile_data.as_mut().unwrap().sgroups;
-        }
-        if self.cx_data.is_none() {
+        if let Some(data) = self.ctfile_data.as_mut() {
+            &mut data.sgroups
+        } else {
             self.cx_data = Some(CxAnnotationData::default());
+            &mut self.cx_data.as_mut().unwrap().sgroups
         }
-        &mut self.cx_data.as_mut().unwrap().sgroups
     }
 
     /// View over RGroups from both ctfile_data and cx_data.
@@ -460,13 +459,12 @@ impl ExtendedMolecule {
     /// Get mutable reference to RGroups.
     /// Uses ctfile_data if present, else cx_data (creating it if needed)
     pub fn rgroups_mut(&mut self) -> &mut BTreeMap<u32, RGroup> {
-        if self.ctfile_data.is_some() {
-            return &mut self.ctfile_data.as_mut().unwrap().rgroups;
-        }
-        if self.cx_data.is_none() {
+        if let Some(data) = self.ctfile_data.as_mut() {
+            &mut data.rgroups
+        } else {
             self.cx_data = Some(CxAnnotationData::default());
+            &mut self.cx_data.as_mut().unwrap().rgroups
         }
-        &mut self.cx_data.as_mut().unwrap().rgroups
     }
 
     /// Count of SDF/MOL properties
@@ -848,8 +846,8 @@ impl<'a> SgroupsView<'a> {
     }
 
     pub fn contains_key(&self, key: &u32) -> bool {
-        self.ctfile.map_or(false, |m| m.contains_key(key))
-            || self.cx.map_or(false, |m| m.contains_key(key))
+        self.ctfile.is_some_and(|m| m.contains_key(key))
+            || self.cx.is_some_and(|m| m.contains_key(key))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (u32, &'a SGroup)> {
@@ -884,8 +882,8 @@ impl<'a> RgroupsView<'a> {
     }
 
     pub fn contains_key(&self, key: &u32) -> bool {
-        self.ctfile.map_or(false, |m| m.contains_key(key))
-            || self.cx.map_or(false, |m| m.contains_key(key))
+        self.ctfile.is_some_and(|m| m.contains_key(key))
+            || self.cx.is_some_and(|m| m.contains_key(key))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (u32, &'a RGroup)> {

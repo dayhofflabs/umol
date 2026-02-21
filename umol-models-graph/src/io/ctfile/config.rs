@@ -195,9 +195,6 @@ pub struct CtfileIoConfig {
     pub parse_flags: CtabParseFlags,
 }
 
-/// Backwards compatibility alias
-pub type MolIoConfig = CtfileIoConfig;
-
 impl CtfileIoConfig {
     pub fn with_parse_flags(flags: CtabParseFlags) -> Self {
         Self { parse_flags: flags }

@@ -1,5 +1,22 @@
 //! Configuration for TableIR → GraphIR resolution.
 
+use bitflags::bitflags;
+
+bitflags! {
+    /// Topology resolution options.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct TopologyResolveFlags: u32 {
+        /// Allow molecules with more than one connected component.
+        const DISCONNECTED_MOLECULES = 1;
+    }
+}
+
+impl Default for TopologyResolveFlags {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// Configuration controlling which validation phases run and with what strictness.
 #[derive(Clone, Debug)]
 pub struct ResolveConfig {
@@ -12,6 +29,7 @@ pub struct ResolveConfig {
 #[derive(Clone, Debug)]
 pub struct TopologyConfig {
     pub enabled: bool,
+    pub flags: TopologyResolveFlags,
 }
 
 #[derive(Clone, Debug)]
@@ -32,7 +50,10 @@ pub struct StereoResolveConfig {
 impl Default for ResolveConfig {
     fn default() -> Self {
         Self {
-            topology: TopologyConfig { enabled: true },
+            topology: TopologyConfig {
+                enabled: true,
+                flags: TopologyResolveFlags::empty(),
+            },
             valence: ValenceResolveConfig { enabled: true },
             aromaticity: AromaticityResolveConfig { enabled: true },
             stereo: StereoResolveConfig { enabled: true },
