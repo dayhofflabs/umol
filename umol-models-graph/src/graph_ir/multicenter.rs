@@ -5,7 +5,6 @@
 //! multicenter sets, each contributing a fixed number of electrons. Multicenter sets are sorted and
 //! deduplicated by atom index. Atom indices use `AtomIndex` from the molecule module.
 
-
 use smallvec::SmallVec;
 
 use super::molecule::AtomIndex;
@@ -67,8 +66,7 @@ impl MulticenterBond {
     where
         I: IntoIterator<Item = MulticenterSet>,
     {
-        let mut contributions: SmallVec<[MulticenterSet; 4]> =
-            contributions.into_iter().collect();
+        let mut contributions: SmallVec<[MulticenterSet; 4]> = contributions.into_iter().collect();
         contributions.sort_unstable();
         contributions.dedup();
         Self { contributions }
@@ -90,6 +88,10 @@ impl MulticenterBond {
             .iter()
             .map(MulticenterSet::atom_count)
             .sum()
+    }
+
+    pub fn contains_atom(&self, atom: AtomIndex) -> bool {
+        self.contributions.iter().any(|c| c.contains_atom(atom))
     }
 
     pub fn all_atoms(&self) -> Vec<AtomIndex> {

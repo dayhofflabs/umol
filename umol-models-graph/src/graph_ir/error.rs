@@ -8,6 +8,10 @@ use crate::table_ir::bond::BondOrder;
 pub enum ResolutionError {
     #[error("Invalid bond order: {0}")]
     InvalidBondOrder(BondOrder),
+    #[error("Atom index out of range: {0}")]
+    AtomIndexOutOfRange(u32),
+    #[error("Bond index out of range: {0}")]
+    BondIndexOutOfRange(u32),
     #[error("Invalid atom specification: {0}")]
     InvalidAtomSpec(String),
     #[error("Invalid bond specification: {0}")]

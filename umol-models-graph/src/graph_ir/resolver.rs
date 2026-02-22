@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use super::config::{ResolveConfig, TopologyResolveFlags};
 use super::error::ResolutionError;
 use super::molecule::{AtomIndex, MoleculeBuilder};
+use super::multicenter::{MulticenterBond, MulticenterSet};
 use super::{AtomBuilder, Bond, Molecule};
 use crate::table_ir::Molecule as TableMolecule;
 
@@ -57,12 +58,12 @@ fn resolve_topology_with(
             }
         }
 
-        let mut pair_to_bonds: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
+        let mut atom_bonds: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
         for (i, bond) in molecule.bonds.iter().enumerate() {
             let key = (bond.atoms.first(), bond.atoms.second());
-            pair_to_bonds.entry(key).or_default().push(i as u32);
+            atom_bonds.entry(key).or_default().push(i as u32);
         }
-        for (_pair, indices) in pair_to_bonds {
+        for (_pair, indices) in atom_bonds {
             if indices.len() >= 2 {
                 return Err(ResolutionError::TopologyParallelEdges(
                     indices[0], indices[1],
@@ -92,6 +93,32 @@ fn resolve_topology_with(
                 ResolutionError::InvalidBondSpec("bond endpoint index out of range".to_string())
             })?;
     }
+
+    for mc in &molecule.multicenter_bonds {
+        let contributions: Vec<MulticenterSet> = mc
+            .contributions()
+            .iter()
+            .map(|contrib| {
+                let atoms: Vec<AtomIndex> = contrib
+                    .atoms()
+                    .iter()
+                    .map(|&idx| {
+                        if (idx as usize) >= n {
+                            Err(ResolutionError::InvalidAtomSpec(format!(
+                                "multicenter bond references atom index {} out of range (0..{})",
+                                idx, n
+                            )))
+                        } else {
+                            Ok(node_indices[idx as usize])
+                        }
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(MulticenterSet::new(atoms, contrib.electrons()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        builder.add_multicenter_bond(MulticenterBond::new(contributions));
+    }
+
     Ok(builder)
 }
 
