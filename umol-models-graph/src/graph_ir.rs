@@ -16,6 +16,7 @@ pub mod error;
 pub mod molecule;
 pub mod multicenter;
 pub mod resolver;
+pub mod symmetry;
 
 pub use aromatic::*;
 pub use atom::*;
@@ -32,3 +33,4 @@ pub use error::*;
 pub use molecule::*;
 pub use multicenter::*;
 pub use resolver::*;
+pub use symmetry::*;

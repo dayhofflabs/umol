@@ -7,7 +7,7 @@ use umol::error::DataError;
 use umol::{Error, Result};
 
 /// Spin multiplicity descriptor (2S+1)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SpinMultiplicity {
     Singlet = 0,
     Doublet = 1,

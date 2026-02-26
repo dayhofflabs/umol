@@ -49,6 +49,7 @@ indexmap = { version = "2.11.1", features = ["serde"] }
 itertools = "0.14.0"
 map-macro = "0.3.0"
 murmur3 = "0.5"
+nauty-Traces-sys = "0.11"
 nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
 nom = { version = "8.0.0" }
 num = "0.4.3"
