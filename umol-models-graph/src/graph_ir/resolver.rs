@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use super::config::{ResolveConfig, TopologyResolveFlags};
 use super::error::ResolutionError;
 use super::molecule::{AtomIndex, MoleculeBuilder};
-use super::multicenter::{MulticenterBond, MulticenterSet};
+use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
 use super::{AtomBuilder, Bond, Molecule};
 use crate::table_ir::Molecule as TableMolecule;
 
@@ -95,11 +95,11 @@ fn resolve_topology_with(
     }
 
     for mc in &molecule.multicenter_bonds {
-        let contributions: Vec<MulticenterSet> = mc
+        let sets: Vec<MulticenterSet> = mc
             .contributions()
             .iter()
             .map(|contrib| {
-                let atoms: Vec<AtomIndex> = contrib
+                let contributions: Vec<MulticenterContribution> = contrib
                     .atoms()
                     .iter()
                     .map(|&idx| {
@@ -109,14 +109,18 @@ fn resolve_topology_with(
                                 idx, n
                             )))
                         } else {
-                            Ok(node_indices[idx as usize])
+                            Ok(MulticenterContribution::topology_only(
+                                node_indices[idx as usize],
+                            ))
                         }
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(MulticenterSet::new(atoms, contrib.electrons()))
+                Ok(MulticenterSet::topology_only(
+                    contributions.iter().map(|c| c.atom()),
+                ))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        builder.add_multicenter_bond(MulticenterBond::new(contributions));
+        builder.add_multicenter_bond(MulticenterBond::new(sets));
     }
 
     Ok(builder)

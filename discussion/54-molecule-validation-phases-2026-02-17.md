@@ -24,7 +24,8 @@
 | Bond::order               | (+)   | +        | +       | +           | +      | CTab, SMILES: bond type (incl. aromatic); only localized (sigma) bond order               |      |
 | Bond::donation            | (+)   | (+)      | [+]     | +           | +      | CX: coordinate bonds                                                                      |      |
 | Graph                     | -     | +        | +       | +           | +      | Edges = Atoms, Nodes = Ordinary bonds                                                     |      |
-| Atom, Bond indices        | -     | +        | +       | +           | +      | u32                                                                                       |      |
+| Atom, Bond indices        | -     | +        | +       | +           | +      | AtomIndex, BondIndex                                                                      |      |
+| Total charge              | (+)   | (+)      | (+)     | (+)         | +      | CTab, SMILES: no explicit total charge                                                    |      |
 | Aromatic systems          | ~     | ~        | ~       | +           | +      | CTab: bond type, SMILES: atom, bond type                                                  |      |
 | Multicenter bonds         | (+)   | +        | +       | +           | +      | CX: multicenter bond (no #e)                                                              | +    |
 | Noncovalent bonds         | (+)   | +        | +       | +           | +      | CX: hydrogen bond                                                                         | +    |

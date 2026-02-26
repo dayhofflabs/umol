@@ -14,6 +14,9 @@ keywords = [
 description = "3D geometric molecular models for umol."
 edition = "2021"
 
+[lib]
+bench = false
+
 [dependencies]
 nalgebra = "0.34.0"
 nom = { version = "8.0.0" }
@@ -23,10 +26,7 @@ umol = { path = "../umol", version = "0.1.0" }
 umol-data = { path = "../umol-data", version = "0.1.0" }
 
 [dev-dependencies]
-rstest = "0.26.1"
-pretty_assertions = "1.4.1"
 criterion = "0.8.1"
 float-cmp = "0.10.0"
-
-[lib]
-bench = false
+pretty_assertions = "1.4.1"
+rstest = "0.26.1"

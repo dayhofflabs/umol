@@ -263,9 +263,8 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                         }
                     }
                     let bond = MulticenterBond::new(vec![
-                        // TODO: Remove electron fields, not available here, 0 is meaningless
-                        MulticenterSet::new(ligands, 0),
-                        MulticenterSet::single(center, 0),
+                        MulticenterSet::single(center),
+                        MulticenterSet::new(ligands),
                     ]);
                     mol.multicenter_bonds.push(bond);
                 }
@@ -424,10 +423,9 @@ pub fn update_extended_molecule(
                             return Err(ParseError::AtomIndexOutOfBounds { atom_idx: ligand });
                         }
                     }
-                    // TODO: Remove electron fields, not available here, 0 is meaningless
                     let bond = MulticenterBond::new(vec![
-                        MulticenterSet::new(ligands, 0),
-                        MulticenterSet::single(center, 0),
+                        MulticenterSet::single(center),
+                        MulticenterSet::new(ligands),
                     ]);
                     mol.multicenter_bonds.push(bond);
                 }
@@ -1578,14 +1576,13 @@ fn parse_lone_pairs(input: &[u8]) -> IResult<&[u8], CxEntry> {
 /// Parse multicenter bonds: `m:central:ligand.ligand,...`
 fn parse_multicenter(input: &[u8]) -> IResult<&[u8], CxEntry> {
     let (input, _) = tag("m:").parse(input)?;
-
     let parse_entry = |i| {
-        let (i, center) = nom_u32.parse(i)?;
-        let (i, _) = char(':').parse(i)?;
-        let (i, ligands) = separated_list0(char('.'), nom_u32).parse(i)?;
-        Ok((i, (center, ligands)))
+        (
+            terminated(nom_u32, char(':')),
+            separated_list0(char('.'), nom_u32),
+        )
+            .parse(i)
     };
-
     let (input, entries) = separated_list0(comma_not_before_entry, parse_entry).parse(input)?;
 
     Ok((input, CxEntry::MulticenterBonds(entries)))
@@ -2394,8 +2391,10 @@ mod tests {
     #[case::radicals_multiple_atoms(b"|^1:0,1,2|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None }),
         (1, UnpairedElectrons { count: 1, multiplicity: None }), (2, UnpairedElectrons { count: 1, multiplicity: None })])])]
     #[case::wiggly_bonds(b"|w:0.1,2.3|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondWedge::Either), (2, 3, BondWedge::Either)])])]
-    #[case::cis_trans(b"|c:0,1|", vec![CxEntry::CisBonds(vec![0, 1])])]
-    #[case::trans_trans(b"|t:0,1|", vec![CxEntry::TransBonds(vec![0, 1])])]
+    #[case::cis_bonds(b"|c:0,1|", vec![CxEntry::CisBonds(vec![0, 1])])]
+    #[case::trans_bonds(b"|t:0,1|", vec![CxEntry::TransBonds(vec![0, 1])])]
+    #[case::unspec_bonds(b"|ctu:0,1|", vec![CxEntry::UnspecBonds(vec![0, 1])])]
+    #[case::multicenter_bonds(b"|m:0:3.4,2:1.5|", vec![CxEntry::MulticenterBonds(vec![(0, vec![3, 4]), (2, vec![1, 5])])])]
     #[case::atom_labels(b"|$label1;label2;label3$|", vec![CxEntry::Labels(vec![(0, "label1".to_string()), (1, "label2".to_string()), (2, "label3".to_string())])])]
     #[case::atom_values(b"$_AV:value1;value2;value3$|", vec![CxEntry::Values(vec![(0, "value1".to_string()), (1, "value2".to_string()), (2, "value3".to_string())])])]
     #[case::coordinates_2d(b"|(1.5,2.5;3.5,4.5)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.5, 2.5, 0.0), Point3D::new(3.5, 4.5, 0.0)])])]
@@ -2468,6 +2467,7 @@ mod tests {
     #[case::trans_bonds(b"|t:0|", vec![CxEntry::TransBonds(vec![0])])]
     #[case::atom_labels(b"|$label$|", vec![CxEntry::Labels(vec![(0, "label".to_string())])])]
     #[case::fragment_groups(b"|f:0.1.2,3.4|", vec![CxEntry::FragmentGroups(vec![vec![0, 1, 2], vec![3, 4]])])]
+    #[case::multicenter_bonds(b"|m:0:3.4,2:1.5|", vec![CxEntry::MulticenterBonds(vec![(0, vec![3, 4]), (2, vec![1, 5])])])]
     #[case::stereo_absolute(b"|a:0,1,2|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1, 2] })])]
     #[case::stereo_or(b"|o1:0,1|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0, 1] })])]
     #[case::stereo_and(b"|&1:0,1|", vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(1), atoms: vec![0, 1] })])]
@@ -2572,6 +2572,10 @@ mod tests {
     #[case::trans_bonds(vec![CxEntry::TransBonds(vec![1])], |mol: &Molecule| mol.bonds[1].stereo == Some(BondStereo::Trans))]
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].donation == Some(BondDonation::Donating))]
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &Molecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
+    #[case::multicenter_bonds(vec![CxEntry::MulticenterBonds(vec![(0, vec![1, 2]), (2, vec![0, 1])])],
+        |mol: &Molecule| mol.multicenter_bonds.len() == 2 &&
+          mol.multicenter_bonds[0] == MulticenterBond::new(vec![MulticenterSet::new(vec![0]), MulticenterSet::new(vec![1, 2])]) &&
+          mol.multicenter_bonds[1] == MulticenterBond::new(vec![MulticenterSet::new(vec![2]), MulticenterSet::new(vec![0, 1])]))]
     #[case::extended_entries(vec![CxEntry::FragmentGroups(vec![vec![0, 1]]), CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0] }),
         CxEntry::RelativeStereo, CxEntry::AtomProperties(vec![(0, "k".to_string(), "v".to_string())])], |mol: &Molecule| mol.atoms[0].label.is_none())]
     fn test_update_molecule(
@@ -2597,6 +2601,10 @@ mod tests {
     #[case::coordinate_bonds(vec![CxEntry::CoordinateBonds(vec![(1, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].donation == Some(BondDonation::Accepting))]
     #[case::hydrogen_bonds(vec![CxEntry::HydrogenBonds(vec![(0, 0)])], |mol: &ExtendedMolecule| mol.bonds[0].noncovalent == Some(BondNoncovalent::Hydrogen) && mol.bonds[0].order == BondOrder::Zero)]
     #[case::fragment_groups(vec![CxEntry::FragmentGroups(vec![vec![0, 1], vec![2]])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().map(|d| d.components.as_ref()) == Some(Some(&vec![vec![0, 1], vec![2]])))]
+    #[case::multicenter_bonds(vec![CxEntry::MulticenterBonds(vec![(0, vec![1, 2]), (2, vec![0, 1])])],
+        |mol: &ExtendedMolecule| mol.multicenter_bonds.len() == 2 &&
+          mol.multicenter_bonds[0] == MulticenterBond::new(vec![MulticenterSet::new(vec![0]), MulticenterSet::new(vec![1, 2])]) &&
+          mol.multicenter_bonds[1] == MulticenterBond::new(vec![MulticenterSet::new(vec![2]), MulticenterSet::new(vec![0, 1])]))]
     #[case::stereo_group_absolute(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1] })],
         |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Absolute) && mol.cx_data.is_none())]
     #[case::stereo_group_or(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0] })],

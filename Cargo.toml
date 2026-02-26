@@ -2,16 +2,14 @@
 members = [
     "umol",
     "umol-data",
+    "umol-fuzz",
     "umol-macros",
     "umol-models",
-    "umol-models-valence",
-    "umol-models-graph",
     "umol-models-geometric",
-    "umol-fuzz",
+    "umol-models-graph",
+    "umol-models-valence",
 ]
-exclude = [
-    "fuzz",
-]
+exclude = ["fuzz"]
 resolver = "2"
 
 [profile.bench]

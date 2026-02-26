@@ -5,8 +5,17 @@ authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rappoport/umol"
-keywords = ["chemistry", "cheminformatics", "computational chemistry", "molecular modeling", "molecular representation"]
+keywords = [
+    "chemistry",
+    "cheminformatics",
+    "computational chemistry",
+    "molecular modeling",
+    "molecular representation",
+]
 description = "Molecular models for umol."
+
+[lib]
+bench = false
 
 [dependencies]
 map-macro = "0.3.0"
@@ -15,6 +24,3 @@ serde = { version = "1.0.221", features = ["derive"] }
 serde_json = "1.0.145"
 umol = { path = "../umol", version = "0.1.0" }
 umol-data = { path = "../umol-data", version = "0.1.0" }
-
-[lib]
-bench = false

@@ -1,4 +1,4 @@
-//! Multi-center bond representation for graph-based molecular models.
+//! Multi-center bond representation for table-based molecular models.
 //!
 //! Multi-center bonds describe bonding interactions involving more than two atoms,
 //! where electrons are shared or donated across multiple centers simultaneously.
@@ -29,35 +29,30 @@ use std::collections::HashMap;
 
 use smallvec::SmallVec;
 
-/// A set of atoms contributing to a multi-center bond.
+/// A set of atoms participating in a multi-center bond.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MulticenterSet {
-    /// Atom indices participating in this contribution.
     atoms: SmallVec<[u32; 8]>,
-
-    /// Number of electrons contributed by this group.
-    electrons: u8,
 }
 
 impl MulticenterSet {
-    pub fn new(atoms: Vec<u32>, electrons: u8) -> Self {
-        Self::from_atoms(atoms, electrons)
+    pub fn new(atoms: Vec<u32>) -> Self {
+        Self::from_atoms(atoms)
     }
 
-    pub fn from_atoms<I>(atoms: I, electrons: u8) -> Self
+    pub fn from_atoms<I>(atoms: I) -> Self
     where
         I: IntoIterator<Item = u32>,
     {
         let mut atoms: SmallVec<[u32; 8]> = atoms.into_iter().collect();
         atoms.sort_unstable();
         atoms.dedup();
-        Self { atoms, electrons }
+        Self { atoms }
     }
 
-    pub fn single(atom: u32, electrons: u8) -> Self {
+    pub fn single(atom: u32) -> Self {
         Self {
             atoms: SmallVec::from_elem(atom, 1),
-            electrons,
         }
     }
 
@@ -65,16 +60,8 @@ impl MulticenterSet {
         self.atoms.as_slice()
     }
 
-    pub fn electrons(&self) -> u8 {
-        self.electrons
-    }
-
     pub fn atom_count(&self) -> usize {
         self.atoms.len()
-    }
-
-    pub fn electron_count(&self) -> u8 {
-        self.electrons
     }
 
     pub fn set_atoms<I>(&mut self, atoms: I)
@@ -155,15 +142,6 @@ impl MulticenterBond {
         }
     }
 
-    /// Number of electrons in this multi-center bond.
-    pub fn electron_count(&self) -> u8 {
-        self.contributions
-            .iter()
-            .map(MulticenterSet::electrons)
-            .sum()
-    }
-
-    /// Total number of atoms involved.
     pub fn atom_count(&self) -> usize {
         self.contributions
             .iter()
@@ -171,7 +149,6 @@ impl MulticenterBond {
             .sum()
     }
 
-    /// All atom indices involved in this bond (flattened).
     pub fn all_atoms(&self) -> Vec<u32> {
         self.contributions
             .iter()
@@ -191,7 +168,7 @@ impl MulticenterBond {
                     .iter()
                     .map(|old_idx| index_map.get(old_idx).copied())
                     .collect::<Option<Vec<u32>>>()
-                    .map(|atoms| MulticenterSet::new(atoms, contribution.electrons()))
+                    .map(|atoms| MulticenterSet::new(atoms))
             })
             .collect::<Option<Vec<MulticenterSet>>>()?;
 
@@ -208,16 +185,13 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::ferrocene(MulticenterSet::new(vec![0, 1, 2, 3, 4], 6), 6, 5, vec![0, 1, 2, 3, 4])]
-    #[case::diborane(MulticenterSet::single(0, 1), 1, 1, vec![0])]
-    #[case::xef2(MulticenterSet::single(0, 2), 2, 1, vec![0])]
+    #[case::ferrocene(MulticenterSet::new(vec![0, 1, 2, 3, 4]), 5, vec![0, 1, 2, 3, 4])]
+    #[case::single(MulticenterSet::single(0), 1, vec![0])]
     fn test_multicenter_set_new(
         #[case] set: MulticenterSet,
-        #[case] expected_electron_count: u8,
         #[case] expected_atom_count: usize,
         #[case] expected_atoms: Vec<u32>,
     ) {
-        assert_eq!(set.electron_count(), expected_electron_count);
         assert_eq!(set.atom_count(), expected_atom_count);
         assert_eq!(set.atoms.into_iter().collect::<Vec<u32>>(), expected_atoms);
     }
@@ -226,7 +200,7 @@ mod tests {
     #[case::sorted_unique(vec![3, 1, 2, 2], vec![1, 2, 3])]
     #[case::single(vec![7], vec![7])]
     fn test_multicenter_set_set_atoms(#[case] input: Vec<u32>, #[case] expected: Vec<u32>) {
-        let mut set = MulticenterSet::single(0, 2);
+        let mut set = MulticenterSet::single(0);
         set.set_atoms(input);
         assert_eq!(set.atoms.as_slice(), expected.as_slice());
     }
@@ -239,7 +213,7 @@ mod tests {
         #[case] atom: u32,
         #[case] expected: Vec<u32>,
     ) {
-        let mut set = MulticenterSet::new(atoms, 1);
+        let mut set = MulticenterSet::new(atoms);
         set.insert_atom(atom);
         assert_eq!(set.atoms.as_slice(), expected.as_slice());
     }
@@ -253,52 +227,50 @@ mod tests {
         #[case] expected_removed: bool,
         #[case] expected_atoms: Vec<u32>,
     ) {
-        let mut set = MulticenterSet::new(atoms, 1);
+        let mut set = MulticenterSet::new(atoms);
         let removed = set.remove_atom(atom);
         assert_eq!(removed, expected_removed);
         assert_eq!(set.atoms.as_slice(), expected_atoms.as_slice());
     }
 
     #[rstest]
-    #[case::ferrocene(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 2, 3, 4], 6), MulticenterSet::single(9, 0)]), 6, 6, vec![0, 1, 2, 3, 4, 9])]
-    #[case::diborane(MulticenterBond::new(vec![MulticenterSet::single(0, 1), MulticenterSet::single(1, 0), MulticenterSet::single(5, 1)]), 2, 3, vec![0, 1, 5])]
-    #[case::xef2(MulticenterBond::new(vec![MulticenterSet::single(0, 2), MulticenterSet::single(1, 1), MulticenterSet::single(2, 1)]), 4, 3, vec![0, 1, 2])]
-    #[case::one_set(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 2], 3)]), 3, 3, vec![0, 1, 2])]
-    #[case::permuted(MulticenterBond::new(vec![MulticenterSet::new(vec![2, 1, 0], 3)]), 3, 3, vec![0, 1, 2])]
-    #[case::non_contiguous(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 2, 5], 3)]), 3, 3, vec![0, 2, 5])]
-    #[case::duplicate_atoms(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 1, 2], 3)]), 3, 3, vec![0, 1, 2])]
-    #[case::multiple_sets(MulticenterBond::new(vec![MulticenterSet::new(vec![4, 5, 6], 3),
-           MulticenterSet::new(vec![0, 1, 2], 3)]), 6, 6, vec![0, 1, 2, 4, 5, 6])]
-    #[case::multiple_sets_overlapping(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 2], 3),
-           MulticenterSet::new(vec![1, 2, 3], 3)]), 6, 6, vec![0, 1, 2, 1, 2, 3])]
+    #[case::ferrocene(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 2, 3, 4]), MulticenterSet::single(9)]), 6, vec![0, 1, 2, 3, 4, 9])]
+    #[case::diborane(MulticenterBond::new(vec![MulticenterSet::single(0), MulticenterSet::single(1), MulticenterSet::single(5)]), 3, vec![0, 1, 5])]
+    #[case::xef2(MulticenterBond::new(vec![MulticenterSet::single(0), MulticenterSet::single(1), MulticenterSet::single(2)]), 3, vec![0, 1, 2])]
+    #[case::one_set(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 2])]), 3, vec![0, 1, 2])]
+    #[case::permuted(MulticenterBond::new(vec![MulticenterSet::new(vec![2, 1, 0])]), 3, vec![0, 1, 2])]
+    #[case::non_contiguous(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 2, 5])]), 3, vec![0, 2, 5])]
+    #[case::duplicate_atoms(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 1, 2])]), 3, vec![0, 1, 2])]
+    #[case::multiple_sets(MulticenterBond::new(vec![MulticenterSet::new(vec![4, 5, 6]),
+           MulticenterSet::new(vec![0, 1, 2])]), 6, vec![0, 1, 2, 4, 5, 6])]
+    #[case::multiple_sets_overlapping(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1, 2]),
+           MulticenterSet::new(vec![1, 2, 3])]), 6, vec![0, 1, 2, 1, 2, 3])]
     fn test_multicenter_bond_new(
         #[case] bond: MulticenterBond,
-        #[case] expected_electron_count: u8,
         #[case] expected_atom_count: usize,
         #[case] expected_atoms: Vec<u32>,
     ) {
-        assert_eq!(bond.electron_count(), expected_electron_count);
         assert_eq!(bond.atom_count(), expected_atom_count);
         assert_eq!(bond.all_atoms(), expected_atoms);
     }
 
     #[rstest]
-    #[case::unsorted_duplicate(vec![MulticenterSet::new(vec![5, 4], 2), MulticenterSet::new(vec![1, 0], 1), MulticenterSet::new(vec![5, 4], 2)],
-        vec![MulticenterSet::new(vec![0, 1], 1), MulticenterSet::new(vec![4, 5], 2)],)]
+    #[case::unsorted_duplicate(vec![MulticenterSet::new(vec![5, 4]), MulticenterSet::new(vec![1, 0]), MulticenterSet::new(vec![5, 4])],
+        vec![MulticenterSet::new(vec![0, 1]), MulticenterSet::new(vec![4, 5])],)]
     fn test_multicenter_bond_set_contributions(
         #[case] input: Vec<MulticenterSet>,
         #[case] expected: Vec<MulticenterSet>,
     ) {
-        let mut bond = MulticenterBond::new(vec![MulticenterSet::single(9, 0)]);
+        let mut bond = MulticenterBond::new(vec![MulticenterSet::single(9)]);
         bond.set_contributions(input);
         assert_eq!(bond.contributions.as_slice(), expected.as_slice());
     }
 
     #[rstest]
-    #[case::new(vec![MulticenterSet::new(vec![0, 1], 1)], MulticenterSet::new(vec![2, 3], 2),
-        vec![MulticenterSet::new(vec![0, 1], 1), MulticenterSet::new(vec![2, 3], 2)])]
-    #[case::existing(vec![MulticenterSet::new(vec![0, 1], 1), MulticenterSet::new(vec![2, 3], 2)],
-        MulticenterSet::new(vec![3, 2], 2), vec![MulticenterSet::new(vec![0, 1], 1), MulticenterSet::new(vec![2, 3], 2)])]
+    #[case::new(vec![MulticenterSet::new(vec![0, 1])], MulticenterSet::new(vec![2, 3]),
+        vec![MulticenterSet::new(vec![0, 1]), MulticenterSet::new(vec![2, 3])])]
+    #[case::existing(vec![MulticenterSet::new(vec![0, 1]), MulticenterSet::new(vec![2, 3])],
+        MulticenterSet::new(vec![3, 2]), vec![MulticenterSet::new(vec![0, 1]), MulticenterSet::new(vec![2, 3])])]
     fn test_multicenter_bond_insert_contribution(
         #[case] initial: Vec<MulticenterSet>,
         #[case] contribution: MulticenterSet,
@@ -310,10 +282,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::remove_present(vec![ MulticenterSet::new(vec![0, 1], 1), MulticenterSet::new(vec![2, 3], 2)],
-        MulticenterSet::new(vec![3, 2], 2), true, vec![MulticenterSet::new(vec![0, 1], 1)])]
-    #[case::remove_missing(vec![MulticenterSet::new(vec![0, 1], 1)], MulticenterSet::new(vec![2, 3], 2),
-        false, vec![MulticenterSet::new(vec![0, 1], 1)])]
+    #[case::remove_present(vec![ MulticenterSet::new(vec![0, 1]), MulticenterSet::new(vec![2, 3])],
+        MulticenterSet::new(vec![3, 2]), true, vec![MulticenterSet::new(vec![0, 1])])]
+    #[case::remove_missing(vec![MulticenterSet::new(vec![0, 1])], MulticenterSet::new(vec![2, 3]),
+        false, vec![MulticenterSet::new(vec![0, 1])])]
     fn test_multicenter_bond_remove_contribution(
         #[case] initial: Vec<MulticenterSet>,
         #[case] contribution: MulticenterSet,
@@ -327,10 +299,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::complete_mapping(MulticenterBond::new(vec![ MulticenterSet::new(vec![2, 3], 4), MulticenterSet::single(5, 0)]),
+    #[case::complete_mapping(MulticenterBond::new(vec![ MulticenterSet::new(vec![2, 3]), MulticenterSet::single(5)]),
         hash_map! { 2u32 => 0u32, 3u32 => 1u32, 5u32 => 2u32 },
-        Some(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1], 4), MulticenterSet::single(2, 0)])))]
-    #[case::missing_mapping(MulticenterBond::new(vec![MulticenterSet::new(vec![2, 3], 4)]),
+        Some(MulticenterBond::new(vec![MulticenterSet::new(vec![0, 1]), MulticenterSet::single(2)])))]
+    #[case::missing_mapping(MulticenterBond::new(vec![MulticenterSet::new(vec![2, 3])]),
         hash_map! { 2u32 => 0u32 }, None)]
     fn test_multicenter_bond_update_atoms(
         #[case] bond: MulticenterBond,

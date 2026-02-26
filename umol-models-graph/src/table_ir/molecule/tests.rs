@@ -99,7 +99,6 @@ fn test_molecule_multicenter_bond_count() {
         positions: None,
         multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
             vec![0, 1, 2],
-            3,
         )])],
         stereo_interpretation: None,
         comments: vec![],
@@ -143,7 +142,6 @@ fn test_molecule_component_count_multicenter_bonds() {
         positions: None,
         multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
             vec![0, 1, 2],
-            3,
         )])],
         stereo_interpretation: None,
         comments: vec![],
@@ -181,7 +179,6 @@ fn test_molecule_split_components_remaps_indices() {
         ]),
         multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
             vec![2, 3],
-            2,
         )])],
         stereo_interpretation: None,
         comments: vec!["molecule comment".to_string()],
@@ -230,7 +227,7 @@ fn test_molecule_split_components_remaps_indices() {
     assert_eq!(c1.multicenter_bond_count(), 1);
     assert_eq!(
         c1.multicenter_bonds[0].contributions()[0],
-        MulticenterSet::new(vec![0, 1], 2)
+        MulticenterSet::new(vec![0, 1])
     );
 }
 
@@ -267,7 +264,6 @@ fn test_molecule_split_components_roundtrip() {
         ]),
         multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
             vec![2, 3],
-            2,
         )])],
         stereo_interpretation: None,
         comments: vec!["molecule comment".to_string()],
@@ -527,12 +523,10 @@ fn test_extended_molecule_multicenter_bond_count() {
     ext.multicenter_bonds
         .push(MulticenterBond::new(vec![MulticenterSet::new(
             vec![0, 1, 2],
-            3,
         )]));
     ext.multicenter_bonds
         .push(MulticenterBond::new(vec![MulticenterSet::new(
             vec![3, 4, 5],
-            2,
         )]));
     assert_eq!(ext.multicenter_bond_count(), 2);
 }
@@ -565,7 +559,6 @@ fn test_extended_molecule_split_join_components_core() {
     ]);
     ext.multicenter_bonds = vec![MulticenterBond::new(vec![MulticenterSet::new(
         vec![2, 3],
-        2,
     )])];
 
     let split = ext.split_components();
