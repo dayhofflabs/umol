@@ -52,6 +52,13 @@ fn bond_color(b: &Bond) -> VertexColor {
     }
 }
 
+/// Automorphism group order: exact when it fits in `u32`, else approximate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AutoGroupOrder {
+    Exact(u32),
+    Approx(f64),
+}
+
 /// Result of graph automorphism computation on a molecular graph.
 #[derive(Debug, Clone)]
 pub struct GraphSymmetry {
@@ -61,19 +68,43 @@ pub struct GraphSymmetry {
     canonical_lab: Vec<c_int>,
     n_atoms: usize,
     num_orbits: usize,
+    grpsize1: f64,
+    grpsize2: c_int,
 }
 
 impl GraphSymmetry {
+    /// Number of distinct orbits among atoms.
+    pub fn num_orbits(&self) -> usize {
+        self.num_orbits
+    }
+
     /// Canonical orbit representative for an atom.
     pub fn orbit_representative(&self, atom: AtomIndex) -> AtomIndex {
         let ni = self.atom_to_nauty[atom.index()];
         debug_assert!(ni < self.n_atoms);
+        debug_assert!((self.orbits[ni] as usize) < self.n_atoms);
         self.nauty_to_atom[self.orbits[ni] as usize]
     }
 
     /// Whether two atoms belong to the same orbit.
     pub fn same_orbit(&self, a: AtomIndex, b: AtomIndex) -> bool {
+        debug_assert!(a.index() < self.n_atoms);
+        debug_assert!(b.index() < self.n_atoms);
+        debug_assert!(self.atom_to_nauty[a.index()] < self.n_atoms);
+        debug_assert!(self.atom_to_nauty[b.index()] < self.n_atoms);
         self.orbits[self.atom_to_nauty[a.index()]] == self.orbits[self.atom_to_nauty[b.index()]]
+    }
+
+    /// Atoms grouped by orbit.
+    pub fn orbit_partition(&self) -> Vec<Vec<AtomIndex>> {
+        let mut groups: BTreeMap<c_int, Vec<AtomIndex>> = BTreeMap::new();
+        for i in 0..self.n_atoms {
+            groups
+                .entry(self.orbits[i])
+                .or_default()
+                .push(self.nauty_to_atom[i]);
+        }
+        groups.into_values().collect()
     }
 
     /// Atoms in canonical order (deterministic across identical graphs).
@@ -87,21 +118,28 @@ impl GraphSymmetry {
             .collect()
     }
 
-    /// Number of distinct orbits among atoms.
-    pub fn num_orbits(&self) -> usize {
-        self.num_orbits
+    /// Automorphism group order: exact if it fits in `u32`, else approximate.
+    pub fn auto_group_order(&self) -> AutoGroupOrder {
+        if self.grpsize2 == 0 {
+            let g = self.grpsize1;
+            if g >= 0.0 && g <= u32::MAX as f64 && g.fract() == 0.0 {
+                return AutoGroupOrder::Exact(g as u32);
+            }
+        }
+        let approx = if self.grpsize2 == 0 {
+            self.grpsize1
+        } else {
+            self.grpsize1 * 10.0_f64.powi(self.grpsize2)
+        };
+        AutoGroupOrder::Approx(approx)
     }
 
-    /// Atoms grouped by orbit.
-    pub fn orbit_partition(&self) -> Vec<Vec<AtomIndex>> {
-        let mut groups: BTreeMap<c_int, Vec<AtomIndex>> = BTreeMap::new();
-        for i in 0..self.n_atoms {
-            groups
-                .entry(self.orbits[i])
-                .or_default()
-                .push(self.nauty_to_atom[i]);
+    /// Exact automorphism group order when representable as `u32`.
+    pub fn auto_group_order_exact(&self) -> Option<u32> {
+        match self.auto_group_order() {
+            AutoGroupOrder::Exact(n) => Some(n),
+            AutoGroupOrder::Approx(_) => None,
         }
-        groups.into_values().collect()
     }
 }
 
@@ -121,6 +159,8 @@ pub fn compute_symmetry(builder: &MoleculeBuilder) -> GraphSymmetry {
             canonical_lab: vec![],
             n_atoms: 0,
             num_orbits: 0,
+            grpsize1: 1.0,
+            grpsize2: 0,
         };
     }
 
@@ -238,6 +278,8 @@ pub fn compute_symmetry(builder: &MoleculeBuilder) -> GraphSymmetry {
         canonical_lab: lab,
         n_atoms,
         num_orbits,
+        grpsize1: stats.grpsize1,
+        grpsize2: stats.grpsize2,
     }
 }
 
@@ -248,12 +290,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn empty() {
+        let b = MoleculeBuilder::new();
+        let sym = compute_symmetry(&b);
+        assert_eq!(sym.num_orbits(), 0);
+        assert_eq!(sym.orbit_partition().len(), 0);
+        assert_eq!(sym.canonical_order().len(), 0);
+        assert_eq!(sym.auto_group_order_exact(), Some(1));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(1)));
+    }
+
+    #[test]
     fn single_atom() {
         let mut b = MoleculeBuilder::new();
         let a = b.add_atom(AtomBuilder::new(Element::C));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
+        assert_eq!(sym.orbit_representative(a), a);
+        assert_eq!(sym.orbit_partition(), vec![vec![a]]);
         assert_eq!(sym.canonical_order(), vec![a]);
+        assert_eq!(sym.auto_group_order_exact(), Some(1));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(1)));
     }
 
     #[test]
@@ -265,6 +322,12 @@ mod tests {
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
         assert!(sym.same_orbit(h1, h2));
+        assert_eq!(sym.orbit_representative(h1), h1);
+        assert_eq!(sym.orbit_representative(h2), h1);
+        assert_eq!(sym.orbit_partition(), vec![vec![h1, h2]]);
+        assert_eq!(sym.canonical_order(), vec![h1, h2]);
+        assert_eq!(sym.auto_group_order_exact(), Some(2));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(2)));
     }
 
     #[test]
@@ -276,6 +339,12 @@ mod tests {
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 2);
         assert!(!sym.same_orbit(h, f));
+        assert_eq!(sym.orbit_representative(h), h);
+        assert_eq!(sym.orbit_representative(f), f);
+        assert_eq!(sym.orbit_partition(), vec![vec![h], vec![f]]);
+        assert_eq!(sym.canonical_order(), vec![h, f]);
+        assert_eq!(sym.auto_group_order_exact(), Some(1));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(1)));
     }
 
     #[test]
@@ -289,6 +358,19 @@ mod tests {
         }
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
+        assert!(sym.same_orbit(c[0], c[1]));
+        assert!(sym.same_orbit(c[1], c[2]));
+        assert!(sym.same_orbit(c[2], c[3]));
+        assert!(sym.same_orbit(c[3], c[0]));
+        assert_eq!(sym.orbit_representative(c[0]), c[0]);
+        assert_eq!(sym.orbit_representative(c[1]), c[0]);
+        assert_eq!(sym.orbit_representative(c[2]), c[0]);
+        assert_eq!(sym.orbit_representative(c[3]), c[0]);
+        let partition = sym.orbit_partition();
+        assert_eq!(partition, vec![vec![c[0], c[1], c[2], c[3]]]);
+        assert_eq!(sym.canonical_order(), vec![c[0], c[1], c[3], c[2]]);
+        assert_eq!(sym.auto_group_order_exact(), Some(8));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(8)));
     }
 
     #[test]
@@ -302,6 +384,17 @@ mod tests {
         b.add_bond(c2, c3, Bond::new(1));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 3);
+        assert!(!sym.same_orbit(c1, c2));
+        assert!(!sym.same_orbit(c2, c3));
+        assert!(!sym.same_orbit(c3, c1));
+        assert_eq!(sym.orbit_representative(c1), c1);
+        assert_eq!(sym.orbit_representative(c2), c2);
+        assert_eq!(sym.orbit_representative(c3), c3);
+        let partition = sym.orbit_partition();
+        assert_eq!(partition, vec![vec![c1], vec![c2], vec![c3]]);
+        assert_eq!(sym.canonical_order(), vec![c1, c3, c2]);
+        assert_eq!(sym.auto_group_order_exact(), Some(1));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(1)));
     }
 
     #[test]
@@ -317,10 +410,23 @@ mod tests {
         b.add_bond(c[3], c[0], Bond::new(1));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
+        assert!(sym.same_orbit(c[0], c[1]));
+        assert!(sym.same_orbit(c[1], c[2]));
+        assert!(sym.same_orbit(c[2], c[3]));
+        assert!(sym.same_orbit(c[3], c[0]));
+        assert_eq!(sym.orbit_representative(c[0]), c[0]);
+        assert_eq!(sym.orbit_representative(c[1]), c[0]);
+        assert_eq!(sym.orbit_representative(c[2]), c[0]);
+        assert_eq!(sym.orbit_representative(c[3]), c[0]);
+        let partition = sym.orbit_partition();
+        assert_eq!(partition, vec![vec![c[0], c[1], c[2], c[3]]]);
+        assert_eq!(sym.canonical_order(), vec![c[0], c[3], c[1], c[2]]);
+        assert_eq!(sym.auto_group_order_exact(), Some(4));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(4)));
     }
 
     #[test]
-    fn water_like() {
+    fn water() {
         // H-O-H: two orbits (O and the two H's)
         let mut b = MoleculeBuilder::new();
         let h1 = b.add_atom(AtomBuilder::new(Element::H));
@@ -332,28 +438,15 @@ mod tests {
         assert_eq!(sym.num_orbits(), 2);
         assert!(sym.same_orbit(h1, h2));
         assert!(!sym.same_orbit(h1, o));
+        assert!(!sym.same_orbit(h2, o));
+        assert_eq!(sym.orbit_representative(h1), h1);
+        assert_eq!(sym.orbit_representative(o), o);
+        assert_eq!(sym.orbit_representative(h2), h1);
         let partition = sym.orbit_partition();
-        assert_eq!(partition.len(), 2);
-    }
-
-    #[test]
-    fn canonical_order_deterministic() {
-        let mut b = MoleculeBuilder::new();
-        b.add_atom(AtomBuilder::new(Element::C));
-        b.add_atom(AtomBuilder::new(Element::N));
-        b.add_atom(AtomBuilder::new(Element::O));
-        let order1 = compute_symmetry(&b).canonical_order();
-        let order2 = compute_symmetry(&b).canonical_order();
-        assert_eq!(order1, order2);
-        assert_eq!(order1.len(), 3);
-    }
-
-    #[test]
-    fn empty_graph() {
-        let b = MoleculeBuilder::new();
-        let sym = compute_symmetry(&b);
-        assert_eq!(sym.num_orbits(), 0);
-        assert!(sym.canonical_order().is_empty());
+        assert_eq!(partition, vec![vec![h1, h2], vec![o]]);
+        assert_eq!(sym.canonical_order(), vec![h1, h2, o]);
+        assert_eq!(sym.auto_group_order_exact(), Some(2));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(2)));
     }
 
     #[test]
@@ -368,6 +461,37 @@ mod tests {
         }
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
-        assert_eq!(sym.canonical_order().len(), 6);
+        assert!(sym.same_orbit(c[0], c[1]));
+        assert!(sym.same_orbit(c[1], c[2]));
+        assert!(sym.same_orbit(c[2], c[3]));
+        assert!(sym.same_orbit(c[3], c[4]));
+        assert!(sym.same_orbit(c[4], c[5]));
+        assert!(sym.same_orbit(c[5], c[0]));
+        assert_eq!(sym.orbit_representative(c[0]), c[0]);
+        assert_eq!(sym.orbit_representative(c[1]), c[0]);
+        assert_eq!(sym.orbit_representative(c[2]), c[0]);
+        assert_eq!(sym.orbit_representative(c[3]), c[0]);
+        assert_eq!(sym.orbit_representative(c[4]), c[0]);
+        assert_eq!(sym.orbit_representative(c[5]), c[0]);
+        let partition = sym.orbit_partition();
+        assert_eq!(partition, vec![vec![c[0], c[1], c[2], c[3], c[4], c[5]]]);
+        assert_eq!(
+            sym.canonical_order(),
+            vec![c[0], c[2], c[4], c[3], c[1], c[5]]
+        );
+        assert_eq!(sym.auto_group_order_exact(), Some(12));
+        assert!(matches!(sym.auto_group_order(), AutoGroupOrder::Exact(12)));
+    }
+
+    #[test]
+    fn canonical_order_deterministic() {
+        let mut b = MoleculeBuilder::new();
+        b.add_atom(AtomBuilder::new(Element::C));
+        b.add_atom(AtomBuilder::new(Element::N));
+        b.add_atom(AtomBuilder::new(Element::O));
+        let order1 = compute_symmetry(&b).canonical_order();
+        let order2 = compute_symmetry(&b).canonical_order();
+        assert_eq!(order1, order2);
+        assert_eq!(order1.len(), 3);
     }
 }
