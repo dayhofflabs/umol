@@ -1,0 +1,475 @@
+# Per-element valence data for counts-based validation (from RDKit atomic_data.cpp).
+# outer_electrons: valence shell electron count
+# allowed_valences: ordered list of allowed total valences; -1 = unconstrained
+
+[H]
+outer_electrons = 1
+allowed_valences = [1]
+
+[He]
+outer_electrons = 2
+allowed_valences = [0]
+
+[Li]
+outer_electrons = 1
+allowed_valences = [1, -1]
+
+[Be]
+outer_electrons = 2
+allowed_valences = [2]
+
+[B]
+outer_electrons = 3
+allowed_valences = [3]
+
+[C]
+outer_electrons = 4
+allowed_valences = [4]
+
+[N]
+outer_electrons = 5
+allowed_valences = [3]
+
+[O]
+outer_electrons = 6
+allowed_valences = [2]
+
+[F]
+outer_electrons = 7
+allowed_valences = [1]
+
+[Ne]
+outer_electrons = 8
+allowed_valences = [0]
+
+[Na]
+outer_electrons = 1
+allowed_valences = [1, -1]
+
+[Mg]
+outer_electrons = 2
+allowed_valences = [2, -1]
+
+[Al]
+outer_electrons = 3
+allowed_valences = [3]
+
+[Si]
+outer_electrons = 4
+allowed_valences = [4]
+
+[P]
+outer_electrons = 5
+allowed_valences = [3, 5]
+
+[S]
+outer_electrons = 6
+allowed_valences = [2, 4, 6]
+
+[Cl]
+outer_electrons = 7
+allowed_valences = [1]
+
+[Ar]
+outer_electrons = 8
+allowed_valences = [0]
+
+[K]
+outer_electrons = 1
+allowed_valences = [1, -1]
+
+[Ca]
+outer_electrons = 2
+allowed_valences = [2, -1]
+
+[Sc]
+outer_electrons = 3
+allowed_valences = [-1]
+
+[Ti]
+outer_electrons = 4
+allowed_valences = [-1]
+
+[V]
+outer_electrons = 5
+allowed_valences = [-1]
+
+[Cr]
+outer_electrons = 6
+allowed_valences = [-1]
+
+[Mn]
+outer_electrons = 7
+allowed_valences = [-1]
+
+[Fe]
+outer_electrons = 8
+allowed_valences = [-1]
+
+[Co]
+outer_electrons = 9
+allowed_valences = [-1]
+
+[Ni]
+outer_electrons = 10
+allowed_valences = [-1]
+
+[Cu]
+outer_electrons = 11
+allowed_valences = [-1]
+
+[Zn]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Ga]
+outer_electrons = 3
+allowed_valences = [3]
+
+[Ge]
+outer_electrons = 4
+allowed_valences = [4]
+
+[As]
+outer_electrons = 5
+allowed_valences = [3, 5]
+
+[Se]
+outer_electrons = 6
+allowed_valences = [2, 4, 6]
+
+[Br]
+outer_electrons = 7
+allowed_valences = [1]
+
+[Kr]
+outer_electrons = 8
+allowed_valences = [0]
+
+[Rb]
+outer_electrons = 1
+allowed_valences = [1, -1]
+
+[Sr]
+outer_electrons = 2
+allowed_valences = [2, -1]
+
+[Y]
+outer_electrons = 3
+allowed_valences = [-1]
+
+[Zr]
+outer_electrons = 4
+allowed_valences = [-1]
+
+[Nb]
+outer_electrons = 5
+allowed_valences = [-1]
+
+[Mo]
+outer_electrons = 6
+allowed_valences = [-1]
+
+[Tc]
+outer_electrons = 7
+allowed_valences = [-1]
+
+[Ru]
+outer_electrons = 8
+allowed_valences = [-1]
+
+[Rh]
+outer_electrons = 9
+allowed_valences = [-1]
+
+[Pd]
+outer_electrons = 10
+allowed_valences = [-1]
+
+[Ag]
+outer_electrons = 11
+allowed_valences = [-1]
+
+[Cd]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[In]
+outer_electrons = 3
+allowed_valences = [3]
+
+[Sn]
+outer_electrons = 4
+allowed_valences = [2, 4]
+
+[Sb]
+outer_electrons = 5
+allowed_valences = [3, 5]
+
+[Te]
+outer_electrons = 6
+allowed_valences = [2, 4, 6]
+
+[I]
+outer_electrons = 7
+allowed_valences = [1, 3, 5]
+
+[Xe]
+outer_electrons = 8
+allowed_valences = [0, 2, 4, 6]
+
+[Cs]
+outer_electrons = 1
+allowed_valences = [1]
+
+[Ba]
+outer_electrons = 2
+allowed_valences = [2, -1]
+
+[La]
+outer_electrons = 3
+allowed_valences = [-1]
+
+[Ce]
+outer_electrons = 4
+allowed_valences = [-1]
+
+[Pr]
+outer_electrons = 3
+allowed_valences = [-1]
+
+[Nd]
+outer_electrons = 4
+allowed_valences = [-1]
+
+[Pm]
+outer_electrons = 5
+allowed_valences = [-1]
+
+[Sm]
+outer_electrons = 6
+allowed_valences = [-1]
+
+[Eu]
+outer_electrons = 7
+allowed_valences = [-1]
+
+[Gd]
+outer_electrons = 8
+allowed_valences = [-1]
+
+[Tb]
+outer_electrons = 9
+allowed_valences = [-1]
+
+[Dy]
+outer_electrons = 10
+allowed_valences = [-1]
+
+[Ho]
+outer_electrons = 11
+allowed_valences = [-1]
+
+[Er]
+outer_electrons = 12
+allowed_valences = [-1]
+
+[Tm]
+outer_electrons = 13
+allowed_valences = [-1]
+
+[Yb]
+outer_electrons = 14
+allowed_valences = [-1]
+
+[Lu]
+outer_electrons = 15
+allowed_valences = [-1]
+
+[Hf]
+outer_electrons = 4
+allowed_valences = [-1]
+
+[Ta]
+outer_electrons = 5
+allowed_valences = [-1]
+
+[W]
+outer_electrons = 6
+allowed_valences = [-1]
+
+[Re]
+outer_electrons = 7
+allowed_valences = [-1]
+
+[Os]
+outer_electrons = 8
+allowed_valences = [-1]
+
+[Ir]
+outer_electrons = 9
+allowed_valences = [-1]
+
+[Pt]
+outer_electrons = 10
+allowed_valences = [-1]
+
+[Au]
+outer_electrons = 11
+allowed_valences = [-1]
+
+[Hg]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Tl]
+outer_electrons = 3
+allowed_valences = [-1]
+
+[Pb]
+outer_electrons = 4
+allowed_valences = [2, 4]
+
+[Bi]
+outer_electrons = 5
+allowed_valences = [3, 5]
+
+[Po]
+outer_electrons = 6
+allowed_valences = [2, 4, 6]
+
+[At]
+outer_electrons = 7
+allowed_valences = [1, 3, 5]
+
+[Rn]
+outer_electrons = 8
+allowed_valences = [0]
+
+[Fr]
+outer_electrons = 1
+allowed_valences = [1]
+
+[Ra]
+outer_electrons = 2
+allowed_valences = [2, -1]
+
+[Ac]
+outer_electrons = 3
+allowed_valences = [-1]
+
+[Th]
+outer_electrons = 4
+allowed_valences = [-1]
+
+[Pa]
+outer_electrons = 3
+allowed_valences = [-1]
+
+[U]
+outer_electrons = 4
+allowed_valences = [-1]
+
+[Np]
+outer_electrons = 5
+allowed_valences = [-1]
+
+[Pu]
+outer_electrons = 6
+allowed_valences = [-1]
+
+[Am]
+outer_electrons = 7
+allowed_valences = [-1]
+
+[Cm]
+outer_electrons = 8
+allowed_valences = [-1]
+
+[Bk]
+outer_electrons = 9
+allowed_valences = [-1]
+
+[Cf]
+outer_electrons = 10
+allowed_valences = [-1]
+
+[Es]
+outer_electrons = 11
+allowed_valences = [-1]
+
+[Fm]
+outer_electrons = 12
+allowed_valences = [-1]
+
+[Md]
+outer_electrons = 13
+allowed_valences = [-1]
+
+[No]
+outer_electrons = 14
+allowed_valences = [-1]
+
+[Lr]
+outer_electrons = 15
+allowed_valences = [-1]
+
+[Rf]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Db]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Sg]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Bh]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Hs]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Mt]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Ds]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Rg]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Cn]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Nh]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Fl]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Mc]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Lv]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Ts]
+outer_electrons = 2
+allowed_valences = [-1]
+
+[Og]
+outer_electrons = 2
+allowed_valences = [-1]

@@ -2,7 +2,7 @@
 
 use bitflags::bitflags;
 
-use super::valence::AtomTypeRegistry;
+use super::config_data::{AtomTypeRegistry, ValenceTable};
 
 bitflags! {
     /// Topology resolution options.
@@ -37,14 +37,15 @@ pub struct TopologyConfig {
 #[derive(Clone, Debug)]
 pub struct ValenceResolveConfig {
     pub enabled: bool,
-    pub strategy: ValenceStrategyKind,
+    pub strategy: ValenceStrategy,
     pub no_match_policy: ValenceMatchPolicy,
     pub ambiguous_policy: ValenceMatchPolicy,
-    pub registry: AtomTypeRegistry,
+    pub atom_type_registry: AtomTypeRegistry,
+    pub valence_table: ValenceTable,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ValenceStrategyKind {
+pub enum ValenceStrategy {
     AtomTyping,
     Counts,
 }
@@ -74,10 +75,11 @@ impl Default for ResolveConfig {
             },
             valence: ValenceResolveConfig {
                 enabled: true,
-                strategy: ValenceStrategyKind::AtomTyping,
+                strategy: ValenceStrategy::AtomTyping,
                 no_match_policy: ValenceMatchPolicy::Error,
                 ambiguous_policy: ValenceMatchPolicy::Error,
-                registry: AtomTypeRegistry::default_registry().clone(),
+                atom_type_registry: AtomTypeRegistry::default_registry().clone(),
+                valence_table: ValenceTable::default_table().clone(),
             },
             aromaticity: AromaticityResolveConfig { enabled: true },
             stereo: StereoResolveConfig { enabled: true },

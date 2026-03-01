@@ -7,7 +7,7 @@ use nauty_Traces_sys::*;
 use umol_data::{Element, SpinMultiplicity};
 
 use super::atom::AtomBuilder;
-use super::bond::Bond;
+use super::bond::BondBuilder;
 use super::molecule::{AtomIndex, MoleculeBuilder};
 
 /// Vertex color for nauty partitioning.
@@ -39,7 +39,7 @@ fn atom_color(ab: &AtomBuilder) -> VertexColor {
     }
 }
 
-fn bond_color(b: &Bond) -> VertexColor {
+fn bond_color(b: &BondBuilder) -> VertexColor {
     VertexColor::Bond {
         order: b.order(),
         donation: 0,
@@ -312,7 +312,7 @@ mod tests {
         let mut b = MoleculeBuilder::new();
         let h1 = b.add_atom(AtomBuilder::new(Element::H));
         let h2 = b.add_atom(AtomBuilder::new(Element::H));
-        b.add_bond(h1, h2, Bond::new(1));
+        b.add_bond(h1, h2, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
         assert!(sym.same_orbit(h1, h2));
@@ -329,7 +329,7 @@ mod tests {
         let mut b = MoleculeBuilder::new();
         let h = b.add_atom(AtomBuilder::new(Element::H));
         let f = b.add_atom(AtomBuilder::new(Element::F));
-        b.add_bond(h, f, Bond::new(1));
+        b.add_bond(h, f, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 2);
         assert!(!sym.same_orbit(h, f));
@@ -348,7 +348,7 @@ mod tests {
             .map(|_| b.add_atom(AtomBuilder::new(Element::C)))
             .collect();
         for i in 0..4 {
-            b.add_bond(c[i], c[(i + 1) % 4], Bond::new(1));
+            b.add_bond(c[i], c[(i + 1) % 4], BondBuilder::new(1, None));
         }
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
@@ -374,8 +374,8 @@ mod tests {
         let c1 = b.add_atom(AtomBuilder::new(Element::C));
         let c2 = b.add_atom(AtomBuilder::new(Element::C));
         let c3 = b.add_atom(AtomBuilder::new(Element::C));
-        b.add_bond(c1, c2, Bond::new(2));
-        b.add_bond(c2, c3, Bond::new(1));
+        b.add_bond(c1, c2, BondBuilder::new(2, None));
+        b.add_bond(c2, c3, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 3);
         assert!(!sym.same_orbit(c1, c2));
@@ -398,10 +398,10 @@ mod tests {
         let c: Vec<_> = (0..4)
             .map(|_| b.add_atom(AtomBuilder::new(Element::C)))
             .collect();
-        b.add_bond(c[0], c[1], Bond::new(2));
-        b.add_bond(c[1], c[2], Bond::new(1));
-        b.add_bond(c[2], c[3], Bond::new(2));
-        b.add_bond(c[3], c[0], Bond::new(1));
+        b.add_bond(c[0], c[1], BondBuilder::new(2, None));
+        b.add_bond(c[1], c[2], BondBuilder::new(1, None));
+        b.add_bond(c[2], c[3], BondBuilder::new(2, None));
+        b.add_bond(c[3], c[0], BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
         assert!(sym.same_orbit(c[0], c[1]));
@@ -426,8 +426,8 @@ mod tests {
         let h1 = b.add_atom(AtomBuilder::new(Element::H));
         let o = b.add_atom(AtomBuilder::new(Element::O));
         let h2 = b.add_atom(AtomBuilder::new(Element::H));
-        b.add_bond(h1, o, Bond::new(1));
-        b.add_bond(o, h2, Bond::new(1));
+        b.add_bond(h1, o, BondBuilder::new(1, None));
+        b.add_bond(o, h2, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 2);
         assert!(sym.same_orbit(h1, h2));
@@ -451,7 +451,7 @@ mod tests {
             .map(|_| b.add_atom(AtomBuilder::new(Element::C)))
             .collect();
         for i in 0..6 {
-            b.add_bond(c[i], c[(i + 1) % 6], Bond::new(1));
+            b.add_bond(c[i], c[(i + 1) % 6], BondBuilder::new(1, None));
         }
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);

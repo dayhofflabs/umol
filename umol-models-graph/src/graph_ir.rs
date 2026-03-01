@@ -2,17 +2,11 @@
 
 pub mod aromatic;
 pub mod atom;
-// pub mod atom_matcher;
-// pub mod atom_spec;
-// pub mod atom_spec_registry;
-// pub mod atom_validator;
+pub mod atom_type;
+pub mod config_data;
 pub mod bond;
-// pub mod bond_matcher;
-// pub mod bond_spec;
-// pub mod bond_spec_registry;
 pub mod config;
 pub mod dative;
-// pub mod diagnostics;
 pub mod error;
 pub mod molecule;
 pub mod multicenter;
@@ -23,14 +17,9 @@ pub mod valence;
 
 pub use aromatic::*;
 pub use atom::*;
-// pub use atom_matcher::*;
-// pub use atom_spec::*;
-// pub use atom_spec_registry::*;
-// pub use atom_validator::*;
+pub use atom_type::*;
+pub use config_data::*;
 pub use bond::*;
-// pub use bond_matcher::*;
-// pub use bond_spec::*;
-// pub use bond_spec_registry::*;
 pub use config::*;
 pub use dative::*;
 pub use error::*;

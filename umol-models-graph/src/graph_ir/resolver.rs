@@ -2,14 +2,15 @@
 
 use std::collections::HashMap;
 
-use super::config::{ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy, ValenceStrategyKind};
+use super::bond::BondBuilder;
+use super::config::{ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy, ValenceStrategy};
 use super::dative::DativeBond;
 use super::error::ResolutionError;
 use super::molecule::{AtomIndex, MoleculeBuilder};
 use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
 use super::noncovalent::NoncovalentBond;
 use super::valence::ValenceValidator;
-use super::{AtomBuilder, Bond, Molecule};
+use super::{AtomBuilder, Molecule};
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 /// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
@@ -36,6 +37,8 @@ pub fn resolve_molecule_with(
 ) -> Result<Molecule, ResolutionError> {
     let mut builder = resolve_topology_with(molecule, config)?;
     resolve_valence_with(&mut builder, config)?;
+    assign_radicals(&mut builder, config)?;
+    kekulize(&mut builder, config)?;
     resolve_aromaticity_with(&mut builder, config)?;
     resolve_stereo_with(&mut builder, config)?;
     builder.build(config)
@@ -93,7 +96,7 @@ fn resolve_topology_with(
         ) {
             builder.add_dative_bond(DativeBond::from_table_bond(bond, &node_indices));
         } else {
-            builder.add_bond_unchecked(a, b, Bond::from_table_bond(bond)?);
+            builder.add_bond_unchecked(a, b, BondBuilder::from_table_bond(bond)?);
         }
     }
 
@@ -135,10 +138,12 @@ fn resolve_valence_with(
     }
 
     let validator = match config.valence.strategy {
-        ValenceStrategyKind::AtomTyping => {
-            ValenceValidator::AtomTyping(config.valence.registry.clone())
+        ValenceStrategy::AtomTyping => {
+            ValenceValidator::AtomTyping(config.valence.atom_type_registry.clone())
         }
-        ValenceStrategyKind::Counts => ValenceValidator::Counts,
+        ValenceStrategy::Counts => {
+            ValenceValidator::Counts(config.valence.valence_table.clone())
+        }
     };
 
     let atom_indices: Vec<AtomIndex> = builder.atom_indices().collect();
@@ -149,7 +154,10 @@ fn resolve_valence_with(
             if config.valence.no_match_policy == ValenceMatchPolicy::Ignore {
                 continue;
             }
-            let element = builder.atom(atom_index).expect("atom_index must be valid").element();
+            let element = builder
+                .atom(atom_index)
+                .expect("atom_index must be valid")
+                .element();
             return Err(ResolutionError::ValenceNoMatch(format!(
                 "atom {:?} at index {} has no valence match",
                 element,
@@ -158,7 +166,10 @@ fn resolve_valence_with(
         }
 
         if candidates.len() > 1 && config.valence.ambiguous_policy != ValenceMatchPolicy::Ignore {
-            let element = builder.atom(atom_index).expect("atom_index must be valid").element();
+            let element = builder
+                .atom(atom_index)
+                .expect("atom_index must be valid")
+                .element();
             return Err(ResolutionError::ValenceAmbiguous(format!(
                 "atom {:?} at index {} has {} valence matches",
                 element,
@@ -173,6 +184,30 @@ fn resolve_valence_with(
             .set_candidates(candidates);
     }
 
+    Ok(())
+}
+
+/// Stub: assign radical electrons to atoms that need them.
+///
+/// After valence resolution, some atoms may have implicit unpaired electrons
+/// (e.g. a carbon with bond order sum 3 and no hydrogens). This phase will
+/// set `unpaired_electrons` and `multiplicity` on those atom builders.
+fn assign_radicals(
+    _builder: &mut MoleculeBuilder,
+    _config: &ResolveConfig,
+) -> Result<(), ResolutionError> {
+    Ok(())
+}
+
+/// Stub: assign definite bond orders to aromatic bonds (Kekulization).
+///
+/// Replaces `aromatic_hint` bonds with alternating single/double bond orders
+/// that satisfy valence constraints, or returns an error if no valid Kekulé
+/// structure exists.
+fn kekulize(
+    _builder: &mut MoleculeBuilder,
+    _config: &ResolveConfig,
+) -> Result<(), ResolutionError> {
     Ok(())
 }
 
@@ -198,74 +233,129 @@ fn resolve_stereo_with(
 
 #[cfg(test)]
 mod tests {
+    use rstest::*;
     use umol_data::Element;
 
+    use super::super::config_data::AtomTypeRegistry;
     use super::*;
     use crate::registry;
-    use super::super::valence::AtomTypeRegistry;
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder};
     use crate::table_ir::Molecule as TableMolecule;
 
-    fn empty_atom(element: Element) -> TableAtom {
-        TableAtom::from_element(element)
+    #[fixture]
+    fn h_atom() -> TableAtom {
+        TableAtom::from_element(Element::H)
     }
 
-    fn config_with(registry: AtomTypeRegistry) -> ResolveConfig {
-        let mut config = ResolveConfig::default();
-        config.valence.registry = registry;
-        config
+    #[fixture]
+    fn c_atom() -> TableAtom {
+        TableAtom::from_element(Element::C)
     }
 
-    #[test]
-    fn resolve_molecule_h2_succeeds() {
+    #[fixture]
+    fn h2_molecule(h_atom: TableAtom) -> TableMolecule {
         let mut table = TableMolecule::empty();
-        table.atoms.push(empty_atom(Element::H));
-        table.atoms.push(empty_atom(Element::H));
+        table.atoms.push(h_atom.clone());
+        table.atoms.push(h_atom.clone());
         table.bonds.push(TableBond::new(0, 1, BondOrder::Single));
-
-        let resolved = resolve_molecule_with(&table, &config_with(registry!["[H+0v1]"]));
-        assert!(resolved.is_ok());
+        table
     }
 
-    #[test]
-    #[should_panic(expected = "counts-based valence is not implemented yet")]
-    fn resolve_molecule_counts_strategy_panics() {
+    #[fixture]
+    fn c_molecule(c_atom: TableAtom) -> TableMolecule {
         let mut table = TableMolecule::empty();
-        table.atoms.push(empty_atom(Element::H));
-        table.atoms.push(empty_atom(Element::H));
-        table.bonds.push(TableBond::new(0, 1, BondOrder::Single));
-
-        let mut config = config_with(registry!["[H+0v1]"]);
-        config.valence.strategy = ValenceStrategyKind::Counts;
-
-        let _ = resolve_molecule_with(&table, &config);
+        table.atoms.push(c_atom);
+        table
     }
 
-    #[test]
-    fn resolve_molecule_no_match_errors() {
+    #[fixture]
+    fn ch3_molecule(c_atom: TableAtom, h_atom: TableAtom) -> TableMolecule {
         let mut table = TableMolecule::empty();
-        table.atoms.push(empty_atom(Element::C));
-
-        let resolved = resolve_molecule_with(&table, &config_with(AtomTypeRegistry::new()));
-        assert!(matches!(resolved, Err(ResolutionError::ValenceNoMatch(_))));
-    }
-
-    #[test]
-    fn resolve_molecule_ambiguous_errors() {
-        let mut table = TableMolecule::empty();
-        table.atoms.push(empty_atom(Element::C));
-        table.atoms.push(empty_atom(Element::H));
-        table.atoms.push(empty_atom(Element::H));
-        table.atoms.push(empty_atom(Element::H));
+        table.atoms.push(c_atom.clone());
+        table.atoms.push(h_atom.clone());
+        table.atoms.push(h_atom.clone());
+        table.atoms.push(h_atom.clone());
         table.bonds.push(TableBond::new(0, 1, BondOrder::Single));
         table.bonds.push(TableBond::new(0, 2, BondOrder::Single));
         table.bonds.push(TableBond::new(0, 3, BondOrder::Single));
+        table
+    }
 
-        let resolved = resolve_molecule_with(
-            &table,
-            &config_with(registry!["[H+0v1]", "[C+0v3]", "[C+1v3]"]),
+    #[fixture]
+    fn config_with_empty_registry() -> ResolveConfig {
+        let mut config = ResolveConfig::default();
+        config.valence.atom_type_registry = AtomTypeRegistry::new();
+        config
+    }
+
+    #[fixture]
+    fn config_with_h_registry() -> ResolveConfig {
+        let mut config = ResolveConfig::default();
+        config.valence.atom_type_registry = registry!["[H+0v1]"];
+        config
+    }
+
+    #[fixture]
+    fn config_with_counts_strategy() -> ResolveConfig {
+        let mut config = ResolveConfig::default();
+        config.valence.strategy = ValenceStrategy::Counts;
+        config
+    }
+
+    #[fixture]
+    fn config_with_ch_registry() -> ResolveConfig {
+        let mut config = ResolveConfig::default();
+        config.valence.atom_type_registry = registry!["[H+0v1]", "[C+0v3]", "[C+1v3]"];
+        config
+    }
+
+    #[rstest]
+    fn resolve_molecule(h2_molecule: TableMolecule, config_with_h_registry: ResolveConfig) {
+        let resolved = resolve_molecule_with(&h2_molecule, &config_with_h_registry);
+        assert!(resolved.is_ok());
+        let mol = resolved.unwrap();
+        assert_eq!(mol.atom_count(), 2);
+        assert_eq!(
+            mol.atom(mol.atom_indices().next().unwrap())
+                .unwrap()
+                .hydrogens(),
+            0
         );
+    }
+
+    #[rstest]
+    fn resolve_molecule_counts_strategy(
+        h2_molecule: TableMolecule,
+        config_with_counts_strategy: ResolveConfig,
+    ) {
+        let resolved = resolve_molecule_with(&h2_molecule, &config_with_counts_strategy);
+        assert!(resolved.is_ok());
+        let mol = resolved.unwrap();
+        assert_eq!(mol.atom_count(), 2);
+        assert_eq!(
+            mol.atom(mol.atom_indices().next().unwrap())
+                .unwrap()
+                .hydrogens(),
+            0
+        );
+    }
+
+    #[rstest]
+    fn resolve_molecule_no_match(
+        c_molecule: TableMolecule,
+        config_with_empty_registry: ResolveConfig,
+    ) {
+        let resolved = resolve_molecule_with(&c_molecule, &config_with_empty_registry);
+        assert!(matches!(resolved, Err(ResolutionError::ValenceNoMatch(_))));
+    }
+
+    #[rstest]
+    fn resolve_molecule_ambiguous(
+        ch3_molecule: TableMolecule,
+        config_with_ch_registry: ResolveConfig,
+    ) {
+        let resolved = resolve_molecule_with(&ch3_molecule, &config_with_ch_registry);
         assert!(matches!(
             resolved,
             Err(ResolutionError::ValenceAmbiguous(_))

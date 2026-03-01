@@ -1,10 +1,10 @@
 //! Atom type and builder for GraphIR.
 
 use smallvec::SmallVec;
-use umol_data::{Element, SpinMultiplicity};
+use umol_data::{Element, SpinMultiplicity, SpinState};
 
+use super::atom_type::AtomTypeSpec;
 use super::error::ResolutionError;
-use super::valence::AtomTypeSpec;
 use crate::table_ir::atom::{Atom as TableAtom, Chirality};
 
 /// Resolved atom in GraphIR. All fields are definite.
@@ -16,8 +16,7 @@ pub struct Atom {
     charge: i8,
     hydrogens: u8,
     lone_pairs: u8,
-    unpaired_electrons: u8,
-    multiplicity: SpinMultiplicity,
+    spin: SpinState,
     valence: u8,
     donated_pairs: u8,
     accepted_pairs: u8,
@@ -46,12 +45,16 @@ impl Atom {
         self.lone_pairs
     }
 
+    pub fn spin(&self) -> SpinState {
+        self.spin
+    }
+
     pub fn unpaired_electrons(&self) -> u8 {
-        self.unpaired_electrons
+        self.spin.unpaired_electrons()
     }
 
     pub fn multiplicity(&self) -> SpinMultiplicity {
-        self.multiplicity
+        self.spin.multiplicity()
     }
 
     pub fn valence(&self) -> u8 {
@@ -80,8 +83,8 @@ impl Atom {
             self.charge,
             self.hydrogens,
             self.lone_pairs,
-            self.unpaired_electrons,
-            self.multiplicity,
+            self.spin.unpaired_electrons(),
+            self.spin.multiplicity(),
             self.valence,
             self.donated_pairs,
             self.accepted_pairs,
@@ -95,8 +98,8 @@ impl Atom {
             charge: Some(self.charge),
             hydrogens: Some(self.hydrogens),
             lone_pairs: Some(self.lone_pairs),
-            unpaired_electrons: Some(self.unpaired_electrons),
-            multiplicity: Some(self.multiplicity),
+            unpaired_electrons: Some(self.spin.unpaired_electrons()),
+            multiplicity: Some(self.spin.multiplicity()),
             aromatic_hint: None,
             chirality_hint: None,
             candidates: SmallVec::from_elem(spec, 1),
@@ -274,8 +277,7 @@ impl AtomBuilder {
             charge: candidate.charge(),
             hydrogens: candidate.hydrogens(),
             lone_pairs: candidate.lone_pairs(),
-            unpaired_electrons: candidate.unpaired_electrons(),
-            multiplicity: candidate.multiplicity(),
+            spin: candidate.spin(),
             valence: candidate.valence(),
             donated_pairs: candidate.donated_pairs(),
             accepted_pairs: candidate.accepted_pairs(),

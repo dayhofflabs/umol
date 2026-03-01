@@ -4,11 +4,11 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
-use umol_data::SpinMultiplicity;
+use umol_data::SpinState;
 
 use super::aromatic::AromaticSystem;
 use super::atom::{Atom, AtomBuilder};
-use super::bond::Bond;
+use super::bond::{Bond, BondBuilder};
 use super::config::ResolveConfig;
 use super::dative::DativeBond;
 use super::error::ResolutionError;
@@ -63,8 +63,7 @@ pub struct Molecule {
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
     charge: i32,
-    unpaired_electrons: u8,
-    multiplicity: SpinMultiplicity,
+    spin: SpinState,
 }
 
 impl Molecule {
@@ -175,12 +174,8 @@ impl Molecule {
         self.charge
     }
 
-    pub fn unpaired_electrons(&self) -> u8 {
-        self.unpaired_electrons
-    }
-
-    pub fn multiplicity(&self) -> SpinMultiplicity {
-        self.multiplicity
+    pub fn spin(&self) -> SpinState {
+        self.spin
     }
 
     // Atom-atom relationships
@@ -369,14 +364,13 @@ impl Molecule {
 /// molecule construction.
 #[derive(Debug, Clone)]
 pub struct MoleculeBuilder {
-    graph: StableGraph<AtomBuilder, Bond, Undirected, u32>,
+    graph: StableGraph<AtomBuilder, BondBuilder, Undirected, u32>,
     dative_bonds: Vec<DativeBond>,
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
     charge: i32,
-    unpaired_electrons: u8,
-    multiplicity: SpinMultiplicity,
+    spin: SpinState,
 }
 
 impl MoleculeBuilder {
@@ -388,8 +382,7 @@ impl MoleculeBuilder {
             multicenter_bonds: Vec::new(),
             noncovalent_bonds: Vec::new(),
             charge: 0,
-            unpaired_electrons: 0,
-            multiplicity: SpinMultiplicity::Singlet,
+            spin: SpinState::closed_shell(),
         }
     }
 
@@ -401,8 +394,7 @@ impl MoleculeBuilder {
             multicenter_bonds: Vec::new(),
             noncovalent_bonds: Vec::new(),
             charge: 0,
-            unpaired_electrons: 0,
-            multiplicity: SpinMultiplicity::Singlet,
+            spin: SpinState::closed_shell(),
         }
     }
 
@@ -450,18 +442,27 @@ impl MoleculeBuilder {
         self.graph.edge_indices()
     }
 
-    pub fn bond(&self, index: BondIndex) -> Option<&Bond> {
+    pub fn bond(&self, index: BondIndex) -> Option<&BondBuilder> {
         self.graph.edge_weight(index)
     }
 
-    pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: Bond) -> Option<BondIndex> {
+    pub fn bond_mut(&mut self, index: BondIndex) -> Option<&mut BondBuilder> {
+        self.graph.edge_weight_mut(index)
+    }
+
+    pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: BondBuilder) -> Option<BondIndex> {
         if !self.graph.contains_node(a) || !self.graph.contains_node(b) {
             return None;
         }
         Some(self.graph.add_edge(a, b, bond))
     }
 
-    pub fn add_bond_unchecked(&mut self, a: AtomIndex, b: AtomIndex, bond: Bond) -> BondIndex {
+    pub fn add_bond_unchecked(
+        &mut self,
+        a: AtomIndex,
+        b: AtomIndex,
+        bond: BondBuilder,
+    ) -> BondIndex {
         debug_assert!(
             self.graph.contains_node(a),
             "atom index {:?} not in builder",
@@ -475,11 +476,11 @@ impl MoleculeBuilder {
         self.graph.add_edge(a, b, bond)
     }
 
-    pub fn remove_bond(&mut self, index: BondIndex) -> Option<Bond> {
+    pub fn remove_bond(&mut self, index: BondIndex) -> Option<BondBuilder> {
         self.graph.remove_edge(index)
     }
 
-    pub fn replace_bond(&mut self, index: BondIndex, bond: Bond) -> Option<Bond> {
+    pub fn replace_bond(&mut self, index: BondIndex, bond: BondBuilder) -> Option<BondBuilder> {
         self.graph
             .edge_weight_mut(index)
             .map(|old| std::mem::replace(old, bond))
@@ -677,36 +678,24 @@ impl MoleculeBuilder {
         self.charge
     }
 
-    pub fn unpaired_electrons(&self) -> u8 {
-        self.unpaired_electrons
-    }
-
-    pub fn multiplicity(&self) -> SpinMultiplicity {
-        self.multiplicity
+    pub fn spin(&self) -> SpinState {
+        self.spin
     }
 
     pub fn set_charge(&mut self, charge: i32) {
         self.charge = charge;
     }
 
-    pub fn set_unpaired_electrons(&mut self, unpaired_electrons: u8) {
-        self.unpaired_electrons = unpaired_electrons;
-    }
-
-    pub fn set_multiplicity(&mut self, multiplicity: SpinMultiplicity) {
-        self.multiplicity = multiplicity;
+    pub fn set_spin(&mut self, spin: SpinState) {
+        self.spin = spin;
     }
 
     pub fn update_charge(&mut self, f: impl FnOnce(i32) -> i32) {
         self.charge = f(self.charge);
     }
 
-    pub fn update_unpaired_electrons(&mut self, f: impl FnOnce(u8) -> u8) {
-        self.unpaired_electrons = f(self.unpaired_electrons);
-    }
-
-    pub fn update_multiplicity(&mut self, f: impl FnOnce(SpinMultiplicity) -> SpinMultiplicity) {
-        self.multiplicity = f(self.multiplicity);
+    pub fn update_spin(&mut self, f: impl FnOnce(SpinState) -> SpinState) {
+        self.spin = f(self.spin);
     }
 
     // Atom-atom relationships
@@ -732,7 +721,7 @@ impl MoleculeBuilder {
         self.graph.edges(index).map(|e| e.id())
     }
 
-    pub fn atom_bonds(&self, index: AtomIndex) -> impl Iterator<Item = &Bond> + '_ {
+    pub fn atom_bonds(&self, index: AtomIndex) -> impl Iterator<Item = &BondBuilder> + '_ {
         self.graph.edges(index).map(|e| e.weight())
     }
 
@@ -740,11 +729,25 @@ impl MoleculeBuilder {
         self.graph.edges(index).map(|e| e.weight().order()).sum()
     }
 
+    pub fn atom_bond_order_sum_with_aromatic(&self, index: AtomIndex, aromatic_weight: f32) -> f32 {
+        self.graph
+            .edges(index)
+            .map(|e| {
+                let b = e.weight();
+                if b.aromatic_hint() == Some(true) {
+                    aromatic_weight
+                } else {
+                    b.order() as f32
+                }
+            })
+            .sum()
+    }
+
     pub fn connecting_bond_index(&self, a: AtomIndex, b: AtomIndex) -> Option<BondIndex> {
         self.graph.edges_connecting(a, b).next().map(|e| e.id())
     }
 
-    pub fn connecting_bond(&self, a: AtomIndex, b: AtomIndex) -> Option<&Bond> {
+    pub fn connecting_bond(&self, a: AtomIndex, b: AtomIndex) -> Option<&BondBuilder> {
         self.graph.edges_connecting(a, b).next().map(|e| e.weight())
     }
 
@@ -912,10 +915,10 @@ impl MoleculeBuilder {
 
         for old_edge in self.graph.edge_indices() {
             let (a, b) = self.graph.edge_endpoints(old_edge).unwrap();
-            let bond = self.graph.edge_weight(old_edge).unwrap().clone();
+            let bond_builder = self.graph.edge_weight(old_edge).unwrap();
             let new_a = index_map[a.index()].unwrap();
             let new_b = index_map[b.index()].unwrap();
-            resolved_graph.add_edge(new_a, new_b, bond);
+            resolved_graph.add_edge(new_a, new_b, bond_builder.build());
         }
 
         Ok(Molecule {
@@ -925,8 +928,7 @@ impl MoleculeBuilder {
             dative_bonds: self.dative_bonds,
             noncovalent_bonds: self.noncovalent_bonds,
             charge: self.charge,
-            unpaired_electrons: self.unpaired_electrons,
-            multiplicity: self.multiplicity,
+            spin: self.spin,
         })
     }
 }

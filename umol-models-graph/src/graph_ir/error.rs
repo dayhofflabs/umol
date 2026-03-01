@@ -14,6 +14,8 @@ pub enum ResolutionError {
     InvalidAtomSpec(String),
     #[error("Invalid atom type registry: {0}")]
     InvalidAtomTypeRegistry(String),
+    #[error("Invalid valence table: {0}")]
+    InvalidValenceTable(String),
 
     #[error("Molecule has more than one connected component")]
     TopologyDisconnected,

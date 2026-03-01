@@ -1,4 +1,4 @@
-//! Bond type for GraphIR.
+//! Bond types for GraphIR.
 
 use super::error::ResolutionError;
 use crate::table_ir::bond::{Bond as TableBond, BondOrder};
@@ -19,19 +19,58 @@ impl Bond {
         self.order
     }
 
-    /// Construct from a shared TableIR bond.
-    ///
-    /// Note: Aromaticity is handled separately; aromatic bonds are mapped to
-    /// single bonds. Query bonds are not allowed. Dative and non-covalent bonds
-    /// must be routed to their respective constructors before calling this.
-    pub fn from_table_bond(bond: &TableBond) -> Result<Bond, ResolutionError> {
-        let order = match bond.order {
-            BondOrder::Aromatic => 1,
-            o if o.is_query() => return Err(ResolutionError::InvalidBondOrder(bond.order)),
-            o => o
-                .value()
-                .ok_or(ResolutionError::InvalidBondOrder(bond.order))?,
-        };
-        Ok(Bond::new(order))
+    pub fn to_builder(&self) -> BondBuilder {
+        BondBuilder::new(self.order, None)
+    }
+}
+
+/// Mutable bond representation used during resolution phases.
+/// Carries an aromaticity hint that is consumed by Kekulization;
+/// `build()` produces the final `Bond` with a definite order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BondBuilder {
+    order: u8,
+    aromatic_hint: Option<bool>,
+}
+
+impl BondBuilder {
+    pub fn new(order: u8, aromatic_hint: Option<bool>) -> Self {
+        Self {
+            order,
+            aromatic_hint,
+        }
+    }
+
+    pub fn order(&self) -> u8 {
+        self.order
+    }
+
+    pub fn set_order(&mut self, order: u8) {
+        self.order = order;
+    }
+
+    pub fn aromatic_hint(&self) -> Option<bool> {
+        self.aromatic_hint
+    }
+
+    pub fn set_aromatic_hint(&mut self, aromatic: Option<bool>) {
+        self.aromatic_hint = aromatic;
+    }
+
+    pub fn from_table_bond(bond: &TableBond) -> Result<Self, ResolutionError> {
+        match bond.order {
+            BondOrder::Aromatic => Ok(Self::new(1, Some(true))),
+            o if o.is_query() => Err(ResolutionError::InvalidBondOrder(bond.order)),
+            o => {
+                let order = o
+                    .value()
+                    .ok_or(ResolutionError::InvalidBondOrder(bond.order))?;
+                Ok(Self::new(order, Some(false)))
+            }
+        }
+    }
+
+    pub fn build(&self) -> Bond {
+        Bond::new(self.order)
     }
 }
