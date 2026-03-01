@@ -4,23 +4,8 @@ use smallvec::SmallVec;
 use umol_data::{Element, SpinMultiplicity};
 
 use super::error::ResolutionError;
+use super::valence::AtomTypeSpec;
 use crate::table_ir::atom::{Atom as TableAtom, Chirality};
-
-/// A single candidate valence state for an atom. Populated by the valence
-/// resolution phase, narrowed by aromaticity resolution. All fields definite.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ValenceCandidate {
-    pub charge: i8,
-    pub hydrogens: u8,
-    pub lone_pairs: u8,
-    pub donated_pairs: u8,
-    pub accepted_pairs: u8,
-    pub unpaired_electrons: u8,
-    pub multiplicity: SpinMultiplicity,
-    pub valence: u8,
-    pub aromatic_valence: u8,
-    pub multicenter_valence: u8,
-}
 
 /// Resolved atom in GraphIR. All fields are definite.
 /// Created via `AtomBuilder::build()` after resolution phases complete.
@@ -31,11 +16,11 @@ pub struct Atom {
     charge: i8,
     hydrogens: u8,
     lone_pairs: u8,
-    donated_pairs: u8,
-    accepted_pairs: u8,
     unpaired_electrons: u8,
     multiplicity: SpinMultiplicity,
     valence: u8,
+    donated_pairs: u8,
+    accepted_pairs: u8,
     aromatic_valence: u8,
     multicenter_valence: u8,
 }
@@ -61,14 +46,6 @@ impl Atom {
         self.lone_pairs
     }
 
-    pub fn donated_pairs(&self) -> u8 {
-        self.donated_pairs
-    }
-
-    pub fn accepted_pairs(&self) -> u8 {
-        self.accepted_pairs
-    }
-
     pub fn unpaired_electrons(&self) -> u8 {
         self.unpaired_electrons
     }
@@ -81,6 +58,14 @@ impl Atom {
         self.valence
     }
 
+    pub fn donated_pairs(&self) -> u8 {
+        self.donated_pairs
+    }
+
+    pub fn accepted_pairs(&self) -> u8 {
+        self.accepted_pairs
+    }
+
     pub fn aromatic_valence(&self) -> u8 {
         self.aromatic_valence
     }
@@ -90,33 +75,31 @@ impl Atom {
     }
 
     pub fn to_builder(&self) -> AtomBuilder {
+        let spec = AtomTypeSpec::new(
+            self.element,
+            self.charge,
+            self.hydrogens,
+            self.lone_pairs,
+            self.unpaired_electrons,
+            self.multiplicity,
+            self.valence,
+            self.donated_pairs,
+            self.accepted_pairs,
+            self.aromatic_valence,
+            self.multicenter_valence,
+        )
+        .expect("resolved Atom fields always form a valid AtomTypeSpec");
         AtomBuilder {
             element: self.element,
             isotope_mass: self.isotope_mass,
             charge: Some(self.charge),
             hydrogens: Some(self.hydrogens),
             lone_pairs: Some(self.lone_pairs),
-            donated_pairs: Some(self.donated_pairs),
-            accepted_pairs: Some(self.accepted_pairs),
             unpaired_electrons: Some(self.unpaired_electrons),
             multiplicity: Some(self.multiplicity),
             aromatic_hint: None,
             chirality_hint: None,
-            candidates: SmallVec::from_elem(
-                ValenceCandidate {
-                    charge: self.charge,
-                    hydrogens: self.hydrogens,
-                    lone_pairs: self.lone_pairs,
-                    donated_pairs: self.donated_pairs,
-                    accepted_pairs: self.accepted_pairs,
-                    unpaired_electrons: self.unpaired_electrons,
-                    multiplicity: self.multiplicity,
-                    valence: self.valence,
-                    aromatic_valence: self.aromatic_valence,
-                    multicenter_valence: self.multicenter_valence,
-                },
-                1,
-            ),
+            candidates: SmallVec::from_elem(spec, 1),
         }
     }
 }
@@ -131,13 +114,11 @@ pub struct AtomBuilder {
     charge: Option<i8>,
     hydrogens: Option<u8>,
     lone_pairs: Option<u8>,
-    donated_pairs: Option<u8>,
-    accepted_pairs: Option<u8>,
     unpaired_electrons: Option<u8>,
     multiplicity: Option<SpinMultiplicity>,
     aromatic_hint: Option<bool>,
     chirality_hint: Option<Chirality>,
-    candidates: SmallVec<[ValenceCandidate; 4]>,
+    candidates: SmallVec<[AtomTypeSpec; 4]>,
 }
 
 impl AtomBuilder {
@@ -148,8 +129,6 @@ impl AtomBuilder {
             charge: None,
             hydrogens: None,
             lone_pairs: None,
-            donated_pairs: None,
-            accepted_pairs: None,
             unpaired_electrons: None,
             multiplicity: None,
             aromatic_hint: None,
@@ -165,8 +144,6 @@ impl AtomBuilder {
             charge: atom.charge,
             hydrogens: atom.hydrogens,
             lone_pairs: atom.lone_pairs,
-            donated_pairs: None,
-            accepted_pairs: None,
             unpaired_electrons: atom.unpaired_electrons.map(|u| u.count),
             multiplicity: atom.unpaired_electrons.and_then(|u| u.multiplicity),
             aromatic_hint: atom.aromatic,
@@ -195,14 +172,6 @@ impl AtomBuilder {
         self.lone_pairs
     }
 
-    pub fn donated_pairs(&self) -> Option<u8> {
-        self.donated_pairs
-    }
-
-    pub fn accepted_pairs(&self) -> Option<u8> {
-        self.accepted_pairs
-    }
-
     pub fn unpaired_electrons(&self) -> Option<u8> {
         self.unpaired_electrons
     }
@@ -219,7 +188,7 @@ impl AtomBuilder {
         self.chirality_hint.as_ref()
     }
 
-    pub fn candidates(&self) -> &[ValenceCandidate] {
+    pub fn candidates(&self) -> &[AtomTypeSpec] {
         &self.candidates
     }
 
@@ -243,21 +212,13 @@ impl AtomBuilder {
         self
     }
 
-    pub fn set_donated_pairs(&mut self, donated_pairs: u8) -> &mut Self {
-        self.donated_pairs = Some(donated_pairs);
-        self
-    }
-
-    pub fn set_accepted_pairs(&mut self, accepted_pairs: u8) -> &mut Self {
-        self.accepted_pairs = Some(accepted_pairs);
-        self
-    }
-
+    // TODO: Check consistency with multiplicity
     pub fn set_unpaired_electrons(&mut self, unpaired_electrons: u8) -> &mut Self {
         self.unpaired_electrons = Some(unpaired_electrons);
         self
     }
 
+    // TODO: Check consistency with unpaired electrons
     pub fn set_multiplicity(&mut self, multiplicity: SpinMultiplicity) -> &mut Self {
         self.multiplicity = Some(multiplicity);
         self
@@ -273,12 +234,12 @@ impl AtomBuilder {
         self
     }
 
-    pub fn set_candidates(&mut self, candidates: SmallVec<[ValenceCandidate; 4]>) -> &mut Self {
+    pub fn set_candidates(&mut self, candidates: SmallVec<[AtomTypeSpec; 4]>) -> &mut Self {
         self.candidates = candidates;
         self
     }
 
-    pub fn add_candidate(&mut self, candidate: ValenceCandidate) -> &mut Self {
+    pub fn add_candidate(&mut self, candidate: AtomTypeSpec) -> &mut Self {
         if !self.candidates.contains(&candidate) {
             self.candidates.push(candidate);
         }
@@ -310,16 +271,16 @@ impl AtomBuilder {
         Ok(Atom {
             element: self.element,
             isotope_mass: self.isotope_mass,
-            charge: candidate.charge,
-            hydrogens: candidate.hydrogens,
-            lone_pairs: candidate.lone_pairs,
-            donated_pairs: candidate.donated_pairs,
-            accepted_pairs: candidate.accepted_pairs,
-            unpaired_electrons: candidate.unpaired_electrons,
-            multiplicity: candidate.multiplicity,
-            valence: candidate.valence,
-            aromatic_valence: candidate.aromatic_valence,
-            multicenter_valence: candidate.multicenter_valence,
+            charge: candidate.charge(),
+            hydrogens: candidate.hydrogens(),
+            lone_pairs: candidate.lone_pairs(),
+            unpaired_electrons: candidate.unpaired_electrons(),
+            multiplicity: candidate.multiplicity(),
+            valence: candidate.valence(),
+            donated_pairs: candidate.donated_pairs(),
+            accepted_pairs: candidate.accepted_pairs(),
+            aromatic_valence: candidate.aromatic_valence(),
+            multicenter_valence: candidate.multicenter_valence(),
         })
     }
 }

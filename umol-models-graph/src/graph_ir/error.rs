@@ -10,18 +10,10 @@ pub enum ResolutionError {
     InvalidBondOrder(BondOrder),
     #[error("Atom index out of range: {0}")]
     AtomIndexOutOfRange(u32),
-    #[error("Bond index out of range: {0}")]
-    BondIndexOutOfRange(u32),
     #[error("Invalid atom specification: {0}")]
     InvalidAtomSpec(String),
-    #[error("Invalid bond specification: {0}")]
-    InvalidBondSpec(String),
-    #[error("Valence violation for element {0:?}: {1}")]
-    ValenceViolation(Element, String),
-    #[error("No valence match for {0}")]
-    ValenceNoMatch(String),
-    #[error("Valence ambiguous for {0}")]
-    ValenceAmbiguous(String),
+    #[error("Invalid atom type registry: {0}")]
+    InvalidAtomTypeRegistry(String),
 
     #[error("Molecule has more than one connected component")]
     TopologyDisconnected,
@@ -29,6 +21,12 @@ pub enum ResolutionError {
     TopologySelfLoop(u32),
     #[error("Parallel bonds {0} and {1}")]
     TopologyParallelEdges(u32, u32),
+    #[error("Valence violation for element {0:?}: {1}")]
+    ValenceViolation(Element, String),
+    #[error("No valence match for {0}")]
+    ValenceNoMatch(String),
+    #[error("Valence ambiguous for {0}")]
+    ValenceAmbiguous(String),
 }
 
 impl From<ResolutionError> for Diagnostic {

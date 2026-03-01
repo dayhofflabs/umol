@@ -7,7 +7,6 @@ members = [
     "umol-models",
     "umol-models-geometric",
     "umol-models-graph",
-    "umol-models-valence",
 ]
 exclude = ["fuzz"]
 resolver = "2"

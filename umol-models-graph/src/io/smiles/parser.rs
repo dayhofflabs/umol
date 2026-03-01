@@ -22,11 +22,10 @@ use self::utils::{
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
-use crate::bond::BondDonation;
 use crate::span::Span;
 use crate::table_ir::{
-    BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction, SourceFormat,
-    WildcardAtom,
+    BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
+    SourceFormat, WildcardAtom,
 };
 
 /// Parse SMILES string with basic OpenSMILES configuration

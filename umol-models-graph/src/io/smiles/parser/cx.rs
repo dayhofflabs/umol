@@ -22,13 +22,13 @@ use umol_data::SpinMultiplicity;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
-use crate::bond::{BondDonation, BondNoncovalent};
+use crate::bond::BondNoncovalent;
 use crate::position::Point3D;
 use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
 use crate::table_ir::{
-    BondOrder, BondStereo, BondWedge, CxAnnotationData, ExtendedMolecule, ExtendedReaction,
-    LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount, SGroup,
-    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
+    BondDonation, BondOrder, BondStereo, BondWedge, CxAnnotationData, ExtendedMolecule,
+    ExtendedReaction, LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount,
+    SGroup, SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
     SGroupData, SGroupDataType, SGroupSubtype, SGroupType, StereoInterpretation, StereoSet,
     StereoSetMode, SubstitutionCount, UnpairedElectrons, UnsaturatedAtom,
 };

@@ -204,15 +204,6 @@ pub enum DataError {
     #[error("Invalid bond donation: {0}")]
     InvalidBondDonation(String),
 
-    #[error("Invalid bond spec: {0}")]
-    InvalidBondSpec(String),
-
-    #[error("No matching bond spec found: {0}")]
-    NoBondSpec(String),
-
-    #[error("Multiple matching bond specs found: {0}")]
-    MultipleBondSpecs(String),
-
     #[error("Missing atom index: {0}")]
     MissingAtomIndex(usize),
 

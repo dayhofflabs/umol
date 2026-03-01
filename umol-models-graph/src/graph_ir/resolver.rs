@@ -2,12 +2,15 @@
 
 use std::collections::HashMap;
 
-use super::config::{ResolveConfig, TopologyResolveFlags};
+use super::config::{ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy, ValenceStrategyKind};
+use super::dative::DativeBond;
 use super::error::ResolutionError;
 use super::molecule::{AtomIndex, MoleculeBuilder};
 use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
+use super::noncovalent::NoncovalentBond;
+use super::valence::ValenceValidator;
 use super::{AtomBuilder, Bond, Molecule};
-use crate::table_ir::Molecule as TableMolecule;
+use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 /// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
 pub fn resolve_molecule(molecule: &TableMolecule) -> Result<Molecule, ResolutionError> {
@@ -80,18 +83,18 @@ fn resolve_topology_with(
         node_indices.push(builder.add_atom(AtomBuilder::from_table_atom(atom)));
     }
     for bond in &molecule.bonds {
-        let a = bond.atoms.first();
-        let b = bond.atoms.second();
-        let graph_bond = Bond::from_table_bond(bond)?;
-        builder
-            .add_bond(
-                node_indices[a as usize],
-                node_indices[b as usize],
-                graph_bond,
-            )
-            .ok_or_else(|| {
-                ResolutionError::InvalidBondSpec("bond endpoint index out of range".to_string())
-            })?;
+        let a = node_indices[bond.atoms.first() as usize];
+        let b = node_indices[bond.atoms.second() as usize];
+        if bond.noncovalent.is_some() {
+            builder.add_noncovalent_bond(NoncovalentBond::from_table_bond(bond, &node_indices));
+        } else if matches!(
+            bond.donation,
+            Some(BondDonation::Donating | BondDonation::Accepting)
+        ) {
+            builder.add_dative_bond(DativeBond::from_table_bond(bond, &node_indices));
+        } else {
+            builder.add_bond_unchecked(a, b, Bond::from_table_bond(bond)?);
+        }
     }
 
     for mc in &molecule.multicenter_bonds {
@@ -104,10 +107,7 @@ fn resolve_topology_with(
                     .iter()
                     .map(|&idx| {
                         if (idx as usize) >= n {
-                            Err(ResolutionError::InvalidAtomSpec(format!(
-                                "multicenter bond references atom index {} out of range (0..{})",
-                                idx, n
-                            )))
+                            Err(ResolutionError::AtomIndexOutOfRange(idx as u32))
                         } else {
                             Ok(MulticenterContribution::topology_only(
                                 node_indices[idx as usize],
@@ -127,22 +127,148 @@ fn resolve_topology_with(
 }
 
 fn resolve_valence_with(
-    _builder: &mut MoleculeBuilder,
-    _config: &ResolveConfig,
+    builder: &mut MoleculeBuilder,
+    config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
-    todo!()
+    if !config.valence.enabled {
+        return Ok(());
+    }
+
+    let validator = match config.valence.strategy {
+        ValenceStrategyKind::AtomTyping => {
+            ValenceValidator::AtomTyping(config.valence.registry.clone())
+        }
+        ValenceStrategyKind::Counts => ValenceValidator::Counts,
+    };
+
+    let atom_indices: Vec<AtomIndex> = builder.atom_indices().collect();
+    for atom_index in atom_indices {
+        let candidates = validator.candidates_for(builder, atom_index);
+
+        if candidates.is_empty() {
+            if config.valence.no_match_policy == ValenceMatchPolicy::Ignore {
+                continue;
+            }
+            let element = builder.atom(atom_index).expect("atom_index must be valid").element();
+            return Err(ResolutionError::ValenceNoMatch(format!(
+                "atom {:?} at index {} has no valence match",
+                element,
+                atom_index.index()
+            )));
+        }
+
+        if candidates.len() > 1 && config.valence.ambiguous_policy != ValenceMatchPolicy::Ignore {
+            let element = builder.atom(atom_index).expect("atom_index must be valid").element();
+            return Err(ResolutionError::ValenceAmbiguous(format!(
+                "atom {:?} at index {} has {} valence matches",
+                element,
+                atom_index.index(),
+                candidates.len()
+            )));
+        }
+
+        builder
+            .atom_mut(atom_index)
+            .expect("atom_index from atom_indices must be valid")
+            .set_candidates(candidates);
+    }
+
+    Ok(())
 }
 
 fn resolve_aromaticity_with(
     _builder: &mut MoleculeBuilder,
-    _config: &ResolveConfig,
+    config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
-    todo!()
+    if !config.aromaticity.enabled {
+        return Ok(());
+    }
+    Ok(())
 }
 
 fn resolve_stereo_with(
     _builder: &mut MoleculeBuilder,
-    _config: &ResolveConfig,
+    config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
-    todo!()
+    if !config.stereo.enabled {
+        return Ok(());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use umol_data::Element;
+
+    use super::*;
+    use crate::registry;
+    use super::super::valence::AtomTypeRegistry;
+    use crate::table_ir::atom::Atom as TableAtom;
+    use crate::table_ir::bond::{Bond as TableBond, BondOrder};
+    use crate::table_ir::Molecule as TableMolecule;
+
+    fn empty_atom(element: Element) -> TableAtom {
+        TableAtom::from_element(element)
+    }
+
+    fn config_with(registry: AtomTypeRegistry) -> ResolveConfig {
+        let mut config = ResolveConfig::default();
+        config.valence.registry = registry;
+        config
+    }
+
+    #[test]
+    fn resolve_molecule_h2_succeeds() {
+        let mut table = TableMolecule::empty();
+        table.atoms.push(empty_atom(Element::H));
+        table.atoms.push(empty_atom(Element::H));
+        table.bonds.push(TableBond::new(0, 1, BondOrder::Single));
+
+        let resolved = resolve_molecule_with(&table, &config_with(registry!["[H+0v1]"]));
+        assert!(resolved.is_ok());
+    }
+
+    #[test]
+    #[should_panic(expected = "counts-based valence is not implemented yet")]
+    fn resolve_molecule_counts_strategy_panics() {
+        let mut table = TableMolecule::empty();
+        table.atoms.push(empty_atom(Element::H));
+        table.atoms.push(empty_atom(Element::H));
+        table.bonds.push(TableBond::new(0, 1, BondOrder::Single));
+
+        let mut config = config_with(registry!["[H+0v1]"]);
+        config.valence.strategy = ValenceStrategyKind::Counts;
+
+        let _ = resolve_molecule_with(&table, &config);
+    }
+
+    #[test]
+    fn resolve_molecule_no_match_errors() {
+        let mut table = TableMolecule::empty();
+        table.atoms.push(empty_atom(Element::C));
+
+        let resolved = resolve_molecule_with(&table, &config_with(AtomTypeRegistry::new()));
+        assert!(matches!(resolved, Err(ResolutionError::ValenceNoMatch(_))));
+    }
+
+    #[test]
+    fn resolve_molecule_ambiguous_errors() {
+        let mut table = TableMolecule::empty();
+        table.atoms.push(empty_atom(Element::C));
+        table.atoms.push(empty_atom(Element::H));
+        table.atoms.push(empty_atom(Element::H));
+        table.atoms.push(empty_atom(Element::H));
+        table.bonds.push(TableBond::new(0, 1, BondOrder::Single));
+        table.bonds.push(TableBond::new(0, 2, BondOrder::Single));
+        table.bonds.push(TableBond::new(0, 3, BondOrder::Single));
+
+        let resolved = resolve_molecule_with(
+            &table,
+            &config_with(registry!["[H+0v1]", "[C+0v3]", "[C+1v3]"]),
+        );
+        assert!(matches!(
+            resolved,
+            Err(ResolutionError::ValenceAmbiguous(_))
+        ));
+    }
 }

@@ -4,13 +4,13 @@ use rstest::*;
 use umol_data::SpinMultiplicity;
 
 use super::super::*;
-use crate::bond::{BondDonation, BondNoncovalent};
+use crate::bond::BondNoncovalent;
 use crate::position::Point3D;
 use crate::table_ir::{
-    BondOrder, BondStereo, BondWedge, LinkAtom, RingBondCount,
-    SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
-    SGroupDataType, SGroupType, StereoInterpretation, StereoSet, StereoSetMode, SubstitutionCount,
-    UnpairedElectrons, UnsaturatedAtom,
+    BondDonation, BondOrder, BondStereo, BondWedge, LinkAtom, RingBondCount, SGroupBracketCoords,
+    SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity, SGroupDataType, SGroupType,
+    StereoInterpretation, StereoSet, StereoSetMode, SubstitutionCount, UnpairedElectrons,
+    UnsaturatedAtom,
 };
 
 fn parse_basic_cxsmiles(input: &[u8]) -> Result<Molecule, ParseError> {

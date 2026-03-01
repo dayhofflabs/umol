@@ -4,25 +4,67 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
+use umol_data::SpinMultiplicity;
 
 use super::aromatic::AromaticSystem;
 use super::atom::{Atom, AtomBuilder};
 use super::bond::Bond;
 use super::config::ResolveConfig;
+use super::dative::DativeBond;
 use super::error::ResolutionError;
 use super::multicenter::MulticenterBond;
+use super::noncovalent::NoncovalentBond;
 
 pub type AtomIndex = NodeIndex<u32>;
 pub type BondIndex = EdgeIndex<u32>;
-pub type AromaticSystemIndex = u32;
-pub type MulticenterBondIndex = u32;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AromaticSystemIndex(u32);
+
+impl AromaticSystemIndex {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MulticenterBondIndex(u32);
+
+impl MulticenterBondIndex {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct DativeBondIndex(u32);
+
+impl DativeBondIndex {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct NoncovalentBondIndex(u32);
+
+impl NoncovalentBondIndex {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
 
 /// Resolved molecule in GraphIR. All atoms and bonds are fully validated.
 #[derive(Debug, Clone)]
 pub struct Molecule {
     graph: StableGraph<Atom, Bond, Undirected, u32>,
+    dative_bonds: Vec<DativeBond>,
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
+    noncovalent_bonds: Vec<NoncovalentBond>,
+    charge: i32,
+    unpaired_electrons: u8,
+    multiplicity: SpinMultiplicity,
 }
 
 impl Molecule {
@@ -60,13 +102,30 @@ impl Molecule {
         self.graph.edge_weight(index)
     }
 
+    // Dative bonds
+    pub fn dative_bond_count(&self) -> usize {
+        self.dative_bonds.len()
+    }
+
+    pub fn dative_bond_indices(&self) -> impl Iterator<Item = DativeBondIndex> + '_ {
+        (0..self.dative_bond_count()).map(|i| DativeBondIndex(i as u32))
+    }
+
+    pub fn dative_bonds(&self) -> impl Iterator<Item = &DativeBond> + '_ {
+        self.dative_bonds.iter()
+    }
+
+    pub fn dative_bond(&self, index: DativeBondIndex) -> Option<&DativeBond> {
+        self.dative_bonds.get(index.index())
+    }
+
     // Aromatic systems
     pub fn aromatic_system_count(&self) -> usize {
         self.aromatic_systems.len()
     }
 
     pub fn aromatic_systems_indices(&self) -> impl Iterator<Item = AromaticSystemIndex> + '_ {
-        (0..self.aromatic_system_count()).map(|i| i as AromaticSystemIndex)
+        (0..self.aromatic_system_count()).map(|i| AromaticSystemIndex(i as u32))
     }
 
     pub fn aromatic_systems(&self) -> impl Iterator<Item = &AromaticSystem> + '_ {
@@ -74,7 +133,7 @@ impl Molecule {
     }
 
     pub fn aromatic_system(&self, index: AromaticSystemIndex) -> Option<&AromaticSystem> {
-        self.aromatic_systems.get(index as usize)
+        self.aromatic_systems.get(index.index())
     }
 
     // Multicenter bonds
@@ -83,7 +142,7 @@ impl Molecule {
     }
 
     pub fn multicenter_bonds_indices(&self) -> impl Iterator<Item = MulticenterBondIndex> + '_ {
-        (0..self.multicenter_bond_count()).map(|i| i as MulticenterBondIndex)
+        (0..self.multicenter_bond_count()).map(|i| MulticenterBondIndex(i as u32))
     }
 
     pub fn multicenter_bonds(&self) -> impl Iterator<Item = &MulticenterBond> + '_ {
@@ -91,7 +150,37 @@ impl Molecule {
     }
 
     pub fn multicenter_bond(&self, index: MulticenterBondIndex) -> Option<&MulticenterBond> {
-        self.multicenter_bonds.get(index as usize)
+        self.multicenter_bonds.get(index.index())
+    }
+
+    // Non-covalent bonds
+    pub fn noncovalent_bond_count(&self) -> usize {
+        self.noncovalent_bonds.len()
+    }
+
+    pub fn noncovalent_bond_indices(&self) -> impl Iterator<Item = NoncovalentBondIndex> + '_ {
+        (0..self.noncovalent_bond_count()).map(|i| NoncovalentBondIndex(i as u32))
+    }
+
+    pub fn noncovalent_bonds(&self) -> impl Iterator<Item = &NoncovalentBond> + '_ {
+        self.noncovalent_bonds.iter()
+    }
+
+    pub fn noncovalent_bond(&self, index: NoncovalentBondIndex) -> Option<&NoncovalentBond> {
+        self.noncovalent_bonds.get(index.index())
+    }
+
+    // Charge
+    pub fn charge(&self) -> i32 {
+        self.charge
+    }
+
+    pub fn unpaired_electrons(&self) -> u8 {
+        self.unpaired_electrons
+    }
+
+    pub fn multiplicity(&self) -> SpinMultiplicity {
+        self.multiplicity
     }
 
     // Atom-atom relationships
@@ -105,7 +194,14 @@ impl Molecule {
             .map(|n| self.graph.node_weight(n).unwrap())
     }
 
+    // TODO: Add dative and noncovalent neighbors (+indices)
+    // TODO: Add aromatic system and multicenter system partners (+indices)
+
     // Atom-bond relationships
+    pub fn atom_bond_count(&self, index: AtomIndex) -> usize {
+        self.graph.edges(index).count()
+    }
+
     pub fn atom_bond_indices(&self, index: AtomIndex) -> impl Iterator<Item = BondIndex> + '_ {
         self.graph.edges(index).map(|e| e.id())
     }
@@ -114,12 +210,15 @@ impl Molecule {
         self.graph.edges(index).map(|e| e.weight())
     }
 
-    pub fn connecting_bond_indices(
-        &self,
-        a: AtomIndex,
-        b: AtomIndex,
-    ) -> impl Iterator<Item = BondIndex> + '_ {
-        self.graph.edges_connecting(a, b).map(|edge| edge.id())
+    pub fn atom_bond_order_sum(&self, index: AtomIndex) -> u8 {
+        self.graph.edges(index).map(|e| e.weight().order()).sum()
+    }
+
+    pub fn connecting_bond_index(&self, a: AtomIndex, b: AtomIndex) -> Option<BondIndex> {
+        self.graph
+            .edges_connecting(a, b)
+            .next()
+            .map(|edge| edge.id())
     }
 
     pub fn connecting_bond(&self, a: AtomIndex, b: AtomIndex) -> Option<&Bond> {
@@ -139,7 +238,65 @@ impl Molecule {
         })
     }
 
+    // Atom-dative bond relationships
+    pub fn atom_has_dative_bonds(&self, index: AtomIndex) -> bool {
+        self.dative_bonds.iter().any(|b| b.contains_atom(index))
+    }
+
+    pub fn atom_dative_bond_counts(&self, index: AtomIndex) -> (usize, usize) {
+        assert!(
+            self.graph.contains_node(index),
+            "atom index {:?} not in builder",
+            index
+        );
+        let mut donated = 0;
+        let mut accepted = 0;
+        for db in &self.dative_bonds {
+            if db.donor() == index {
+                donated += 1;
+            } else if db.acceptor() == index {
+                accepted += 1;
+            }
+        }
+        (donated, accepted)
+    }
+
+    pub fn atom_dative_bond_indices(
+        &self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = DativeBondIndex> + '_ {
+        self.dative_bond_indices()
+            .filter(move |&i| self.dative_bond(i).unwrap().contains_atom(index))
+    }
+
+    pub fn atom_dative_bonds(&self, index: AtomIndex) -> impl Iterator<Item = &DativeBond> + '_ {
+        self.dative_bonds().filter(move |b| b.contains_atom(index))
+    }
+
+    pub fn atom_dative_bond_order_sums(&self, index: AtomIndex) -> (u8, u8) {
+        debug_assert!(
+            self.graph.contains_node(index),
+            "atom index {:?} not in builder",
+            index
+        );
+
+        let mut donated = 0;
+        let mut accepted = 0;
+        for db in &self.dative_bonds {
+            if db.donor() == index {
+                donated += db.order();
+            } else if db.acceptor() == index {
+                accepted += db.order();
+            }
+        }
+        (donated, accepted)
+    }
+
     // Atom-aromatic system relationships
+    pub fn atom_has_aromatic_systems(&self, index: AtomIndex) -> bool {
+        self.aromatic_systems.iter().any(|s| s.contains_atom(index))
+    }
+
     pub fn atom_aromatic_systems_indices(
         &self,
         index: AtomIndex,
@@ -157,10 +314,13 @@ impl Molecule {
             .map(|s| s.clone())
     }
 
-    // TODO: Consider adding connecting_aromatic_system_indices and connecting_aromatic_system methods
-    // that take a IntoIterator<Item = AtomIndex>
-
     // Atom-multicenter bond relationships
+    pub fn atom_has_multicenter_bonds(&self, index: AtomIndex) -> bool {
+        self.multicenter_bonds
+            .iter()
+            .any(|b| b.contains_atom(index))
+    }
+
     pub fn atom_multicenter_bonds_indices(
         &self,
         index: AtomIndex,
@@ -178,8 +338,28 @@ impl Molecule {
             .map(|b| b.clone())
     }
 
-    // TODO: Consider adding connecting_multicenter_bond_indices and connecting_multicenter_bond methods
-    // that take a IntoIterator<Item = AtomIndex>
+    // Atom-noncovalent bond relationships
+    pub fn atom_has_noncovalent_bonds(&self, index: AtomIndex) -> bool {
+        self.noncovalent_bonds
+            .iter()
+            .any(|b| b.contains_atom(index))
+    }
+
+    pub fn atom_noncovalent_bond_indices(
+        &self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = NoncovalentBondIndex> + '_ {
+        self.noncovalent_bond_indices()
+            .filter(move |&i| self.noncovalent_bond(i).unwrap().contains_atom(index))
+    }
+
+    pub fn atom_noncovalent_bonds(
+        &self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = &NoncovalentBond> + '_ {
+        self.noncovalent_bonds()
+            .filter(move |b| b.contains_atom(index))
+    }
 }
 
 /// Builder for constructing a `Molecule`. Carries `AtomBuilder` nodes during
@@ -190,24 +370,39 @@ impl Molecule {
 #[derive(Debug, Clone)]
 pub struct MoleculeBuilder {
     graph: StableGraph<AtomBuilder, Bond, Undirected, u32>,
+    dative_bonds: Vec<DativeBond>,
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
+    noncovalent_bonds: Vec<NoncovalentBond>,
+    charge: i32,
+    unpaired_electrons: u8,
+    multiplicity: SpinMultiplicity,
 }
 
 impl MoleculeBuilder {
     pub fn new() -> Self {
         Self {
             graph: StableGraph::default(),
+            dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
+            noncovalent_bonds: Vec::new(),
+            charge: 0,
+            unpaired_electrons: 0,
+            multiplicity: SpinMultiplicity::Singlet,
         }
     }
 
     pub fn with_capacity(atom_capacity: usize, bond_capacity: usize) -> Self {
         Self {
             graph: StableGraph::with_capacity(atom_capacity, bond_capacity),
+            dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
+            noncovalent_bonds: Vec::new(),
+            charge: 0,
+            unpaired_electrons: 0,
+            multiplicity: SpinMultiplicity::Singlet,
         }
     }
 
@@ -266,6 +461,20 @@ impl MoleculeBuilder {
         Some(self.graph.add_edge(a, b, bond))
     }
 
+    pub fn add_bond_unchecked(&mut self, a: AtomIndex, b: AtomIndex, bond: Bond) -> BondIndex {
+        debug_assert!(
+            self.graph.contains_node(a),
+            "atom index {:?} not in builder",
+            a
+        );
+        debug_assert!(
+            self.graph.contains_node(b),
+            "atom index {:?} not in builder",
+            b
+        );
+        self.graph.add_edge(a, b, bond)
+    }
+
     pub fn remove_bond(&mut self, index: BondIndex) -> Option<Bond> {
         self.graph.remove_edge(index)
     }
@@ -276,13 +485,56 @@ impl MoleculeBuilder {
             .map(|old| std::mem::replace(old, bond))
     }
 
+    // Dative bonds
+    pub fn dative_bond_count(&self) -> usize {
+        self.dative_bonds.len()
+    }
+
+    pub fn dative_bond_indices(&self) -> impl Iterator<Item = DativeBondIndex> + '_ {
+        (0..self.dative_bond_count()).map(|i| DativeBondIndex(i as u32))
+    }
+
+    pub fn dative_bonds(&self) -> impl Iterator<Item = &DativeBond> + '_ {
+        self.dative_bonds.iter()
+    }
+
+    pub fn dative_bond(&self, index: DativeBondIndex) -> Option<&DativeBond> {
+        self.dative_bonds.get(index.index())
+    }
+
+    pub fn dative_bond_mut(&mut self, index: DativeBondIndex) -> Option<&mut DativeBond> {
+        self.dative_bonds.get_mut(index.index())
+    }
+
+    pub fn add_dative_bond(&mut self, bond: DativeBond) {
+        self.dative_bonds.push(bond);
+    }
+
+    pub fn remove_dative_bond(&mut self, index: DativeBondIndex) -> Option<DativeBond> {
+        let i = index.index();
+        if i >= self.dative_bonds.len() {
+            return None;
+        }
+        Some(self.dative_bonds.remove(i))
+    }
+
+    pub fn replace_dative_bond(
+        &mut self,
+        index: DativeBondIndex,
+        bond: DativeBond,
+    ) -> Option<DativeBond> {
+        self.dative_bonds
+            .get_mut(index.index())
+            .map(|b| std::mem::replace(b, bond))
+    }
+
     // Aromatic systems
     pub fn aromatic_system_count(&self) -> usize {
         self.aromatic_systems.len()
     }
 
     pub fn aromatic_system_indices(&self) -> impl Iterator<Item = AromaticSystemIndex> + '_ {
-        (0..self.aromatic_system_count()).map(|i| i as AromaticSystemIndex)
+        (0..self.aromatic_system_count()).map(|i| AromaticSystemIndex(i as u32))
     }
 
     pub fn aromatic_systems(&self) -> impl Iterator<Item = &AromaticSystem> + '_ {
@@ -290,11 +542,14 @@ impl MoleculeBuilder {
     }
 
     pub fn aromatic_system(&self, index: AromaticSystemIndex) -> Option<&AromaticSystem> {
-        self.aromatic_systems.get(index as usize)
+        self.aromatic_systems.get(index.index())
     }
 
-    pub fn aromatic_system_mut(&mut self, index: AromaticSystemIndex) -> Option<&mut AromaticSystem> {
-        self.aromatic_systems.get_mut(index as usize)
+    pub fn aromatic_system_mut(
+        &mut self,
+        index: AromaticSystemIndex,
+    ) -> Option<&mut AromaticSystem> {
+        self.aromatic_systems.get_mut(index.index())
     }
 
     pub fn add_aromatic_system(&mut self, system: AromaticSystem) {
@@ -302,11 +557,11 @@ impl MoleculeBuilder {
     }
 
     pub fn remove_aromatic_system(&mut self, index: AromaticSystemIndex) -> Option<AromaticSystem> {
-        let index = index as usize;
-        if index >= self.aromatic_systems.len() {
+        let i = index.index();
+        if i >= self.aromatic_systems.len() {
             return None;
         }
-        Some(self.aromatic_systems.remove(index))
+        Some(self.aromatic_systems.remove(i))
     }
 
     pub fn replace_aromatic_system(
@@ -314,12 +569,8 @@ impl MoleculeBuilder {
         index: AromaticSystemIndex,
         system: AromaticSystem,
     ) -> Option<AromaticSystem> {
-        let index = index as usize;
-        if index >= self.aromatic_systems.len() {
-            return None;
-        }
         self.aromatic_systems
-            .get_mut(index)
+            .get_mut(index.index())
             .map(|s| std::mem::replace(s, system))
     }
 
@@ -329,7 +580,7 @@ impl MoleculeBuilder {
     }
 
     pub fn multicenter_bond_indices(&self) -> impl Iterator<Item = MulticenterBondIndex> + '_ {
-        (0..self.multicenter_bond_count()).map(|i| i as MulticenterBondIndex)
+        (0..self.multicenter_bond_count()).map(|i| MulticenterBondIndex(i as u32))
     }
 
     pub fn multicenter_bonds(&self) -> impl Iterator<Item = &MulticenterBond> + '_ {
@@ -337,11 +588,14 @@ impl MoleculeBuilder {
     }
 
     pub fn multicenter_bond(&self, index: MulticenterBondIndex) -> Option<&MulticenterBond> {
-        self.multicenter_bonds.get(index as usize)
+        self.multicenter_bonds.get(index.index())
     }
 
-    pub fn multicenter_bond_mut(&mut self, index: MulticenterBondIndex) -> Option<&mut MulticenterBond> {
-        self.multicenter_bonds.get_mut(index as usize)
+    pub fn multicenter_bond_mut(
+        &mut self,
+        index: MulticenterBondIndex,
+    ) -> Option<&mut MulticenterBond> {
+        self.multicenter_bonds.get_mut(index.index())
     }
 
     pub fn add_multicenter_bond(&mut self, bond: MulticenterBond) {
@@ -352,11 +606,11 @@ impl MoleculeBuilder {
         &mut self,
         index: MulticenterBondIndex,
     ) -> Option<MulticenterBond> {
-        let index = index as usize;
-        if index >= self.multicenter_bonds.len() {
+        let i = index.index();
+        if i >= self.multicenter_bonds.len() {
             return None;
         }
-        Some(self.multicenter_bonds.remove(index))
+        Some(self.multicenter_bonds.remove(i))
     }
 
     pub fn replace_multicenter_bond(
@@ -364,13 +618,95 @@ impl MoleculeBuilder {
         index: MulticenterBondIndex,
         bond: MulticenterBond,
     ) -> Option<MulticenterBond> {
-        let index = index as usize;
-        if index >= self.multicenter_bonds.len() {
+        self.multicenter_bonds
+            .get_mut(index.index())
+            .map(|b| std::mem::replace(b, bond))
+    }
+
+    // Non-covalent bonds
+    pub fn noncovalent_bond_count(&self) -> usize {
+        self.noncovalent_bonds.len()
+    }
+
+    pub fn noncovalent_bond_indices(&self) -> impl Iterator<Item = NoncovalentBondIndex> + '_ {
+        (0..self.noncovalent_bond_count()).map(|i| NoncovalentBondIndex(i as u32))
+    }
+
+    pub fn noncovalent_bonds(&self) -> impl Iterator<Item = &NoncovalentBond> + '_ {
+        self.noncovalent_bonds.iter()
+    }
+
+    pub fn noncovalent_bond(&self, index: NoncovalentBondIndex) -> Option<&NoncovalentBond> {
+        self.noncovalent_bonds.get(index.index())
+    }
+
+    pub fn noncovalent_bond_mut(
+        &mut self,
+        index: NoncovalentBondIndex,
+    ) -> Option<&mut NoncovalentBond> {
+        self.noncovalent_bonds.get_mut(index.index())
+    }
+
+    pub fn add_noncovalent_bond(&mut self, bond: NoncovalentBond) {
+        self.noncovalent_bonds.push(bond);
+    }
+
+    pub fn remove_noncovalent_bond(
+        &mut self,
+        index: NoncovalentBondIndex,
+    ) -> Option<NoncovalentBond> {
+        let i = index.index();
+        if i >= self.noncovalent_bonds.len() {
             return None;
         }
-        self.multicenter_bonds
-            .get_mut(index)
+        Some(self.noncovalent_bonds.remove(i))
+    }
+
+    pub fn replace_noncovalent_bond(
+        &mut self,
+        index: NoncovalentBondIndex,
+        bond: NoncovalentBond,
+    ) -> Option<NoncovalentBond> {
+        self.noncovalent_bonds
+            .get_mut(index.index())
             .map(|b| std::mem::replace(b, bond))
+    }
+
+    // Charge
+    pub fn charge(&self) -> i32 {
+        self.charge
+    }
+
+    pub fn unpaired_electrons(&self) -> u8 {
+        self.unpaired_electrons
+    }
+
+    pub fn multiplicity(&self) -> SpinMultiplicity {
+        self.multiplicity
+    }
+
+    pub fn set_charge(&mut self, charge: i32) {
+        self.charge = charge;
+    }
+
+    pub fn set_unpaired_electrons(&mut self, unpaired_electrons: u8) {
+        self.unpaired_electrons = unpaired_electrons;
+    }
+
+    pub fn set_multiplicity(&mut self, multiplicity: SpinMultiplicity) {
+        self.multiplicity = multiplicity;
+    }
+
+    pub fn update_charge(&mut self, f: impl FnOnce(i32) -> i32) {
+        self.charge = f(self.charge);
+    }
+
+    pub fn update_unpaired_electrons(&mut self, f: impl FnOnce(u8) -> u8) {
+        self.unpaired_electrons = f(self.unpaired_electrons);
+    }
+
+    pub fn update_multiplicity(&mut self, f: impl FnOnce(SpinMultiplicity) -> SpinMultiplicity) {
+        self.multiplicity = f(self.multiplicity);
     }
 
     // Atom-atom relationships
@@ -384,7 +720,14 @@ impl MoleculeBuilder {
             .map(|n| self.graph.node_weight(n).unwrap())
     }
 
+    // TODO: Add dative and noncovalent neighbors (+indices)
+    // TODO: Add aromatic system and multicenter system partners (+indices)
+
     // Atom-bond relationships
+    pub fn atom_bond_count(&self, index: AtomIndex) -> usize {
+        self.graph.edges(index).count()
+    }
+
     pub fn atom_bond_indices(&self, index: AtomIndex) -> impl Iterator<Item = BondIndex> + '_ {
         self.graph.edges(index).map(|e| e.id())
     }
@@ -393,12 +736,12 @@ impl MoleculeBuilder {
         self.graph.edges(index).map(|e| e.weight())
     }
 
-    pub fn connecting_bond_indices(
-        &self,
-        a: AtomIndex,
-        b: AtomIndex,
-    ) -> impl Iterator<Item = BondIndex> + '_ {
-        self.graph.edges_connecting(a, b).map(|e| e.id())
+    pub fn atom_bond_order_sum(&self, index: AtomIndex) -> u8 {
+        self.graph.edges(index).map(|e| e.weight().order()).sum()
+    }
+
+    pub fn connecting_bond_index(&self, a: AtomIndex, b: AtomIndex) -> Option<BondIndex> {
+        self.graph.edges_connecting(a, b).next().map(|e| e.id())
     }
 
     pub fn connecting_bond(&self, a: AtomIndex, b: AtomIndex) -> Option<&Bond> {
@@ -418,7 +761,70 @@ impl MoleculeBuilder {
         })
     }
 
+    // Atom-dative bond relationships
+    pub fn atom_has_dative_bonds(&self, index: AtomIndex) -> bool {
+        self.dative_bonds.iter().any(|b| b.contains_atom(index))
+    }
+
+    pub fn atom_dative_bond_counts(&self, index: AtomIndex) -> (usize, usize) {
+        assert!(
+            self.graph.contains_node(index),
+            "atom index {:?} not in builder",
+            index
+        );
+        let mut donated = 0;
+        let mut accepted = 0;
+        for db in &self.dative_bonds {
+            if db.donor() == index {
+                donated += 1;
+            } else if db.acceptor() == index {
+                accepted += 1;
+            }
+        }
+        (donated, accepted)
+    }
+
+    pub fn atom_dative_bond_indices(
+        &self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = DativeBondIndex> + '_ {
+        self.dative_bond_indices()
+            .filter(move |&i| self.dative_bond(i).unwrap().contains_atom(index))
+    }
+
+    pub fn atom_dative_bonds(&self, index: AtomIndex) -> impl Iterator<Item = &DativeBond> + '_ {
+        self.dative_bonds().filter(move |b| b.contains_atom(index))
+    }
+
+    pub fn atom_dative_bond_order_sums(&self, index: AtomIndex) -> (u8, u8) {
+        debug_assert!(
+            self.graph.contains_node(index),
+            "atom index {:?} not in builder",
+            index
+        );
+
+        let mut donated = 0;
+        let mut accepted = 0;
+        for db in &self.dative_bonds {
+            if db.donor() == index {
+                donated += db.order();
+            } else if db.acceptor() == index {
+                accepted += db.order();
+            }
+        }
+        (donated, accepted)
+    }
+
     // Atom-aromatic system relationships
+    pub fn atom_has_aromatic_systems(&self, index: AtomIndex) -> bool {
+        debug_assert!(
+            self.graph.contains_node(index),
+            "atom index {:?} not in builder",
+            index
+        );
+        self.atom_aromatic_systems_indices(index).next().is_some()
+    }
+
     pub fn atom_aromatic_systems_indices(
         &self,
         index: AtomIndex,
@@ -436,10 +842,16 @@ impl MoleculeBuilder {
             .map(|s| s.clone())
     }
 
-    // TODO: Consider adding connecting_aromatic_system_indices and connecting_aromatic_system methods
-    // that take a IntoIterator<Item = AtomIndex>
-
     // Atom-multicenter bond relationships
+    pub fn atom_has_multicenter_bonds(&self, index: AtomIndex) -> bool {
+        debug_assert!(
+            self.graph.contains_node(index),
+            "atom index {:?} not in builder",
+            index
+        );
+        self.atom_multicenter_bonds_indices(index).next().is_some()
+    }
+
     pub fn atom_multicenter_bonds_indices(
         &self,
         index: AtomIndex,
@@ -457,8 +869,28 @@ impl MoleculeBuilder {
             .map(|b| b.clone())
     }
 
-    // TODO: Consider adding connecting_multicenter_bond_indices and connecting_multicenter_bond methods
-    // that take a IntoIterator<Item = AtomIndex>
+    // Atom-noncovalent bond relationships
+    pub fn atom_has_noncovalent_bonds(&self, index: AtomIndex) -> bool {
+        self.noncovalent_bonds
+            .iter()
+            .any(|b| b.contains_atom(index))
+    }
+
+    pub fn atom_noncovalent_bond_indices(
+        &self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = NoncovalentBondIndex> + '_ {
+        self.noncovalent_bond_indices()
+            .filter(move |&i| self.noncovalent_bond(i).unwrap().contains_atom(index))
+    }
+
+    pub fn atom_noncovalent_bonds(
+        &self,
+        index: AtomIndex,
+    ) -> impl Iterator<Item = &NoncovalentBond> + '_ {
+        self.noncovalent_bonds()
+            .filter(move |b| b.contains_atom(index))
+    }
 
     /// Build the final `Molecule` by finalizing each `AtomBuilder` into an `Atom`.
     ///
@@ -490,6 +922,11 @@ impl MoleculeBuilder {
             graph: resolved_graph,
             aromatic_systems: self.aromatic_systems,
             multicenter_bonds: self.multicenter_bonds,
+            dative_bonds: self.dative_bonds,
+            noncovalent_bonds: self.noncovalent_bonds,
+            charge: self.charge,
+            unpaired_electrons: self.unpaired_electrons,
+            multiplicity: self.multiplicity,
         })
     }
 }

@@ -9,7 +9,6 @@ use umol_data::{Element, SpinMultiplicity};
 use super::atom::AtomBuilder;
 use super::bond::Bond;
 use super::molecule::{AtomIndex, MoleculeBuilder};
-use crate::bond::BondDonation;
 
 /// Vertex color for nauty partitioning.
 /// Atom and Bond variants are in separate cells, so they can never share an orbit.
@@ -43,12 +42,7 @@ fn atom_color(ab: &AtomBuilder) -> VertexColor {
 fn bond_color(b: &Bond) -> VertexColor {
     VertexColor::Bond {
         order: b.order(),
-        donation: match b.donation() {
-            None => 0,
-            Some(BondDonation::Shared) => 1,
-            Some(BondDonation::Donating) => 2,
-            Some(BondDonation::Accepting) => 3,
-        },
+        donation: 0,
     }
 }
 

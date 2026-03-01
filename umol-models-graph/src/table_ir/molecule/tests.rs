@@ -3,12 +3,11 @@ use pretty_assertions::assert_eq;
 use umol_data::Element;
 
 use super::*;
-use crate::bond::BondDonation;
 use crate::position::Point3D;
 use crate::table_ir::{
-    Atom, AtomStereoCare, BicycloStereo, BicycloStereoData, Bond, BondOrder, Chirality,
-    ConversionError, CtfileData, CxAnnotationData, ExtendedAtom, ExtendedBond, JoinError,
-    LegacyGroupAbbreviation, LocalParityCenter, MulticenterBond, MulticenterSet, RGroup,
+    Atom, AtomStereoCare, BicycloStereo, BicycloStereoData, Bond, BondDonation, BondOrder,
+    Chirality, ConversionError, CtfileData, CxAnnotationData, ExtendedAtom, ExtendedBond,
+    JoinError, LegacyGroupAbbreviation, LocalParityCenter, MulticenterBond, MulticenterSet, RGroup,
     RGroupOccurrence, SGroup, SGroupType, SourceFormat, StereoSet, StereoSetMode,
 };
 
@@ -97,9 +96,9 @@ fn test_molecule_multicenter_bond_count() {
         bonds: vec![],
         rings: vec![],
         positions: None,
-        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
-            vec![0, 1, 2],
-        )])],
+        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(vec![
+            0, 1, 2,
+        ])])],
         stereo_interpretation: None,
         comments: vec![],
         properties: IndexMap::new(),
@@ -140,9 +139,9 @@ fn test_molecule_component_count_multicenter_bonds() {
         bonds: vec![],
         rings: vec![],
         positions: None,
-        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
-            vec![0, 1, 2],
-        )])],
+        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(vec![
+            0, 1, 2,
+        ])])],
         stereo_interpretation: None,
         comments: vec![],
         properties: IndexMap::new(),
@@ -177,9 +176,7 @@ fn test_molecule_split_components_remaps_indices() {
             Point3D::new(20.0, 0.0, 0.0),
             Point3D::new(21.0, 0.0, 0.0),
         ]),
-        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
-            vec![2, 3],
-        )])],
+        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(vec![2, 3])])],
         stereo_interpretation: None,
         comments: vec!["molecule comment".to_string()],
         properties: IndexMap::from_iter([("k".to_string(), "v".to_string())]),
@@ -262,9 +259,7 @@ fn test_molecule_split_components_roundtrip() {
             Point3D::new(20.0, 0.0, 0.0),
             Point3D::new(21.0, 0.0, 0.0),
         ]),
-        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(
-            vec![2, 3],
-        )])],
+        multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(vec![2, 3])])],
         stereo_interpretation: None,
         comments: vec!["molecule comment".to_string()],
         properties: IndexMap::from_iter([("k".to_string(), "v".to_string())]),
@@ -521,13 +516,13 @@ fn test_extended_molecule_bond_count() {
 fn test_extended_molecule_multicenter_bond_count() {
     let mut ext = ExtendedMolecule::empty();
     ext.multicenter_bonds
-        .push(MulticenterBond::new(vec![MulticenterSet::new(
-            vec![0, 1, 2],
-        )]));
+        .push(MulticenterBond::new(vec![MulticenterSet::new(vec![
+            0, 1, 2,
+        ])]));
     ext.multicenter_bonds
-        .push(MulticenterBond::new(vec![MulticenterSet::new(
-            vec![3, 4, 5],
-        )]));
+        .push(MulticenterBond::new(vec![MulticenterSet::new(vec![
+            3, 4, 5,
+        ])]));
     assert_eq!(ext.multicenter_bond_count(), 2);
 }
 
@@ -557,9 +552,7 @@ fn test_extended_molecule_split_join_components_core() {
         Point3D::new(2.0, 0.0, 0.0),
         Point3D::new(3.0, 0.0, 0.0),
     ]);
-    ext.multicenter_bonds = vec![MulticenterBond::new(vec![MulticenterSet::new(
-        vec![2, 3],
-    )])];
+    ext.multicenter_bonds = vec![MulticenterBond::new(vec![MulticenterSet::new(vec![2, 3])])];
 
     let split = ext.split_components();
     assert_eq!(split.len(), 2);
