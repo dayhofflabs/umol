@@ -62,9 +62,9 @@ impl ValenceValidator {
         }
         let lone_pairs = atom.lone_pairs().unwrap_or(lone_pairs_unassigned);
         let spin = match atom.multiplicity() {
-            Some(m) => match SpinState::new(unpaired, m) {
-                Ok(s) => s,
-                Err(_) => return SmallVec::new(),
+            Some(m) => match SpinState::try_new(unpaired, m) {
+                Some(s) => s,
+                None => return SmallVec::new(),
             },
             None => match SpinState::max_multiplicity(unpaired) {
                 Some(s) => s,

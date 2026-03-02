@@ -55,7 +55,7 @@ impl AtomTypeSpec {
         aromatic_valence: u8,
         multicenter_valence: u8,
     ) -> Result<Self, ResolutionError> {
-        let spin = SpinState::new(unpaired_electrons, multiplicity).map_err(|_| {
+        let spin = SpinState::try_new(unpaired_electrons, multiplicity).ok_or_else(|| {
             ResolutionError::InvalidAtomSpec(format!(
                 "invalid spin state: {} unpaired electrons, {} multiplicity",
                 unpaired_electrons,

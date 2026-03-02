@@ -1,5 +1,11 @@
 //! Spin multiplicity and spin state data
 
+use std::fmt;
+use std::str::FromStr;
+
+use serde::de::{Deserializer, Error as SerdeError};
+use serde::ser::Serializer;
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 use umol::error::DataError;
 
@@ -71,6 +77,8 @@ pub fn is_valid_spin_state(unpaired_electrons: u8, multiplicity: SpinMultiplicit
 ///
 /// Invariant: `m <= n+1` and `m` has the same parity as `n+1`, where
 /// `m = multiplicity.multiplicity()` and `n = unpaired_electrons`.
+///
+/// String format: `"{n},{multiplicity_name}"`, e.g. `"2,singlet"`, `"0,singlet"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SpinState {
     unpaired_electrons: u8,
@@ -78,20 +86,27 @@ pub struct SpinState {
 }
 
 impl SpinState {
-    /// Create a new spin state, validating consistency.
-    pub fn new(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> Result<Self, DataError> {
-        if !is_valid_spin_state(unpaired_electrons, multiplicity) {
-            return Err(DataError::InvalidSpinMultiplicity(format!(
-                "inconsistent spin state: {} unpaired electrons, {} multiplicity",
+    /// Create a spin state, panicking on invalid input.
+    pub fn new(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> Self {
+        Self::try_new(unpaired_electrons, multiplicity).unwrap_or_else(|| {
+            panic!(
+                "invalid spin state: {} unpaired electrons, {} multiplicity",
                 unpaired_electrons,
                 multiplicity.multiplicity()
-            ))
-            .into());
-        }
-        Ok(Self {
-            unpaired_electrons,
-            multiplicity,
+            )
         })
+    }
+
+    /// Create a spin state, returning `None` if the combination is invalid.
+    pub fn try_new(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> Option<Self> {
+        if is_valid_spin_state(unpaired_electrons, multiplicity) {
+            Some(Self {
+                unpaired_electrons,
+                multiplicity,
+            })
+        } else {
+            None
+        }
     }
 
     /// Create a spin state assuming maximum multiplicity (Hund's rule: m = n+1).
@@ -117,6 +132,47 @@ impl SpinState {
 
     pub fn multiplicity(&self) -> SpinMultiplicity {
         self.multiplicity
+    }
+}
+
+impl fmt::Display for SpinState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{},{}", self.unpaired_electrons, self.multiplicity)
+    }
+}
+
+impl FromStr for SpinState {
+    type Err = DataError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (n_str, m_str) = s.split_once(',').ok_or_else(|| {
+            DataError::InvalidSpinState(format!("expected 'n,multiplicity', got '{}'", s))
+        })?;
+        let n: u8 = n_str.trim().parse().map_err(|_| {
+            DataError::InvalidSpinState(format!("invalid unpaired electrons: '{}'", n_str))
+        })?;
+        let m: SpinMultiplicity = m_str.trim().parse().map_err(|_| {
+            DataError::InvalidSpinState(format!("invalid multiplicity: '{}'", m_str))
+        })?;
+        Self::try_new(n, m).ok_or_else(|| {
+            DataError::InvalidSpinState(format!(
+                "inconsistent spin state: {} unpaired electrons, {}",
+                n, m
+            ))
+        })
+    }
+}
+
+impl Serialize for SpinState {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for SpinState {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(SerdeError::custom)
     }
 }
 
@@ -166,14 +222,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case(SpinMultiplicity::Singlet, "singlet")]
-    #[case(SpinMultiplicity::Doublet, "doublet")]
-    #[case(SpinMultiplicity::Triplet, "triplet")]
-    fn test_spin_multiplicity_format(#[case] spin: SpinMultiplicity, #[case] expected: &str) {
-        assert_eq!(format!("{}", spin), expected);
-    }
-
-    #[rstest]
     #[case("singlet", SpinMultiplicity::Singlet)]
     #[case("doublet", SpinMultiplicity::Doublet)]
     #[case("triplet", SpinMultiplicity::Triplet)]
@@ -205,14 +253,14 @@ mod tests {
     #[case(4, SpinMultiplicity::Singlet, true)]
     #[case(4, SpinMultiplicity::Triplet, true)]
     #[case(4, SpinMultiplicity::Quintet, true)]
-    #[case(0, SpinMultiplicity::Doublet, false)] // wrong parity
-    #[case(0, SpinMultiplicity::Triplet, false)] // m > n+1
-    #[case(1, SpinMultiplicity::Singlet, false)] // wrong parity
-    #[case(1, SpinMultiplicity::Triplet, false)] // m > n+1
-    #[case(2, SpinMultiplicity::Doublet, false)] // wrong parity
-    #[case(2, SpinMultiplicity::Quartet, false)] // m > n+1
-    #[case(3, SpinMultiplicity::Singlet, false)] // wrong parity
-    #[case(3, SpinMultiplicity::Triplet, false)] // wrong parity
+    #[case(0, SpinMultiplicity::Doublet, false)]
+    #[case(0, SpinMultiplicity::Triplet, false)]
+    #[case(1, SpinMultiplicity::Singlet, false)]
+    #[case(1, SpinMultiplicity::Triplet, false)]
+    #[case(2, SpinMultiplicity::Doublet, false)]
+    #[case(2, SpinMultiplicity::Quartet, false)]
+    #[case(3, SpinMultiplicity::Singlet, false)]
+    #[case(3, SpinMultiplicity::Triplet, false)]
     fn test_is_valid_spin_state(
         #[case] n: u8,
         #[case] m: SpinMultiplicity,
@@ -229,17 +277,31 @@ mod tests {
     #[case(3, SpinMultiplicity::Doublet)]
     #[case(3, SpinMultiplicity::Quartet)]
     fn test_spin_state_new(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        let state = SpinState::new(n, m).unwrap();
+        let state = SpinState::new(n, m);
         assert_eq!(state.unpaired_electrons(), n);
         assert_eq!(state.multiplicity(), m);
+    }
+
+    #[rstest]
+    #[case(0, SpinMultiplicity::Singlet)]
+    #[case(1, SpinMultiplicity::Doublet)]
+    #[case(2, SpinMultiplicity::Singlet)]
+    fn test_spin_state_try_new(#[case] n: u8, #[case] m: SpinMultiplicity) {
+        assert!(SpinState::try_new(n, m).is_some());
     }
 
     #[rstest]
     #[case(0, SpinMultiplicity::Triplet)]
     #[case(1, SpinMultiplicity::Singlet)]
     #[case(2, SpinMultiplicity::Doublet)]
-    fn test_spin_state_new_invalid(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        assert!(SpinState::new(n, m).is_err());
+    fn test_spin_state_try_new_invalid(#[case] n: u8, #[case] m: SpinMultiplicity) {
+        assert!(SpinState::try_new(n, m).is_none());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_spin_state_new_panics() {
+        SpinState::new(0, SpinMultiplicity::Triplet);
     }
 
     #[rstest]
@@ -263,5 +325,68 @@ mod tests {
         let state = SpinState::closed_shell();
         assert_eq!(state.unpaired_electrons(), 0);
         assert_eq!(state.multiplicity(), SpinMultiplicity::Singlet);
+    }
+
+    #[rstest]
+    #[case(0, SpinMultiplicity::Singlet, "0,singlet")]
+    #[case(1, SpinMultiplicity::Doublet, "1,doublet")]
+    #[case(2, SpinMultiplicity::Singlet, "2,singlet")]
+    #[case(2, SpinMultiplicity::Triplet, "2,triplet")]
+    #[case(3, SpinMultiplicity::Quartet, "3,quartet")]
+    fn test_spin_state_to_string(
+        #[case] n: u8,
+        #[case] m: SpinMultiplicity,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(SpinState::new(n, m).to_string(), expected);
+    }
+
+    #[rstest]
+    #[case("0,singlet", 0, SpinMultiplicity::Singlet)]
+    #[case("1,doublet", 1, SpinMultiplicity::Doublet)]
+    #[case("2,singlet", 2, SpinMultiplicity::Singlet)]
+    #[case("2,triplet", 2, SpinMultiplicity::Triplet)]
+    #[case("3,quartet", 3, SpinMultiplicity::Quartet)]
+    #[case(" 2 , triplet ", 2, SpinMultiplicity::Triplet)]
+    fn test_spin_state_parse(
+        #[case] input: &str,
+        #[case] expected_n: u8,
+        #[case] expected_m: SpinMultiplicity,
+    ) {
+        let state: SpinState = input.parse().unwrap();
+        assert_eq!(state.unpaired_electrons(), expected_n);
+        assert_eq!(state.multiplicity(), expected_m);
+    }
+
+    #[rstest]
+    #[case("")]
+    #[case("singlet")]
+    #[case("0")]
+    #[case("0,nosuchplet")]
+    #[case("x,singlet")]
+    #[case("1,singlet")] // invalid combination
+    fn test_spin_state_parse_error(#[case] input: &str) {
+        assert!(input.parse::<SpinState>().is_err());
+    }
+
+    #[rstest]
+    #[case(0, SpinMultiplicity::Singlet)]
+    #[case(2, SpinMultiplicity::Triplet)]
+    #[case(3, SpinMultiplicity::Quartet)]
+    fn test_spin_state_roundtrip(#[case] n: u8, #[case] m: SpinMultiplicity) {
+        let state = SpinState::new(n, m);
+        let s = state.to_string();
+        let parsed: SpinState = s.parse().unwrap();
+        assert_eq!(state, parsed);
+    }
+
+    #[rstest]
+    #[case(0, SpinMultiplicity::Singlet)]
+    #[case(2, SpinMultiplicity::Triplet)]
+    fn test_spin_state_serde_roundtrip(#[case] n: u8, #[case] m: SpinMultiplicity) {
+        let state = SpinState::new(n, m);
+        let json = serde_json::to_string(&state).unwrap();
+        let parsed: SpinState = serde_json::from_str(&json).unwrap();
+        assert_eq!(state, parsed);
     }
 }
