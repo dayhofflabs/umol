@@ -1,0 +1,25 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: basic
+atom_typing:
+  success: true
+  summary:
+    atom_count: 2
+    bond_count: 1
+    charge: 0
+    spin: "0,singlet"
+    atoms:
+      - "[Hv1]"
+      - "[Hv1]"
+counts:
+  success: true
+  summary:
+    atom_count: 2
+    bond_count: 1
+    charge: 0
+    spin: "0,singlet"
+    atoms:
+      - "[Hv1]"
+      - "[Hv1]"

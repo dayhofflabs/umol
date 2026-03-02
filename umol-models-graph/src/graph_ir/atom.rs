@@ -77,8 +77,8 @@ impl Atom {
         self.multicenter_valence
     }
 
-    pub fn to_builder(&self) -> AtomBuilder {
-        let spec = AtomTypeSpec::new(
+    pub fn to_spec(&self) -> AtomTypeSpec {
+        AtomTypeSpec::new(
             self.element,
             self.charge,
             self.hydrogens,
@@ -91,7 +91,11 @@ impl Atom {
             self.aromatic_valence,
             self.multicenter_valence,
         )
-        .expect("resolved Atom fields always form a valid AtomTypeSpec");
+        .expect("resolved Atom fields always form a valid AtomTypeSpec")
+    }
+
+    pub fn to_builder(&self) -> AtomBuilder {
+        let spec = self.to_spec();
         AtomBuilder {
             element: self.element,
             isotope_mass: self.isotope_mass,
