@@ -39,6 +39,7 @@ impl MulticenterContribution {
         self.electrons
     }
 
+    // TODO: Intermediate state, should be moved to a separate builder struct
     pub fn is_resolved(&self) -> bool {
         self.electrons.is_some()
     }
@@ -123,6 +124,7 @@ impl MulticenterSet {
 }
 
 /// A multi-center bond consisting of one or more multicenter sets.
+/// TODO: Needs builder struct
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MulticenterBond {
     sets: SmallVec<[MulticenterSet; 4]>,

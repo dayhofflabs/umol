@@ -66,19 +66,19 @@ fn parse_atom_token(token: &str) -> TableAtom {
         atom.charge = Some(charge);
     }
 
-    let h = spec.hydrogens();
-    if h > 0 {
-        atom.hydrogens = Some(h);
+    let hydrogens = spec.hydrogens();
+    if hydrogens > 0 {
+        atom.hydrogens = Some(hydrogens);
     }
 
-    let lp = spec.lone_pairs();
-    if lp > 0 {
-        atom.lone_pairs = Some(lp);
+    let lone_pairs = spec.lone_pairs();
+    if lone_pairs > 0 {
+        atom.lone_pairs = Some(lone_pairs);
     }
 
-    let ue = spec.unpaired_electrons();
-    if ue > 0 {
-        atom.unpaired_electrons = Some(UnpairedElectrons::new(ue, Some(spec.multiplicity())));
+    let unpaired = spec.unpaired_electrons();
+    if unpaired > 0 {
+        atom.unpaired_electrons = Some(UnpairedElectrons::new(unpaired, Some(spec.multiplicity())));
     }
 
     atom

@@ -4,8 +4,9 @@ use smallvec::SmallVec;
 use umol_data::{SpinState, MAX_UNPAIRED_ELECTRONS};
 
 use super::atom_type::{AtomTypeQuery, AtomTypeSpec};
+use super::builder::MoleculeBuilder;
 use super::config_data::{AtomTypeRegistry, ValenceTable};
-use super::molecule::{AtomIndex, MoleculeBuilder};
+use super::molecule::AtomIndex;
 
 /// Atom-level valence validator.
 #[derive(Debug, Clone)]

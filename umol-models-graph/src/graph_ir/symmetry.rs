@@ -8,7 +8,8 @@ use umol_data::{Element, SpinMultiplicity};
 
 use super::atom::AtomBuilder;
 use super::bond::BondBuilder;
-use super::molecule::{AtomIndex, MoleculeBuilder};
+use super::builder::MoleculeBuilder;
+use super::molecule::AtomIndex;
 
 /// Vertex color for nauty partitioning.
 /// Atom and Bond variants are in separate cells, so they can never share an orbit.
