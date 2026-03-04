@@ -8,6 +8,7 @@ atom_typing:
   summary:
     atom_count: 2
     bond_count: 1
+    topology: A_
     charge: 0
     spin: "0,singlet"
     atoms:
@@ -18,6 +19,7 @@ counts:
   summary:
     atom_count: 2
     bond_count: 1
+    topology: A_
     charge: 0
     spin: "0,singlet"
     atoms:

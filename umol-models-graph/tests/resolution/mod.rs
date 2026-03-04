@@ -9,7 +9,8 @@ use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use umol_models_graph::graph_ir::{
-    resolve_molecule_with, AtomTypeSpec, Molecule, ResolutionError, ResolveConfig, ValenceStrategy,
+    resolve_molecule_with, AtomTypeSpec, Molecule, ResolutionError, ResolveConfig,
+    TopologyProjection, ValenceStrategy,
 };
 use umol_models_graph::table_ir::{
     Atom as TableAtom, Bond as TableBond, BondDonation, BondOrder, Molecule as TableMolecule,
@@ -43,6 +44,7 @@ struct ResolveResult {
 struct ResolveSummary {
     atom_count: usize,
     bond_count: usize,
+    topology: String,
     charge: i32,
     spin: String,
     atoms: Vec<String>,
@@ -150,9 +152,14 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         .atom_indices()
         .map(|idx| mol.atom(idx).unwrap().to_spec().to_string())
         .collect();
+    let topology = mol
+        .topology_graph(TopologyProjection::ordinary())
+        .to_graph6_canonical()
+        .unwrap();
     ResolveSummary {
         atom_count: mol.atom_count(),
         bond_count: mol.bond_count(),
+        topology,
         charge: mol.charge(),
         spin: mol.spin().to_string(),
         atoms,

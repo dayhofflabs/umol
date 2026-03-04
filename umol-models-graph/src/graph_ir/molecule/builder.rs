@@ -1,9 +1,10 @@
 //! GraphIR molecule builder.
 
+use std::collections::{HashMap, HashSet};
+
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
-use std::collections::{HashMap, HashSet};
 use umol_data::SpinState;
 
 use super::super::aromatic::AromaticSystem;
@@ -17,7 +18,7 @@ use super::super::noncovalent::NoncovalentBond;
 use super::super::symmetry::compute_symmetry;
 use super::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
-    NoncovalentBondIndex, TopologyGraph, TopologyProjection,
+    NoncovalentBondIndex, TopologyExportError, TopologyGraph, TopologyProjection,
 };
 /// Builder for constructing a `Molecule`. Carries `AtomBuilder` nodes during
 /// resolution phases; `build()` finalizes each atom and produces a `Molecule`.
@@ -78,12 +79,30 @@ impl MoleculeBuilder {
                 .unwrap_or(usize::MAX / 4 + ai.index()),
             super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
             super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
-            super::TopologyNodeRef::NoncovalentBond(i) => {
-                usize::MAX / 2 + 2_000_000 + i.index()
-            }
-            super::TopologyNodeRef::MulticenterBond(i) => {
-                usize::MAX / 2 + 3_000_000 + i.index()
-            }
+            super::TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
+            super::TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
+        })
+    }
+
+    pub fn topology_graph6_canonical(
+        &self,
+        projection: TopologyProjection,
+    ) -> Result<String, TopologyExportError> {
+        let canonical_atoms = compute_symmetry(self).canonical_order();
+        let mut atom_rank = HashMap::<AtomIndex, usize>::new();
+        for (rank, atom) in canonical_atoms.into_iter().enumerate() {
+            atom_rank.insert(atom, rank);
+        }
+        let graph = self.topology_graph(projection);
+        graph.to_graph6_canonical_with_rank(|node_ref| match node_ref {
+            super::TopologyNodeRef::Atom(ai) => atom_rank
+                .get(&ai)
+                .copied()
+                .unwrap_or(usize::MAX / 4 + ai.index()),
+            super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
+            super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
+            super::TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
+            super::TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
         })
     }
 

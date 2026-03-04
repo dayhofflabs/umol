@@ -243,59 +243,24 @@ impl TopologyGraph {
     }
 
     pub fn to_graph6(&self) -> Result<String, TopologyExportError> {
-        if self
-            .edge_map
-            .iter()
-            .any(|e| *e == TopologyEdgeRef::Incidence)
-        {
-            return Err(TopologyExportError::HasIncidenceEdges);
-        }
+        self.validate_graph6_export()?;
+        let order: Vec<NodeIndex> = (0..self.node_count()).map(NodeIndex::new).collect();
+        Ok(self.encode_graph6_with_order(&order))
+    }
 
-        let n = self.node_count();
-        let n_u64 = u64::try_from(n).map_err(|_| TopologyExportError::TooManyNodes(n))?;
-        if n_u64 > 68_719_476_735 {
-            return Err(TopologyExportError::TooManyNodes(n));
-        }
+    pub fn to_graph6_canonical(&self) -> Result<String, TopologyExportError> {
+        self.validate_graph6_export()?;
+        let order = self.canonical_bfs();
+        Ok(self.encode_graph6_with_order(&order))
+    }
 
-        let mut seen = HashSet::<(usize, usize)>::new();
-        for edge in self.graph.edge_references() {
-            let u = edge.source().index();
-            let v = edge.target().index();
-            if u == v {
-                return Err(TopologyExportError::HasSelfLoops);
-            }
-            let key = if u <= v { (u, v) } else { (v, u) };
-            if !seen.insert(key) {
-                return Err(TopologyExportError::HasParallelEdges);
-            }
-        }
-
-        let mut out = String::new();
-        Self::append_graph6_n(&mut out, n_u64);
-
-        let mut bits = Vec::<bool>::with_capacity(n.saturating_mul(n.saturating_sub(1)) / 2);
-        for i in 0..n {
-            for j in (i + 1)..n {
-                let has = self
-                    .graph
-                    .find_edge(NodeIndex::new(i), NodeIndex::new(j))
-                    .is_some();
-                bits.push(has);
-            }
-        }
-        while bits.len() % 6 != 0 {
-            bits.push(false);
-        }
-        for chunk in bits.chunks(6) {
-            let mut value = 0u8;
-            for (k, bit) in chunk.iter().enumerate() {
-                if *bit {
-                    value |= 1 << (5 - k);
-                }
-            }
-            out.push((value + 63) as char);
-        }
-        Ok(out)
+    pub fn to_graph6_canonical_with_rank<F>(&self, rank: F) -> Result<String, TopologyExportError>
+    where
+        F: Fn(TopologyNodeRef) -> usize,
+    {
+        self.validate_graph6_export()?;
+        let order = self.canonical_bfs_with_rank(rank);
+        Ok(self.encode_graph6_with_order(&order))
     }
 
     fn build(
@@ -478,6 +443,60 @@ impl TopologyGraph {
             out.push((((n >> shift) & 63) as u8 + 63) as char);
         }
     }
+
+    fn validate_graph6_export(&self) -> Result<(), TopologyExportError> {
+        if self
+            .edge_map
+            .iter()
+            .any(|e| *e == TopologyEdgeRef::Incidence)
+        {
+            return Err(TopologyExportError::HasIncidenceEdges);
+        }
+        let n = self.node_count();
+        let n_u64 = u64::try_from(n).map_err(|_| TopologyExportError::TooManyNodes(n))?;
+        if n_u64 > 68_719_476_735 {
+            return Err(TopologyExportError::TooManyNodes(n));
+        }
+        let mut seen = HashSet::<(usize, usize)>::new();
+        for edge in self.graph.edge_references() {
+            let u = edge.source().index();
+            let v = edge.target().index();
+            if u == v {
+                return Err(TopologyExportError::HasSelfLoops);
+            }
+            let key = if u <= v { (u, v) } else { (v, u) };
+            if !seen.insert(key) {
+                return Err(TopologyExportError::HasParallelEdges);
+            }
+        }
+        Ok(())
+    }
+
+    fn encode_graph6_with_order(&self, order: &[NodeIndex]) -> String {
+        let n = order.len();
+        let mut out = String::new();
+        Self::append_graph6_n(&mut out, n as u64);
+
+        let mut bits = Vec::<bool>::with_capacity(n.saturating_mul(n.saturating_sub(1)) / 2);
+        for i in 0..n {
+            for j in (i + 1)..n {
+                bits.push(self.graph.find_edge(order[i], order[j]).is_some());
+            }
+        }
+        while bits.len() % 6 != 0 {
+            bits.push(false);
+        }
+        for chunk in bits.chunks(6) {
+            let mut value = 0u8;
+            for (k, bit) in chunk.iter().enumerate() {
+                if *bit {
+                    value |= 1 << (5 - k);
+                }
+            }
+            out.push((value + 63) as char);
+        }
+        out
+    }
 }
 
 fn node_ref_key(node_ref: TopologyNodeRef) -> usize {
@@ -510,6 +529,17 @@ mod tests {
         let a0 = b.add_atom(AtomBuilder::new(Element::C));
         let a1 = b.add_atom(AtomBuilder::new(Element::C));
         let a2 = b.add_atom(AtomBuilder::new(Element::C));
+        b.add_bond_unchecked(a0, a1, BondBuilder::new(1, Some(false)));
+        b.add_bond_unchecked(a1, a2, BondBuilder::new(1, Some(false)));
+        b
+    }
+
+    #[fixture]
+    fn c3_molecule_reordered() -> MoleculeBuilder {
+        let mut b = MoleculeBuilder::new();
+        let a2 = b.add_atom(AtomBuilder::new(Element::C));
+        let a1 = b.add_atom(AtomBuilder::new(Element::C));
+        let a0 = b.add_atom(AtomBuilder::new(Element::C));
         b.add_bond_unchecked(a0, a1, BondBuilder::new(1, Some(false)));
         b.add_bond_unchecked(a1, a2, BondBuilder::new(1, Some(false)));
         b
@@ -662,6 +692,35 @@ mod tests {
     fn test_to_graph6(c3_molecule: MoleculeBuilder) {
         let tg = c3_molecule.topology_graph(TopologyProjection::ordinary());
         assert_eq!(tg.to_graph6().unwrap(), "Bg");
+    }
+
+    #[rstest]
+    fn test_to_graph6_canonical(c3_molecule: MoleculeBuilder) {
+        let tg = c3_molecule.topology_graph(TopologyProjection::ordinary());
+        assert_eq!(tg.to_graph6_canonical().unwrap(), "Bg");
+    }
+
+    #[rstest]
+    fn test_to_graph6_canonical_with_rank(c3_molecule: MoleculeBuilder) {
+        let tg = c3_molecule.topology_graph(TopologyProjection::ordinary());
+        let out = tg
+            .to_graph6_canonical_with_rank(|node_ref| match node_ref {
+                TopologyNodeRef::Atom(a) => usize::MAX - a.index(),
+                _ => usize::MAX,
+            })
+            .unwrap();
+        assert_eq!(out, "Bg");
+    }
+
+    #[rstest]
+    fn test_builder_topology_graph6_canonical(
+        c3_molecule: MoleculeBuilder,
+        c3_molecule_reordered: MoleculeBuilder,
+    ) {
+        let p = TopologyProjection::ordinary();
+        let a = c3_molecule.topology_graph6_canonical(p).unwrap();
+        let b = c3_molecule_reordered.topology_graph6_canonical(p).unwrap();
+        assert_eq!(a, b);
     }
 
     #[rstest]
