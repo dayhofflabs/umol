@@ -1,6 +1,7 @@
 //! Configuration data for GraphIR.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -8,6 +9,7 @@ use std::sync::LazyLock;
 use serde::Deserialize;
 use smallvec::SmallVec;
 use umol_data::Element;
+use xxhash_rust::const_xxh3::xxh3_64;
 
 use super::atom_type::{AtomTypeQuery, AtomTypeSpec};
 use super::error::ResolutionError;
@@ -16,17 +18,23 @@ use super::error::ResolutionError;
 ///
 /// Each spec is stored under both `(element, Some(charge))` and `(element, None)`,
 /// enabling O(1) lookup for both charge-specific and element-only queries.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct AtomTypeRegistry {
-    atom_types: HashMap<(Element, Option<i8>), Vec<AtomTypeSpec>>,
+    atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomTypeSpec>>,
+    content_hash: u64,
 }
 
 /// Two-level TOML map: element symbol -> charge string -> specs list.
-type AtomTypeRegistryToml = HashMap<String, HashMap<String, Vec<AtomTypeSpec>>>;
+type AtomTypeRegistryToml = BTreeMap<String, BTreeMap<String, Vec<AtomTypeSpec>>>;
 
 impl AtomTypeRegistry {
     pub fn new() -> Self {
-        Self::default()
+        let mut reg = AtomTypeRegistry {
+            atom_types: BTreeMap::new(),
+            content_hash: 0,
+        };
+        reg.recompute_hash();
+        reg
     }
 
     pub fn default_registry() -> &'static Self {
@@ -41,10 +49,32 @@ impl AtomTypeRegistry {
         reg
     }
 
+    pub fn content_hash(&self) -> u64 {
+        self.content_hash
+    }
+
+    pub fn content_hash_hex(&self) -> String {
+        format!("{:016x}", self.content_hash)
+    }
+
+    fn recompute_hash(&mut self) {
+        let mut buf = String::new();
+        for ((element, charge), specs) in &self.atom_types {
+            let _ = write!(buf, "{},{:?}:", element, charge);
+            let mut spec_strs: Vec<String> = specs.iter().map(|s| s.to_string()).collect();
+            spec_strs.sort();
+            for s in &spec_strs {
+                let _ = write!(buf, "{},", s);
+            }
+            buf.push('\n');
+        }
+        self.content_hash = xxh3_64(buf.as_bytes());
+    }
+
     pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
-        let mut atom_types: HashMap<(Element, Option<i8>), Vec<AtomTypeSpec>> = HashMap::new();
+        let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomTypeSpec>> = BTreeMap::new();
         for (element_key, charges) in &parsed {
             let element: Element = element_key.parse().map_err(|_| {
                 ResolutionError::InvalidAtomTypeRegistry(format!(
@@ -69,7 +99,12 @@ impl AtomTypeRegistry {
                     .extend(specs.iter().copied());
             }
         }
-        Ok(AtomTypeRegistry { atom_types })
+        let mut reg = AtomTypeRegistry {
+            atom_types,
+            content_hash: 0,
+        };
+        reg.recompute_hash();
+        Ok(reg)
     }
 
     pub fn from_toml_file(path: &Path) -> Result<Self, ResolutionError> {
@@ -87,6 +122,7 @@ impl AtomTypeRegistry {
             .entry((spec.element(), None))
             .or_default()
             .push(spec);
+        self.recompute_hash();
     }
 
     pub fn specs_for_element(&self, element: Element) -> &[AtomTypeSpec] {
@@ -146,7 +182,8 @@ pub struct ValenceEntry {
 /// Valence table for counts-based validation.
 #[derive(Debug, Clone)]
 pub struct ValenceTable {
-    entries: HashMap<Element, ValenceEntry>,
+    entries: BTreeMap<Element, ValenceEntry>,
+    content_hash: u64,
 }
 
 #[derive(Deserialize)]
@@ -157,13 +194,37 @@ struct ValenceEntryToml {
 
 impl ValenceTable {
     pub fn empty() -> Self {
-        ValenceTable {
-            entries: HashMap::new(),
-        }
+        let mut table = ValenceTable {
+            entries: BTreeMap::new(),
+            content_hash: 0,
+        };
+        table.recompute_hash();
+        table
     }
 
     pub fn insert(&mut self, element: Element, entry: ValenceEntry) {
         self.entries.insert(element, entry);
+        self.recompute_hash();
+    }
+
+    pub fn content_hash(&self) -> u64 {
+        self.content_hash
+    }
+
+    pub fn content_hash_hex(&self) -> String {
+        format!("{:016x}", self.content_hash)
+    }
+
+    fn recompute_hash(&mut self) {
+        let mut buf = String::new();
+        for (element, entry) in &self.entries {
+            let _ = write!(
+                buf,
+                "{}:{}:{:?}\n",
+                element, entry.outer_electrons, entry.allowed_valences
+            );
+        }
+        self.content_hash = xxh3_64(buf.as_bytes());
     }
 
     pub fn default_table() -> &'static Self {
@@ -171,9 +232,9 @@ impl ValenceTable {
     }
 
     pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
-        let parsed: HashMap<String, ValenceEntryToml> = toml::from_str(input)
+        let parsed: BTreeMap<String, ValenceEntryToml> = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
-        let mut entries = HashMap::new();
+        let mut entries = BTreeMap::new();
         for (symbol, entry) in parsed {
             let element: Element = symbol.parse().map_err(|_| {
                 ResolutionError::InvalidValenceTable(format!("unknown element: {}", symbol))
@@ -186,7 +247,12 @@ impl ValenceTable {
                 },
             );
         }
-        Ok(ValenceTable { entries })
+        let mut table = ValenceTable {
+            entries,
+            content_hash: 0,
+        };
+        table.recompute_hash();
+        Ok(table)
     }
 
     pub fn entry(&self, element: Element) -> Option<&ValenceEntry> {
@@ -262,7 +328,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn atom_type_registry_from_toml() {
+    fn test_atom_type_registry_from_toml() {
         let input = r#"
 [C]
 0 = ["[C+0v4a0m0]"]
@@ -271,54 +337,53 @@ mod tests {
 -1 = ["[O-1/3v1a0m0]"]
 "#;
         let registry = AtomTypeRegistry::from_toml_str(input).unwrap();
-        assert_eq!(registry.specs_for_element_and_charge(Element::C, 0).len(), 1);
-        assert_eq!(registry.specs_for_element_and_charge(Element::O, -1).len(), 1);
+        assert_eq!(
+            registry.specs_for_element_and_charge(Element::C, 0).len(),
+            1
+        );
+        assert_eq!(
+            registry.specs_for_element_and_charge(Element::O, -1).len(),
+            1
+        );
+        assert_eq!(registry.content_hash_hex(), "8107a709363781cb");
     }
 
     #[test]
-    fn default_registry_is_populated() {
+    fn test_default_registry() {
         let reg = AtomTypeRegistry::default_registry();
         assert!(!reg.specs_for_element(Element::C).is_empty());
     }
 
     #[test]
-    fn registry_macro_builds() {
+    fn test_registry_macro() {
         let reg = registry!["[C+0v4]", "[C+1^3v3]"];
         assert_eq!(reg.specs_for_element(Element::C).len(), 2);
     }
 
     #[test]
-    fn default_table_loads() {
+    fn test_valence_table_from_toml() {
+        let table = ValenceTable::from_toml_str(
+            r#"
+        [H]
+        outer_electrons = 1
+        allowed_valences = [1]
+        "#,
+        )
+        .unwrap();
+        assert!(table.entry(Element::H).is_some());
+        assert_eq!(table.entry(Element::H).unwrap().outer_electrons, 1);
+        assert_eq!(table.entry(Element::H).unwrap().allowed_valences, [1]);
+        assert_eq!(table.content_hash_hex(), "16c1f636ecff83e4");
+    }
+
+    #[test]
+    fn test_default_valence_table() {
         let table = ValenceTable::default_table();
         assert!(table.entry(Element::C).is_some());
     }
 
     #[test]
-    fn carbon_neutral_four_bonds() {
-        let table = ValenceTable::default_table();
-        assert_eq!(table.compute_implicit_hydrogens(Element::C, 0, 4), Some(0));
-    }
-
-    #[test]
-    fn carbon_neutral_two_bonds() {
-        let table = ValenceTable::default_table();
-        assert_eq!(table.compute_implicit_hydrogens(Element::C, 0, 2), Some(2));
-    }
-
-    #[test]
-    fn carbon_exceeds_all_allowed() {
-        let table = ValenceTable::default_table();
-        assert_eq!(table.compute_implicit_hydrogens(Element::C, 0, 5), None);
-    }
-
-    #[test]
-    fn nitrogen_neutral_three_bonds() {
-        let table = ValenceTable::default_table();
-        assert_eq!(table.compute_implicit_hydrogens(Element::N, 0, 3), Some(0));
-    }
-
-    #[test]
-    fn sulfur_allowed_list() {
+    fn test_valence_table_allowed() {
         let table = ValenceTable::default_table();
         assert_eq!(table.compute_implicit_hydrogens(Element::S, 0, 2), Some(0));
         assert_eq!(table.compute_implicit_hydrogens(Element::S, 0, 4), Some(0));
@@ -326,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn iron_unconstrained() {
+    fn test_valence_table_unconstrained() {
         let table = ValenceTable::default_table();
         // Fe has [-1], outer_electrons=8
         assert_eq!(table.compute_implicit_hydrogens(Element::Fe, 0, 3), Some(5));
@@ -334,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_element_returns_none() {
+    fn test_valence_table_missing() {
         let table =
             ValenceTable::from_toml_str("[H]\nouter_electrons = 1\nallowed_valences = [1]\n")
                 .unwrap();

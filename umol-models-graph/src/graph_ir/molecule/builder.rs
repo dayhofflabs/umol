@@ -94,16 +94,22 @@ impl MoleculeBuilder {
             atom_rank.insert(atom, rank);
         }
         let graph = self.topology_graph(projection);
-        graph.to_graph6_canonical_with_rank(|node_ref| match node_ref {
-            super::TopologyNodeRef::Atom(ai) => atom_rank
-                .get(&ai)
-                .copied()
-                .unwrap_or(usize::MAX / 4 + ai.index()),
-            super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
-            super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
-            super::TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
-            super::TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
-        })
+        let (g6, _order) =
+            graph.to_graph6_canonical_with_rank(|node_ref| match node_ref {
+                super::TopologyNodeRef::Atom(ai) => atom_rank
+                    .get(&ai)
+                    .copied()
+                    .unwrap_or(usize::MAX / 4 + ai.index()),
+                super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
+                super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
+                super::TopologyNodeRef::NoncovalentBond(i) => {
+                    usize::MAX / 2 + 2_000_000 + i.index()
+                }
+                super::TopologyNodeRef::MulticenterBond(i) => {
+                    usize::MAX / 2 + 3_000_000 + i.index()
+                }
+            })?;
+        Ok(g6)
     }
 
     pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {

@@ -248,19 +248,26 @@ impl TopologyGraph {
         Ok(self.encode_graph6_with_order(&order))
     }
 
-    pub fn to_graph6_canonical(&self) -> Result<String, TopologyExportError> {
+    pub fn to_graph6_canonical(
+        &self,
+    ) -> Result<(String, Vec<NodeIndex>), TopologyExportError> {
         self.validate_graph6_export()?;
         let order = self.canonical_bfs();
-        Ok(self.encode_graph6_with_order(&order))
+        let g6 = self.encode_graph6_with_order(&order);
+        Ok((g6, order))
     }
 
-    pub fn to_graph6_canonical_with_rank<F>(&self, rank: F) -> Result<String, TopologyExportError>
+    pub fn to_graph6_canonical_with_rank<F>(
+        &self,
+        rank: F,
+    ) -> Result<(String, Vec<NodeIndex>), TopologyExportError>
     where
         F: Fn(TopologyNodeRef) -> usize,
     {
         self.validate_graph6_export()?;
         let order = self.canonical_bfs_with_rank(rank);
-        Ok(self.encode_graph6_with_order(&order))
+        let g6 = self.encode_graph6_with_order(&order);
+        Ok((g6, order))
     }
 
     fn build(
@@ -697,19 +704,20 @@ mod tests {
     #[rstest]
     fn test_to_graph6_canonical(c3_molecule: MoleculeBuilder) {
         let tg = c3_molecule.topology_graph(TopologyProjection::ordinary());
-        assert_eq!(tg.to_graph6_canonical().unwrap(), "Bg");
+        let (g6, _order) = tg.to_graph6_canonical().unwrap();
+        assert_eq!(g6, "Bg");
     }
 
     #[rstest]
     fn test_to_graph6_canonical_with_rank(c3_molecule: MoleculeBuilder) {
         let tg = c3_molecule.topology_graph(TopologyProjection::ordinary());
-        let out = tg
+        let (g6, _order) = tg
             .to_graph6_canonical_with_rank(|node_ref| match node_ref {
                 TopologyNodeRef::Atom(a) => usize::MAX - a.index(),
                 _ => usize::MAX,
             })
             .unwrap();
-        assert_eq!(out, "Bg");
+        assert_eq!(g6, "Bg");
     }
 
     #[rstest]

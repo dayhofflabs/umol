@@ -10,7 +10,7 @@ use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use umol_models_graph::graph_ir::{
     resolve_molecule_with, AtomTypeSpec, Molecule, ResolutionError, ResolveConfig,
-    TopologyProjection, ValenceStrategy,
+    TopologyNodeRef, TopologyProjection, ValenceStrategy,
 };
 use umol_models_graph::table_ir::{
     Atom as TableAtom, Bond as TableBond, BondDonation, BondOrder, Molecule as TableMolecule,
@@ -48,6 +48,7 @@ struct ResolveSummary {
     charge: i32,
     spin: String,
     atoms: Vec<String>,
+    bonds: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -147,15 +148,55 @@ fn build_table_molecule(input: &TestInput) -> TableMolecule {
     mol
 }
 
+fn bond_order_symbol(order: u8) -> String {
+    match order {
+        0 => ".".to_string(),
+        1 => "-".to_string(),
+        2 => "=".to_string(),
+        3 => "#".to_string(),
+        4 => "$".to_string(),
+        other => format!("~{}", other),
+    }
+}
+
 fn summarize(mol: &Molecule) -> ResolveSummary {
-    let atoms: Vec<String> = mol
-        .atom_indices()
-        .map(|idx| mol.atom(idx).unwrap().to_spec().to_string())
+    let tg = mol.topology_graph(TopologyProjection::ordinary());
+    let (topology, order) = tg.to_graph6_canonical().unwrap();
+
+    let mut canon_pos = vec![0usize; mol.atom_count()];
+    for (pos, nidx) in order.iter().enumerate() {
+        if let Some(TopologyNodeRef::Atom(ai)) = tg.node_ref(*nidx) {
+            canon_pos[ai.index()] = pos;
+        }
+    }
+
+    let atoms: Vec<String> = order
+        .iter()
+        .filter_map(|nidx| {
+            if let Some(TopologyNodeRef::Atom(ai)) = tg.node_ref(*nidx) {
+                Some(mol.atom(ai).unwrap().to_spec().to_string())
+            } else {
+                None
+            }
+        })
         .collect();
-    let topology = mol
-        .topology_graph(TopologyProjection::ordinary())
-        .to_graph6_canonical()
-        .unwrap();
+
+    let mut bonds: Vec<(usize, usize, u8)> = mol
+        .bond_indices()
+        .map(|idx| {
+            let (a, b) = mol.bond_atom_indices(idx).unwrap();
+            let ca = canon_pos[a.index()];
+            let cb = canon_pos[b.index()];
+            let order = mol.bond(idx).unwrap().order();
+            (ca.min(cb), ca.max(cb), order)
+        })
+        .collect();
+    bonds.sort();
+    let bonds: Vec<String> = bonds
+        .iter()
+        .map(|&(_, _, o)| bond_order_symbol(o))
+        .collect();
+
     ResolveSummary {
         atom_count: mol.atom_count(),
         bond_count: mol.bond_count(),
@@ -163,6 +204,7 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         charge: mol.charge(),
         spin: mol.spin().to_string(),
         atoms,
+        bonds,
     }
 }
 
