@@ -293,7 +293,7 @@ mod tests {
     #[fixture]
     fn config_with_h_registry() -> ResolveConfig {
         let mut config = ResolveConfig::default();
-        config.valence.atom_type_registry = registry!["[H+0v1]"];
+        config.valence.atom_type_registry = registry!["{H+0v1}"];
         config
     }
 
@@ -307,7 +307,7 @@ mod tests {
     #[fixture]
     fn config_with_ch_registry() -> ResolveConfig {
         let mut config = ResolveConfig::default();
-        config.valence.atom_type_registry = registry!["[H+0v1]", "[C+0v3]", "[C+1v3]"];
+        config.valence.atom_type_registry = registry!["{H+0v1}", "{C+0v3}", "{C+1v3}"];
         config
     }
 

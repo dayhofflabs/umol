@@ -10,7 +10,7 @@
 | 05-mutability-2025-03-01.md                                    | Informational | 2026-02-17   |
 | 06-atom-bond-identity-iteration-2025-03-01.md                  | Informational | 2026-02-17   |
 | 07-molecule-slices-2025-03-01.md                               | Informational | 2026-02-17   |
-| 08-molecule-builder-api-2025-03-01.md                          | Active        | 2026-02-17   |
+| 08-molecule-builder-api-2025-03-01.md                          | Informational | 2026-03-06   |
 | 09-torch-api-design-inspiration-2025-03-02.md                  | Informational | 2026-02-17   |
 | 10-diesel-api-design-inspiration.md                            | Informational | 2026-02-17   |
 | 11-cheminformatics-libraries.md                                | Informational | 2026-02-17   |
@@ -58,5 +58,5 @@
 | 52-graph-ir-2026-02-11.md                                      | Active        | 2026-02-17   |
 | 53-molecule-validation-scheme-2026-02-17.md                    | Active        | 2026-02-17   |
 | 54-molecule-validation-phases-2026-02-17.md                    | Active        | 2026-02-17   |
-
+| 55-opensmiles-spec-validation-2026-03-06.md                    | Active        | 2026-03-06   |
 

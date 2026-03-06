@@ -154,7 +154,7 @@ impl AtomTypeRegistry {
 /// Element and charge keys are derived from each spec automatically.
 ///
 /// ```ignore
-/// let reg = registry!["[H+0v1]", "[C+0v4]", "[C+1v3]"];
+/// let reg = registry!["{H+0v1}", "{C+0v4}", "{C+1v3}"];
 /// ```
 #[macro_export]
 macro_rules! registry {
@@ -273,6 +273,9 @@ impl ValenceTable {
         charge: i8,
         explicit_valence: u8,
     ) -> Option<u8> {
+        if element == Element::H {
+            return Some(0);
+        }
         let entry = self.entries.get(&element)?;
         let num_electrons = (entry.outer_electrons as i16) - (charge as i16);
 
@@ -331,10 +334,10 @@ mod tests {
     fn test_atom_type_registry_from_toml() {
         let input = r#"
 [C]
-0 = ["[C+0v4a0m0]"]
+0 = ["{C+0v4a0m0}"]
 
 [O]
--1 = ["[O-1/3v1a0m0]"]
+-1 = ["{O-1/3v1a0m0}"]
 "#;
         let registry = AtomTypeRegistry::from_toml_str(input).unwrap();
         assert_eq!(
@@ -345,7 +348,7 @@ mod tests {
             registry.specs_for_element_and_charge(Element::O, -1).len(),
             1
         );
-        assert_eq!(registry.content_hash_hex(), "8107a709363781cb");
+        assert_eq!(registry.content_hash_hex(), "ddca7c7894e08249");
     }
 
     #[test]
@@ -356,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_registry_macro() {
-        let reg = registry!["[C+0v4]", "[C+1^3v3]"];
+        let reg = registry!["{C+0v4}", "{C+1^3v3}"];
         assert_eq!(reg.specs_for_element(Element::C).len(), 2);
     }
 

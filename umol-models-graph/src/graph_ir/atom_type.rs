@@ -14,7 +14,7 @@ use super::molecule::{AtomIndex, MoleculeBuilder};
 /// Atom typing specification for valence resolution.
 ///
 /// String notation:
-/// - `[El...]` where `El` is an element symbol.
+/// - `{El...}` where `El` is an element symbol.
 /// - tokens are optional and can appear in any order:
 ///   - `+n` / `-n` charge (default 0, bare `+`/`-` means 1)
 ///   - `/n` lone pairs
@@ -127,7 +127,7 @@ impl AtomTypeSpec {
 
 impl Display for AtomTypeSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}", self.element)?;
+        write!(f, "{{{}", self.element)?;
         match self.charge {
             0 => {}
             1 => write!(f, "+")?,
@@ -164,7 +164,7 @@ impl Display for AtomTypeSpec {
         if self.multicenter_valence > 0 {
             write!(f, "m{}", self.multicenter_valence)?;
         }
-        write!(f, "]")
+        write!(f, "}}")
     }
 }
 
@@ -172,9 +172,9 @@ impl FromStr for AtomTypeSpec {
     type Err = ResolutionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if !s.starts_with('[') || !s.ends_with(']') {
+        if !s.starts_with('{') || !s.ends_with('}') {
             return Err(ResolutionError::InvalidAtomSpec(format!(
-                "atom type spec must be bracketed: {}",
+                "atom type spec must be braced: {}",
                 s
             )));
         }
@@ -192,8 +192,15 @@ impl FromStr for AtomTypeSpec {
         }
         let mut elem = String::new();
         elem.push(first);
-        if chars.peek().is_some_and(|c| c.is_ascii_lowercase()) {
-            elem.push(chars.next().unwrap());
+        if let Some(&c) = chars.peek() {
+            if c.is_ascii_lowercase() {
+                let mut two = String::new();
+                two.push(first);
+                two.push(c);
+                if two.parse::<Element>().is_ok() {
+                    elem.push(chars.next().unwrap());
+                }
+            }
         }
         let element: Element = elem
             .parse()
@@ -323,7 +330,7 @@ impl<'de> Deserialize<'de> for AtomTypeSpec {
 }
 
 /// Optional query constraints for matching atom type specs.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AtomTypeQuery {
     pub element: Element,
     pub charge: Option<i8>,
@@ -405,12 +412,184 @@ impl AtomTypeQuery {
     }
 }
 
+impl Display for AtomTypeQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "?{{{}", self.element)?;
+        match self.charge {
+            None => {}
+            Some(0) => write!(f, "+0")?,
+            Some(1) => write!(f, "+")?,
+            Some(-1) => write!(f, "-")?,
+            Some(c) if c < 0 => write!(f, "{}", c)?,
+            Some(c) => write!(f, "+{}", c)?,
+        }
+        if let Some(lp) = self.lone_pairs {
+            write!(f, "/{}", lp)?;
+        }
+        if let Some(n) = self.unpaired_electrons {
+            write!(f, "^{}", n)?;
+        }
+        if let Some(m) = self.multiplicity {
+            write!(f, "*{}", m.multiplicity())?;
+        }
+        if let Some(h) = self.hydrogens {
+            write!(f, "H{}", h)?;
+        }
+        if let Some(v) = self.valence {
+            write!(f, "v{}", v)?;
+        }
+        if let Some(d) = self.donated_pairs {
+            write!(f, ">{}", d)?;
+        }
+        if let Some(a) = self.accepted_pairs {
+            write!(f, "<{}", a)?;
+        }
+        if let Some(av) = self.aromatic_valence {
+            write!(f, "a{}", av)?;
+        }
+        if let Some(mv) = self.multicenter_valence {
+            write!(f, "m{}", mv)?;
+        }
+        write!(f, "}}")
+    }
+}
+
+impl FromStr for AtomTypeQuery {
+    type Err = ResolutionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.starts_with("?{") || !s.ends_with('}') {
+            return Err(ResolutionError::InvalidAtomSpec(format!(
+                "atom type query must use ?{{...}} notation: {}",
+                s
+            )));
+        }
+        let body = &s[2..s.len() - 1];
+        let mut chars = body.chars().peekable();
+
+        let first = chars
+            .next()
+            .ok_or_else(|| ResolutionError::InvalidAtomSpec("empty atom type query".to_string()))?;
+        if !first.is_ascii_uppercase() {
+            return Err(ResolutionError::InvalidAtomSpec(format!(
+                "invalid element in {}",
+                s
+            )));
+        }
+        let mut elem = String::new();
+        elem.push(first);
+        if let Some(&c) = chars.peek() {
+            if c.is_ascii_lowercase() {
+                let mut two = String::new();
+                two.push(first);
+                two.push(c);
+                if two.parse::<Element>().is_ok() {
+                    elem.push(chars.next().unwrap());
+                }
+            }
+        }
+        let element: Element = elem
+            .parse()
+            .map_err(|_| ResolutionError::InvalidAtomSpec(format!("invalid element: {}", elem)))?;
+
+        let mut query = AtomTypeQuery::unconstrained(element);
+        let mut seen_charge = false;
+
+        while let Some(token) = chars.next() {
+            let mut number = String::new();
+            while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+                number.push(chars.next().unwrap());
+            }
+            let num_u8 = |default: u8| -> Result<u8, ResolutionError> {
+                if number.is_empty() {
+                    Ok(default)
+                } else {
+                    number.parse::<u8>().map_err(|_| {
+                        ResolutionError::InvalidAtomSpec(format!(
+                            "invalid numeric token '{}' in {}",
+                            number, s
+                        ))
+                    })
+                }
+            };
+            match token {
+                '+' => {
+                    if seen_charge {
+                        return Err(ResolutionError::InvalidAtomSpec(
+                            "duplicate charge token".to_string(),
+                        ));
+                    }
+                    query.charge = Some(num_u8(1)? as i8);
+                    seen_charge = true;
+                }
+                '-' => {
+                    if seen_charge {
+                        return Err(ResolutionError::InvalidAtomSpec(
+                            "duplicate charge token".to_string(),
+                        ));
+                    }
+                    query.charge = Some(-(num_u8(1)? as i8));
+                    seen_charge = true;
+                }
+                '/' => query.lone_pairs = Some(num_u8(1)?),
+                '^' => query.unpaired_electrons = Some(num_u8(1)?),
+                '*' => {
+                    let m = num_u8(1)?;
+                    query.multiplicity =
+                        Some(SpinMultiplicity::from_multiplicity(m).ok_or_else(|| {
+                            ResolutionError::InvalidAtomSpec(format!(
+                                "invalid multiplicity {} in {}",
+                                m, s
+                            ))
+                        })?);
+                }
+                'H' => query.hydrogens = Some(num_u8(1)?),
+                'v' => query.valence = Some(num_u8(1)?),
+                '>' => query.donated_pairs = Some(num_u8(1)?),
+                '<' => query.accepted_pairs = Some(num_u8(1)?),
+                'a' => query.aromatic_valence = Some(num_u8(1)?),
+                'm' => query.multicenter_valence = Some(num_u8(1)?),
+                _ => {
+                    return Err(ResolutionError::InvalidAtomSpec(format!(
+                        "unknown token '{}' in {}",
+                        token, s
+                    )))
+                }
+            }
+        }
+
+        Ok(query)
+    }
+}
+
+impl Serialize for AtomTypeQuery {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for AtomTypeQuery {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(de::Error::custom)
+    }
+}
+
 /// Public shorthand for parsing a single atom type specification.
 #[macro_export]
 macro_rules! spec {
     ($s:expr) => {{
         use std::str::FromStr;
         $crate::graph_ir::atom_type::AtomTypeSpec::from_str($s).unwrap()
+    }};
+}
+
+/// Public shorthand for parsing a single atom type query.
+#[macro_export]
+macro_rules! query {
+    ($s:expr) => {{
+        use std::str::FromStr;
+        $crate::graph_ir::atom_type::AtomTypeQuery::from_str($s).unwrap()
     }};
 }
 
@@ -424,8 +603,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn atom_type_spec_parse_extended_fields() {
-        let spec = AtomTypeSpec::from_str("[N+1/1^0*1H0v3>1<0a1m0]").unwrap();
+    fn atom_type_spec_from_str() {
+        let spec = AtomTypeSpec::from_str("{N+1/1^0*1H0v3>1<0a1m0}").unwrap();
         assert_eq!(spec.element(), Element::N);
         assert_eq!(spec.charge(), 1);
         assert_eq!(spec.lone_pairs(), 1);
@@ -438,9 +617,39 @@ mod tests {
 
     #[test]
     fn atom_type_spec_display_roundtrip() {
-        let input = "[C-1/1^2*1H1v2a1m2]";
+        let input = "{C-1/1^2*1H1v2a1m2}";
         let parsed = AtomTypeSpec::from_str(input).unwrap();
         let reparsed = AtomTypeSpec::from_str(&parsed.to_string()).unwrap();
         assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
+    fn atom_type_query_from_str() {
+        let q = AtomTypeQuery::from_str("?{C-1/1^2*1H1v2a1m2}").unwrap();
+        assert_eq!(q.element, Element::C);
+        assert_eq!(q.charge, Some(-1));
+        assert_eq!(q.lone_pairs, Some(1));
+        assert_eq!(q.unpaired_electrons, Some(2));
+        assert_eq!(q.multiplicity, Some(SpinMultiplicity::from_multiplicity(1).unwrap()));
+        assert_eq!(q.hydrogens, Some(1));
+        assert_eq!(q.valence, Some(2));
+        assert_eq!(q.aromatic_valence, Some(1));
+        assert_eq!(q.multicenter_valence, Some(2));
+    }
+
+    #[test]
+    fn atom_type_query_display_roundtrip() {
+        let input = "?{C-1/1^2*1H1v2a1m2}";
+        let parsed = AtomTypeQuery::from_str(input).unwrap();
+        let reparsed = AtomTypeQuery::from_str(&parsed.to_string()).unwrap();
+        assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
+    fn atom_type_query_unconstrained() {
+        let undetermined = AtomTypeQuery::from_str("?{H}").unwrap();
+        let explicit_zero = AtomTypeQuery::from_str("?{H+0}").unwrap();
+        assert_eq!(undetermined.charge, None);
+        assert_eq!(explicit_zero.charge, Some(0));
     }
 }

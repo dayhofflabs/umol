@@ -9,7 +9,7 @@ use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use umol_models_graph::graph_ir::{
-    resolve_molecule_with, AtomTypeSpec, Molecule, ResolutionError, ResolveConfig,
+    resolve_molecule_with, AtomTypeQuery, Molecule, ResolutionError, ResolveConfig,
     TopologyNodeRef, TopologyProjection, ValenceStrategy,
 };
 use umol_models_graph::table_ir::{
@@ -45,8 +45,6 @@ struct ResolveSummary {
     atom_count: usize,
     bond_count: usize,
     topology: String,
-    charge: i32,
-    spin: String,
     atoms: Vec<String>,
     bonds: Vec<String>,
 }
@@ -58,30 +56,17 @@ struct ErrorSummary {
 }
 
 fn parse_atom_token(token: &str) -> TableAtom {
-    let spec: AtomTypeSpec = token
+    let query: AtomTypeQuery = token
         .parse()
-        .unwrap_or_else(|e| panic!("invalid atom spec '{}': {}", token, e));
+        .unwrap_or_else(|e| panic!("invalid atom query '{}': {}", token, e));
 
-    let mut atom = TableAtom::from_element(spec.element());
+    let mut atom = TableAtom::from_element(query.element);
+    atom.charge = query.charge;
+    atom.hydrogens = query.hydrogens;
+    atom.lone_pairs = query.lone_pairs;
 
-    let charge = spec.charge();
-    if charge != 0 {
-        atom.charge = Some(charge);
-    }
-
-    let hydrogens = spec.hydrogens();
-    if hydrogens > 0 {
-        atom.hydrogens = Some(hydrogens);
-    }
-
-    let lone_pairs = spec.lone_pairs();
-    if lone_pairs > 0 {
-        atom.lone_pairs = Some(lone_pairs);
-    }
-
-    let unpaired = spec.unpaired_electrons();
-    if unpaired > 0 {
-        atom.unpaired_electrons = Some(UnpairedElectrons::new(unpaired, Some(spec.multiplicity())));
+    if let Some(unpaired) = query.unpaired_electrons {
+        atom.unpaired_electrons = Some(UnpairedElectrons::new(unpaired, query.multiplicity));
     }
 
     atom
@@ -201,8 +186,6 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         atom_count: mol.atom_count(),
         bond_count: mol.bond_count(),
         topology,
-        charge: mol.charge(),
-        spin: mol.spin().to_string(),
         atoms,
         bonds,
     }

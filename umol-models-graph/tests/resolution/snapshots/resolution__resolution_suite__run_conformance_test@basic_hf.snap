@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 1
     topology: A_
     atoms:
-      - "{Hv1}"
+      - "{F/3v1}"
       - "{Hv1}"
     bonds:
       - "-"
@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{Hv1}"
+      - "{F/3v1}"
       - "{Hv1}"
     bonds:
       - "-"

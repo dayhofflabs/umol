@@ -15,8 +15,6 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 
 - LEX_LEADING_WHITESPACE (LEX, Error): whitespace at start of input before SMILES string
 - LEX_INVALID_WHITESPACE (LEX, Error): inter-token whitespace encountered
-- LEX_INVALID_COMMENT (LEX, Error): comment encountered
-- LEX_UNTERMINATED_BLOCK_COMMENT (LEX, Error): block comment not terminated before end of input
 - LEX_INVALID_ELEMENT (LEX, Error): invalid element symbol
 - LEX_INVALID_TOKEN (LEX, Error): input slice cannot be tokenized per lexical rules
 
@@ -47,8 +45,9 @@ This file defines the diagnostics taxonomy and stable codes for OpenSMILES parsi
 - SYN_DUPLICATE_BRACKET_FIELD (SYN, Error): duplicate bracket field of the same kind
 - SYN_MISSING_CLASS_INDEX (SYN, Error): class field without numeric value
 - SYN_MISSING_CHIRALITY_INDEX (SYN, Error): chirality marker (@TH, @AL, @SP, @TB, @OH) without numeric value
+- SYN_EMPTY_BRACKET (SYN, Error): no bracket fields
 - SYN_BRACKET_H_WITH_HCOUNT (SYN, Error): hydrogen element carries an H-count field
-- SYN_INVALID_BRACKET (SYN, Error): bracket errors
+- SYN_INVALID_BRACKET (SYN, Error): bracket errors (e.g., no element in [1])
 
 ##### Semantic (post-parse)
 

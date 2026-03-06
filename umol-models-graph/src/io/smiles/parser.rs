@@ -255,30 +255,21 @@ fn parse_smiles_inner(
                     }
                     last_atom_idx = Some(base);
                 }
-                Frame::Group {
-                    had_atom, open_pos, ..
-                } => {
+                Frame::Group { had_atom, .. } => {
                     if !had_atom {
-                        if i + 1 != n {
-                            return Err(ParseError::EmptyGroup { pos: offset + i });
+                        return Err(ParseError::EmptyGroup { pos: offset + i });
+                    }
+                    just_closed_group = true;
+                    if let Some(parent) = branch_stack.last_mut() {
+                        match parent {
+                            Frame::Branch { had_atom, .. }
+                            | Frame::Group { had_atom, .. } => *had_atom = true,
                         }
-                        if i > 0 && input[i - 1] == b'.' {
-                            return Err(ParseError::LeadingDot {
-                                pos: offset + i - 1,
-                            });
-                        }
-                        if open_pos != 0 {
-                            return Err(ParseError::EmptyGroup { pos: offset + i });
-                        }
-                        last_atom_idx = None;
-                        just_closed_group = false;
-                    } else {
-                        just_closed_group = true;
-                        if branch_stack.is_empty() && i + 1 != n {
-                            let next = input[i + 1];
-                            if next != b'.' {
-                                return Err(ParseError::NonfinalGroup { pos: offset + i });
-                            }
+                    }
+                    if branch_stack.is_empty() && i + 1 != n {
+                        let next = input[i + 1];
+                        if next != b'.' {
+                            return Err(ParseError::NonfinalGroup { pos: offset + i });
                         }
                     }
                 }
@@ -403,7 +394,7 @@ fn parse_smiles_inner(
             let atom = AtomData {
                 element,
                 isotope: iso_opt,
-                charge: charge_opt,
+                charge: charge_opt.or(Some(0)),
                 hydrogen_count: h_opt,
                 class: class_opt,
                 aromatic,
@@ -861,30 +852,21 @@ fn parse_extended_smiles_inner(
                     }
                     last_atom_idx = Some(base);
                 }
-                Frame::Group {
-                    had_atom, open_pos, ..
-                } => {
+                Frame::Group { had_atom, .. } => {
                     if !had_atom {
-                        if i + 1 != n {
-                            return Err(ParseError::EmptyGroup { pos: offset + i });
+                        return Err(ParseError::EmptyGroup { pos: offset + i });
+                    }
+                    just_closed_group = true;
+                    if let Some(parent) = branch_stack.last_mut() {
+                        match parent {
+                            Frame::Branch { had_atom, .. }
+                            | Frame::Group { had_atom, .. } => *had_atom = true,
                         }
-                        if i > 0 && input[i - 1] == b'.' {
-                            return Err(ParseError::LeadingDot {
-                                pos: offset + i - 1,
-                            });
-                        }
-                        if open_pos != 0 {
-                            return Err(ParseError::EmptyGroup { pos: offset + i });
-                        }
-                        last_atom_idx = None;
-                        just_closed_group = false;
-                    } else {
-                        just_closed_group = true;
-                        if branch_stack.is_empty() && i + 1 != n {
-                            let next = input[i + 1];
-                            if next != b'.' {
-                                return Err(ParseError::NonfinalGroup { pos: offset + i });
-                            }
+                    }
+                    if branch_stack.is_empty() && i + 1 != n {
+                        let next = input[i + 1];
+                        if next != b'.' {
+                            return Err(ParseError::NonfinalGroup { pos: offset + i });
                         }
                     }
                 }
@@ -1002,7 +984,7 @@ fn parse_extended_smiles_inner(
             let atom = ExtendedAtomData {
                 symbol,
                 isotope: iso_opt,
-                charge: charge_opt,
+                charge: charge_opt.or(Some(0)),
                 hydrogen_count: h_opt,
                 class: class_opt,
                 aromatic,

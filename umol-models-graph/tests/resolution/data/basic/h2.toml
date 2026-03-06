@@ -1,2 +1,2 @@
-atoms = "[H] [H]"
+atoms = "?{H} ?{H}"
 bonds = "0-1"

@@ -106,15 +106,13 @@ impl MoleculeBuilder {
         span_end: Option<u32>,
     ) -> u32 {
         let span = Span::from_bytes_opt(span_start, span_end);
-        let atom = if aromatic {
-            let mut a = Atom::aromatic_atom(element);
-            a.span = span;
-            a
+        let mut atom = if aromatic {
+            Atom::aromatic_atom(element)
         } else {
-            let mut a = Atom::aliphatic_atom(element);
-            a.span = span;
-            a
+            Atom::aliphatic_atom(element)
         };
+        atom.charge = Some(0);
+        atom.span = span;
         self.atoms.push(atom);
         (self.atoms.len() - 1) as u32
     }
@@ -284,7 +282,7 @@ impl ExtendedMoleculeBuilder {
         let span = Span::from_bytes_opt(span_start, span_end);
         let atom = ExtendedAtom {
             symbol: AtomSymbol::Element(element),
-            charge: None,
+            charge: Some(0),
             isotope_mass: None,
             hydrogens: None,
             implicit_hydrogens: true,
