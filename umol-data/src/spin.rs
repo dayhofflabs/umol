@@ -133,6 +133,56 @@ impl SpinState {
     pub fn multiplicity(&self) -> SpinMultiplicity {
         self.multiplicity
     }
+
+    /// High-spin molecular state from a collection of atomic spin states.
+    ///
+    /// Unpaired electrons = sum of atomic unpaired electrons.
+    /// Multiplicity = max coupled multiplicity (all spins parallel).
+    /// Returns `None` if the result exceeds `MAX_UNPAIRED_ELECTRONS`.
+    pub fn high_spin(states: &[SpinState]) -> Option<Self> {
+        let unpaired: u32 = states.iter().map(|s| s.unpaired_electrons as u32).sum();
+        Self::max_multiplicity(unpaired as u8)
+    }
+
+    /// Check whether this molecular spin state is achievable by coupling
+    /// the given atomic spin states.
+    ///
+    /// Uses sequential angular momentum coupling: for spins S1, S2, the
+    /// total S ranges from |S1-S2| to S1+S2 in integer steps. The set of
+    /// allowed S values is order-independent.
+    pub fn is_compatible(&self, states: &[SpinState]) -> bool {
+        let ue: u32 = states.iter().map(|s| s.unpaired_electrons as u32).sum();
+        if self.unpaired_electrons as u32 != ue {
+            return false;
+        }
+
+        let target_two_s = (self.multiplicity.multiplicity() - 1) as u32;
+
+        if states.is_empty() {
+            return target_two_s == 0;
+        }
+
+        let mut possible: Vec<u32> = vec![(states[0].multiplicity.multiplicity() - 1) as u32];
+
+        for state in &states[1..] {
+            let two_s = (state.multiplicity.multiplicity() - 1) as u32;
+            let mut next = Vec::new();
+            for &prev in &possible {
+                let lo = prev.abs_diff(two_s);
+                let hi = prev + two_s;
+                let mut s = lo;
+                while s <= hi {
+                    next.push(s);
+                    s += 2;
+                }
+            }
+            next.sort_unstable();
+            next.dedup();
+            possible = next;
+        }
+
+        possible.contains(&target_two_s)
+    }
 }
 
 impl fmt::Display for SpinState {
@@ -388,5 +438,71 @@ mod tests {
         let json = serde_json::to_string(&state).unwrap();
         let parsed: SpinState = serde_json::from_str(&json).unwrap();
         assert_eq!(state, parsed);
+    }
+
+    #[test]
+    fn test_high_spin_empty() {
+        let hs = SpinState::high_spin(&[]).unwrap();
+        assert_eq!(hs, SpinState::closed_shell());
+    }
+
+    #[test]
+    fn test_high_spin_single_doublet() {
+        let d = SpinState::new(1, SpinMultiplicity::Doublet);
+        let hs = SpinState::high_spin(&[d]).unwrap();
+        assert_eq!(hs.unpaired_electrons(), 1);
+        assert_eq!(hs.multiplicity(), SpinMultiplicity::Doublet);
+    }
+
+    #[test]
+    fn test_high_spin_two_doublets() {
+        let d = SpinState::new(1, SpinMultiplicity::Doublet);
+        let hs = SpinState::high_spin(&[d, d]).unwrap();
+        assert_eq!(hs.unpaired_electrons(), 2);
+        assert_eq!(hs.multiplicity(), SpinMultiplicity::Triplet);
+    }
+
+    #[test]
+    fn test_high_spin_three_triplets() {
+        let t = SpinState::new(2, SpinMultiplicity::Triplet);
+        let hs = SpinState::high_spin(&[t, t, t]).unwrap();
+        assert_eq!(hs.unpaired_electrons(), 6);
+        assert_eq!(hs.multiplicity(), SpinMultiplicity::Septet);
+    }
+
+    #[test]
+    fn test_high_spin_low_spin_atom() {
+        // 2 unpaired electrons in singlet (open-shell singlet atom)
+        let os = SpinState::new(2, SpinMultiplicity::Singlet);
+        let d = SpinState::new(1, SpinMultiplicity::Doublet);
+        let hs = SpinState::high_spin(&[os, d]).unwrap();
+        assert_eq!(hs.unpaired_electrons(), 3);
+        assert_eq!(hs.multiplicity(), SpinMultiplicity::Quartet);
+    }
+
+    #[test]
+    fn test_is_compatible_empty() {
+        assert!(SpinState::closed_shell().is_compatible(&[]));
+        assert!(!SpinState::new(1, SpinMultiplicity::Doublet).is_compatible(&[]));
+    }
+
+    #[test]
+    fn test_is_compatible_two_doublets() {
+        let d = SpinState::new(1, SpinMultiplicity::Doublet);
+        assert!(!SpinState::closed_shell().is_compatible(&[d, d]));
+        assert!(SpinState::new(2, SpinMultiplicity::Singlet).is_compatible(&[d, d]));
+        assert!(SpinState::new(2, SpinMultiplicity::Triplet).is_compatible(&[d, d]));
+        assert!(!SpinState::new(4, SpinMultiplicity::Quintet).is_compatible(&[d, d]));
+    }
+
+    #[test]
+    fn test_is_compatible_three_triplets() {
+        let t = SpinState::new(2, SpinMultiplicity::Triplet);
+        let states = [t, t, t];
+        assert!(SpinState::new(6, SpinMultiplicity::Singlet).is_compatible(&states));
+        assert!(SpinState::new(6, SpinMultiplicity::Triplet).is_compatible(&states));
+        assert!(SpinState::new(6, SpinMultiplicity::Quintet).is_compatible(&states));
+        assert!(SpinState::new(6, SpinMultiplicity::Septet).is_compatible(&states));
+        assert!(!SpinState::new(1, SpinMultiplicity::Doublet).is_compatible(&states));
     }
 }

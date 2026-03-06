@@ -29,6 +29,18 @@ pub enum ResolutionError {
     ValenceNoMatch(String),
     #[error("Valence ambiguous for {0}")]
     ValenceAmbiguous(String),
+
+    #[error("Molecular charge mismatch: explicit {explicit}, computed from atoms {computed}")]
+    MolecularChargeMismatch { explicit: i32, computed: i32 },
+    #[error(
+        "Molecular spin incompatible: {explicit_unpaired} unpaired electrons (multiplicity {explicit_multiplicity}) \
+         not achievable from atomic spin states (total unpaired: {atom_unpaired_sum})"
+    )]
+    MolecularSpinIncompatible {
+        explicit_unpaired: u8,
+        explicit_multiplicity: u8,
+        atom_unpaired_sum: u16,
+    },
 }
 
 impl From<ResolutionError> for Diagnostic {

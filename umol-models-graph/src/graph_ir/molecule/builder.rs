@@ -32,8 +32,8 @@ pub struct MoleculeBuilder {
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
-    charge: i32,
-    spin: SpinState,
+    charge: Option<i32>,
+    spin: Option<SpinState>,
 }
 
 impl MoleculeBuilder {
@@ -44,8 +44,8 @@ impl MoleculeBuilder {
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
             noncovalent_bonds: Vec::new(),
-            charge: 0,
-            spin: SpinState::closed_shell(),
+            charge: None,
+            spin: None,
         }
     }
 
@@ -56,8 +56,8 @@ impl MoleculeBuilder {
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
             noncovalent_bonds: Vec::new(),
-            charge: 0,
-            spin: SpinState::closed_shell(),
+            charge: None,
+            spin: None,
         }
     }
 
@@ -94,21 +94,16 @@ impl MoleculeBuilder {
             atom_rank.insert(atom, rank);
         }
         let graph = self.topology_graph(projection);
-        let (g6, _order) =
-            graph.to_graph6_canonical_with_rank(|node_ref| match node_ref {
-                super::TopologyNodeRef::Atom(ai) => atom_rank
-                    .get(&ai)
-                    .copied()
-                    .unwrap_or(usize::MAX / 4 + ai.index()),
-                super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
-                super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
-                super::TopologyNodeRef::NoncovalentBond(i) => {
-                    usize::MAX / 2 + 2_000_000 + i.index()
-                }
-                super::TopologyNodeRef::MulticenterBond(i) => {
-                    usize::MAX / 2 + 3_000_000 + i.index()
-                }
-            })?;
+        let (g6, _order) = graph.to_graph6_canonical_with_rank(|node_ref| match node_ref {
+            super::TopologyNodeRef::Atom(ai) => atom_rank
+                .get(&ai)
+                .copied()
+                .unwrap_or(usize::MAX / 4 + ai.index()),
+            super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
+            super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
+            super::TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
+            super::TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
+        })?;
         Ok(g6)
     }
 
@@ -477,28 +472,28 @@ impl MoleculeBuilder {
             .map(|b| std::mem::replace(b, bond))
     }
 
-    // Charge
-    pub fn charge(&self) -> i32 {
+    // Molecular charge and spin
+    pub fn charge(&self) -> Option<i32> {
         self.charge
     }
 
-    pub fn spin(&self) -> SpinState {
+    pub fn spin(&self) -> Option<SpinState> {
         self.spin
     }
 
     pub fn set_charge(&mut self, charge: i32) {
-        self.charge = charge;
+        self.charge = Some(charge);
     }
 
     pub fn set_spin(&mut self, spin: SpinState) {
-        self.spin = spin;
+        self.spin = Some(spin);
     }
 
-    pub fn update_charge(&mut self, f: impl FnOnce(i32) -> i32) {
+    pub fn update_charge(&mut self, f: impl FnOnce(Option<i32>) -> Option<i32>) {
         self.charge = f(self.charge);
     }
 
-    pub fn update_spin(&mut self, f: impl FnOnce(SpinState) -> SpinState) {
+    pub fn update_spin(&mut self, f: impl FnOnce(Option<SpinState>) -> Option<SpinState>) {
         self.spin = f(self.spin);
     }
 
@@ -704,7 +699,7 @@ impl MoleculeBuilder {
     /// Requires all atom builders to have exactly one valence candidate
     /// remaining (i.e., resolution phases must have been run).
     pub fn build(self, _config: &ResolveConfig) -> Result<Molecule, ResolutionError> {
-        let mut resolved_graph =
+        let mut graph =
             StableGraph::with_capacity(self.graph.node_count(), self.graph.edge_count());
 
         let mut index_map = Vec::with_capacity(self.graph.node_bound());
@@ -713,7 +708,7 @@ impl MoleculeBuilder {
         for old_idx in self.graph.node_indices() {
             let builder = self.graph.node_weight(old_idx).unwrap();
             let atom = builder.build()?;
-            let new_idx = resolved_graph.add_node(atom);
+            let new_idx = graph.add_node(atom);
             index_map[old_idx.index()] = Some(new_idx);
         }
 
@@ -722,17 +717,53 @@ impl MoleculeBuilder {
             let bond_builder = self.graph.edge_weight(old_edge).unwrap();
             let new_a = index_map[a.index()].unwrap();
             let new_b = index_map[b.index()].unwrap();
-            resolved_graph.add_edge(new_a, new_b, bond_builder.build());
+            graph.add_edge(new_a, new_b, bond_builder.build());
         }
 
+        let charge: i32 = graph.node_weights().map(|a| a.charge() as i32).sum();
+
+        if let Some(explicit) = self.charge {
+            if explicit != charge {
+                return Err(ResolutionError::MolecularChargeMismatch {
+                    explicit,
+                    computed: charge,
+                });
+            }
+        }
+
+        let atom_spins: Vec<SpinState> = graph.node_weights().map(|a| a.spin()).collect();
+
+        let spin = match self.spin {
+            Some(explicit) => {
+                if !explicit.is_compatible(&atom_spins) {
+                    let atom_unpaired_sum: u16 = atom_spins
+                        .iter()
+                        .map(|s| s.unpaired_electrons() as u16)
+                        .sum();
+                    return Err(ResolutionError::MolecularSpinIncompatible {
+                        explicit_unpaired: explicit.unpaired_electrons(),
+                        explicit_multiplicity: explicit.multiplicity().multiplicity(),
+                        atom_unpaired_sum,
+                    });
+                }
+                explicit
+            }
+            None => SpinState::high_spin(&atom_spins).ok_or_else(|| {
+                ResolutionError::ValenceViolation(
+                    graph.node_weights().next().unwrap().element(),
+                    "molecular spin exceeds maximum representable".to_string(),
+                )
+            })?,
+        };
+
         Ok(Molecule {
-            graph: resolved_graph,
+            graph,
             aromatic_systems: self.aromatic_systems,
             multicenter_bonds: self.multicenter_bonds,
             dative_bonds: self.dative_bonds,
             noncovalent_bonds: self.noncovalent_bonds,
-            charge: self.charge,
-            spin: self.spin,
+            charge,
+            spin,
         })
     }
 }
