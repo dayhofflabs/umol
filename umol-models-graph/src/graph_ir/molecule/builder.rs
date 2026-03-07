@@ -720,6 +720,7 @@ impl MoleculeBuilder {
             graph.add_edge(new_a, new_b, bond_builder.build());
         }
 
+        // TODO: add aromatic system charge
         let charge: i32 = graph.node_weights().map(|a| a.charge() as i32).sum();
 
         if let Some(explicit) = self.charge {
@@ -731,6 +732,7 @@ impl MoleculeBuilder {
             }
         }
 
+        // TODO: add aromatic system spin
         let atom_spins: Vec<SpinState> = graph.node_weights().map(|a| a.spin()).collect();
 
         let spin = match self.spin {

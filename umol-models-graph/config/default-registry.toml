@@ -1,277 +1,297 @@
 [H]
 0 = [
-    "{H+0v1}",   # H-X
-    "{H+0^1v0}", # H atom
+    "{Hv1}", # H-X
+    "{H^1}", # H atom
+    "{HH1}", # HH
 ]
 1 = [
-    "{H+1v0}", # H+
+    "{H+}", # H+
 ]
 -1 = [
-    "{H-1/1v0}", # H-
+    "{H-/1}", # H-
 ]
 
 [He]
 0 = [
-    "{He+0v0}", # He atom
+    "{He}", # He atom
 ]
 
 [Li]
 0 = [
-    "{Li+0v1}",   # Li-X
-    "{Li+0^1v0}", # Li atom
+    "{Liv1}", # Li-X
+    "{Li^1}", # Li atom
 ]
 1 = [
-    "{Li+1v0}", # Li+
+    "{Li+}", # Li+
 ]
 
 [Be]
 0 = [
-    "{Be+0/1v0}", # Be atom
+    "{Be/1}", # Be atom
 ]
 
 [B]
 0 = [
-    "{B+0v3}",
-    "{B+0^1v2}",
-    "{B+0/1v1}",
-    "{B+0/1^1v0}", # B atom
+    "{Bv3}",
+    "{B^1v2}",
+    "{B/1v1}",
+    "{B/1^1}", # B atom
 ]
--1 = ["{B-1v4}"]
+-1 = ["{B-v4}"]
 
 [C]
 0 = [
-    "{C+0v4}",
-    "{C+0^1v3}",
-    "{C+0/1^2v2}",
-    "{C+0/1v1}",
-    "{C+0/1^2v0}", # C atom
+    "{Cv4}",
+    "{C^1v3}",
+    "{C/1^2v2}",
+    "{C/1v1}",
+    "{C/1^2}",   # C atom
 ]
-1 = ["{C+1v3}"]
--1 = ["{C-1/1v3}"]
+1 = ["{C+v3}"]
+-1 = ["{C-/1v3}"]
 
 [N]
 0 = [
-    "{N+0/1v3}",
-    "{N+0/1^1v2}",
-    "{N+0/2^2*3v1}",
-    "{N+0/1^3v0}",   # N atom
+    "{N/1v3}",
+    "{N/1^1v2}",
+    "{N/2^2*3v1}",
+    "{N/1^3}",     # N atom
 ]
-1 = ["{N+1v4}", "{N+1/1v2}"]
--1 = ["{N-1/2v2}"]
--3 = ["{N-3/4v0}"]
+1 = ["{N+v4}", "{N+/1v2}"]
+-1 = ["{N-/2v2}"]
+-3 = ["{N-3/4}"]
 
 [O]
 0 = [
-    "{O+0/2v2}",
-    "{O+0/2^1v1}",
-    "{O+0/2^2v0}", # O atom
+    "{O/2v2}",
+    "{O/2^1v1}",
+    "{O/2^2}",   # O atom
 ]
-1 = ["{O+1/1v3}", "{O+1/2v1}"]
--1 = ["{O-1/3v1}"]
--2 = ["{O-2/4v0}"]
+1 = ["{O+/1v3}", "{O+/2v1}"]
+-1 = ["{O-/3v1}"]
+-2 = ["{O-2/4}"]
 
 [F]
 0 = [
-    "{F+0/3v1}",   # F2, HF, F-X
-    "{F+0/3^1v0}", # F atom
+    "{F/3v1}", # F2, HF, F-X
+    "{F/3^1}", # F atom
 ]
 -1 = [
-    "{F-1/4v0}", # F-
+    "{F-/4}", # F-
 ]
 
 [Ne]
 0 = [
-    "{Ne+0v0}", # Ne atom
+    "{Ne}", # Ne atom
 ]
 
 [Na]
 0 = [
-    "{Na+0^1v0}", # Na atom
+    "{Na^1}", # Na atom
 ]
-1 = ["{Na+1v0}"]
+1 = ["{Na+}"]
 
 [Mg]
 0 = [
-    "{Mg+0v2}",
-    "{Mg+0^1v1}",
-    "{Mg+0/1v0}", # Mg atom
+    "{Mgv2}",
+    "{Mg^1v1}",
+    "{Mg/1}",   # Mg atom
 ]
-2 = ["{Mg+2v0}"]
+2 = ["{Mg+2}"]
 
 [Al]
 0 = [
-    "{Al+0v3}",
-    "{Al+0/1^1v0}", # Al atom
+    "{Alv3}",
+    "{Al/1^1}", # Al atom
 ]
-3 = ["{Al+3v0}"]
+3 = ["{Al+3}"]
 
 [Si]
 0 = [
-    "{Si+0v4}",
-    "{Si+0v2}",
-    "{Si+0^1v3}",
-    "{Si+0/1^2v0}", # Si atom
+    "{Siv4}",
+    "{Siv2}",
+    "{Si^1v3}",
+    "{Si/1^2}", # Si atom
 ]
 
 [P]
 0 = [
-    "{P+0/1v3}",
-    "{P+0v5}",
-    "{P+0/1^3v0}", # P atom
+    "{P/1v3}",
+    "{Pv5}",
+    "{P/1^3}", # P atom
 ]
-1 = ["{P+1v4}"]
--1 = ["{P-1/2v3}"]
+1 = ["{P+v4}"]
+-1 = ["{P-/2v3}"]
 
 [S]
 0 = [
-    "{S+0/2v2}",
-    "{S+0/2^1v1}",
-    "{S+0/1v4}",
-    "{S+0v6}",
-    "{S+0/2^2v0}", # S atom
+    "{S/2v2}",
+    "{S/2^1v1}",
+    "{S/1v4}",
+    "{Sv6}",
+    "{S/2^2}",   # S atom
 ]
-1 = ["{S+1/1v3}"]
--1 = ["{S-1/3v1}"]
--2 = ["{S-2/4v0}"]
+1 = ["{S+/1v3}"]
+-1 = ["{S-/3v1}"]
+-2 = ["{S-2/4}"]
 
 [Cl]
 0 = [
-    "{Cl+0/3v1}", # HCl, Cl-X
-    "{Cl+0/3^1v0}", # Cl atom
-    "{Cl+0v3}",
-    "{Cl+0v5}",
+    "{Cl/3v1}", # HCl, Cl-X
+    "{Clv3}",
+    "{Clv5}",
+    "{Cl/3^1}", # Cl atom
 ]
-1 = ["{Cl+1/2v2}"]
--1 = ["{Cl-1/4v0}"]
+1 = [
+    "{Cl+/2v2}", # Cl-Cl(+)-Cl (DOI: 10.1021/ic950305s)
+    "{Cl+/3<2}", # Pyr->Cl(+)<-Pyr (DOI: 10.1071/CH13202)
+]
+-1 = ["{Cl-/4}"]
 
 [Ar]
 0 = [
-    "{Ar+0v0}", # Ar atom
+    "{Ar}", # Ar atom
 ]
 
 [K]
 0 = [
-    "{K+0^1v0}", # K atom
+    "{K^1}", # K atom
 ]
-1 = ["{K+1v0}"]
+1 = ["{K+}"]
 
 [Ca]
 0 = [
-    "{Ca+0/1v0}", # Ca atom
+    "{Ca/1}", # Ca atom
 ]
-2 = ["{Ca+2v0}"]
+2 = ["{Ca+2}"]
 
 # 3d
 
 [Ga]
 0 = [
-    "{Ga+0/1^1v0}", # Ga atom
+    "{Ga/1^1}", # Ga atom
 ]
 
 [Ge]
 0 = [
-    "{Ge+0/1^2v0}", # Ge atom
+    "{Ge/1^2}", # Ge atom
 ]
 
 [As]
 0 = [
-    "{As+0/1^3v0}", # As atom
+    "{As/1^3}", # As atom
 ]
 
 [Se]
 0 = [
-    "{Se+0/2v2}",
-    "{Se+0/2^1v1}",
-    "{Se+0v4}",
-    "{Se+0v6}",
-    "{Se+0/2^2v0}", # Se atom
+    "{Se/2v2}",
+    "{Se/2^1v1}",
+    "{Sev4}",
+    "{Sev6}",
+    "{Se/2^2}",   # Se atom
 ]
--1 = ["{Se-1/3v1}"]
--2 = ["{Se-2/4v0}"]
+-1 = ["{Se-/3v1}"]
+-2 = ["{Se-2/4}"]
 
 [Br]
 0 = [
-    "{Br+0/3v1}",
-    "{Br+0/3^1v0}",
-    "{Br+0v3}",
-    "{Br+0v5}",
-    "{Br+0/3^1v0}", # Br atom
+    "{Br/3v1}",
+    "{Br/3^1}",
+    "{Brv3}",
+    "{Brv5}",
+    "{Br/3^1}", # Br atom
 ]
-1 = ["{Br+1/2v2}"]
--1 = ["{Br-1/4v0}"]
+1 = [
+    "{Br+/3}",     # Br+
+    "{Br+/2^1v1}", # Br(+)-Br (DOI: 10.1021/ic50109a033, 10.1016/0301-0104(88)80004-1)
+    "{Br+/2v2}",   # Br-Br(+)-Br, X-Br(+)-X  (DOI: 10.1021/ic950305s)
+    "{Br+/3<2}",   # Pyr->Br(+)<-Pyr (DOI: 10.1071/CH13202)
+]
+-1 = ["{Br-/4}"]
 
 [Kr]
 0 = [
-    "{Kr+0v0}",   # Kr atom
-    "{Kr+0/3m2}", # KrF2
+    "{Kr}",     # Kr atom
+    "{Kr/3m2}", # KrF2
 ]
 1 = [
-    "{Kr+1/3v1}",   # KrF+
-    "{Kr+1/3<1v1}", # FKrF->KrF+, HCN->KrF
+    "{Kr+/3v1}",   # KrF+
+    "{Kr+/3<1v1}", # FKrF->KrF+, HCN->KrF
 ]
 
 [Rb]
 0 = [
-    "{Rb+0^1v0}", # Rb atom
+    "{Rb^1}", # Rb atom
 ]
 
 [Sr]
 0 = [
-    "{Sr+0/1v0}", # Sr atom
+    "{Sr/1}", # Sr atom
 ]
 
 # 4d
 
 [In]
 0 = [
-    "{In+0/1^1v0}", # In atom
+    "{In/1^1}", # In atom
 ]
 
 [Sn]
 0 = [
-    "{Sn+0/1^2v0}", # Sn atom
+    "{Sn/1^2}", # Sn atom
 ]
 
 [Sb]
 0 = [
-    "{Sb+0/1^3v0}", # Sb atom
+    "{Sb/1^3}", # Sb atom
 ]
 
 [Te]
 0 = [
-    "{Te+0/2^2v0}", # Te atom
+    "{Te/2^2}", # Te atom
 ]
 
 [I]
 0 = [
-    "{I+0/3v1}",
-    "{I+0/3^1v0}",
-    "{I+0v3}",
-    "{I+0v5}",
-    "{I+0/3^1v0}", # I atom
+    "{I/3v1}",   # I2, I-X
+    "{I/3H1}",   # HI
+    "{I/3^1}",
+    "{Iv3}",
+    "{Iv5}",
+    "{I/3v1m0}", # I-I*..I-I(+)-I (DOI: 10.1021/ic00224a009)
+    "{I/3m1}",   # I-I..I*-I(+)-I (DOI: 10.1021/ic00224a009)
+    "{I/3^1}",   # I atom
 ]
-1 = ["{I+1/2v2}"]
--1 = ["{I-1/4v0}"]
+1 = [
+    "{I+/3}",     # I+
+    "{I+/2v2}",   # I-I(+)-I, X-I(+)-X  (DOI: 10.1021/ic950305s)
+    "{I+/2^1v1}", # I(+)-I (DOI:10.1021/ic50043a024)
+    "{I+/3<2}",   # Pyr->I(+)<-Pyr (DOI: 10.1071/CH13202)
+    "{I+/2v1m1}", # I-I..I-I(+)-I  (DOI: 10.1021/ic00224a009)
+]
+-1 = [
+    "{I-/4}", # I-
+]
 
 [Xe]
 0 = [
-    "{Xe+0v0}",      # Xe atom
-    "{Xe+0/3m2}",    # XeF2, XeCl2, XeX2
-    "{Xe+0/2m4}",    # XeF4, XeOF2
-    "{Xe+0/1m6}",    # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-
-    "{Xe+0/1<v1m6}", # MeCN->XeO3
-    "{Xe+0m8}",      # XeO2F4, XeO3F2, XeO4, H4XeO6, [XeO6]3-, [XeO6]4-
+    "{Xe}",        # Xe atom
+    "{Xe/3m2}",    # XeF2, XeCl2, XeX2
+    "{Xe/2m4}",    # XeF4, XeOF2
+    "{Xe/1m6}",    # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-
+    "{Xe/1<v1m6}", # MeCN->XeO3
+    "{Xem8}",      # XeO2F4, XeO3F2, XeO4, H4XeO6, [XeO6]3-, [XeO6]4-
 ]
 1 = [
-    "{Xe+1/3v1}",     # XeF+, XeCl+, XeX+
-    "{Xe+1/3<1v1}",   # HF->XeF+, HCN->XeF+, MeCN->XeF+
-    "{Xe+1/2v1m2}",   # [XeF3]+, [XeF2X]+
-    "{Xe+1/1v1m4}",   # [XeF5]+, [XeOF3]+, XeO2F+
-    "{Xe+1/1<1v1m4}", # F5XeF->[XeF5]+
+    "{Xe+/3v1}",     # XeF+, XeCl+, XeX+
+    "{Xe+/3<1v1}",   # HF->XeF+, HCN->XeF+, MeCN->XeF+
+    "{Xe+/2v1m2}",   # [XeF3]+, [XeF2X]+
+    "{Xe+/1v1m4}",   # [XeF5]+, [XeOF3]+, XeO2F+
+    "{Xe+/1<1v1m4}", # F5XeF->[XeF5]+
 ]
 -1 = [
-    "{Xe-1/1v1m4}", # [XeF5]-
-    "{Xe-1v1m6}",   # [XeF7]-, [XeO2F3]-, [XeOF5]-
+    "{Xe-/1v1m4}", # [XeF5]-
+    "{Xe-v1m6}",   # [XeF7]-, [XeO2F3]-, [XeOF5]-
 ]
 -2 = [
     "{Xe-2v2m6}", # [XeF8]2-
@@ -279,12 +299,12 @@
 
 [Cs]
 0 = [
-    "{Cs+0^1v0}", # Cs atom
+    "{Cs^1}", # Cs atom
 ]
 
 [Ba]
 0 = [
-    "{Ba+0/1v0}", # Ba atom
+    "{Ba/1}", # Ba atom
 ]
 
 # 4f
@@ -292,45 +312,46 @@
 
 [Tl]
 0 = [
-    "{Tl+0/1^1v0}", # Tl atom
+    "{Tl/1^1}", # Tl atom
 ]
 
 [Pb]
 0 = [
-    "{Pb+0/1^2v0}", # Pb atom
+    "{Pb/1^2}", # Pb atom
 ]
 
 [Bi]
 0 = [
-    "{Bi+0/1^3v0}", # Bi atom
+    "{Bi/1^3}", # Bi atom
 ]
 
 [Po]
 0 = [
-    "{Po+0/2^2v0}", # Po atom
+    "{Po/2^2}", # Po atom
 ]
 
 [At]
 0 = [
-    "{At+0/3^1v1}", # At atom
+    "{At/3v1}", # At2
+    "{At/3^1}", # At atom
 ]
 
 [Rn]
 0 = [
-    "{Rn+0v0}",   # Rn atom
-    "{Rn+0/3m2}", # RnF2
-    "{Rn+0/2m4}", # RnF4
-    "{Rn+0/1m6}", # RnF6, RnO3
+    "{Rn}",     # Rn atom
+    "{Rn/3m2}", # RnF2
+    "{Rn/2m4}", # RnF4
+    "{Rn/1m6}", # RnF6, RnO3
 ]
 
 [Fr]
 0 = [
-    "{Fr+0^1v0}", # Fr atom
+    "{Fr^1}", # Fr atom
 ]
 
 [Ra]
 0 = [
-    "{Ra+0/1v0}", # Ra atom
+    "{Ra/1}", # Ra atom
 ]
 
 # 5f
@@ -338,30 +359,30 @@
 
 [Nh]
 0 = [
-    "{Nh+0/1^1v0}", # Nd atom
+    "{Nh/1^1}", # Nd atom
 ]
 
 [Fl]
 0 = [
-    "{Fl+0/1^2v0}", # Fl atom
+    "{Fl/1^2}", # Fl atom
 ]
 
 [Mc]
 0 = [
-    "{Mc+0/1^3v0}", # Mc atom
+    "{Mc/1^3}", # Mc atom
 ]
 
 [Lv]
 0 = [
-    "{Lv+0/2^2v0}", # Lv atom
+    "{Lv/2^2}", # Lv atom
 ]
 
 [Ts]
 0 = [
-    "{Ts+0/3^1v0}", # Ts atom
+    "{Ts/3^1}", # Ts atom
 ]
 
 [Og]
 0 = [
-    "{Og+0v0}", # Og atom   
+    "{Og}", # Og atom   
 ]
