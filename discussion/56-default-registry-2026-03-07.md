@@ -42,13 +42,21 @@ Status values:
 | H | yes | yes (+1) | yes | yes (`atoms/h.toml`, `ions/h+1.toml`, hydrides) | review | Counts now respects `implicit_h`; verify final ground-state convention |
 | He | yes | no | n/a | yes (`atoms/he.toml`) | review | Counts currently yields `{He/1}` |
 | Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `ions/li+1.toml`) | review | Counts/typing parity fixed under `implicit_h=false` |
-| Be | yes | no | no | yes (`atoms/be.toml`) | review |  |
+| Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `ions/be+2.toml`) | review | Added missing `Be+2` registry spec |
 | B | yes | no | no | yes (`atoms/b.toml`) | review |  |
 | C | yes | no | no | yes (`atoms/c.toml`) | review |  |
 | N | yes | yes (-3) | no | yes (`atoms/n.toml`, `ions/n-3.toml`) | review | `N3-` included intentionally (hypothetical edge case) |
 | O | yes | yes (-2) | no | yes (`atoms/o.toml`, `ions/o-2.toml`) | review | `O2-` included intentionally (hypothetical edge case) |
 | F | yes | yes (-1) | no | yes (`atoms/f.toml`, `ions/f-1.toml`, hydrides) | review |  |
 | Ne | yes | no | n/a | yes (`atoms/ne.toml`) | review |  |
+| Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `ions/na+1.toml`) | review |  |
+| Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `ions/mg+2.toml`) | review |  |
+| Al | yes | yes (+3) | no | yes (`atoms/al.toml`, `ions/al+3.toml`) | review |  |
+| Si | yes | no | no | yes (`atoms/si.toml`) | review |  |
+| P | yes | partial (-3 queried) | no | yes (`atoms/p.toml`, `ions/p-3.toml`) | review | `P3-` missing in atom-typing registry (counts-only pass) |
+| S | yes | yes (-2) | no | yes (`atoms/s.toml`, `ions/s-2.toml`) | review |  |
+| Cl | yes | yes (-1) | no | yes (`atoms/cl.toml`, `ions/cl-1.toml`, hydrides) | review |  |
+| Ar | yes | no | n/a | yes (`atoms/ar.toml`) | review |  |
 
 Extend this table as new elements are considered.
 
@@ -84,8 +92,8 @@ Use resolution data categories:
 
 ## Current Conformance Seed
 
-- `atoms/`: `h`, `he`, `li`, `be`, `b`, `c`, `n`, `o`, `f`, `ne`
-- `ions/`: `h+1`, `li+1`, `mg+2`, `n-3`, `o-2`, `f-1`
+- `atoms/`: `h`, `he`, `li`, `be`, `b`, `c`, `n`, `o`, `f`, `ne`, `na`, `mg`, `al`, `si`, `p`, `s`, `cl`, `ar`
+- `ions/`: `h+1`, `li+1`, `be+2`, `mg+2`, `al+3`, `n-3`, `o-2`, `f-1`, `na+1`, `p-3`, `s-2`, `cl-1`
 - `hydrides/`: `h2`, `hf`
 
 ## Decision Log
@@ -97,3 +105,4 @@ Use resolution data categories:
 - Agreed registry specs are reviewed with code-level rigor (small, explicit, traceable changes).
 - Agreed conformance naming/categories: `atoms/`, `ions/`, `hydrides/` and file naming rules above.
 - Added `implicit_h` control to conformance inputs; counts strategy now honors this via `enable_implicit_hydrogens`.
+- Expanded coverage to period-3 atoms (`Na`..`Ar`) and matching ions (`Na+`, `Al3+`, `P3-`, `S2-`, `Cl-`), plus `Be2+`.

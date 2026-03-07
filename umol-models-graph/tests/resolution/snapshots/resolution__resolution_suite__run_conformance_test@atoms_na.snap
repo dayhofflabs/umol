@@ -1,0 +1,23 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: atoms
+atom_typing:
+  success: true
+  summary:
+    atom_count: 1
+    bond_count: 0
+    topology: "@"
+    atoms:
+      - "{Na^1}"
+    bonds: []
+counts:
+  success: true
+  summary:
+    atom_count: 1
+    bond_count: 0
+    topology: "@"
+    atoms:
+      - "{Na^1}"
+    bonds: []

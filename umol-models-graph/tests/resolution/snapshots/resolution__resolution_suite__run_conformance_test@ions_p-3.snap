@@ -1,0 +1,19 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: ions
+atom_typing:
+  success: false
+  error:
+    error_type: ValenceNoMatch
+    message: No valence match for atom P at index 0 has no valence match
+counts:
+  success: true
+  summary:
+    atom_count: 1
+    bond_count: 0
+    topology: "@"
+    atoms:
+      - "{P-3/4}"
+    bonds: []
