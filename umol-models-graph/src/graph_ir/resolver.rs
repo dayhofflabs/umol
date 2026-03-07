@@ -142,9 +142,10 @@ fn resolve_valence_with(
         ValenceStrategy::AtomTyping => {
             ValenceValidator::AtomTyping(config.valence.atom_type_registry.clone())
         }
-        ValenceStrategy::Counts => {
-            ValenceValidator::Counts(config.valence.valence_table.clone())
-        }
+        ValenceStrategy::Counts => ValenceValidator::Counts {
+            table: config.valence.valence_table.clone(),
+            enable_implicit_hydrogens: config.valence.enable_implicit_hydrogens,
+        },
     };
 
     let atom_indices: Vec<AtomIndex> = builder.atom_indices().collect();

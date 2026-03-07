@@ -40,6 +40,7 @@ pub struct ValenceResolveConfig {
     pub strategy: ValenceStrategy,
     pub no_match_policy: ValenceMatchPolicy,
     pub ambiguous_policy: ValenceMatchPolicy,
+    pub enable_implicit_hydrogens: bool,
     pub atom_type_registry: AtomTypeRegistry,
     pub valence_table: ValenceTable,
 }
@@ -78,6 +79,7 @@ impl Default for ResolveConfig {
                 strategy: ValenceStrategy::AtomTyping,
                 no_match_policy: ValenceMatchPolicy::Error,
                 ambiguous_policy: ValenceMatchPolicy::Error,
+                enable_implicit_hydrogens: true,
                 atom_type_registry: AtomTypeRegistry::default_registry().clone(),
                 valence_table: ValenceTable::default_table().clone(),
             },

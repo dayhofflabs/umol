@@ -22,6 +22,12 @@ struct TestInput {
     atoms: String,
     bonds: Option<String>,
     dative: Option<String>,
+    #[serde(default = "default_true")]
+    implicit_h: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize)]
@@ -55,14 +61,23 @@ struct ErrorSummary {
     message: String,
 }
 
-fn parse_atom_token(token: &str) -> TableAtom {
+fn parse_atom_token(token: &str, implicit_h: bool) -> TableAtom {
     let query: AtomTypeQuery = token
         .parse()
         .unwrap_or_else(|e| panic!("invalid atom query '{}': {}", token, e));
 
     let mut atom = TableAtom::from_element(query.element);
     atom.charge = query.charge;
-    atom.hydrogens = query.hydrogens;
+    atom.hydrogens = if implicit_h {
+        Some(query.hydrogens.unwrap_or_else(|| {
+            panic!(
+                "missing hydrogen token in '{}' while implicit_h=true; specify H0 explicitly",
+                token
+            )
+        }))
+    } else {
+        None
+    };
     atom.lone_pairs = query.lone_pairs;
 
     if let Some(unpaired) = query.unpaired_electrons {
@@ -109,7 +124,7 @@ fn build_table_molecule(input: &TestInput) -> TableMolecule {
     let mut mol = TableMolecule::empty();
 
     for token in input.atoms.split_whitespace() {
-        mol.atoms.push(parse_atom_token(token));
+        mol.atoms.push(parse_atom_token(token, input.implicit_h));
     }
 
     if let Some(ref bonds) = input.bonds {
@@ -226,9 +241,10 @@ fn atom_typing_config() -> ResolveConfig {
     config
 }
 
-fn counts_config() -> ResolveConfig {
+fn counts_config(enable_implicit_hydrogens: bool) -> ResolveConfig {
     let mut config = ResolveConfig::default();
     config.valence.strategy = ValenceStrategy::Counts;
+    config.valence.enable_implicit_hydrogens = enable_implicit_hydrogens;
     config
 }
 
@@ -253,7 +269,7 @@ fn resolve_file(path: &Path) -> FileResolveResults {
     let category = extract_category(path);
 
     let atom_typing = resolve_with_config(&table_mol, &atom_typing_config());
-    let counts = resolve_with_config(&table_mol, &counts_config());
+    let counts = resolve_with_config(&table_mol, &counts_config(input.implicit_h));
 
     FileResolveResults {
         category,
@@ -281,6 +297,7 @@ fn run_conformance_test(file_path: &PathBuf) {
 }
 
 #[rstest]
+// Keep recursive glob so category folders remain auto-discovered at compile time.
 fn test_conformance(#[files("tests/resolution/data/**/*.toml")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }

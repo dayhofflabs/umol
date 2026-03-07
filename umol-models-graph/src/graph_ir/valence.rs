@@ -12,7 +12,10 @@ use super::molecule::AtomIndex;
 #[derive(Debug, Clone)]
 pub enum ValenceValidator {
     AtomTyping(AtomTypeRegistry),
-    Counts(ValenceTable),
+    Counts {
+        table: ValenceTable,
+        enable_implicit_hydrogens: bool,
+    },
 }
 
 impl ValenceValidator {
@@ -25,12 +28,21 @@ impl ValenceValidator {
             ValenceValidator::AtomTyping(registry) => {
                 registry.candidates_for(&AtomTypeQuery::from_builder_atom(builder, atom_index))
             }
-            ValenceValidator::Counts(table) => Self::counts_candidates(table, builder, atom_index),
+            ValenceValidator::Counts {
+                table,
+                enable_implicit_hydrogens,
+            } => Self::counts_candidates(
+                table,
+                *enable_implicit_hydrogens,
+                builder,
+                atom_index,
+            ),
         }
     }
 
     fn counts_candidates(
         table: &ValenceTable,
+        enable_implicit_hydrogens: bool,
         builder: &MoleculeBuilder,
         atom_index: AtomIndex,
     ) -> SmallVec<[AtomTypeSpec; 4]> {
@@ -44,11 +56,16 @@ impl ValenceValidator {
             Some(e) => e,
             None => return SmallVec::new(),
         };
-        let implicit_hydrogens =
+        let implicit_hydrogens = if let Some(h) = atom.hydrogens() {
+            h
+        } else if enable_implicit_hydrogens {
             match table.compute_implicit_hydrogens(element, charge, explicit_valence) {
                 Some(h) => h,
                 None => return SmallVec::new(),
-            };
+            }
+        } else {
+            0
+        };
         let total_valence = explicit_valence + implicit_hydrogens;
         let num_electrons = (entry.outer_electrons as i16) - (charge as i16);
         let unassigned_electrons = num_electrons - (total_valence as i16);

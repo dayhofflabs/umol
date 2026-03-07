@@ -2,7 +2,7 @@
 0 = [
     "{Hv1}", # H-X
     "{H^1}", # H atom
-    "{HH1}", # HH
+    # "{HH1}", # HH
 ]
 1 = [
     "{H+}", # H+
@@ -13,7 +13,7 @@
 
 [He]
 0 = [
-    "{He}", # He atom
+    "{He/1}", # He atom
 ]
 
 [Li]
@@ -82,7 +82,7 @@
 
 [Ne]
 0 = [
-    "{Ne}", # Ne atom
+    "{Ne/4}", # Ne atom
 ]
 
 [Na]
@@ -150,7 +150,7 @@
 
 [Ar]
 0 = [
-    "{Ar}", # Ar atom
+    "{Ar/4}", # Ar atom
 ]
 
 [K]
@@ -211,7 +211,7 @@
 
 [Kr]
 0 = [
-    "{Kr}",     # Kr atom
+    "{Kr/4}",   # Kr atom
     "{Kr/3m2}", # KrF2
 ]
 1 = [
@@ -275,7 +275,7 @@
 
 [Xe]
 0 = [
-    "{Xe}",        # Xe atom
+    "{Xe/4}",      # Xe atom
     "{Xe/3m2}",    # XeF2, XeCl2, XeX2
     "{Xe/2m4}",    # XeF4, XeOF2
     "{Xe/1m6}",    # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-
@@ -338,7 +338,7 @@
 
 [Rn]
 0 = [
-    "{Rn}",     # Rn atom
+    "{Rn/4}",   # Rn atom
     "{Rn/3m2}", # RnF2
     "{Rn/2m4}", # RnF4
     "{Rn/1m6}", # RnF6, RnO3
@@ -384,5 +384,5 @@
 
 [Og]
 0 = [
-    "{Og}", # Og atom   
+    "{Og/4}", # Og atom   
 ]

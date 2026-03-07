@@ -2,7 +2,7 @@
 source: umol-models-graph/tests/resolution/mod.rs
 expression: results
 ---
-category: basic
+category: atoms
 atom_typing:
   success: true
   summary:
