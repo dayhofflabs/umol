@@ -297,7 +297,7 @@ fn run_conformance_test(file_path: &PathBuf) {
 }
 
 #[rstest]
-// Keep recursive glob so category folders and recently added files are auto-discovered at compile time.
+// Keep recursive glob so category folders and recently added files are auto-discovered at compile time (refresh marker).
 fn test_conformance(#[files("tests/resolution/data/**/*.toml")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }

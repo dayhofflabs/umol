@@ -143,3 +143,5 @@ Use resolution data categories:
 - Added `implicit_h` control to conformance inputs; counts strategy now honors this via `enable_implicit_hydrogens`.
 - Expanded coverage to period-3 atoms (`Na`..`Ar`) and matching ions (`Na+`, `Al3+`, `P3-`, `S2-`, `Cl-`), plus `Be2+`.
 - Expanded coverage to period-4 and period-5 s/p blocks, 3d block, and 4d block with ions: `Y3+`, `Zr4+`, `Nb3+`, `Mo2+`, `Mo3+`, `Ru2+`, `Ru3+`, `Rh2+`, `Rh3+`, `Pd2+`, `Ag+`, `Ag2+`, `Cd2+`.
+- Added missing 3d atom conformance files (`atoms/sc.toml` through `atoms/zn.toml`) and refreshed snapshots.
+- TODO: 5d ions La3+, Hf4+, Au3+, Hg2+, [Hg2]2+ ("{Hg+/5v1}"), 
