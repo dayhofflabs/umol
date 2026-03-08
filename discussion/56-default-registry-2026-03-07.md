@@ -39,23 +39,23 @@ Status values:
 
 | Element | Ground state | Discrete ions | Typical valences | Conformance added | Status | Notes |
 |---|---|---|---|---|---|---|
-| H | yes | yes (+1) | yes | yes (`atoms/h.toml`, `ions/h+1.toml`, hydrides) | review | Counts now respects `implicit_h`; verify final ground-state convention |
-| He | yes | no | n/a | yes (`atoms/he.toml`) | review | Counts currently yields `{He/1}` |
-| Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `ions/li+1.toml`) | review | Counts/typing parity fixed under `implicit_h=false` |
-| Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `ions/be+2.toml`) | review | Added missing `Be+2` registry spec |
+| H | yes | yes (+1) | yes | yes (`atoms/h.toml`, `ions/h+1.toml`, hydrides) | review |  |
+| He | yes | no | n/a | yes (`atoms/he.toml`) | review | |
+| Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `ions/li+1.toml`) | review |  |
+| Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `ions/be+2.toml`) | review |  |
 | B | yes | no | no | yes (`atoms/b.toml`) | review |  |
 | C | yes | no | no | yes (`atoms/c.toml`) | review |  |
-| N | yes | yes (-3) | no | yes (`atoms/n.toml`, `ions/n-3.toml`) | review | `N3-` included intentionally (hypothetical edge case) |
-| O | yes | yes (-2) | no | yes (`atoms/o.toml`, `ions/o-2.toml`) | review | `O2-` included intentionally (hypothetical edge case) |
+| N | yes | yes (-3) | no | yes (`atoms/n.toml`, `ions/n-3.toml`) | review |  |
+| O | yes | yes (-2) | no | yes (`atoms/o.toml`, `ions/o-2.toml`) | review |  |
 | F | yes | yes (-1) | no | yes (`atoms/f.toml`, `ions/f-1.toml`, hydrides) | review |  |
 | Ne | yes | no | n/a | yes (`atoms/ne.toml`) | review |  |
 | Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `ions/na+1.toml`) | review |  |
 | Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `ions/mg+2.toml`) | review |  |
 | Al | yes | yes (+3) | no | yes (`atoms/al.toml`, `ions/al+3.toml`) | review |  |
 | Si | yes | no | no | yes (`atoms/si.toml`) | review |  |
-| P | yes | partial (-3 queried) | no | yes (`atoms/p.toml`, `ions/p-3.toml`) | review | `P3-` missing in atom-typing registry (counts-only pass) |
+| P | yes | yes (-3) | no | yes (`atoms/p.toml`, `ions/p-3.toml`) | review |  |
 | S | yes | yes (-2) | no | yes (`atoms/s.toml`, `ions/s-2.toml`) | review |  |
-| Cl | yes | yes (-1) | no | yes (`atoms/cl.toml`, `ions/cl-1.toml`, hydrides) | review |  |
+| Cl | yes | yes (-1) | no | yes (`atoms/cl.toml`, `ions/cl-1.toml`) | review |  |
 | Ar | yes | no | n/a | yes (`atoms/ar.toml`) | review |  |
 | K | yes | yes (+1) | no | yes (`atoms/k.toml`, `ions/k+1.toml`) | review |  |
 | Ca | yes | yes (+2) | no | yes (`atoms/ca.toml`, `ions/ca+2.toml`) | review |  |
@@ -92,7 +92,7 @@ Status values:
 | Sb | yes | yes (-3) | no | yes (`atoms/sb.toml`, `ions/sb-3.toml`) | review |  |
 | Te | yes | yes (-2) | no | yes (`atoms/te.toml`, `ions/te-2.toml`) | review |  |
 | I | yes | yes (-1) | no | yes (`atoms/i.toml`, `ions/i-1.toml`, hydrides) | review | `implicit_h=false => H=Some(0)` rule required for unambiguous typing |
-| Xe | yes | no | partial | yes (`atoms/xe.toml`) | review | Extended neutral set present in registry; ions not yet in conformance scope |
+| Xe | yes | no | partial | yes (`atoms/xe.toml`) | review |  |
 
 Extend this table as new elements are considered.
 
