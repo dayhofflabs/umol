@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Nb/1^4}"
+      - "{Nb^5}"
     bonds: []
 counts:
   success: true

@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Mo/1^5}"
+      - "{Mo^6}"
     bonds: []
 counts:
   success: true

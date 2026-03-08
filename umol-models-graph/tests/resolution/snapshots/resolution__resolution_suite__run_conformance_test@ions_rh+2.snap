@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Rh+2/3^3}"
+      - "{Rh+2/3^1}"
     bonds: []
 counts:
   success: true

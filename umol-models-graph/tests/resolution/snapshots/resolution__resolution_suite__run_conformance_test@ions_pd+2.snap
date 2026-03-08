@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Pd+2/4^2}"
+      - "{Pd+2/4}"
     bonds: []
 counts:
   success: true

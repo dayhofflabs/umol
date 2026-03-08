@@ -4,14 +4,10 @@ expression: results
 ---
 category: ions
 atom_typing:
-  success: true
-  summary:
-    atom_count: 1
-    bond_count: 0
-    topology: "@"
-    atoms:
-      - "{Ni+2/4^2}"
-    bonds: []
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: Valence ambiguous for atom Ni at index 0 has 2 valence matches
 counts:
   success: true
   summary:
