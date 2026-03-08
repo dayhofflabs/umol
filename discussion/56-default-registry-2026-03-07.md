@@ -93,6 +93,38 @@ Status values:
 | Te | yes | yes (-2) | no | yes (`atoms/te.toml`, `ions/te-2.toml`) | review |  |
 | I | yes | yes (-1) | no | yes (`atoms/i.toml`, `ions/i-1.toml`, hydrides) | review | `implicit_h=false => H=Some(0)` rule required for unambiguous typing |
 | Xe | yes | no | partial | yes (`atoms/xe.toml`) | review |  |
+| Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `ions/cs+1.toml`) | review |  |
+| Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `ions/ba+2.toml`) | review |  |
+| Tl | yes | yes (+1,+3) | no | yes (`atoms/tl.toml`, `ions/tl+1.toml`, `ions/tl+3.toml`) | review |  |
+| Pb | yes | yes (+2,+4) | no | yes (`atoms/pb.toml`, `ions/pb+2.toml`, `ions/pb+4.toml`) | review |  |
+| Bi | yes | yes (+3) | no | yes (`atoms/bi.toml`, `ions/bi+3.toml`) | review |  |
+| Po | yes | yes (-2) | no | yes (`atoms/po.toml`, `ions/po-2.toml`) | review |  |
+| At | yes | yes (-1) | no | yes (`atoms/at.toml`, `ions/at-1.toml`) | review |  |
+| Rn | yes | no | no | yes (`atoms/rn.toml`) | review |  |
+| La | yes | yes (+3) | no | yes (`atoms/la.toml`, `ions/la+3.toml`) | review |  |
+| Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `ions/ce+3.toml`, `ions/ce+4.toml`) | review |  |
+| Pr | yes | yes (+3,+4) | no | yes (`atoms/pr.toml`, `ions/pr+3.toml`, `ions/pr+4.toml`) | review | Counts requires `Pr` valence-table support for +4 |
+| Nd | yes | yes (+3) | no | yes (`atoms/nd.toml`, `ions/nd+3.toml`) | review |  |
+| Pm | yes | yes (+3) | no | yes (`atoms/pm.toml`, `ions/pm+3.toml`) | review |  |
+| Sm | yes | yes (+2,+3) | no | yes (`atoms/sm.toml`, `ions/sm+2.toml`, `ions/sm+3.toml`) | review |  |
+| Eu | yes | yes (+2,+3) | no | yes (`atoms/eu.toml`, `ions/eu+2.toml`, `ions/eu+3.toml`) | review |  |
+| Gd | yes | yes (+3) | no | yes (`atoms/gd.toml`, `ions/gd+3.toml`) | review |  |
+| Tb | yes | yes (+3,+4) | no | yes (`atoms/tb.toml`, `ions/tb+3.toml`, `ions/tb+4.toml`) | review |  |
+| Dy | yes | yes (+3) | no | yes (`atoms/dy.toml`, `ions/dy+3.toml`) | review |  |
+| Ho | yes | yes (+3) | no | yes (`atoms/ho.toml`, `ions/ho+3.toml`) | review |  |
+| Er | yes | yes (+3) | no | yes (`atoms/er.toml`, `ions/er+3.toml`) | review |  |
+| Tm | yes | yes (+3) | no | yes (`atoms/tm.toml`, `ions/tm+3.toml`) | review |  |
+| Yb | yes | yes (+2,+3) | no | yes (`atoms/yb.toml`, `ions/yb+2.toml`, `ions/yb+3.toml`) | review |  |
+| Lu | yes | yes (+3) | no | yes (`atoms/lu.toml`, `ions/lu+3.toml`) | review |  |
+| Hf | yes | yes (+4) | no | yes (`atoms/hf.toml`, `ions/hf+4.toml`) | review |  |
+| Ta | yes | no | no | yes (`atoms/ta.toml`) | review |  |
+| W | yes | no | no | yes (`atoms/w.toml`) | review |  |
+| Re | yes | no | no | yes (`atoms/re.toml`) | review |  |
+| Os | yes | no | no | yes (`atoms/os.toml`) | review |  |
+| Ir | yes | no | no | yes (`atoms/ir.toml`) | review |  |
+| Pt | yes | yes (+2) | no | yes (`atoms/pt.toml`, `ions/pt+2.toml`) | review |  |
+| Au | yes | yes (+1,+3) | no | yes (`atoms/au.toml`, `ions/au+1.toml`, `ions/au+3.toml`) | review | `Au3+` conformance pinned to low-spin |
+| Hg | yes | yes (+2, [Hg2]2+) | no | yes (`atoms/hg.toml`, `ions/hg+2.toml`, `ions/hg+2_dimer.toml`) | review | Dimer encoded as two `Hg+1` atoms with single bond |
 
 Extend this table as new elements are considered.
 
@@ -128,8 +160,8 @@ Use resolution data categories:
 
 ## Current Conformance Set
 
-- `atoms/`: `h`, `he`, `li`, `be`, `b`, `c`, `n`, `o`, `f`, `ne`, `na`, `mg`, `al`, `si`, `p`, `s`, `cl`, `ar`, `k`, `ca`, `sc`, `ti`, `v`, `cr`, `mn`, `fe`, `co`, `ni`, `cu`, `zn`, `ga`, `ge`, `as`, `se`, `br`, `kr`, `rb`, `sr`, `y`, `zr`, `nb`, `mo`, `tc`, `ru`, `rh`, `pd`, `ag`, `cd`, `in`, `sn`, `sb`, `te`, `i`, `xe`
-- `ions/`: `h+1`, `li+1`, `be+2`, `mg+2`, `al+3`, `n-3`, `o-2`, `f-1`, `na+1`, `p-3`, `s-2`, `cl-1`, `k+1`, `ca+2`, `sc+3`, `ti+3`, `ti+4`, `v+2`, `v+3`, `cr+2`, `cr+3`, `mn+2`, `mn+3`, `fe+2`, `fe+3`, `co+2`, `co+3`, `ni+2`, `cu+1`, `cu+2`, `zn+2`, `ga+3`, `as-3`, `se-2`, `br-1`, `rb+1`, `sr+2`, `y+3`, `zr+4`, `nb+3`, `mo+2`, `mo+3`, `ru+2`, `ru+3`, `rh+2`, `rh+3`, `pd+2`, `ag+1`, `ag+2`, `cd+2`, `in+3`, `sb-3`, `te-2`, `i-1`
+- `atoms/`: `h`, `he`, `li`, `be`, `b`, `c`, `n`, `o`, `f`, `ne`, `na`, `mg`, `al`, `si`, `p`, `s`, `cl`, `ar`, `k`, `ca`, `sc`, `ti`, `v`, `cr`, `mn`, `fe`, `co`, `ni`, `cu`, `zn`, `ga`, `ge`, `as`, `se`, `br`, `kr`, `rb`, `sr`, `y`, `zr`, `nb`, `mo`, `tc`, `ru`, `rh`, `pd`, `ag`, `cd`, `in`, `sn`, `sb`, `te`, `i`, `xe`, `cs`, `ba`, `tl`, `pb`, `bi`, `po`, `at`, `rn`, `la`, `ce`, `pr`, `nd`, `pm`, `sm`, `eu`, `gd`, `tb`, `dy`, `ho`, `er`, `tm`, `yb`, `lu`, `hf`, `ta`, `w`, `re`, `os`, `ir`, `pt`, `au`, `hg`
+- `ions/`: `h+1`, `li+1`, `be+2`, `mg+2`, `al+3`, `n-3`, `o-2`, `f-1`, `na+1`, `p-3`, `s-2`, `cl-1`, `k+1`, `ca+2`, `sc+3`, `ti+3`, `ti+4`, `v+2`, `v+3`, `cr+2`, `cr+3`, `mn+2`, `mn+3`, `fe+2`, `fe+3`, `co+2`, `co+3`, `ni+2`, `cu+1`, `cu+2`, `zn+2`, `ga+3`, `as-3`, `se-2`, `br-1`, `rb+1`, `sr+2`, `y+3`, `zr+4`, `nb+3`, `mo+2`, `mo+3`, `ru+2`, `ru+3`, `rh+2`, `rh+3`, `pd+2`, `ag+1`, `ag+2`, `cd+2`, `in+3`, `sb-3`, `te-2`, `i-1`, `cs+1`, `ba+2`, `tl+1`, `tl+3`, `pb+2`, `pb+4`, `bi+3`, `po-2`, `at-1`, `la+3`, `ce+3`, `ce+4`, `pr+3`, `pr+4`, `nd+3`, `pm+3`, `sm+2`, `sm+3`, `eu+2`, `eu+3`, `gd+3`, `tb+3`, `tb+4`, `dy+3`, `ho+3`, `er+3`, `tm+3`, `yb+2`, `yb+3`, `lu+3`, `hf+4`, `pt+2`, `au+1`, `au+3`, `hg+2`, `hg+2_dimer`
 - `hydrides/`: `h2`, `hf`
 
 ## Decision Log
@@ -144,4 +176,7 @@ Use resolution data categories:
 - Expanded coverage to period-3 atoms (`Na`..`Ar`) and matching ions (`Na+`, `Al3+`, `P3-`, `S2-`, `Cl-`), plus `Be2+`.
 - Expanded coverage to period-4 and period-5 s/p blocks, 3d block, and 4d block with ions: `Y3+`, `Zr4+`, `Nb3+`, `Mo2+`, `Mo3+`, `Ru2+`, `Ru3+`, `Rh2+`, `Rh3+`, `Pd2+`, `Ag+`, `Ag2+`, `Cd2+`.
 - Added missing 3d atom conformance files (`atoms/sc.toml` through `atoms/zn.toml`) and refreshed snapshots.
-- TODO: 5d ions La3+, Hf4+, Au3+, Hg2+, [Hg2]2+ ("{Hg+/5v1}"), 
+- Added 6s/6p conformance coverage: atoms `Cs`, `Ba`, `Tl`, `Pb`, `Bi`, `Po`, `At`, `Rn`; ions `Cs+`, `Ba2+`, `Tl+`, `Tl3+`, `Pb2+`, `Pb4+`, `Bi3+`, `Po2-`, `At-`.
+- Added 4f conformance coverage (`La`..`Lu`) with ions: all `3+`, plus `Ce4+`, `Pr4+`, `Tb4+`, and `Sm2+`, `Eu2+`, `Yb2+`.
+- Added 5d conformance coverage (`Hf`..`Hg`) with ions: `Hf4+`, `Pt2+`, `Au+`, `Au3+`, `Hg2+`, and `[Hg2]2+` as `ions/hg+2_dimer.toml`.
+- Pinned spin-sensitive transition-metal ion queries in conformance inputs (high-spin/low-spin where requested) and aligned `Pr` counts support (`default-valence-table`: `outer_electrons=5`, `allowed_valences=[3,4]`) so all conformance snapshots resolve with success.

@@ -475,7 +475,7 @@
 
 [In]
 0 = [
-    "{In/1^1}", # In atom
+    "{In/1^1}", # In atom, s2p1
 ]
 3 = [
     "{In+3}", # In3+
@@ -483,12 +483,12 @@
 
 [Sn]
 0 = [
-    "{Sn/1^2}", # Sn atom
+    "{Sn/1^2}", # Sn atom, s2p2
 ]
 
 [Sb]
 0 = [
-    "{Sb/1^3}", # Sb atom
+    "{Sb/1^3}", # Sb atom, s2p3
 ]
 -3 = [
     "{Sb-3/4}", # Sb3-
@@ -496,7 +496,7 @@
 
 [Te]
 0 = [
-    "{Te/2^2}", # Te atom
+    "{Te/2^2}", # Te atom, s2p4
 ]
 -2 = [
     "{Te-2/4}", # Te2-
@@ -508,7 +508,7 @@
     "{I/3H1}",   # HI
     "{I/3v1m0}", # I-I*..I-I(+)-I (DOI: 10.1021/ic00224a009)
     "{I/3m1}",   # I-I..I*-I(+)-I (DOI: 10.1021/ic00224a009)
-    "{I/3^1}",   # I atom
+    "{I/3^1}",   # I atom, s2p5
 ]
 1 = [
     "{I+/3}",     # I+
@@ -523,12 +523,12 @@
 
 [Xe]
 0 = [
-    "{Xe/4}",      # Xe atom
     "{Xe/3m2}",    # XeF2, XeCl2, XeX2
     "{Xe/2m4}",    # XeF4, XeOF2
     "{Xe/1m6}",    # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-
     "{Xe/1<v1m6}", # MeCN->XeO3
     "{Xem8}",      # XeO2F4, XeO3F2, XeO4, H4XeO6, [XeO6]3-, [XeO6]4-
+    "{Xe/4}",      # Xe atom, s2p6
 ]
 1 = [
     "{Xe+/3v1}",     # XeF+, XeCl+, XeX+
@@ -547,90 +547,380 @@
 
 [Cs]
 0 = [
-    "{Cs^1}", # Cs atom
+    "{Cs^1}", # Cs atom, s1
+]
+1 = [
+    "{Cs+}", # Cs+
 ]
 
 [Ba]
 0 = [
-    "{Ba/1}", # Ba atom
+    "{Ba/1}", # Ba atom, s2
+]
+2 = [
+    "{Ba+2}", # Ba2+
 ]
 
-# 4f
-# 5d
+[La]
+0 = [
+    "{La/1^1}", # La atom, s2d1
+]
+3 = [
+    "{La+3}", # La3+
+]
+
+[Ce]
+0 = [
+    "{Ce/1^2*1}", # Ce atom, s2d1f1
+]
+3 = [
+    "{Ce+3^1}", # Ce3+, f1
+]
+4 = [
+    "{Ce+4}", # Ce4+
+]
+
+[Pr]
+0 = [
+    "{Pr/1^3}", # Pr atom, s2f3
+]
+3 = [
+    "{Pr+3^2}", # Pr3+, f2
+]
+4 = [
+    "{Pr+4^1}", # Pr4+, f1
+]
+
+[Nd]
+0 = [
+    "{Nd/1^4}", # Nd atom, s2f4
+]
+3 = [
+    "{Nd+3^3}", # Nd3+, f3
+]
+
+[Pm]
+0 = [
+    "{Pm/1^5}", # Pm atom, s2f5
+]
+3 = [
+    "{Pm+3^4}", # Pm3+, f4
+]
+
+[Sm]
+0 = [
+    "{Sm/1^6}", # Sm atom, s2f6
+]
+2 = [
+    "{Sm+2^6}", # Sm2+, f6
+]
+3 = [
+    "{Sm+3^5}", # Sm3+, f5
+]
+
+[Eu]
+0 = [
+    "{Eu/1^7}", # Eu atom, s2f7
+]
+2 = [
+    "{Eu+2^7}", # Eu2+, f7
+]
+3 = [
+    "{Eu+3^6}", # Eu3+, f6
+]
+
+[Gd]
+0 = [
+    "{Gd/1^8}", # Gd atom, s2d1f7
+]
+3 = [
+    "{Gd+3^7}", # Gd3+, f7
+]
+
+[Tb]
+0 = [
+    "{Tb/3^5}", # Tb atom, s2f9
+]
+3 = [
+    "{Tb+3/1^6}", # Tb3+, f8
+]
+4 = [
+    "{Tb+4^7}", # Tb4+, f7
+]
+
+[Dy]
+0 = [
+    "{Dy/4^4}", # Dy atom, s2f10
+]
+3 = [
+    "{Dy+3/2^5}", # Dy3+, f9
+]
+
+[Ho]
+0 = [
+    "{Ho/5^3}", # Ho atom, s2f11
+]
+3 = [
+    "{Ho+3/3^4}", # Ho3+, f10
+]
+
+[Er]
+0 = [
+    "{Er/6^2}", # Er atom, s2f12
+]
+3 = [
+    "{Er+3/4^3}", # Er3+, f11
+]
+
+[Tm]
+0 = [
+    "{Tm/7^1}", # Tm atom, s2f13
+]
+3 = [
+    "{Tm+3/5^2}", # Tm3+, f12
+]
+
+[Yb]
+0 = [
+    "{Yb/8}", # Yb atom, s2f14
+]
+2 = [
+    "{Yb+2/7}", # Yb2+, f14
+]
+3 = [
+    "{Yb+3/6^1}", # Yb3+, f13
+]
+
+[Lu]
+0 = [
+    "{Lu/1^1}", # Lu atom, s2d1
+]
+3 = [
+    "{Lu+3}", # Lu3+, d0
+]
+
+[Hf]
+0 = [
+    "{Hf/1^2}", # Hf atom, s2d2
+]
+4 = [
+    "{Hf+4}", # Hf4+, d0
+]
+
+[Ta]
+0 = [
+    "{Ta/1^3}", # Ta atom, s2d3
+]
+
+[W]
+0 = [
+    "{W/1^4}", # W atom, s2d4
+]
+
+[Re]
+0 = [
+    "{Re/1^5}", # Re atom, s2d5
+]
+
+[Os]
+0 = [
+    "{Os/2^4}", # Os atom, s2d6
+]
+
+[Ir]
+0 = [
+    "{Ir/3^3}", # Ir atom, s2d7
+]
+
+[Pt]
+0 = [
+    "{Pt/4^2}", # Pt atom, s1d9
+]
+2 = [
+    "{Pt+2/4}", # Pt2+, d8 low-spin
+]
+
+[Au]
+0 = [
+    "{Au/5^1}", # Au atom, s1d10
+]
+1 = [
+    "{Au+/5}", # Au+, d10
+]
+3 = [
+    "{Au+3/4}", # Au3+, d8 low-spin
+    "{Au+3/3^2}", # Au3+, d8 high-spin
+]
+
+[Hg]
+0 = [
+    "{Hg/6}", # Hg atom, s2d10
+]
+1 = [
+    "{Hg+/5v1}", # [Hg2]2+
+]
+2 = [
+    "{Hg+2/5}", # Hg2+, d10
+]
 
 [Tl]
 0 = [
-    "{Tl/1^1}", # Tl atom
+    "{Tl/1^1}", # Tl atom, s2p1
+]
+1 = [
+    "{Tl+/1}", # Tl+
+]
+3 = [
+    "{Tl+3}", # Tl3+
 ]
 
 [Pb]
 0 = [
-    "{Pb/1^2}", # Pb atom
+    "{Pb/1^2}", # Pb atom, s2p2
+]
+2 = [
+    "{Pb+2/1}", # Pb2+
+]
+4 = [
+    "{Pb+4}", # Pb4+
 ]
 
 [Bi]
 0 = [
-    "{Bi/1^3}", # Bi atom
+    "{Bi/1^3}", # Bi atom, s2p3
+]
+3 = [
+    "{Bi+3/1}", # Bi3+
 ]
 
 [Po]
 0 = [
-    "{Po/2^2}", # Po atom
+    "{Po/2^2}", # Po atom, s2p4
+]
+-2 = [
+    "{Po-2/4}", # Po2-
 ]
 
 [At]
 0 = [
     "{At/3v1}", # At2
-    "{At/3^1}", # At atom
+    "{At/3^1}", # At atom, s2p5
 ]
 
 [Rn]
 0 = [
-    "{Rn/4}",   # Rn atom
     "{Rn/3m2}", # RnF2
     "{Rn/2m4}", # RnF4
     "{Rn/1m6}", # RnF6, RnO3
+    "{Rn/4}",   # Rn atom, s2p6
 ]
 
 [Fr]
 0 = [
-    "{Fr^1}", # Fr atom
+    "{Fr^1}", # Fr atom, s1
 ]
 
 [Ra]
 0 = [
-    "{Ra/1}", # Ra atom
+    "{Ra/1}", # Ra atom, s2
 ]
 
-# 5f
-# 6d
-
-[Nh]
+[Ac]
 0 = [
-    "{Nh/1^1}", # Nd atom
+    "{Ac/1^1}", # Ac atom, s2d1
 ]
 
-[Fl]
+[Th]
 0 = [
-    "{Fl/1^2}", # Fl atom
+    "{Th/1^2}", # Th atom, s2d2
 ]
 
-[Mc]
+[Pa]
 0 = [
-    "{Mc/1^3}", # Mc atom
+    "{Pa/1^3}", # Pa atom, s2d1f2
 ]
 
-[Lv]
+[U]
 0 = [
-    "{Lv/2^2}", # Lv atom
+    "{U/1^4}", # U atom, s2d2f3
 ]
 
-[Ts]
+[Np]
 0 = [
-    "{Ts/3^1}", # Ts atom
+    "{Np/1^5}", # Np atom, s2d1f3
 ]
 
-[Og]
+[Pu]
 0 = [
-    "{Og/4}", # Og atom   
+    "{Pu/1^6}", # Pu atom, s2f6
+]
+
+[Am]
+0 = [
+    "{Am/1^7}", # Am atom, s2d1f6
+]
+
+[Cm]
+0 = [
+    "{Cm/1^8}", # Cm atom, s2d1f7
+]
+
+[Bk]
+0 = [
+    "{Bk/3^5}", # Bk atom, s2f9
+]
+
+[Cf]
+0 = [
+    "{Cf/4^4}", # Cf atom, s2f10
+]
+
+[Es]
+0 = [
+    "{Es/5^3}", # Es atom, s2f11
+]
+
+[Fm]
+0 = [
+    "{Fm/6^2}", # Fm atom, s2f12
+]
+
+[Md]
+0 = [
+    "{Md/7^1}", # Md atom, s2f13
+]
+
+[No]
+0 = [
+    "{No/8}", # No atom, s2f14
+]
+
+[Lr]
+0 = [
+    "{Lr/1^1}", # Lr atom, s2d1
+]
+
+[Rf]
+0 = [
+    "{Rf/1^2}", # Rf atom, s2d2
+]
+
+[Db]
+0 = [
+    "{Db/1^3}", # Db atom, s2d3
+]
+
+[Sg]
+0 = [
+    "{Sg/1^4}", # Sg atom, s2d4
+]
+
+[Bh]
+0 = [
+    "{Bh/1^5}", # Bh atom, s2d5
+]
+
+[Hs]
+0 = [
+    "{Hs/2^4}", # Hs atom, s2d6
 ]

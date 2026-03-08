@@ -4,10 +4,14 @@ expression: results
 ---
 category: ions
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: Valence ambiguous for atom Fe at index 0 has 3 valence matches
+  success: true
+  summary:
+    atom_count: 1
+    bond_count: 0
+    topology: "@"
+    atoms:
+      - "{Fe+3^5}"
+    bonds: []
 counts:
   success: true
   summary:
@@ -15,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Fe+3/2^1}"
+      - "{Fe+3/2^5}"
     bonds: []

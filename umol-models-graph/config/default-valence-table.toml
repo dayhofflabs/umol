@@ -235,7 +235,7 @@ outer_electrons = 4
 allowed_valences = [-1]
 
 [Pr]
-outer_electrons = 3
+outer_electrons = 5
 allowed_valences = [-1]
 
 [Nd]

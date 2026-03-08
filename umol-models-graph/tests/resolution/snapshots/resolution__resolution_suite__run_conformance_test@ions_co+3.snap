@@ -4,10 +4,14 @@ expression: results
 ---
 category: ions
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: Valence ambiguous for atom Co at index 0 has 2 valence matches
+  success: true
+  summary:
+    atom_count: 1
+    bond_count: 0
+    topology: "@"
+    atoms:
+      - "{Co+3/1^4}"
+    bonds: []
 counts:
   success: true
   summary:
@@ -15,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Co+3/3}"
+      - "{Co+3/3^4}"
     bonds: []
