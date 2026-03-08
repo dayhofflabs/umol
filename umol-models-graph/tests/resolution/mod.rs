@@ -76,7 +76,7 @@ fn parse_atom_token(token: &str, implicit_h: bool) -> TableAtom {
             )
         }))
     } else {
-        None
+        Some(query.hydrogens.unwrap_or(0))
     };
     atom.lone_pairs = query.lone_pairs;
 
@@ -297,7 +297,7 @@ fn run_conformance_test(file_path: &PathBuf) {
 }
 
 #[rstest]
-// Keep recursive glob so category folders and new files are auto-discovered at compile time.
+// Keep recursive glob so category folders and recently added files are auto-discovered at compile time.
 fn test_conformance(#[files("tests/resolution/data/**/*.toml")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }

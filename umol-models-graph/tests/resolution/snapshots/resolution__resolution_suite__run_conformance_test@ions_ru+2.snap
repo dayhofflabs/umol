@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{P-3/4}"
+      - "{Ru+2/2^4}"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{P-3/4}"
+      - "{Ru+2/3}"
     bonds: []

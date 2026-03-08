@@ -2,7 +2,7 @@
 source: umol-models-graph/tests/resolution/mod.rs
 expression: results
 ---
-category: ions
+category: atoms
 atom_typing:
   success: true
   summary:
@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{P-3/4}"
+      - "{Cd/6}"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{P-3/4}"
+      - "{Cd/1}"
     bonds: []
