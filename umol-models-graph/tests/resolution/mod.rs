@@ -69,12 +69,7 @@ fn parse_atom_token(token: &str, implicit_h: bool) -> TableAtom {
     let mut atom = TableAtom::from_element(query.element);
     atom.charge = query.charge;
     atom.hydrogens = if implicit_h {
-        Some(query.hydrogens.unwrap_or_else(|| {
-            panic!(
-                "missing hydrogen token in '{}' while implicit_h=true; specify H0 explicitly",
-                token
-            )
-        }))
+        query.hydrogens
     } else {
         Some(query.hydrogens.unwrap_or(0))
     };

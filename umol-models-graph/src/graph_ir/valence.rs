@@ -98,7 +98,7 @@ impl ValenceValidator {
             lone_pairs,
             unpaired,
             multiplicity,
-            total_valence,
+            explicit_valence,
             donated,
             accepted,
             0,

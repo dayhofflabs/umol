@@ -61,9 +61,9 @@ Status values:
 | Ca | yes | yes (+2) | no | yes (`atoms/ca.toml`, `ions/ca+2.toml`) | done |  |
 | Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `ions/sc+3.toml`) | done |  |
 | Ti | yes | yes (+3,+4) | no | yes (`atoms/ti.toml`, `ions/ti+3.toml`, `ions/ti+4.toml`) | done |  |
-| V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `ions/v+2.toml`, `ions/v+3.toml`) | done | Higher oxidation states intentionally excluded from ion set |
-| Cr | yes | yes (+2,+3) | no | yes (`atoms/cr.toml`, `ions/cr+2.toml`, `ions/cr+3.toml`) | done | Higher oxidation states intentionally excluded from ion set |
-| Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `ions/mn+2.toml`, `ions/mn+3.toml`) | done | Higher oxidation states intentionally excluded from ion set |
+| V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `ions/v+2.toml`, `ions/v+3.toml`) | done |  |
+| Cr | yes | yes (+2,+3) | no | yes (`atoms/cr.toml`, `ions/cr+2.toml`, `ions/cr+3.toml`) | done |  |
+| Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `ions/mn+2.toml`, `ions/mn+3.toml`) | done |  |
 | Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `ions/fe+2.toml`, `ions/fe+3.toml`) | done |  |
 | Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `ions/co+2.toml`, `ions/co+3.toml`) | done |  |
 | Ni | yes | yes (+2) | no | yes (`atoms/ni.toml`, `ions/ni+2.toml`) | done |  |
@@ -91,7 +91,7 @@ Status values:
 | Sn | yes | no | no | yes (`atoms/sn.toml`) | done |  |
 | Sb | yes | yes (-3) | no | yes (`atoms/sb.toml`, `ions/sb-3.toml`) | done |  |
 | Te | yes | yes (-2) | no | yes (`atoms/te.toml`, `ions/te-2.toml`) | done |  |
-| I | yes | yes (-1) | no | yes (`atoms/i.toml`, `ions/i-1.toml`, hydrides) | done | `implicit_h=false => H=Some(0)` rule required for unambiguous typing |
+| I | yes | yes (-1) | no | yes (`atoms/i.toml`, `ions/i-1.toml`, hydrides) | done |   |
 | Xe | yes | no | partial | yes (`atoms/xe.toml`) | done |  |
 | Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `ions/cs+1.toml`) | done |  |
 | Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `ions/ba+2.toml`) | done |  |
