@@ -363,19 +363,19 @@ outer_electrons = 4
 allowed_valences = [-1]
 
 [Pa]
-outer_electrons = 3
-allowed_valences = [-1]
-
-[U]
-outer_electrons = 4
-allowed_valences = [-1]
-
-[Np]
 outer_electrons = 5
 allowed_valences = [-1]
 
-[Pu]
+[U]
 outer_electrons = 6
+allowed_valences = [-1]
+
+[Np]
+outer_electrons = 6
+allowed_valences = [-1]
+
+[Pu]
+outer_electrons = 7
 allowed_valences = [-1]
 
 [Am]
