@@ -39,109 +39,109 @@ Status values:
 
 | Element | Ground state | Discrete ions | Typical valences | Conformance added | Status | Notes |
 |---|---|---|---|---|---|---|
-| H | yes | yes (+1) | yes | yes (`atoms/h.toml`, `ions/h+1.toml`, hydrides) | done |  |
+| H | yes | yes (+1) | yes | yes (`atoms/h.toml`, `atomic_ions/h+1.toml`, hydrides) | done |  |
 | He | yes | no | n/a | yes (`atoms/he.toml`) | done | |
-| Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `ions/li+1.toml`) | done |  |
-| Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `ions/be+2.toml`) | done |  |
+| Li | yes | yes (+1) | no | yes (`atoms/li.toml`, `atomic_ions/li+1.toml`) | done |  |
+| Be | yes | yes (+2) | no | yes (`atoms/be.toml`, `atomic_ions/be+2.toml`) | done |  |
 | B | yes | no | no | yes (`atoms/b.toml`) | done |  |
 | C | yes | no | no | yes (`atoms/c.toml`) | done |  |
-| N | yes | yes (-3) | no | yes (`atoms/n.toml`, `ions/n-3.toml`) | done |  |
-| O | yes | yes (-2) | no | yes (`atoms/o.toml`, `ions/o-2.toml`) | done |  |
-| F | yes | yes (-1) | no | yes (`atoms/f.toml`, `ions/f-1.toml`, hydrides) | done |  |
+| N | yes | yes (-3) | no | yes (`atoms/n.toml`, `atomic_ions/n-3.toml`) | done |  |
+| O | yes | yes (-2) | no | yes (`atoms/o.toml`, `atomic_ions/o-2.toml`) | done |  |
+| F | yes | yes (-1) | no | yes (`atoms/f.toml`, `atomic_ions/f-1.toml`, hydrides) | done |  |
 | Ne | yes | no | n/a | yes (`atoms/ne.toml`) | done |  |
-| Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `ions/na+1.toml`) | done |  |
-| Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `ions/mg+2.toml`) | done |  |
-| Al | yes | yes (+3) | no | yes (`atoms/al.toml`, `ions/al+3.toml`) | done |  |
+| Na | yes | yes (+1) | no | yes (`atoms/na.toml`, `atomic_ions/na+1.toml`) | done |  |
+| Mg | yes | yes (+2) | no | yes (`atoms/mg.toml`, `atomic_ions/mg+2.toml`) | done |  |
+| Al | yes | yes (+3) | no | yes (`atoms/al.toml`, `atomic_ions/al+3.toml`) | done |  |
 | Si | yes | no | no | yes (`atoms/si.toml`) | done |  |
-| P | yes | yes (-3) | no | yes (`atoms/p.toml`, `ions/p-3.toml`) | done |  |
-| S | yes | yes (-2) | no | yes (`atoms/s.toml`, `ions/s-2.toml`) | done |  |
-| Cl | yes | yes (-1) | no | yes (`atoms/cl.toml`, `ions/cl-1.toml`) | done |  |
+| P | yes | yes (-3) | no | yes (`atoms/p.toml`, `atomic_ions/p-3.toml`) | done |  |
+| S | yes | yes (-2) | no | yes (`atoms/s.toml`, `atomic_ions/s-2.toml`) | done |  |
+| Cl | yes | yes (-1) | no | yes (`atoms/cl.toml`, `atomic_ions/cl-1.toml`) | done |  |
 | Ar | yes | no | n/a | yes (`atoms/ar.toml`) | done |  |
-| K | yes | yes (+1) | no | yes (`atoms/k.toml`, `ions/k+1.toml`) | done |  |
-| Ca | yes | yes (+2) | no | yes (`atoms/ca.toml`, `ions/ca+2.toml`) | done |  |
-| Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `ions/sc+3.toml`) | done |  |
-| Ti | yes | yes (+3,+4) | no | yes (`atoms/ti.toml`, `ions/ti+3.toml`, `ions/ti+4.toml`) | done |  |
-| V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `ions/v+2.toml`, `ions/v+3.toml`) | done |  |
-| Cr | yes | yes (+2,+3) | no | yes (`atoms/cr.toml`, `ions/cr+2.toml`, `ions/cr+3.toml`) | done |  |
-| Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `ions/mn+2.toml`, `ions/mn+3.toml`) | done |  |
-| Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `ions/fe+2.toml`, `ions/fe+3.toml`) | done |  |
-| Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `ions/co+2.toml`, `ions/co+3.toml`) | done |  |
-| Ni | yes | yes (+2) | no | yes (`atoms/ni.toml`, `ions/ni+2.toml`) | done |  |
-| Cu | yes | yes (+1,+2) | no | yes (`atoms/cu.toml`, `ions/cu+1.toml`, `ions/cu+2.toml`) | done |  |
-| Zn | yes | yes (+2) | no | yes (`atoms/zn.toml`, `ions/zn+2.toml`) | done |  |
-| Ga | yes | yes (+3) | no | yes (`atoms/ga.toml`, `ions/ga+3.toml`) | done |  |
+| K | yes | yes (+1) | no | yes (`atoms/k.toml`, `atomic_ions/k+1.toml`) | done |  |
+| Ca | yes | yes (+2) | no | yes (`atoms/ca.toml`, `atomic_ions/ca+2.toml`) | done |  |
+| Sc | yes | yes (+3) | no | yes (`atoms/sc.toml`, `atomic_ions/sc+3.toml`) | done |  |
+| Ti | yes | yes (+3,+4) | no | yes (`atoms/ti.toml`, `atomic_ions/ti+3.toml`, `atomic_ions/ti+4.toml`) | done |  |
+| V | yes | yes (+2,+3) | no | yes (`atoms/v.toml`, `atomic_ions/v+2.toml`, `atomic_ions/v+3.toml`) | done |  |
+| Cr | yes | yes (+2,+3) | no | yes (`atoms/cr.toml`, `atomic_ions/cr+2.toml`, `atomic_ions/cr+3.toml`) | done |  |
+| Mn | yes | yes (+2,+3) | no | yes (`atoms/mn.toml`, `atomic_ions/mn+2.toml`, `atomic_ions/mn+3.toml`) | done |  |
+| Fe | yes | yes (+2,+3) | no | yes (`atoms/fe.toml`, `atomic_ions/fe+2.toml`, `atomic_ions/fe+3.toml`) | done |  |
+| Co | yes | yes (+2,+3) | no | yes (`atoms/co.toml`, `atomic_ions/co+2.toml`, `atomic_ions/co+3.toml`) | done |  |
+| Ni | yes | yes (+2) | no | yes (`atoms/ni.toml`, `atomic_ions/ni+2.toml`) | done |  |
+| Cu | yes | yes (+1,+2) | no | yes (`atoms/cu.toml`, `atomic_ions/cu+1.toml`, `atomic_ions/cu+2.toml`) | done |  |
+| Zn | yes | yes (+2) | no | yes (`atoms/zn.toml`, `atomic_ions/zn+2.toml`) | done |  |
+| Ga | yes | yes (+3) | no | yes (`atoms/ga.toml`, `atomic_ions/ga+3.toml`) | done |  |
 | Ge | yes | no | no | yes (`atoms/ge.toml`) | done |  |
-| As | yes | yes (-3) | no | yes (`atoms/as.toml`, `ions/as-3.toml`) | done |  |
-| Se | yes | yes (-2) | no | yes (`atoms/se.toml`, `ions/se-2.toml`) | done |  |
-| Br | yes | yes (-1) | no | yes (`atoms/br.toml`, `ions/br-1.toml`, hydrides) | done |  |
+| As | yes | yes (-3) | no | yes (`atoms/as.toml`, `atomic_ions/as-3.toml`) | done |  |
+| Se | yes | yes (-2) | no | yes (`atoms/se.toml`, `atomic_ions/se-2.toml`) | done |  |
+| Br | yes | yes (-1) | no | yes (`atoms/br.toml`, `atomic_ions/br-1.toml`, hydrides) | done |  |
 | Kr | yes | no | n/a | yes (`atoms/kr.toml`) | done |  |
-| Rb | yes | yes (+1) | no | yes (`atoms/rb.toml`, `ions/rb+1.toml`) | done |  |
-| Sr | yes | yes (+2) | no | yes (`atoms/sr.toml`, `ions/sr+2.toml`) | done |  |
-| Y | yes | yes (+3) | no | yes (`atoms/y.toml`, `ions/y+3.toml`) | done |  |
-| Zr | yes | yes (+4) | no | yes (`atoms/zr.toml`, `ions/zr+4.toml`) | done |  |
-| Nb | yes | yes (+3) | no | yes (`atoms/nb.toml`, `ions/nb+3.toml`) | done |  |
-| Mo | yes | yes (+2,+3) | no | yes (`atoms/mo.toml`, `ions/mo+2.toml`, `ions/mo+3.toml`) | done |  |
+| Rb | yes | yes (+1) | no | yes (`atoms/rb.toml`, `atomic_ions/rb+1.toml`) | done |  |
+| Sr | yes | yes (+2) | no | yes (`atoms/sr.toml`, `atomic_ions/sr+2.toml`) | done |  |
+| Y | yes | yes (+3) | no | yes (`atoms/y.toml`, `atomic_ions/y+3.toml`) | done |  |
+| Zr | yes | yes (+4) | no | yes (`atoms/zr.toml`, `atomic_ions/zr+4.toml`) | done |  |
+| Nb | yes | yes (+3) | no | yes (`atoms/nb.toml`, `atomic_ions/nb+3.toml`) | done |  |
+| Mo | yes | yes (+2,+3) | no | yes (`atoms/mo.toml`, `atomic_ions/mo+2.toml`, `atomic_ions/mo+3.toml`) | done |  |
 | Tc | yes | no | no | yes (`atoms/tc.toml`) | done | No ion added in current scope |
-| Ru | yes | yes (+2,+3) | no | yes (`atoms/ru.toml`, `ions/ru+2.toml`, `ions/ru+3.toml`) | done |  |
-| Rh | yes | yes (+2,+3) | no | yes (`atoms/rh.toml`, `ions/rh+2.toml`, `ions/rh+3.toml`) | done |  |
-| Pd | yes | yes (+2) | no | yes (`atoms/pd.toml`, `ions/pd+2.toml`) | done |  |
-| Ag | yes | yes (+1,+2) | no | yes (`atoms/ag.toml`, `ions/ag+1.toml`, `ions/ag+2.toml`) | done |  |
-| Cd | yes | yes (+2) | no | yes (`atoms/cd.toml`, `ions/cd+2.toml`) | done |  |
-| In | yes | yes (+3) | no | yes (`atoms/in.toml`, `ions/in+3.toml`) | done |  |
+| Ru | yes | yes (+2,+3) | no | yes (`atoms/ru.toml`, `atomic_ions/ru+2.toml`, `atomic_ions/ru+3.toml`) | done |  |
+| Rh | yes | yes (+2,+3) | no | yes (`atoms/rh.toml`, `atomic_ions/rh+2.toml`, `atomic_ions/rh+3.toml`) | done |  |
+| Pd | yes | yes (+2) | no | yes (`atoms/pd.toml`, `atomic_ions/pd+2.toml`) | done |  |
+| Ag | yes | yes (+1,+2) | no | yes (`atoms/ag.toml`, `atomic_ions/ag+1.toml`, `atomic_ions/ag+2.toml`) | done |  |
+| Cd | yes | yes (+2) | no | yes (`atoms/cd.toml`, `atomic_ions/cd+2.toml`) | done |  |
+| In | yes | yes (+3) | no | yes (`atoms/in.toml`, `atomic_ions/in+3.toml`) | done |  |
 | Sn | yes | no | no | yes (`atoms/sn.toml`) | done |  |
-| Sb | yes | yes (-3) | no | yes (`atoms/sb.toml`, `ions/sb-3.toml`) | done |  |
-| Te | yes | yes (-2) | no | yes (`atoms/te.toml`, `ions/te-2.toml`) | done |  |
-| I | yes | yes (-1) | no | yes (`atoms/i.toml`, `ions/i-1.toml`, hydrides) | done |   |
+| Sb | yes | yes (-3) | no | yes (`atoms/sb.toml`, `atomic_ions/sb-3.toml`) | done |  |
+| Te | yes | yes (-2) | no | yes (`atoms/te.toml`, `atomic_ions/te-2.toml`) | done |  |
+| I | yes | yes (-1) | no | yes (`atoms/i.toml`, `atomic_ions/i-1.toml`, hydrides) | done |   |
 | Xe | yes | no | partial | yes (`atoms/xe.toml`) | done |  |
-| Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `ions/cs+1.toml`) | done |  |
-| Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `ions/ba+2.toml`) | done |  |
-| Tl | yes | yes (+1,+3) | no | yes (`atoms/tl.toml`, `ions/tl+1.toml`, `ions/tl+3.toml`) | done |  |
-| Pb | yes | yes (+2,+4) | no | yes (`atoms/pb.toml`, `ions/pb+2.toml`, `ions/pb+4.toml`) | done |  |
-| Bi | yes | yes (+3) | no | yes (`atoms/bi.toml`, `ions/bi+3.toml`) | done |  |
-| Po | yes | yes (-2) | no | yes (`atoms/po.toml`, `ions/po-2.toml`) | done |  |
-| At | yes | yes (-1) | no | yes (`atoms/at.toml`, `ions/at-1.toml`) | done |  |
+| Cs | yes | yes (+1) | no | yes (`atoms/cs.toml`, `atomic_ions/cs+1.toml`) | done |  |
+| Ba | yes | yes (+2) | no | yes (`atoms/ba.toml`, `atomic_ions/ba+2.toml`) | done |  |
+| Tl | yes | yes (+1,+3) | no | yes (`atoms/tl.toml`, `atomic_ions/tl+1.toml`, `atomic_ions/tl+3.toml`) | done |  |
+| Pb | yes | yes (+2,+4) | no | yes (`atoms/pb.toml`, `atomic_ions/pb+2.toml`, `atomic_ions/pb+4.toml`) | done |  |
+| Bi | yes | yes (+3) | no | yes (`atoms/bi.toml`, `atomic_ions/bi+3.toml`) | done |  |
+| Po | yes | yes (-2) | no | yes (`atoms/po.toml`, `atomic_ions/po-2.toml`) | done |  |
+| At | yes | yes (-1) | no | yes (`atoms/at.toml`, `atomic_ions/at-1.toml`) | done |  |
 | Rn | yes | no | no | yes (`atoms/rn.toml`) | done |  |
-| La | yes | yes (+3) | no | yes (`atoms/la.toml`, `ions/la+3.toml`) | done |  |
-| Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `ions/ce+3.toml`, `ions/ce+4.toml`) | done |  |
-| Pr | yes | yes (+3,+4) | no | yes (`atoms/pr.toml`, `ions/pr+3.toml`, `ions/pr+4.toml`) | done | Counts requires `Pr` valence-table support for +4 |
-| Nd | yes | yes (+3) | no | yes (`atoms/nd.toml`, `ions/nd+3.toml`) | done |  |
-| Pm | yes | yes (+3) | no | yes (`atoms/pm.toml`, `ions/pm+3.toml`) | done |  |
-| Sm | yes | yes (+2,+3) | no | yes (`atoms/sm.toml`, `ions/sm+2.toml`, `ions/sm+3.toml`) | done |  |
-| Eu | yes | yes (+2,+3) | no | yes (`atoms/eu.toml`, `ions/eu+2.toml`, `ions/eu+3.toml`) | done |  |
-| Gd | yes | yes (+3) | no | yes (`atoms/gd.toml`, `ions/gd+3.toml`) | done |  |
-| Tb | yes | yes (+3,+4) | no | yes (`atoms/tb.toml`, `ions/tb+3.toml`, `ions/tb+4.toml`) | done |  |
-| Dy | yes | yes (+3) | no | yes (`atoms/dy.toml`, `ions/dy+3.toml`) | done |  |
-| Ho | yes | yes (+3) | no | yes (`atoms/ho.toml`, `ions/ho+3.toml`) | done |  |
-| Er | yes | yes (+3) | no | yes (`atoms/er.toml`, `ions/er+3.toml`) | done |  |
-| Tm | yes | yes (+3) | no | yes (`atoms/tm.toml`, `ions/tm+3.toml`) | done |  |
-| Yb | yes | yes (+2,+3) | no | yes (`atoms/yb.toml`, `ions/yb+2.toml`, `ions/yb+3.toml`) | done |  |
-| Lu | yes | yes (+3) | no | yes (`atoms/lu.toml`, `ions/lu+3.toml`) | done |  |
-| Hf | yes | yes (+4) | no | yes (`atoms/hf.toml`, `ions/hf+4.toml`) | done |  |
+| La | yes | yes (+3) | no | yes (`atoms/la.toml`, `atomic_ions/la+3.toml`) | done |  |
+| Ce | yes | yes (+3,+4) | no | yes (`atoms/ce.toml`, `atomic_ions/ce+3.toml`, `atomic_ions/ce+4.toml`) | done |  |
+| Pr | yes | yes (+3,+4) | no | yes (`atoms/pr.toml`, `atomic_ions/pr+3.toml`, `atomic_ions/pr+4.toml`) | done | Counts requires `Pr` valence-table support for +4 |
+| Nd | yes | yes (+3) | no | yes (`atoms/nd.toml`, `atomic_ions/nd+3.toml`) | done |  |
+| Pm | yes | yes (+3) | no | yes (`atoms/pm.toml`, `atomic_ions/pm+3.toml`) | done |  |
+| Sm | yes | yes (+2,+3) | no | yes (`atoms/sm.toml`, `atomic_ions/sm+2.toml`, `atomic_ions/sm+3.toml`) | done |  |
+| Eu | yes | yes (+2,+3) | no | yes (`atoms/eu.toml`, `atomic_ions/eu+2.toml`, `atomic_ions/eu+3.toml`) | done |  |
+| Gd | yes | yes (+3) | no | yes (`atoms/gd.toml`, `atomic_ions/gd+3.toml`) | done |  |
+| Tb | yes | yes (+3,+4) | no | yes (`atoms/tb.toml`, `atomic_ions/tb+3.toml`, `atomic_ions/tb+4.toml`) | done |  |
+| Dy | yes | yes (+3) | no | yes (`atoms/dy.toml`, `atomic_ions/dy+3.toml`) | done |  |
+| Ho | yes | yes (+3) | no | yes (`atoms/ho.toml`, `atomic_ions/ho+3.toml`) | done |  |
+| Er | yes | yes (+3) | no | yes (`atoms/er.toml`, `atomic_ions/er+3.toml`) | done |  |
+| Tm | yes | yes (+3) | no | yes (`atoms/tm.toml`, `atomic_ions/tm+3.toml`) | done |  |
+| Yb | yes | yes (+2,+3) | no | yes (`atoms/yb.toml`, `atomic_ions/yb+2.toml`, `atomic_ions/yb+3.toml`) | done |  |
+| Lu | yes | yes (+3) | no | yes (`atoms/lu.toml`, `atomic_ions/lu+3.toml`) | done |  |
+| Hf | yes | yes (+4) | no | yes (`atoms/hf.toml`, `atomic_ions/hf+4.toml`) | done |  |
 | Ta | yes | no | no | yes (`atoms/ta.toml`) | done |  |
 | W | yes | no | no | yes (`atoms/w.toml`) | done |  |
 | Re | yes | no | no | yes (`atoms/re.toml`) | done |  |
 | Os | yes | no | no | yes (`atoms/os.toml`) | done |  |
 | Ir | yes | no | no | yes (`atoms/ir.toml`) | done |  |
-| Pt | yes | yes (+2) | no | yes (`atoms/pt.toml`, `ions/pt+2.toml`) | done |  |
-| Au | yes | yes (+1,+3) | no | yes (`atoms/au.toml`, `ions/au+1.toml`, `ions/au+3.toml`) | done | `Au3+` conformance pinned to low-spin |
-| Hg | yes | yes (+2, [Hg2]2+) | no | yes (`atoms/hg.toml`, `ions/hg+2.toml`, `ions/hg+2_dimer.toml`) | done | Dimer encoded as two `Hg+1` atoms with single bond |
-| Fr | yes | yes (+1) | no | yes (`atoms/fr.toml`, `ions/fr+1.toml`) | done |  |
-| Ra | yes | yes (+2) | no | yes (`atoms/ra.toml`, `ions/ra+2.toml`) | done |  |
-| Ac | yes | yes (+3) | no | yes (`atoms/ac.toml`, `ions/ac+3.toml`) | done |  |
-| Th | yes | yes (+3,+4) | no | yes (`atoms/th.toml`, `ions/th+3.toml`, `ions/th+4.toml`) | done |  |
-| Pa | yes | yes (+4,+5) | no | yes (`atoms/pa.toml`, `ions/pa+4.toml`, `ions/pa+5.toml`) | done | Valence table outer electrons adjusted to 5 |
-| U | yes | yes (+3,+4,+5,+6) | no | yes (`atoms/u.toml`, `ions/u+3.toml`, `ions/u+4.toml`, `ions/u+5.toml`, `ions/u+6.toml`) | done | Valence table outer electrons adjusted to 6 |
-| Np | yes | yes (+3,+4,+5,+6) | no | yes (`atoms/np.toml`, `ions/np+3.toml`, `ions/np+4.toml`, `ions/np+5.toml`, `ions/np+6.toml`) | done | Valence table outer electrons adjusted to 6 |
-| Pu | yes | yes (+3,+4,+5,+6,+7) | no | yes (`atoms/pu.toml`, `ions/pu+3.toml`, `ions/pu+4.toml`, `ions/pu+5.toml`, `ions/pu+6.toml`, `ions/pu+7.toml`) | done | Valence table outer electrons adjusted to 7 |
-| Am | yes | yes (+2,+3,+4) | no | yes (`atoms/am.toml`, `ions/am+2.toml`, `ions/am+3.toml`, `ions/am+4.toml`) | done |  |
-| Cm | yes | yes (+3,+4) | no | yes (`atoms/cm.toml`, `ions/cm+3.toml`, `ions/cm+4.toml`) | done |  |
-| Bk | yes | yes (+3,+4) | no | yes (`atoms/bk.toml`, `ions/bk+3.toml`, `ions/bk+4.toml`) | done |  |
-| Cf | yes | yes (+2,+3,+4) | no | yes (`atoms/cf.toml`, `ions/cf+2.toml`, `ions/cf+3.toml`, `ions/cf+4.toml`) | done |  |
-| Es | yes | yes (+2,+3) | no | yes (`atoms/es.toml`, `ions/es+2.toml`, `ions/es+3.toml`) | done |  |
-| Fm | yes | yes (+2,+3) | no | yes (`atoms/fm.toml`, `ions/fm+2.toml`, `ions/fm+3.toml`) | done |  |
-| Md | yes | yes (+2,+3) | no | yes (`atoms/md.toml`, `ions/md+2.toml`, `ions/md+3.toml`) | done |  |
-| No | yes | yes (+2) | no | yes (`atoms/no.toml`, `ions/no+2.toml`) | done |  |
-| Lr | yes | yes (+3) | no | yes (`atoms/lr.toml`, `ions/lr+3.toml`) | done |  |
+| Pt | yes | yes (+2) | no | yes (`atoms/pt.toml`, `atomic_ions/pt+2.toml`) | done |  |
+| Au | yes | yes (+1,+3) | no | yes (`atoms/au.toml`, `atomic_ions/au+1.toml`, `atomic_ions/au+3.toml`) | done | `Au3+` conformance pinned to low-spin |
+| Hg | yes | yes (+2, [Hg2]2+) | no | yes (`atoms/hg.toml`, `atomic_ions/hg+2.toml`, `atomic_ions/hg+2_dimer.toml`) | done | Dimer encoded as two `Hg+1` atoms with single bond |
+| Fr | yes | yes (+1) | no | yes (`atoms/fr.toml`, `atomic_ions/fr+1.toml`) | done |  |
+| Ra | yes | yes (+2) | no | yes (`atoms/ra.toml`, `atomic_ions/ra+2.toml`) | done |  |
+| Ac | yes | yes (+3) | no | yes (`atoms/ac.toml`, `atomic_ions/ac+3.toml`) | done |  |
+| Th | yes | yes (+3,+4) | no | yes (`atoms/th.toml`, `atomic_ions/th+3.toml`, `atomic_ions/th+4.toml`) | done |  |
+| Pa | yes | yes (+4,+5) | no | yes (`atoms/pa.toml`, `atomic_ions/pa+4.toml`, `atomic_ions/pa+5.toml`) | done | Valence table outer electrons adjusted to 5 |
+| U | yes | yes (+3,+4,+5,+6) | no | yes (`atoms/u.toml`, `atomic_ions/u+3.toml`, `atomic_ions/u+4.toml`, `atomic_ions/u+5.toml`, `atomic_ions/u+6.toml`) | done | Valence table outer electrons adjusted to 6 |
+| Np | yes | yes (+3,+4,+5,+6) | no | yes (`atoms/np.toml`, `atomic_ions/np+3.toml`, `atomic_ions/np+4.toml`, `atomic_ions/np+5.toml`, `atomic_ions/np+6.toml`) | done | Valence table outer electrons adjusted to 6 |
+| Pu | yes | yes (+3,+4,+5,+6,+7) | no | yes (`atoms/pu.toml`, `atomic_ions/pu+3.toml`, `atomic_ions/pu+4.toml`, `atomic_ions/pu+5.toml`, `atomic_ions/pu+6.toml`, `atomic_ions/pu+7.toml`) | done | Valence table outer electrons adjusted to 7 |
+| Am | yes | yes (+2,+3,+4) | no | yes (`atoms/am.toml`, `atomic_ions/am+2.toml`, `atomic_ions/am+3.toml`, `atomic_ions/am+4.toml`) | done |  |
+| Cm | yes | yes (+3,+4) | no | yes (`atoms/cm.toml`, `atomic_ions/cm+3.toml`, `atomic_ions/cm+4.toml`) | done |  |
+| Bk | yes | yes (+3,+4) | no | yes (`atoms/bk.toml`, `atomic_ions/bk+3.toml`, `atomic_ions/bk+4.toml`) | done |  |
+| Cf | yes | yes (+2,+3,+4) | no | yes (`atoms/cf.toml`, `atomic_ions/cf+2.toml`, `atomic_ions/cf+3.toml`, `atomic_ions/cf+4.toml`) | done |  |
+| Es | yes | yes (+2,+3) | no | yes (`atoms/es.toml`, `atomic_ions/es+2.toml`, `atomic_ions/es+3.toml`) | done |  |
+| Fm | yes | yes (+2,+3) | no | yes (`atoms/fm.toml`, `atomic_ions/fm+2.toml`, `atomic_ions/fm+3.toml`) | done |  |
+| Md | yes | yes (+2,+3) | no | yes (`atoms/md.toml`, `atomic_ions/md+2.toml`, `atomic_ions/md+3.toml`) | done |  |
+| No | yes | yes (+2) | no | yes (`atoms/no.toml`, `atomic_ions/no+2.toml`) | done |  |
+| Lr | yes | yes (+3) | no | yes (`atoms/lr.toml`, `atomic_ions/lr+3.toml`) | done |  |
 | Rf | yes | no | no | yes (`atoms/rf.toml`) | done |  |
 | Db | yes | no | no | yes (`atoms/db.toml`) | done |  |
 | Sg | yes | no | no | yes (`atoms/sg.toml`) | done |  |
@@ -149,6 +149,19 @@ Status values:
 | Hs | yes | no | no | yes (`atoms/hs.toml`) | done |  |
 
 Extend this table as new elements are considered.
+
+### Organic compounds
+
+| Class | Scope | Conformance dir | Status | Notes |
+|-------|-------|-----------------|--------|-------|
+| Hydrocarbons | Alkanes, alkenes, alkynes, dienes/cumulenes, cycloalkanes, unsaturated alicycles, fused/spiro/bridged bicycles, polycycles | `hydrocarbons/` | done | 51 files, `implicit_h=true`, `?{CHn}` |
+| Alcohols / ethers | R–OH, R–O–R′ | — | todo | |
+| Carbonyls | Aldehydes, ketones | — | todo | |
+| Carboxylic acids / derivatives | Acids, esters, amides | — | todo | |
+| Organic halides | R–F, R–Cl, R–Br, R–I | — | todo | |
+| Other | Amines, thiols, etc. | — | todo | |
+
+Extend this table as new organic classes are added.
 
 ## Conformance Policy
 
@@ -163,8 +176,8 @@ Suggested naming pattern:
 
 - Atomic ground state: `tests/resolution/data/atoms/<element>.toml`
 - Atomic valence/excited variants: `tests/resolution/data/atoms/<element>_<motif>.toml`
-- Ionic ground state: `tests/resolution/data/ions/<element><charge>.toml`
-- Ionic valence/excited variants: `tests/resolution/data/ions/<element><charge>_<motif>.toml`
+- Ionic ground state: `tests/resolution/data/atomic_ions/<element><charge>.toml`
+- Ionic valence/excited variants: `tests/resolution/data/atomic_ions/<element><charge>_<motif>.toml`
 
 Conventions:
 
@@ -176,19 +189,25 @@ Conventions:
 
 Use resolution data categories:
 
-- `atoms/`
-- `ions/`
-- `hydrides/`
-- `covalent/`
-- `hydrocarbons/`
+- `atoms/` — free atoms (ground and valence/excited states).
+- `atomic_ions/` — single-atom ions (discrete charge states).
+- `hydrides/` — one-atom graphs with implicit H (`?{EHn}`, `implicit_h=true`); no explicit H atoms.
+- `inorganic_small/` — small neutral inorganic molecules (including sextet species); explicit H only (`implicit_h=false`). Split from former `covalent/`.
+- `inorganic_ions/` — small molecular ions (e.g. NH4+, OH3+); explicit H only. Split from former `covalent/`.
+- `hydrocarbons/` — C/H only, implicit H (`?{CHn}`, `implicit_h=true`).
+- `functional_groups/` — organic molecules with heteroatom functional groups; implicit H (`?{CHn}`, `?{OH}`, `?{NH2}`, `?{SH}`, etc., `implicit_h=true`).
+
+Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic_ions, and hydrocarbons use explicit H where present, except hydrocarbons where H is in the query.
 
 ## Current Conformance Set
 
 - `atoms/`: `h`, `he`, `li`, `be`, `b`, `c`, `n`, `o`, `f`, `ne`, `na`, `mg`, `al`, `si`, `p`, `s`, `cl`, `ar`, `k`, `ca`, `sc`, `ti`, `v`, `cr`, `mn`, `fe`, `co`, `ni`, `cu`, `zn`, `ga`, `ge`, `as`, `se`, `br`, `kr`, `rb`, `sr`, `y`, `zr`, `nb`, `mo`, `tc`, `ru`, `rh`, `pd`, `ag`, `cd`, `in`, `sn`, `sb`, `te`, `i`, `xe`, `cs`, `ba`, `tl`, `pb`, `bi`, `po`, `at`, `rn`, `la`, `ce`, `pr`, `nd`, `pm`, `sm`, `eu`, `gd`, `tb`, `dy`, `ho`, `er`, `tm`, `yb`, `lu`, `hf`, `ta`, `w`, `re`, `os`, `ir`, `pt`, `au`, `hg`, `fr`, `ra`, `ac`, `th`, `pa`, `u`, `np`, `pu`, `am`, `cm`, `bk`, `cf`, `es`, `fm`, `md`, `no`, `lr`, `rf`, `db`, `sg`, `bh`, `hs`
-- `ions/`: `h+1`, `li+1`, `be+2`, `mg+2`, `al+3`, `n-3`, `o-2`, `f-1`, `na+1`, `p-3`, `s-2`, `cl-1`, `k+1`, `ca+2`, `sc+3`, `ti+3`, `ti+4`, `v+2`, `v+3`, `cr+2`, `cr+3`, `mn+2`, `mn+3`, `fe+2`, `fe+3`, `co+2`, `co+3`, `ni+2`, `cu+1`, `cu+2`, `zn+2`, `ga+3`, `as-3`, `se-2`, `br-1`, `rb+1`, `sr+2`, `y+3`, `zr+4`, `nb+3`, `mo+2`, `mo+3`, `ru+2`, `ru+3`, `rh+2`, `rh+3`, `pd+2`, `ag+1`, `ag+2`, `cd+2`, `in+3`, `sb-3`, `te-2`, `i-1`, `cs+1`, `ba+2`, `tl+1`, `tl+3`, `pb+2`, `pb+4`, `bi+3`, `po-2`, `at-1`, `la+3`, `ce+3`, `ce+4`, `pr+3`, `pr+4`, `nd+3`, `pm+3`, `sm+2`, `sm+3`, `eu+2`, `eu+3`, `gd+3`, `tb+3`, `tb+4`, `dy+3`, `ho+3`, `er+3`, `tm+3`, `yb+2`, `yb+3`, `lu+3`, `hf+4`, `pt+2`, `au+1`, `au+3`, `hg+2`, `hg+2_dimer`, `fr+1`, `ra+2`, `ac+3`, `th+3`, `th+4`, `pa+4`, `pa+5`, `u+3`, `u+4`, `u+5`, `u+6`, `np+3`, `np+4`, `np+5`, `np+6`, `pu+3`, `pu+4`, `pu+5`, `pu+6`, `pu+7`, `am+2`, `am+3`, `am+4`, `cm+3`, `cm+4`, `bk+3`, `bk+4`, `cf+2`, `cf+3`, `cf+4`, `es+2`, `es+3`, `fm+2`, `fm+3`, `md+2`, `md+3`, `no+2`, `lr+3`
+- `atomic_ions/`: `h+1`, `li+1`, `be+2`, `mg+2`, `al+3`, `n-3`, `o-2`, `f-1`, `na+1`, `p-3`, `s-2`, `cl-1`, `k+1`, `ca+2`, `sc+3`, `ti+3`, `ti+4`, `v+2`, `v+3`, `cr+2`, `cr+3`, `mn+2`, `mn+3`, `fe+2`, `fe+3`, `co+2`, `co+3`, `ni+2`, `cu+1`, `cu+2`, `zn+2`, `ga+3`, `as-3`, `se-2`, `br-1`, `rb+1`, `sr+2`, `y+3`, `zr+4`, `nb+3`, `mo+2`, `mo+3`, `ru+2`, `ru+3`, `rh+2`, `rh+3`, `pd+2`, `ag+1`, `ag+2`, `cd+2`, `in+3`, `sb-3`, `te-2`, `i-1`, `cs+1`, `ba+2`, `tl+1`, `tl+3`, `pb+2`, `pb+4`, `bi+3`, `po-2`, `at-1`, `la+3`, `ce+3`, `ce+4`, `pr+3`, `pr+4`, `nd+3`, `pm+3`, `sm+2`, `sm+3`, `eu+2`, `eu+3`, `gd+3`, `tb+3`, `tb+4`, `dy+3`, `ho+3`, `er+3`, `tm+3`, `yb+2`, `yb+3`, `lu+3`, `hf+4`, `pt+2`, `au+1`, `au+3`, `hg+2`, `hg+2_dimer`, `fr+1`, `ra+2`, `ac+3`, `th+3`, `th+4`, `pa+4`, `pa+5`, `u+3`, `u+4`, `u+5`, `u+6`, `np+3`, `np+4`, `np+5`, `np+6`, `pu+3`, `pu+4`, `pu+5`, `pu+6`, `pu+7`, `am+2`, `am+3`, `am+4`, `cm+3`, `cm+4`, `bk+3`, `bk+4`, `cf+2`, `cf+3`, `cf+4`, `es+2`, `es+3`, `fm+2`, `fm+3`, `md+2`, `md+3`, `no+2`, `lr+3`
 - `hydrides/`: `h2`, `bh3`, `ch4`, `nh3`, `h2o`, `hf`, `sih4`, `ph3`, `h2s`, `hcl`, `ash3`, `h2se`, `hbr`, `sbh3`, `h2te`, `hi`
-- `covalent/`: `bf2`, `bcl4-`, `bn`, `c2`, `ch3`, `cf3-`, `ccl3+`, `ch2_singlet`, `ch2_triplet`, `sih3`, `sif3-`, `sicl3+`, `sih2_singlet`, `sih2_triplet`, `nh2`, `nh2-`, `nh4+`, `ph2`, `ph2-`, `ph4+`, `ash2`, `ash2-`, `ash4+`, `sbh2`, `sbh2-`, `sbh4+`, `oh`, `oh-`, `oh3+`, `sh`, `sh-`, `sh3+`, `seh`, `seh-`, `seh3+`, `teh`, `teh-`, `teh3+`, `f-`, `cl-`, `br-`, `i-`, `bf3`, `br2`, `cl2`, `cn-`, `f2`, `i2`, `n2`, `o2`
+- `inorganic_small/`: neutral small inorganics (explicit H only): e.g. `bf2`, `bf3`, `bn`, `c2`, `ch3`, `ch2_singlet`, `ch2_triplet`, `sih3`, `sih2_*`, `nh2`, `ph2`, `ash2`, `sbh2`, `oh`, `sh`, `seh`, `teh`, `br2`, `cl2`, `cn-`, `f2`, `i2`, `n2`, `o2`, etc.
+- `inorganic_ions/`: molecular ions (explicit H only): e.g. `bcl4-`, `cf3-`, `ccl3+`, `nh2-`, `nh4+`, `ph2-`, `ph4+`, `ash2-`, `ash4+`, `sbh2-`, `sbh4+`, `oh-`, `oh3+`, `sh-`, `sh3+`, `seh-`, `seh3+`, `teh-`, `teh3+`, `f-`, `cl-`, `br-`, `i-`, `sif3-`, `sicl3+`, etc.
 - `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`
+- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6). Total: 64 files, `implicit_h=true`.
 
 ## Decision Log
 
@@ -197,14 +216,14 @@ Use resolution data categories:
 - Agreed staged rollout: ground states -> discrete ions -> typical non-metal valences.
 - Agreed registry expansion must be paired with conformance additions.
 - Agreed registry specs are reviewed with code-level rigor (small, explicit, traceable changes).
-- Agreed conformance naming/categories: `atoms/`, `ions/`, `hydrides/` and file naming rules above.
+- Agreed conformance naming/categories: `atoms/`, `atomic_ions/`, `hydrides/` and file naming rules above.
 - Added `implicit_h` control to conformance inputs; counts strategy now honors this via `enable_implicit_hydrogens`.
 - Expanded coverage to period-3 atoms (`Na`..`Ar`) and matching ions (`Na+`, `Al3+`, `P3-`, `S2-`, `Cl-`), plus `Be2+`.
 - Expanded coverage to period-4 and period-5 s/p blocks, 3d block, and 4d block with ions: `Y3+`, `Zr4+`, `Nb3+`, `Mo2+`, `Mo3+`, `Ru2+`, `Ru3+`, `Rh2+`, `Rh3+`, `Pd2+`, `Ag+`, `Ag2+`, `Cd2+`.
 - Added missing 3d atom conformance files (`atoms/sc.toml` through `atoms/zn.toml`) and refreshed snapshots.
 - Added 6s/6p conformance coverage: atoms `Cs`, `Ba`, `Tl`, `Pb`, `Bi`, `Po`, `At`, `Rn`; ions `Cs+`, `Ba2+`, `Tl+`, `Tl3+`, `Pb2+`, `Pb4+`, `Bi3+`, `Po2-`, `At-`.
 - Added 4f conformance coverage (`La`..`Lu`) with ions: all `3+`, plus `Ce4+`, `Pr4+`, `Tb4+`, and `Sm2+`, `Eu2+`, `Yb2+`.
-- Added 5d conformance coverage (`Hf`..`Hg`) with ions: `Hf4+`, `Pt2+`, `Au+`, `Au3+`, `Hg2+`, and `[Hg2]2+` as `ions/hg+2_dimer.toml`.
+- Added 5d conformance coverage (`Hf`..`Hg`) with ions: `Hf4+`, `Pt2+`, `Au+`, `Au3+`, `Hg2+`, and `[Hg2]2+` as `atomic_ions/hg+2_dimer.toml`.
 - Pinned spin-sensitive transition-metal ion queries in conformance inputs (high-spin/low-spin where requested) and aligned `Pr` counts support (`default-valence-table`: `outer_electrons=5`, `allowed_valences=[3,4]`) so all conformance snapshots resolve with success.
 - Added conformance coverage for `Fr`..`Lr` atoms and all corresponding registry ion charge states.
 - Added neutral-atom conformance coverage for `Rf`, `Db`, `Sg`, `Bh`, `Hs`.
@@ -219,3 +238,5 @@ Use resolution data categories:
 - Conformance parity verified: `atom_typing` and `counts` both succeed on all new `covalent/` snapshots; no valence-table adjustments were required in this phase.
 - Mixed implicit/explicit hydrogen representations are deferred to a future phase.
 - Added `hydrocarbons/` conformance category (51 files) with `implicit_h=true` using `?{CHn}` atom queries and C-C bonds only. Covers alkanes (8), alkenes (6), alkynes (4), dienes/cumulenes (4), cycloalkanes (5), unsaturated alicycles (7), fused bicycles (6), spiro bicycles (4), bridged bicycles (3), and polycycles (4: tetrahedrane, prismane, cubane, adamantane). No new registry entries required. All 51 tests pass for both `atom_typing` and `counts` strategies.
+- Restructured conformance categories: renamed `ions/` → `atomic_ions/` (single-atom ions). Split `covalent/` → `inorganic_small/` (neutral small inorganics, including sextet species) and `inorganic_ions/` (molecular ions). Policy: `hydrides/` use implicit H only (one-atom graphs); `inorganic_small/`, `inorganic_ions/`, and hydrocarbons use explicit H where present (hydrocarbons keep implicit H in queries). Compromise between fine-grained compound classes and a single mixed category.
+- Added `functional_groups/` conformance category (64 files) with `implicit_h=true`. Covers organic halides (methyl/ethyl × 4 halogens + 7 alkyl chlorides + 7 poly/mixed chloro compounds = 39), azides, isocyanides, cyanates, thiocyanates, isothiocyanates, nitrites, nitrates, thiols, selenols (methyl/ethyl × 9 = 18), alcohols (9), ethers (3), amines (6), nitroso (3), nitro (3). Many atom-typing results show `ValenceAmbiguous` or `ValenceNoMatch` for N/O/S/Se in functional groups not yet in the registry — follow-up registry work needed.

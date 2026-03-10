@@ -40,6 +40,12 @@ alwaysApply: true
 - **DO NOT** remove or simplify code during refactors to keep the tests passing. Break such
   refactor tasks into multiple steps, accepting that tests will not pass after the first step.
 
+## Do not reinvent wheels
+- Before writing new code, check whether the codebase already provides the needed functionality.
+- **DO NOT** reimplement logic that existing functions, methods, or crates already handle.
+- Prefer calling existing code over rolling your own, even if the existing API isn't a perfect fit.
+- If in doubt whether something already exists, search first and ask.
+
 ## Use modern Rust (edition 2021) and leverage the ecosystem.
 - Use <module>.rs for file names instead of <module>/mod.rs.
 - Take existing high-quality crates into account for solving a problem. Prefer high-quality external

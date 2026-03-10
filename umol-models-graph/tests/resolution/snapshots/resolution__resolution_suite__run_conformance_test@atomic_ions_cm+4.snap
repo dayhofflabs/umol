@@ -1,0 +1,23 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: atomic_ions
+atom_typing:
+  success: true
+  summary:
+    atom_count: 1
+    bond_count: 0
+    topology: "@"
+    atoms:
+      - "{Cm+4^6}"
+    bonds: []
+counts:
+  success: true
+  summary:
+    atom_count: 1
+    bond_count: 0
+    topology: "@"
+    atoms:
+      - "{Cm+4/2}"
+    bonds: []

@@ -1,0 +1,3 @@
+atoms = "?{CH3} ?{CH2} ?{N+H0} ?{C-H0}"
+bonds = "0-1 1-2 2#3"
+implicit_h = true

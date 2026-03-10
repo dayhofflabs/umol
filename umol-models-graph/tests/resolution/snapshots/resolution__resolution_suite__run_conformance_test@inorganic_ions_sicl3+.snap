@@ -1,0 +1,35 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: inorganic_ions
+atom_typing:
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Cw
+    atoms:
+      - "{Si+v3}"
+      - "{Cl/3v1}"
+      - "{Cl/3v1}"
+      - "{Cl/3v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Cw
+    atoms:
+      - "{Si+v3}"
+      - "{Cl/3v1}"
+      - "{Cl/3v1}"
+      - "{Cl/3v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"

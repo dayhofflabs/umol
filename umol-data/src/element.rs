@@ -718,6 +718,16 @@ impl Element {
         }
     }
 
+    // Get element differing by n in atomic number
+    pub const fn shift(self, n: i8) -> Option<Self> {
+        let atomic_number = self.atomic_number() as i8;
+        if atomic_number + n >= 1 && atomic_number + n <= MAX_ATOMIC_NUMBER as i8 {
+            Self::from_atomic_number((atomic_number + n) as u8)
+        } else {
+            None
+        }
+    }
+
     // Get element in the next period (same group)
     pub const fn next_period(&self) -> Option<Self> {
         if self.period() == MAX_PERIOD_NUMBER {
@@ -1217,7 +1227,22 @@ mod tests {
     }
 
     #[test]
-    fn test_period_group_lookup() {
+    fn test_element_shift() {
+        assert_eq!(Element::H.shift(1), Some(Element::He));
+        assert_eq!(Element::H.shift(-1), None);
+        assert_eq!(Element::H.shift(2), Some(Element::Li));
+        assert_eq!(Element::H.shift(117), Some(Element::Og));
+        assert_eq!(Element::H.shift(118), None);
+        assert_eq!(Element::He.shift(-1), Some(Element::H));
+        assert_eq!(Element::Og.shift(1), None);
+        assert_eq!(Element::Og.shift(-1), Some(Element::Ts));
+        assert_eq!(Element::Ts.shift(1), Some(Element::Og));
+        assert_eq!(Element::Og.shift(-117), Some(Element::H));
+        assert_eq!(Element::Og.shift(-118), None);
+    }
+
+    #[test]
+    fn test_from_period_group() {
         assert_eq!(Element::from_period_group(1, 1), Some(Element::H));
         assert_eq!(Element::from_period_group(1, 32), Some(Element::He));
         assert_eq!(Element::from_period_group(4, 22), Some(Element::Fe));

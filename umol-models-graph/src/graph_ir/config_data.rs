@@ -261,10 +261,12 @@ impl ValenceTable {
 
     /// Compute implicit hydrogen count using RDKit-style counts logic.
     ///
-    /// Walks `allowed_valences` in order. `-1` means unconstrained: implicit H
-    /// is `max(0, outer_electrons − charge − explicit_valence)`. Otherwise the
-    /// first allowed value ≥ `explicit_valence` gives
-    /// `implicit_h = allowed − explicit_valence`.
+    /// For charged atoms with specific allowed valences, looks up the
+    /// isoelectronic element (atomic_number − charge) following RDKit's
+    /// effective-atomic-number convention. Walks `allowed_valences` in order:
+    /// `-1` means unconstrained (implicit H = max(0, outer_electrons − charge
+    /// − explicit_valence)); otherwise the first allowed value ≥
+    /// `explicit_valence` gives `implicit_h = allowed − explicit_valence`.
     ///
     /// Returns `None` when no valid valence state exists.
     pub fn compute_implicit_hydrogens(
@@ -279,7 +281,14 @@ impl ValenceTable {
         let entry = self.entries.get(&element)?;
         let num_electrons = (entry.outer_electrons as i16) - (charge as i16);
 
-        for &allowed in &entry.allowed_valences {
+        let effective_valences = if charge != 0 && !entry.allowed_valences.contains(&-1) {
+            let eff_entry = self.entries.get(&element.shift(-charge)?)?;
+            &eff_entry.allowed_valences
+        } else {
+            &entry.allowed_valences
+        };
+
+        for &allowed in effective_valences {
             if allowed == -1 {
                 return Some((num_electrons - explicit_valence as i16).max(0) as u8);
             }

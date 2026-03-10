@@ -1,0 +1,57 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: functional_groups
+atom_typing:
+  success: true
+  summary:
+    atom_count: 9
+    bond_count: 9
+    topology: HoCB@CW
+    atoms:
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH1v3}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{N+v4}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+      - "{O-/3v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "="
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 9
+    bond_count: 9
+    topology: HoCB@CW
+    atoms:
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH1v3}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{N+v4}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+      - "{O-/3v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "="
+      - "-"

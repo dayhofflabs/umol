@@ -347,7 +347,7 @@ fn run_conformance_test(file_path: &PathBuf) {
 }
 
 #[rstest]
-// Keep recursive glob for fast auto-discovery of new files at compile time (refresh marker v4).
+// Keep recursive glob for fast auto-discovery of new files at compile time (refresh marker v1).
 fn test_conformance(#[files("tests/resolution/data/**/*.toml")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }

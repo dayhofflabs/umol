@@ -1,0 +1,53 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: functional_groups
+atom_typing:
+  success: true
+  summary:
+    atom_count: 8
+    bond_count: 8
+    topology: GwEA?c
+    atoms:
+      - "{CH1v3}"
+      - "{CH1v3}"
+      - "{CH2v2}"
+      - "{Cl/3v1}"
+      - "{CH2v2}"
+      - "{Cl/3v1}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 8
+    bond_count: 8
+    topology: GwEA?c
+    atoms:
+      - "{CH1v3}"
+      - "{CH1v3}"
+      - "{CH2v2}"
+      - "{Cl/3v1}"
+      - "{CH2v2}"
+      - "{Cl/3v1}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"

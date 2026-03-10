@@ -1,0 +1,35 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: inorganic_ions
+atom_typing:
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Cw
+    atoms:
+      - "{Se+/1v3}"
+      - "{Hv1}"
+      - "{Hv1}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Cw
+    atoms:
+      - "{Se+/1v3}"
+      - "{Hv1}"
+      - "{Hv1}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
