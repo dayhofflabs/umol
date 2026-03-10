@@ -1,0 +1,27 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: covalent
+atom_typing:
+  success: true
+  summary:
+    atom_count: 2
+    bond_count: 1
+    topology: A_
+    atoms:
+      - "{B/1v1}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 2
+    bond_count: 1
+    topology: A_
+    atoms:
+      - "{B/1v1}"
+      - "{Hv1}"
+    bonds:
+      - "-"

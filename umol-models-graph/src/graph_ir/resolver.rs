@@ -97,7 +97,7 @@ fn resolve_topology_with(
         ) {
             builder.add_dative_bond(DativeBond::from_table_bond(bond, &node_indices));
         } else {
-            builder.add_bond_unchecked(a, b, BondBuilder::from_table_bond(bond)?);
+            builder.add_bond_unchecked(a, b, BondBuilder::from_table_bond(bond));
         }
     }
 

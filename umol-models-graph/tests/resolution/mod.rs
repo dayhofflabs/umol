@@ -3,11 +3,13 @@
 //! Runs each `.toml` test input through multiple resolver configurations,
 //! producing insta YAML snapshots with per-atom AtomTypeSpec notation.
 
+use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
+use umol_data::SpinMultiplicity;
 use umol_models_graph::graph_ir::{
     resolve_molecule_with, AtomTypeQuery, Molecule, ResolutionError, ResolveConfig,
     TopologyNodeRef, TopologyProjection, ValenceStrategy,
@@ -82,6 +84,25 @@ fn parse_atom_token(token: &str, implicit_h: bool) -> TableAtom {
     atom
 }
 
+fn parse_bond_token(token: &str) -> TableBond {
+    for (sep, order) in [
+        ('-', BondOrder::Single),
+        ('=', BondOrder::Double),
+        ('#', BondOrder::Triple),
+        (':', BondOrder::Aromatic),
+    ] {
+        if let Some((l, r)) = token.split_once(sep) {
+            let (idx_str, charge, mult) = parse_bond_suffix(r, token);
+            let (a, b) = split_bond_indices(l, idx_str, token);
+            let mut bond = TableBond::new(a, b, order);
+            bond.charge = charge;
+            bond.multiplicity = mult;
+            return bond;
+        }
+    }
+    panic!("invalid bond token: '{}'", token);
+}
+
 fn split_bond_indices(left: &str, right: &str, token: &str) -> (u32, u32) {
     let a = left
         .parse()
@@ -92,19 +113,36 @@ fn split_bond_indices(left: &str, right: &str, token: &str) -> (u32, u32) {
     (a, b)
 }
 
-fn parse_bond_token(token: &str) -> TableBond {
-    for (sep, order) in [
-        ('-', BondOrder::Single),
-        ('=', BondOrder::Double),
-        ('#', BondOrder::Triple),
-        (':', BondOrder::Aromatic),
-    ] {
-        if let Some((l, r)) = token.split_once(sep) {
-            let (a, b) = split_bond_indices(l, r, token);
-            return TableBond::new(a, b, order);
-        }
+fn parse_bond_suffix<'a>(
+    right: &'a str,
+    token: &str,
+) -> (&'a str, Option<i8>, Option<SpinMultiplicity>) {
+    let (rest, mult) = if let Some((before_star, m_str)) = right.rsplit_once('*') {
+        let m: u8 = m_str
+            .parse()
+            .unwrap_or_else(|_| panic!("invalid multiplicity in bond token '{}'", token));
+        let mult = SpinMultiplicity::from_multiplicity(m).unwrap_or_else(|| {
+            panic!("invalid multiplicity value {} in bond token '{}'", m, token)
+        });
+        (before_star, Some(mult))
+    } else {
+        (right, None)
+    };
+
+    if let Some(pos) = rest.find('+').or_else(|| {
+        rest.char_indices()
+            .skip(1)
+            .find(|(_, c)| *c == '-')
+            .map(|(i, _)| i)
+    }) {
+        let idx_str = &rest[..pos];
+        let charge: i8 = rest[pos..]
+            .parse()
+            .unwrap_or_else(|_| panic!("invalid charge in bond token '{}'", token));
+        (idx_str, Some(charge), mult)
+    } else {
+        (rest, None, mult)
     }
-    panic!("invalid bond token: '{}'", token);
 }
 
 fn parse_dative_token(token: &str) -> TableBond {
@@ -143,15 +181,26 @@ fn build_table_molecule(input: &TestInput) -> TableMolecule {
     mol
 }
 
-fn bond_order_symbol(order: u8) -> String {
-    match order {
+fn bond_order_symbol(order: u8, charge: i8, multiplicity: SpinMultiplicity) -> String {
+    let base = match order {
         0 => ".".to_string(),
         1 => "-".to_string(),
         2 => "=".to_string(),
         3 => "#".to_string(),
         4 => "$".to_string(),
         other => format!("~{}", other),
-    }
+    };
+    let charge_str = match charge {
+        0 => String::new(),
+        c if c > 0 => format!("+{}", c),
+        c => format!("{}", c),
+    };
+    let mult_str = if multiplicity == SpinMultiplicity::Singlet {
+        String::new()
+    } else {
+        format!("*{}", multiplicity.multiplicity())
+    };
+    format!("{}{}{}", base, charge_str, mult_str)
 }
 
 fn summarize(mol: &Molecule) -> ResolveSummary {
@@ -176,20 +225,26 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         })
         .collect();
 
-    let mut bonds: Vec<(usize, usize, u8)> = mol
+    let mut bonds: Vec<(usize, usize, u8, i8, SpinMultiplicity)> = mol
         .bond_indices()
         .map(|idx| {
             let (a, b) = mol.bond_atom_indices(idx).unwrap();
             let ca = canon_pos[a.index()];
             let cb = canon_pos[b.index()];
-            let order = mol.bond(idx).unwrap().order();
-            (ca.min(cb), ca.max(cb), order)
+            let bond = mol.bond(idx).unwrap();
+            (
+                ca.min(cb),
+                ca.max(cb),
+                bond.order(),
+                bond.charge(),
+                bond.multiplicity(),
+            )
         })
         .collect();
     bonds.sort();
     let bonds: Vec<String> = bonds
         .iter()
-        .map(|&(_, _, o)| bond_order_symbol(o))
+        .map(|&(_, _, o, c, m)| bond_order_symbol(o, c, m))
         .collect();
 
     ResolveSummary {
@@ -258,7 +313,7 @@ fn extract_category(path: &Path) -> String {
 }
 
 fn resolve_file(path: &Path) -> FileResolveResults {
-    let content = std::fs::read_to_string(path).expect("failed to read test file");
+    let content = fs::read_to_string(path).expect("failed to read test file");
     let input: TestInput = toml::from_str(&content).expect("failed to parse TOML input");
     let table_mol = build_table_molecule(&input);
     let category = extract_category(path);

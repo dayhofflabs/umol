@@ -1,0 +1,21 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: covalent
+atom_typing:
+  success: false
+  error:
+    error_type: ValenceNoMatch
+    message: No valence match for atom B at index 0 has no valence match
+counts:
+  success: true
+  summary:
+    atom_count: 2
+    bond_count: 1
+    topology: A_
+    atoms:
+      - "{B/1^1v2}"
+      - "{N/1^1v2}"
+    bonds:
+      - "="

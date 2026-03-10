@@ -34,35 +34,56 @@
 
 [B]
 0 = [
-    "{Bv3}",   # BX3, BH3
-    "{Bv2H}",  # X2BH
-    "{Bv1H2}", # XBH2
-    "{BH3}",   # BH3
-    "{B^1v2}", # BX2
-    "{B/1v1}", # BH
-    "{B/1^1}", # B atom, s2p1
+    "{Bv3}",    # BX3, BH3
+    "{Bv2H}",   # X2BH
+    "{Bv1H2}",  # XBH2
+    "{BH3}",    # BH3
+    "{B^1v2}",  # BX2, BH2
+    "{B^1v1H}", # XBH
+    "{B^1H2}",  # BH2
+    "{B/1v1}",  # BX
+    "{B/1^1}",  # B atom, s2p1
 ]
 -1 = [
-    "{B-v4}", # [BX4]-
+    "{B-v4}",   # [BX4]-
+    "{B-v1H3}", # [BX3H]-
+    "{B-v2H2}", # [BX2H2]-
+    "{B-v3H}",  # [BXH3]-
+    "{B-H4}",   # [BH4]-
 ]
 
 [C]
 0 = [
-    "{Cv4}",   # CX4, CH4
-    "{Cv3H}",  # X3CH
-    "{Cv2H2}", # X2CH2
-    "{Cv1H3}", # XCH3
-    "{CH4}",   # CH4
-    "{C^1v3}", # CX3
-    "{C^2v2}", # CX2 (triplet)
-    "{C/1v2}", # CX2 (singlet)
-    "{C/1^2}", # C atom, s2p2
+    "{Cv4}",     # CX4, CH4
+    "{Cv3H}",    # X3CH
+    "{Cv2H2}",   # X2CH2
+    "{Cv1H3}",   # XCH3
+    "{CH4}",     # CH4
+    "{C^1v3}",   # CX3, CH3
+    "{C^1v2H}",  # XCH2
+    "{C^1v1H2}", # XCH2
+    "{C^1H3}",   # CH3
+    "{C^2v2}",   # CX2, CH2 (triplet)
+    "{C^2v1H}",  # XCH (triplet)
+    "{C^2H2}",   # CH2 (triplet)
+    "{C/1v2}",   # CX2, CH2 (singlet)
+    "{C/1v1H}",  # XCH (singlet)
+    "{C/1H2}",   # CH2 (singlet)
+    "{C/1^1v1}", # CX, CH (doublet)
+    "{C/1^2H}",  # CH (triplet)
+    "{C/1^2}",   # C atom, s2p2
 ]
 1 = [
-    "{C+v3}", # [CX3]+
+    "{C+v3}",   # [CX3]+, [CH3]+
+    "{C+v2H}",  # [XCH2]+
+    "{C+v1H2}", # [XCH2]+
+    "{C+H3}",   # [CH3]+
 ]
 -1 = [
-    "{C-/1v3}", # [CX3]-
+    "{C-/1v3}",   # [CX3]-
+    "{C-/1v2H}",  # [XCH2]-
+    "{C-/1v1H2}", # [XCH2]-
+    "{C-/1H3}",   # [CH3]-
 ]
 
 [N]
@@ -71,16 +92,26 @@
     "{N/1v2H}",  # X2NH
     "{N/1v1H2}", # XNH2
     "{N/1H3}",   # NH3
-    "{N/1^1v2}", # NX2
-    "{N/2v1}",   # NX
+    "{N/1^1v2}", # NX2, NH2
+    "{N^1v1H}",  # XNH
+    "{N^1H2}",   # NH2
+    "{N/2v1}",   # NX, NH
+    "{N/2H}",    # NH
     "{N/1^3}",   # N atom, s2p3
 ]
 1 = [
-    "{N+v4}",   # [NH4]+
-    "{N+/1v2}", # [NH2]+
+    "{N+v4}",    # [NX4]+, [NH4]+
+    "{N+v2H}",   # [XNH2]+
+    "{N+v1H2}",  # [XNH2]+
+    "{N+H3}",    # [NH3]+
+    "{N+/1v2}",  # [NX2]+, [NH2]+
+    "{N+/1v1H}", # [XNH]+
+    "{N+/1H2}",  # [NH2]+
 ]
 -1 = [
-    "{N-/2v2}", # [NH2]-
+    "{N-/2v2}",  # [NX2]-, [NH2]-
+    "{N-/1v1H}", # [XNH]-
+    "{N-/1H2}",  # [NH2]-
 ]
 -3 = [
     "{N-3/4}", # N3-

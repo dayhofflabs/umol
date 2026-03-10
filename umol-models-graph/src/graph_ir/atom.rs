@@ -219,13 +219,11 @@ impl AtomBuilder {
         self
     }
 
-    // TODO: Check consistency with multiplicity
     pub fn set_unpaired_electrons(&mut self, unpaired_electrons: u8) -> &mut Self {
         self.unpaired_electrons = Some(unpaired_electrons);
         self
     }
 
-    // TODO: Check consistency with unpaired electrons
     pub fn set_multiplicity(&mut self, multiplicity: SpinMultiplicity) -> &mut Self {
         self.multiplicity = Some(multiplicity);
         self

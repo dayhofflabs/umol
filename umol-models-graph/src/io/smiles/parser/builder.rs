@@ -87,6 +87,8 @@ impl MoleculeBuilder {
         let bond = Bond {
             atoms: AtomPair::new(start, end),
             order: b.order,
+            charge: None,
+            multiplicity: None,
             wedge: b.wedge,
             donation,
             noncovalent: None,

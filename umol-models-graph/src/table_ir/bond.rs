@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use strum::{Display, EnumString};
+use umol_data::SpinMultiplicity;
 
 use super::error::ConversionError;
 use crate::bond::BondNoncovalent;
@@ -88,6 +89,8 @@ impl BondDonation {
 pub struct Bond {
     pub atoms: AtomPair,
     pub order: BondOrder,
+    pub charge: Option<i8>,
+    pub multiplicity: Option<SpinMultiplicity>,
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
     pub wedge: Option<BondWedge>,
@@ -101,6 +104,8 @@ impl Bond {
         Self {
             atoms: AtomPair::new(a, b),
             order,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -117,6 +122,8 @@ impl Bond {
         Self {
             atoms: AtomPair::new(a, b),
             order,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -131,6 +138,8 @@ impl Bond {
         Self {
             atoms: AtomPair::new(a, b),
             order: BondOrder::Zero,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -260,6 +269,8 @@ pub enum BondStereo {
 pub struct ExtendedBond {
     pub atoms: AtomPair,
     pub order: BondOrder,
+    pub charge: Option<i8>,
+    pub multiplicity: Option<SpinMultiplicity>,
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
     pub wedge: Option<BondWedge>,
@@ -277,6 +288,8 @@ impl ExtendedBond {
         Self {
             atoms: AtomPair::new(start_atom, end_atom),
             order,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -296,6 +309,8 @@ impl ExtendedBond {
         Self {
             atoms: AtomPair::new(a, b),
             order,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -313,6 +328,8 @@ impl ExtendedBond {
         Self {
             atoms: AtomPair::new(a, b),
             order: BondOrder::Zero,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -360,6 +377,8 @@ impl From<Bond> for ExtendedBond {
         Self {
             atoms: bond.atoms,
             order: bond.order,
+            charge: bond.charge,
+            multiplicity: bond.multiplicity,
             ring: bond.ring,
             stereo: bond.stereo,
             wedge: bond.wedge,
@@ -377,7 +396,6 @@ impl TryFrom<ExtendedBond> for Bond {
     type Error = ConversionError;
 
     fn try_from(extended: ExtendedBond) -> Result<Self, Self::Error> {
-        // Check for extended features
         if extended.has_extended_features() {
             return Err(ConversionError::HasExtendedFeatures);
         }
@@ -385,6 +403,8 @@ impl TryFrom<ExtendedBond> for Bond {
         Ok(Self {
             atoms: extended.atoms,
             order: extended.order,
+            charge: extended.charge,
+            multiplicity: extended.multiplicity,
             ring: extended.ring,
             stereo: extended.stereo,
             wedge: extended.wedge,
@@ -592,6 +612,8 @@ mod tests {
         let bond = Bond {
             atoms: AtomPair::new(0, 1),
             order: BondOrder::Single,
+            charge: None,
+            multiplicity: None,
             ring: Some(5),
             stereo: Some(BondStereo::Cis),
             wedge: Some(BondWedge::Up),
@@ -615,6 +637,8 @@ mod tests {
         let extended = ExtendedBond {
             atoms: AtomPair::new(0, 1),
             order: BondOrder::Double,
+            charge: None,
+            multiplicity: None,
             ring: Some(6),
             stereo: Some(BondStereo::Trans),
             wedge: Some(BondWedge::Down),
@@ -640,6 +664,8 @@ mod tests {
         let extended = ExtendedBond {
             atoms: AtomPair::new(0, 1),
             order: BondOrder::Single,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -660,6 +686,8 @@ mod tests {
         let extended = ExtendedBond {
             atoms: AtomPair::new(0, 1),
             order: BondOrder::Triple,
+            charge: None,
+            multiplicity: None,
             ring: Some(5),
             stereo: Some(BondStereo::Cis),
             wedge: Some(BondWedge::Up),
@@ -679,6 +707,8 @@ mod tests {
         let extended = ExtendedBond {
             atoms: AtomPair::new(0, 1),
             order: BondOrder::Single,
+            charge: None,
+            multiplicity: None,
             ring: None,
             stereo: None,
             wedge: None,
@@ -710,6 +740,8 @@ mod tests {
         let bond = Bond {
             atoms: AtomPair::new(0, 1),
             order: BondOrder::Aromatic,
+            charge: None,
+            multiplicity: None,
             ring: Some(6),
             stereo: Some(BondStereo::Either),
             wedge: Some(BondWedge::Either),

@@ -31,7 +31,7 @@ impl AromaticContribution {
     }
 }
 
-// TODO: Add charge and spin fields for delocalized charge and spin, not assignable to individual atoms.
+// TODO: Add charge and multiplicity fields for delocalized charge and spin, not assignable to individual atoms.
 /// An aromatic system: a set of atoms each contributing electrons to a
 /// delocalized π system. Contributions are canonicalized by atom index;
 /// each atom appears at most once.
