@@ -1,0 +1,27 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: hydrocarbons
+atom_typing:
+  success: true
+  summary:
+    atom_count: 2
+    bond_count: 1
+    topology: A_
+    atoms:
+      - "{CH1v3}"
+      - "{CH1v3}"
+    bonds:
+      - "#"
+counts:
+  success: true
+  summary:
+    atom_count: 2
+    bond_count: 1
+    topology: A_
+    atoms:
+      - "{CH1v3}"
+      - "{CH1v3}"
+    bonds:
+      - "#"

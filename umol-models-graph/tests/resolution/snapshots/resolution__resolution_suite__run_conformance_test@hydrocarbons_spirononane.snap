@@ -1,0 +1,59 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: hydrocarbons
+atom_typing:
+  success: true
+  summary:
+    atom_count: 9
+    bond_count: 10
+    topology: "H{@?_``"
+    atoms:
+      - "{Cv4}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 9
+    bond_count: 10
+    topology: "H{@?_``"
+    atoms:
+      - "{Cv4}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
