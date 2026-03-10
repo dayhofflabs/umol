@@ -2,16 +2,12 @@
 source: umol-models-graph/tests/resolution/mod.rs
 expression: results
 ---
-category: ions
+category: hydrides
 atom_typing:
-  success: true
-  summary:
-    atom_count: 1
-    bond_count: 0
-    topology: "@"
-    atoms:
-      - "{Se-2/4}"
-    bonds: []
+  success: false
+  error:
+    error_type: ValenceNoMatch
+    message: No valence match for atom N at index 0 has no valence match
 counts:
   success: true
   summary:
@@ -19,5 +15,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Se-2/4}"
+      - "{N+H4}"
     bonds: []

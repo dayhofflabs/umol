@@ -266,9 +266,10 @@ impl AtomBuilder {
             }
             1 => &self.candidates[0],
             n => {
+                let specs: Vec<String> = self.candidates.iter().map(|s| s.to_string()).collect();
                 return Err(ResolutionError::ValenceAmbiguous(format!(
-                    "{} valence matches for {:?}",
-                    n, self.element
+                    "{} valence matches for {:?}: {}",
+                    n, self.element, specs.join(", ")
                 )))
             }
         };

@@ -172,11 +172,13 @@ fn resolve_valence_with(
                 .atom(atom_index)
                 .expect("atom_index must be valid")
                 .element();
+            let specs: Vec<String> = candidates.iter().map(|s| s.to_string()).collect();
             return Err(ResolutionError::ValenceAmbiguous(format!(
-                "atom {:?} at index {} has {} valence matches",
+                "atom {:?} at index {} has {} valence matches: {}",
                 element,
                 atom_index.index(),
-                candidates.len()
+                candidates.len(),
+                specs.join(", ")
             )));
         }
 

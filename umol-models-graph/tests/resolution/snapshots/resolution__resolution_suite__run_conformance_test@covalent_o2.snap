@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 1
     topology: A_
     atoms:
-      - "{B-/1v2}"
-      - "{N+/1v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
     bonds:
       - "=*3"
 counts:
@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{B-/1v2}"
-      - "{N+/1v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
     bonds:
       - "=*3"
