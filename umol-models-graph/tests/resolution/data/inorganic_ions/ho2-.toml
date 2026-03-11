@@ -1,3 +1,3 @@
-atoms = "?{O-^1} ?{O} ?{H}"
+atoms = "?{O-} ?{O} ?{H}"
 bonds = "0-1 1-2"
 implicit_h = false

@@ -1,0 +1,39 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: hypervalent
+atom_typing:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 4
+    topology: "D{?"
+    atoms:
+      - "{Sv6}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O-/3v1}"
+      - "{O-/3v1}"
+    bonds:
+      - "="
+      - "="
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 4
+    topology: "D{?"
+    atoms:
+      - "{Sv6}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O-/3v1}"
+      - "{O-/3v1}"
+    bonds:
+      - "="
+      - "="
+      - "-"
+      - "-"

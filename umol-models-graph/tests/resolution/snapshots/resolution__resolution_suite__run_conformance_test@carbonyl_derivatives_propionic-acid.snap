@@ -1,0 +1,39 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: carbonyl_derivatives
+atom_typing:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 4
+    topology: DaW
+    atoms:
+      - "{CH3v1}"
+      - "{CH2v2}"
+      - "{Cv4}"
+      - "{O/2v2}"
+      - "{O/2H1v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "="
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 4
+    topology: DaW
+    atoms:
+      - "{CH3v1}"
+      - "{CH2v2}"
+      - "{Cv4}"
+      - "{O/2v2}"
+      - "{O/2H1v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "="
+      - "-"

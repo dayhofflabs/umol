@@ -1,0 +1,43 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: functional_groups
+atom_typing:
+  success: true
+  summary:
+    atom_count: 6
+    bond_count: 5
+    topology: EooO
+    atoms:
+      - "{CH2v2}"
+      - "{CH1v3}"
+      - "{O/2H1v1}"
+      - "{CH2v2}"
+      - "{O/2H1v1}"
+      - "{O/2H1v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 6
+    bond_count: 5
+    topology: EooO
+    atoms:
+      - "{CH2v2}"
+      - "{CH1v3}"
+      - "{O/2H1v1}"
+      - "{CH2v2}"
+      - "{O/2H1v1}"
+      - "{O/2H1v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"

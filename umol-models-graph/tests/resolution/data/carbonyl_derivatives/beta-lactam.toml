@@ -1,3 +1,3 @@
-atoms = "?{CH2} ?{CH2} ?{C} ?{OH0} ?{NH}"
+atoms = "?{CH2} ?{CH2} ?{CH0} ?{OH0} ?{NH}"
 bonds = "0-1 1-2 2=3 2-4 4-0"
 implicit_h = true

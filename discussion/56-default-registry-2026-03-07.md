@@ -5,7 +5,7 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 
 ## Project Status (2026-03-12)
 
-**530 conformance tests, all passing.** Only 1 snapshot records a partial failure (NO2: `atom_typing` fails due to missing radical N registry entry `{N/1^1v3}`; `counts` succeeds).
+**605 conformance tests.** Status refresh pending after adding `carbonyl_derivatives` and extending `functional_groups`.
 
 ### Conformance suite breakdown
 
@@ -15,29 +15,13 @@ Registry entries are treated as code: explicit scope, per-entry review, and matc
 | `atomic_ions/` | 127 | n/a | Single-atom ions with discrete charge states |
 | `hydrides/` | 17 | true | One-atom graphs with implicit H (`?{EHn}`) |
 | `inorganic_small/` | 65 | false | Neutral small inorganics, all H explicit |
-| `inorganic_ions/` | 25 | false | Molecular ions, all H explicit |
+| `inorganic_ions/` | 28 | false | Molecular ions, all H explicit |
 | `hydrocarbons/` | 53 | true | C/H only, `?{CHn}` queries |
-| `functional_groups/` | 64 | true | Organic heteroatom groups (halides, amines, etc.) |
-| `heterocycles/` | 54 | true | Non-aromatic O/N/S heterocycles, crown ethers |
-| `hypervalent/` | 17 | false | Expanded-octet species (S, P, Cl, I) |
-| **Total** | **530** | | |
-
-### Resolution strategy results
-
-- **`counts`**: 530/530 pass. Uses `default-valence-table.toml` with element-level `outer_electrons` and `allowed_valences`. Charged atoms use RDKit-style effective-element lookup via `element.shift(-charge)`.
-- **`atom_typing`**: 529/530 pass. Uses `default-registry.toml` with per-element, per-charge lists of `AtomTypeSpec` entries. The single failure is NO2 (radical nitrogen `{N/1^1v3}` not yet in registry).
-
-### Known registry gaps (atom types needed but not yet added)
-
-| Spec | Context | Category |
-|---|---|---|
-| `{N/1^1v3}` | Radical N in NO2 | inorganic_small |
-| `{Cl/2v3}` | Cl valence 3 (HClO2, ClF3) | hypervalent |
-| `{Cl/1v5}` | Cl valence 5 (HClO3) | hypervalent |
-| `{Clv7}` | Cl valence 7 (HClO4) | hypervalent |
-| `{I/1v5}` | I valence 5 (IF5) | hypervalent |
-
-These do not cause test failures because the hypervalent compounds resolve via `counts` and NO2 is the only `atom_typing` failure. Adding these specs would make `atom_typing` succeed for all 530 tests.
+| `functional_groups/` | 73 | true | Organic heteroatom groups (halides, amines, etc.) |
+| `carbonyl_derivatives/` | 62 | true | Non-aromatic carbonyl compounds (aldehydes, ketones, acids, esters, amides, acyl derivatives) |
+| `heterocycles/` | 52 | true | Non-aromatic O/N/S heterocycles, crown ethers |
+| `hypervalent/` | 20 | false | Expanded-octet species (S, P, Cl, I) |
+| **Total** | **605** | | |
 
 ### Key code files
 
@@ -50,6 +34,15 @@ These do not cause test failures because the hypervalent compounds resolve via `
 - **Valence logic**: `umol-models-graph/src/graph_ir/valence.rs`, `config_data.rs`
 - **Atom type spec/query**: `umol-models-graph/src/graph_ir/atom_type.rs`
 - **Tracking doc**: `discussion/56-default-registry-2026-03-07.md` (this file)
+
+### Conformance execution notes
+
+- Run the conformance suite with feature flag enabled:
+  - `cargo test --features conformance --test resolution`
+- Keep the compile-time refresh marker comment in `umol-models-graph/tests/resolution/mod.rs` up to date when adding/removing conformance files (current marker: `v6`).
+- Validation criterion for accepted conformance snapshots:
+  - `atom_typing.success: true`
+  - `counts.success: true`
 
 ### TOML input format
 
@@ -85,8 +78,7 @@ Provisions:
 ### What's next (not started)
 
 - Aromatic heterocycles (pyridine, pyrrole, furan, thiophene, imidazole, etc.)
-- Carbonyls (aldehydes, ketones)
-- Carboxylic acids and derivatives (acids, esters, amides)
+- Carbonyl-derivatives snapshot/registry review (new category coverage just added)
 - Adding the 5 missing registry atom type specs listed above
 
 ## Scope and Ordering
@@ -242,12 +234,11 @@ Extend this table as new elements are considered.
 |-------|-------|-----------------|--------|-------|
 | Hydrocarbons | Alkanes, alkenes, alkynes, dienes/cumulenes, cycloalkanes, unsaturated alicycles, fused/spiro/bridged bicycles, polycycles | `hydrocarbons/` | done | 51 files, `implicit_h=true`, `?{CHn}` |
 | Alcohols / ethers | R–OH, R–O–R′ | — | todo | |
-| Carbonyls | Aldehydes, ketones | — | todo | |
-| Carboxylic acids / derivatives | Acids, esters, amides | — | todo | |
+| Carbonyl derivatives | Aldehydes, ketones, carboxylic acids, esters, amides | `carbonyl_derivatives/` | review | 62 files, `implicit_h=true`, non-aromatic |
 | Organic halides | R–F, R–Cl, R–Br, R–I | — | todo | |
 | Other | Amines, thiols, etc. | — | todo | |
-| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, ethers, amines, nitroso, nitro | `functional_groups/` | done | 64 files, `implicit_h=true` |
-| Heterocycles | Non-aromatic O/N/S heterocycles, crown ethers, bridged/fused | `heterocycles/` | review | 54 files, `implicit_h=true` |
+| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, ethers, amines, nitroso, nitro, sulfoxides, hydrazines, diazo/azo | `functional_groups/` | review | 73 files, `implicit_h=true` |
+| Heterocycles | Non-aromatic O/N/S heterocycles, crown ethers, bridged/fused | `heterocycles/` | review | 52 files, `implicit_h=true` |
 
 Extend this table as new organic classes are added.
 
@@ -284,6 +275,7 @@ Use resolution data categories:
 - `inorganic_ions/` — small molecular ions (e.g. NH4+, OH3+); explicit H only. Split from former `covalent/`.
 - `hydrocarbons/` — C/H only, implicit H (`?{CHn}`, `implicit_h=true`).
 - `functional_groups/` — organic molecules with heteroatom functional groups; implicit H (`?{CHn}`, `?{OH}`, `?{NH2}`, `?{SH}`, etc., `implicit_h=true`).
+- `carbonyl_derivatives/` — carbonyl-centered organics; implicit H (`?{CHn}`, `?{OH0}`, `?{NH0}`, etc., `implicit_h=true`).
 - `heterocycles/` — non-aromatic heterocycles; implicit H (`?{CHn}`, `?{OH0}`, `?{NH}`, `?{SH0}`, etc., `implicit_h=true`).
 
 Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic_ions, and hydrocarbons use explicit H where present, except hydrocarbons where H is in the query.
@@ -296,9 +288,10 @@ Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic
 - `inorganic_small/`: neutral small inorganics (explicit H only): e.g. `bf2`, `bf3`, `bn`, `c2`, `ch3`, `ch2_singlet`, `ch2_triplet`, `sih3`, `sih2_*`, `nh2`, `ph2`, `ash2`, `sbh2`, `oh`, `sh`, `seh`, `teh`, `br2`, `cl2`, `cn-`, `f2`, `i2`, `n2`, `o2`, etc. Added nitrogen oxides (NO, NO2, N2O, N2O3, N2O4), carbon compounds (CO2, CS2, COS, HCN), oxyacids/hydroxides (HNO2, HNO3, HClO, H2CO3, H3BO3, HOBr, HOI), N-H compounds (N2H4, NH2OH, N2H2), peroxides (H2O2, H2S2), halides (NF3, NCl3, PF3, PCl3, SF2, SiF4, SiCl4, BCl3, ClF, BrF), and other (O3, HNCO, HOCN, HSCN, HNCS).
 - `inorganic_ions/`: molecular ions (explicit H only): e.g. `bcl4-`, `cf3-`, `ccl3+`, `nh2-`, `nh4+`, `ph2-`, `ph4+`, `ash2-`, `ash4+`, `sbh2-`, `sbh4+`, `oh-`, `oh3+`, `sh-`, `sh3+`, `seh-`, `seh3+`, `teh-`, `teh3+`, `f-`, `cl-`, `br-`, `i-`, `sif3-`, `sicl3+`, etc.
 - `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`
-- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6). Total: 64 files, `implicit_h=true`.
-- `hypervalent/`: expanded-octet species (all `implicit_h=false`): SO2, SO3, H2SO3, H2SO4, SF4, SF6, H3PO3, H3PO4, P4O10, PF5, PCl5, POCl3, HClO2, HClO3, HClO4, ClF3, IF5. Total: 17 files.
-- `heterocycles/`: non-aromatic heterocycles (all `implicit_h=true`). O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine, beta-lactam); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, succinimide, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6). Total: 53 files.
+- `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6); dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene (6). Total: 73 files, `implicit_h=true`.
+- `carbonyl_derivatives/`: non-aromatic carbonyl compounds (all `implicit_h=true`): aldehydes, ketones, dicarbonyls/hydroxy-carbonyls, monocarboxylic and dicarboxylic acids, acyl halides, anhydrides, carboxylates, esters/lactones/thioesters, amides/lactams/imides, and carbonyl-derived C=N species (oxime/hydrazone), plus pyruvic acid. Total: 62 files.
+- `hypervalent/`: expanded-octet species (all `implicit_h=false`): SO2, SO3, H2SO3, H2SO4, SF4, SF6, H3PO3, H3PO4, P4O10, PF5, PCl5, POCl3, HClO2, HClO3, HClO4, ClF3, IF5, SO4(2-), PO4(3-), ClO4(-). Total: 20 files.
+- `heterocycles/`: non-aromatic heterocycles (all `implicit_h=true`). O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6). Total: 52 files.
 
 ## Decision Log
 
@@ -338,3 +331,6 @@ Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic
 - Resolution results: all 53 new files resolve successfully with `counts` strategy. `atom_typing` fails on 3 files (NO2, IF5, HClO4) due to missing registry entries for radical N (`{N/1^1v3}`), hypervalent I (`{I/1v5}`), and heptavalent Cl (`{Clv7}`). N2O4 input was corrected to symmetric O=N+(O-)–N+(O-)=O structure; both strategies now succeed.
 - Identified 5 new atom type specs needed for full `atom_typing` coverage of new compounds: `{Cl/2v3}` (Cl valence 3), `{Cl/1v5}` (Cl valence 5), `{Clv7}` (Cl valence 7), `{I/1v5}` (I valence 5), `{N/1^1v3}` (radical N in NO2).
 - Added `heterocycles/` conformance category (53 files) with `implicit_h=true`. Covers O-saturated (7), N-saturated (5), S-saturated (4), O/S-unsaturated (6), N-unsaturated (5), functionalized (4: sulfolane, succinimide, 2-oxazolidone, hydantoin), multi-O/S (6), multi-N (5), mixed heteroatom (5), bridged/fused (3: pyrrolizidine, quinuclidine, 1-azaadamantane), crown ethers (3: 12-crown-4, 15-crown-5, 18-crown-6). All 53 counts-strategy results pass. 5 atom-typing results show `ValenceAmbiguous` on carbonyl O (same registry disambiguation issue as functional_groups).
+- Added new `carbonyl_derivatives/` conformance category (62 files, non-aromatic) covering aldehydes, ketones, acids, esters, amides, acyl halides, anhydrides, carboxylates, lactones/thioesters, and C=N derivatives tied to carbonyl chemistry.
+- Added 6 `functional_groups/` compounds requested for S/N chemistry expansion: dimethyl-sulfoxide, methylhydrazine, 1,1-dimethylhydrazine, 1,2-dimethylhydrazine, diazomethane, dimethyldiazene.
+- Moved `beta-lactam` and `succinimide` from `heterocycles/` into `carbonyl_derivatives/` to keep carbonyl-centered compounds in one category.

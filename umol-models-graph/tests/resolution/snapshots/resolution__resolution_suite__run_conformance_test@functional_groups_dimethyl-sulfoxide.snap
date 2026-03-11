@@ -1,0 +1,35 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: functional_groups
+atom_typing:
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Ce
+    atoms:
+      - "{CH3v1}"
+      - "{S/1v4}"
+      - "{CH3v1}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "="
+counts:
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Ce
+    atoms:
+      - "{CH3v1}"
+      - "{S/1v4}"
+      - "{CH3v1}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "="

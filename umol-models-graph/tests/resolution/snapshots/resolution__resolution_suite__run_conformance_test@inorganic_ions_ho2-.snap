@@ -1,0 +1,31 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: inorganic_ions
+atom_typing:
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bg
+    atoms:
+      - "{O-/3v1}"
+      - "{O/2v2}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bg
+    atoms:
+      - "{O-/3v1}"
+      - "{O/2v2}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+      - "-"

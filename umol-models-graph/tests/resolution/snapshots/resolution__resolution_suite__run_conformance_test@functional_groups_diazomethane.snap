@@ -1,0 +1,31 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: functional_groups
+atom_typing:
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bg
+    atoms:
+      - "{CH2v2}"
+      - "{N+v4}"
+      - "{N-/2v2}"
+    bonds:
+      - "="
+      - "="
+counts:
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bg
+    atoms:
+      - "{CH2v2}"
+      - "{N+v4}"
+      - "{N-/2v2}"
+    bonds:
+      - "="
+      - "="
