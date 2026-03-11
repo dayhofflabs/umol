@@ -1,0 +1,39 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: inorganic_small
+atom_typing:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 4
+    topology: Dw_
+    atoms:
+      - "{N/1v3}"
+      - "{O/2v2}"
+      - "{Hv1}"
+      - "{Hv1}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 4
+    topology: Dw_
+    atoms:
+      - "{N/1v3}"
+      - "{O/2v2}"
+      - "{Hv1}"
+      - "{Hv1}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"

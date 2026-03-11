@@ -1,0 +1,3 @@
+atoms = "?{H} ?{S} ?{C} ?{N}"
+bonds = "0-1 1-2 2#3"
+implicit_h = false

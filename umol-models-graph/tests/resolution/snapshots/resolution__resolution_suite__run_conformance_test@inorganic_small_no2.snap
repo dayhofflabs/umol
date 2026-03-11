@@ -1,0 +1,23 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: inorganic_small
+atom_typing:
+  success: false
+  error:
+    error_type: ValenceNoMatch
+    message: No valence match for atom N at index 0 has no valence match
+counts:
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bo
+    atoms:
+      - "{N/1^1v3}"
+      - "{O/2v2}"
+      - "{O/2^1v1}"
+    bonds:
+      - "="
+      - "-"

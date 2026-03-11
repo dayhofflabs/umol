@@ -68,7 +68,7 @@ allowed_valences = [2, 4, 6]
 
 [Cl]
 outer_electrons = 7
-allowed_valences = [1]
+allowed_valences = [1, 3, 5, 7]
 
 [Ar]
 outer_electrons = 8

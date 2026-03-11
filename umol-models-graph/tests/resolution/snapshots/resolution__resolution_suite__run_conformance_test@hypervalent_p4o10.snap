@@ -1,0 +1,81 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: hypervalent
+atom_typing:
+  success: true
+  summary:
+    atom_count: 14
+    bond_count: 16
+    topology: "M{?A?A?C??FAXS???"
+    atoms:
+      - "{Pv5}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{Pv5}"
+      - "{Pv5}"
+      - "{Pv5}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "="
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "="
+      - "-"
+      - "-"
+      - "="
+      - "-"
+      - "-"
+      - "="
+counts:
+  success: true
+  summary:
+    atom_count: 14
+    bond_count: 16
+    topology: "M{?A?A?C??FAXS???"
+    atoms:
+      - "{Pv5}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{Pv5}"
+      - "{Pv5}"
+      - "{Pv5}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "="
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "="
+      - "-"
+      - "-"
+      - "="
+      - "-"
+      - "-"
+      - "="
