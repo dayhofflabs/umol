@@ -1,0 +1,45 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: heterocycles
+atom_typing:
+  success: true
+  summary:
+    atom_count: 6
+    bond_count: 6
+    topology: EoaW
+    atoms:
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{N/1H1v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 6
+    bond_count: 6
+    topology: EoaW
+    atoms:
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{N/1H1v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"

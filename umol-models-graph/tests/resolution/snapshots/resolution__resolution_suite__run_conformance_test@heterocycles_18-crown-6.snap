@@ -1,0 +1,93 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: heterocycles
+atom_typing:
+  success: true
+  summary:
+    atom_count: 18
+    bond_count: 18
+    topology: Qo??_?A??O?C?A?A?C?OA?_OOaW
+    atoms:
+      - "{O/2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 18
+    bond_count: 18
+    topology: Qo??_?A??O?C?A?A?C?OA?_OOaW
+    atoms:
+      - "{O/2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+      - "{O/2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{CH2v2}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"

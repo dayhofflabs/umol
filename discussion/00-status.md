@@ -58,4 +58,4 @@
 | 53-molecule-validation-scheme-2026-02-17.md                    | Active        | 2026-02-17   |
 | 54-molecule-validation-phases-2026-02-17.md                    | Active        | 2026-02-17   |
 | 55-opensmiles-spec-validation-2026-03-06.md                    | Active        | 2026-03-06   |
-| 56-default-registry-2026-03-07.md                              | Active        | 2026-03-07   |
+| 56-default-registry-2026-03-07.md                              | Active        | 2026-03-11   |

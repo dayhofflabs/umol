@@ -3,6 +3,92 @@
 This document tracks incremental, reviewable expansion of the default atom type registry.
 Registry entries are treated as code: explicit scope, per-entry review, and matching conformance coverage.
 
+## Project Status (2026-03-12)
+
+**530 conformance tests, all passing.** Only 1 snapshot records a partial failure (NO2: `atom_typing` fails due to missing radical N registry entry `{N/1^1v3}`; `counts` succeeds).
+
+### Conformance suite breakdown
+
+| Category | Files | `implicit_h` | Description |
+|---|---|---|---|
+| `atoms/` | 108 | n/a | Free atoms (ground/excited states), H through Hs |
+| `atomic_ions/` | 127 | n/a | Single-atom ions with discrete charge states |
+| `hydrides/` | 17 | true | One-atom graphs with implicit H (`?{EHn}`) |
+| `inorganic_small/` | 65 | false | Neutral small inorganics, all H explicit |
+| `inorganic_ions/` | 25 | false | Molecular ions, all H explicit |
+| `hydrocarbons/` | 53 | true | C/H only, `?{CHn}` queries |
+| `functional_groups/` | 64 | true | Organic heteroatom groups (halides, amines, etc.) |
+| `heterocycles/` | 54 | true | Non-aromatic O/N/S heterocycles, crown ethers |
+| `hypervalent/` | 17 | false | Expanded-octet species (S, P, Cl, I) |
+| **Total** | **530** | | |
+
+### Resolution strategy results
+
+- **`counts`**: 530/530 pass. Uses `default-valence-table.toml` with element-level `outer_electrons` and `allowed_valences`. Charged atoms use RDKit-style effective-element lookup via `element.shift(-charge)`.
+- **`atom_typing`**: 529/530 pass. Uses `default-registry.toml` with per-element, per-charge lists of `AtomTypeSpec` entries. The single failure is NO2 (radical nitrogen `{N/1^1v3}` not yet in registry).
+
+### Known registry gaps (atom types needed but not yet added)
+
+| Spec | Context | Category |
+|---|---|---|
+| `{N/1^1v3}` | Radical N in NO2 | inorganic_small |
+| `{Cl/2v3}` | Cl valence 3 (HClO2, ClF3) | hypervalent |
+| `{Cl/1v5}` | Cl valence 5 (HClO3) | hypervalent |
+| `{Clv7}` | Cl valence 7 (HClO4) | hypervalent |
+| `{I/1v5}` | I valence 5 (IF5) | hypervalent |
+
+These do not cause test failures because the hypervalent compounds resolve via `counts` and NO2 is the only `atom_typing` failure. Adding these specs would make `atom_typing` succeed for all 530 tests.
+
+### Key code files
+
+- **Registry**: `umol-models-graph/config/default-registry.toml` — per-element atom type spec lists
+- **Valence table**: `umol-models-graph/config/default-valence-table.toml` — element `outer_electrons` + `allowed_valences`
+- **Test harness**: `umol-models-graph/tests/resolution/mod.rs` — rstest-based conformance runner with insta snapshots
+- **Test data**: `umol-models-graph/tests/resolution/data/<category>/<compound>.toml`
+- **Snapshots**: `umol-models-graph/tests/resolution/snapshots/`
+- **Resolver**: `umol-models-graph/src/graph_ir/resolver.rs`
+- **Valence logic**: `umol-models-graph/src/graph_ir/valence.rs`, `config_data.rs`
+- **Atom type spec/query**: `umol-models-graph/src/graph_ir/atom_type.rs`
+- **Tracking doc**: `discussion/56-default-registry-2026-03-07.md` (this file)
+
+### TOML input format
+
+```toml
+atoms = "?{CH2} ?{CH2} ?{OH0}"   # space-separated atom type queries
+bonds = "0-1 1=2 2-0"            # index pairs with - = # : for bond order
+implicit_h = true                 # whether resolver infers implicit H
+```
+
+Query syntax: `?{Element[charge][/lone_pairs][^unpaired][Hn][vn]}`. Examples: `?{CH3}` (C with 3 H), `?{N+}` (N with +1 charge), `?{OH0}` (O with 0 H, used for ethers/carbonyls), `?{SH0}` (thioether S), `?{N^1}` (N with 1 unpaired electron).
+
+### Disambiguation lessons learned
+
+- Carbonyl/ether O must use `?{OH0}` (not bare `?{O}`) to avoid ambiguity with `{O+/1H1v2}` in the registry.
+- Charged atoms in Lewis structures (nitro, azide, isocyanide, ozone, N2O, N2O4) must have explicit formal charges in queries.
+- `compute_implicit_hydrogens` uses `element.shift(-charge)` to look up isoelectronic element's allowed valences for charged atoms.
+
+### ValenceMatchPolicy extension: `SelectBest` (proposed)
+
+Current `ValenceMatchPolicy` behavior is binary (`Error` or `Ignore`) and treats any multi-match as either hard failure or pass-through. For conformance and chemistry-review workflows, `Error` remains the default because it forces explicit input and registry disambiguation.
+
+Add a third policy, `SelectBest`, as an explicit opt-in for ingestion and interoperability scenarios where ambiguous inputs must still resolve to one state. This policy should not change matching; it only defines post-match tie-breaking when multiple candidates survive.
+
+Provisions:
+
+- Keep `Error` as default policy for ambiguity in resolver defaults and conformance suite runs.
+- Use `SelectBest` only when caller explicitly enables it in `ResolveConfig`.
+- Apply tie-breaking only after exact constraints are matched; never admit non-matching candidates.
+- Prefer candidates with explicit query agreement in this order: charge > unpaired electrons > lone pairs > hydrogens > valence.
+- If top-ranked candidates remain tied, return `ValenceAmbiguous` (do not silently choose).
+- Snapshot/reporting should record when `SelectBest` was used and which candidates were considered.
+
+### What's next (not started)
+
+- Aromatic heterocycles (pyridine, pyrrole, furan, thiophene, imidazole, etc.)
+- Carbonyls (aldehydes, ketones)
+- Carboxylic acids and derivatives (acids, esters, amides)
+- Adding the 5 missing registry atom type specs listed above
+
 ## Scope and Ordering
 
 Implementation proceeds in this order:
@@ -160,6 +246,8 @@ Extend this table as new elements are considered.
 | Carboxylic acids / derivatives | Acids, esters, amides | — | todo | |
 | Organic halides | R–F, R–Cl, R–Br, R–I | — | todo | |
 | Other | Amines, thiols, etc. | — | todo | |
+| Functional groups | Halides, azides, cyanates, thiocyanates, alcohols, ethers, amines, nitroso, nitro | `functional_groups/` | done | 64 files, `implicit_h=true` |
+| Heterocycles | Non-aromatic O/N/S heterocycles, crown ethers, bridged/fused | `heterocycles/` | review | 54 files, `implicit_h=true` |
 
 Extend this table as new organic classes are added.
 
@@ -196,6 +284,7 @@ Use resolution data categories:
 - `inorganic_ions/` — small molecular ions (e.g. NH4+, OH3+); explicit H only. Split from former `covalent/`.
 - `hydrocarbons/` — C/H only, implicit H (`?{CHn}`, `implicit_h=true`).
 - `functional_groups/` — organic molecules with heteroatom functional groups; implicit H (`?{CHn}`, `?{OH}`, `?{NH2}`, `?{SH}`, etc., `implicit_h=true`).
+- `heterocycles/` — non-aromatic heterocycles; implicit H (`?{CHn}`, `?{OH0}`, `?{NH}`, `?{SH0}`, etc., `implicit_h=true`).
 
 Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic_ions, and hydrocarbons use explicit H where present, except hydrocarbons where H is in the query.
 
@@ -209,6 +298,7 @@ Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic
 - `hydrocarbons/`: `ethane`, `propane`, `butane`, `isobutane`, `pentane`, `isopentane`, `neopentane`, `hexane`, `ethene`, `propene`, `but-1-ene`, `but-2-ene`, `2-methylpropene`, `2-methylbut-2-ene`, `ethyne`, `propyne`, `but-1-yne`, `but-2-yne`, `allene`, `buta-1,3-diene`, `penta-1,4-diene`, `butatriene`, `cyclopropane`, `cyclobutane`, `cyclopentane`, `cyclohexane`, `cycloheptane`, `cyclopropene`, `cyclobutene`, `cyclopentene`, `cyclopentadiene`, `cyclohexene`, `cyclohexa-1,3-diene`, `cyclohexa-1,4-diene`, `bicyclo-1.1.0-butane`, `bicyclo-2.1.0-pentane`, `bicyclo-2.2.0-hexane`, `bicyclo-3.3.0-octane`, `bicyclo-4.3.0-nonane`, `decalin`, `spiropentane`, `spirohexane`, `spiroheptane`, `spirononane`, `bicyclo-1.1.1-pentane`, `norbornane`, `bicyclo-2.2.2-octane`, `tetrahedrane`, `prismane`, `cubane`, `adamantane`
 - `functional_groups/`: methyl/ethyl × {fluoride, chloride, bromide, iodide, azide, isocyanide, cyanate, thiocyanate, isothiocyanate, nitrite, nitrate, thiol, selenol} (26); {propyl, isopropyl, butyl, isobutyl, tert-butyl, cyclopropyl, cyclohexyl}-chloride (7); dichloromethane, chloroform, carbon-tetrachloride, 1,1-dichloroethane, 1,2-dichloroethane, 1,2-dichlorocyclohexane, 1-chloro-2-hydroxyethane (7); methanol, ethanol, propan-1-ol, propan-2-ol, butan-1-ol, butan-2-ol, 2,2-dimethylpropan-2-ol, hydroxycyclopropane, hydroxycyclohexane (9); dimethylether, diethylether, 1,2-dimethoxyethane (3); methylamine, ethylamine, dimethylamine, trimethylamine, tetramethylammonium, trimethylamine-oxide (6); nitrosomethane, nitrosoethane, nitromethane, nitroethane, nitrosocyclohexane, nitrocyclohexane (6). Total: 64 files, `implicit_h=true`.
 - `hypervalent/`: expanded-octet species (all `implicit_h=false`): SO2, SO3, H2SO3, H2SO4, SF4, SF6, H3PO3, H3PO4, P4O10, PF5, PCl5, POCl3, HClO2, HClO3, HClO4, ClF3, IF5. Total: 17 files.
+- `heterocycles/`: non-aromatic heterocycles (all `implicit_h=true`). O-saturated (oxirane, dioxirane, oxetane, 1,2-dioxetane, 1,3-dioxetane, tetrahydrofuran, tetrahydropyran); N-saturated (aziridine, azetidine, pyrrolidine, piperidine, beta-lactam); S-saturated (thiirane, thietane, tetrahydrothiophene, thiane); O/S-unsaturated (2H-oxete, 2H-thiete, 2H-pyran, 4H-pyran, 2H-thiopyran, 4H-thiopyran); N-unsaturated (2H-azirine, 2,3-dihydroazete, azete, 3-pyrroline, 2-pyrroline); functionalized (sulfolane, succinimide, 2-oxazolidone, hydantoin); multi-O/S (1,3-dioxolane, 1,2,3-trioxolane, 1,4-dioxane, 1,3-dithiane, 1,4-dithiane, 1,3,5-trithiane); multi-N (1,3-diazetidine, pyrazolidine, imidazolidine, 2-pyrazoline, 2-imidazoline); mixed (1,2-oxazetidine, 1,2-oxathiolane, 1,3-oxathiolane, morpholine, thiomorpholine); bridged/fused (pyrrolizidine, quinuclidine, 1-azaadamantane); crown ethers (12-crown-4, 15-crown-5, 18-crown-6). Total: 53 files.
 
 ## Decision Log
 
@@ -247,3 +337,4 @@ Compromise: hydrides use implicit H (one-atom graph); inorganic_small, inorganic
 - Added 17 new `hypervalent/` conformance files: sulfur (SO2, SO3, H2SO3, H2SO4, SF4, SF6), phosphorus (H3PO3, H3PO4, P4O10, PF5, PCl5, POCl3), chlorine (HClO2, HClO3, HClO4, ClF3), iodine (IF5). All `implicit_h=false`.
 - Resolution results: all 53 new files resolve successfully with `counts` strategy. `atom_typing` fails on 3 files (NO2, IF5, HClO4) due to missing registry entries for radical N (`{N/1^1v3}`), hypervalent I (`{I/1v5}`), and heptavalent Cl (`{Clv7}`). N2O4 input was corrected to symmetric O=N+(O-)–N+(O-)=O structure; both strategies now succeed.
 - Identified 5 new atom type specs needed for full `atom_typing` coverage of new compounds: `{Cl/2v3}` (Cl valence 3), `{Cl/1v5}` (Cl valence 5), `{Clv7}` (Cl valence 7), `{I/1v5}` (I valence 5), `{N/1^1v3}` (radical N in NO2).
+- Added `heterocycles/` conformance category (53 files) with `implicit_h=true`. Covers O-saturated (7), N-saturated (5), S-saturated (4), O/S-unsaturated (6), N-unsaturated (5), functionalized (4: sulfolane, succinimide, 2-oxazolidone, hydantoin), multi-O/S (6), multi-N (5), mixed heteroatom (5), bridged/fused (3: pyrrolizidine, quinuclidine, 1-azaadamantane), crown ethers (3: 12-crown-4, 15-crown-5, 18-crown-6). All 53 counts-strategy results pass. 5 atom-typing results show `ValenceAmbiguous` on carbonyl O (same registry disambiguation issue as functional_groups).

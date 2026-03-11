@@ -4,10 +4,18 @@ expression: results
 ---
 category: inorganic_small
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceNoMatch
-    message: No valence match for atom N at index 0 has no valence match
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bo
+    atoms:
+      - "{N+^1v3}"
+      - "{O/2v2}"
+      - "{O-/3v1}"
+    bonds:
+      - "="
+      - "-"
 counts:
   success: true
   summary:
@@ -15,9 +23,9 @@ counts:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{N/1^1v3}"
+      - "{N+^1v3}"
       - "{O/2v2}"
-      - "{O/2^1v1}"
+      - "{O-/3v1}"
     bonds:
       - "="
       - "-"
