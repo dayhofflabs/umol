@@ -15,7 +15,7 @@
 | 11-cheminformatics-libraries.md                                | Informational | 2026-02-17   |
 | 12-molecular-representations-2025-03-01.md                     | Informational | 2026-02-17   |
 | 13-substructure-match-2025-03-02.md                            | Informational | 2026-02-17   |
-| 14-aromaticity-2025-03-08.md                                   | Informational | 2026-02-17   |
+| 14-aromaticity-2025-03-08.md                                   | Outdated      | 2026-03-11   |
 | 15-semantic-model-2025-03-10.md                                | Active        | 2026-02-17   |
 | 16-hypergraphs-2025-03-10.md                                   | Informational | 2026-02-17   |
 | 17-molecular-builder-api-2025-03-15.md                         | Informational | 2026-02-17   |
@@ -44,7 +44,7 @@
 | 39-opensmiles-semantic-issues-2025-09-30.md                    | Active        | 2026-02-17   |
 | 40-opensmiles-ir-modeling-2025-09-30.md                        | Active        | 2026-02-17   |
 | 41-opensmiles-aromaticity-2025-10-01.md                        | Informational | 2026-02-17   |
-| 42-relational-molecular-structure-representation-2025-11-23.md | Informational | 2026-02-17   |
+| 42-relational-molecular-structure-representation-2025-11-23.md | Informational | 2026-03-11   |
 | 43-mutative-efficient-serializable-undoable-mutation.md        | Informational | 2026-02-17   |
 | 44-unified-ir-graph-models-2026-01-14.md                       | Active        | 2026-02-17   |
 | 45-mol-file-parsing-benchmarks-2026-01-14.md                   | Completed     | 2026-02-17   |
@@ -59,3 +59,5 @@
 | 54-molecule-validation-phases-2026-02-17.md                    | Active        | 2026-02-17   |
 | 55-opensmiles-spec-validation-2026-03-06.md                    | Active        | 2026-03-06   |
 | 56-default-registry-2026-03-07.md                              | Active        | 2026-03-11   |
+| 57-sssr-needed-2026-03-11.md                                   | Informational | 2026-03-11   |
+| 58-aromaticity-perception-2026-03-11.md                        | Active        | 2026-03-11   |
