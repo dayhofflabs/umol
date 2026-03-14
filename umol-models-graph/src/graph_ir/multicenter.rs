@@ -111,10 +111,7 @@ impl MulticenterSet {
     }
 
     fn electron_sum(&self) -> u8 {
-        self.contributions
-            .iter()
-            .filter_map(|c| c.electrons)
-            .sum()
+        self.contributions.iter().filter_map(|c| c.electrons).sum()
     }
 
     pub fn electron_count(&self) -> u8 {
@@ -162,9 +159,6 @@ impl MulticenterBond {
     }
 
     pub fn all_atoms(&self) -> Vec<AtomIndex> {
-        self.sets
-            .iter()
-            .flat_map(|s| s.atoms())
-            .collect()
+        self.sets.iter().flat_map(|s| s.atoms()).collect()
     }
 }

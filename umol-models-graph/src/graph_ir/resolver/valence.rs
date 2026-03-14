@@ -3,10 +3,10 @@
 use smallvec::SmallVec;
 use umol_data::{SpinState, MAX_UNPAIRED_ELECTRONS};
 
-use super::atom_type::{AtomTypeQuery, AtomTypeSpec};
-use super::builder::MoleculeBuilder;
-use super::config_data::{AtomTypeRegistry, ValenceTable};
-use super::molecule::AtomIndex;
+use crate::graph_ir::atom_type::{AromaticValence, AtomTypeQuery, AtomTypeSpec};
+use crate::graph_ir::config_data::{AtomTypeRegistry, ValenceTable};
+use crate::graph_ir::molecule::builder::MoleculeBuilder;
+use crate::graph_ir::molecule::AtomIndex;
 
 /// Atom-level valence validator.
 #[derive(Debug, Clone)]
@@ -31,12 +31,7 @@ impl ValenceValidator {
             ValenceValidator::Counts {
                 table,
                 enable_implicit_hydrogens,
-            } => Self::counts_candidates(
-                table,
-                *enable_implicit_hydrogens,
-                builder,
-                atom_index,
-            ),
+            } => Self::counts_candidates(table, *enable_implicit_hydrogens, builder, atom_index),
         }
     }
 
@@ -101,7 +96,7 @@ impl ValenceValidator {
             explicit_valence,
             donated,
             accepted,
-            0,
+            AromaticValence::None,
             0,
         ) {
             Ok(spec) => SmallVec::from_elem(spec, 1),

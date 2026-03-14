@@ -31,13 +31,18 @@ impl AromaticContribution {
     }
 }
 
-// TODO: Add charge and multiplicity fields for delocalized charge and spin, not assignable to individual atoms.
-/// An aromatic system: a set of atoms each contributing electrons to a
-/// delocalized π system. Contributions are canonicalized by atom index;
-/// each atom appears at most once.
+// TODO: Add multiplicity field
+/// An aromatic system consisting of atoms and number of electrons contributed
+/// Charge is delocalized charge, not assignable to any individual atom
+/// Each atom can participate in at most one aromatic system, appears only once
+/// in the contributions list
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
+    /// Delocalized charge
+    charge: i8,
+    /// List of atomic indices per ring
+    rings: Vec<Vec<AtomIndex>>,
 }
 
 impl AromaticSystem {
@@ -48,7 +53,25 @@ impl AromaticSystem {
         let mut contributions: Vec<AromaticContribution> = contributions.into_iter().collect();
         contributions.sort_unstable();
         contributions.dedup_by_key(|c| c.atom);
-        Self { contributions }
+        Self {
+            contributions,
+            charge: 0,
+            rings: Vec::new(),
+        }
+    }
+
+    pub fn with_rings<I>(contributions: I, rings: Vec<Vec<AtomIndex>>) -> Self
+    where
+        I: IntoIterator<Item = AromaticContribution>,
+    {
+        let mut contributions: Vec<AromaticContribution> = contributions.into_iter().collect();
+        contributions.sort_unstable();
+        contributions.dedup_by_key(|c| c.atom);
+        Self {
+            contributions,
+            charge: 0,
+            rings,
+        }
     }
 
     pub fn contributions(&self) -> &[AromaticContribution] {
@@ -61,6 +84,18 @@ impl AromaticSystem {
 
     pub fn electron_count(&self) -> u8 {
         self.contributions.iter().map(|c| c.aromatic_valence).sum()
+    }
+
+    pub fn charge(&self) -> i8 {
+        self.charge
+    }
+
+    pub fn set_charge(&mut self, charge: i8) {
+        self.charge = charge;
+    }
+
+    pub fn rings(&self) -> &[Vec<AtomIndex>] {
+        &self.rings
     }
 
     pub fn contains_atom(&self, atom: AtomIndex) -> bool {

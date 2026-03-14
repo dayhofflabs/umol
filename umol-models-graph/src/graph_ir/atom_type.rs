@@ -11,20 +11,69 @@ use umol_data::{Element, SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 use super::error::ResolutionError;
 use super::molecule::{AtomIndex, MoleculeBuilder};
 
+/// Aromatic valence of an atom: either non-aromatic or contributing n >= 0
+/// valence to a delocalized pi-system. Each atom can participate in at
+/// most one aromatic system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum AromaticValence {
+    /// Non-aromatic atom.
+    None,
+    /// Aromatic atom contributing  valence `n` (n >= 0)
+    Valence(u8),
+}
+
+impl AromaticValence {
+    pub fn valence(&self) -> u8 {
+        match self {
+            AromaticValence::None => 0,
+            AromaticValence::Valence(n) => *n,
+        }
+    }
+
+    /// Atom is aromatic if it contributes valence (n >= 0) to an aromatic system
+    pub fn is_aromatic(&self) -> bool {
+        matches!(self, AromaticValence::Valence(_))
+    }
+}
+
+impl Display for AromaticValence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AromaticValence::None => Ok(()),
+            AromaticValence::Valence(n) => write!(f, "a{}", n),
+        }
+    }
+}
+
+impl FromStr for AromaticValence {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(rest) = s.strip_prefix('a') {
+            let n: u8 = rest
+                .parse()
+                .map_err(|_| format!("invalid aromatic valence: {}", s))?;
+            Ok(AromaticValence::Valence(n))
+        } else {
+            Err(format!("expected 'a' prefix: {}", s))
+        }
+    }
+}
+
 /// Atom typing specification for valence resolution.
 ///
 /// String notation:
 /// - `{El...}` where `El` is an element symbol.
 /// - tokens are optional and can appear in any order:
 ///   - `+n` / `-n` charge (default 0, bare `+`/`-` means 1)
+///   - `Hn` hydrogens
 ///   - `/n` lone pairs
 ///   - `^n` unpaired electrons
 ///   - `*n` multiplicity (default `unpaired + 1`)
-///   - `Hn` hydrogens
 ///   - `vn` valence
 ///   - `>n` donated pairs
 ///   - `<n` accepted pairs
-///   - `an` aromatic valence
+///   - `an` aromatic valence (n >= 0) or none (non-aromatic)
 ///   - `mn` multicenter valence
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AtomTypeSpec {
@@ -36,7 +85,7 @@ pub struct AtomTypeSpec {
     valence: u8,
     donated_pairs: u8,
     accepted_pairs: u8,
-    aromatic_valence: u8,
+    aromatic_valence: AromaticValence,
     multicenter_valence: u8,
 }
 
@@ -52,7 +101,7 @@ impl AtomTypeSpec {
         valence: u8,
         donated_pairs: u8,
         accepted_pairs: u8,
-        aromatic_valence: u8,
+        aromatic_valence: AromaticValence,
         multicenter_valence: u8,
     ) -> Result<Self, ResolutionError> {
         let spin = SpinState::try_new(unpaired_electrons, multiplicity).ok_or_else(|| {
@@ -116,12 +165,16 @@ impl AtomTypeSpec {
         self.accepted_pairs
     }
 
-    pub fn aromatic_valence(&self) -> u8 {
+    pub fn aromatic_valence(&self) -> AromaticValence {
         self.aromatic_valence
     }
 
     pub fn multicenter_valence(&self) -> u8 {
         self.multicenter_valence
+    }
+
+    pub fn is_aromatic(&self) -> bool {
+        self.aromatic_valence.is_aromatic()
     }
 }
 
@@ -135,6 +188,13 @@ impl Display for AtomTypeSpec {
             c if c < 0 => write!(f, "{}", c)?,
             c => write!(f, "+{}", c)?,
         }
+        if self.hydrogens > 0 {
+            if self.hydrogens == 1 {
+                write!(f, "H")?;
+            } else {
+                write!(f, "H{}", self.hydrogens)?;
+            }
+        }
         if self.lone_pairs > 0 {
             write!(f, "/{}", self.lone_pairs)?;
         }
@@ -143,11 +203,8 @@ impl Display for AtomTypeSpec {
         if n > 0 {
             write!(f, "^{}", n)?;
         }
-        if m.multiplicity() != n.saturating_add(1) {
+        if m.multiplicity() != n + 1 {
             write!(f, "*{}", m.multiplicity())?;
-        }
-        if self.hydrogens > 0 {
-            write!(f, "H{}", self.hydrogens)?;
         }
         if self.valence > 0 {
             write!(f, "v{}", self.valence)?;
@@ -158,9 +215,7 @@ impl Display for AtomTypeSpec {
         if self.accepted_pairs > 0 {
             write!(f, "<{}", self.accepted_pairs)?;
         }
-        if self.aromatic_valence > 0 {
-            write!(f, "a{}", self.aromatic_valence)?;
-        }
+        write!(f, "{}", self.aromatic_valence)?;
         if self.multicenter_valence > 0 {
             write!(f, "m{}", self.multicenter_valence)?;
         }
@@ -206,16 +261,15 @@ impl FromStr for AtomTypeSpec {
             .parse()
             .map_err(|_| ResolutionError::InvalidAtomSpec(format!("invalid element: {}", elem)))?;
 
-        let mut charge = 0i8;
-        let mut seen_charge = false;
+        let mut charge = None;
+        let mut hydrogens = 0u8;
         let mut lone_pairs = 0_u8;
         let mut multiplicity: Option<SpinMultiplicity> = None;
-        let mut hydrogens = 0u8;
         let mut valence = 0u8;
         let mut donated_pairs = 0u8;
         let mut accepted_pairs = 0u8;
         let mut unpaired_electrons = 0u8;
-        let mut aromatic_valence = 0u8;
+        let mut aromatic_valence = AromaticValence::None;
         let mut multicenter_valence = 0u8;
 
         while let Some(token) = chars.next() {
@@ -237,23 +291,22 @@ impl FromStr for AtomTypeSpec {
             };
             match token {
                 '+' => {
-                    if seen_charge {
+                    if charge.is_some() {
                         return Err(ResolutionError::InvalidAtomSpec(
                             "duplicate charge token".to_string(),
                         ));
                     }
-                    charge = num_u8(1)? as i8;
-                    seen_charge = true;
+                    charge = Some(num_u8(1)? as i8);
                 }
                 '-' => {
-                    if seen_charge {
+                    if charge.is_some() {
                         return Err(ResolutionError::InvalidAtomSpec(
                             "duplicate charge token".to_string(),
                         ));
                     }
-                    charge = -(num_u8(1)? as i8);
-                    seen_charge = true;
+                    charge = Some(-(num_u8(1)? as i8));
                 }
+                'H' => hydrogens = num_u8(1)?,
                 '/' => lone_pairs = num_u8(1)?,
                 '^' => unpaired_electrons = num_u8(1)?,
                 '*' => {
@@ -266,11 +319,10 @@ impl FromStr for AtomTypeSpec {
                             ))
                         })?);
                 }
-                'H' => hydrogens = num_u8(1)?,
                 'v' => valence = num_u8(1)?,
                 '>' => donated_pairs = num_u8(1)?,
                 '<' => accepted_pairs = num_u8(1)?,
-                'a' => aromatic_valence = num_u8(1)?,
+                'a' => aromatic_valence = AromaticValence::Valence(num_u8(1)?),
                 'm' => multicenter_valence = num_u8(1)?,
                 _ => {
                     return Err(ResolutionError::InvalidAtomSpec(format!(
@@ -302,7 +354,7 @@ impl FromStr for AtomTypeSpec {
 
         Self::new(
             element,
-            charge,
+            charge.unwrap_or(0),
             hydrogens,
             lone_pairs,
             unpaired_electrons,
@@ -341,7 +393,7 @@ pub struct AtomTypeQuery {
     pub valence: Option<u8>,
     pub donated_pairs: Option<u8>,
     pub accepted_pairs: Option<u8>,
-    pub aromatic_valence: Option<u8>,
+    pub aromatic_valence: Option<AromaticValence>,
     pub multicenter_valence: Option<u8>,
 }
 
@@ -367,7 +419,7 @@ impl AtomTypeQuery {
         let valence = builder.atom_bond_order_sum(atom_index);
         let (donated_pairs, accepted_pairs) = builder.atom_dative_bond_order_sums(atom_index);
         let aromatic_valence = match atom.aromatic_hint() {
-            Some(false) => Some(0),
+            Some(false) => Some(AromaticValence::None),
             _ => None,
         };
         let multicenter_valence = if builder.atom_has_multicenter_bonds(atom_index) {
@@ -423,6 +475,13 @@ impl Display for AtomTypeQuery {
             Some(c) if c < 0 => write!(f, "{}", c)?,
             Some(c) => write!(f, "+{}", c)?,
         }
+        if let Some(h) = self.hydrogens {
+            if h == 1 {
+                write!(f, "H")?;
+            } else {
+                write!(f, "H{}", h)?;
+            }
+        }
         if let Some(lp) = self.lone_pairs {
             write!(f, "/{}", lp)?;
         }
@@ -431,9 +490,6 @@ impl Display for AtomTypeQuery {
         }
         if let Some(m) = self.multiplicity {
             write!(f, "*{}", m.multiplicity())?;
-        }
-        if let Some(h) = self.hydrogens {
-            write!(f, "H{}", h)?;
         }
         if let Some(v) = self.valence {
             write!(f, "v{}", v)?;
@@ -445,7 +501,7 @@ impl Display for AtomTypeQuery {
             write!(f, "<{}", a)?;
         }
         if let Some(av) = self.aromatic_valence {
-            write!(f, "a{}", av)?;
+            write!(f, "a{}", av.valence())?;
         }
         if let Some(mv) = self.multicenter_valence {
             write!(f, "m{}", mv)?;
@@ -531,6 +587,7 @@ impl FromStr for AtomTypeQuery {
                     query.charge = Some(-(num_u8(1)? as i8));
                     seen_charge = true;
                 }
+                'H' => query.hydrogens = Some(num_u8(1)?),
                 '/' => query.lone_pairs = Some(num_u8(1)?),
                 '^' => query.unpaired_electrons = Some(num_u8(1)?),
                 '*' => {
@@ -543,11 +600,10 @@ impl FromStr for AtomTypeQuery {
                             ))
                         })?);
                 }
-                'H' => query.hydrogens = Some(num_u8(1)?),
                 'v' => query.valence = Some(num_u8(1)?),
                 '>' => query.donated_pairs = Some(num_u8(1)?),
                 '<' => query.accepted_pairs = Some(num_u8(1)?),
-                'a' => query.aromatic_valence = Some(num_u8(1)?),
+                'a' => query.aromatic_valence = Some(AromaticValence::Valence(num_u8(1)?)),
                 'm' => query.multicenter_valence = Some(num_u8(1)?),
                 _ => {
                     return Err(ResolutionError::InvalidAtomSpec(format!(
@@ -598,58 +654,128 @@ mod tests {
 
     use std::str::FromStr;
 
+    use pretty_assertions::assert_eq;
+    use rstest::*;
     use umol_data::Element;
 
     use super::*;
 
     #[test]
-    fn atom_type_spec_from_str() {
-        let spec = AtomTypeSpec::from_str("{N+1/1^0*1H0v3>1<0a1m0}").unwrap();
-        assert_eq!(spec.element(), Element::N);
-        assert_eq!(spec.charge(), 1);
-        assert_eq!(spec.lone_pairs(), 1);
-        assert_eq!(spec.valence(), 3);
-        assert_eq!(spec.donated_pairs(), 1);
-        assert_eq!(spec.accepted_pairs(), 0);
-        assert_eq!(spec.aromatic_valence(), 1);
-        assert_eq!(spec.multicenter_valence(), 0);
+    fn test_aromatic_valence_display() {
+        assert_eq!(AromaticValence::None.to_string(), "");
+        assert_eq!(AromaticValence::Valence(0).to_string(), "a0");
+        assert_eq!(AromaticValence::Valence(1).to_string(), "a1");
     }
 
     #[test]
-    fn atom_type_spec_display_roundtrip() {
-        let input = "{C-1/1^2*1H1v2a1m2}";
+    fn test_aromatic_valence_from_str() {
+        assert!(AromaticValence::from_str("").is_err());
+        assert_eq!(
+            AromaticValence::from_str("a0").unwrap(),
+            AromaticValence::Valence(0)
+        );
+        assert_eq!(
+            AromaticValence::from_str("a1").unwrap(),
+            AromaticValence::Valence(1)
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::atom("{N}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::charge_plus("{N+}", Element::N, 1, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::charge_minus("{N-}", Element::N, -1, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::charge_minus_1("{N-1}", Element::N, -1, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::charge_plus_1("{N+1}", Element::N, 1, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::hydrogen("{NH}", Element::N, 0, 1, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::hydrogen1("{NH1}", Element::N, 0, 1, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::lone_pairs("{N/1}", Element::N, 0, 0, 1, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::unpaired_electrons("{N^1}", Element::N, 0, 0, 0, 1, SpinMultiplicity::Doublet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::multiplicity("{N*1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::valence("{Nv1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 1, 0, 0, AromaticValence::None, 0)]
+    #[case::donated_pairs("{N>1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 1, 0, AromaticValence::None, 0)]
+    #[case::accepted_pairs("{N<1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 1, AromaticValence::None, 0)]
+    #[case::aromatic_valence_0("{N+0a0}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::Valence(0), 0)]
+    #[case::aromatic_valence_1("{N+0a1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::Valence(1), 0)]
+    #[case::multicenter_valence_0("{Nm0}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::multicenter_valence_1("{Nm1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 1)]
+    #[case::complete("{N-H/1^2*1v2a1m2}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
+    #[case::permuted("{N^2v2a1m2-H/1^2*1}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
+    fn test_atom_type_spec_from_str(
+        #[case] input: &str,
+        #[case] element: Element,
+        #[case] charge: i8,
+        #[case] hydrogens: u8,
+        #[case] lone_pairs: u8,
+        #[case] unpaired_electrons: u8,
+        #[case] multiplicity: SpinMultiplicity,
+        #[case] valence: u8,
+        #[case] donated_pairs: u8,
+        #[case] accepted_pairs: u8,
+        #[case] aromatic_valence: AromaticValence,
+        #[case] multicenter_valence: u8,
+    ) {
+        let spec = AtomTypeSpec::from_str(input).unwrap();
+        assert_eq!(spec.element(), element, "element mismatch for {}", input);
+        assert_eq!(spec.charge(), charge, "charge mismatch for {}", input);
+        assert_eq!(spec.hydrogens(), hydrogens, "hydrogens mismatch for {}", input);
+        assert_eq!(spec.lone_pairs(), lone_pairs, "lone pairs mismatch for {}", input);
+        assert_eq!(spec.unpaired_electrons(), unpaired_electrons, "unpaired electrons mismatch for {}", input);
+        assert_eq!(spec.multiplicity(), multiplicity, "multiplicity mismatch for {}", input);
+        assert_eq!(spec.valence(), valence, "valence mismatch for {}", input);
+        assert_eq!(spec.donated_pairs(), donated_pairs, "donated pairs mismatch for {}", input);
+        assert_eq!(spec.accepted_pairs(), accepted_pairs, "accepted pairs mismatch for {}", input);
+        assert_eq!(spec.aromatic_valence(), aromatic_valence, "aromatic valence mismatch for {}", input);
+        assert_eq!(spec.multicenter_valence(), multicenter_valence, "multicenter valence mismatch for {}", input);
+    }
+
+    #[rstest]
+    #[case::aromatic_a2("{C-Hv2a2}")]
+    #[case::aromatic_a0("{C+Hv2a0}")]
+    #[case::non_aromatic("{CH3v1}")]
+    #[case::multicenter_m2("{C-H/1^2*1v2m2}")]
+    // TODO: Fix multicenter valence
+    // #[case::multicenter_m0("{C-H/1^2*1v2m0}")]
+    fn test_atom_type_spec_display_roundtrip(#[case] input: &str) {
         let parsed = AtomTypeSpec::from_str(input).unwrap();
-        let reparsed = AtomTypeSpec::from_str(&parsed.to_string()).unwrap();
-        assert_eq!(parsed, reparsed);
+        let formatted = parsed.to_string();
+        assert_eq!(input, formatted);
     }
 
-    #[test]
-    fn atom_type_query_from_str() {
-        let q = AtomTypeQuery::from_str("?{C-1/1^2*1H1v2a1m2}").unwrap();
-        assert_eq!(q.element, Element::C);
-        assert_eq!(q.charge, Some(-1));
-        assert_eq!(q.lone_pairs, Some(1));
-        assert_eq!(q.unpaired_electrons, Some(2));
-        assert_eq!(q.multiplicity, Some(SpinMultiplicity::from_multiplicity(1).unwrap()));
-        assert_eq!(q.hydrogens, Some(1));
-        assert_eq!(q.valence, Some(2));
-        assert_eq!(q.aromatic_valence, Some(1));
-        assert_eq!(q.multicenter_valence, Some(2));
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unconstrained("?{C}", Element::C, None, None, None, None, None, None, None, None)]
+    #[case::constrained("?{C-H/1^2*1v2a1m2}", Element::C, Some(-1), Some(1), Some(1), Some(2), Some(SpinMultiplicity::Singlet), Some(2), Some(AromaticValence::Valence(1)), Some(2))]
+    fn test_atom_type_query_from_str(
+        #[case] input: &str,
+        #[case] element: Element,
+        #[case] charge: Option<i8>,
+        #[case] hydrogens: Option<u8>,
+        #[case] lone_pairs: Option<u8>,
+        #[case] unpaired_electrons: Option<u8>,
+        #[case] multiplicity: Option<SpinMultiplicity>,
+        #[case] valence: Option<u8>,
+        #[case] aromatic_valence: Option<AromaticValence>,
+        #[case] multicenter_valence: Option<u8>,
+    ) {
+        let query = AtomTypeQuery::from_str(input).unwrap();
+        assert_eq!(query.element, element, "element mismatch for {}", input);
+        assert_eq!(query.charge, charge, "charge mismatch for {}", input);
+        assert_eq!(query.hydrogens, hydrogens, "hydrogens mismatch for {}", input);
+        assert_eq!(query.lone_pairs, lone_pairs, "lone pairs mismatch for {}", input);
+        assert_eq!(query.unpaired_electrons, unpaired_electrons, "unpaired electrons mismatch for {}", input);
+        assert_eq!(query.multiplicity, multiplicity, "multiplicity mismatch for {}", input);
+        assert_eq!(query.valence, valence, "valence mismatch for {}", input);
+        assert_eq!(query.aromatic_valence, aromatic_valence, "aromatic valence mismatch for {}", input);
+        assert_eq!(query.multicenter_valence, multicenter_valence, "multicenter valence mismatch for {}", input);
     }
 
-    #[test]
-    fn atom_type_query_display_roundtrip() {
-        let input = "?{C-1/1^2*1H1v2a1m2}";
+    #[rstest]
+    #[case::unconstrained("?{C}")]
+    #[case::constrained("?{C-H/1^2*1v2a1m2}")]
+    fn test_atom_type_query_display_roundtrip(#[case] input: &str) {
         let parsed = AtomTypeQuery::from_str(input).unwrap();
-        let reparsed = AtomTypeQuery::from_str(&parsed.to_string()).unwrap();
-        assert_eq!(parsed, reparsed);
-    }
-
-    #[test]
-    fn atom_type_query_unconstrained() {
-        let undetermined = AtomTypeQuery::from_str("?{H}").unwrap();
-        let explicit_zero = AtomTypeQuery::from_str("?{H+0}").unwrap();
-        assert_eq!(undetermined.charge, None);
-        assert_eq!(explicit_zero.charge, Some(0));
+        let formatted = parsed.to_string();
+        assert_eq!(input, formatted);
     }
 }

@@ -262,8 +262,9 @@ fn parse_smiles_inner(
                     just_closed_group = true;
                     if let Some(parent) = branch_stack.last_mut() {
                         match parent {
-                            Frame::Branch { had_atom, .. }
-                            | Frame::Group { had_atom, .. } => *had_atom = true,
+                            Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
+                                *had_atom = true
+                            }
                         }
                     }
                     if branch_stack.is_empty() && i + 1 != n {
@@ -859,8 +860,9 @@ fn parse_extended_smiles_inner(
                     just_closed_group = true;
                     if let Some(parent) = branch_stack.last_mut() {
                         match parent {
-                            Frame::Branch { had_atom, .. }
-                            | Frame::Group { had_atom, .. } => *had_atom = true,
+                            Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
+                                *had_atom = true
+                            }
                         }
                     }
                     if branch_stack.is_empty() && i + 1 != n {

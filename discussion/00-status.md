@@ -60,4 +60,5 @@
 | 55-opensmiles-spec-validation-2026-03-06.md                    | Active        | 2026-03-06   |
 | 56-default-registry-2026-03-07.md                              | Active        | 2026-03-11   |
 | 57-sssr-needed-2026-03-11.md                                   | Informational | 2026-03-11   |
-| 58-aromaticity-perception-2026-03-11.md                        | Active        | 2026-03-11   |
+| 58-aromaticity-perception-2026-03-11.md                        | Active        | 2026-03-12   |
+| 59-aromaticity-perception-review-2026-03-12.md                 | Active        | 2026-03-12   |

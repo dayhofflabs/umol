@@ -1,9 +1,11 @@
 //! Atom type and builder for GraphIR.
 
+use std::str::FromStr;
+
 use smallvec::SmallVec;
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
-use super::atom_type::AtomTypeSpec;
+use super::atom_type::{AromaticValence, AtomTypeSpec};
 use super::error::ResolutionError;
 use crate::table_ir::atom::{Atom as TableAtom, Chirality};
 
@@ -20,7 +22,7 @@ pub struct Atom {
     valence: u8,
     donated_pairs: u8,
     accepted_pairs: u8,
-    aromatic_valence: u8,
+    aromatic_valence: AromaticValence,
     multicenter_valence: u8,
 }
 
@@ -69,7 +71,7 @@ impl Atom {
         self.accepted_pairs
     }
 
-    pub fn aromatic_valence(&self) -> u8 {
+    pub fn aromatic_valence(&self) -> AromaticValence {
         self.aromatic_valence
     }
 
@@ -269,8 +271,10 @@ impl AtomBuilder {
                 let specs: Vec<String> = self.candidates.iter().map(|s| s.to_string()).collect();
                 return Err(ResolutionError::ValenceAmbiguous(format!(
                     "{} valence matches for {:?}: {}",
-                    n, self.element, specs.join(", ")
-                )))
+                    n,
+                    self.element,
+                    specs.join(", ")
+                )));
             }
         };
 
@@ -288,4 +292,29 @@ impl AtomBuilder {
             multicenter_valence: candidate.multicenter_valence(),
         })
     }
+}
+
+impl FromStr for AtomBuilder {
+    type Err = ResolutionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let spec: AtomTypeSpec = s.parse()?;
+        let mut builder = AtomBuilder::new(spec.element());
+        builder.set_charge(spec.charge());
+        builder.set_hydrogens(spec.hydrogens());
+        builder.set_lone_pairs(spec.lone_pairs());
+        builder.set_unpaired_electrons(spec.unpaired_electrons());
+        builder.set_multiplicity(spec.multiplicity());
+        builder.add_candidate(spec);
+        Ok(builder)
+    }
+}
+
+#[macro_export]
+macro_rules! atom {
+    ($spec:expr) => {
+        $spec
+            .parse::<$crate::graph_ir::atom::AtomBuilder>()
+            .expect("invalid atom spec")
+    };
 }

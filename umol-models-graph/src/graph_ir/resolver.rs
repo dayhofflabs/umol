@@ -1,17 +1,24 @@
 //! Resolution of TableIR molecules to GraphIR molecules.
 
+pub mod aromaticity;
+pub mod valence;
+
 use std::collections::HashMap;
 
+use self::aromaticity::AromaticityModel;
+use self::valence::ValenceValidator;
+use super::atom::AtomBuilder;
 use super::bond::BondBuilder;
-use super::config::{ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy, ValenceStrategy};
+use super::config::{
+    ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy, ValenceStrategy,
+};
 use super::dative::DativeBond;
 use super::error::ResolutionError;
-use super::builder::MoleculeBuilder;
-use super::molecule::AtomIndex;
+use super::molecule::builder::MoleculeBuilder;
+use super::molecule::{AtomIndex, Molecule};
 use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
 use super::noncovalent::NoncovalentBond;
-use super::valence::ValenceValidator;
-use super::{AtomBuilder, Molecule};
+use super::rings::MoleculeRings;
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 /// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
@@ -26,20 +33,15 @@ pub fn resolve_molecule(molecule: &TableMolecule) -> Result<Molecule, Resolution
 ///
 /// 1. **Topology** — build graph from TableIR, validate indices, self-loops,
 ///    parallel edges, connectivity.
-/// 2. **Valence** — match atoms against valid valence states; for aromatic atoms,
-///    enumerate candidate states with σ-bond sum and π-contribution.
-/// 3. **Aromaticity** — select from valence candidates by ring membership and
-///    Kekulé/Hückel feasibility.
-/// 4. **Stereochemistry** — validate chiral centers and bond stereo against the
-///    resolved topology and bond orders.
+/// 2. **Valence** — match atoms against valid valence states
+/// 3. **Aromaticity** — select from valence candidates by ring membership
+/// 4. **Stereochemistry** — validate chiral centers and bond stereo
 pub fn resolve_molecule_with(
     molecule: &TableMolecule,
     config: &ResolveConfig,
 ) -> Result<Molecule, ResolutionError> {
     let mut builder = resolve_topology_with(molecule, config)?;
     resolve_valence_with(&mut builder, config)?;
-    assign_radicals(&mut builder, config)?;
-    kekulize(&mut builder, config)?;
     resolve_aromaticity_with(&mut builder, config)?;
     resolve_stereo_with(&mut builder, config)?;
     builder.build(config)
@@ -191,37 +193,20 @@ fn resolve_valence_with(
     Ok(())
 }
 
-/// Stub: assign radical electrons to atoms that need them.
-///
-/// After valence resolution, some atoms may have implicit unpaired electrons
-/// (e.g. a carbon with bond order sum 3 and no hydrogens). This phase will
-/// set `unpaired_electrons` and `multiplicity` on those atom builders.
-fn assign_radicals(
-    _builder: &mut MoleculeBuilder,
-    _config: &ResolveConfig,
-) -> Result<(), ResolutionError> {
-    Ok(())
-}
-
-/// Stub: assign definite bond orders to aromatic bonds (Kekulization).
-///
-/// Replaces `aromatic_hint` bonds with alternating single/double bond orders
-/// that satisfy valence constraints, or returns an error if no valid Kekulé
-/// structure exists.
-fn kekulize(
-    _builder: &mut MoleculeBuilder,
-    _config: &ResolveConfig,
-) -> Result<(), ResolutionError> {
-    Ok(())
-}
-
 fn resolve_aromaticity_with(
-    _builder: &mut MoleculeBuilder,
+    builder: &mut MoleculeBuilder,
     config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
     if !config.aromaticity.enabled {
         return Ok(());
     }
+
+    let model = AromaticityModel::from_strategy(&config.aromaticity.strategy);
+    let rings = MoleculeRings::from_builder(builder, model.max_ring_size());
+    for system in model.aromatic_systems(builder, &rings)? {
+        builder.add_aromatic_system(system);
+    }
+
     Ok(())
 }
 

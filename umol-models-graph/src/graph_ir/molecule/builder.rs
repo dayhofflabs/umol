@@ -16,6 +16,7 @@ use super::super::error::ResolutionError;
 use super::super::multicenter::MulticenterBond;
 use super::super::noncovalent::NoncovalentBond;
 use super::super::symmetry::compute_symmetry;
+use super::utils::biconnected_components;
 use super::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
     NoncovalentBondIndex, TopologyExportError, TopologyGraph, TopologyProjection,
@@ -105,6 +106,10 @@ impl MoleculeBuilder {
             super::TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
         })?;
         Ok(g6)
+    }
+
+    pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
+        biconnected_components(self.atom_indices(), self.adjacency_list())
     }
 
     pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {
@@ -204,6 +209,19 @@ impl MoleculeBuilder {
 
     pub fn atom_indices(&self) -> impl Iterator<Item = AtomIndex> + '_ {
         self.graph.node_indices()
+    }
+
+    /// Atoms that have at least one candidate with a non-None aromatic valence.
+    pub fn aromatic_candidate_atoms(&self) -> impl Iterator<Item = AtomIndex> + '_ {
+        self.atom_indices().filter(|&atom| {
+            self.atom(atom)
+                .map(|a| {
+                    a.candidates()
+                        .iter()
+                        .any(|c| c.aromatic_valence().is_aromatic())
+                })
+                .unwrap_or(false)
+        })
     }
 
     pub fn atoms(&self) -> impl Iterator<Item = &AtomBuilder> + '_ {
@@ -498,6 +516,19 @@ impl MoleculeBuilder {
     }
 
     // Atom-atom relationships
+    pub fn adjacency_list(&self) -> HashMap<AtomIndex, Vec<AtomIndex>> {
+        let mut adj = HashMap::with_capacity(self.graph.node_count());
+        for atom in self.graph.node_indices() {
+            adj.insert(atom, Vec::new());
+        }
+        for bond in self.graph.edge_indices() {
+            let (a, b) = self.graph.edge_endpoints(bond).unwrap();
+            adj.get_mut(&a).unwrap().push(b);
+            adj.get_mut(&b).unwrap().push(a);
+        }
+        adj
+    }
+
     pub fn atom_neighbor_indices(&self, index: AtomIndex) -> impl Iterator<Item = AtomIndex> + '_ {
         self.graph.neighbors(index)
     }
@@ -727,7 +758,7 @@ impl MoleculeBuilder {
             if explicit != charge {
                 return Err(ResolutionError::MolecularChargeMismatch {
                     explicit,
-                    computed: charge,
+                    atom_sum: charge,
                 });
             }
         }
@@ -773,5 +804,163 @@ impl MoleculeBuilder {
 impl Default for MoleculeBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::*;
+    use smallvec::SmallVec;
+    use umol_data::Element;
+
+    use super::*;
+    use crate::graph_ir::atom::AtomBuilder;
+    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::config::ResolveConfig;
+    use crate::graph_ir::molecule::Molecule;
+    use crate::spec;
+
+    #[fixture]
+    fn empty_builder() -> MoleculeBuilder {
+        MoleculeBuilder::new()
+    }
+
+    #[fixture]
+    fn single_atom_builder() -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        builder.add_atom(AtomBuilder::new(Element::C));
+        builder
+    }
+
+    #[fixture]
+    fn ring_builder(#[default(6)] n: usize) -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = (0..n)
+            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .collect();
+        for i in 0..n {
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
+        }
+        builder
+    }
+
+    #[fixture]
+    fn chain_builder(#[default(5)] n: usize) -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = (0..n)
+            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .collect();
+        for i in 0..n - 1 {
+            builder.add_bond_unchecked(atoms[i], atoms[i + 1], BondBuilder::new(1, None));
+        }
+        builder
+    }
+
+    #[fixture]
+    fn naphthalene_builder() -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = (0..10)
+            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .collect();
+        let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
+        for (a, b) in ring1_edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        let ring2_edges = [(3, 6), (6, 7), (7, 8), (8, 9), (9, 4)];
+        for (a, b) in ring2_edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        builder
+    }
+
+    #[fixture]
+    fn cubane_builder() -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = (0..8)
+            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .collect();
+        let edges = [
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4),
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),
+        ];
+        for (a, b) in edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        builder
+    }
+
+    #[fixture]
+    fn spiro_builder() -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = (0..5)
+            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .collect();
+        let edges = [(0, 1), (1, 2), (2, 0), (0, 3), (3, 4), (4, 0)];
+        for (a, b) in edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        builder
+    }
+
+    #[fixture]
+    fn bridged_builder() -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = (0..6)
+            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .collect();
+        let ring1_edges = [(0, 2), (2, 1), (1, 3), (3, 0)];
+        for (a, b) in ring1_edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        let ring2_edges = [(0, 4), (4, 1), (1, 5), (5, 0)];
+        for (a, b) in ring2_edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        builder
+    }
+
+    #[fixture]
+    fn naphthalene_molecule(mut naphthalene_builder: MoleculeBuilder) -> Molecule {
+        let carbon = spec!("{Cv4}");
+        for atom in naphthalene_builder.atom_indices().collect::<Vec<_>>() {
+            naphthalene_builder
+                .atom_mut(atom)
+                .unwrap()
+                .set_candidates(SmallVec::from_elem(carbon, 1));
+        }
+        naphthalene_builder
+            .build(&ResolveConfig::default())
+            .expect("test molecule should build")
+    }
+
+    #[rstest]
+    #[case::empty(empty_builder(), vec![])]
+    #[case::single_atom(single_atom_builder(), vec![])]
+    #[case::chain(chain_builder(5), vec![])]
+    #[case::single_ring(ring_builder(6), vec![6])]
+    #[case::naphthalene(naphthalene_builder(), vec![10])]
+    #[case::spiro(spiro_builder(), vec![3, 3])]
+    #[case::cubane(cubane_builder(), vec![8])]
+    fn test_biconnected_components(
+        #[case] builder: MoleculeBuilder,
+        #[case] expected_sizes: Vec<usize>,
+    ) {
+        let mut actual_sizes: Vec<usize> = builder
+            .biconnected_components()
+            .iter()
+            .map(|c| c.len())
+            .collect();
+        actual_sizes.sort_unstable();
+        assert_eq!(actual_sizes, expected_sizes);
     }
 }

@@ -30,11 +30,16 @@ pub enum ResolutionError {
     #[error("Valence ambiguous for {0}")]
     ValenceAmbiguous(String),
 
-    #[error("Molecular charge mismatch: explicit {explicit}, computed from atoms {computed}")]
-    MolecularChargeMismatch { explicit: i32, computed: i32 },
+    #[error("Aromaticity inconsistent: {0}")]
+    AromaticityInconsistent(String),
+
+    // TODO: Semantically incorrect: molecular charge is not stored. Restructure
+    #[error("Molecular charge mismatch: explicit {explicit}, from atoms {atom_sum}")]
+    MolecularChargeMismatch { explicit: i32, atom_sum: i32 },
+    // TODO: Semantically incorrect: molecular spin is not stored. Restructure
     #[error(
         "Molecular spin incompatible: {explicit_unpaired} unpaired electrons (multiplicity {explicit_multiplicity}) \
-         not achievable from atomic spin states (total unpaired: {atom_unpaired_sum})"
+         from atoms (total unpaired: {atom_unpaired_sum})"
     )]
     MolecularSpinIncompatible {
         explicit_unpaired: u8,

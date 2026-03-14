@@ -1,6 +1,6 @@
 //! GraphIR molecule representation using typed atoms and bonds
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
@@ -19,6 +19,9 @@ pub mod builder;
 pub mod topology;
 pub use builder::*;
 pub use topology::*;
+mod utils;
+use utils::biconnected_components;
+pub(crate) use utils::enumerate_rings;
 
 pub type AtomIndex = NodeIndex<u32>;
 pub type BondIndex = EdgeIndex<u32>;
@@ -72,105 +75,6 @@ pub struct Molecule {
 }
 
 impl Molecule {
-    // Topology
-    pub fn topology_graph(&self, projection: TopologyProjection) -> TopologyGraph {
-        TopologyGraph::from_molecule(self, projection)
-    }
-
-    pub fn topology_canonical_bfs(&self, projection: TopologyProjection) -> Vec<NodeIndex> {
-        self.topology_graph(projection).canonical_bfs()
-    }
-
-    pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {
-        self.atom_indices()
-    }
-
-    pub(crate) fn topology_edges(
-        &self,
-        projection: TopologyProjection,
-    ) -> impl Iterator<Item = TopologyEdge> + '_ {
-        let mut edges = Vec::new();
-
-        for i in self.bond_indices() {
-            if let Some((a, b)) = self.bond_atom_indices(i) {
-                edges.push(topology::TopologyEdge::Edge {
-                    node_ref: TopologyNodeRef::Bond(i),
-                    a,
-                    b,
-                });
-            }
-        }
-
-        if projection.dative == DativeProjection::Undirected {
-            for i in self.dative_bond_indices() {
-                if let Some(b) = self.dative_bond(i) {
-                    edges.push(topology::TopologyEdge::Edge {
-                        node_ref: TopologyNodeRef::DativeBond(i),
-                        a: b.donor(),
-                        b: b.acceptor(),
-                    });
-                }
-            }
-        }
-
-        if projection.noncovalent == NoncovalentProjection::Undirected {
-            for i in self.noncovalent_bond_indices() {
-                if let Some(b) = self.noncovalent_bond(i) {
-                    edges.push(topology::TopologyEdge::Edge {
-                        node_ref: TopologyNodeRef::NoncovalentBond(i),
-                        a: b.a(),
-                        b: b.b(),
-                    });
-                }
-            }
-        }
-
-        match projection.multicenter {
-            MulticenterProjection::Skip => {}
-            MulticenterProjection::CliqueExpansion => {
-                for i in self.multicenter_bonds_indices() {
-                    if let Some(mc) = self.multicenter_bond(i) {
-                        let mut seen = HashSet::new();
-                        let atoms: Vec<AtomIndex> = mc
-                            .all_atoms()
-                            .into_iter()
-                            .filter(|a| seen.insert(*a))
-                            .collect();
-                        for x in 0..atoms.len() {
-                            for y in (x + 1)..atoms.len() {
-                                edges.push(topology::TopologyEdge::Edge {
-                                    node_ref: TopologyNodeRef::MulticenterBond(i),
-                                    a: atoms[x],
-                                    b: atoms[y],
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            MulticenterProjection::IncidenceNode => {
-                for i in self.multicenter_bonds_indices() {
-                    if let Some(mc) = self.multicenter_bond(i) {
-                        let mut seen = HashSet::new();
-                        let atoms: Vec<AtomIndex> = mc
-                            .all_atoms()
-                            .into_iter()
-                            .filter(|a| seen.insert(*a))
-                            .collect();
-                        if !atoms.is_empty() {
-                            edges.push(topology::TopologyEdge::Hyperedge {
-                                node_ref: TopologyNodeRef::MulticenterBond(i),
-                                atoms,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        edges.into_iter()
-    }
-
     // Atoms
     pub fn atom_count(&self) -> usize {
         self.graph.node_count()
@@ -282,6 +186,122 @@ impl Molecule {
         self.spin
     }
 
+    // Topology
+    pub fn topology_graph(&self, projection: TopologyProjection) -> TopologyGraph {
+        TopologyGraph::from_molecule(self, projection)
+    }
+
+    pub fn topology_canonical_bfs(&self, projection: TopologyProjection) -> Vec<NodeIndex> {
+        self.topology_graph(projection).canonical_bfs()
+    }
+
+    pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {
+        self.atom_indices()
+    }
+
+    pub(crate) fn topology_edges(
+        &self,
+        projection: TopologyProjection,
+    ) -> impl Iterator<Item = TopologyEdge> + '_ {
+        let mut edges = Vec::new();
+
+        for i in self.bond_indices() {
+            if let Some((a, b)) = self.bond_atom_indices(i) {
+                edges.push(topology::TopologyEdge::Edge {
+                    node_ref: TopologyNodeRef::Bond(i),
+                    a,
+                    b,
+                });
+            }
+        }
+
+        if projection.dative == DativeProjection::Undirected {
+            for i in self.dative_bond_indices() {
+                if let Some(b) = self.dative_bond(i) {
+                    edges.push(topology::TopologyEdge::Edge {
+                        node_ref: TopologyNodeRef::DativeBond(i),
+                        a: b.donor(),
+                        b: b.acceptor(),
+                    });
+                }
+            }
+        }
+
+        if projection.noncovalent == NoncovalentProjection::Undirected {
+            for i in self.noncovalent_bond_indices() {
+                if let Some(b) = self.noncovalent_bond(i) {
+                    edges.push(topology::TopologyEdge::Edge {
+                        node_ref: TopologyNodeRef::NoncovalentBond(i),
+                        a: b.a(),
+                        b: b.b(),
+                    });
+                }
+            }
+        }
+
+        match projection.multicenter {
+            MulticenterProjection::Skip => {}
+            MulticenterProjection::CliqueExpansion => {
+                for i in self.multicenter_bonds_indices() {
+                    if let Some(mc) = self.multicenter_bond(i) {
+                        let mut seen = HashSet::new();
+                        let atoms: Vec<AtomIndex> = mc
+                            .all_atoms()
+                            .into_iter()
+                            .filter(|a| seen.insert(*a))
+                            .collect();
+                        for x in 0..atoms.len() {
+                            for y in (x + 1)..atoms.len() {
+                                edges.push(topology::TopologyEdge::Edge {
+                                    node_ref: TopologyNodeRef::MulticenterBond(i),
+                                    a: atoms[x],
+                                    b: atoms[y],
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            MulticenterProjection::IncidenceNode => {
+                for i in self.multicenter_bonds_indices() {
+                    if let Some(mc) = self.multicenter_bond(i) {
+                        let mut seen = HashSet::new();
+                        let atoms: Vec<AtomIndex> = mc
+                            .all_atoms()
+                            .into_iter()
+                            .filter(|a| seen.insert(*a))
+                            .collect();
+                        if !atoms.is_empty() {
+                            edges.push(topology::TopologyEdge::Hyperedge {
+                                node_ref: TopologyNodeRef::MulticenterBond(i),
+                                atoms,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        edges.into_iter()
+    }
+
+    pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
+        biconnected_components(self.atom_indices(), self.adjacency_list())
+    }
+
+    pub fn adjacency_list(&self) -> HashMap<AtomIndex, Vec<AtomIndex>> {
+        let mut adj = HashMap::with_capacity(self.graph.node_count());
+        for atom in self.graph.node_indices() {
+            adj.insert(atom, Vec::new());
+        }
+        for bond in self.graph.edge_indices() {
+            let (a, b) = self.graph.edge_endpoints(bond).unwrap();
+            adj.get_mut(&a).unwrap().push(b);
+            adj.get_mut(&b).unwrap().push(a);
+        }
+        adj
+    }
+
     // Atom-atom relationships
     pub fn atom_neighbor_indices(&self, index: AtomIndex) -> impl Iterator<Item = AtomIndex> + '_ {
         self.graph.neighbors(index)
@@ -297,7 +317,8 @@ impl Molecule {
     // TODO: Add aromatic system and multicenter system partners (+indices)
 
     // Atom-bond relationships
-    pub fn bonded_atoms(&self) -> impl Iterator<Item = (AtomIndex, AtomIndex)> + '_ {
+    // Iterator over all bonded atom pairs
+    pub fn bonded_atom_pairs(&self) -> impl Iterator<Item = (AtomIndex, AtomIndex)> + '_ {
         self.graph
             .edge_indices()
             .map(|e| self.graph.edge_endpoints(e).unwrap())
@@ -480,5 +501,57 @@ impl Molecule {
     ) -> impl Iterator<Item = &NoncovalentBond> + '_ {
         self.noncovalent_bonds()
             .filter(move |b| b.contains_atom(index))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::*;
+    use smallvec::SmallVec;
+    use umol_data::Element;
+
+    use super::*;
+    use crate::graph_ir::atom::AtomBuilder;
+    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::config::ResolveConfig;
+    use crate::graph_ir::molecule::Molecule;
+    use crate::spec;
+
+    #[fixture]
+    fn naphthalene_molecule() -> Molecule {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = (0..10)
+            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .collect();
+        let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
+        for (a, b) in ring1_edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        let ring2_edges = [(3, 6), (6, 7), (7, 8), (8, 9), (9, 4)];
+        for (a, b) in ring2_edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        let carbon = spec!("{Cv4}");
+        for atom in builder.atom_indices().collect::<Vec<_>>() {
+            builder
+                .atom_mut(atom)
+                .unwrap()
+                .set_candidates(SmallVec::from_elem(carbon, 1));
+        }
+        builder
+            .build(&ResolveConfig::default())
+            .expect("test molecule should build")
+    }
+
+    #[rstest]
+    #[case::naphthalene(naphthalene_molecule(), vec![10])]
+    fn test_biconnected_components(#[case] molecule: Molecule, #[case] expected_sizes: Vec<usize>) {
+        let mut actual_sizes: Vec<usize> = molecule
+            .biconnected_components()
+            .iter()
+            .map(|c| c.len())
+            .collect();
+        actual_sizes.sort_unstable();
+        assert_eq!(actual_sizes, expected_sizes);
     }
 }

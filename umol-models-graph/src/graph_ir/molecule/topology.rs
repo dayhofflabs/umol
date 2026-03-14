@@ -124,34 +124,6 @@ pub enum TopologyExportError {
 }
 
 impl TopologyGraph {
-    pub fn graph(&self) -> &Graph<(), (), Undirected> {
-        &self.graph
-    }
-
-    pub fn node_count(&self) -> usize {
-        self.graph.node_count()
-    }
-
-    pub fn edge_count(&self) -> usize {
-        self.graph.edge_count()
-    }
-
-    pub fn node_map(&self) -> &[TopologyNodeRef] {
-        self.node_map.as_slice()
-    }
-
-    pub fn edge_map(&self) -> &[TopologyEdgeRef] {
-        self.edge_map.as_slice()
-    }
-
-    pub fn node_ref(&self, index: NodeIndex) -> Option<TopologyNodeRef> {
-        self.node_map.get(index.index()).copied()
-    }
-
-    pub fn edge_ref(&self, index: EdgeIndex) -> Option<TopologyEdgeRef> {
-        self.edge_map.get(index.index()).copied()
-    }
-
     pub fn from_molecule(mol: &Molecule, projection: TopologyProjection) -> Self {
         Self::build(
             projection,
@@ -166,108 +138,6 @@ impl TopologyGraph {
             builder.topology_nodes(),
             builder.topology_edges(projection),
         )
-    }
-
-    pub fn adjacency_matrix(&self) -> DMatrix<u8> {
-        let n = self.node_count();
-        let mut matrix = DMatrix::<u8>::zeros(n, n);
-        for edge in self.graph.edge_references() {
-            let u = edge.source().index();
-            let v = edge.target().index();
-            matrix[(u, v)] = matrix[(u, v)].saturating_add(1);
-            if u != v {
-                matrix[(v, u)] = matrix[(v, u)].saturating_add(1);
-            }
-        }
-        matrix
-    }
-
-    pub fn incidence_matrix(&self) -> DMatrix<u8> {
-        let n = self.node_count();
-        let m = self.edge_count();
-        let mut matrix = DMatrix::<u8>::zeros(n, m);
-        for (col, edge) in self.graph.edge_references().enumerate() {
-            let u = edge.source().index();
-            let v = edge.target().index();
-            matrix[(u, col)] = matrix[(u, col)].saturating_add(1);
-            matrix[(v, col)] = matrix[(v, col)].saturating_add(1);
-        }
-        matrix
-    }
-
-    pub fn canonical_bfs(&self) -> Vec<NodeIndex> {
-        self.canonical_bfs_with_rank(|_| usize::MAX)
-    }
-
-    pub fn canonical_bfs_with_rank<F>(&self, rank: F) -> Vec<NodeIndex>
-    where
-        F: Fn(TopologyNodeRef) -> usize,
-    {
-        let n = self.node_count();
-        if n == 0 {
-            return Vec::new();
-        }
-        let mut order = Vec::with_capacity(n);
-        let mut visited = vec![false; n];
-        let mut queue = VecDeque::new();
-
-        let mut all_nodes: Vec<NodeIndex> = self.graph.node_indices().collect();
-        all_nodes.sort_by_key(|&nidx| self.bfs_key(nidx, &rank));
-
-        for start in all_nodes {
-            if visited[start.index()] {
-                continue;
-            }
-            visited[start.index()] = true;
-            queue.push_back(start);
-
-            while let Some(node) = queue.pop_front() {
-                order.push(node);
-                let mut neighbors: Vec<NodeIndex> = self
-                    .graph
-                    .neighbors(node)
-                    .filter(|nidx| !visited[nidx.index()])
-                    .collect();
-                neighbors.sort_by_key(|&nidx| self.bfs_key(nidx, &rank));
-                neighbors.dedup_by_key(|nidx| nidx.index());
-                for neigh in neighbors {
-                    if !visited[neigh.index()] {
-                        visited[neigh.index()] = true;
-                        queue.push_back(neigh);
-                    }
-                }
-            }
-        }
-
-        order
-    }
-
-    pub fn to_graph6(&self) -> Result<String, TopologyExportError> {
-        self.validate_graph6_export()?;
-        let order: Vec<NodeIndex> = (0..self.node_count()).map(NodeIndex::new).collect();
-        Ok(self.encode_graph6_with_order(&order))
-    }
-
-    pub fn to_graph6_canonical(
-        &self,
-    ) -> Result<(String, Vec<NodeIndex>), TopologyExportError> {
-        self.validate_graph6_export()?;
-        let order = self.canonical_bfs();
-        let g6 = self.encode_graph6_with_order(&order);
-        Ok((g6, order))
-    }
-
-    pub fn to_graph6_canonical_with_rank<F>(
-        &self,
-        rank: F,
-    ) -> Result<(String, Vec<NodeIndex>), TopologyExportError>
-    where
-        F: Fn(TopologyNodeRef) -> usize,
-    {
-        self.validate_graph6_export()?;
-        let order = self.canonical_bfs_with_rank(rank);
-        let g6 = self.encode_graph6_with_order(&order);
-        Ok((g6, order))
     }
 
     fn build(
@@ -422,6 +292,134 @@ impl TopologyGraph {
             node_map,
             edge_map,
         }
+    }
+
+    pub fn graph(&self) -> &Graph<(), (), Undirected> {
+        &self.graph
+    }
+
+    pub fn node_count(&self) -> usize {
+        self.graph.node_count()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.graph.edge_count()
+    }
+
+    pub fn node_map(&self) -> &[TopologyNodeRef] {
+        self.node_map.as_slice()
+    }
+
+    pub fn edge_map(&self) -> &[TopologyEdgeRef] {
+        self.edge_map.as_slice()
+    }
+
+    pub fn node_ref(&self, index: NodeIndex) -> Option<TopologyNodeRef> {
+        self.node_map.get(index.index()).copied()
+    }
+
+    pub fn edge_ref(&self, index: EdgeIndex) -> Option<TopologyEdgeRef> {
+        self.edge_map.get(index.index()).copied()
+    }
+
+    pub fn adjacency_matrix(&self) -> DMatrix<u8> {
+        let n = self.node_count();
+        let mut matrix = DMatrix::<u8>::zeros(n, n);
+        for edge in self.graph.edge_references() {
+            let u = edge.source().index();
+            let v = edge.target().index();
+            matrix[(u, v)] = matrix[(u, v)].saturating_add(1);
+            if u != v {
+                matrix[(v, u)] = matrix[(v, u)].saturating_add(1);
+            }
+        }
+        matrix
+    }
+
+    pub fn incidence_matrix(&self) -> DMatrix<u8> {
+        let n = self.node_count();
+        let m = self.edge_count();
+        let mut matrix = DMatrix::<u8>::zeros(n, m);
+        for (col, edge) in self.graph.edge_references().enumerate() {
+            let u = edge.source().index();
+            let v = edge.target().index();
+            matrix[(u, col)] = matrix[(u, col)].saturating_add(1);
+            matrix[(v, col)] = matrix[(v, col)].saturating_add(1);
+        }
+        matrix
+    }
+
+    pub fn canonical_bfs(&self) -> Vec<NodeIndex> {
+        self.canonical_bfs_with_rank(|_| usize::MAX)
+    }
+
+    pub fn canonical_bfs_with_rank<F>(&self, rank: F) -> Vec<NodeIndex>
+    where
+        F: Fn(TopologyNodeRef) -> usize,
+    {
+        let n = self.node_count();
+        if n == 0 {
+            return Vec::new();
+        }
+        let mut order = Vec::with_capacity(n);
+        let mut visited = vec![false; n];
+        let mut queue = VecDeque::new();
+
+        let mut all_nodes: Vec<NodeIndex> = self.graph.node_indices().collect();
+        all_nodes.sort_by_key(|&nidx| self.bfs_key(nidx, &rank));
+
+        for start in all_nodes {
+            if visited[start.index()] {
+                continue;
+            }
+            visited[start.index()] = true;
+            queue.push_back(start);
+
+            while let Some(node) = queue.pop_front() {
+                order.push(node);
+                let mut neighbors: Vec<NodeIndex> = self
+                    .graph
+                    .neighbors(node)
+                    .filter(|nidx| !visited[nidx.index()])
+                    .collect();
+                neighbors.sort_by_key(|&nidx| self.bfs_key(nidx, &rank));
+                neighbors.dedup_by_key(|nidx| nidx.index());
+                for neigh in neighbors {
+                    if !visited[neigh.index()] {
+                        visited[neigh.index()] = true;
+                        queue.push_back(neigh);
+                    }
+                }
+            }
+        }
+
+        order
+    }
+
+    pub fn to_graph6(&self) -> Result<String, TopologyExportError> {
+        self.validate_graph6_export()?;
+        let order: Vec<NodeIndex> = (0..self.node_count()).map(NodeIndex::new).collect();
+        Ok(self.encode_graph6_with_order(&order))
+    }
+
+    pub fn to_graph6_canonical(&self) -> Result<(String, Vec<NodeIndex>), TopologyExportError> {
+        self.validate_graph6_export()?;
+        let order = self.canonical_bfs();
+        let g6 = self.encode_graph6_with_order(&order);
+        Ok((g6, order))
+    }
+
+    pub fn to_graph6_canonical_with_rank<F>(
+        &self,
+        rank: F,
+    ) -> Result<(String, Vec<NodeIndex>), TopologyExportError>
+    where
+        F: Fn(TopologyNodeRef) -> usize,
+    {
+        self.validate_graph6_export()?;
+        let order = self.canonical_bfs_with_rank(rank);
+        let g6 = self.encode_graph6_with_order(&order);
+        Ok((g6, order))
     }
 
     fn bfs_key<F>(&self, nidx: NodeIndex, rank: &F) -> (usize, usize, usize)

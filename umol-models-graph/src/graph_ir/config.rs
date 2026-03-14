@@ -1,6 +1,7 @@
 //! Configuration for TableIR → GraphIR resolution.
 
 use bitflags::bitflags;
+use umol_data::Element;
 
 use super::config_data::{AtomTypeRegistry, ValenceTable};
 
@@ -57,9 +58,99 @@ pub enum ValenceMatchPolicy {
     Ignore,
 }
 
+/// Elements eligible for aromaticity perception
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ElementScope {
+    Any,
+    AllowList(Vec<Element>),
+}
+
+/// Ring size and fused-ring constraints for HueckelRule.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RingLimits {
+    pub min_ring_size: usize,
+    pub max_ring_size: usize,
+    pub include_fused: bool,
+    pub max_fused_combination: usize,
+    pub max_fused_search: usize,
+}
+
+impl Default for RingLimits {
+    fn default() -> Self {
+        Self {
+            min_ring_size: 3,
+            max_ring_size: 22,
+            include_fused: true,
+            max_fused_combination: 6,
+            max_fused_search: 10_000,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum AromaticityStrategy {
+    HueckelRule {
+        element_scope: ElementScope,
+        ring_limits: RingLimits,
+    },
+    Hmo {
+        element_scope: ElementScope,
+        /// Delocalization energy per pi-electron (in units of |beta|) required
+        /// for classification as aromatic. Benzene: dE/n ~ 0.33|beta|.
+        stabilization_threshold: f64,
+    },
+    Clar,
+}
+
 #[derive(Clone, Debug)]
 pub struct AromaticityResolveConfig {
     pub enabled: bool,
+    pub strategy: AromaticityStrategy,
+}
+
+impl AromaticityResolveConfig {
+    /// Daylight (SMILES) aromaticity: C, N, O, S, Se, As.
+    pub fn daylight() -> Self {
+        Self {
+            enabled: true,
+            strategy: AromaticityStrategy::HueckelRule {
+                element_scope: ElementScope::AllowList(vec![
+                    Element::C,
+                    Element::N,
+                    Element::O,
+                    Element::S,
+                    Element::Se,
+                    Element::As,
+                ]),
+                ring_limits: RingLimits::default(),
+            },
+        }
+    }
+
+    /// MDL (MOL/SDF) aromaticity: C and N only. Minimum ring size 6.
+    pub fn mdl() -> Self {
+        Self {
+            enabled: true,
+            strategy: AromaticityStrategy::HueckelRule {
+                element_scope: ElementScope::AllowList(vec![Element::C, Element::N]),
+                ring_limits: RingLimits {
+                    min_ring_size: 6,
+                    ..RingLimits::default()
+                },
+            },
+        }
+    }
+
+    /// Permissive aromaticity: any element with aromatic valence states.
+    pub fn permissive() -> Self {
+        Self {
+            enabled: true,
+            strategy: AromaticityStrategy::HueckelRule {
+                element_scope: ElementScope::Any,
+                ring_limits: RingLimits::default(),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -83,7 +174,7 @@ impl Default for ResolveConfig {
                 atom_type_registry: AtomTypeRegistry::default_registry().clone(),
                 valence_table: ValenceTable::default_table().clone(),
             },
-            aromaticity: AromaticityResolveConfig { enabled: true },
+            aromaticity: AromaticityResolveConfig::daylight(),
             stereo: StereoResolveConfig { enabled: true },
         }
     }

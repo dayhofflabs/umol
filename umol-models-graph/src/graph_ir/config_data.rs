@@ -357,7 +357,7 @@ mod tests {
             registry.specs_for_element_and_charge(Element::O, -1).len(),
             1
         );
-        assert_eq!(registry.content_hash_hex(), "ddca7c7894e08249");
+        assert_eq!(registry.content_hash_hex(), "cb498fccad4c230a");
     }
 
     #[test]

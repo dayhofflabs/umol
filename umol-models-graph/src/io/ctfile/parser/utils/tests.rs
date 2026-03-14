@@ -1,4 +1,4 @@
-use float_cmp::approx_eq;
+use float_cmp::*;
 use nom::character::complete::space0;
 use nom::combinator::all_consuming;
 use nom::error::ErrorKind as NomErrorKind;
@@ -361,7 +361,7 @@ fn test_fixed_width_float(#[case] input: &[u8], #[case] expected: f64) {
     let input_str = input.to_str_lossy();
     let (_, parsed_val) = result.unwrap();
     assert!(
-        approx_eq!(f64, parsed_val, expected, epsilon = 1e-4),
+        approx_eq!(f64, parsed_val, expected, ulps = 4),
         "{:?} has returned value {:?}, expected {:?}",
         input_str,
         parsed_val,
