@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 4
     topology: Cr
     atoms:
-      - "{CH1v3}"
-      - "{CH1v3}"
+      - "{CHv3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
     bonds:
@@ -26,8 +26,8 @@ counts:
     bond_count: 4
     topology: Cr
     atoms:
-      - "{CH1v3}"
-      - "{CH1v3}"
+      - "{CHv3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
     bonds:

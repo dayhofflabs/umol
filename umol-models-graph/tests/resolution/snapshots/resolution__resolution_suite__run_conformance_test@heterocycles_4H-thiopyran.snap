@@ -4,25 +4,10 @@ expression: results
 ---
 category: heterocycles
 atom_typing:
-  success: true
-  summary:
-    atom_count: 6
-    bond_count: 6
-    topology: EoaW
-    atoms:
-      - "{S/2v2}"
-      - "{CH1v3}"
-      - "{CH1v3}"
-      - "{CH1v3}"
-      - "{CH1v3}"
-      - "{CH2v2}"
-    bonds:
-      - "-"
-      - "-"
-      - "="
-      - "="
-      - "-"
-      - "-"
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: "Valence ambiguous for atom S at index 0 has 3 valence matches: {S/2v2}, {S/1v2a2}, {S+/1v2a1}"
 counts:
   success: true
   summary:
@@ -31,10 +16,10 @@ counts:
     topology: EoaW
     atoms:
       - "{S/2v2}"
-      - "{CH1v3}"
-      - "{CH1v3}"
-      - "{CH1v3}"
-      - "{CH1v3}"
+      - "{CHv3}"
+      - "{CHv3}"
+      - "{CHv3}"
+      - "{CHv3}"
       - "{CH2v2}"
     bonds:
       - "-"

@@ -20,7 +20,7 @@ pub mod topology;
 pub use builder::*;
 pub use topology::*;
 mod utils;
-use utils::biconnected_components;
+pub(crate) use utils::biconnected_components;
 pub(crate) use utils::enumerate_rings;
 
 pub type AtomIndex = NodeIndex<u32>;

@@ -4,35 +4,10 @@ expression: results
 ---
 category: heterocycles
 atom_typing:
-  success: true
-  summary:
-    atom_count: 10
-    bond_count: 12
-    topology: Iw@?OGKj?
-    atoms:
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{N/1v3}"
-      - "{N/1v3}"
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-    bonds:
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: "Valence ambiguous for atom N at index 0 has 2 valence matches: {N/1v3}, {Nv3a2}"
 counts:
   success: true
   summary:

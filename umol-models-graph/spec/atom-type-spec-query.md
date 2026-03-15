@@ -12,7 +12,7 @@ Both specs and queries use the same token syntax after the element symbol:
 - `>n`: donated pairs
 - `<n`: accepted pairs
 - `^n`: unpaired electrons
-- `*n`: multiplicity (defaults to `unpaired_electrons + 1`)
+- `xn`: multiplicity (defaults to `unpaired_electrons + 1`)
 - `Hn`: attached/implicit hydrogens
 - `vn`: sigma valence (bond order sum)
 - `an`: aromatic valence contribution
@@ -28,7 +28,7 @@ Examples:
 - `{C+0v4}` neutral tetra-valent carbon
 - `{N+0/1v3a1}` aromatic N with one lone pair
 - `{O-1/3v1}` anionic O with three lone pairs
-- `{C-1/1^2*1H1v2a1m2}` full form with explicit spin/aromatic/multicenter fields
+- `{C-1/1^2x1H1v2a1m2}` full form with explicit spin/aromatic/multicenter fields
 
 ## AtomTypeQuery — `?{El...}`
 

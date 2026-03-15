@@ -117,14 +117,14 @@ fn parse_bond_suffix<'a>(
     right: &'a str,
     token: &str,
 ) -> (&'a str, Option<i8>, Option<SpinMultiplicity>) {
-    let (rest, mult) = if let Some((before_star, m_str)) = right.rsplit_once('*') {
+    let (rest, mult) = if let Some((before_x, m_str)) = right.rsplit_once('x') {
         let m: u8 = m_str
             .parse()
             .unwrap_or_else(|_| panic!("invalid multiplicity in bond token '{}'", token));
         let mult = SpinMultiplicity::from_multiplicity(m).unwrap_or_else(|| {
             panic!("invalid multiplicity value {} in bond token '{}'", m, token)
         });
-        (before_star, Some(mult))
+        (before_x, Some(mult))
     } else {
         (right, None)
     };

@@ -32,7 +32,7 @@ impl HmoAromaticity {
         }
     }
 
-    fn build_calculator(
+    pub(crate) fn build_calculator(
         &self,
         builder: &MoleculeBuilder,
         pi_atoms: &[AtomIndex],
@@ -198,7 +198,7 @@ impl HmoAromaticity {
 }
 
 /// HMO calculator: parameter-agnostic Hueckel MO solver.
-struct HmoCalculator {
+pub(crate) struct HmoCalculator {
     pi_atoms: Vec<AtomIndex>,
     electron_count: u32,
     h_values: Vec<f64>,
@@ -419,24 +419,24 @@ mod tests {
     #[case::azulene(azulene(), 3.364)]
     #[case::pyridine(pyridine(), 2.614)]
     #[case::pyrrole(pyrrole(), 2.200)]
-    fn test_delocalization_energy(
+    fn test_hmo_model_delocalization_energy(
         hmo_model: HmoAromaticity,
         #[case] builder: MoleculeBuilder,
         #[case] expected_de: f64,
     ) {
         let result = solve(&hmo_model, &builder);
-        assert_approx_eq!(
+        assert!(approx_eq!(
             f64,
             result.delocalization_energy,
             expected_de,
             epsilon = 0.005
-        );
+        ));
     }
 
     #[rstest]
     #[case::benzene(benzene(), 6, 0.667, 0.667)]
     #[case::azulene(azulene(), 11, 0.401, 0.664)]
-    fn test_bond_orders(
+    fn test_hmo_model_bond_orders(
         hmo_model: HmoAromaticity,
         #[case] builder: MoleculeBuilder,
         #[case] expected_count: usize,
@@ -455,27 +455,66 @@ mod tests {
             .values()
             .cloned()
             .fold(f64::NEG_INFINITY, f64::max);
-        assert_approx_eq!(f64, min, expected_min, epsilon = 0.001);
-        assert_approx_eq!(f64, max, expected_max, epsilon = 0.001);
+        assert!(approx_eq!(f64, min, expected_min, epsilon = 0.001));
+        assert!(approx_eq!(f64, max, expected_max, epsilon = 0.001));
     }
 
     #[rstest]
-    fn test_aromatic_detection(hmo_model: HmoAromaticity, benzene: MoleculeBuilder) {
-        let ring_info = MoleculeRings::from_builder(&benzene, 22);
-        let systems = hmo_model.find_from_rings(&benzene, &ring_info).unwrap();
-        assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].atom_count(), 6);
-    }
-
-    #[rstest]
-    fn test_cyclobutadiene_not_aromatic(
+    #[case::benzene(benzene(), 1, Some(6))]
+    #[case::naphthalene(naphthalene(), 1, Some(10))]
+    #[case::cyclobutadiene(cyclobutadiene(), 0, None)]
+    fn test_hmo_model_find_from_rings(
         hmo_model: HmoAromaticity,
-        cyclobutadiene: MoleculeBuilder,
+        #[case] builder: MoleculeBuilder,
+        #[case] expected_systems: usize,
+        #[case] expected_atoms: Option<usize>,
     ) {
-        let ring_info = MoleculeRings::from_builder(&cyclobutadiene, 22);
-        let systems = hmo_model
-            .find_from_rings(&cyclobutadiene, &ring_info)
-            .unwrap();
-        assert!(systems.is_empty());
+        let ring_info = MoleculeRings::from_builder(&builder, 22, usize::MAX);
+        let systems = hmo_model.find_from_rings(&builder, &ring_info).unwrap();
+        assert_eq!(systems.len(), expected_systems);
+        assert_eq!(
+            systems.get(0).map(|s| s.contributions().len()),
+            expected_atoms
+        );
+    }
+
+    #[rstest]
+    fn test_hmo_output(hmo_model: HmoAromaticity, benzene: MoleculeBuilder) {
+        let atoms: Vec<AtomIndex> = benzene.atom_indices().collect();
+        let output = hmo_model
+            .build_calculator(&benzene, &atoms)
+            .unwrap()
+            .solve();
+
+        assert_eq!(output.bond_orders.len(), 6);
+        let min_bo = output
+            .bond_orders
+            .values()
+            .cloned()
+            .fold(f64::INFINITY, f64::min);
+        let max_bo = output
+            .bond_orders
+            .values()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!(approx_eq!(f64, min_bo, 0.667, epsilon = 0.001));
+        assert!(approx_eq!(f64, max_bo, 0.667, epsilon = 0.001));
+        assert!(approx_eq!(
+            f64,
+            output.delocalization_energy,
+            2.0,
+            epsilon = 0.005
+        ));
+        assert_eq!(output.electron_count, 6);
+    }
+
+    #[rstest]
+    fn test_hmo_model_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeBuilder) {
+        let atoms: Vec<AtomIndex> = pyridine.atom_indices().collect();
+        let calc = hmo_model.build_calculator(&pyridine, &atoms).unwrap();
+        let h = calc.hamiltonian();
+        assert_eq!(h.nrows(), 6);
+        assert_eq!(h.ncols(), 6);
+        assert!(approx_eq!(f64, h[(0, 0)], 0.51, epsilon = 0.01));
     }
 }

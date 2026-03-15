@@ -142,7 +142,7 @@ impl AtomTypeRegistry {
             .get(&(query.element, query.charge))
             .into_iter()
             .flatten()
-            .filter(|spec| query.matches_spec(spec))
+            .filter(|spec| query.matches(spec))
             .copied()
             .collect()
     }
@@ -177,6 +177,7 @@ static DEFAULT_ATOM_TYPE_REGISTRY: LazyLock<AtomTypeRegistry> = LazyLock::new(||
 pub struct ValenceEntry {
     pub outer_electrons: u8,
     pub allowed_valences: Vec<i8>,
+    pub allowed_aromatic_valences: Vec<u8>,
 }
 
 /// Valence table for counts-based validation.
@@ -190,6 +191,8 @@ pub struct ValenceTable {
 struct ValenceEntryToml {
     outer_electrons: u8,
     allowed_valences: Vec<i8>,
+    #[serde(default)]
+    allowed_aromatic_valences: Vec<u8>,
 }
 
 impl ValenceTable {
@@ -220,8 +223,9 @@ impl ValenceTable {
         for (element, entry) in &self.entries {
             let _ = write!(
                 buf,
-                "{}:{}:{:?}\n",
-                element, entry.outer_electrons, entry.allowed_valences
+                "{}:{}:{:?}:{:?}\n",
+                element, entry.outer_electrons, entry.allowed_valences,
+                entry.allowed_aromatic_valences
             );
         }
         self.content_hash = xxh3_64(buf.as_bytes());
@@ -244,6 +248,7 @@ impl ValenceTable {
                 ValenceEntry {
                     outer_electrons: entry.outer_electrons,
                     allowed_valences: entry.allowed_valences,
+                    allowed_aromatic_valences: entry.allowed_aromatic_valences,
                 },
             );
         }
@@ -385,7 +390,7 @@ mod tests {
         assert!(table.entry(Element::H).is_some());
         assert_eq!(table.entry(Element::H).unwrap().outer_electrons, 1);
         assert_eq!(table.entry(Element::H).unwrap().allowed_valences, [1]);
-        assert_eq!(table.content_hash_hex(), "16c1f636ecff83e4");
+        assert_eq!(table.content_hash_hex(), "9b2eb23f510cbec2");
     }
 
     #[test]

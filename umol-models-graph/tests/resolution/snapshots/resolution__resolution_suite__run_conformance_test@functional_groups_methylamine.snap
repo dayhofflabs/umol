@@ -11,7 +11,7 @@ atom_typing:
     topology: A_
     atoms:
       - "{CH3v1}"
-      - "{N/1H2v1}"
+      - "{NH2/1v1}"
     bonds:
       - "-"
 counts:
@@ -22,6 +22,6 @@ counts:
     topology: A_
     atoms:
       - "{CH3v1}"
-      - "{N/1H2v1}"
+      - "{NH2/1v1}"
     bonds:
       - "-"

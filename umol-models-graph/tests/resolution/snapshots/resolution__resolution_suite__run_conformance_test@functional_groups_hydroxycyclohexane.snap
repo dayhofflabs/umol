@@ -12,10 +12,10 @@ atom_typing:
     atoms:
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{O/2H1v1}"
+      - "{OH/2v1}"
       - "{CH2v2}"
     bonds:
       - "-"
@@ -34,10 +34,10 @@ counts:
     atoms:
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{O/2H1v1}"
+      - "{OH/2v1}"
       - "{CH2v2}"
     bonds:
       - "-"

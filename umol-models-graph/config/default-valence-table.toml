@@ -21,18 +21,22 @@ allowed_valences = [2]
 [B]
 outer_electrons = 3
 allowed_valences = [3]
+allowed_aromatic_valences = [0]
 
 [C]
 outer_electrons = 4
 allowed_valences = [4]
+allowed_aromatic_valences = [1]
 
 [N]
 outer_electrons = 5
 allowed_valences = [3]
+allowed_aromatic_valences = [1, 2]
 
 [O]
 outer_electrons = 6
 allowed_valences = [2]
+allowed_aromatic_valences = [2]
 
 [F]
 outer_electrons = 7
@@ -57,14 +61,17 @@ allowed_valences = [3]
 [Si]
 outer_electrons = 4
 allowed_valences = [4]
+allowed_aromatic_valences = [1]
 
 [P]
 outer_electrons = 5
 allowed_valences = [3, 5]
+allowed_aromatic_valences = [1, 2]
 
 [S]
 outer_electrons = 6
 allowed_valences = [2, 4, 6]
+allowed_aromatic_valences = [2]
 
 [Cl]
 outer_electrons = 7
@@ -133,10 +140,12 @@ allowed_valences = [4]
 [As]
 outer_electrons = 5
 allowed_valences = [3, 5]
+allowed_aromatic_valences = [1, 2]
 
 [Se]
 outer_electrons = 6
 allowed_valences = [2, 4, 6]
+allowed_aromatic_valences = [2]
 
 [Br]
 outer_electrons = 7

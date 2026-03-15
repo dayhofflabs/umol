@@ -4,20 +4,10 @@ expression: results
 ---
 category: functional_groups
 atom_typing:
-  success: true
-  summary:
-    atom_count: 4
-    bond_count: 3
-    topology: Cd
-    atoms:
-      - "{CH3v1}"
-      - "{S/2v2}"
-      - "{Cv4}"
-      - "{N/1v3}"
-    bonds:
-      - "-"
-      - "-"
-      - "#"
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: "Valence ambiguous for atom S at index 1 has 3 valence matches: {S/2v2}, {S/1v2a2}, {S+/1v2a1}"
 counts:
   success: true
   summary:

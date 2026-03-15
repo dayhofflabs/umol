@@ -1,6 +1,7 @@
 //! GraphIR molecule builder.
 
 use std::collections::{HashMap, HashSet};
+use std::vec::IntoIter;
 
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
@@ -16,10 +17,14 @@ use super::super::error::ResolutionError;
 use super::super::multicenter::MulticenterBond;
 use super::super::noncovalent::NoncovalentBond;
 use super::super::symmetry::compute_symmetry;
+use super::topology::{
+    DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
+    TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
+};
 use super::utils::biconnected_components;
 use super::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
-    NoncovalentBondIndex, TopologyExportError, TopologyGraph, TopologyProjection,
+    NoncovalentBondIndex,
 };
 /// Builder for constructing a `Molecule`. Carries `AtomBuilder` nodes during
 /// resolution phases; `build()` finalizes each atom and produces a `Molecule`.
@@ -74,14 +79,14 @@ impl MoleculeBuilder {
         }
         let graph = self.topology_graph(projection);
         graph.canonical_bfs_with_rank(|node_ref| match node_ref {
-            super::TopologyNodeRef::Atom(ai) => atom_rank
+            TopologyNodeRef::Atom(ai) => atom_rank
                 .get(&ai)
                 .copied()
                 .unwrap_or(usize::MAX / 4 + ai.index()),
-            super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
-            super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
-            super::TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
-            super::TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
+            TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
+            TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
+            TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
+            TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
         })
     }
 
@@ -96,14 +101,14 @@ impl MoleculeBuilder {
         }
         let graph = self.topology_graph(projection);
         let (g6, _order) = graph.to_graph6_canonical_with_rank(|node_ref| match node_ref {
-            super::TopologyNodeRef::Atom(ai) => atom_rank
+            TopologyNodeRef::Atom(ai) => atom_rank
                 .get(&ai)
                 .copied()
                 .unwrap_or(usize::MAX / 4 + ai.index()),
-            super::TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
-            super::TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
-            super::TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
-            super::TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
+            TopologyNodeRef::Bond(i) => usize::MAX / 2 + i.index(),
+            TopologyNodeRef::DativeBond(i) => usize::MAX / 2 + 1_000_000 + i.index(),
+            TopologyNodeRef::NoncovalentBond(i) => usize::MAX / 2 + 2_000_000 + i.index(),
+            TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
         })?;
         Ok(g6)
     }
@@ -116,27 +121,24 @@ impl MoleculeBuilder {
         self.atom_indices()
     }
 
-    pub(crate) fn topology_edges(
-        &self,
-        projection: TopologyProjection,
-    ) -> std::vec::IntoIter<super::topology::TopologyEdge> {
+    pub(crate) fn topology_edges(&self, projection: TopologyProjection) -> IntoIter<TopologyEdge> {
         let mut edges = Vec::new();
 
         for i in self.bond_indices() {
             if let Some((a, b)) = self.bond_atom_indices(i) {
-                edges.push(super::topology::TopologyEdge::Edge {
-                    node_ref: super::TopologyNodeRef::Bond(i),
+                edges.push(TopologyEdge::Edge {
+                    node_ref: TopologyNodeRef::Bond(i),
                     a,
                     b,
                 });
             }
         }
 
-        if projection.dative == super::DativeProjection::Undirected {
+        if projection.dative == DativeProjection::Undirected {
             for i in self.dative_bond_indices() {
                 if let Some(b) = self.dative_bond(i) {
-                    edges.push(super::topology::TopologyEdge::Edge {
-                        node_ref: super::TopologyNodeRef::DativeBond(i),
+                    edges.push(TopologyEdge::Edge {
+                        node_ref: TopologyNodeRef::DativeBond(i),
                         a: b.donor(),
                         b: b.acceptor(),
                     });
@@ -144,11 +146,11 @@ impl MoleculeBuilder {
             }
         }
 
-        if projection.noncovalent == super::NoncovalentProjection::Undirected {
+        if projection.noncovalent == NoncovalentProjection::Undirected {
             for i in self.noncovalent_bond_indices() {
                 if let Some(b) = self.noncovalent_bond(i) {
-                    edges.push(super::topology::TopologyEdge::Edge {
-                        node_ref: super::TopologyNodeRef::NoncovalentBond(i),
+                    edges.push(TopologyEdge::Edge {
+                        node_ref: TopologyNodeRef::NoncovalentBond(i),
                         a: b.a(),
                         b: b.b(),
                     });
@@ -157,8 +159,8 @@ impl MoleculeBuilder {
         }
 
         match projection.multicenter {
-            super::MulticenterProjection::Skip => {}
-            super::MulticenterProjection::CliqueExpansion => {
+            MulticenterProjection::Skip => {}
+            MulticenterProjection::CliqueExpansion => {
                 for i in self.multicenter_bond_indices() {
                     if let Some(mc) = self.multicenter_bond(i) {
                         let mut seen = HashSet::new();
@@ -169,8 +171,8 @@ impl MoleculeBuilder {
                             .collect();
                         for x in 0..atoms.len() {
                             for y in (x + 1)..atoms.len() {
-                                edges.push(super::topology::TopologyEdge::Edge {
-                                    node_ref: super::TopologyNodeRef::MulticenterBond(i),
+                                edges.push(TopologyEdge::Edge {
+                                    node_ref: TopologyNodeRef::MulticenterBond(i),
                                     a: atoms[x],
                                     b: atoms[y],
                                 });
@@ -179,7 +181,7 @@ impl MoleculeBuilder {
                     }
                 }
             }
-            super::MulticenterProjection::IncidenceNode => {
+            MulticenterProjection::IncidenceNode => {
                 for i in self.multicenter_bond_indices() {
                     if let Some(mc) = self.multicenter_bond(i) {
                         let mut seen = HashSet::new();
@@ -189,8 +191,8 @@ impl MoleculeBuilder {
                             .filter(|a| seen.insert(*a))
                             .collect();
                         if !atoms.is_empty() {
-                            edges.push(super::topology::TopologyEdge::Hyperedge {
-                                node_ref: super::TopologyNodeRef::MulticenterBond(i),
+                            edges.push(TopologyEdge::Hyperedge {
+                                node_ref: TopologyNodeRef::MulticenterBond(i),
                                 atoms,
                             });
                         }
@@ -555,6 +557,18 @@ impl MoleculeBuilder {
         self.graph.edges(index).map(|e| e.weight())
     }
 
+    /// Returns true if this atom should be treated as aromatic based on
+    /// its own aromatic_hint or any incident bond's aromatic_hint.
+    pub fn atom_aromatic_hint(&self, index: AtomIndex) -> bool {
+        if let Some(atom) = self.atom(index) {
+            if atom.aromatic_hint() == Some(true) {
+                return true;
+            }
+        }
+        self.atom_bonds(index)
+            .any(|b| b.aromatic_hint() == Some(true))
+    }
+
     pub fn atom_bond_order_sum(&self, index: AtomIndex) -> u8 {
         self.graph.edges(index).map(|e| e.weight().order()).sum()
     }
@@ -873,6 +887,7 @@ mod tests {
         builder
     }
 
+    #[rustfmt::skip]
     #[fixture]
     fn cubane_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
@@ -880,18 +895,8 @@ mod tests {
             .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
             .collect();
         let edges = [
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 0),
-            (4, 5),
-            (5, 6),
-            (6, 7),
-            (7, 4),
-            (0, 4),
-            (1, 5),
-            (2, 6),
-            (3, 7),
+            (0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
+            (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7),
         ];
         for (a, b) in edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));

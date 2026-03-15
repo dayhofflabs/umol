@@ -11,9 +11,9 @@ atom_typing:
     topology: Ce
     atoms:
       - "{CH3v1}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH3v1}"
-      - "{O/2H1v1}"
+      - "{OH/2v1}"
     bonds:
       - "-"
       - "-"
@@ -26,9 +26,9 @@ counts:
     topology: Ce
     atoms:
       - "{CH3v1}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH3v1}"
-      - "{O/2H1v1}"
+      - "{OH/2v1}"
     bonds:
       - "-"
       - "-"

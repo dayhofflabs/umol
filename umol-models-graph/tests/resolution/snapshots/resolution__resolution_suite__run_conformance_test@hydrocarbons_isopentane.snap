@@ -11,7 +11,7 @@ atom_typing:
     topology: DbG
     atoms:
       - "{CH3v1}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH3v1}"
       - "{CH3v1}"
@@ -28,7 +28,7 @@ counts:
     topology: DbG
     atoms:
       - "{CH3v1}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH3v1}"
       - "{CH3v1}"

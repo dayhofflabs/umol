@@ -11,6 +11,7 @@ use umol_data::Element;
 
 use crate::graph_ir::aromatic::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::atom_type::AromaticValence;
+use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
 use crate::graph_ir::rings::{MoleculeRings, RingIndex};
@@ -23,7 +24,22 @@ impl ClarAromaticity {
         &self,
         builder: &MoleculeBuilder,
         rings: &MoleculeRings,
-    ) -> Vec<AromaticSystem> {
+    ) -> Result<Vec<AromaticSystem>, ResolutionError> {
+        let has_non_benzenoid_aromatic = rings.atom_rings.keys().any(|&atom| {
+            builder.atom(atom).is_some_and(|a| {
+                a.candidates()
+                    .iter()
+                    .any(|c| c.aromatic_valence().is_aromatic())
+                    && a.element() != Element::C
+            })
+        });
+        if has_non_benzenoid_aromatic {
+            return Err(ResolutionError::AromaticityInconsistent(
+                "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
+                    .to_string(),
+            ));
+        }
+
         let sextet_indices: Vec<RingIndex> = rings
             .ring_indices()
             .filter(|&i| {
@@ -46,7 +62,7 @@ impl ClarAromaticity {
             .collect();
 
         if sextet_indices.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let all_atoms: HashSet<AtomIndex> = sextet_indices
@@ -59,7 +75,7 @@ impl ClarAromaticity {
         let best_sextet_indices = solver.solve();
 
         if best_sextet_indices.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let contributions: Vec<AromaticContribution> = all_atoms
@@ -85,11 +101,11 @@ impl ClarAromaticity {
             .filter_map(|&ring_idx| rings.ring(ring_idx).map(|r| r.to_vec()))
             .collect();
 
-        vec![AromaticSystem::with_rings(contributions, all_rings)]
+        Ok(vec![AromaticSystem::with_rings(contributions, all_rings)])
     }
 }
 
-struct ClarSolver<'a> {
+pub(crate) struct ClarSolver<'a> {
     rings: &'a MoleculeRings,
     candidates: &'a [RingIndex],
     current: Vec<RingIndex>,
@@ -98,7 +114,7 @@ struct ClarSolver<'a> {
 }
 
 impl<'a> ClarSolver<'a> {
-    fn new(rings: &'a MoleculeRings, candidates: &'a [RingIndex]) -> Self {
+    pub(crate) fn new(rings: &'a MoleculeRings, candidates: &'a [RingIndex]) -> Self {
         Self {
             rings,
             candidates,
@@ -108,7 +124,7 @@ impl<'a> ClarSolver<'a> {
         }
     }
 
-    fn solve(&mut self) -> Vec<RingIndex> {
+    pub(crate) fn solve(&mut self) -> Vec<RingIndex> {
         self.branch(0);
         self.best.clone()
     }
@@ -169,28 +185,14 @@ mod tests {
     use crate::graph_ir::rings::MoleculeRings;
 
     const C1: &str = "{Cv2a1H}";
+    const C0: &str = "{Cv4}";
 
-    fn make_ring(n: usize) -> MoleculeBuilder {
+    fn make_ring(atom_specs: &[&str]) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_atom(atom!(C1))).collect();
-        for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
-        }
-        builder
-    }
-
-    fn make_fused(n: usize, edges: &[(usize, usize)]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_atom(atom!(C1))).collect();
-        for &(a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
-        }
-        builder
-    }
-
-    fn make_ring_from(specs: &[&str]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = specs.iter().map(|s| builder.add_atom(atom!(s))).collect();
+        let atoms: Vec<AtomIndex> = atom_specs
+            .iter()
+            .map(|s| builder.add_atom(atom!(s)))
+            .collect();
         let n = atoms.len();
         for i in 0..n {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
@@ -198,23 +200,41 @@ mod tests {
         builder
     }
 
+    fn make_fused(atom_specs: &[&str], edges: &[(usize, usize)]) -> MoleculeBuilder {
+        let mut builder = MoleculeBuilder::new();
+        let atoms: Vec<AtomIndex> = atom_specs
+            .iter()
+            .map(|s| builder.add_atom(atom!(s)))
+            .collect();
+        for &(a, b) in edges {
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+        }
+        builder
+    }
+
     #[rustfmt::skip]
     #[fixture]
     fn naphthalene() -> MoleculeBuilder {
-        make_fused(10, &[
-            (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
-            (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
-        ])
+        make_fused(
+            &[C1; 10],
+            &[
+                (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
+                (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
+            ],
+        )
     }
 
     #[rustfmt::skip]
     #[fixture]
     fn phenanthrene() -> MoleculeBuilder {
-        make_fused(14, &[
-            (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
-            (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
-            (8, 10), (10, 11), (11, 12), (12, 13), (13, 9),
-        ])
+        make_fused(
+            &[C1; 14],
+            &[
+                (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
+                (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
+                (8, 10), (10, 11), (11, 12), (12, 13), (13, 9),
+            ],
+        )
     }
 
     #[rustfmt::skip]
@@ -268,12 +288,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::benzene(make_ring(6), 1)]
+    #[case::benzene(make_ring(&[C1; 6]), 1)]
     #[case::naphthalene(naphthalene(), 1)]
     #[case::phenanthrene(phenanthrene(), 2)]
     #[case::coronene(coronene(), 3)]
-    fn test_sextet_count(#[case] builder: MoleculeBuilder, #[case] expected_sextets: usize) {
-        let ring_info = MoleculeRings::from_builder(&builder, 22);
+    fn test_clar_model_sextet_count(
+        #[case] builder: MoleculeBuilder,
+        #[case] expected_sextets: usize,
+    ) {
+        let ring_info = MoleculeRings::from_builder(&builder, 22, usize::MAX);
         let candidates = hex_ring_indices(&builder, &ring_info);
         let mut solver = ClarSolver::new(&ring_info, &candidates);
         let sextets = solver.solve();
@@ -281,31 +304,46 @@ mod tests {
     }
 
     #[rstest]
-    #[case::benzene(make_ring(6), 1, 6)]
-    #[case::naphthalene(naphthalene(), 1, 10)]
-    #[case::phenanthrene(phenanthrene(), 1, 14)]
-    #[case::coronene(coronene(), 1, 24)]
-    fn test_find_from_rings_aromatic(
+    #[case::benzene(make_ring(&[C1; 6]), 1, Some(6))]
+    #[case::naphthalene(naphthalene(), 1, Some(10))]
+    #[case::phenanthrene(phenanthrene(), 1, Some(14))]
+    #[case::coronene(coronene(), 1, Some(24))]
+    #[case::cyclohexane(make_ring(&[C0; 6]), 0, None)]
+    fn test_clar_model_find_from_rings(
         #[case] builder: MoleculeBuilder,
         #[case] expected_systems: usize,
-        #[case] expected_atoms: usize,
+        #[case] expected_atoms: Option<usize>,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 22);
+        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
         let model = ClarAromaticity;
-        let systems = model.find_from_rings(&builder, &rings);
+        let systems = model.find_from_rings(&builder, &rings).unwrap();
         assert_eq!(systems.len(), expected_systems);
-        assert_eq!(systems[0].atom_count(), expected_atoms);
+        assert_eq!(
+            systems.get(0).map(|s| s.contributions().len()),
+            expected_atoms
+        );
     }
 
     #[rstest]
-    #[case::pyrrole(make_ring_from(&["{Nv2a2H}", C1, C1, C1, C1]))]
-    #[case::pyridine(make_ring_from(&["{N/1v2a1}", C1, C1, C1, C1, C1]))]
-    #[case::furan(make_ring_from(&["{O/1v2a2}", C1, C1, C1, C1]))]
-    #[case::cyclopentadiene(make_ring(5))]
-    fn test_find_from_rings_non_benzenoid(#[case] builder: MoleculeBuilder) {
-        let rings = MoleculeRings::from_builder(&builder, 22);
+    #[case::pyrrole(make_ring(&["{Nv2a2H}", C1, C1, C1, C1]))]
+    #[case::pyridine(make_ring(&["{N/1v2a1}", C1, C1, C1, C1, C1]))]
+    #[case::furan(make_ring(&["{O/1v2a2}", C1, C1, C1, C1]))]
+    fn test_clar_model_find_from_rings_error(#[case] builder: MoleculeBuilder) {
+        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
         let model = ClarAromaticity;
-        let systems = model.find_from_rings(&builder, &rings);
-        assert!(systems.is_empty());
+        assert!(model.find_from_rings(&builder, &rings).is_err());
+    }
+
+    #[rstest]
+    fn test_clar_solver(phenanthrene: MoleculeBuilder) {
+        let ring_info = MoleculeRings::from_builder(&phenanthrene, 22, usize::MAX);
+        let candidates = hex_ring_indices(&phenanthrene, &ring_info);
+        let mut solver = ClarSolver::new(&ring_info, &candidates);
+        let sextets = solver.solve();
+        assert_eq!(sextets.len(), 2);
+        for &sextet_idx in &sextets {
+            let ring = ring_info.ring(sextet_idx).unwrap();
+            assert_eq!(ring.len(), 6);
+        }
     }
 }

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::AtomIndex;
 
-pub(super) fn biconnected_components(
+pub(crate) fn biconnected_components(
     atoms: impl Iterator<Item = AtomIndex>,
     adj: HashMap<AtomIndex, Vec<AtomIndex>>,
 ) -> Vec<Vec<AtomIndex>> {

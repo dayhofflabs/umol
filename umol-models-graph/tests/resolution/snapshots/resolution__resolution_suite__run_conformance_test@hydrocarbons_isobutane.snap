@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 3
     topology: Cw
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH3v1}"
       - "{CH3v1}"
       - "{CH3v1}"
@@ -25,7 +25,7 @@ counts:
     bond_count: 3
     topology: Cw
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH3v1}"
       - "{CH3v1}"
       - "{CH3v1}"

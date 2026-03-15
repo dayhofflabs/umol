@@ -4,18 +4,10 @@ expression: results
 ---
 category: inorganic_small
 atom_typing:
-  success: true
-  summary:
-    atom_count: 3
-    bond_count: 2
-    topology: Bo
-    atoms:
-      - "{As/1^1v2}"
-      - "{Hv1}"
-      - "{Hv1}"
-    bonds:
-      - "-"
-      - "-"
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: "Valence ambiguous for atom As at index 0 has 2 valence matches: {As/1^1v2}, {As/1v2a1}"
 counts:
   success: true
   summary:

@@ -12,7 +12,7 @@ atom_typing:
     atoms:
       - "{CH3v1}"
       - "{CH2v2}"
-      - "{N/1H2v1}"
+      - "{NH2/1v1}"
     bonds:
       - "-"
       - "-"
@@ -25,7 +25,7 @@ counts:
     atoms:
       - "{CH3v1}"
       - "{CH2v2}"
-      - "{N/1H2v1}"
+      - "{NH2/1v1}"
     bonds:
       - "-"
       - "-"

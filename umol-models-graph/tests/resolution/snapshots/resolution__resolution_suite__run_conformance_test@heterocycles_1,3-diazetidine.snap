@@ -4,21 +4,10 @@ expression: results
 ---
 category: heterocycles
 atom_typing:
-  success: true
-  summary:
-    atom_count: 4
-    bond_count: 4
-    topology: Cr
-    atoms:
-      - "{N/1H1v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{N/1H1v2}"
-    bonds:
-      - "-"
-      - "-"
-      - "-"
-      - "-"
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: "Valence ambiguous for atom N at index 0 has 3 valence matches: {NH/1v2}, {NHv2a2}, {N+Hv2a1}"
 counts:
   success: true
   summary:
@@ -26,10 +15,10 @@ counts:
     bond_count: 4
     topology: Cr
     atoms:
-      - "{N/1H1v2}"
+      - "{NH/1v2}"
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{N/1H1v2}"
+      - "{NH/1v2}"
     bonds:
       - "-"
       - "-"

@@ -1,6 +1,7 @@
 # Prompt
 
 Please review the plan in @/Users/dr/.cursor/plans/aromaticity_perception_framework_5071f98f.plan.md and the design document in @discussion/58-aromaticity-perception-2026-03-11.md for implementing aromaticity perception in umol resolution pipeline. Questions to address:
+
 1. Completeness of design
 2. Configurability (integration with @umol-models-graph/src/graph_ir/config.rs configuration) and presets (incl. naming)
 3. Lower-level algorithmic prerequisites (graph for computing cycle basis, linear algebra for HMO, ILP for Clar algorithm). Which crates can be usefully employed here besides petgraph for graph algorithms and nalgebra for linear algebra?
@@ -539,3 +540,398 @@ but should specify the error message content clearly.
 - Diagnostics is not an error type; it exists for a different purpose (out of scope for this work). Don't touch it.
 - Question in need of additional exploration: How should the aromaticity perception interact with the `aromatic_hint`
   fields in `AtomBuilder` and `BondBuilder`? Should the treatment of aromatic hints be configurable?
+
+# Prompt
+
+Ok, let's review status of the aromatic flags in the inputs to aromaticity perception carefully. We talked about that a bit in @discussion/58-aromaticity-perception-2026-03-11.md but it is not fully worked out, seems like.
+
+1. The TableIR input provides 2 types of aromaticity flags that come from parsing SMILES / MOL inputs:
+   a. atom aromatic_hint (obtained from lowercase element names in SMILES (no equivalent in MOL)
+   b. bond aromatic_hint (either explicit ":" or implicitly between lowercase atoms in SMILES, bond type "aromatic" in MOL)
+2. The atom type valence validator assigns valence types with aromatic valences (`a`) based on the input. At the moment, the matching does not take the aromatic_hints into account. This needs to be built.
+3. The counts validator (RDKit-like) only applies a simple valence counting rule based on max valence. There is no handling of aromatic hints in this approach at all. Needs to be built. The RDKit approach is that everything is kekulized, then an aromaticity perception is run. I'd like to get a clearer workflow of their approach. However, I do not want to emulate this (s. below).
+   Let me now state the basic semantic principles used throughout umol:
+   A. Immutability should be employed wherever possible. That applies both to the key objects (e.g., Atom, Bond, Molecule) should be immutable. But this also applies more broadly to the semantic concepts, meaning that the structures should not be modified by default (no "sanitization" in the RDKit parlance) during parsing (-> TableIR) or resolution (-> GraphIR). This design makes it necessary that the resolution be quite permissive (important to avoid RDKit's infuriating failures to parse fe-porphyrin etc.), which is quite a heavy design constraint. Concretely, this also means that Kekule structures remain in the Kekule formulations -- no aromaticity should be layered onto them in the standard resolution process, not even with aromaticity resolution = on. That is important. The Kekule structure is a valid GraphIR representation. So is an aromatic representation.
+   B. Any modifications should be expliciti and operate on a well-defined input after resolution. This means that need to be able to perceive aromatic systems from Kekule structures (fully resolved = GraphiIR Molecule structure). Conversely, we need to be able to kekulize aromatic structures (again from GraphIR representations). This means that the aromaticity perception primitives need to work both on the partially resolved structures (MoleculeBuilder objects produced by the valence validator) using aromatic hints and on fully resolved structures (Molecule objects), generating MoleculeBuilder objects for subsequent resolution.
+   We didn't put enough thought into this aspect of the design but it is clearly blocking further progress since this distinction is not well worked out.
+   One more note on the transformations, which is not something that needs to be addressed immediately but should be included in the design considerations. Aromaticity perception / Kekulization are two types of transformations that can be applied to GraphIR. Other examples include
+4. stereochemistry perception (same principle apply: no sanization, no mandatory perception steps even if stereo resolution is on) / stereo removal (racemization if you will)
+5. perception of dative bonds and multicenter bonds (not supported by SMILES and MOL but really important in order to support chemistry properly).
+6. "sanitization" steps, for example, fixing of incorrect structures (hypervalent N is an example, CN(=O)=O)
+7. ionization / deionization
+8. tautomerization
+9. reactions
+   The preliminary idea is that these transformations do not modify the GraphIR structure but generate a new MoleculeBuilder, which can then be subject to the same resolution phases.
+   The two key principles are (they are slightly in tension but that is the nature of the domain):
+10. Invalid molecules should not be representable as GraphIR Molecule
+11. The definition of what is valid should be quite permissive. Warning is fine, erroring out on hypervalent N or silently modifying it is not.
+    Please start by reviewing this outline, the current state of implementation (see @discussion/53-molecule-validation-scheme-2026-02-17.md and @discussion/54-molecule-validation-phases-2026-02-17.md . The aromaticity perception discussion is in @discussion/58-aromaticity-perception-2026-03-11.md and @discussion/59-aromaticity-perception-review-2026-03-12.md ).
+    Then make a suggestion for the implementation plan, identify missing pieces, current blockers, restructuring needs in the current umol-models-graph codebase. Ask clariying questions as necessary.
+
+# Composer 1.5
+
+## 2. Current implementation status
+
+### 2.2 Bond aromatic hints — **not used**
+
+The design (discussion-58 §4.5) says: "If a bond has `aromatic_hint = Some(true)` but neither endpoint has aromatic candidates, this is a mismatch." The valence phase does not currently check bond hints. This check belongs in the **aromaticity phase** as a validation step when hints are present, not in valence. Valence only needs to narrow atom candidates; bond-hint consistency can be verified after aromaticity detection (if hinted bonds are not covered by any AromaticSystem → error/warning).
+
+-> This logic is flawed. Since there is no backtracking, if the atom has no aromaticity hint, then aromatic specs will not be picked up by the valence phase.
+**TODO**: When setting the aromatic hint on atoms, check incident bonds for aromatic hints. If any bond has an aromatic hint, then the atom is aromatic.
+
+### 2.3 Counts validator — **blocks aromaticity**
+
+```rust:88:99:umol-models-graph/src/graph_ir/resolver/valence.rs
+        match AtomTypeSpec::new(
+            ...
+            AromaticValence::None,
+            0,
+        ) {
+```
+
+The counts validator always uses `AromaticValence::None`. **Both strategies (AtomTyping and Counts) must support aromatic atoms**—this is standard in both MOL and SMILES and cannot be out of scope. Counts needs inference rules: given aromatic hint (atom or bond), element, charge, explicit valence → infer `a` (e.g. C with v=3 and hint → a=1; N with v=2 and hint → a=1 or 2 depending on H). Design and implement as part of Phase 1/5.
+
+## 4. Implementation plan
+
+### Phase 1: Aromatic hint handling in valence (atom typing)
+
+1. **Extend `AtomTypeQuery`** with an explicit aromatic hint constraint:
+   - `aromatic_valence_query: Option<AromaticValenceQuery>` where `AromaticValenceQuery` is `RequireAromatic | RequireNonAromatic | Exact(AromaticValence)`.
+   - **Inference rule (no mutation):** Use either atom hint or bond hint. `RequireAromatic` when: `atom.aromatic_hint() == Some(true)` OR any incident bond has `aromatic_hint == Some(true)`. `RequireNonAromatic` when: `atom.aromatic_hint() == Some(false)` AND all incident bonds have `aromatic_hint == Some(false)`. Otherwise unconstrained. No changes to atoms; both sources feed the query.
+
+-> **TODO**: Instead mirror the AromaticValence enum but add a new variant: `Any`. Use `Option<AromaticConstraint>` in line with other `Option<T>` fields.
+
+- `Some(AromaticConstraint::Valence(n))` → constrains to candidates with `a = Valence(n)`
+- `Some(AromaticConstraint::Any)` → constrains to candidates with `a = Valence(_)`
+- `Some(AromaticConstraint::None)` → constrains to candidates with `a = None`
+- `None` → no constraint
+
+2. **Update `AtomTypeRegistry::candidates_for`** (or equivalent) to apply the aromatic filter:
+   - `RequireAromatic` → retain only specs with `aromatic_valence.is_aromatic()`.
+   - `RequireNonAromatic` → retain only specs with `aromatic_valence == None`.
+   - `Exact(x)` → retain only specs matching `x`.
+
+-> **TODO**: Update `AtomTypeRegistry::candidates_for` to apply the aromatic filter.
+
+3. **Tests:** Benzene from aromatic SMILES (`c1ccccc1`) should resolve with `AtomTyping` and default registry. Each carbon should get candidates narrowed to aromatic (e.g. `{Cv2a1H}`, `{Cv3a1}` for bridgehead).
+
+### Phase 2: Bond hint validation in aromaticity phase
+
+1. **After** `AromaticityModel::aromatic_systems` returns, for each bond with `aromatic_hint = Some(true)`:
+   - Check that both endpoints are in some `AromaticSystem`.
+   - If not, apply policy: `AromaticityMatchPolicy::Error` → return `AromaticityInconsistent`; `Ignore` → continue.
+
+2. **Config:** Add `AromaticityResolveConfig.aromatic_hint_policy: AromaticityHintPolicy` with variants `Strict` (error on mismatch), `Lenient` (warn), `Ignore`.
+
+### Phase 3: Transformations (Molecule → MoleculeBuilder)
+
+Resolution uses `resolve_aromaticity_with`, which **mutates** `MoleculeBuilder` in place. Transformations are different: they operate on **immutable** `Molecule` and produce `MoleculeBuilder`.
+
+1. **`kekulize(mol: &Molecule) -> MoleculeBuilder`**
+   - Input: `Molecule` with `AromaticSystem` objects.
+   - Output: `MoleculeBuilder` with explicit single/double bonds (aromatic bonds replaced by 1 or 2).
+   - Module: `umol_models_graph::transform::kekulize`.
+   - Algorithm: Backtracking DFS or matching; optionally HMO bond order guidance.
+   - Contract: Does not modify input; produces new builder for re-resolution.
+
+2. **`aromatize(mol: &Molecule) -> MoleculeBuilder`** (or similar name)
+   - Input: `Molecule` (Kekule form, fully resolved).
+   - Output: `MoleculeBuilder` with topology unchanged but `AromaticSystem` objects attached (and bond orders adjusted to aromatic where applicable, per representation).
+   - Runs aromaticity perception on the resolved molecule; attaches detected systems to new builder.
+
+-> **TODO**: Need to add a no-op path for resolution if aromatic systems are already present. Similar for valence phase.
+
+### Phase 4: Counts + aromatic (required)
+
+- Design inference rules: given aromatic hint (atom or bond), element, charge, explicit valence → infer `a`.
+- Implement for `ValenceStrategy::Counts`. Both strategies must support aromatic SMILES and MOL.
+
+## 5. Restructuring needs in umol-models-graph
+
+### 5.1 Suggested layout
+
+```
+graph_ir/
+  atom.rs, atom_type.rs, bond.rs, ...
+  resolver/
+    valence.rs
+    aromaticity/
+      mod.rs           # AromaticityModel dispatch
+      hueckel_rule.rs
+      hmo.rs
+      clar.rs
+  transform/           # NEW: post-resolution transformations
+    mod.rs
+    aromaticity.rs     # perception on Molecule
+    kekulize.rs
+    ...
+```
+
+-> **TODO**: The aromaticity rules are broader than the resolver and should be in a separate module. One needs to be able to run aromaticity perception on MoleculeBuilder or Molecule
+and generate the results according to the semantics of the step (resolution or transformation).
+
+### 5.2 Data flow clarity
+
+| Input type                    | Valence phase                                          | Aromaticity phase                                                                  |
+| ----------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| **Aromatic** (hints)          | Constrain to aromatic candidates via `RequireAromatic` | Validate hinted systems; narrow to single `a` per atom                             |
+| **Kekule** (no hints)         | No aromatic constraint                                 | Detect 4n+2; narrow candidates; build AromaticSystem                               |
+| **Molecule** (transformation) | N/A                                                    | Perception from resolved `a`; produce AromaticSystem for attachment to new builder |
+
+### 5.3 Config additions
+
+```rust
+pub struct AromaticityResolveConfig {
+    // enabled removed — see §6.2
+    pub model: AromaticityModelChoice,
+    pub aromatic_hint_policy: AromaticityHintPolicy,  // Strict | Lenient | Ignore
+    // ...
+}
+```
+
+# Premium
+
+## Proposed Architecture Restructure
+
+- Keep phase pipeline unchanged for resolution, but split aromatic functionality into two reusable layers:
+  - Core aromatic primitives that work on a graph view + atom candidate/hint metadata.
+  - Transformation adapters:
+    - builder adapter for in-pipeline aromaticity phase,
+    - molecule adapter for post-resolution transforms that output MoleculeBuilder.
+- Introduce an explicit Transformation module family (aromaticity perception, kekulization first) under
+  graph_ir, with a stable contract: Molecule -> MoleculeBuilder (or BuilderView -> BuilderDelta internally).
+
+## Implementation Phases
+
+### Phase 1: Enforce strict aromatic hints in valence
+
+- Update atom-typing query construction in [/Users/dr/.cursor/worktrees/umol/uff/umol-models-graph/src/graph_ir/atom_type.rs](/Users/dr/.cursor/worktrees/umol/uff/umol-models-graph/src/graph_ir/atom_type.rs):
+  - `aromatic_hint=true` constrains to aromatic-capable candidates (a > 0).
+  - `aromatic_hint=false` remains non-aromatic constraint (a=None).
+- Add hint mismatch policy wiring for explicit diagnostics (atom-level and bond-level), reusing policy patterns from valence ambiguity/no-match.
+- Define bond-hint consistency check: if bond is aromatic-hinted, at least one aromatic-feasible assignment must exist on both endpoints after valence narrowing.
+
+-> **TODO**: Generally agree, a0 does not mean non-aromatic (tropylium). See `AromaticConstraint` discussion under Composer 1.5.
+
+### Phase 2: Make Counts aromatic-capable
+
+- Extend counts_candidates in valence.rs to emit aromatic-capable candidates when constraints permit.
+- Add a lightweight aromatic donation mapping for Counts (initially C/N/O/S/Se with charge/valence-conditioned possibilities) so Counts can generate a=1/a=2 alternatives where chemically plausible.
+
+-> **TODO**: yes, please spare me `lightweight` and just do it.
+
+- Ensure implicit-H inference under Counts respects aromatic hints (e.g., fused aromatic carbons with H0 vs edge carbons H1).
+- Add ambiguity policy behavior for multi-candidate Counts output (fail/ignore as configured).
+
+### Phase 3: Separate aromatic primitives from resolver internals
+
+- Extract aromatic perception/kekulization core interfaces from aromaticity.rs into reusable modules under a new transformation namespace.
+
+-> **TODO**: Aromaticity primitives should be in a separate module from the resolver.
+
+- Keep resolver aromatic phase as a thin adapter over this core.
+
+-> **TODO**: Yes, but please spare me LLM-babble `thin adapter`.
+
+### Phase 4: Workflow and config consolidation
+
+- Extend resolve/config docs and types so behavior is explicit for:
+  - aromatic-hint strictness,
+  - mismatch policy,
+  - Counts aromatic candidate generation rules.
+- Clarify and enforce invariant: no automatic sanitization in parse/resolve; transformations are explicit and produce new builders.
+- Align discussion/design docs with actual API contracts in:
+  - 53-molecule-validation-scheme-2026-02-17.md
+  - 54-molecule-validation-phases-2026-02-17.md
+  - 58-aromaticity-perception-2026-03-11.md
+  - 59-aromaticity-perception-review-2026-03-12.md
+
+## GPT-5.3 Codex
+
+### Implementation Plan
+
+1. Rework aromaticity config from boolean gate to behavior contract
+
+- Update config.rs
+  - Remove/deprecate AromaticityResolveConfig.enabled.
+  - Add input_mode (how to treat aromatic hints in resolved output intent).
+  - Add hint_policy (strict/warn/ignore).
+  - Keep model selection (HueckelRule/Hmo/Clar) + ring strategy; model always available.
+- Update resolver flow in resolver.rs so aromaticity phase always executes and chooses behavior by config mode.
+
+-> **TODO**: Fine, let's discuss naming first. `input_mode` is too vague.
+What is the difference between `input_mode` and `hint_policy`? There are also chirality hints.
+
+2. Make aromatic hints first-class constraints in valence matching
+   -> **TODO**: See `AromaticConstraint` discussion under Composer 1.5.
+
+3. Add bond-hint consistency validation
+
+- Add a small aromatic-hint consistency pass (new helper module under resolver, e.g. resolver/hints.rs):
+  For bonds with aromatic_hint == Some(true), require chemically coherent aromatic endpoints/candidates or aromatic-system membership depending on phase.
+- Enforce strict/warn/ignore policy.
+- Keep hints non-persistent in final Atom/Bond (current behavior remains aligned with your immutability semantics).
+
+-> **TODO**: Fine
+
+4. Define counts-strategy aromatic behavior explicitly
+
+Extend valence.rs with one of two explicit modes:
+
+- CountsAromaticMode::Disabled (counts can parse aromatic input but treats aromatic participation as unresolved; requires later transform to aromatize), or
+- CountsAromaticMode::InferFromHints (minimal inference from aromatic hints/ring context for candidate a values).
+
+-> **TODO**: Makes no sense to ignore, same argument as turning off aromaticity perception.
+
+5. Separate “perception” and “transformation” APIs
+
+- Add explicit transformation API surface (new module graph_ir/transform/):
+  - perceive_aromaticity_from_kekule(&Molecule, cfg) -> Result<MoleculeBuilder, ...>
+  - kekulize_aromatic(&Molecule, cfg) -> Result<MoleculeBuilder, ...>
+- Reuse existing ring/model code rings.rs, resolver/aromaticity/\*.rs) but avoid in-place mutation of existing Molecule.
+
+-> **TODO**: Fine, shorter names, `write_a_tolstoy_novel_just_to_check_the_compiler_limits_and_make_myself_look_very_sophisticated`
+is not my style.
+
+6. Upgrade kekulization output to builder-producing transform
+
+- Keep existing solver core in kekule.rs.
+- Add wrapper that applies assignment onto a cloned builder, clears aromatic hints/systems as configured, and returns `MoleculeBuilder` for re-resolution.
+
+-> **TODO**: Needs deeper analysis that this shooting from the hip.
+
+7. Add lifecycle invariants and tests for the four input/representation cases
+
+Add tests under tests/resolution/ and aromaticity unit suites:
+
+- Kekule input -> aromatic system perceived (no bond-order mutation in resolver path).
+- Aromatic input -> valence constrained by hints; mismatch policy behavior verified.
+- Aromatic representation retained as aromatic GraphIR when configured.
+- Explicit transform round-trips: aromatic -> kekule transform; kekule -> aromatic transform.
+- Add regression cases: tropylium, Cp-, fulvene/tropone representations, porphyrin-like permissive handling.
+
+-> **TODO**: Fine
+
+# Claude Opus 4.6
+
+## Analysis: Aromatic Flags in Resolution
+
+### Current State Summary
+
+The pipeline currently flows as:
+
+SMILES/MOL → TableIR (aromatic_hint on atoms/bonds) → Topology → Valence → Aromaticity → Stereo → Build → Molecule
+
+Here's what works and what doesn't at each stage.
+
+1. TableIR → AtomBuilder/BondBuilder (works correctly)
+
+Aromatic hints propagate cleanly:
+
+SMILES c → TableAtom.aromatic = Some(true) → AtomBuilder.aromatic_hint = Some(true)
+Between two aromatic atoms: BondOrder::Aromatic → BondBuilder(order=1, aromatic_hint=Some(true))
+MOL aromatic bond type → same path 2. Valence matching (partially broken)
+
+2. Valence matching (partially broken)
+
+```rust
+    let aromatic_valence = match atom.aromatic_hint() {
+    Some(false) => Some(AromaticValence::None),
+    - => None,
+      };
+```
+
+This is asymmetric: aromatic_hint = Some(false) correctly constrains to non-aromatic specs, but aromatic_hint = Some(true) leaves aromatic_valence = None in the query, meaning it matches both aromatic and non-aromatic specs. For benzene C from c1ccccc1, the query ?{Cv2} matches both {Cv2a1H} (aromatic, 1 pi-electron, 1 implicit H) and potentially {Cv2H2} (non-aromatic, 2 implicit H) if that spec exists. This causes ambiguity rather than correct aromatic-constrained matching.
+
+3. Counts validator (broken for aromatic input)
+
+```rust
+AromaticValence::None,
+0,
+```
+
+Hardcodes AromaticValence::None. Aromatic atoms cannot be represented at all under Counts strategy.
+
+4. Aromaticity phase (incomplete)
+
+The phase detects aromatic systems and adds them to the builder, but does not narrow atom candidates. After valence + aromaticity phases, atoms with aromatic_hint = Some(true) can still have multiple candidates (both aromatic and non-aromatic), causing build() to fail on ambiguity.
+
+5. Build phase (missing validation)
+
+BondBuilder::build() silently drops aromatic_hint without asserting that all aromatic_hint = Some(true) bonds were resolved into AromaticSystem membership.
+
+6. Registry (populated correctly)
+
+The default registry contains the necessary aromatic entries: {Cv2a1H}, {Cv3a1}, {N/1v2a1}, {Nv2a2H}, {O/1v2a2}, {S/1v2a2}, {Se/1v2a2}, etc.
+
+## Key Architectural Clarification: Resolution vs. Transformation
+
+Your message establishes a critical principle that partially supersedes the input handling matrix in discussion/58:
+
+> Kekule structures remain in the Kekule formulations — no aromaticity should be layered onto them in the standard resolution process,
+> not even with aromaticity resolution = on.
+
+| Input                             | Resolution behavior                                                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Kekule (no aromatic hints)        | Valence matches non-aromatic specs. No AromaticSystem created. Molecule is Kekule. Always.                                                                               |
+| Aromatic (aromatic hints present) | Valence constrained to aromatic specs. Aromaticity phase validates ring membership + Hückel (or configured model). AromaticSystem objects created. Molecule is aromatic. |
+| Mixed (e.g. c1ccccc1CC)           | Aromatic atoms → aromatic specs; aliphatic atoms → non-aromatic specs. AromaticSystem for the aromatic part only.                                                        |
+
+And separately, transformations operate on fully resolved Molecule objects:
+
+```rust
+Molecule (Kekule) → perceive_aromaticity() → MoleculeBuilder → resolve → Molecule (aromatic)
+Molecule (aromatic) → kekulize() → MoleculeBuilder → resolve → Molecule (Kekule)
+```
+
+This means the aromaticity resolution phase during the standard pipeline only needs to handle aromatic-hinted input. It does not detect aromaticity in Kekule structures — that is a separate, explicit transformation.
+
+## The Four Concrete Gaps to Close
+
+### Gap 1: Aromatic hint constraining in valence matching (AtomType strategy)
+
+`aromatic_hint = Some(true)` must constrain the query to `aromatic_valence = Some(AromaticValence::Valence(*))` — meaning only aromatic specs match. This is the single most important fix. Currently lines 421–424 of atom_type.rs need to become:
+
+```rust
+let aromatic_valence = match atom.aromatic_hint() {
+Some(true) => None, // match any Valence(*), exclude None
+Some(false) => Some(AromaticValence::None),
+None => None,
+};
+```
+
+But this alone isn't sufficient — None in the query means "match anything", which includes non-aromatic specs too. What we actually need is a richer query constraint. The query's `aromatic_valence: Option<AromaticValence>` field can't express "must be `Valence(*)` for any value of the inner u8." This requires either:
+
+- A new query variant (e.g. `AromaticValenceConstraint::MustBeAromatic` | `MustBeNonAromatic` | `Any`)
+- Or changing the matching logic to filter differently
+
+-> **TODO**: See discussion regarding `AromaticConstraint` in Composer 1.5 addressing this issue.
+
+### Gap 2: Aromatic hint handling in Counts strategy
+
+The Counts validator needs to be extended. When aromatic_hint = Some(true):
+
+- The atom is in an aromatic ring, contributing some pi-electrons
+- Bond order sum from graph edges gives the σ-skeleton (aromatic bonds at order 1)
+- Need to infer aromatic valence from element + charge + σ-skeleton
+- Implicit H inference must account for the pi-electron budget
+
+This is non-trivial. The RDKit approach is to kekulize first (assign alternating single/double bonds), then run aromaticity perception on the kekulized form. Since we explicitly reject that approach, the Counts strategy needs its own aromatic inference logic, or it should be clearly documented as not supporting aromatic input (requiring the AtomType strategy for aromatic SMILES).
+
+-> **TODO**: Cannot reject this strategy because this is too hard. Boo-hoo. The kekulization is a lazy shortcut, not a scientific necessity. The fact that there is usually only one spec in the registry per atom / charge state (which are known) tells us that this is solvable.
+What we need to add are calculations for:
+
+- Number of unpaired electrons (need the equivalent to "radical assignment" in RDKit), a bit rough but acceptable. This is the essence of the counts method -- a bit imprecise but does not need a registry (see the "lightweight aromatic donation mapping" in Premium).
+- Number of implicit hydrogens (naphthalene bridging = H0 vs alpha/beta carbons = H1)? This is analogous to the aliphatic case once the aromatic valence is established. Needs to be done but there is plenty of precedent to fall back on.
+
+### Gap 3: Aromaticity phase candidate narrowing
+
+Currently resolve_aromaticity_with adds AromaticSystem objects but doesn't narrow atom candidates. It needs to:
+
+1. For each atom with aromatic_hint = Some(true): verify that the atom is in a detected AromaticSystem
+2. Narrow candidates to those whose aromatic_valence is consistent with the AromaticSystem's pi-electron assignment
+3. Handle the error case: aromatic-hinted atom not in any detected system → AromaticityInconsistent
+
+### Gap 4: Bond aromatic hint validation at build time
+
+MoleculeBuilder::build() should verify that every bond with aromatic_hint = Some(true) has both endpoints in some AromaticSystem. If not, this is a resolution pipeline bug (aromatic bond not resolved).

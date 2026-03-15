@@ -4,20 +4,10 @@ expression: results
 ---
 category: hypervalent
 atom_typing:
-  success: true
-  summary:
-    atom_count: 4
-    bond_count: 3
-    topology: Cd
-    atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{Cl/2v3}"
-      - "{O/2v2}"
-    bonds:
-      - "-"
-      - "-"
-      - "="
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: "Valence ambiguous for atom O at index 1 has 3 valence matches: {O/2v2}, {O/1v2a2}, {O+/1v2a1}"
 counts:
   success: true
   summary:

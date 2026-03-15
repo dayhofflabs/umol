@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 6
     topology: EoaW
     atoms:
-      - "{CH1v3}"
-      - "{CH1v3}"
+      - "{CHv3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
@@ -30,8 +30,8 @@ counts:
     bond_count: 6
     topology: EoaW
     atoms:
-      - "{CH1v3}"
-      - "{CH1v3}"
+      - "{CHv3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"

@@ -4,23 +4,10 @@ expression: results
 ---
 category: heterocycles
 atom_typing:
-  success: true
-  summary:
-    atom_count: 5
-    bond_count: 5
-    topology: DpK
-    atoms:
-      - "{O/2v2}"
-      - "{O/2v2}"
-      - "{CH2v2}"
-      - "{O/2v2}"
-      - "{CH2v2}"
-    bonds:
-      - "-"
-      - "-"
-      - "-"
-      - "-"
-      - "-"
+  success: false
+  error:
+    error_type: ValenceAmbiguous
+    message: "Valence ambiguous for atom O at index 0 has 3 valence matches: {O/2v2}, {O/1v2a2}, {O+/1v2a1}"
 counts:
   success: true
   summary:

@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 2
     topology: Bg
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{Cv4}"
       - "{CH3v1}"
     bonds:
@@ -23,7 +23,7 @@ counts:
     bond_count: 2
     topology: Bg
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{Cv4}"
       - "{CH3v1}"
     bonds:

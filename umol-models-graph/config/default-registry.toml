@@ -452,6 +452,9 @@
     "{As/1v1H2}", # XAsH2
     "{As/1H3}",   # AsH3
     "{As/1^1v2}", # AsX2
+    "{Asv3a2}",   # C4H4AsX, C4H4AsH
+    "{Asv2a2H}",  # C4H4AsH
+    "{As/1v2a1}", # C5H5As
 ]
 1 = [
     "{As+v4}", # [AsX4]+
@@ -739,7 +742,7 @@
 
 [Ce]
 0 = [
-    "{Ce/1^2*1}", # Ce atom, s2d1f1
+    "{Ce/1^2x1}", # Ce atom, s2d1f1
 ]
 3 = [
     "{Ce+3^1}", # Ce3+, f1

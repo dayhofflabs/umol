@@ -60,6 +60,31 @@ impl FromStr for AromaticValence {
     }
 }
 
+/// Constraint for matching aromatic valence in atom type queries.
+///
+/// Used by `AtomTypeQuery` to filter candidates during valence resolution.
+/// Unlike `AromaticValence` (which is a concrete value on a spec), this
+/// expresses what range of aromatic valences is acceptable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AromaticConstraint {
+    /// Must be non-aromatic (`AromaticValence::None`).
+    None,
+    /// Must be aromatic with any pi-electron count (`AromaticValence::Valence(_)`).
+    Any,
+    /// Must be aromatic with exactly `n` pi-electrons (`AromaticValence::Valence(n)`).
+    Valence(u8),
+}
+
+impl AromaticConstraint {
+    pub fn matches(&self, av: AromaticValence) -> bool {
+        match self {
+            AromaticConstraint::None => av == AromaticValence::None,
+            AromaticConstraint::Any => av.is_aromatic(),
+            AromaticConstraint::Valence(n) => av == AromaticValence::Valence(*n),
+        }
+    }
+}
+
 /// Atom typing specification for valence resolution.
 ///
 /// String notation:
@@ -69,7 +94,7 @@ impl FromStr for AromaticValence {
 ///   - `Hn` hydrogens
 ///   - `/n` lone pairs
 ///   - `^n` unpaired electrons
-///   - `*n` multiplicity (default `unpaired + 1`)
+///   - `xn` multiplicity (default `unpaired + 1`)
 ///   - `vn` valence
 ///   - `>n` donated pairs
 ///   - `<n` accepted pairs
@@ -204,7 +229,7 @@ impl Display for AtomTypeSpec {
             write!(f, "^{}", n)?;
         }
         if m.multiplicity() != n + 1 {
-            write!(f, "*{}", m.multiplicity())?;
+            write!(f, "x{}", m.multiplicity())?;
         }
         if self.valence > 0 {
             write!(f, "v{}", self.valence)?;
@@ -309,7 +334,7 @@ impl FromStr for AtomTypeSpec {
                 'H' => hydrogens = num_u8(1)?,
                 '/' => lone_pairs = num_u8(1)?,
                 '^' => unpaired_electrons = num_u8(1)?,
-                '*' => {
+                'x' => {
                     let m = num_u8(1)?;
                     multiplicity =
                         Some(SpinMultiplicity::from_multiplicity(m).ok_or_else(|| {
@@ -393,7 +418,7 @@ pub struct AtomTypeQuery {
     pub valence: Option<u8>,
     pub donated_pairs: Option<u8>,
     pub accepted_pairs: Option<u8>,
-    pub aromatic_valence: Option<AromaticValence>,
+    pub aromatic_valence: Option<AromaticConstraint>,
     pub multicenter_valence: Option<u8>,
 }
 
@@ -418,9 +443,12 @@ impl AtomTypeQuery {
         let atom = builder.atom(atom_index).expect("atom_index must be valid");
         let valence = builder.atom_bond_order_sum(atom_index);
         let (donated_pairs, accepted_pairs) = builder.atom_dative_bond_order_sums(atom_index);
-        let aromatic_valence = match atom.aromatic_hint() {
-            Some(false) => Some(AromaticValence::None),
-            _ => None,
+        let aromatic_valence = if builder.atom_aromatic_hint(atom_index) {
+            Some(AromaticConstraint::Any)
+        } else if atom.aromatic_hint() == Some(false) {
+            Some(AromaticConstraint::None)
+        } else {
+            None
         };
         let multicenter_valence = if builder.atom_has_multicenter_bonds(atom_index) {
             None
@@ -442,7 +470,7 @@ impl AtomTypeQuery {
         }
     }
 
-    pub fn matches_spec(&self, spec: &AtomTypeSpec) -> bool {
+    pub fn matches(&self, spec: &AtomTypeSpec) -> bool {
         self.charge.is_none_or(|v| v == spec.charge())
             && self.hydrogens.is_none_or(|v| v == spec.hydrogens())
             && self.lone_pairs.is_none_or(|v| v == spec.lone_pairs())
@@ -457,10 +485,15 @@ impl AtomTypeQuery {
                 .is_none_or(|v| v == spec.accepted_pairs())
             && self
                 .aromatic_valence
-                .is_none_or(|v| v == spec.aromatic_valence())
+                .is_none_or(|c| c.matches(spec.aromatic_valence()))
             && self
                 .multicenter_valence
                 .is_none_or(|v| v == spec.multicenter_valence())
+    }
+
+    pub fn is_aromatic(&self) -> bool {
+        self.aromatic_valence
+            .is_some_and(|c| matches!(c, AromaticConstraint::Any | AromaticConstraint::Valence(_)))
     }
 }
 
@@ -489,7 +522,7 @@ impl Display for AtomTypeQuery {
             write!(f, "^{}", n)?;
         }
         if let Some(m) = self.multiplicity {
-            write!(f, "*{}", m.multiplicity())?;
+            write!(f, "x{}", m.multiplicity())?;
         }
         if let Some(v) = self.valence {
             write!(f, "v{}", v)?;
@@ -500,8 +533,11 @@ impl Display for AtomTypeQuery {
         if let Some(a) = self.accepted_pairs {
             write!(f, "<{}", a)?;
         }
-        if let Some(av) = self.aromatic_valence {
-            write!(f, "a{}", av.valence())?;
+        match self.aromatic_valence {
+            Some(AromaticConstraint::None) => write!(f, "a!")?,
+            Some(AromaticConstraint::Any) => write!(f, "a*")?,
+            Some(AromaticConstraint::Valence(n)) => write!(f, "a{}", n)?,
+            None => {}
         }
         if let Some(mv) = self.multicenter_valence {
             write!(f, "m{}", mv)?;
@@ -590,7 +626,7 @@ impl FromStr for AtomTypeQuery {
                 'H' => query.hydrogens = Some(num_u8(1)?),
                 '/' => query.lone_pairs = Some(num_u8(1)?),
                 '^' => query.unpaired_electrons = Some(num_u8(1)?),
-                '*' => {
+                'x' => {
                     let m = num_u8(1)?;
                     query.multiplicity =
                         Some(SpinMultiplicity::from_multiplicity(m).ok_or_else(|| {
@@ -603,7 +639,17 @@ impl FromStr for AtomTypeQuery {
                 'v' => query.valence = Some(num_u8(1)?),
                 '>' => query.donated_pairs = Some(num_u8(1)?),
                 '<' => query.accepted_pairs = Some(num_u8(1)?),
-                'a' => query.aromatic_valence = Some(AromaticValence::Valence(num_u8(1)?)),
+                'a' => {
+                    if chars.peek() == Some(&'*') {
+                        chars.next();
+                        query.aromatic_valence = Some(AromaticConstraint::Any);
+                    } else if chars.peek() == Some(&'!') {
+                        chars.next();
+                        query.aromatic_valence = Some(AromaticConstraint::None);
+                    } else {
+                        query.aromatic_valence = Some(AromaticConstraint::Valence(num_u8(1)?));
+                    }
+                }
                 'm' => query.multicenter_valence = Some(num_u8(1)?),
                 _ => {
                     return Err(ResolutionError::InvalidAtomSpec(format!(
@@ -691,7 +737,7 @@ mod tests {
     #[case::hydrogen1("{NH1}", Element::N, 0, 1, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
     #[case::lone_pairs("{N/1}", Element::N, 0, 0, 1, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
     #[case::unpaired_electrons("{N^1}", Element::N, 0, 0, 0, 1, SpinMultiplicity::Doublet, 0, 0, 0, AromaticValence::None, 0)]
-    #[case::multiplicity("{N*1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::multiplicity("{Nx1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
     #[case::valence("{Nv1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 1, 0, 0, AromaticValence::None, 0)]
     #[case::donated_pairs("{N>1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 1, 0, AromaticValence::None, 0)]
     #[case::accepted_pairs("{N<1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 1, AromaticValence::None, 0)]
@@ -699,8 +745,8 @@ mod tests {
     #[case::aromatic_valence_1("{N+0a1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::Valence(1), 0)]
     #[case::multicenter_valence_0("{Nm0}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
     #[case::multicenter_valence_1("{Nm1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 1)]
-    #[case::complete("{N-H/1^2*1v2a1m2}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
-    #[case::permuted("{N^2v2a1m2-H/1^2*1}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
+    #[case::complete("{N-H/1^2x1v2a1m2}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
+    #[case::permuted("{N^2v2a1m2-H/1^2x1}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
     fn test_atom_type_spec_from_str(
         #[case] input: &str,
         #[case] element: Element,
@@ -733,9 +779,9 @@ mod tests {
     #[case::aromatic_a2("{C-Hv2a2}")]
     #[case::aromatic_a0("{C+Hv2a0}")]
     #[case::non_aromatic("{CH3v1}")]
-    #[case::multicenter_m2("{C-H/1^2*1v2m2}")]
+    #[case::multicenter_m2("{C-H/1^2x1v2m2}")]
     // TODO: Fix multicenter valence
-    // #[case::multicenter_m0("{C-H/1^2*1v2m0}")]
+    // #[case::multicenter_m0("{C-H/1^2x1v2m0}")]
     fn test_atom_type_spec_display_roundtrip(#[case] input: &str) {
         let parsed = AtomTypeSpec::from_str(input).unwrap();
         let formatted = parsed.to_string();
@@ -745,7 +791,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unconstrained("?{C}", Element::C, None, None, None, None, None, None, None, None)]
-    #[case::constrained("?{C-H/1^2*1v2a1m2}", Element::C, Some(-1), Some(1), Some(1), Some(2), Some(SpinMultiplicity::Singlet), Some(2), Some(AromaticValence::Valence(1)), Some(2))]
+    #[case::constrained("?{C-H/1^2x1v2a1m2}", Element::C, Some(-1), Some(1), Some(1), Some(2), Some(SpinMultiplicity::Singlet), Some(2), Some(AromaticConstraint::Valence(1)), Some(2))]
+    #[case::aromatic_any("?{Cv2a*}", Element::C, None, None, None, None, None, Some(2), Some(AromaticConstraint::Any), None)]
+    #[case::aromatic_none("?{Cv2a!}", Element::C, None, None, None, None, None, Some(2), Some(AromaticConstraint::None), None)]
     fn test_atom_type_query_from_str(
         #[case] input: &str,
         #[case] element: Element,
@@ -755,7 +803,7 @@ mod tests {
         #[case] unpaired_electrons: Option<u8>,
         #[case] multiplicity: Option<SpinMultiplicity>,
         #[case] valence: Option<u8>,
-        #[case] aromatic_valence: Option<AromaticValence>,
+        #[case] aromatic_valence: Option<AromaticConstraint>,
         #[case] multicenter_valence: Option<u8>,
     ) {
         let query = AtomTypeQuery::from_str(input).unwrap();
@@ -772,10 +820,29 @@ mod tests {
 
     #[rstest]
     #[case::unconstrained("?{C}")]
-    #[case::constrained("?{C-H/1^2*1v2a1m2}")]
+    #[case::constrained("?{C-H/1^2x1v2a1m2}")]
+    #[case::aromatic_any("?{Cv2a*}")]
+    #[case::aromatic_none("?{Cv2a!}")]
     fn test_atom_type_query_display_roundtrip(#[case] input: &str) {
         let parsed = AtomTypeQuery::from_str(input).unwrap();
         let formatted = parsed.to_string();
         assert_eq!(input, formatted);
+    }
+
+    #[rstest]
+    #[case::any_matches_a1(AromaticConstraint::Any, AromaticValence::Valence(1), true)]
+    #[case::any_matches_a0(AromaticConstraint::Any, AromaticValence::Valence(0), true)]
+    #[case::any_rejects_none(AromaticConstraint::Any, AromaticValence::None, false)]
+    #[case::none_matches_none(AromaticConstraint::None, AromaticValence::None, true)]
+    #[case::none_rejects_a1(AromaticConstraint::None, AromaticValence::Valence(1), false)]
+    #[case::exact_matches(AromaticConstraint::Valence(2), AromaticValence::Valence(2), true)]
+    #[case::exact_rejects_wrong(AromaticConstraint::Valence(2), AromaticValence::Valence(1), false)]
+    #[case::exact_rejects_none(AromaticConstraint::Valence(1), AromaticValence::None, false)]
+    fn test_aromatic_constraint_matches(
+        #[case] constraint: AromaticConstraint,
+        #[case] valence: AromaticValence,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.matches(valence), expected);
     }
 }

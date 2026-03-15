@@ -448,7 +448,7 @@ mod tests {
         #[case] expected_atoms: usize,
         #[case] expected_electrons: u8,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 22);
+        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
         let model = HueckelRuleAromaticity::daylight();
         let systems = model.find_from_rings(&builder, &rings);
         assert_eq!(systems.len(), 1);
@@ -467,7 +467,7 @@ mod tests {
         #[case] builder: MoleculeBuilder,
         #[case] model: HueckelRuleAromaticity,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 22);
+        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
         let systems = model.find_from_rings(&builder, &rings);
         assert!(systems.is_empty());
     }

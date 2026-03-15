@@ -10,7 +10,8 @@ use self::valence::ValenceValidator;
 use super::atom::AtomBuilder;
 use super::bond::BondBuilder;
 use super::config::{
-    ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy, ValenceStrategy,
+    AromaticityHintPolicy, ResolveConfig, RingMethod, TopologyResolveFlags, ValenceMatchPolicy,
+    ValenceStrategy,
 };
 use super::dative::DativeBond;
 use super::error::ResolutionError;
@@ -136,10 +137,6 @@ fn resolve_valence_with(
     builder: &mut MoleculeBuilder,
     config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
-    if !config.valence.enabled {
-        return Ok(());
-    }
-
     let validator = match config.valence.strategy {
         ValenceStrategy::AtomTyping => {
             ValenceValidator::AtomTyping(config.valence.atom_type_registry.clone())
@@ -197,14 +194,73 @@ fn resolve_aromaticity_with(
     builder: &mut MoleculeBuilder,
     config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
-    if !config.aromaticity.enabled {
+    let has_hints = builder
+        .atom_indices()
+        .any(|i| builder.atom_aromatic_hint(i));
+    if !has_hints {
         return Ok(());
     }
 
-    let model = AromaticityModel::from_strategy(&config.aromaticity.strategy);
-    let rings = MoleculeRings::from_builder(builder, model.max_ring_size());
+    let model = AromaticityModel::from_strategy(&config.aromaticity.perception_strategy);
+    let ring_cfg = &config.aromaticity.ring_strategy;
+    let rings = match ring_cfg.method {
+        RingMethod::GlobalAllCycles => MoleculeRings::from_builder(
+            builder,
+            ring_cfg.max_ring_size,
+            ring_cfg.max_rings_per_component,
+        ),
+        RingMethod::PiSubgraph => MoleculeRings::from_pi_subgraph(
+            builder,
+            ring_cfg.max_ring_size,
+            ring_cfg.max_rings_per_component,
+        ),
+    };
     for system in model.aromatic_systems(builder, &rings)? {
         builder.add_aromatic_system(system);
+    }
+
+    validate_aromatic_hints(builder, config.aromaticity.hint_policy)?;
+
+    Ok(())
+}
+
+fn validate_aromatic_hints(
+    builder: &MoleculeBuilder,
+    policy: AromaticityHintPolicy,
+) -> Result<(), ResolutionError> {
+    if policy == AromaticityHintPolicy::Ignore {
+        return Ok(());
+    }
+
+    for atom_index in builder.atom_indices() {
+        if builder.atom_aromatic_hint(atom_index) && !builder.atom_has_aromatic_systems(atom_index)
+        {
+            let element = builder
+                .atom(atom_index)
+                .expect("atom_index must be valid")
+                .element();
+            return Err(ResolutionError::AromaticityInconsistent(format!(
+                "atom {:?} at index {} has aromatic hint but is not in any detected aromatic system",
+                element,
+                atom_index.index()
+            )));
+        }
+    }
+
+    for bond_index in builder.bond_indices() {
+        let bond = builder.bond(bond_index).expect("bond_index must be valid");
+        if bond.aromatic_hint() != Some(true) {
+            continue;
+        }
+        let (a, b) = builder
+            .bond_atom_indices(bond_index)
+            .expect("bond_index must be valid");
+        if !builder.atom_has_aromatic_systems(a) || !builder.atom_has_aromatic_systems(b) {
+            return Err(ResolutionError::AromaticityInconsistent(format!(
+                "bond at index {} has aromatic hint but its endpoints are not both in an aromatic system",
+                bond_index.index()
+            )));
+        }
     }
 
     Ok(())
@@ -329,6 +385,8 @@ mod tests {
             0
         );
     }
+
+    // TODO: Add tests for aromaticity phase
 
     #[rstest]
     fn resolve_molecule_no_match(

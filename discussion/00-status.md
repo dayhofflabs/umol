@@ -24,7 +24,7 @@
 | 20-core-traits-impl-2025-04-04.md                              | Active        | 2026-02-17   |
 | 21-core-traits-update-2025-04-07.md                            | Active        | 2026-02-17   |
 | 22-capability-traits-2025-04-09.md                             | Active        | 2026-02-17   |
-| 23-valence-states-2025-04-19.md                                | Active        | 2026-02-17   |
+| 23-valence-states-2025-04-19.md                                | Completed     | 2026-03-15   |
 | 24-mol-file-parsing-2025-06-16.md                              | Completed     | 2026-02-17   |
 | 25-ctab-properties-2025-07-03.md                               | Completed     | 2026-02-17   |
 | 25-geometric-models-2025-06-29.md                              | Active        | 2026-02-17   |
@@ -61,4 +61,4 @@
 | 56-default-registry-2026-03-07.md                              | Active        | 2026-03-11   |
 | 57-sssr-needed-2026-03-11.md                                   | Informational | 2026-03-11   |
 | 58-aromaticity-perception-2026-03-11.md                        | Active        | 2026-03-12   |
-| 59-aromaticity-perception-review-2026-03-12.md                 | Active        | 2026-03-12   |
+| 59-aromaticity-perception-review-2026-03-12.md                 | Active        | 2026-03-15   |

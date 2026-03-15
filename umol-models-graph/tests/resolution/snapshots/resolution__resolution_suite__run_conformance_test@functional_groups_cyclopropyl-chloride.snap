@@ -12,7 +12,7 @@ atom_typing:
     atoms:
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{Cl/3v1}"
     bonds:
       - "-"
@@ -28,7 +28,7 @@ counts:
     atoms:
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{Cl/3v1}"
     bonds:
       - "-"

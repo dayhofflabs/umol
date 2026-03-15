@@ -24,7 +24,6 @@ fn chain_inputs() -> Vec<(&'static str, &'static [u8])> {
 // Tree corpus, bare atoms
 fn tree_inputs() -> Vec<(&'static str, &'static [u8])> {
     vec![
-        ("empty", b"()"),
         ("c_1", b"(C)"),
         ("c_5_1", b"(CCCCC)"),
         ("c_5_2", b"C(C(C(C(C))))"),

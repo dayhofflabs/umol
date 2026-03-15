@@ -10,9 +10,9 @@ atom_typing:
     bond_count: 10
     topology: "HwA@_`K"
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
@@ -37,9 +37,9 @@ counts:
     bond_count: 10
     topology: "HwA@_`K"
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"

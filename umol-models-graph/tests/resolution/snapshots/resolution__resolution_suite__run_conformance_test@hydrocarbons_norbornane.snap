@@ -10,13 +10,13 @@ atom_typing:
     bond_count: 8
     topology: FwGPW
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
     bonds:
       - "-"
       - "-"
@@ -33,13 +33,13 @@ counts:
     bond_count: 8
     topology: FwGPW
     atoms:
-      - "{CH1v3}"
+      - "{CHv3}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
       - "{CH2v2}"
-      - "{CH1v3}"
+      - "{CHv3}"
     bonds:
       - "-"
       - "-"

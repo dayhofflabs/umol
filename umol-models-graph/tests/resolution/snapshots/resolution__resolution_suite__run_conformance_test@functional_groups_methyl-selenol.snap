@@ -11,7 +11,7 @@ atom_typing:
     topology: A_
     atoms:
       - "{CH3v1}"
-      - "{Se/2H1v1}"
+      - "{SeH/2v1}"
     bonds:
       - "-"
 counts:
@@ -22,6 +22,6 @@ counts:
     topology: A_
     atoms:
       - "{CH3v1}"
-      - "{Se/2H1v1}"
+      - "{SeH/2v1}"
     bonds:
       - "-"

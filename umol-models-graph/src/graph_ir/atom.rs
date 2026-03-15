@@ -79,6 +79,10 @@ impl Atom {
         self.multicenter_valence
     }
 
+    pub fn is_aromatic(&self) -> bool {
+        self.aromatic_valence.is_aromatic()
+    }
+
     pub fn to_spec(&self) -> AtomTypeSpec {
         AtomTypeSpec::new(
             self.element,

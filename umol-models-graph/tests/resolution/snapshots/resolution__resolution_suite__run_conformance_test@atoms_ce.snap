@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Ce/1^2*1}"
+      - "{Ce/1^2x1}"
     bonds: []
 counts:
   success: true

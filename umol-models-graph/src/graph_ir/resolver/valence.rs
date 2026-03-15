@@ -1,10 +1,11 @@
 //! Valence resolution strategies and atom typing support for GraphIR.
 
 use smallvec::SmallVec;
-use umol_data::{SpinState, MAX_UNPAIRED_ELECTRONS};
+use umol_data::{Element, SpinState, MAX_UNPAIRED_ELECTRONS};
 
+use crate::graph_ir::atom::AtomBuilder;
 use crate::graph_ir::atom_type::{AromaticValence, AtomTypeQuery, AtomTypeSpec};
-use crate::graph_ir::config_data::{AtomTypeRegistry, ValenceTable};
+use crate::graph_ir::config_data::{AtomTypeRegistry, ValenceEntry, ValenceTable};
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
 
@@ -51,6 +52,19 @@ impl ValenceValidator {
             Some(e) => e,
             None => return SmallVec::new(),
         };
+
+        if builder.atom_aromatic_hint(atom_index) {
+            return Self::build_aromatic_spec(
+                entry,
+                element,
+                charge,
+                explicit_valence,
+                donated,
+                accepted,
+                &atom,
+            );
+        }
+
         let implicit_hydrogens = if let Some(h) = atom.hydrogens() {
             h
         } else if enable_implicit_hydrogens {
@@ -61,46 +75,137 @@ impl ValenceValidator {
         } else {
             0
         };
-        let total_valence = explicit_valence + implicit_hydrogens;
-        let num_electrons = (entry.outer_electrons as i16) - (charge as i16);
-        let unassigned_electrons = num_electrons - (total_valence as i16);
-        if unassigned_electrons < 0 {
+        Self::build_spec(
+            element,
+            charge,
+            implicit_hydrogens,
+            explicit_valence,
+            donated,
+            accepted,
+            AromaticValence::None,
+            &atom,
+            entry,
+        )
+    }
+
+    fn build_aromatic_spec(
+        entry: &ValenceEntry,
+        element: Element,
+        charge: i8,
+        explicit_valence: u8,
+        donated: u8,
+        accepted: u8,
+        atom: &AtomBuilder,
+    ) -> SmallVec<[AtomTypeSpec; 4]> {
+        if entry.allowed_aromatic_valences.is_empty() {
             return SmallVec::new();
         }
-        let unpaired_unassigned = (unassigned_electrons % 2) as u8;
-        let lone_pairs_unassigned = (unassigned_electrons / 2) as u8;
+
+        let effective_electrons = (entry.outer_electrons as i16) - (charge as i16);
+        let mut candidates = SmallVec::new();
+
+        for &a in &entry.allowed_aromatic_valences {
+            let sigma_budget = effective_electrons - (a as i16);
+            if sigma_budget < explicit_valence as i16 {
+                continue;
+            }
+            let implicit_h = if let Some(h) = atom.hydrogens() {
+                h
+            } else {
+                (sigma_budget - explicit_valence as i16) as u8
+            };
+            let total_sigma = explicit_valence + implicit_h;
+            let remaining = effective_electrons - total_sigma as i16 - a as i16;
+            if remaining < 0 || remaining % 2 != 0 {
+                continue;
+            }
+            if let Some(spec) = Self::try_build_spec(
+                element,
+                charge,
+                implicit_h,
+                explicit_valence,
+                donated,
+                accepted,
+                AromaticValence::Valence(a),
+                atom,
+                entry,
+            ) {
+                candidates.push(spec);
+            }
+        }
+
+        candidates
+    }
+
+    fn build_spec(
+        element: Element,
+        charge: i8,
+        implicit_hydrogens: u8,
+        explicit_valence: u8,
+        donated: u8,
+        accepted: u8,
+        aromatic_valence: AromaticValence,
+        atom: &AtomBuilder,
+        entry: &ValenceEntry,
+    ) -> SmallVec<[AtomTypeSpec; 4]> {
+        match Self::try_build_spec(
+            element,
+            charge,
+            implicit_hydrogens,
+            explicit_valence,
+            donated,
+            accepted,
+            aromatic_valence,
+            atom,
+            entry,
+        ) {
+            Some(spec) => SmallVec::from_elem(spec, 1),
+            None => SmallVec::new(),
+        }
+    }
+
+    fn try_build_spec(
+        element: Element,
+        charge: i8,
+        implicit_hydrogens: u8,
+        explicit_valence: u8,
+        donated: u8,
+        accepted: u8,
+        aromatic_valence: AromaticValence,
+        atom: &AtomBuilder,
+        entry: &ValenceEntry,
+    ) -> Option<AtomTypeSpec> {
+        let total_valence = explicit_valence + implicit_hydrogens;
+        let num_electrons = (entry.outer_electrons as i16) - (charge as i16);
+        let unassigned =
+            num_electrons - (total_valence as i16) - (aromatic_valence.valence() as i16);
+        if unassigned < 0 {
+            return None;
+        }
+        let unpaired_unassigned = (unassigned % 2) as u8;
+        let lone_pairs_unassigned = (unassigned / 2) as u8;
         let unpaired = atom.unpaired_electrons().unwrap_or(unpaired_unassigned);
         if unpaired > MAX_UNPAIRED_ELECTRONS {
-            return SmallVec::new();
+            return None;
         }
         let lone_pairs = atom.lone_pairs().unwrap_or(lone_pairs_unassigned);
         let spin = match atom.multiplicity() {
-            Some(m) => match SpinState::try_new(unpaired, m) {
-                Some(s) => s,
-                None => return SmallVec::new(),
-            },
-            None => match SpinState::max_multiplicity(unpaired) {
-                Some(s) => s,
-                None => return SmallVec::new(),
-            },
+            Some(m) => SpinState::try_new(unpaired, m)?,
+            None => SpinState::max_multiplicity(unpaired)?,
         };
-        let multiplicity = spin.multiplicity();
-
-        match AtomTypeSpec::new(
+        AtomTypeSpec::new(
             element,
             charge,
             implicit_hydrogens,
             lone_pairs,
             unpaired,
-            multiplicity,
+            spin.multiplicity(),
             explicit_valence,
             donated,
             accepted,
-            AromaticValence::None,
+            aromatic_valence,
             0,
-        ) {
-            Ok(spec) => SmallVec::from_elem(spec, 1),
-            Err(_) => SmallVec::new(),
-        }
+        )
+        .ok()
     }
 }

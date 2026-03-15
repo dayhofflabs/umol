@@ -11,8 +11,8 @@ atom_typing:
     topology: Cd
     atoms:
       - "{CH2v2}"
-      - "{CH1v3}"
-      - "{CH1v3}"
+      - "{CHv3}"
+      - "{CHv3}"
       - "{CH2v2}"
     bonds:
       - "="
@@ -26,8 +26,8 @@ counts:
     topology: Cd
     atoms:
       - "{CH2v2}"
-      - "{CH1v3}"
-      - "{CH1v3}"
+      - "{CHv3}"
+      - "{CHv3}"
       - "{CH2v2}"
     bonds:
       - "="

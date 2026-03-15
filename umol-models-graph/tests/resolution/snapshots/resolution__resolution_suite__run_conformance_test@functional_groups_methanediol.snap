@@ -11,8 +11,8 @@ atom_typing:
     topology: Bo
     atoms:
       - "{CH2v2}"
-      - "{O/2H1v1}"
-      - "{O/2H1v1}"
+      - "{OH/2v1}"
+      - "{OH/2v1}"
     bonds:
       - "-"
       - "-"
@@ -24,8 +24,8 @@ counts:
     topology: Bo
     atoms:
       - "{CH2v2}"
-      - "{O/2H1v1}"
-      - "{O/2H1v1}"
+      - "{OH/2v1}"
+      - "{OH/2v1}"
     bonds:
       - "-"
       - "-"
