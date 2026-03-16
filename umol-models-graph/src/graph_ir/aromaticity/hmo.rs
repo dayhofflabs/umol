@@ -10,7 +10,7 @@ use nalgebra::{DMatrix, SymmetricEigen};
 use umol_data::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
-use crate::graph_ir::aromatic::{AromaticContribution, AromaticSystem};
+use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::atom_type::AromaticValence;
 use crate::graph_ir::config::ElementScope;
 use crate::graph_ir::error::ResolutionError;
@@ -327,7 +327,8 @@ mod tests {
     use super::*;
     use crate::atom;
     use crate::graph_ir::bond::BondBuilder;
-    use crate::graph_ir::rings::MoleculeRings;
+    use crate::graph_ir::config::RingEnumerationStrategy;
+    use crate::graph_ir::rings::RingEnumerator;
 
     const C1: &str = "{Cv2a1H}";
 
@@ -469,7 +470,7 @@ mod tests {
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let ring_info = MoleculeRings::from_builder(&builder, 22, usize::MAX);
+        let ring_info = RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
         let systems = hmo_model.find_from_rings(&builder, &ring_info).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(

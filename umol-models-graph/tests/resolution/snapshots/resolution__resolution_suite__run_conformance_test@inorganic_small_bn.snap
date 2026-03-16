@@ -13,7 +13,7 @@ atom_typing:
       - "{B-/1v2}"
       - "{N+/1v2}"
     bonds:
-      - "=*3"
+      - "=x3"
 counts:
   success: true
   summary:
@@ -24,4 +24,4 @@ counts:
       - "{B-/1v2}"
       - "{N+/1v2}"
     bonds:
-      - "=*3"
+      - "=x3"

@@ -5,8 +5,8 @@ use std::str::FromStr;
 use smallvec::SmallVec;
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
-use super::atom_type::{AromaticValence, AtomTypeSpec};
-use super::error::ResolutionError;
+use crate::graph_ir::atom_type::{AromaticValence, AtomTypeSpec};
+use crate::graph_ir::error::ResolutionError;
 use crate::table_ir::atom::{Atom as TableAtom, Chirality};
 
 /// Resolved atom in GraphIR. All fields are definite.

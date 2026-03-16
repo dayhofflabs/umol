@@ -4,12 +4,11 @@
 //! rings within configured bounds, checks the Hueckel 4n+2 rule on individual
 //! and fused ring combinations, and produces `AromaticSystem` objects.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use petgraph::unionfind::UnionFind;
-use umol_data::Element;
 
-use crate::graph_ir::aromatic::{AromaticContribution, AromaticSystem};
+use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::atom_type::AromaticValence;
 use crate::graph_ir::config::{ElementScope, RingLimits};
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
@@ -29,34 +28,6 @@ impl HueckelRuleAromaticity {
             element_scope,
             ring_limits,
         }
-    }
-
-    pub fn daylight() -> Self {
-        Self::new(
-            ElementScope::AllowList(vec![
-                Element::C,
-                Element::N,
-                Element::O,
-                Element::S,
-                Element::Se,
-                Element::As,
-            ]),
-            RingLimits::default(),
-        )
-    }
-
-    pub fn mdl() -> Self {
-        Self::new(
-            ElementScope::AllowList(vec![Element::C, Element::N]),
-            RingLimits {
-                min_ring_size: 6,
-                ..RingLimits::default()
-            },
-        )
-    }
-
-    pub fn permissive() -> Self {
-        Self::new(ElementScope::Any, RingLimits::default())
     }
 
     pub fn find_from_rings(
@@ -263,7 +234,7 @@ fn merge_overlapping_systems(
         }
     }
 
-    let mut groups: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
+    let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
     for i in 0..n {
         groups.entry(uf.find(i)).or_default().push(i);
     }
@@ -293,10 +264,41 @@ fn merge_overlapping_systems(
 mod tests {
     use rstest::*;
 
+    use umol_data::Element;
+
     use super::*;
     use crate::atom;
     use crate::graph_ir::bond::BondBuilder;
-    use crate::graph_ir::rings::MoleculeRings;
+    use crate::graph_ir::config::RingEnumerationStrategy;
+    use crate::graph_ir::rings::RingEnumerator;
+
+    fn daylight_model() -> HueckelRuleAromaticity {
+        HueckelRuleAromaticity::new(
+            ElementScope::AllowList(vec![
+                Element::C,
+                Element::N,
+                Element::O,
+                Element::S,
+                Element::Se,
+                Element::As,
+            ]),
+            RingLimits::default(),
+        )
+    }
+
+    fn mdl_model() -> HueckelRuleAromaticity {
+        HueckelRuleAromaticity::new(
+            ElementScope::AllowList(vec![Element::C, Element::N]),
+            RingLimits {
+                min_ring_size: 6,
+                ..RingLimits::default()
+            },
+        )
+    }
+
+    fn permissive_model() -> HueckelRuleAromaticity {
+        HueckelRuleAromaticity::new(ElementScope::Any, RingLimits::default())
+    }
 
     fn make_ring(atom_specs: &[&str]) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
@@ -448,8 +450,9 @@ mod tests {
         #[case] expected_atoms: usize,
         #[case] expected_electrons: u8,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
-        let model = HueckelRuleAromaticity::daylight();
+        let rings =
+            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+        let model = daylight_model();
         let systems = model.find_from_rings(&builder, &rings);
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].contributions().len(), expected_atoms);
@@ -457,17 +460,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::cyclobutadiene(cyclobutadiene(), HueckelRuleAromaticity::daylight())]
-    #[case::cyclohexane(cyclohexane(), HueckelRuleAromaticity::daylight())]
-    #[case::cubane(cubane(), HueckelRuleAromaticity::daylight())]
-    #[case::borazine_daylight(borazine(), HueckelRuleAromaticity::daylight())]
-    #[case::borazine_permissive(borazine(), HueckelRuleAromaticity::permissive())]
-    #[case::pyrrole_mdl(pyrrole(), HueckelRuleAromaticity::mdl())]
+    #[case::cyclobutadiene(cyclobutadiene(), daylight_model())]
+    #[case::cyclohexane(cyclohexane(), daylight_model())]
+    #[case::cubane(cubane(), daylight_model())]
+    #[case::borazine_daylight(borazine(), daylight_model())]
+    #[case::borazine_permissive(borazine(), permissive_model())]
+    #[case::pyrrole_mdl(pyrrole(), mdl_model())]
     fn test_find_from_rings_non_aromatic(
         #[case] builder: MoleculeBuilder,
         #[case] model: HueckelRuleAromaticity,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
+        let rings =
+            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
         let systems = model.find_from_rings(&builder, &rings);
         assert!(systems.is_empty());
     }

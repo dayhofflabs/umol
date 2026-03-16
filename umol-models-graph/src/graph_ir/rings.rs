@@ -4,8 +4,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
-use super::molecule::builder::MoleculeBuilder;
-use super::molecule::{biconnected_components, enumerate_rings, AtomIndex, BondIndex, Molecule};
+use crate::graph_ir::config::RingEnumerationStrategy;
+use crate::graph_ir::graph_utils::{biconnected_components, enumerate_rings};
+use crate::graph_ir::molecule::{AtomIndex, BondIndex, Molecule, MoleculeBuilder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RingIndex(pub u32);
@@ -45,122 +46,6 @@ impl MoleculeRings {
             ring_bonds: Vec::new(),
             atom_rings: BTreeMap::new(),
             bond_rings: BTreeMap::new(),
-        }
-    }
-
-    pub fn from_builder(
-        builder: &MoleculeBuilder,
-        max_ring_size: usize,
-        max_rings_per_component: usize,
-    ) -> Self {
-        let bcc = builder.biconnected_components();
-        let full_adj = builder.adjacency_list();
-        Self::build(&bcc, &full_adj, max_ring_size, max_rings_per_component, |a, b| {
-            builder.connecting_bond_index(a, b)
-        })
-    }
-
-    pub fn from_molecule(
-        molecule: &Molecule,
-        max_ring_size: usize,
-        max_rings_per_component: usize,
-    ) -> Self {
-        let bcc = molecule.biconnected_components();
-        let full_adj = molecule.adjacency_list();
-        Self::build(&bcc, &full_adj, max_ring_size, max_rings_per_component, |a, b| {
-            molecule.connecting_bond_index(a, b)
-        })
-    }
-
-    /// Build rings from the pi-subgraph only: restrict to atoms with at least
-    /// one aromatic candidate, build the induced subgraph, then enumerate cycles.
-    pub fn from_pi_subgraph(
-        builder: &MoleculeBuilder,
-        max_ring_size: usize,
-        max_rings_per_component: usize,
-    ) -> Self {
-        let full_adj = builder.adjacency_list();
-        let pi_atoms: HashSet<AtomIndex> = builder
-            .atom_indices()
-            .filter(|&atom| {
-                builder
-                    .atom(atom)
-                    .is_some_and(|a| a.candidates().iter().any(|c| c.aromatic_valence().is_aromatic()))
-            })
-            .collect();
-
-        let mut pi_adj: HashMap<AtomIndex, Vec<AtomIndex>> = HashMap::new();
-        for &atom in &pi_atoms {
-            let neighbors: Vec<AtomIndex> = full_adj
-                .get(&atom)
-                .map(|ns| ns.iter().copied().filter(|n| pi_atoms.contains(n)).collect())
-                .unwrap_or_default();
-            pi_adj.insert(atom, neighbors);
-        }
-
-        let bcc = biconnected_components(pi_atoms.iter().copied(), pi_adj.clone());
-        Self::build(&bcc, &pi_adj, max_ring_size, max_rings_per_component, |a, b| {
-            builder.connecting_bond_index(a, b)
-        })
-    }
-
-    fn build(
-        bcc: &[Vec<AtomIndex>],
-        full_adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
-        max_ring_size: usize,
-        max_rings_per_component: usize,
-        bond_lookup: impl Fn(AtomIndex, AtomIndex) -> Option<BondIndex>,
-    ) -> Self {
-        let mut all_rings: Vec<Vec<AtomIndex>> = Vec::new();
-
-        for component in bcc {
-            let component_set: HashSet<AtomIndex> = component.iter().copied().collect();
-            let mut sub_adj: HashMap<AtomIndex, Vec<AtomIndex>> = HashMap::new();
-            for &atom in component {
-                let neighbors: Vec<AtomIndex> = full_adj
-                    .get(&atom)
-                    .map(|ns| {
-                        ns.iter()
-                            .copied()
-                            .filter(|n| component_set.contains(n))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                sub_adj.insert(atom, neighbors);
-            }
-            let mut rings = enumerate_rings(&sub_adj, max_ring_size);
-            rings.truncate(max_rings_per_component);
-            all_rings.extend(rings);
-        }
-
-        let mut ring_atoms: BTreeMap<AtomIndex, Vec<RingIndex>> = BTreeMap::new();
-        let mut ring_bonds: BTreeMap<BondIndex, Vec<RingIndex>> = BTreeMap::new();
-        let mut cycle_bonds: Vec<Vec<BondIndex>> = Vec::with_capacity(all_rings.len());
-
-        for (idx, ring) in all_rings.iter().enumerate() {
-            let ring_idx = RingIndex(idx as u32);
-            for &atom in ring {
-                ring_atoms.entry(atom).or_default().push(ring_idx);
-            }
-            let n = ring.len();
-            let mut bonds = Vec::with_capacity(n);
-            for i in 0..n {
-                let a = ring[i];
-                let b = ring[(i + 1) % n];
-                if let Some(bond) = bond_lookup(a, b) {
-                    ring_bonds.entry(bond).or_default().push(ring_idx);
-                    bonds.push(bond);
-                }
-            }
-            cycle_bonds.push(bonds);
-        }
-
-        Self {
-            max_ring_size,
-            ring_atoms: all_rings,
-            ring_bonds: cycle_bonds,
-            atom_rings: ring_atoms,
-            bond_rings: ring_bonds,
         }
     }
 
@@ -338,6 +223,144 @@ impl MoleculeRings {
     }
 }
 
+pub struct RingEnumerator {
+    aromatic_only: bool,
+    max_ring_size: usize,
+    max_rings_per_component: usize,
+}
+
+impl RingEnumerator {
+    pub fn new(strategy: &RingEnumerationStrategy) -> Self {
+        Self {
+            aromatic_only: strategy.aromatic_only,
+            max_ring_size: strategy.max_ring_size,
+            max_rings_per_component: strategy.max_rings_per_component,
+        }
+    }
+
+    pub fn enumerate_builder(&self, builder: &MoleculeBuilder) -> MoleculeRings {
+        let mut bond_map: HashMap<(AtomIndex, AtomIndex), BondIndex> = HashMap::new();
+        for bond in builder.bond_indices() {
+            if let Some((a, b)) = builder.bond_atom_indices(bond) {
+                bond_map.insert((a, b), bond);
+                bond_map.insert((b, a), bond);
+            }
+        }
+        let (adj, bcc) = if self.aromatic_only {
+            let full_adj = builder.adjacency_list();
+            let pi_atoms: HashSet<AtomIndex> = builder
+                .atom_indices()
+                .filter(|&atom| builder.atom_aromatic_hint(atom))
+                .collect();
+            let adj = induced_subgraph(&full_adj, &pi_atoms);
+            let bcc = biconnected_components(pi_atoms.iter().copied(), &adj);
+            (adj, bcc)
+        } else {
+            let adj = builder.adjacency_list();
+            let bcc = builder.biconnected_components();
+            (adj, bcc)
+        };
+        self.build(&bcc, &adj, &bond_map)
+    }
+
+    pub fn enumerate_molecule(&self, molecule: &Molecule) -> MoleculeRings {
+        let mut bond_map: HashMap<(AtomIndex, AtomIndex), BondIndex> = HashMap::new();
+        for bond in molecule.bond_indices() {
+            if let Some((a, b)) = molecule.bond_atom_indices(bond) {
+                bond_map.insert((a, b), bond);
+                bond_map.insert((b, a), bond);
+            }
+        }
+        let (adj, bcc) = if self.aromatic_only {
+            let full_adj = molecule.adjacency_list();
+            let pi_atoms: HashSet<AtomIndex> = molecule
+                .atom_indices()
+                .filter(|&atom| molecule.atom(atom).is_some_and(|a| a.is_aromatic()))
+                .collect();
+            let adj = induced_subgraph(&full_adj, &pi_atoms);
+            let bcc = biconnected_components(pi_atoms.iter().copied(), &adj);
+            (adj, bcc)
+        } else {
+            let adj = molecule.adjacency_list();
+            let bcc = molecule.biconnected_components();
+            (adj, bcc)
+        };
+        self.build(&bcc, &adj, &bond_map)
+    }
+
+    fn build(
+        &self,
+        bcc: &[Vec<AtomIndex>],
+        adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
+        bond_map: &HashMap<(AtomIndex, AtomIndex), BondIndex>,
+    ) -> MoleculeRings {
+        let mut all_rings: Vec<Vec<AtomIndex>> = Vec::new();
+        for component in bcc {
+            let component_set: HashSet<AtomIndex> = component.iter().copied().collect();
+            let mut sub_adj: HashMap<AtomIndex, Vec<AtomIndex>> = HashMap::new();
+            for &atom in component {
+                let neighbors: Vec<AtomIndex> = adj
+                    .get(&atom)
+                    .map(|ns| {
+                        ns.iter()
+                            .copied()
+                            .filter(|n| component_set.contains(n))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                sub_adj.insert(atom, neighbors);
+            }
+            let mut rings = enumerate_rings(&sub_adj, self.max_ring_size);
+            rings.truncate(self.max_rings_per_component);
+            all_rings.extend(rings);
+        }
+
+        let mut atom_rings: BTreeMap<AtomIndex, Vec<RingIndex>> = BTreeMap::new();
+        let mut bond_rings: BTreeMap<BondIndex, Vec<RingIndex>> = BTreeMap::new();
+        let mut ring_bonds: Vec<Vec<BondIndex>> = Vec::with_capacity(all_rings.len());
+        for (idx, ring) in all_rings.iter().enumerate() {
+            let ring_idx = RingIndex(idx as u32);
+            for &atom in ring {
+                atom_rings.entry(atom).or_default().push(ring_idx);
+            }
+            let n = ring.len();
+            let mut bonds = Vec::with_capacity(n);
+            for i in 0..n {
+                let a = ring[i];
+                let b = ring[(i + 1) % n];
+                if let Some(&bond) = bond_map.get(&(a, b)) {
+                    bond_rings.entry(bond).or_default().push(ring_idx);
+                    bonds.push(bond);
+                }
+            }
+            ring_bonds.push(bonds);
+        }
+
+        MoleculeRings {
+            max_ring_size: self.max_ring_size,
+            ring_atoms: all_rings,
+            ring_bonds,
+            atom_rings,
+            bond_rings,
+        }
+    }
+}
+
+fn induced_subgraph(
+    full_adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
+    atoms: &HashSet<AtomIndex>,
+) -> HashMap<AtomIndex, Vec<AtomIndex>> {
+    let mut adj = HashMap::new();
+    for &atom in atoms {
+        let neighbors: Vec<AtomIndex> = full_adj
+            .get(&atom)
+            .map(|ns| ns.iter().copied().filter(|n| atoms.contains(n)).collect())
+            .unwrap_or_default();
+        adj.insert(atom, neighbors);
+    }
+    adj
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -348,7 +371,47 @@ mod tests {
     use crate::atom;
     use crate::graph_ir::atom::AtomBuilder;
     use crate::graph_ir::bond::BondBuilder;
-    use crate::graph_ir::config::ResolveConfig;
+    use crate::graph_ir::config::{ResolveConfig, RingEnumerationStrategy};
+
+    fn enumerate(builder: &MoleculeBuilder, max_ring_size: usize) -> MoleculeRings {
+        RingEnumerator::new(&RingEnumerationStrategy {
+            aromatic_only: false,
+            max_ring_size,
+            max_rings_per_component: usize::MAX,
+        })
+        .enumerate_builder(builder)
+    }
+
+    fn enumerate_capped(
+        builder: &MoleculeBuilder,
+        max_ring_size: usize,
+        max_rings_per_component: usize,
+    ) -> MoleculeRings {
+        RingEnumerator::new(&RingEnumerationStrategy {
+            aromatic_only: false,
+            max_ring_size,
+            max_rings_per_component,
+        })
+        .enumerate_builder(builder)
+    }
+
+    fn enumerate_molecule(molecule: &Molecule, max_ring_size: usize) -> MoleculeRings {
+        RingEnumerator::new(&RingEnumerationStrategy {
+            aromatic_only: false,
+            max_ring_size,
+            max_rings_per_component: usize::MAX,
+        })
+        .enumerate_molecule(molecule)
+    }
+
+    fn enumerate_aromatic(builder: &MoleculeBuilder, max_ring_size: usize) -> MoleculeRings {
+        RingEnumerator::new(&RingEnumerationStrategy {
+            aromatic_only: true,
+            max_ring_size,
+            max_rings_per_component: usize::MAX,
+        })
+        .enumerate_builder(builder)
+    }
 
     #[fixture]
     fn empty_builder() -> MoleculeBuilder {
@@ -466,6 +529,7 @@ mod tests {
         builder
     }
 
+    #[rustfmt::skip]
     #[fixture]
     fn cubane_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
@@ -473,18 +537,8 @@ mod tests {
             .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
             .collect();
         let edges = [
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 0),
-            (4, 5),
-            (5, 6),
-            (6, 7),
-            (7, 4),
-            (0, 4),
-            (1, 5),
-            (2, 6),
-            (3, 7),
+            (0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
+            (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7),
         ];
         for (a, b) in edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
@@ -523,43 +577,43 @@ mod tests {
     #[fixture]
     fn ring_molecule_rings(#[default(6)] n: usize) -> MoleculeRings {
         let molecule = ring_builder(n);
-        MoleculeRings::from_builder(&molecule, n, usize::MAX)
+        enumerate(&molecule, n)
     }
 
     #[fixture]
     fn disjoint_molecule_rings() -> MoleculeRings {
         let molecule = disjoint_builder();
-        MoleculeRings::from_builder(&molecule, 10, usize::MAX)
+        enumerate(&molecule, 10)
     }
 
     #[fixture]
     fn spiro_molecule_rings() -> MoleculeRings {
         let molecule = spiro_builder();
-        MoleculeRings::from_builder(&molecule, 10, usize::MAX)
+        enumerate(&molecule, 10)
     }
 
     #[fixture]
     fn fused_molecule_rings() -> MoleculeRings {
         let molecule = fused_builder();
-        MoleculeRings::from_builder(&molecule, 10, usize::MAX)
+        enumerate(&molecule, 10)
     }
 
     #[fixture]
     fn bridged_molecule_rings() -> MoleculeRings {
         let molecule = bridged_builder();
-        MoleculeRings::from_builder(&molecule, 5, usize::MAX)
+        enumerate(&molecule, 5)
     }
 
     #[fixture]
     fn cubane_molecule_rings() -> MoleculeRings {
         let molecule = cubane_builder();
-        MoleculeRings::from_builder(&molecule, 8, usize::MAX)
+        enumerate(&molecule, 8)
     }
 
     #[fixture]
     fn multi_spiro_molecule_rings() -> MoleculeRings {
         let molecule = multi_spiro_builder();
-        MoleculeRings::from_builder(&molecule, 4, usize::MAX)
+        enumerate(&molecule, 4)
     }
 
     #[rstest]
@@ -597,7 +651,7 @@ mod tests {
         #[case] max_ring_size: usize,
         #[case] expected: usize,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, max_ring_size, usize::MAX);
+        let rings = enumerate(&builder, max_ring_size);
         assert_eq!(rings.ring_count(), expected);
     }
 
@@ -611,7 +665,7 @@ mod tests {
         #[case] max_ring_size: usize,
         #[case] expected: usize,
     ) {
-        let rings = MoleculeRings::from_molecule(&molecule, max_ring_size, usize::MAX);
+        let rings = enumerate_molecule(&molecule, max_ring_size);
         assert_eq!(rings.ring_count(), expected);
     }
 
@@ -685,55 +739,16 @@ mod tests {
         assert_eq!(shared_bonds, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::identical(
-        ring_molecule_rings(6),
-        RingIndex(0),
-        RingIndex(0),
-        RingRelation::Identical
-    )]
-    #[case::disjoint(
-        disjoint_molecule_rings(),
-        RingIndex(0),
-        RingIndex(1),
-        RingRelation::Disjoint
-    )]
-    #[case::spiro(
-        spiro_molecule_rings(),
-        RingIndex(0),
-        RingIndex(1),
-        RingRelation::Spiro
-    )]
-    #[case::fused(
-        fused_molecule_rings(),
-        RingIndex(0),
-        RingIndex(1),
-        RingRelation::Fused
-    )]
-    #[case::bridged(
-        bridged_molecule_rings(),
-        RingIndex(0),
-        RingIndex(1),
-        RingRelation::Bridged
-    )]
-    #[case::multi_spiro(
-        multi_spiro_molecule_rings(),
-        RingIndex(0),
-        RingIndex(5),
-        RingRelation::MultiSpiro
-    )]
-    #[case::cubane(
-        cubane_molecule_rings(),
-        RingIndex(0),
-        RingIndex(25),
-        RingRelation::Noncontiguous
-    )]
-    #[case::non_existent(
-        ring_molecule_rings(6),
-        RingIndex(0),
-        RingIndex(2),
-        RingRelation::Disjoint
-    )]
+    #[case::identical(ring_molecule_rings(6), RingIndex(0), RingIndex(0), RingRelation::Identical)]
+    #[case::disjoint(disjoint_molecule_rings(), RingIndex(0), RingIndex(1), RingRelation::Disjoint)]
+    #[case::spiro(spiro_molecule_rings(), RingIndex(0), RingIndex(1), RingRelation::Spiro)]
+    #[case::fused(fused_molecule_rings(), RingIndex(0), RingIndex(1), RingRelation::Fused)]
+    #[case::bridged(bridged_molecule_rings(), RingIndex(0), RingIndex(1), RingRelation::Bridged)]
+    #[case::multi_spiro(multi_spiro_molecule_rings(), RingIndex(0), RingIndex(5), RingRelation::MultiSpiro)]
+    #[case::cubane(cubane_molecule_rings(), RingIndex(0), RingIndex(25), RingRelation::Noncontiguous)]
+    #[case::non_existent(ring_molecule_rings(6), RingIndex(0), RingIndex(2), RingRelation::Disjoint)]
     fn test_molecule_rings_ring_relation(
         #[case] rings: MoleculeRings,
         #[case] ring_index_a: RingIndex,
@@ -848,7 +863,7 @@ mod tests {
         #[case] atom_index: usize,
         #[case] expected: bool,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 10, usize::MAX);
+        let rings = enumerate(&builder, 10);
         let atom = AtomIndex::new(atom_index);
         assert_eq!(rings.is_ring_atom(atom), expected);
     }
@@ -870,7 +885,7 @@ mod tests {
         #[case] atom_index: usize,
         #[case] expected_ring_size: Option<usize>,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, max_ring_size, usize::MAX);
+        let rings = enumerate(&builder, max_ring_size);
         let atom = AtomIndex::new(atom_index);
         assert_eq!(rings.atom_smallest_ring_size(atom), expected_ring_size);
     }
@@ -893,7 +908,7 @@ mod tests {
         #[case] bond_index: usize,
         #[case] expected: bool,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 10, usize::MAX);
+        let rings = enumerate(&builder, 10);
         let bond = BondIndex::new(bond_index);
         assert_eq!(rings.is_ring_bond(bond), expected);
     }
@@ -915,22 +930,27 @@ mod tests {
         #[case] bond_index: usize,
         #[case] expected_ring_size: Option<usize>,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, max_ring_size, usize::MAX);
+        let rings = enumerate(&builder, max_ring_size);
         let bond = BondIndex::new(bond_index);
         assert_eq!(rings.bond_smallest_ring_size(bond), expected_ring_size);
     }
 
-    /// Benzene with aromatic atom types, linked to a saturated cyclohexane.
+    /// Benzene with aromatic hints, linked to a saturated cyclohexane.
     #[fixture]
     fn aromatic_plus_saturated_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
-        let aromatic: Vec<AtomIndex> =
-            (0..6).map(|_| builder.add_atom(atom!("{Cv2a1H}"))).collect();
+        let aromatic: Vec<AtomIndex> = (0..6)
+            .map(|_| {
+                let mut a = AtomBuilder::new(Element::C);
+                a.set_aromatic_hint(true);
+                builder.add_atom(a)
+            })
+            .collect();
         for i in 0..6 {
             builder.add_bond_unchecked(
                 aromatic[i],
                 aromatic[(i + 1) % 6],
-                BondBuilder::new(1, None),
+                BondBuilder::new(1, Some(true)),
             );
         }
         let sat: Vec<AtomIndex> = (0..6)
@@ -946,34 +966,25 @@ mod tests {
     #[rstest]
     #[case::no_aromatic_atoms(ring_builder(6), 0)]
     #[case::mixed_skips_saturated(aromatic_plus_saturated_builder(), 1)]
-    fn test_pi_subgraph_ring_count(
-        #[case] builder: MoleculeBuilder,
-        #[case] expected: usize,
-    ) {
-        let pi = MoleculeRings::from_pi_subgraph(&builder, 22, usize::MAX);
+    fn test_pi_subgraph_ring_count(#[case] builder: MoleculeBuilder, #[case] expected: usize) {
+        let pi = enumerate_aromatic(&builder, 22);
         assert_eq!(pi.ring_count(), expected);
     }
 
     #[rstest]
-    fn test_pi_subgraph_skips_saturated_rings(
-        aromatic_plus_saturated_builder: MoleculeBuilder,
-    ) {
-        let pi = MoleculeRings::from_pi_subgraph(
-            &aromatic_plus_saturated_builder, 22, usize::MAX,
-        );
-        let global = MoleculeRings::from_builder(
-            &aromatic_plus_saturated_builder, 22, usize::MAX,
-        );
+    fn test_pi_subgraph_skips_saturated_rings(aromatic_plus_saturated_builder: MoleculeBuilder) {
+        let pi = enumerate_aromatic(&aromatic_plus_saturated_builder, 22);
+        let global = enumerate(&aromatic_plus_saturated_builder, 22);
         assert_eq!(pi.ring_count(), 1);
         assert!(global.ring_count() >= 2);
     }
 
     #[rstest]
     fn test_max_rings_per_component_truncates(cubane_builder: MoleculeBuilder) {
-        let capped = MoleculeRings::from_builder(&cubane_builder, 8, 3);
+        let capped = enumerate_capped(&cubane_builder, 8, 3);
         assert_eq!(capped.ring_count(), 3);
 
-        let uncapped = MoleculeRings::from_builder(&cubane_builder, 8, usize::MAX);
+        let uncapped = enumerate(&cubane_builder, 8);
         assert_eq!(uncapped.ring_count(), 28);
     }
 }

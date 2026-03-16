@@ -8,8 +8,8 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use umol_data::{Element, SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 
-use super::error::ResolutionError;
-use super::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::error::ResolutionError;
+use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 
 /// Aromatic valence of an atom: either non-aromatic or contributing n >= 0
 /// valence to a delocalized pi-system. Each atom can participate in at

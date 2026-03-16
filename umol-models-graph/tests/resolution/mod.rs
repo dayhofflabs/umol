@@ -10,6 +10,7 @@ use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use umol_data::SpinMultiplicity;
+use umol_models_graph::graph_ir::config_data::ValenceTable;
 use umol_models_graph::graph_ir::{
     resolve_molecule_with, AtomTypeQuery, Molecule, ResolutionError, ResolveConfig,
     TopologyNodeRef, TopologyProjection, ValenceStrategy,
@@ -198,7 +199,7 @@ fn bond_order_symbol(order: u8, charge: i8, multiplicity: SpinMultiplicity) -> S
     let mult_str = if multiplicity == SpinMultiplicity::Singlet {
         String::new()
     } else {
-        format!("*{}", multiplicity.multiplicity())
+        format!("x{}", multiplicity.multiplicity())
     };
     format!("{}{}{}", base, charge_str, mult_str)
 }
@@ -286,15 +287,15 @@ fn resolve_with_config(table_mol: &TableMolecule, config: &ResolveConfig) -> Res
 }
 
 fn atom_typing_config() -> ResolveConfig {
-    let mut config = ResolveConfig::default();
-    config.valence.strategy = ValenceStrategy::AtomTyping;
-    config
+    ResolveConfig::default()
 }
 
-fn counts_config(enable_implicit_hydrogens: bool) -> ResolveConfig {
+fn counts_config(allow_implicit_hydrogens: bool) -> ResolveConfig {
     let mut config = ResolveConfig::default();
-    config.valence.strategy = ValenceStrategy::Counts;
-    config.valence.enable_implicit_hydrogens = enable_implicit_hydrogens;
+    config.valence.strategy = ValenceStrategy::Counts {
+        table: ValenceTable::default_table().clone(),
+        allow_implicit_hydrogens,
+    };
     config
 }
 

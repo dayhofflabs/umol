@@ -31,7 +31,6 @@ pub struct ResolveConfig {
 
 #[derive(Clone, Debug)]
 pub struct TopologyConfig {
-    pub enabled: bool,
     pub flags: TopologyResolveFlags,
 }
 
@@ -40,15 +39,17 @@ pub struct ValenceResolveConfig {
     pub strategy: ValenceStrategy,
     pub no_match_policy: ValenceMatchPolicy,
     pub ambiguous_policy: ValenceMatchPolicy,
-    pub enable_implicit_hydrogens: bool,
-    pub atom_type_registry: AtomTypeRegistry,
-    pub valence_table: ValenceTable,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum ValenceStrategy {
-    AtomTyping,
-    Counts,
+    AtomTyping {
+        registry: AtomTypeRegistry,
+    },
+    Counts {
+        table: ValenceTable,
+        allow_implicit_hydrogens: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -86,28 +87,20 @@ impl Default for RingLimits {
     }
 }
 
-/// How rings are enumerated for aromaticity perception.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RingMethod {
-    /// Enumerate all elementary cycles per biconnected component.
-    GlobalAllCycles,
-    /// Extract the pi-subgraph first, then enumerate cycles locally
-    /// within each connected component of aromatic-candidate atoms.
-    PiSubgraph,
-}
-
 /// Ring enumeration parameters, independent of aromaticity model.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RingStrategy {
-    pub method: RingMethod,
+pub struct RingEnumerationStrategy {
+    /// If true, restrict ring enumeration to atoms with aromatic hints
+    /// (builder) or aromatic types (molecule).
+    pub aromatic_only: bool,
     pub max_ring_size: usize,
     pub max_rings_per_component: usize,
 }
 
-impl Default for RingStrategy {
+impl Default for RingEnumerationStrategy {
     fn default() -> Self {
         Self {
-            method: RingMethod::GlobalAllCycles,
+            aromatic_only: false,
             max_ring_size: 22,
             max_rings_per_component: 2000,
         }
@@ -115,7 +108,7 @@ impl Default for RingStrategy {
 }
 
 #[derive(Clone, Debug)]
-pub enum PerceptionStrategy {
+pub enum AromaticityStrategy {
     HueckelRule {
         element_scope: ElementScope,
         ring_limits: RingLimits,
@@ -132,89 +125,75 @@ pub enum PerceptionStrategy {
 /// Policy for mismatches between aromatic hints and detected aromatic systems.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AromaticityHintPolicy {
-    /// Error if a hinted atom/bond is not in any detected aromatic system.
     Strict,
-    /// Ignore mismatches silently.
     Ignore,
 }
 
-#[derive(Clone, Debug)]
-pub struct AromaticityResolveConfig {
-    pub perception_strategy: PerceptionStrategy,
-    pub ring_strategy: RingStrategy,
-    pub hint_policy: AromaticityHintPolicy,
-}
-
-impl AromaticityResolveConfig {
+impl AromaticityStrategy {
     /// Daylight (SMILES) aromaticity: C, N, O, S, Se, As.
     pub fn daylight() -> Self {
-        Self {
-            perception_strategy: PerceptionStrategy::HueckelRule {
-                element_scope: ElementScope::AllowList(vec![
-                    Element::C,
-                    Element::N,
-                    Element::O,
-                    Element::S,
-                    Element::Se,
-                    Element::As,
-                ]),
-                ring_limits: RingLimits::default(),
-            },
-            ring_strategy: RingStrategy::default(),
-            hint_policy: AromaticityHintPolicy::Strict,
+        Self::HueckelRule {
+            element_scope: ElementScope::AllowList(vec![
+                Element::C,
+                Element::N,
+                Element::O,
+                Element::S,
+                Element::Se,
+                Element::As,
+            ]),
+            ring_limits: RingLimits::default(),
         }
     }
 
     /// MDL (MOL/SDF) aromaticity: C and N only. Minimum ring size 6.
     pub fn mdl() -> Self {
-        Self {
-            perception_strategy: PerceptionStrategy::HueckelRule {
-                element_scope: ElementScope::AllowList(vec![Element::C, Element::N]),
-                ring_limits: RingLimits {
-                    min_ring_size: 6,
-                    ..RingLimits::default()
-                },
+        Self::HueckelRule {
+            element_scope: ElementScope::AllowList(vec![Element::C, Element::N]),
+            ring_limits: RingLimits {
+                min_ring_size: 6,
+                ..RingLimits::default()
             },
-            ring_strategy: RingStrategy::default(),
-            hint_policy: AromaticityHintPolicy::Strict,
         }
     }
 
     /// Permissive aromaticity: any element with aromatic valence states.
     pub fn permissive() -> Self {
-        Self {
-            perception_strategy: PerceptionStrategy::HueckelRule {
-                element_scope: ElementScope::Any,
-                ring_limits: RingLimits::default(),
-            },
-            ring_strategy: RingStrategy::default(),
-            hint_policy: AromaticityHintPolicy::Strict,
+        Self::HueckelRule {
+            element_scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct StereoResolveConfig {
-    pub enabled: bool,
+pub struct AromaticityResolveConfig {
+    pub aromaticity_strategy: AromaticityStrategy,
+    pub enumeration_strategy: RingEnumerationStrategy,
+    pub hint_policy: AromaticityHintPolicy,
 }
+
+#[derive(Clone, Debug)]
+pub struct StereoResolveConfig {}
 
 impl Default for ResolveConfig {
     fn default() -> Self {
         Self {
             topology: TopologyConfig {
-                enabled: true,
                 flags: TopologyResolveFlags::empty(),
             },
             valence: ValenceResolveConfig {
-                strategy: ValenceStrategy::AtomTyping,
+                strategy: ValenceStrategy::AtomTyping {
+                    registry: AtomTypeRegistry::default_registry().clone(),
+                },
                 no_match_policy: ValenceMatchPolicy::Error,
                 ambiguous_policy: ValenceMatchPolicy::Error,
-                enable_implicit_hydrogens: true,
-                atom_type_registry: AtomTypeRegistry::default_registry().clone(),
-                valence_table: ValenceTable::default_table().clone(),
             },
-            aromaticity: AromaticityResolveConfig::daylight(),
-            stereo: StereoResolveConfig { enabled: true },
+            aromaticity: AromaticityResolveConfig {
+                aromaticity_strategy: AromaticityStrategy::daylight(),
+                enumeration_strategy: RingEnumerationStrategy::default(),
+                hint_policy: AromaticityHintPolicy::Strict,
+            },
+            stereo: StereoResolveConfig {},
         }
     }
 }

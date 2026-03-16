@@ -1,11 +1,21 @@
-//! Aromatic system representation for GraphIR.
+//! Aromaticity types and perception models for GraphIR.
 //!
-//! An aromatic system is a molecule-level object describing a set of atoms
-//! participating in a delocalized π system, each contributing a fixed number
-//! of electrons (`aromatic_valence`). The system as a whole is subject to
-//! validation (ring membership, Kekulé feasibility, optional Hückel 4n+2).
+//! Core types (`AromaticSystem`, `AromaticContribution`) describe delocalized
+//! π systems. Perception models (`hueckel_rule`, `hmo`, `clar`) detect aromatic
+//! systems from ring topology and atom properties. `AromaticityModel` dispatches
+//! to the configured model.
 
-use super::molecule::AtomIndex;
+pub mod clar;
+pub mod hmo;
+pub mod hueckel_rule;
+
+pub use self::clar::*;
+pub use self::hmo::*;
+pub use self::hueckel_rule::*;
+use crate::graph_ir::config::AromaticityStrategy;
+use crate::graph_ir::error::ResolutionError;
+use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::rings::MoleculeRings;
 
 /// Per-atom contribution to an aromatic system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,16 +42,14 @@ impl AromaticContribution {
 }
 
 // TODO: Add multiplicity field
-/// An aromatic system consisting of atoms and number of electrons contributed
-/// Charge is delocalized charge, not assignable to any individual atom
+/// An aromatic system consisting of atoms and number of electrons contributed.
+/// Charge is delocalized charge, not assignable to any individual atom.
 /// Each atom can participate in at most one aromatic system, appears only once
-/// in the contributions list
+/// in the contributions list.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
-    /// Delocalized charge
     charge: i8,
-    /// List of atomic indices per ring
     rings: Vec<Vec<AtomIndex>>,
 }
 
@@ -106,5 +114,45 @@ impl AromaticSystem {
 
     pub fn atoms(&self) -> impl Iterator<Item = AtomIndex> + '_ {
         self.contributions.iter().map(|c| c.atom)
+    }
+}
+
+pub enum AromaticityModel {
+    HueckelRule(HueckelRuleAromaticity),
+    Hmo(HmoAromaticity),
+    Clar(ClarAromaticity),
+}
+
+impl AromaticityModel {
+    pub fn new(strategy: &AromaticityStrategy) -> Self {
+        match strategy {
+            AromaticityStrategy::HueckelRule {
+                element_scope,
+                ring_limits,
+            } => Self::HueckelRule(HueckelRuleAromaticity::new(
+                element_scope.clone(),
+                ring_limits.clone(),
+            )),
+            AromaticityStrategy::Hmo {
+                element_scope,
+                stabilization_threshold,
+            } => Self::Hmo(HmoAromaticity::new(
+                element_scope.clone(),
+                *stabilization_threshold,
+            )),
+            AromaticityStrategy::Clar => Self::Clar(ClarAromaticity),
+        }
+    }
+
+    pub fn aromatic_systems(
+        &self,
+        builder: &MoleculeBuilder,
+        rings: &MoleculeRings,
+    ) -> Result<Vec<AromaticSystem>, ResolutionError> {
+        match self {
+            Self::HueckelRule(m) => Ok(m.find_from_rings(builder, rings)),
+            Self::Hmo(m) => m.find_from_rings(builder, rings),
+            Self::Clar(m) => m.find_from_rings(builder, rings),
+        }
     }
 }

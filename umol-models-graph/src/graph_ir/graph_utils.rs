@@ -2,11 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::AtomIndex;
+use crate::graph_ir::molecule::AtomIndex;
 
-pub(crate) fn biconnected_components(
+pub fn biconnected_components(
     atoms: impl Iterator<Item = AtomIndex>,
-    adj: HashMap<AtomIndex, Vec<AtomIndex>>,
+    adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
 ) -> Vec<Vec<AtomIndex>> {
     let atoms: Vec<AtomIndex> = atoms.collect();
     if atoms.is_empty() {
@@ -114,7 +114,7 @@ fn biconnected_components_dfs(
     }
 }
 
-pub(crate) fn enumerate_rings(
+pub fn enumerate_rings(
     adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
     max_ring_size: usize,
 ) -> Vec<Vec<AtomIndex>> {

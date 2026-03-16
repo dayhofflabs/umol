@@ -10,7 +10,7 @@
 
 use smallvec::SmallVec;
 
-use super::molecule::AtomIndex;
+use crate::graph_ir::molecule::AtomIndex;
 
 /// Per-atom contribution to a multicenter set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

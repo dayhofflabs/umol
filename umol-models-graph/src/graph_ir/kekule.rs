@@ -6,9 +6,8 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use super::aromatic::AromaticSystem;
-use super::molecule::builder::MoleculeBuilder;
-use super::molecule::{AtomIndex, BondIndex};
+use crate::graph_ir::aromaticity::AromaticSystem;
+use crate::graph_ir::molecule::{AtomIndex, BondIndex, MoleculeBuilder};
 
 /// Result of Kekulization for one aromatic system.
 #[derive(Clone, Debug)]
@@ -201,7 +200,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::aromatic::AromaticContribution;
+    use crate::graph_ir::aromaticity::AromaticContribution;
     use crate::graph_ir::atom::AtomBuilder;
     use crate::graph_ir::bond::BondBuilder;
 

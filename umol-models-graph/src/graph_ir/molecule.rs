@@ -8,20 +8,19 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
 use umol_data::SpinState;
 
-use super::aromatic::AromaticSystem;
-use super::atom::Atom;
-use super::bond::Bond;
-use super::dative::DativeBond;
-use super::multicenter::MulticenterBond;
-use super::noncovalent::NoncovalentBond;
+use crate::graph_ir::aromaticity::AromaticSystem;
+use crate::graph_ir::graph_utils::biconnected_components;
+use crate::graph_ir::atom::Atom;
+use crate::graph_ir::bond::Bond;
+use crate::graph_ir::dative::DativeBond;
+use crate::graph_ir::multicenter::MulticenterBond;
+use crate::graph_ir::noncovalent::NoncovalentBond;
 
 pub mod builder;
 pub mod topology;
+
 pub use builder::*;
 pub use topology::*;
-mod utils;
-pub(crate) use utils::biconnected_components;
-pub(crate) use utils::enumerate_rings;
 
 pub type AtomIndex = NodeIndex<u32>;
 pub type BondIndex = EdgeIndex<u32>;
@@ -286,7 +285,7 @@ impl Molecule {
     }
 
     pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
-        biconnected_components(self.atom_indices(), self.adjacency_list())
+        biconnected_components(self.atom_indices(), &self.adjacency_list())
     }
 
     pub fn adjacency_list(&self) -> HashMap<AtomIndex, Vec<AtomIndex>> {

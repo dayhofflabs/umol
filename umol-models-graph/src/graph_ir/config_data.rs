@@ -11,8 +11,8 @@ use smallvec::SmallVec;
 use umol_data::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
-use super::atom_type::{AtomTypeQuery, AtomTypeSpec};
-use super::error::ResolutionError;
+use crate::graph_ir::atom_type::{AtomTypeQuery, AtomTypeSpec};
+use crate::graph_ir::error::ResolutionError;
 
 /// Atom type registry for GraphIR.
 ///
@@ -224,7 +224,9 @@ impl ValenceTable {
             let _ = write!(
                 buf,
                 "{}:{}:{:?}:{:?}\n",
-                element, entry.outer_electrons, entry.allowed_valences,
+                element,
+                entry.outer_electrons,
+                entry.allowed_valences,
                 entry.allowed_aromatic_valences
             );
         }

@@ -9,11 +9,10 @@ use std::collections::HashSet;
 
 use umol_data::Element;
 
-use crate::graph_ir::aromatic::{AromaticContribution, AromaticSystem};
+use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::atom_type::AromaticValence;
 use crate::graph_ir::error::ResolutionError;
-use crate::graph_ir::molecule::builder::MoleculeBuilder;
-use crate::graph_ir::molecule::AtomIndex;
+use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 use crate::graph_ir::rings::{MoleculeRings, RingIndex};
 
 #[derive(Clone, Debug)]
@@ -182,7 +181,8 @@ mod tests {
     use super::*;
     use crate::atom;
     use crate::graph_ir::bond::BondBuilder;
-    use crate::graph_ir::rings::MoleculeRings;
+    use crate::graph_ir::config::RingEnumerationStrategy;
+    use crate::graph_ir::rings::RingEnumerator;
 
     const C1: &str = "{Cv2a1H}";
     const C0: &str = "{Cv4}";
@@ -296,7 +296,8 @@ mod tests {
         #[case] builder: MoleculeBuilder,
         #[case] expected_sextets: usize,
     ) {
-        let ring_info = MoleculeRings::from_builder(&builder, 22, usize::MAX);
+        let ring_info =
+            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
         let candidates = hex_ring_indices(&builder, &ring_info);
         let mut solver = ClarSolver::new(&ring_info, &candidates);
         let sextets = solver.solve();
@@ -314,7 +315,8 @@ mod tests {
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
+        let rings =
+            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
         let model = ClarAromaticity;
         let systems = model.find_from_rings(&builder, &rings).unwrap();
         assert_eq!(systems.len(), expected_systems);
@@ -329,14 +331,16 @@ mod tests {
     #[case::pyridine(make_ring(&["{N/1v2a1}", C1, C1, C1, C1, C1]))]
     #[case::furan(make_ring(&["{O/1v2a2}", C1, C1, C1, C1]))]
     fn test_clar_model_find_from_rings_error(#[case] builder: MoleculeBuilder) {
-        let rings = MoleculeRings::from_builder(&builder, 22, usize::MAX);
+        let rings =
+            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
         let model = ClarAromaticity;
         assert!(model.find_from_rings(&builder, &rings).is_err());
     }
 
     #[rstest]
     fn test_clar_solver(phenanthrene: MoleculeBuilder) {
-        let ring_info = MoleculeRings::from_builder(&phenanthrene, 22, usize::MAX);
+        let ring_info = RingEnumerator::new(&RingEnumerationStrategy::default())
+            .enumerate_builder(&phenanthrene);
         let candidates = hex_ring_indices(&phenanthrene, &ring_info);
         let mut solver = ClarSolver::new(&ring_info, &candidates);
         let sextets = solver.solve();

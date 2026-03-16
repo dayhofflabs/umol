@@ -1,25 +1,20 @@
 //! Resolution of TableIR molecules to GraphIR molecules.
 
-pub mod aromaticity;
-pub mod valence;
-
 use std::collections::HashMap;
 
-use self::aromaticity::AromaticityModel;
-use self::valence::ValenceValidator;
-use super::atom::AtomBuilder;
-use super::bond::BondBuilder;
-use super::config::{
-    AromaticityHintPolicy, ResolveConfig, RingMethod, TopologyResolveFlags, ValenceMatchPolicy,
-    ValenceStrategy,
+use crate::graph_ir::aromaticity::AromaticityModel;
+use crate::graph_ir::atom::AtomBuilder;
+use crate::graph_ir::bond::BondBuilder;
+use crate::graph_ir::config::{
+    AromaticityHintPolicy, ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy,
 };
-use super::dative::DativeBond;
-use super::error::ResolutionError;
-use super::molecule::builder::MoleculeBuilder;
-use super::molecule::{AtomIndex, Molecule};
-use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
-use super::noncovalent::NoncovalentBond;
-use super::rings::MoleculeRings;
+use crate::graph_ir::dative::DativeBond;
+use crate::graph_ir::error::ResolutionError;
+use crate::graph_ir::molecule::{AtomIndex, Molecule, MoleculeBuilder};
+use crate::graph_ir::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
+use crate::graph_ir::noncovalent::NoncovalentBond;
+use crate::graph_ir::rings::RingEnumerator;
+use crate::graph_ir::valence::ValenceMatcher;
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 /// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
@@ -52,33 +47,31 @@ fn resolve_topology_with(
     molecule: &TableMolecule,
     config: &ResolveConfig,
 ) -> Result<MoleculeBuilder, ResolutionError> {
-    if config.topology.enabled {
-        if !config
-            .topology
-            .flags
-            .contains(TopologyResolveFlags::DISCONNECTED_MOLECULES)
-            && molecule.component_count() > 1
-        {
-            return Err(ResolutionError::TopologyDisconnected);
-        }
+    if !config
+        .topology
+        .flags
+        .contains(TopologyResolveFlags::DISCONNECTED_MOLECULES)
+        && molecule.component_count() > 1
+    {
+        return Err(ResolutionError::TopologyDisconnected);
+    }
 
-        for (i, bond) in molecule.bonds.iter().enumerate() {
-            if bond.atoms.first() == bond.atoms.second() {
-                return Err(ResolutionError::TopologySelfLoop(i as u32));
-            }
+    for (i, bond) in molecule.bonds.iter().enumerate() {
+        if bond.atoms.first() == bond.atoms.second() {
+            return Err(ResolutionError::TopologySelfLoop(i as u32));
         }
+    }
 
-        let mut atom_bonds: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
-        for (i, bond) in molecule.bonds.iter().enumerate() {
-            let key = (bond.atoms.first(), bond.atoms.second());
-            atom_bonds.entry(key).or_default().push(i as u32);
-        }
-        for (_pair, indices) in atom_bonds {
-            if indices.len() >= 2 {
-                return Err(ResolutionError::TopologyParallelEdges(
-                    indices[0], indices[1],
-                ));
-            }
+    let mut atom_bonds: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
+    for (i, bond) in molecule.bonds.iter().enumerate() {
+        let key = (bond.atoms.first(), bond.atoms.second());
+        atom_bonds.entry(key).or_default().push(i as u32);
+    }
+    for (_pair, indices) in atom_bonds {
+        if indices.len() >= 2 {
+            return Err(ResolutionError::TopologyParallelEdges(
+                indices[0], indices[1],
+            ));
         }
     }
 
@@ -137,19 +130,10 @@ fn resolve_valence_with(
     builder: &mut MoleculeBuilder,
     config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
-    let validator = match config.valence.strategy {
-        ValenceStrategy::AtomTyping => {
-            ValenceValidator::AtomTyping(config.valence.atom_type_registry.clone())
-        }
-        ValenceStrategy::Counts => ValenceValidator::Counts {
-            table: config.valence.valence_table.clone(),
-            enable_implicit_hydrogens: config.valence.enable_implicit_hydrogens,
-        },
-    };
-
+    let matcher = ValenceMatcher::new(&config.valence.strategy);
     let atom_indices: Vec<AtomIndex> = builder.atom_indices().collect();
     for atom_index in atom_indices {
-        let candidates = validator.candidates_for(builder, atom_index);
+        let candidates = matcher.candidates_for(builder, atom_index);
 
         if candidates.is_empty() {
             if config.valence.no_match_policy == ValenceMatchPolicy::Ignore {
@@ -201,20 +185,9 @@ fn resolve_aromaticity_with(
         return Ok(());
     }
 
-    let model = AromaticityModel::from_strategy(&config.aromaticity.perception_strategy);
-    let ring_cfg = &config.aromaticity.ring_strategy;
-    let rings = match ring_cfg.method {
-        RingMethod::GlobalAllCycles => MoleculeRings::from_builder(
-            builder,
-            ring_cfg.max_ring_size,
-            ring_cfg.max_rings_per_component,
-        ),
-        RingMethod::PiSubgraph => MoleculeRings::from_pi_subgraph(
-            builder,
-            ring_cfg.max_ring_size,
-            ring_cfg.max_rings_per_component,
-        ),
-    };
+    let model = AromaticityModel::new(&config.aromaticity.aromaticity_strategy);
+    let enumerator = RingEnumerator::new(&config.aromaticity.enumeration_strategy);
+    let rings = enumerator.enumerate_builder(builder);
     for system in model.aromatic_systems(builder, &rings)? {
         builder.add_aromatic_system(system);
     }
@@ -268,11 +241,8 @@ fn validate_aromatic_hints(
 
 fn resolve_stereo_with(
     _builder: &mut MoleculeBuilder,
-    config: &ResolveConfig,
+    _config: &ResolveConfig,
 ) -> Result<(), ResolutionError> {
-    if !config.stereo.enabled {
-        return Ok(());
-    }
     Ok(())
 }
 
@@ -281,7 +251,8 @@ mod tests {
     use rstest::*;
     use umol_data::Element;
 
-    use super::super::config_data::AtomTypeRegistry;
+    use super::super::config::ValenceStrategy;
+    use super::super::config_data::{AtomTypeRegistry, ValenceTable};
     use super::*;
     use crate::registry;
     use crate::table_ir::atom::Atom as TableAtom;
@@ -330,28 +301,37 @@ mod tests {
     #[fixture]
     fn config_with_empty_registry() -> ResolveConfig {
         let mut config = ResolveConfig::default();
-        config.valence.atom_type_registry = AtomTypeRegistry::new();
+        config.valence.strategy = ValenceStrategy::AtomTyping {
+            registry: AtomTypeRegistry::new(),
+        };
         config
     }
 
     #[fixture]
     fn config_with_h_registry() -> ResolveConfig {
         let mut config = ResolveConfig::default();
-        config.valence.atom_type_registry = registry!["{H+0v1}"];
+        config.valence.strategy = ValenceStrategy::AtomTyping {
+            registry: registry!["{H+0v1}"],
+        };
         config
     }
 
     #[fixture]
     fn config_with_counts_strategy() -> ResolveConfig {
         let mut config = ResolveConfig::default();
-        config.valence.strategy = ValenceStrategy::Counts;
+        config.valence.strategy = ValenceStrategy::Counts {
+            table: ValenceTable::default_table().clone(),
+            allow_implicit_hydrogens: true,
+        };
         config
     }
 
     #[fixture]
     fn config_with_ch_registry() -> ResolveConfig {
         let mut config = ResolveConfig::default();
-        config.valence.atom_type_registry = registry!["{H+0v1}", "{C+0v3}", "{C+1v3}"];
+        config.valence.strategy = ValenceStrategy::AtomTyping {
+            registry: registry!["{H+0v1}", "{C+0v3}", "{C+1v3}"],
+        };
         config
     }
 

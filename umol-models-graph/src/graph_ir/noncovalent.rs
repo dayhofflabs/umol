@@ -1,7 +1,7 @@
 //! Non-covalent bond representation for GraphIR.
 
-use super::molecule::AtomIndex;
 use crate::bond::BondNoncovalent;
+use crate::graph_ir::molecule::AtomIndex;
 use crate::table_ir::bond::Bond as TableBond;
 
 /// A non-covalent interaction (hydrogen bond, halogen bond, etc.) in GraphIR.

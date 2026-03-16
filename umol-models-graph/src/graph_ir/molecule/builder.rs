@@ -8,20 +8,20 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use umol_data::SpinState;
 
-use super::super::aromatic::AromaticSystem;
-use super::super::atom::AtomBuilder;
-use super::super::bond::BondBuilder;
-use super::super::config::ResolveConfig;
-use super::super::dative::DativeBond;
-use super::super::error::ResolutionError;
-use super::super::multicenter::MulticenterBond;
-use super::super::noncovalent::NoncovalentBond;
-use super::super::symmetry::compute_symmetry;
+use crate::graph_ir::aromaticity::AromaticSystem;
+use crate::graph_ir::atom::AtomBuilder;
+use crate::graph_ir::bond::BondBuilder;
+use crate::graph_ir::config::ResolveConfig;
+use crate::graph_ir::dative::DativeBond;
+use crate::graph_ir::error::ResolutionError;
+use crate::graph_ir::multicenter::MulticenterBond;
+use crate::graph_ir::noncovalent::NoncovalentBond;
+use crate::graph_ir::symmetry::compute_symmetry;
 use super::topology::{
     DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
     TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
 };
-use super::utils::biconnected_components;
+use crate::graph_ir::graph_utils::biconnected_components;
 use super::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
     NoncovalentBondIndex,
@@ -114,7 +114,7 @@ impl MoleculeBuilder {
     }
 
     pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
-        biconnected_components(self.atom_indices(), self.adjacency_list())
+        biconnected_components(self.atom_indices(), &self.adjacency_list())
     }
 
     pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {
