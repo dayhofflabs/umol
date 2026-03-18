@@ -144,7 +144,7 @@ fn resolve_valence_with(
                 .expect("atom_index must be valid")
                 .element();
             return Err(ResolutionError::ValenceNoMatch(format!(
-                "atom {:?} at index {} has no valence match",
+                "atom {:?} at index {}",
                 element,
                 atom_index.index()
             )));

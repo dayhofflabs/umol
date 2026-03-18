@@ -1,3 +1,5 @@
-atoms = "?{Si^1} ?{H} ?{H} ?{H}"
+atoms = "?{Si} ?{H} ?{H} ?{H}"
 bonds = "0-1 0-2 0-3"
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"
+aromatic = "none"

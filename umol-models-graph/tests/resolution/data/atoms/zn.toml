@@ -1,3 +1,4 @@
-atoms = "?{Zn+0}"
+atoms = "?{Zn}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

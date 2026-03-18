@@ -1,3 +1,4 @@
-atoms = "?{Ni+0}"
+atoms = "?{Ni}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

@@ -4,10 +4,18 @@ expression: results
 ---
 category: inorganic_small
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: "Valence ambiguous for atom N at index 0 has 2 valence matches: {N/1v2a1}, {N/1^1v2}"
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bo
+    atoms:
+      - "{N/1^1v2}"
+      - "{Hv1}"
+      - "{Hv1}"
+    bonds:
+      - "-"
+      - "-"
 counts:
   success: true
   summary:

@@ -10,6 +10,7 @@ use super::convert::{
     convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
     convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
 };
+use crate::atom::{ImplicitHydrogens, UnpairedElectrons};
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::properties::{PropertyEntries, SGroupDataEntry};
@@ -18,7 +19,7 @@ use crate::table_ir::{
     LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount, SGroup,
     SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay,
     SGroupMultiplier, SGroupSubtype, SGroupType, StereoInterpretation, SubstitutionCount,
-    UnpairedElectrons, UnsaturatedAtom,
+    UnsaturatedAtom,
 };
 
 /// Accumulator for global molecule properties
@@ -721,7 +722,7 @@ impl PropertyAccumulator {
 
             // Apply hydrogen count
             if let Some(h_count) = props.hydrogen_count {
-                atom.hydrogens = Some(h_count);
+                atom.implicit_hydrogens = Some(ImplicitHydrogens::Hydrogens(h_count));
             }
         }
 
@@ -810,7 +811,7 @@ impl PropertyAccumulator {
 
             // Apply hydrogen count
             if let Some(h_count) = props.hydrogen_count {
-                atom.hydrogens = Some(h_count);
+                atom.implicit_hydrogens = Some(ImplicitHydrogens::Hydrogens(h_count));
             }
 
             // Apply SMARTS pattern

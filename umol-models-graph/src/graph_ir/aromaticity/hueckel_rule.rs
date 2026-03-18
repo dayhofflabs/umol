@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use petgraph::unionfind::UnionFind;
 
 use super::{AromaticContribution, AromaticSystem};
-use crate::graph_ir::atom_type::AromaticValence;
+use crate::atom::AromaticValence;
 use crate::graph_ir::config::{ElementScope, RingLimits};
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
@@ -263,7 +263,6 @@ fn merge_overlapping_systems(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-
     use umol_data::Element;
 
     use super::*;

@@ -1,5 +1,6 @@
 //! Graph-based molecular models.
 
+pub mod atom;
 pub mod bond;
 pub mod diagnostics;
 pub mod graph_ir;

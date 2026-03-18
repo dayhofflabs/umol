@@ -22,15 +22,15 @@ use umol_data::SpinMultiplicity;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
+use crate::atom::UnpairedElectrons;
 use crate::bond::BondNoncovalent;
 use crate::position::Point3D;
-use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
 use crate::table_ir::{
-    BondDonation, BondOrder, BondStereo, BondWedge, CxAnnotationData, ExtendedMolecule,
-    ExtendedReaction, LinkAtom, Molecule, MulticenterBond, MulticenterSet, Reaction, RingBondCount,
-    SGroup, SGroupBracketCoords, SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity,
-    SGroupData, SGroupDataType, SGroupSubtype, SGroupType, StereoInterpretation, StereoSet,
-    StereoSetMode, SubstitutionCount, UnpairedElectrons, UnsaturatedAtom,
+    BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondStereo, BondWedge,
+    CxAnnotationData, ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule, MulticenterBond,
+    MulticenterSet, Reaction, RingBondCount, SGroup, SGroupBracketCoords, SGroupBracketOrientation,
+    SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType, SGroupSubtype, SGroupType,
+    StereoInterpretation, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -458,7 +458,7 @@ pub fn update_extended_molecule(
                             .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
                             .or_insert(StereoSet {
                                 atoms: sg.atoms,
-                                mode: StereoSetMode::Correlated,
+                                relation: StereoSetRelation::Correlated,
                             });
                     }
                     StereoGroupType::And(n) => {
@@ -467,7 +467,7 @@ pub fn update_extended_molecule(
                             .and_modify(|s| s.atoms.extend(sg.atoms.iter().copied()))
                             .or_insert(StereoSet {
                                 atoms: sg.atoms,
-                                mode: StereoSetMode::Independent,
+                                relation: StereoSetRelation::Independent,
                             });
                     }
                 }
@@ -2299,8 +2299,9 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
+    use crate::atom::Chirality;
     use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
-    use crate::table_ir::{Atom, Bond, Chirality, ExtendedAtom, ExtendedBond};
+    use crate::table_ir::{Atom, Bond, ExtendedAtom, ExtendedBond};
 
     #[fixture]
     fn triatomic_molecule() -> Molecule {
@@ -2608,9 +2609,9 @@ mod tests {
     #[case::stereo_group_absolute(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1] })],
         |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Absolute) && mol.cx_data.is_none())]
     #[case::stereo_group_or(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0] })],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&1)) == Some(&StereoSet { atoms: vec![0], mode: StereoSetMode::Correlated }))]
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&1)) == Some(&StereoSet { atoms: vec![0], relation: StereoSetRelation::Correlated }))]
     #[case::stereo_group_and(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(2), atoms: vec![1] })],
-        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&2)) == Some(&StereoSet { atoms: vec![1], mode: StereoSetMode::Independent }))]
+        |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&2)) == Some(&StereoSet { atoms: vec![1], relation: StereoSetRelation::Independent }))]
     #[case::relative_stereo(vec![CxEntry::RelativeStereo],
         |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Relative) && mol.cx_data.is_none())]
     #[case::atom_properties(vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].properties.get("key") == Some(&"value".to_string()))]

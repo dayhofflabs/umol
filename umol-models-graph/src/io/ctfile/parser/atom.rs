@@ -22,7 +22,8 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::rgroup::rgroup_symbol;
 use crate::position::{all_zero, Point3D};
-use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, UnpairedElectrons, WildcardAtom};
+use crate::atom::UnpairedElectrons;
+use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, WildcardAtom};
 
 /// Parse atom block (basic atoms only)
 pub(super) fn atom_block<'inp>(
@@ -319,8 +320,7 @@ pub fn atom_input<'inp>(
                     element,
                     charge,
                     isotope_mass,
-                    hydrogens,
-                    implicit_hydrogens: false,
+                    implicit_hydrogens: hydrogens,
                     valence,
                     lone_pairs: None,
                     unpaired_electrons,
@@ -540,14 +540,13 @@ pub fn extended_atom_input<'inp>(
                     symbol,
                     charge,
                     isotope_mass,
-                    hydrogens,
+                    implicit_hydrogens: hydrogens,
                     stereo_care,
                     valence,
                     lone_pairs: None,
                     unpaired_electrons,
                     inversion_retention,
                     exact_change,
-                    implicit_hydrogens: false,
                     aromatic: None,
                     chirality,
                     class,

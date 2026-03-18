@@ -4,10 +4,22 @@ expression: results
 ---
 category: carbonyl_derivatives
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: "Valence ambiguous for atom O at index 2 has 3 valence matches: {O/2v2}, {O/1v2a2}, {O+/1v2a1}"
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 4
+    topology: DbC
+    atoms:
+      - "{CH3v1}"
+      - "{Cv4}"
+      - "{O/2v2}"
+      - "{CHv3}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "="
+      - "-"
+      - "="
 counts:
   success: true
   summary:

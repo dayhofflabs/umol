@@ -1,3 +1,5 @@
-atoms = "?{S+0} ?{H}"
+atoms = "?{S} ?{H}"
 bonds = "0-1"
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"
+aromatic = "none"

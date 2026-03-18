@@ -8,10 +8,10 @@ use umol_data::Element;
 use super::super::builder::{
     AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,
 };
+use crate::atom::{Chirality, ImplicitHydrogens};
 use crate::span::Span;
 use crate::table_ir::{
-    AtomSymbol, BondDonation, BondOrder, BondWedge, Chirality, ExtendedMolecule, Molecule, Ring,
-    WildcardAtom,
+    AtomSymbol, BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, Ring, WildcardAtom,
 };
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
@@ -256,10 +256,9 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         let id = b.on_atom(AtomData {
             element: el,
             aromatic: arom,
-            implicit_hydrogens: true,
             isotope: None,
             charge: Some(0),
-            hydrogen_count: None,
+            hydrogens: Some(ImplicitHydrogens::Normal),
             class: None,
             chirality: None,
             span: Span::from_bytes_opt(start, end),
@@ -475,10 +474,9 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
             ExtendedAtomSymbol::Element(el) => b.on_atom(ExtendedAtomData {
                 symbol: AtomSymbol::Element(el),
                 aromatic: arom,
-                implicit_hydrogens: true,
                 isotope: None,
                 charge: Some(0),
-                hydrogen_count: None,
+                hydrogens: Some(ImplicitHydrogens::Normal),
                 class: None,
                 chirality: None,
                 span: Span::from_bytes_opt(start, end),

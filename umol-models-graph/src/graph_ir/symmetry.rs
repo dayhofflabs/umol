@@ -33,7 +33,7 @@ fn atom_color(ab: &AtomBuilder) -> VertexColor {
         element: ab.element(),
         isotope_mass: ab.isotope_mass(),
         charge: ab.charge(),
-        hydrogens: ab.hydrogens(),
+        hydrogens: ab.hydrogen_count(),
         unpaired_electrons: ab.unpaired_electrons(),
         multiplicity: ab.multiplicity(),
     }

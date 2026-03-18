@@ -5,10 +5,10 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use super::atom::{BicycloStereo, Chirality};
+use super::atom::{BicycloStereo, BicycloStereoData};
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
-use crate::table_ir::BicycloStereoData;
+use crate::atom::Chirality;
 
 /// Local parity entry (@: / @@:). Chiral center with ordered substituents.
 #[derive(Clone, Debug, PartialEq)]
@@ -22,15 +22,15 @@ pub struct LocalParityCenter {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StereoSet {
     pub atoms: Vec<u32>,
-    pub mode: StereoSetMode,
+    pub relation: StereoSetRelation,
 }
 
 /// How to interpret a group of stereocenters
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StereoSetMode {
-    /// Centers flip together (racemate-like)
+pub enum StereoSetRelation {
+    /// Centers are correlated (e.g., racemate-like)
     Correlated,
-    /// Centers flip independently (mixture)
+    /// Centers are independent (e.g., mixture)
     Independent,
 }
 
@@ -78,7 +78,7 @@ impl CxAnnotationData {
                     *idx,
                     StereoSet {
                         atoms,
-                        mode: set.mode,
+                        relation: set.relation,
                     },
                 );
             }

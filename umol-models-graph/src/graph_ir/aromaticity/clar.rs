@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use umol_data::Element;
 
 use super::{AromaticContribution, AromaticSystem};
-use crate::graph_ir::atom_type::AromaticValence;
+use crate::atom::AromaticValence;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 use crate::graph_ir::rings::{MoleculeRings, RingIndex};

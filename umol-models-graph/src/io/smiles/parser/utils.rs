@@ -7,8 +7,9 @@ use umol_data::Element;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
+use crate::atom::Chirality;
 use crate::span::Span;
-use crate::table_ir::{AtomSymbol, BondDonation, BondOrder, BondWedge, Chirality, WildcardAtom};
+use crate::table_ir::{AtomSymbol, BondDonation, BondOrder, BondWedge, WildcardAtom};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct OpenRing {
@@ -532,7 +533,7 @@ pub(super) fn parse_bracket(
     flags: SmilesParseFlags,
 ) -> Result<
     (
-        Option<Element>,
+        Element,
         bool,
         Option<u32>,
         Option<i8>,
@@ -560,8 +561,7 @@ pub(super) fn parse_bracket(
     }
 
     // 2) Element symbol
-    // Wildcards not supported in basic SMILES parser
-    let element: Option<Element>;
+    let element: Element;
     let aromatic: bool;
     if i < n && input[i] == b'*' {
         return Err(ParseError::InvalidBracket {
@@ -569,7 +569,7 @@ pub(super) fn parse_bracket(
         });
     } else if i < n && input[i].is_ascii_alphabetic() {
         if let Some((e, consumed)) = parse_bracket_aliphatic_element(input, i) {
-            element = Some(e);
+            element = e;
             i += consumed;
             aromatic = false;
         } else if let Some((e, consumed)) = parse_bracket_aromatic_element(
@@ -577,7 +577,7 @@ pub(super) fn parse_bracket(
             i,
             flags.contains(SmilesParseFlags::EXTENDED_AROMATICS),
         ) {
-            element = Some(e);
+            element = e;
             i += consumed;
             aromatic = true;
         } else {
@@ -586,7 +586,6 @@ pub(super) fn parse_bracket(
             });
         }
     } else {
-        // Neither '*' nor element
         return Err(ParseError::InvalidBracket {
             pos: pos_offset + 1 + i,
         });
@@ -594,20 +593,20 @@ pub(super) fn parse_bracket(
 
     // 3) Tail fields in any order
     let mut charge: Option<i8> = None;
-    let mut class_num: Option<u32> = None;
-    let mut hcount: Option<u8> = None;
-    let mut chir: Option<Chirality> = None;
+    let mut class: Option<u32> = None;
+    let mut hydrogens: Option<u8> = None;
+    let mut chirality: Option<Chirality> = None;
 
     while i < n {
         let b0 = input[i];
         match b0 {
             b'H' => {
-                if element == Some(Element::H) {
+                if element == Element::H {
                     return Err(ParseError::BracketHwithHcount {
                         pos: pos_offset + 1 + i,
                     });
                 }
-                if hcount.is_some() {
+                if hydrogens.is_some() {
                     return Err(ParseError::DuplicateBracketField {
                         pos: pos_offset + 1 + i,
                     });
@@ -617,7 +616,7 @@ pub(super) fn parse_bracket(
                     val = input[i + 1] - b'0';
                     i += 1;
                 }
-                hcount = Some(val);
+                hydrogens = Some(val);
                 i += 1;
             }
             b'+' | b'-' => {
@@ -631,23 +630,23 @@ pub(super) fn parse_bracket(
                 i = j2;
             }
             b':' => {
-                if class_num.is_some() {
+                if class.is_some() {
                     return Err(ParseError::DuplicateBracketField {
                         pos: pos_offset + 1 + i,
                     });
                 }
                 let (v, j2) = parse_class_index(input, i, pos_offset)?;
-                class_num = Some(v);
+                class = Some(v);
                 i = j2;
             }
             b'@' => {
-                if chir.is_some() {
+                if chirality.is_some() {
                     return Err(ParseError::DuplicateBracketField {
                         pos: pos_offset + 1 + i,
                     });
                 }
                 let (chir_opt, j2) = parse_chirality(input, i, pos_offset)?;
-                chir = chir_opt;
+                chirality = chir_opt;
                 i = j2;
             }
             _ => {
@@ -658,12 +657,14 @@ pub(super) fn parse_bracket(
         }
     }
 
-    Ok((element, aromatic, isotope, charge, class_num, hcount, chir))
+    Ok((
+        element, aromatic, isotope, charge, class, hydrogens, chirality,
+    ))
 }
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
-pub(super) fn process_ring_closure_extended(
+pub(super) fn process_extended_ring_closure(
     ring_table: &mut Vec<Option<OpenRing>>,
     builder: &mut ExtendedMoleculeBuilder,
     last_aromatic: bool,
@@ -784,7 +785,7 @@ pub(super) fn process_ring_closure_extended(
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
-pub(super) fn attach_atom_extended(
+pub(super) fn attach_extended_atom(
     builder: &mut ExtendedMoleculeBuilder,
     last_atom_idx: Option<u32>,
     curr_atom_idx: u32,
@@ -830,7 +831,7 @@ pub(super) fn attach_atom_extended(
 
 #[inline]
 #[allow(clippy::type_complexity)]
-pub(super) fn parse_bracket_extended(
+pub(super) fn parse_extended_bracket(
     input: &[u8],
     pos_offset: usize,
     flags: SmilesParseFlags,
@@ -893,9 +894,9 @@ pub(super) fn parse_bracket_extended(
     }
 
     let mut charge: Option<i8> = None;
-    let mut class_num: Option<u32> = None;
-    let mut hcount: Option<u8> = None;
-    let mut chir: Option<Chirality> = None;
+    let mut class: Option<u32> = None;
+    let mut hydrogens: Option<u8> = None;
+    let mut chirality: Option<Chirality> = None;
 
     while i < n {
         let b0 = input[i];
@@ -906,7 +907,7 @@ pub(super) fn parse_bracket_extended(
                         pos: pos_offset + 1 + i,
                     });
                 }
-                if hcount.is_some() {
+                if hydrogens.is_some() {
                     return Err(ParseError::DuplicateBracketField {
                         pos: pos_offset + 1 + i,
                     });
@@ -916,7 +917,7 @@ pub(super) fn parse_bracket_extended(
                     val = input[i + 1] - b'0';
                     i += 1;
                 }
-                hcount = Some(val);
+                hydrogens = Some(val);
                 i += 1;
             }
             b'+' | b'-' => {
@@ -930,23 +931,23 @@ pub(super) fn parse_bracket_extended(
                 i = j2;
             }
             b':' => {
-                if class_num.is_some() {
+                if class.is_some() {
                     return Err(ParseError::DuplicateBracketField {
                         pos: pos_offset + 1 + i,
                     });
                 }
                 let (v, j2) = parse_class_index(input, i, pos_offset)?;
-                class_num = Some(v);
+                class = Some(v);
                 i = j2;
             }
             b'@' => {
-                if chir.is_some() {
+                if chirality.is_some() {
                     return Err(ParseError::DuplicateBracketField {
                         pos: pos_offset + 1 + i,
                     });
                 }
                 let (chir_opt, j2) = parse_chirality(input, i, pos_offset)?;
-                chir = chir_opt;
+                chirality = chir_opt;
                 i = j2;
             }
             _ => {
@@ -957,7 +958,9 @@ pub(super) fn parse_bracket_extended(
         }
     }
 
-    Ok((symbol, aromatic, isotope, charge, class_num, hcount, chir))
+    Ok((
+        symbol, aromatic, isotope, charge, class, hydrogens, chirality,
+    ))
 }
 
 /// Unescape `&#code;` sequences in a byte string.

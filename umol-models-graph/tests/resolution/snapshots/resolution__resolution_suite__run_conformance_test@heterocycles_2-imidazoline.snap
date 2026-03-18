@@ -4,10 +4,23 @@ expression: results
 ---
 category: heterocycles
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: "Valence ambiguous for atom N at index 0 has 3 valence matches: {NH/1v2}, {NHv2a2}, {N+Hv2a1}"
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 5
+    topology: DpK
+    atoms:
+      - "{NH/1v2}"
+      - "{CHv3}"
+      - "{CH2v2}"
+      - "{N/1v3}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "="
+      - "-"
+      - "-"
 counts:
   success: true
   summary:

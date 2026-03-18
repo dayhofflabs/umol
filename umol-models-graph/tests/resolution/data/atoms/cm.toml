@@ -1,3 +1,4 @@
-atoms = "?{Cm+0}"
+atoms = "?{Cm}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

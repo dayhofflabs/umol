@@ -1,3 +1,5 @@
-atoms = "?{CH} ?{OH0} ?{NH} ?{CH3}"
+atoms = "?{C} ?{O} ?{N} ?{C}"
 bonds = "0=1 0-2 2-3"
-implicit_h = true
+implicit_h = "normal"
+charge = "zero"
+aromatic = "none"

@@ -3,12 +3,13 @@ use pretty_assertions::assert_eq;
 use umol_data::Element;
 
 use super::*;
+use crate::atom::Chirality;
 use crate::position::Point3D;
 use crate::table_ir::{
     Atom, AtomStereoCare, BicycloStereo, BicycloStereoData, Bond, BondDonation, BondOrder,
-    Chirality, ConversionError, CtfileData, CxAnnotationData, ExtendedAtom, ExtendedBond,
-    JoinError, LegacyGroupAbbreviation, LocalParityCenter, MulticenterBond, MulticenterSet, RGroup,
-    RGroupOccurrence, SGroup, SGroupType, SourceFormat, StereoSet, StereoSetMode,
+    ConversionError, CtfileData, CxAnnotationData, ExtendedAtom, ExtendedBond, JoinError,
+    LegacyGroupAbbreviation, LocalParityCenter, MulticenterBond, MulticenterSet, RGroup,
+    RGroupOccurrence, SGroup, SGroupType, SourceFormat, StereoSet, StereoSetRelation,
 };
 
 #[test]
@@ -631,7 +632,7 @@ fn test_extended_molecule_split_join_cx_data() {
             1u32,
             StereoSet {
                 atoms: vec![2, 3],
-                mode: StereoSetMode::Correlated,
+                relation: StereoSetRelation::Correlated,
             },
         )]
         .into_iter()

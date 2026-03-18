@@ -1,3 +1,4 @@
-atoms = "?{Pa+0}"
+atoms = "?{Pa}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

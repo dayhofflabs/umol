@@ -1,3 +1,5 @@
 atoms = "?{H} ?{O} ?{P} ?{O} ?{O} ?{O} ?{H} ?{H}"
 bonds = "0-1 1-2 2=3 2-4 2-5 4-6 5-7"
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"
+aromatic = "none"

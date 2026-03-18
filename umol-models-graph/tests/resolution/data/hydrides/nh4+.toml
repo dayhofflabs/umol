@@ -1,3 +1,2 @@
 atoms = "?{N+H4}"
-bond = ""
-implicit_h = true
+bonds = ""

@@ -1,3 +1,4 @@
-atoms = "?{Cl+0}"
+atoms = "?{Cl}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

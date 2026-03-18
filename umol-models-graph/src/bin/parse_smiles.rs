@@ -22,8 +22,8 @@ fn main() {
     println!("table atoms: {}", table_mol.atoms.len());
     for (i, atom) in table_mol.atoms.iter().enumerate() {
         println!(
-            "  [{}] {:?} charge={:?} H={:?} implicit_H={} aromatic={:?}",
-            i, atom.element, atom.charge, atom.hydrogens, atom.implicit_hydrogens, atom.aromatic
+            "  [{}] {:?} charge={:?} H={:?} aromatic={:?}",
+            i, atom.element, atom.charge, atom.implicit_hydrogens, atom.aromatic
         );
     }
     println!("table bonds: {}", table_mol.bonds.len());

@@ -10,27 +10,62 @@ use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use umol_data::SpinMultiplicity;
+use umol_models_graph::atom::{ImplicitHydrogens, UnpairedElectrons};
 use umol_models_graph::graph_ir::config_data::ValenceTable;
 use umol_models_graph::graph_ir::{
-    resolve_molecule_with, AtomTypeQuery, Molecule, ResolutionError, ResolveConfig,
-    TopologyNodeRef, TopologyProjection, ValenceStrategy,
+    resolve_molecule_with, AromaticConstraint, AtomTypeQuery, HydrogenConstraint, Molecule,
+    ResolutionError, ResolveConfig, TopologyNodeRef, TopologyProjection, ValenceStrategy,
 };
 use umol_models_graph::table_ir::{
     Atom as TableAtom, Bond as TableBond, BondDonation, BondOrder, Molecule as TableMolecule,
-    UnpairedElectrons,
 };
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ImplicitHydrogenMode {
+    Zero,
+    Normal,
+    Provided,
+}
+
+fn default_implicit_h_mode() -> ImplicitHydrogenMode {
+    ImplicitHydrogenMode::Provided
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ChargeMode {
+    Zero,
+    Provided,
+}
+
+fn default_charge_mode() -> ChargeMode {
+    ChargeMode::Zero
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum AromaticMode {
+    None,
+    Any,
+    Provided,
+}
+
+fn default_aromatic_mode() -> AromaticMode {
+    AromaticMode::Provided
+}
 
 #[derive(Deserialize)]
 struct TestInput {
     atoms: String,
     bonds: Option<String>,
     dative: Option<String>,
-    #[serde(default = "default_true")]
-    implicit_h: bool,
-}
-
-fn default_true() -> bool {
-    true
+    #[serde(default = "default_implicit_h_mode")]
+    implicit_h: ImplicitHydrogenMode,
+    #[serde(default = "default_charge_mode")]
+    charge: ChargeMode,
+    #[serde(default = "default_aromatic_mode")]
+    aromatic: AromaticMode,
 }
 
 #[derive(Serialize)]
@@ -64,17 +99,33 @@ struct ErrorSummary {
     message: String,
 }
 
-fn parse_atom_token(token: &str, implicit_h: bool) -> TableAtom {
+fn parse_atom_token(
+    token: &str,
+    implicit_h: &ImplicitHydrogenMode,
+    charge_mode: &ChargeMode,
+    aromatic_mode: &AromaticMode,
+) -> TableAtom {
     let query: AtomTypeQuery = token
         .parse()
         .unwrap_or_else(|e| panic!("invalid atom query '{}': {}", token, e));
 
     let mut atom = TableAtom::from_element(query.element);
-    atom.charge = query.charge;
-    atom.hydrogens = if implicit_h {
-        query.hydrogens
-    } else {
-        Some(query.hydrogens.unwrap_or(0))
+    atom.charge = match query.charge {
+        Some(charge) => Some(charge),
+        None => match charge_mode {
+            ChargeMode::Zero => Some(0),
+            ChargeMode::Provided => None,
+        },
+    };
+    atom.implicit_hydrogens = match query.implicit_hydrogens {
+        Some(HydrogenConstraint::Hydrogens(h)) => Some(ImplicitHydrogens::Hydrogens(h)),
+        Some(HydrogenConstraint::Normal) => Some(ImplicitHydrogens::Normal),
+        Some(HydrogenConstraint::Any) => None,
+        None => match implicit_h {
+            ImplicitHydrogenMode::Zero => Some(ImplicitHydrogens::Hydrogens(0)),
+            ImplicitHydrogenMode::Normal => Some(ImplicitHydrogens::Normal),
+            ImplicitHydrogenMode::Provided => None,
+        },
     };
     atom.lone_pairs = query.lone_pairs;
 
@@ -82,7 +133,53 @@ fn parse_atom_token(token: &str, implicit_h: bool) -> TableAtom {
         atom.unpaired_electrons = Some(UnpairedElectrons::new(unpaired, query.multiplicity));
     }
 
+    atom.aromatic = match query.aromatic_valence {
+        Some(AromaticConstraint::Any | AromaticConstraint::Valence(_)) => Some(true),
+        Some(AromaticConstraint::None) => Some(false),
+        None => match aromatic_mode {
+            AromaticMode::None => Some(false),
+            AromaticMode::Any => Some(true),
+            AromaticMode::Provided => None,
+        },
+    };
+
     atom
+}
+
+fn parse_atom_tokens(input: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut i = 0usize;
+
+    while i < input.len() {
+        // Skip leading whitespace.
+        let c = input[i..].chars().next().expect("index in bounds");
+        if c.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+
+        // Parse one ?{...} atom token.
+        if !input[i..].starts_with("?{") {
+            panic!("invalid atoms token stream near: '{}'", &input[i..]);
+        }
+        let start = i;
+        i += 2;
+        while i < input.len() {
+            let c = input[i..].chars().next().expect("index in bounds");
+            i += c.len_utf8();
+            if c == '}' {
+                break;
+            }
+        }
+        if !input[start..i].ends_with('}') {
+            panic!("unterminated atom token in atoms string");
+        }
+        tokens.push(&input[start..i]);
+
+        continue;
+    }
+
+    tokens
 }
 
 fn parse_bond_token(token: &str) -> TableBond {
@@ -157,8 +254,14 @@ fn parse_dative_token(token: &str) -> TableBond {
 fn build_table_molecule(input: &TestInput) -> TableMolecule {
     let mut mol = TableMolecule::empty();
 
-    for token in input.atoms.split_whitespace() {
-        mol.atoms.push(parse_atom_token(token, input.implicit_h));
+    for token in parse_atom_tokens(&input.atoms) {
+        mol.atoms
+            .push(parse_atom_token(
+                token,
+                &input.implicit_h,
+                &input.charge,
+                &input.aromatic,
+            ));
     }
 
     if let Some(ref bonds) = input.bonds {
@@ -290,11 +393,11 @@ fn atom_typing_config() -> ResolveConfig {
     ResolveConfig::default()
 }
 
-fn counts_config(allow_implicit_hydrogens: bool) -> ResolveConfig {
+fn counts_config(mode: &ImplicitHydrogenMode) -> ResolveConfig {
     let mut config = ResolveConfig::default();
     config.valence.strategy = ValenceStrategy::Counts {
         table: ValenceTable::default_table().clone(),
-        allow_implicit_hydrogens,
+        allow_implicit_hydrogens: !matches!(mode, ImplicitHydrogenMode::Zero),
     };
     config
 }
@@ -320,7 +423,7 @@ fn resolve_file(path: &Path) -> FileResolveResults {
     let category = extract_category(path);
 
     let atom_typing = resolve_with_config(&table_mol, &atom_typing_config());
-    let counts = resolve_with_config(&table_mol, &counts_config(input.implicit_h));
+    let counts = resolve_with_config(&table_mol, &counts_config(&input.implicit_h));
 
     FileResolveResults {
         category,
@@ -348,7 +451,7 @@ fn run_conformance_test(file_path: &PathBuf) {
 }
 
 #[rstest]
-// Keep recursive glob for fast auto-discovery of new files at compile time (refresh marker v6).
+// Keep recursive glob for fast auto-discovery of new files at compile time (refresh marker v8).
 fn test_conformance(#[files("tests/resolution/data/**/*.toml")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }

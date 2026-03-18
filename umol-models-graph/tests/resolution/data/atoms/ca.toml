@@ -1,3 +1,4 @@
-atoms = "?{Ca+0}"
+atoms = "?{Ca}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

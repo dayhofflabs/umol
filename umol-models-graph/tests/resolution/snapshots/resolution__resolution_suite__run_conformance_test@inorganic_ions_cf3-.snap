@@ -4,10 +4,20 @@ expression: results
 ---
 category: inorganic_ions
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: "Valence ambiguous for atom C at index 0 has 2 valence matches: {C-/1v3}, {C-v3a2}"
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Cw
+    atoms:
+      - "{C-/1v3}"
+      - "{F/3v1}"
+      - "{F/3v1}"
+      - "{F/3v1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
 counts:
   success: true
   summary:

@@ -4,10 +4,20 @@ expression: results
 ---
 category: inorganic_small
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: "Valence ambiguous for atom N at index 1 has 2 valence matches: {N/1v3}, {Nv3a2}"
+  success: true
+  summary:
+    atom_count: 4
+    bond_count: 3
+    topology: Cd
+    atoms:
+      - "{Hv1}"
+      - "{N/1v3}"
+      - "{Cv4}"
+      - "{S/2v2}"
+    bonds:
+      - "-"
+      - "="
+      - "="
 counts:
   success: true
   summary:

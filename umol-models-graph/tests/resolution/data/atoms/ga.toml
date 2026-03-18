@@ -1,3 +1,4 @@
-atoms = "?{Ga+0}"
+atoms = "?{Ga}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

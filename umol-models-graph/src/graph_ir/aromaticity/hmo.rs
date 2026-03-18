@@ -11,7 +11,7 @@ use umol_data::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
 use super::{AromaticContribution, AromaticSystem};
-use crate::graph_ir::atom_type::AromaticValence;
+use crate::atom::AromaticValence;
 use crate::graph_ir::config::ElementScope;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
@@ -470,7 +470,8 @@ mod tests {
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let ring_info = RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+        let ring_info =
+            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
         let systems = hmo_model.find_from_rings(&builder, &ring_info).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(

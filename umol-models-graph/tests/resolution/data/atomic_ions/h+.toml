@@ -1,3 +1,3 @@
 atoms = "?{H+}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"

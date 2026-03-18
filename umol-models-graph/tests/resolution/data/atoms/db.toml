@@ -1,3 +1,4 @@
-atoms = "?{Db+0}"
+atoms = "?{Db}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

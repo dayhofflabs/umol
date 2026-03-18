@@ -4,10 +4,11 @@
 
 use umol_data::{Element, Isotope};
 
+use crate::atom::{Chirality, ImplicitHydrogens};
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomSymbol, AttachmentPointType,
-    BondOrder, BondReactingCenter, BondStereo, BondTopology, BondWedge, Chirality, RingBondCount,
+    BondOrder, BondReactingCenter, BondStereo, BondTopology, BondWedge, RingBondCount,
     SubstitutionCount, UnsaturatedAtom,
 };
 
@@ -94,12 +95,12 @@ pub(super) fn convert_atom_stereo_parity_code(code: u8) -> Option<Chirality> {
 }
 
 /// Convert atom hydrogen count code (extension: 0 in non-query atoms).
-/// 'hhh' field: 0 = non-query atom, 1 = H0, 2 = H1, 3 = H2, 4 = H3, 5 = H4
+/// 'hhh' field: 0 = infer, 1 = H0, 2 = H1, 3 = H2, 4 = H3, 5 = H4
 /// Extended range: 6 = H5, 7 = H6, ..., 13 = H12
-pub(super) fn convert_atom_hydrogen_count_code(code: u8) -> Option<u8> {
+pub(super) fn convert_atom_hydrogen_count_code(code: u8) -> Option<ImplicitHydrogens> {
     match code {
-        0 => None,
-        code => Some(code - 1),
+        0 => Some(ImplicitHydrogens::Normal),
+        code => Some(ImplicitHydrogens::Hydrogens(code - 1)),
     }
 }
 
@@ -422,6 +423,7 @@ mod tests {
     use umol_data::NamedIsotope;
 
     use super::*;
+    use crate::atom::ImplicitHydrogens;
     use crate::table_ir::WildcardAtom;
 
     #[rstest]
@@ -529,13 +531,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::none(0, None)]
-    #[case::zero(1, Some(0))]
-    #[case::one(2, Some(1))]
-    #[case::two(3, Some(2))]
-    #[case::three(4, Some(3))]
-    #[case::four(5, Some(4))]
-    fn test_convert_atom_hydrogen_count_code(#[case] code: u8, #[case] expected: Option<u8>) {
+    #[case::normal(0, Some(ImplicitHydrogens::Normal))]
+    #[case::zero(1, Some(ImplicitHydrogens::Hydrogens(0)))]
+    #[case::one(2, Some(ImplicitHydrogens::Hydrogens(1)))]
+    #[case::two(3, Some(ImplicitHydrogens::Hydrogens(2)))]
+    #[case::three(4, Some(ImplicitHydrogens::Hydrogens(3)))]
+    #[case::four(5, Some(ImplicitHydrogens::Hydrogens(4)))]
+    fn test_convert_atom_hydrogen_count_code(
+        #[case] code: u8,
+        #[case] expected: Option<ImplicitHydrogens>,
+    ) {
         assert_eq!(convert_atom_hydrogen_count_code(code), expected);
     }
 

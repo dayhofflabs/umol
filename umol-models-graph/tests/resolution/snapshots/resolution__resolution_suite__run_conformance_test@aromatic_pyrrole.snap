@@ -1,0 +1,41 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: aromatic
+atom_typing:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 5
+    topology: DpK
+    atoms:
+      - "{NHv2a2}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 5
+    bond_count: 5
+    topology: DpK
+    atoms:
+      - "{NHv2a2}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"

@@ -1,3 +1,4 @@
-atoms = "?{Na+0}"
+atoms = "?{Na}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

@@ -1,3 +1,4 @@
-atoms = "?{Te+0}"
+atoms = "?{Te}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

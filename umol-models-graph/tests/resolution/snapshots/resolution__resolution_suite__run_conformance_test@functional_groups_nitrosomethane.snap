@@ -4,10 +4,18 @@ expression: results
 ---
 category: functional_groups
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: "Valence ambiguous for atom N at index 1 has 2 valence matches: {N/1v3}, {Nv3a2}"
+  success: true
+  summary:
+    atom_count: 3
+    bond_count: 2
+    topology: Bg
+    atoms:
+      - "{CH3v1}"
+      - "{N/1v3}"
+      - "{O/2v2}"
+    bonds:
+      - "-"
+      - "="
 counts:
   success: true
   summary:

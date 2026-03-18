@@ -15,13 +15,14 @@ use self::cx::{
     update_extended_molecule, update_extended_reaction, update_molecule, update_reaction,
 };
 use self::utils::{
-    attach_atom, attach_atom_extended, invalid_ring_context, parse_bond, parse_bracket,
-    parse_bracket_extended, parse_extended_bond, parse_organic_aliphatic_element,
-    parse_organic_aromatic_element, parse_ring_index, process_ring_closure,
-    process_ring_closure_extended, Frame, OpenRing,
+    attach_atom, attach_extended_atom, invalid_ring_context, parse_bond, parse_bracket,
+    parse_extended_bond, parse_extended_bracket, parse_organic_aliphatic_element,
+    parse_organic_aromatic_element, parse_ring_index, process_extended_ring_closure,
+    process_ring_closure, Frame, OpenRing,
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
+use crate::atom::ImplicitHydrogens;
 use crate::span::Span;
 use crate::table_ir::{
     BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
@@ -385,21 +386,16 @@ fn parse_smiles_inner(
                 return Err(ParseError::EmptyBracket { pos: offset + i });
             }
             let inner = &input[start..j];
-            let (elem_opt, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
+            let (element, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
                 parse_bracket(inner, offset + i, flags)?;
-            let (element, aromatic) = match elem_opt {
-                Some(e) => (e, aromatic),
-                None => (Element::C, false),
-            };
             let (s, e) = (Some(i as u32), Some((j + 1) as u32));
             let atom = AtomData {
                 element,
                 isotope: iso_opt,
                 charge: charge_opt.or(Some(0)),
-                hydrogen_count: h_opt,
+                hydrogens: Some(ImplicitHydrogens::Hydrogens(h_opt.unwrap_or(0))),
                 class: class_opt,
                 aromatic,
-                implicit_hydrogens: false,
                 chirality: chir_opt,
                 span: Span::from_bytes_opt(s, e),
             };
@@ -920,7 +916,7 @@ fn parse_extended_smiles_inner(
                 let bond = pending_bond.take();
                 let (order_opt, wedge_opt, donation_opt) =
                     bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
-                process_ring_closure_extended(
+                process_extended_ring_closure(
                     &mut ring_table,
                     &mut builder,
                     last_aromatic,
@@ -981,22 +977,21 @@ fn parse_extended_smiles_inner(
             }
             let inner = &input[start..j];
             let (symbol, aromatic, iso_opt, charge_opt, class_opt, h_opt, chir_opt) =
-                parse_bracket_extended(inner, offset + i, flags)?;
+                parse_extended_bracket(inner, offset + i, flags)?;
             let (s, e) = (Some(i as u32), Some((j + 1) as u32));
             let atom = ExtendedAtomData {
                 symbol,
                 isotope: iso_opt,
                 charge: charge_opt.or(Some(0)),
-                hydrogen_count: h_opt,
+                hydrogens: Some(ImplicitHydrogens::Hydrogens(h_opt.unwrap_or(0))),
                 class: class_opt,
                 aromatic,
-                implicit_hydrogens: false,
                 chirality: chir_opt,
                 span: Span::from_bytes_opt(s, e),
             };
             let curr = builder.on_atom(atom);
 
-            attach_atom_extended(
+            attach_extended_atom(
                 &mut builder,
                 last_atom_idx,
                 curr,
@@ -1023,7 +1018,7 @@ fn parse_extended_smiles_inner(
                 let (s, e) = (Some(i as u32), Some((i + 2) as u32));
                 let curr = builder.on_atom_fast(Element::Cl, false, s, e);
 
-                attach_atom_extended(
+                attach_extended_atom(
                     &mut builder,
                     last_atom_idx,
                     curr,
@@ -1048,7 +1043,7 @@ fn parse_extended_smiles_inner(
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
             let curr = builder.on_atom_fast(Element::C, false, s, e);
 
-            attach_atom_extended(
+            attach_extended_atom(
                 &mut builder,
                 last_atom_idx,
                 curr,
@@ -1075,7 +1070,7 @@ fn parse_extended_smiles_inner(
                 let (s, e) = (Some(i as u32), Some((i + 2) as u32));
                 let curr = builder.on_atom_fast(Element::Br, false, s, e);
 
-                attach_atom_extended(
+                attach_extended_atom(
                     &mut builder,
                     last_atom_idx,
                     curr,
@@ -1100,7 +1095,7 @@ fn parse_extended_smiles_inner(
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
             let curr = builder.on_atom_fast(Element::B, false, s, e);
 
-            attach_atom_extended(
+            attach_extended_atom(
                 &mut builder,
                 last_atom_idx,
                 curr,
@@ -1127,7 +1122,7 @@ fn parse_extended_smiles_inner(
                 let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
                 let curr = builder.on_atom_fast(element, false, s, e);
 
-                attach_atom_extended(
+                attach_extended_atom(
                     &mut builder,
                     last_atom_idx,
                     curr,
@@ -1153,7 +1148,7 @@ fn parse_extended_smiles_inner(
                 let (s, e) = (Some(i as u32), Some((i + consumed) as u32));
                 let curr = builder.on_atom_fast(element, true, s, e);
 
-                attach_atom_extended(
+                attach_extended_atom(
                     &mut builder,
                     last_atom_idx,
                     curr,
@@ -1181,7 +1176,7 @@ fn parse_extended_smiles_inner(
             let (s, e) = (Some(i as u32), Some((i + 1) as u32));
             let curr = builder.on_wildcard(WildcardAtom::Any, None, s, e);
 
-            attach_atom_extended(
+            attach_extended_atom(
                 &mut builder,
                 last_atom_idx,
                 curr,

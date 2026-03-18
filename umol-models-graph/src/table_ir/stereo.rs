@@ -7,8 +7,6 @@
 /// - CXSMILES enhanced stereo markers (`a:` and `r`)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StereoInterpretation {
-    /// Stereochemistry is intended to be absolute (a specific stereoisomer).
     Absolute,
-    /// Stereochemistry is intended to be relative (relationships without absolute assignment).
     Relative,
 }

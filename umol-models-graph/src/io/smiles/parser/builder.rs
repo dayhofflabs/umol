@@ -4,9 +4,10 @@ use std::mem;
 
 use umol_data::Element;
 
+use crate::atom::{Chirality, ImplicitHydrogens};
 use crate::span::Span;
 use crate::table_ir::{
-    Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, Chirality, ExtendedAtom,
+    Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedAtom,
     ExtendedBond, ExtendedMolecule, Molecule, Ring, WildcardAtom,
 };
 
@@ -16,10 +17,9 @@ pub(super) struct AtomData {
     pub element: Element,
     pub isotope: Option<u32>,
     pub charge: Option<i8>,
-    pub hydrogen_count: Option<u8>,
+    pub hydrogens: Option<ImplicitHydrogens>,
     pub class: Option<u32>,
     pub aromatic: bool,
-    pub implicit_hydrogens: bool,
     pub chirality: Option<Chirality>,
     pub span: Option<Span>,
 }
@@ -58,8 +58,7 @@ impl MoleculeBuilder {
             element: a.element,
             charge: a.charge,
             isotope_mass: a.isotope,
-            hydrogens: a.hydrogen_count,
-            implicit_hydrogens: a.implicit_hydrogens,
+            implicit_hydrogens: a.hydrogens,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -198,10 +197,9 @@ pub(super) struct ExtendedAtomData {
     pub symbol: AtomSymbol,
     pub isotope: Option<u32>,
     pub charge: Option<i8>,
-    pub hydrogen_count: Option<u8>,
+    pub hydrogens: Option<ImplicitHydrogens>,
     pub class: Option<u32>,
     pub aromatic: bool,
-    pub implicit_hydrogens: bool,
     pub chirality: Option<Chirality>,
     pub span: Option<Span>,
 }
@@ -230,8 +228,7 @@ impl ExtendedMoleculeBuilder {
             symbol: a.symbol,
             charge: a.charge,
             isotope_mass: a.isotope,
-            hydrogens: a.hydrogen_count,
-            implicit_hydrogens: a.implicit_hydrogens,
+            implicit_hydrogens: a.hydrogens,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -286,8 +283,7 @@ impl ExtendedMoleculeBuilder {
             symbol: AtomSymbol::Element(element),
             charge: Some(0),
             isotope_mass: None,
-            hydrogens: None,
-            implicit_hydrogens: true,
+            implicit_hydrogens: Some(ImplicitHydrogens::Normal),
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -327,8 +323,7 @@ impl ExtendedMoleculeBuilder {
             symbol: AtomSymbol::WildcardAtom(wildcard),
             charge: None,
             isotope_mass: None,
-            hydrogens: None,
-            implicit_hydrogens: false,
+            implicit_hydrogens: None,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,

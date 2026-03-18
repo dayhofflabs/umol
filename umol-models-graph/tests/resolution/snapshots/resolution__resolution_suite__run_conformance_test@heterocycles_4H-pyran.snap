@@ -4,10 +4,25 @@ expression: results
 ---
 category: heterocycles
 atom_typing:
-  success: false
-  error:
-    error_type: ValenceAmbiguous
-    message: "Valence ambiguous for atom O at index 0 has 3 valence matches: {O/2v2}, {O/1v2a2}, {O+/1v2a1}"
+  success: true
+  summary:
+    atom_count: 6
+    bond_count: 6
+    topology: EoaW
+    atoms:
+      - "{O/2v2}"
+      - "{CHv3}"
+      - "{CHv3}"
+      - "{CHv3}"
+      - "{CHv3}"
+      - "{CH2v2}"
+    bonds:
+      - "-"
+      - "-"
+      - "="
+      - "="
+      - "-"
+      - "-"
 counts:
   success: true
   summary:

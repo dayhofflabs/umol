@@ -8,70 +8,52 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use umol_data::{Element, SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 
+use crate::atom::{AromaticValence, ImplicitHydrogens};
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 
-/// Aromatic valence of an atom: either non-aromatic or contributing n >= 0
-/// valence to a delocalized pi-system. Each atom can participate in at
-/// most one aromatic system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum AromaticValence {
-    /// Non-aromatic atom.
-    None,
-    /// Aromatic atom contributing  valence `n` (n >= 0)
-    Valence(u8),
+/// Constraint for matching implicit hydrogen information in atom type queries.
+///
+/// Query notation:
+/// - `H` / `H1` / `Hn` => `Hydrogens(n)`
+/// - `H*` => `Any`
+/// - `H=` => `Normal`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HydrogenConstraint {
+    Hydrogens(u8),
+    Normal,
+    Any,
 }
 
-impl AromaticValence {
-    pub fn valence(&self) -> u8 {
+impl HydrogenConstraint {
+    pub fn matches(&self, hydrogens: u8) -> bool {
         match self {
-            AromaticValence::None => 0,
-            AromaticValence::Valence(n) => *n,
-        }
-    }
-
-    /// Atom is aromatic if it contributes valence (n >= 0) to an aromatic system
-    pub fn is_aromatic(&self) -> bool {
-        matches!(self, AromaticValence::Valence(_))
-    }
-}
-
-impl Display for AromaticValence {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AromaticValence::None => Ok(()),
-            AromaticValence::Valence(n) => write!(f, "a{}", n),
+            HydrogenConstraint::Hydrogens(n) => *n == hydrogens,
+            HydrogenConstraint::Normal => false,
+            HydrogenConstraint::Any => true,
         }
     }
 }
 
-impl FromStr for AromaticValence {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some(rest) = s.strip_prefix('a') {
-            let n: u8 = rest
-                .parse()
-                .map_err(|_| format!("invalid aromatic valence: {}", s))?;
-            Ok(AromaticValence::Valence(n))
-        } else {
-            Err(format!("expected 'a' prefix: {}", s))
+impl HydrogenConstraint {
+    pub fn from_implicit_hydrogens(implicit_hydrogens: ImplicitHydrogens) -> Self {
+        match implicit_hydrogens {
+            ImplicitHydrogens::Hydrogens(h) => HydrogenConstraint::Hydrogens(h),
+            ImplicitHydrogens::Normal => HydrogenConstraint::Normal,
         }
     }
 }
 
 /// Constraint for matching aromatic valence in atom type queries.
 ///
-/// Used by `AtomTypeQuery` to filter candidates during valence resolution.
-/// Unlike `AromaticValence` (which is a concrete value on a spec), this
-/// expresses what range of aromatic valences is acceptable.
+/// Variants:
+/// - None: Non-aromatic
+/// - Any: Aromatic (unknown valence)
+/// - Valence(n): Aromatic, n >= 0 valence electrons
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AromaticConstraint {
-    /// Must be non-aromatic (`AromaticValence::None`).
     None,
-    /// Must be aromatic with any pi-electron count (`AromaticValence::Valence(_)`).
     Any,
-    /// Must be aromatic with exactly `n` pi-electrons (`AromaticValence::Valence(n)`).
     Valence(u8),
 }
 
@@ -104,7 +86,7 @@ impl AromaticConstraint {
 pub struct AtomTypeSpec {
     element: Element,
     charge: i8,
-    hydrogens: u8,
+    implicit_hydrogens: u8,
     lone_pairs: u8,
     spin: SpinState,
     valence: u8,
@@ -119,7 +101,7 @@ impl AtomTypeSpec {
     pub fn new(
         element: Element,
         charge: i8,
-        hydrogens: u8,
+        implicit_hydrogens: u8,
         lone_pairs: u8,
         unpaired_electrons: u8,
         multiplicity: SpinMultiplicity,
@@ -139,7 +121,7 @@ impl AtomTypeSpec {
         Ok(Self {
             element,
             charge,
-            hydrogens,
+            implicit_hydrogens,
             lone_pairs,
             spin,
             valence,
@@ -158,8 +140,8 @@ impl AtomTypeSpec {
         self.charge
     }
 
-    pub fn hydrogens(&self) -> u8 {
-        self.hydrogens
+    pub fn implicit_hydrogens(&self) -> u8 {
+        self.implicit_hydrogens
     }
 
     pub fn lone_pairs(&self) -> u8 {
@@ -213,11 +195,11 @@ impl Display for AtomTypeSpec {
             c if c < 0 => write!(f, "{}", c)?,
             c => write!(f, "+{}", c)?,
         }
-        if self.hydrogens > 0 {
-            if self.hydrogens == 1 {
+        if self.implicit_hydrogens > 0 {
+            if self.implicit_hydrogens == 1 {
                 write!(f, "H")?;
             } else {
-                write!(f, "H{}", self.hydrogens)?;
+                write!(f, "H{}", self.implicit_hydrogens)?;
             }
         }
         if self.lone_pairs > 0 {
@@ -287,7 +269,7 @@ impl FromStr for AtomTypeSpec {
             .map_err(|_| ResolutionError::InvalidAtomSpec(format!("invalid element: {}", elem)))?;
 
         let mut charge = None;
-        let mut hydrogens = 0u8;
+        let mut implicit_hydrogens = 0u8;
         let mut lone_pairs = 0_u8;
         let mut multiplicity: Option<SpinMultiplicity> = None;
         let mut valence = 0u8;
@@ -298,6 +280,9 @@ impl FromStr for AtomTypeSpec {
         let mut multicenter_valence = 0u8;
 
         while let Some(token) = chars.next() {
+            if token.is_ascii_whitespace() {
+                continue;
+            }
             let mut number = String::new();
             while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
                 number.push(chars.next().unwrap());
@@ -331,7 +316,7 @@ impl FromStr for AtomTypeSpec {
                     }
                     charge = Some(-(num_u8(1)? as i8));
                 }
-                'H' => hydrogens = num_u8(1)?,
+                'H' => implicit_hydrogens = num_u8(1)?,
                 '/' => lone_pairs = num_u8(1)?,
                 '^' => unpaired_electrons = num_u8(1)?,
                 'x' => {
@@ -380,7 +365,7 @@ impl FromStr for AtomTypeSpec {
         Self::new(
             element,
             charge.unwrap_or(0),
-            hydrogens,
+            implicit_hydrogens,
             lone_pairs,
             unpaired_electrons,
             multiplicity,
@@ -411,7 +396,7 @@ impl<'de> Deserialize<'de> for AtomTypeSpec {
 pub struct AtomTypeQuery {
     pub element: Element,
     pub charge: Option<i8>,
-    pub hydrogens: Option<u8>,
+    pub implicit_hydrogens: Option<HydrogenConstraint>,
     pub lone_pairs: Option<u8>,
     pub unpaired_electrons: Option<u8>,
     pub multiplicity: Option<SpinMultiplicity>,
@@ -427,7 +412,7 @@ impl AtomTypeQuery {
         Self {
             element,
             charge: None,
-            hydrogens: None,
+            implicit_hydrogens: None,
             lone_pairs: None,
             unpaired_electrons: None,
             multiplicity: None,
@@ -443,7 +428,10 @@ impl AtomTypeQuery {
         let atom = builder.atom(atom_index).expect("atom_index must be valid");
         let valence = builder.atom_bond_order_sum(atom_index);
         let (donated_pairs, accepted_pairs) = builder.atom_dative_bond_order_sums(atom_index);
-        let aromatic_valence = if builder.atom_aromatic_hint(atom_index) {
+        let hydrogen_constraint = atom
+            .implicit_hydrogens()
+            .map(HydrogenConstraint::from_implicit_hydrogens);
+        let aromatic_constraint = if builder.atom_aromatic_hint(atom_index) {
             Some(AromaticConstraint::Any)
         } else if atom.aromatic_hint() == Some(false) {
             Some(AromaticConstraint::None)
@@ -458,21 +446,23 @@ impl AtomTypeQuery {
         Self {
             element: atom.element(),
             charge: atom.charge(),
-            hydrogens: atom.hydrogens(),
+            implicit_hydrogens: hydrogen_constraint,
             lone_pairs: atom.lone_pairs(),
             unpaired_electrons: atom.unpaired_electrons(),
             multiplicity: atom.multiplicity(),
             valence: Some(valence),
             donated_pairs: Some(donated_pairs),
             accepted_pairs: Some(accepted_pairs),
-            aromatic_valence,
+            aromatic_valence: aromatic_constraint,
             multicenter_valence,
         }
     }
 
     pub fn matches(&self, spec: &AtomTypeSpec) -> bool {
         self.charge.is_none_or(|v| v == spec.charge())
-            && self.hydrogens.is_none_or(|v| v == spec.hydrogens())
+            && self
+                .implicit_hydrogens
+                .is_none_or(|v| v.matches(spec.implicit_hydrogens()))
             && self.lone_pairs.is_none_or(|v| v == spec.lone_pairs())
             && self
                 .unpaired_electrons
@@ -508,11 +498,12 @@ impl Display for AtomTypeQuery {
             Some(c) if c < 0 => write!(f, "{}", c)?,
             Some(c) => write!(f, "+{}", c)?,
         }
-        if let Some(h) = self.hydrogens {
-            if h == 1 {
-                write!(f, "H")?;
-            } else {
-                write!(f, "H{}", h)?;
+        if let Some(h) = self.implicit_hydrogens {
+            match h {
+                HydrogenConstraint::Hydrogens(1) => write!(f, "H")?,
+                HydrogenConstraint::Hydrogens(n) => write!(f, "H{}", n)?,
+                HydrogenConstraint::Normal => write!(f, "H=")?,
+                HydrogenConstraint::Any => write!(f, "H*")?,
             }
         }
         if let Some(lp) = self.lone_pairs {
@@ -588,6 +579,9 @@ impl FromStr for AtomTypeQuery {
         let mut seen_charge = false;
 
         while let Some(token) = chars.next() {
+            if token.is_ascii_whitespace() {
+                continue;
+            }
             let mut number = String::new();
             while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
                 number.push(chars.next().unwrap());
@@ -623,7 +617,17 @@ impl FromStr for AtomTypeQuery {
                     query.charge = Some(-(num_u8(1)? as i8));
                     seen_charge = true;
                 }
-                'H' => query.hydrogens = Some(num_u8(1)?),
+                'H' => {
+                    if chars.peek() == Some(&'*') {
+                        chars.next();
+                        query.implicit_hydrogens = Some(HydrogenConstraint::Any);
+                    } else if chars.peek() == Some(&'=') {
+                        chars.next();
+                        query.implicit_hydrogens = Some(HydrogenConstraint::Normal);
+                    } else {
+                        query.implicit_hydrogens = Some(HydrogenConstraint::Hydrogens(num_u8(1)?));
+                    }
+                }
                 '/' => query.lone_pairs = Some(num_u8(1)?),
                 '^' => query.unpaired_electrons = Some(num_u8(1)?),
                 'x' => {
@@ -764,7 +768,7 @@ mod tests {
         let spec = AtomTypeSpec::from_str(input).unwrap();
         assert_eq!(spec.element(), element, "element mismatch for {}", input);
         assert_eq!(spec.charge(), charge, "charge mismatch for {}", input);
-        assert_eq!(spec.hydrogens(), hydrogens, "hydrogens mismatch for {}", input);
+        assert_eq!(spec.implicit_hydrogens(), hydrogens, "hydrogens mismatch for {}", input);
         assert_eq!(spec.lone_pairs(), lone_pairs, "lone pairs mismatch for {}", input);
         assert_eq!(spec.unpaired_electrons(), unpaired_electrons, "unpaired electrons mismatch for {}", input);
         assert_eq!(spec.multiplicity(), multiplicity, "multiplicity mismatch for {}", input);
@@ -791,14 +795,17 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unconstrained("?{C}", Element::C, None, None, None, None, None, None, None, None)]
-    #[case::constrained("?{C-H/1^2x1v2a1m2}", Element::C, Some(-1), Some(1), Some(1), Some(2), Some(SpinMultiplicity::Singlet), Some(2), Some(AromaticConstraint::Valence(1)), Some(2))]
+    #[case::hydrogen_any("?{CH*}", Element::C, None, Some(HydrogenConstraint::Any), None, None, None, None, None, None)]
+    #[case::hydrogen_normal("?{CH=}", Element::C, None, Some(HydrogenConstraint::Normal), None, None, None, None, None, None)]
+    #[case::spaced_aromatic_none("?{B a!}", Element::B, None, None, None, None, None, None, Some(AromaticConstraint::None), None)]
+    #[case::constrained("?{C-H/1^2x1v2a1m2}", Element::C, Some(-1), Some(HydrogenConstraint::Hydrogens(1)), Some(1), Some(2), Some(SpinMultiplicity::Singlet), Some(2), Some(AromaticConstraint::Valence(1)), Some(2))]
     #[case::aromatic_any("?{Cv2a*}", Element::C, None, None, None, None, None, Some(2), Some(AromaticConstraint::Any), None)]
     #[case::aromatic_none("?{Cv2a!}", Element::C, None, None, None, None, None, Some(2), Some(AromaticConstraint::None), None)]
     fn test_atom_type_query_from_str(
         #[case] input: &str,
         #[case] element: Element,
         #[case] charge: Option<i8>,
-        #[case] hydrogens: Option<u8>,
+        #[case] hydrogens: Option<HydrogenConstraint>,
         #[case] lone_pairs: Option<u8>,
         #[case] unpaired_electrons: Option<u8>,
         #[case] multiplicity: Option<SpinMultiplicity>,
@@ -809,7 +816,7 @@ mod tests {
         let query = AtomTypeQuery::from_str(input).unwrap();
         assert_eq!(query.element, element, "element mismatch for {}", input);
         assert_eq!(query.charge, charge, "charge mismatch for {}", input);
-        assert_eq!(query.hydrogens, hydrogens, "hydrogens mismatch for {}", input);
+        assert_eq!(query.implicit_hydrogens, hydrogens, "hydrogens mismatch for {}", input);
         assert_eq!(query.lone_pairs, lone_pairs, "lone pairs mismatch for {}", input);
         assert_eq!(query.unpaired_electrons, unpaired_electrons, "unpaired electrons mismatch for {}", input);
         assert_eq!(query.multiplicity, multiplicity, "multiplicity mismatch for {}", input);
@@ -820,6 +827,8 @@ mod tests {
 
     #[rstest]
     #[case::unconstrained("?{C}")]
+    #[case::hydrogen_any("?{CH*}")]
+    #[case::hydrogen_normal("?{CH=}")]
     #[case::constrained("?{C-H/1^2x1v2a1m2}")]
     #[case::aromatic_any("?{Cv2a*}")]
     #[case::aromatic_none("?{Cv2a!}")]

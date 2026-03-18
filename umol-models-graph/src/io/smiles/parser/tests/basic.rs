@@ -7,7 +7,15 @@ use umol_data::Element;
 
 use super::super::*;
 use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
-use crate::table_ir::{BondOrder, BondWedge, Chirality};
+use crate::atom::{Chirality, ImplicitHydrogens};
+use crate::table_ir::{BondOrder, BondWedge};
+
+fn hydrogens_to_count(h: Option<ImplicitHydrogens>) -> Option<u8> {
+    match h {
+        Some(ImplicitHydrogens::Hydrogens(n)) => Some(n),
+        Some(ImplicitHydrogens::Normal) | None => None,
+    }
+}
 
 #[rstest]
 #[case::organic_c(b"C", build_from_graph("C@0 |"))]
@@ -510,33 +518,33 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::atom_c(b"[C]", Element::C, false, None, None, None, Some(0), None)]
-#[case::atom_h(b"[H]", Element::H, false, None, None, None, Some(0), None)]
-#[case::atom_zn(b"[Zn]", Element::Zn, false, None, None, None, Some(0), None)]
-#[case::atom_og(b"[Og]", Element::Og, false, None, None, None, Some(0), None)]
-#[case::atom_aromatic_c(b"[c]", Element::C, true, None, None, None, Some(0), None)]
-#[case::atom_aromatic_se(b"[se]", Element::Se, true, None, None, None, Some(0), None)]
-#[case::atom_aromatic_as(b"[as]", Element::As, true, None, None, None, Some(0), None)]
-#[case::isotope_element(b"[13C]", Element::C, false, Some(13), None, None, Some(0), None)]
-#[case::isotope_zero(b"[0C]", Element::C, false, Some(0), None, None, Some(0), None)]
-#[case::isotope_hydrogen_1h(b"[1H]", Element::H, false, Some(1), None, None, Some(0), None)]
-#[case::isotope_hydrogen_2h(b"[2H]", Element::H, false, Some(2), None, None, Some(0), None)]
-#[case::isotope_hydrogen_3h(b"[3H]", Element::H, false, Some(3), None, None, Some(0), None)]
-#[case::isotope_zero_prefix_1(b"[02H]", Element::H, false, Some(2), None, None, Some(0), None)]
-#[case::isotope_zero_prefix_2(b"[002H]", Element::H, false, Some(2), None, None, Some(0), None)]
-#[case::isotope_three_digits_1(b"[238U]", Element::U, false, Some(238), None, None, Some(0), None)]
-#[case::isotope_three_digits_2(b"[208Pb]", Element::Pb, false, Some(208), None, None, Some(0), None)]
-#[case::isotope_unstable(b"[36Cl]", Element::Cl, false, Some(36), None, None, Some(0), None)]
-#[case::isotope_max_999(b"[999Og]", Element::Og, false, Some(999), None, None, Some(0), None)]
+#[case::atom_c(b"[C]", Element::C, false, None, None, Some(0), Some(0), None)]
+#[case::atom_h(b"[H]", Element::H, false, None, None, Some(0), Some(0), None)]
+#[case::atom_zn(b"[Zn]", Element::Zn, false, None, None, Some(0), Some(0), None)]
+#[case::atom_og(b"[Og]", Element::Og, false, None, None, Some(0), Some(0), None)]
+#[case::atom_aromatic_c(b"[c]", Element::C, true, None, None, Some(0), Some(0), None)]
+#[case::atom_aromatic_se(b"[se]", Element::Se, true, None, None, Some(0), Some(0), None)]
+#[case::atom_aromatic_as(b"[as]", Element::As, true, None, None, Some(0), Some(0), None)]
+#[case::isotope_element(b"[13C]", Element::C, false, Some(13), None, Some(0), Some(0), None)]
+#[case::isotope_zero(b"[0C]", Element::C, false, Some(0), None, Some(0), Some(0), None)]
+#[case::isotope_hydrogen_1h(b"[1H]", Element::H, false, Some(1), None, Some(0), Some(0), None)]
+#[case::isotope_hydrogen_2h(b"[2H]", Element::H, false, Some(2), None, Some(0), Some(0), None)]
+#[case::isotope_hydrogen_3h(b"[3H]", Element::H, false, Some(3), None, Some(0), Some(0), None)]
+#[case::isotope_zero_prefix_1(b"[02H]", Element::H, false, Some(2), None, Some(0), Some(0), None)]
+#[case::isotope_zero_prefix_2(b"[002H]", Element::H, false, Some(2), None, Some(0), Some(0), None)]
+#[case::isotope_three_digits_1(b"[238U]", Element::U, false, Some(238), None, Some(0), Some(0), None)]
+#[case::isotope_three_digits_2(b"[208Pb]", Element::Pb, false, Some(208), None, Some(0), Some(0), None)]
+#[case::isotope_unstable(b"[36Cl]", Element::Cl, false, Some(36), None, Some(0), Some(0), None)]
+#[case::isotope_max_999(b"[999Og]", Element::Og, false, Some(999), None, Some(0), Some(0), None)]
 #[case::isotope_hcount(b"[13CH4]", Element::C, false, Some(13), None, Some(4), Some(0), None)]
-#[case::isotope_charge(b"[2H+]", Element::H, false, Some(2), None, None, Some(1), None)]
-#[case::chirality_cw(b"[C@]", Element::C, false, None, Some(Chirality::Clockwise), None, Some(0), None)]
-#[case::chirality_ccw(b"[C@@]", Element::C, false, None, Some(Chirality::CounterClockwise), None, Some(0), None)]
-#[case::chirality_th2(b"[C@TH2]", Element::C, false, None, Some(Chirality::Tetrahedral { arr: 2 }), None, Some(0), None)]
-#[case::chirality_al1(b"[C@AL1]", Element::C, false, None, Some(Chirality::Allenal { arr: 1 }), None, Some(0), None)]
-#[case::chirality_sp3(b"[C@SP3]", Element::C, false, None, Some(Chirality::SquarePlanar { arr: 3 }), None, Some(0), None)]
-#[case::chirality_tb5(b"[C@TB5]", Element::C, false, None, Some(Chirality::TrigonalBipyramidal { arr: 5 }), None, Some(0), None)]
-#[case::chirality_oh7(b"[C@OH7]", Element::C, false, None, Some(Chirality::Octahedral { arr: 7 }), None, Some(0), None)]
+#[case::isotope_charge(b"[2H+]", Element::H, false, Some(2), None, Some(0), Some(1), None)]
+#[case::chirality_cw(b"[C@]", Element::C, false, None, Some(Chirality::Clockwise), Some(0), Some(0), None)]
+#[case::chirality_ccw(b"[C@@]", Element::C, false, None, Some(Chirality::CounterClockwise), Some(0), Some(0), None)]
+#[case::chirality_th2(b"[C@TH2]", Element::C, false, None, Some(Chirality::Tetrahedral { arr: 2 }), Some(0), Some(0), None)]
+#[case::chirality_al1(b"[C@AL1]", Element::C, false, None, Some(Chirality::Allenal { arr: 1 }), Some(0), Some(0), None)]
+#[case::chirality_sp3(b"[C@SP3]", Element::C, false, None, Some(Chirality::SquarePlanar { arr: 3 }), Some(0), Some(0), None)]
+#[case::chirality_tb5(b"[C@TB5]", Element::C, false, None, Some(Chirality::TrigonalBipyramidal { arr: 5 }), Some(0), Some(0), None)]
+#[case::chirality_oh7(b"[C@OH7]", Element::C, false, None, Some(Chirality::Octahedral { arr: 7 }), Some(0), Some(0), None)]
 #[case::hcount_default(b"[CH]", Element::C, false, None, None, Some(1), Some(0), None)]
 #[case::hcount_h1(b"[CH1]", Element::C, false, None, None, Some(1), Some(0), None)]
 #[case::hcount_h0(b"[CH0]", Element::C, false, None, None, Some(0), Some(0), None)]
@@ -547,20 +555,20 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::hcount_two_character_2(b"[ClH1]", Element::Cl, false, None, None, Some(1), Some(0), None)]
 #[case::chirality_cw_hydrogen(b"[C@H]", Element::C, false, None, Some(Chirality::Clockwise), Some(1), Some(0), None)]
 #[case::chirality_ccw_hydrogen(b"[C@@H]", Element::C, false, None, Some(Chirality::CounterClockwise), Some(1), Some(0), None)]
-#[case::charge_plus(b"[C+]", Element::C, false, None, None, None, Some(1), None)]
-#[case::charge_minus(b"[C-]", Element::C, false, None, None, None, Some(-1), None)]
-#[case::charge_pp(b"[C++]", Element::C, false, None, None, None, Some(2), None)]
-#[case::charge_mm(b"[C--]", Element::C, false, None, None, None, Some(-2), None)]
-#[case::zero_charge_pos(b"[C+0]", Element::C, false, None, None, None, Some(0), None)]
-#[case::zero_charge_neg(b"[C-0]", Element::C, false, None, None, None, Some(0), None)]
-#[case::charge_plus_15(b"[C+15]", Element::C, false, None, None, None, Some(15), None)]
-#[case::charge_minus_15(b"[C-15]", Element::C, false, None, None, None, Some(-15), None)]
-#[case::charge_two_characters_plus_1(b"[Na+]", Element::Na, false, None, None, None, Some(1), None)]
-#[case::charge_two_characters_plus_2(b"[Ca+2]", Element::Ca, false, None, None, None, Some(2), None)]
-#[case::charge_two_characters_pp(b"[Ca++]", Element::Ca, false, None, None, None, Some(2), None)]
-#[case::charge_two_characters_minus_1(b"[Cl-]", Element::Cl, false, None, None, None, Some(-1), None)]
-#[case::charge_two_characters_minus_2(b"[Se-2]", Element::Se, false, None, None, None, Some(-2), None)]
-#[case::charge_two_characters_mm(b"[Se--]", Element::Se, false, None, None, None, Some(-2), None)]
+#[case::charge_plus(b"[C+]", Element::C, false, None, None, Some(0), Some(1), None)]
+#[case::charge_minus(b"[C-]", Element::C, false, None, None, Some(0), Some(-1), None)]
+#[case::charge_pp(b"[C++]", Element::C, false, None, None, Some(0), Some(2), None)]
+#[case::charge_mm(b"[C--]", Element::C, false, None, None, Some(0), Some(-2), None)]
+#[case::zero_charge_pos(b"[C+0]", Element::C, false, None, None, Some(0), Some(0), None)]
+#[case::zero_charge_neg(b"[C-0]", Element::C, false, None, None, Some(0), Some(0), None)]
+#[case::charge_plus_15(b"[C+15]", Element::C, false, None, None, Some(0), Some(15), None)]
+#[case::charge_minus_15(b"[C-15]", Element::C, false, None, None, Some(0), Some(-15), None)]
+#[case::charge_two_characters_plus_1(b"[Na+]", Element::Na, false, None, None, Some(0), Some(1), None)]
+#[case::charge_two_characters_plus_2(b"[Ca+2]", Element::Ca, false, None, None, Some(0), Some(2), None)]
+#[case::charge_two_characters_pp(b"[Ca++]", Element::Ca, false, None, None, Some(0), Some(2), None)]
+#[case::charge_two_characters_minus_1(b"[Cl-]", Element::Cl, false, None, None, Some(0), Some(-1), None)]
+#[case::charge_two_characters_minus_2(b"[Se-2]", Element::Se, false, None, None, Some(0), Some(-2), None)]
+#[case::charge_two_characters_mm(b"[Se--]", Element::Se, false, None, None, Some(0), Some(-2), None)]
 #[case::charge_plus_hcount(b"[C+H]", Element::C, false, None, None, Some(1), Some(1), None)]
 #[case::charge_plus_1_hcount(b"[C+1H]", Element::C, false, None, None, Some(1), Some(1), None)]
 #[case::charge_minus_hcount(b"[C-H]", Element::C, false, None, None, Some(1), Some(-1), None)]
@@ -576,11 +584,11 @@ fn components_invalid(#[case] input: &[u8], #[case] expected: ParseError) {
 #[case::hcount_charge_neg_two_characters_1(b"[AsH-]", Element::As, false, None, None, Some(1), Some(-1), None)]
 #[case::hcount_charge_neg_two_characters_2(b"[AsH-2]", Element::As, false, None, None, Some(1), Some(-2), None)]
 #[case::hcount_charge_neg_two_characters_mm(b"[AsH--]", Element::As, false, None, None, Some(1), Some(-2), None)]
-#[case::class_elem(b"[C:12]", Element::C, false, None, None, None, Some(0), Some(12))]
-#[case::class_zero(b"[C:0]", Element::C, false, None, None, None, Some(0), Some(0))]
-#[case::class_zero_prefix_1(b"[C:03]", Element::C, false, None, None, None, Some(0), Some(3))]
-#[case::class_zero_prefix_2(b"[C:003]", Element::C, false, None, None, None, Some(0), Some(3))]
-#[case::class_max_9999(b"[C:9999]", Element::C, false, None, None, None, Some(0), Some(9999))]
+#[case::class_elem(b"[C:12]", Element::C, false, None, None, Some(0), Some(0), Some(12))]
+#[case::class_zero(b"[C:0]", Element::C, false, None, None, Some(0), Some(0), Some(0))]
+#[case::class_zero_prefix_1(b"[C:03]", Element::C, false, None, None, Some(0), Some(0), Some(3))]
+#[case::class_zero_prefix_2(b"[C:003]", Element::C, false, None, None, Some(0), Some(0), Some(3))]
+#[case::class_max_9999(b"[C:9999]", Element::C, false, None, None, Some(0), Some(0), Some(9999))]
 #[case::ordering_1(b"[C@H+1:2]", Element::C, false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
 #[case::ordering_2(b"[CH@+1:2]", Element::C, false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
 #[case::ordering_3(b"[CH+1@:2]", Element::C, false, None, Some(Chirality::Clockwise), Some(1), Some(1), Some(2))]
@@ -606,7 +614,7 @@ fn bracket(
     assert_eq!(a.aromatic, Some(aromatic));
     assert_eq!(a.isotope_mass, isotope);
     assert_eq!(a.chirality, chirality);
-    assert_eq!(a.hydrogens, hcount);
+    assert_eq!(hydrogens_to_count(a.implicit_hydrogens), hcount);
     assert_eq!(a.charge, charge);
     assert_eq!(a.class, class_);
 }

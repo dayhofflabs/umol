@@ -1,3 +1,5 @@
-atoms = "?{Se+0} ?{H}"
+atoms = "?{Se} ?{H}"
 bonds = "0-1"
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"
+aromatic = "none"

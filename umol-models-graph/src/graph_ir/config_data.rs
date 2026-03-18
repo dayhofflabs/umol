@@ -340,6 +340,46 @@ static DEFAULT_VALENCE_TABLE: LazyLock<ValenceTable> = LazyLock::new(|| {
         .expect("built-in default valence table must be valid")
 });
 
+/// Per-element default valence used for `ImplicitHydrogens::Normal`.
+#[derive(Debug, Clone)]
+pub struct NormalValenceTable {
+    neutral: BTreeMap<Element, u8>,
+}
+
+impl NormalValenceTable {
+    pub fn default_table() -> &'static Self {
+        &DEFAULT_NORMAL_VALENCE_TABLE
+    }
+
+    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
+        let parsed: BTreeMap<String, u8> = toml::from_str(input)
+            .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
+        let mut neutral = BTreeMap::new();
+        for (symbol, valence) in parsed {
+            let element: Element = symbol.parse().map_err(|_| {
+                ResolutionError::InvalidValenceTable(format!("unknown element: {}", symbol))
+            })?;
+            neutral.insert(element, valence);
+        }
+        Ok(Self { neutral })
+    }
+
+    pub fn normal_valence_for(&self, element: Element, charge: i8) -> Option<u8> {
+        if charge == 0 {
+            return self.neutral.get(&element).copied();
+        }
+        element
+            .shift(-charge)
+            .and_then(|isoelectronic| self.neutral.get(&isoelectronic).copied())
+            .or_else(|| self.neutral.get(&element).copied())
+    }
+}
+
+static DEFAULT_NORMAL_VALENCE_TABLE: LazyLock<NormalValenceTable> = LazyLock::new(|| {
+    NormalValenceTable::from_toml_str(include_str!("../../config/default-normal-valence-table.toml"))
+        .expect("built-in default normal valence table must be valid")
+});
+
 #[cfg(test)]
 mod tests {
     use umol_data::Element;
@@ -423,5 +463,26 @@ mod tests {
             ValenceTable::from_toml_str("[H]\nouter_electrons = 1\nallowed_valences = [1]\n")
                 .unwrap();
         assert_eq!(table.compute_implicit_hydrogens(Element::C, 0, 0), None);
+    }
+
+    #[test]
+    fn test_default_normal_valence_table() {
+        let table = NormalValenceTable::default_table();
+        assert_eq!(table.normal_valence_for(Element::C, 0), Some(4));
+        assert_eq!(table.normal_valence_for(Element::N, 1), Some(4));
+        assert_eq!(table.normal_valence_for(Element::O, -1), Some(1));
+    }
+
+    #[test]
+    fn test_normal_valence_table_from_toml() {
+        let table = NormalValenceTable::from_toml_str(
+            r#"
+            C = 4
+            N = 3
+            "#,
+        )
+        .unwrap();
+        assert_eq!(table.normal_valence_for(Element::C, 0), Some(4));
+        assert_eq!(table.normal_valence_for(Element::N, 0), Some(3));
     }
 }

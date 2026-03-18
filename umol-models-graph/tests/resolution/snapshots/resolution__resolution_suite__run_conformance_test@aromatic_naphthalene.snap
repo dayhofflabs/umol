@@ -1,0 +1,63 @@
+---
+source: umol-models-graph/tests/resolution/mod.rs
+expression: results
+---
+category: aromatic
+atom_typing:
+  success: true
+  summary:
+    atom_count: 10
+    bond_count: 11
+    topology: IoA?_OoaW
+    atoms:
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{Cv3a1}"
+      - "{Cv3a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+counts:
+  success: true
+  summary:
+    atom_count: 10
+    bond_count: 11
+    topology: IoA?_OoaW
+    atoms:
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{Cv3a1}"
+      - "{Cv3a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+    bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"

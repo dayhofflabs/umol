@@ -1,3 +1,5 @@
-atoms = "?{Br+0} ?{Br+0}"
+atoms = "?{Br} ?{Br}"
 bonds = "0-1"
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"
+aromatic = "none"

@@ -1,3 +1,4 @@
-atoms = "?{Ta+0}"
+atoms = "?{Ta}"
 bonds = ""
-implicit_h = false
+implicit_h = "zero"
+charge = "zero"

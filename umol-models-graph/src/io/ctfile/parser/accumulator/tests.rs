@@ -5,6 +5,7 @@ use rstest::*;
 use umol_data::{e, Element, NamedIsotope};
 
 use super::*;
+use crate::atom::{ImplicitHydrogens, UnpairedElectrons};
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,
@@ -23,7 +24,7 @@ use crate::table_ir::{
     ExtendedMolecule, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount,
     SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierTerm, SGroupType,
-    StereoInterpretation, SubstitutionCount, UnpairedElectrons, UnsaturatedAtom,
+    StereoInterpretation, SubstitutionCount, UnsaturatedAtom,
 };
 
 #[fixture]
@@ -501,7 +502,10 @@ fn test_apply_atom_hydrogen_count(mut single_atom: Molecule) {
     acc.update_molecule(&mut single_atom, flags).unwrap();
 
     let atom = &single_atom.atoms[0];
-    assert_eq!(atom.hydrogens, Some(1));
+    assert_eq!(
+        atom.implicit_hydrogens,
+        Some(ImplicitHydrogens::Hydrogens(1))
+    );
 }
 
 #[rstest]
@@ -869,7 +873,10 @@ fn test_apply_extended_atom_hydrogen_count(mut single_extended_atom: ExtendedMol
     acc.add_entry(entry, CtabParseFlags::LENIENT).unwrap();
     acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT)
         .unwrap();
-    assert_eq!(single_extended_atom.atoms[0].hydrogens, Some(1));
+    assert_eq!(
+        single_extended_atom.atoms[0].implicit_hydrogens,
+        Some(ImplicitHydrogens::Hydrogens(1))
+    );
 }
 
 #[rstest]
