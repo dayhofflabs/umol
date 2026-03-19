@@ -8,7 +8,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use umol_data::SpinState;
 
-use crate::graph_ir::alg;
+use crate::graph_ir::algorithms::bcc::biconnected_components;
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::AtomBuilder;
 use crate::graph_ir::bond::BondBuilder;
@@ -143,7 +143,7 @@ impl MoleculeBuilder {
             adj_int[u] = neighbors;
         }
 
-        alg::bcc::biconnected_components(atoms.len(), &adj_int)
+        biconnected_components(atoms.len(), &adj_int)
             .into_iter()
             .map(|component| component.into_iter().map(|i| atoms[i]).collect())
             .collect()

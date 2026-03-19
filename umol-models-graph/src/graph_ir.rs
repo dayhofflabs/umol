@@ -1,6 +1,6 @@
 //! Graph-based molecular intermediate representation.
 
-pub(crate) mod alg;
+pub(crate) mod algorithms;
 pub mod aromaticity;
 pub mod atom;
 pub mod atom_type;

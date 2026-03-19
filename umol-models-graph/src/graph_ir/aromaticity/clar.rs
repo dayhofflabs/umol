@@ -11,7 +11,7 @@ use umol_data::Element;
 
 use super::{AromaticContribution, AromaticSystem};
 use crate::atom::AromaticValence;
-use crate::graph_ir::alg;
+use crate::graph_ir::algorithms::mis::maximum_independent_set;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 use crate::graph_ir::rings::{MoleculeRings, RingIndex};
@@ -132,7 +132,7 @@ fn select_disjoint_sextets(rings: &MoleculeRings, candidates: &[RingIndex]) -> V
         }
     }
 
-    let selected = alg::mis::maximum_independent_set(&conflict_adj);
+    let selected = maximum_independent_set(&conflict_adj);
     selected.into_iter().map(|i| candidates[i]).collect()
 }
 

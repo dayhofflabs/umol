@@ -4,7 +4,8 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
-use crate::graph_ir::alg;
+use crate::graph_ir::algorithms::bcc::biconnected_components;
+use crate::graph_ir::algorithms::cycles::enumerate_simple_cycles;
 use crate::graph_ir::config::RingEnumerationStrategy;
 use crate::graph_ir::molecule::{AtomIndex, BondIndex, Molecule, MoleculeBuilder};
 
@@ -310,13 +311,13 @@ impl RingEnumerator {
             let adj = induced_subgraph(&full_adj, &pi_atoms);
             let mut atoms: Vec<AtomIndex> = pi_atoms.iter().copied().collect();
             atoms.sort_unstable();
-            let bcc = biconnected_components_typed(&atoms, &adj);
+            let bcc = molecule_biconnected_components(&atoms, &adj);
             (adj, bcc)
         } else {
             let adj = builder.adjacency_list();
             let mut atoms: Vec<AtomIndex> = builder.atom_indices().collect();
             atoms.sort_unstable();
-            let bcc = biconnected_components_typed(&atoms, &adj);
+            let bcc = molecule_biconnected_components(&atoms, &adj);
             (adj, bcc)
         };
         self.build(&bcc, &adj, &bond_map)
@@ -339,13 +340,13 @@ impl RingEnumerator {
             let adj = induced_subgraph(&full_adj, &pi_atoms);
             let mut atoms: Vec<AtomIndex> = pi_atoms.iter().copied().collect();
             atoms.sort_unstable();
-            let bcc = biconnected_components_typed(&atoms, &adj);
+            let bcc = molecule_biconnected_components(&atoms, &adj);
             (adj, bcc)
         } else {
             let adj = molecule.adjacency_list();
             let mut atoms: Vec<AtomIndex> = molecule.atom_indices().collect();
             atoms.sort_unstable();
-            let bcc = biconnected_components_typed(&atoms, &adj);
+            let bcc = molecule_biconnected_components(&atoms, &adj);
             (adj, bcc)
         };
         self.build(&bcc, &adj, &bond_map)
@@ -399,14 +400,11 @@ impl RingEnumerator {
                 let u = atom_to_id[&atom];
                 adj_int[u] = neighbors;
             }
-            let mut rings = alg::cycles::enumerate_simple_cycles(
-                component_atoms.len(),
-                &adj_int,
-                self.max_ring_size,
-            )
-            .into_iter()
-            .map(|cycle| cycle.into_iter().map(|i| component_atoms[i]).collect())
-            .collect::<Vec<Vec<AtomIndex>>>();
+            let mut rings =
+                enumerate_simple_cycles(component_atoms.len(), &adj_int, self.max_ring_size)
+                    .into_iter()
+                    .map(|cycle| cycle.into_iter().map(|i| component_atoms[i]).collect())
+                    .collect::<Vec<Vec<AtomIndex>>>();
             rings.truncate(self.max_rings_per_component);
             all_rings.extend(rings);
         }
@@ -442,7 +440,7 @@ impl RingEnumerator {
     }
 }
 
-fn biconnected_components_typed(
+fn molecule_biconnected_components(
     atoms: &[AtomIndex],
     adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
 ) -> Vec<Vec<AtomIndex>> {
@@ -468,7 +466,7 @@ fn biconnected_components_typed(
         adj_int[u] = neighbors;
     }
 
-    alg::bcc::biconnected_components(atoms.len(), &adj_int)
+    biconnected_components(atoms.len(), &adj_int)
         .into_iter()
         .map(|component| component.into_iter().map(|i| atoms[i]).collect())
         .collect()
@@ -851,12 +849,10 @@ mod tests {
         let rings = fused_molecule_rings();
         let ring_graph = rings.ring_graph();
         assert!(!ring_graph.edges().is_empty());
-        assert!(
-            ring_graph
-                .edges()
-                .iter()
-                .any(|e| matches!(e.relation, RingRelation::Fused))
-        );
+        assert!(ring_graph
+            .edges()
+            .iter()
+            .any(|e| matches!(e.relation, RingRelation::Fused)));
     }
 
     #[rstest]
