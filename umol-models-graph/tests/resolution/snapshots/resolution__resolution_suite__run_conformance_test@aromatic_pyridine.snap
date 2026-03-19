@@ -23,6 +23,16 @@ atom_typing:
       - "-"
       - "-"
       - "-"
+    aromatic_systems:
+      - atoms:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+        electrons: 6
+        charge: 0
 counts:
   success: true
   summary:
@@ -43,3 +53,13 @@ counts:
       - "-"
       - "-"
       - "-"
+    aromatic_systems:
+      - atoms:
+          - 0
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+        electrons: 6
+        charge: 0

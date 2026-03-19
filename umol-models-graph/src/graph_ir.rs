@@ -1,5 +1,6 @@
 //! Graph-based molecular intermediate representation.
 
+pub(crate) mod alg;
 pub mod aromaticity;
 pub mod atom;
 pub mod atom_type;
@@ -8,7 +9,6 @@ pub mod config;
 pub mod config_data;
 pub mod dative;
 pub mod error;
-pub mod graph_utils;
 pub mod kekule;
 pub mod molecule;
 pub mod multicenter;
@@ -26,7 +26,6 @@ pub use config::*;
 pub use config_data::*;
 pub use dative::*;
 pub use error::*;
-pub use graph_utils::*;
 pub use kekule::*;
 pub use molecule::*;
 pub use multicenter::*;

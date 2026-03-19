@@ -8,8 +8,8 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
 use umol_data::SpinState;
 
+use crate::graph_ir::alg;
 use crate::graph_ir::aromaticity::AromaticSystem;
-use crate::graph_ir::graph_utils::biconnected_components;
 use crate::graph_ir::atom::Atom;
 use crate::graph_ir::bond::Bond;
 use crate::graph_ir::dative::DativeBond;
@@ -69,8 +69,6 @@ pub struct Molecule {
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
-    charge: i32,
-    spin: SpinState,
 }
 
 impl Molecule {
@@ -178,11 +176,11 @@ impl Molecule {
 
     // Charge
     pub fn charge(&self) -> i32 {
-        self.charge
+        todo!()
     }
 
     pub fn spin(&self) -> SpinState {
-        self.spin
+        todo!()
     }
 
     // Topology
@@ -285,7 +283,39 @@ impl Molecule {
     }
 
     pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
-        biconnected_components(self.atom_indices(), &self.adjacency_list())
+        let mut atoms: Vec<AtomIndex> = self.atom_indices().collect();
+        atoms.sort_unstable();
+        if atoms.is_empty() {
+            return Vec::new();
+        }
+
+        let atom_to_id: HashMap<AtomIndex, usize> = atoms
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, a)| (a, i))
+            .collect();
+        let adj = self.adjacency_list();
+        let mut adj_int: Vec<Vec<usize>> = vec![Vec::new(); atoms.len()];
+        for &atom in &atoms {
+            let mut neighbors = adj
+                .get(&atom)
+                .map(|ns| {
+                    ns.iter()
+                        .filter_map(|&n| atom_to_id.get(&n).copied())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            neighbors.sort_unstable();
+            neighbors.dedup();
+            let u = atom_to_id[&atom];
+            adj_int[u] = neighbors;
+        }
+
+        alg::bcc::biconnected_components(atoms.len(), &adj_int)
+            .into_iter()
+            .map(|component| component.into_iter().map(|i| atoms[i]).collect())
+            .collect()
     }
 
     pub fn adjacency_list(&self) -> HashMap<AtomIndex, Vec<AtomIndex>> {

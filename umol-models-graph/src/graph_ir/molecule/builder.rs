@@ -8,6 +8,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use umol_data::SpinState;
 
+use crate::graph_ir::alg;
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::AtomBuilder;
 use crate::graph_ir::bond::BondBuilder;
@@ -21,7 +22,6 @@ use super::topology::{
     DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
     TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
 };
-use crate::graph_ir::graph_utils::biconnected_components;
 use super::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
     NoncovalentBondIndex,
@@ -114,7 +114,39 @@ impl MoleculeBuilder {
     }
 
     pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
-        biconnected_components(self.atom_indices(), &self.adjacency_list())
+        let mut atoms: Vec<AtomIndex> = self.atom_indices().collect();
+        atoms.sort_unstable();
+        if atoms.is_empty() {
+            return Vec::new();
+        }
+
+        let atom_to_id: HashMap<AtomIndex, usize> = atoms
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, a)| (a, i))
+            .collect();
+        let adj = self.adjacency_list();
+        let mut adj_int: Vec<Vec<usize>> = vec![Vec::new(); atoms.len()];
+        for &atom in &atoms {
+            let mut neighbors = adj
+                .get(&atom)
+                .map(|ns| {
+                    ns.iter()
+                        .filter_map(|&n| atom_to_id.get(&n).copied())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            neighbors.sort_unstable();
+            neighbors.dedup();
+            let u = atom_to_id[&atom];
+            adj_int[u] = neighbors;
+        }
+
+        alg::bcc::biconnected_components(atoms.len(), &adj_int)
+            .into_iter()
+            .map(|component| component.into_iter().map(|i| atoms[i]).collect())
+            .collect()
     }
 
     pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {
@@ -780,7 +812,7 @@ impl MoleculeBuilder {
         // TODO: add aromatic system spin
         let atom_spins: Vec<SpinState> = graph.node_weights().map(|a| a.spin()).collect();
 
-        let spin = match self.spin {
+        let _spin = match self.spin {
             Some(explicit) => {
                 if !explicit.is_compatible(&atom_spins) {
                     let atom_unpaired_sum: u16 = atom_spins
@@ -809,8 +841,6 @@ impl MoleculeBuilder {
             multicenter_bonds: self.multicenter_bonds,
             dative_bonds: self.dative_bonds,
             noncovalent_bonds: self.noncovalent_bonds,
-            charge,
-            spin,
         })
     }
 }

@@ -11,6 +11,7 @@ use umol_data::Element;
 
 use super::{AromaticContribution, AromaticSystem};
 use crate::atom::AromaticValence;
+use crate::graph_ir::alg;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 use crate::graph_ir::rings::{MoleculeRings, RingIndex};
@@ -70,8 +71,7 @@ impl ClarAromaticity {
             .flat_map(|r| r.iter().copied())
             .collect();
 
-        let mut solver = ClarSolver::new(rings, &sextet_indices);
-        let best_sextet_indices = solver.solve();
+        let best_sextet_indices = select_disjoint_sextets(rings, &sextet_indices);
 
         if best_sextet_indices.is_empty() {
             return Ok(Vec::new());
@@ -104,74 +104,36 @@ impl ClarAromaticity {
     }
 }
 
-pub(crate) struct ClarSolver<'a> {
-    rings: &'a MoleculeRings,
-    candidates: &'a [RingIndex],
-    current: Vec<RingIndex>,
-    best: Vec<RingIndex>,
-    used_atoms: HashSet<AtomIndex>,
-}
-
-impl<'a> ClarSolver<'a> {
-    pub(crate) fn new(rings: &'a MoleculeRings, candidates: &'a [RingIndex]) -> Self {
-        Self {
-            rings,
-            candidates,
-            current: Vec::new(),
-            best: Vec::new(),
-            used_atoms: HashSet::new(),
-        }
+fn select_disjoint_sextets(rings: &MoleculeRings, candidates: &[RingIndex]) -> Vec<RingIndex> {
+    if candidates.is_empty() {
+        return Vec::new();
     }
 
-    pub(crate) fn solve(&mut self) -> Vec<RingIndex> {
-        self.branch(0);
-        self.best.clone()
-    }
+    // Domain adapter invariant: candidates are mapped to contiguous integer
+    // ids in stable input order, then mapped back after MIS selection.
+    let candidate_atoms: Vec<HashSet<AtomIndex>> = candidates
+        .iter()
+        .map(|&ring_idx| {
+            rings
+                .ring(ring_idx)
+                .map(|ring| ring.iter().copied().collect())
+                .unwrap_or_default()
+        })
+        .collect();
 
-    fn branch(&mut self, pos: usize) {
-        let remaining = self.candidates.len().saturating_sub(pos);
-        if self.current.len() + remaining <= self.best.len() {
-            return;
-        }
-        if pos == self.candidates.len() {
-            if self.current.len() > self.best.len() {
-                self.best = self.current.clone();
+    let n = candidates.len();
+    let mut conflict_adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for i in 0..n {
+        for j in (i + 1)..n {
+            if !candidate_atoms[i].is_disjoint(&candidate_atoms[j]) {
+                conflict_adj[i].push(j);
+                conflict_adj[j].push(i);
             }
-            return;
-        }
-
-        let ring = self.candidates[pos];
-        if self.can_add(ring) {
-            let added_atoms = self.add_ring(ring);
-            self.branch(pos + 1);
-            self.remove_ring(ring, &added_atoms);
-        }
-        self.branch(pos + 1);
-    }
-
-    fn can_add(&self, ring: RingIndex) -> bool {
-        self.rings
-            .ring(ring)
-            .is_some_and(|r| r.iter().all(|a| !self.used_atoms.contains(a)))
-    }
-
-    fn add_ring(&mut self, ring: RingIndex) -> Vec<AtomIndex> {
-        self.current.push(ring);
-        let atoms: Vec<AtomIndex> = self
-            .rings
-            .ring(ring)
-            .map(|r| r.to_vec())
-            .unwrap_or_default();
-        self.used_atoms.extend(atoms.iter().copied());
-        atoms
-    }
-
-    fn remove_ring(&mut self, _ring: RingIndex, atoms: &[AtomIndex]) {
-        self.current.pop();
-        for &atom in atoms {
-            self.used_atoms.remove(&atom);
         }
     }
+
+    let selected = alg::mis::maximum_independent_set(&conflict_adj);
+    selected.into_iter().map(|i| candidates[i]).collect()
 }
 
 #[cfg(test)]
@@ -299,8 +261,7 @@ mod tests {
         let ring_info =
             RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
         let candidates = hex_ring_indices(&builder, &ring_info);
-        let mut solver = ClarSolver::new(&ring_info, &candidates);
-        let sextets = solver.solve();
+        let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), expected_sextets);
     }
 
@@ -342,8 +303,7 @@ mod tests {
         let ring_info = RingEnumerator::new(&RingEnumerationStrategy::default())
             .enumerate_builder(&phenanthrene);
         let candidates = hex_ring_indices(&phenanthrene, &ring_info);
-        let mut solver = ClarSolver::new(&ring_info, &candidates);
-        let sextets = solver.solve();
+        let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), 2);
         for &sextet_idx in &sextets {
             let ring = ring_info.ring(sextet_idx).unwrap();

@@ -6,18 +6,29 @@ category: aromatic
 atom_typing:
   success: true
   summary:
-    atom_count: 7
-    bond_count: 7
-    topology: FwGOW
+    atom_count: 12
+    bond_count: 13
+    topology: Kw?O@?K@@@AB
     atoms:
       - "{Cv3a1}"
       - "{CHv2a1}"
       - "{CHv2a1}"
-      - "{CH3v1}"
+      - "{Cv3a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
       - "{CHv2a1}"
       - "{CHv2a1}"
       - "{CHv2a1}"
     bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
       - "-"
       - "-"
       - "-"
@@ -32,24 +43,44 @@ atom_typing:
           - 2
           - 4
           - 5
+          - 8
+        electrons: 6
+        charge: 0
+      - atoms:
+          - 3
           - 6
+          - 7
+          - 9
+          - 10
+          - 11
         electrons: 6
         charge: 0
 counts:
   success: true
   summary:
-    atom_count: 7
-    bond_count: 7
-    topology: FwGOW
+    atom_count: 12
+    bond_count: 13
+    topology: Kw?O@?K@@@AB
     atoms:
       - "{Cv3a1}"
       - "{CHv2a1}"
       - "{CHv2a1}"
-      - "{CH3v1}"
+      - "{Cv3a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
+      - "{CHv2a1}"
       - "{CHv2a1}"
       - "{CHv2a1}"
       - "{CHv2a1}"
     bonds:
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
+      - "-"
       - "-"
       - "-"
       - "-"
@@ -64,6 +95,15 @@ counts:
           - 2
           - 4
           - 5
+          - 8
+        electrons: 6
+        charge: 0
+      - atoms:
+          - 3
           - 6
+          - 7
+          - 9
+          - 10
+          - 11
         electrons: 6
         charge: 0

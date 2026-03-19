@@ -69,6 +69,13 @@ struct TestInput {
 }
 
 #[derive(Serialize)]
+struct AromaticSystemSummary {
+    atoms: Vec<usize>,
+    electrons: u8,
+    charge: i8,
+}
+
+#[derive(Serialize)]
 struct FileResolveResults {
     category: String,
     atom_typing: ResolveResult,
@@ -91,6 +98,8 @@ struct ResolveSummary {
     topology: String,
     atoms: Vec<String>,
     bonds: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    aromatic_systems: Vec<AromaticSystemSummary>,
 }
 
 #[derive(Serialize)]
@@ -255,13 +264,12 @@ fn build_table_molecule(input: &TestInput) -> TableMolecule {
     let mut mol = TableMolecule::empty();
 
     for token in parse_atom_tokens(&input.atoms) {
-        mol.atoms
-            .push(parse_atom_token(
-                token,
-                &input.implicit_h,
-                &input.charge,
-                &input.aromatic,
-            ));
+        mol.atoms.push(parse_atom_token(
+            token,
+            &input.implicit_h,
+            &input.charge,
+            &input.aromatic,
+        ));
     }
 
     if let Some(ref bonds) = input.bonds {
@@ -351,12 +359,33 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         .map(|&(_, _, o, c, m)| bond_order_symbol(o, c, m))
         .collect();
 
+    let mut aromatic_systems: Vec<AromaticSystemSummary> = mol
+        .aromatic_systems()
+        .map(|system| {
+            let mut atoms: Vec<usize> = system.atoms().map(|ai| canon_pos[ai.index()]).collect();
+            atoms.sort_unstable();
+
+            AromaticSystemSummary {
+                atoms,
+                electrons: system.electron_count(),
+                charge: system.charge(),
+            }
+        })
+        .collect();
+    aromatic_systems.sort_by(|a, b| {
+        a.atoms
+            .cmp(&b.atoms)
+            .then(a.electrons.cmp(&b.electrons))
+            .then(a.charge.cmp(&b.charge))
+    });
+
     ResolveSummary {
         atom_count: mol.atom_count(),
         bond_count: mol.bond_count(),
         topology,
         atoms,
         bonds,
+        aromatic_systems,
     }
 }
 
@@ -451,7 +480,7 @@ fn run_conformance_test(file_path: &PathBuf) {
 }
 
 #[rstest]
-// Keep recursive glob for fast auto-discovery of new files at compile time (refresh marker v8).
+// Keep recursive glob for fast auto-discovery of new files at compile time (refresh marker v9).
 fn test_conformance(#[files("tests/resolution/data/**/*.toml")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }
