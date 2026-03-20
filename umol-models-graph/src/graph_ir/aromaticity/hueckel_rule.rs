@@ -9,11 +9,10 @@ use std::collections::{HashMap, HashSet};
 use petgraph::unionfind::UnionFind;
 
 use super::{AromaticContribution, AromaticSystem};
-use crate::atom::AromaticValence;
 use crate::graph_ir::config::{ElementScope, RingLimits};
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::rings::{MoleculeRings, RingIndex};
+use crate::graph_ir::rings::{MoleculeRings, Ring, RingIndex};
 
 /// HueckelRule aromaticity model. Parameterized by element scope and ring scope.
 #[derive(Clone, Debug)]
@@ -40,16 +39,16 @@ impl HueckelRuleAromaticity {
             .filter(|&i| rings.ring(i).is_some_and(|r| self.filter_ring(builder, r)))
             .collect();
 
-        let mut aromatic_atom_sets: Vec<(HashSet<AtomIndex>, Vec<Vec<AtomIndex>>)> = Vec::new();
+        let mut aromatic_atom_sets: Vec<(HashSet<AtomIndex>, Vec<Ring>)> = Vec::new();
 
         for &cycle_idx in &eligible_cycles {
             let Some(ring) = rings.ring(cycle_idx) else {
                 continue;
             };
-            if let Some(electrons) = self.ring_electron_count(builder, ring) {
+            if let Some(electrons) = self.ring_electron_count(builder, ring.atoms()) {
                 if self.check_4n_plus_2(electrons) {
-                    let atom_set: HashSet<AtomIndex> = ring.iter().copied().collect();
-                    aromatic_atom_sets.push((atom_set, vec![ring.to_vec()]));
+                    let atom_set: HashSet<AtomIndex> = ring.atoms().iter().copied().collect();
+                    aromatic_atom_sets.push((atom_set, vec![ring.clone()]));
                 }
             }
         }
@@ -106,29 +105,20 @@ impl HueckelRuleAromaticity {
                 }
             }
         }
-        let candidates = atom_data.candidates();
-        candidates
-            .iter()
-            .any(|c| matches!(c.aromatic_valence(), AromaticValence::Valence(_)))
+        builder.atom_has_aromatic_candidate(atom)
     }
 
     fn aromatic_electron_count(&self, builder: &MoleculeBuilder, atom: AtomIndex) -> Option<u8> {
-        let atom_data = builder.atom(atom)?;
-        let candidates = atom_data.candidates();
-        for c in candidates {
-            if let AromaticValence::Valence(n) = c.aromatic_valence() {
-                return Some(n);
-            }
-        }
-        None
+        builder.atom(atom)?;
+        Some(builder.atom_aromatic_valence(atom))
     }
 
-    fn filter_ring(&self, builder: &MoleculeBuilder, ring: &[AtomIndex]) -> bool {
+    fn filter_ring(&self, builder: &MoleculeBuilder, ring: &Ring) -> bool {
         let len = ring.len();
         if len < self.ring_limits.min_ring_size || len > self.ring_limits.max_ring_size {
             return false;
         }
-        ring.iter().all(|&a| self.is_atom_eligible(builder, a))
+        ring.atoms().iter().all(|&a| self.is_atom_eligible(builder, a))
     }
 
     fn check_4n_plus_2(&self, electron_count: u32) -> bool {
@@ -153,14 +143,14 @@ impl HueckelRuleAromaticity {
         &self,
         rings: &MoleculeRings,
         eligible: &[RingIndex],
-    ) -> Vec<(HashSet<AtomIndex>, Vec<Vec<AtomIndex>>)> {
+    ) -> Vec<(HashSet<AtomIndex>, Vec<Ring>)> {
         let max_combo = self.ring_limits.max_fused_combination;
         if max_combo < 2 {
             return Vec::new();
         }
 
         let eligible_set: HashSet<RingIndex> = eligible.iter().copied().collect();
-        let mut results: Vec<(HashSet<AtomIndex>, Vec<Vec<AtomIndex>>)> = Vec::new();
+        let mut results: Vec<(HashSet<AtomIndex>, Vec<Ring>)> = Vec::new();
         let mut seen_combos: HashSet<Vec<RingIndex>> = HashSet::new();
 
         'outer: for &start in eligible {
@@ -168,7 +158,7 @@ impl HueckelRuleAromaticity {
             let Some(start_ring) = rings.ring(start) else {
                 continue;
             };
-            let start_atoms: HashSet<AtomIndex> = start_ring.iter().copied().collect();
+            let start_atoms: HashSet<AtomIndex> = start_ring.atoms().iter().copied().collect();
             stack.push((vec![start], start_atoms));
 
             while let Some((combo, atoms)) = stack.pop() {
@@ -176,9 +166,9 @@ impl HueckelRuleAromaticity {
                     let mut key = combo.clone();
                     key.sort_unstable();
                     if seen_combos.insert(key) {
-                        let rings: Vec<Vec<AtomIndex>> = combo
+                        let rings: Vec<Ring> = combo
                             .iter()
-                            .filter_map(|&i| rings.ring(i).map(|r| r.to_vec()))
+                            .filter_map(|&i| rings.ring(i).cloned())
                             .collect();
                         results.push((atoms.clone(), rings));
                         if results.len() >= self.ring_limits.max_fused_search {
@@ -203,7 +193,7 @@ impl HueckelRuleAromaticity {
                     new_combo.push(neighbor_idx);
                     let mut new_atoms = atoms.clone();
                     if let Some(nr) = rings.ring(neighbor_idx) {
-                        new_atoms.extend(nr.iter().copied());
+                        new_atoms.extend(nr.atoms().iter().copied());
                     }
                     stack.push((new_combo, new_atoms));
                 }
@@ -217,8 +207,8 @@ impl HueckelRuleAromaticity {
 /// Merge overlapping aromatic systems. Two systems overlap if they share
 /// any atoms. Returns deduplicated, merged results.
 fn merge_overlapping_systems(
-    aromatic_systems: &[(HashSet<AtomIndex>, Vec<Vec<AtomIndex>>)],
-) -> Vec<(HashSet<AtomIndex>, Vec<Vec<AtomIndex>>)> {
+    aromatic_systems: &[(HashSet<AtomIndex>, Vec<Ring>)],
+) -> Vec<(HashSet<AtomIndex>, Vec<Ring>)> {
     if aromatic_systems.is_empty() {
         return Vec::new();
     }
@@ -242,12 +232,12 @@ fn merge_overlapping_systems(
     let mut result = Vec::new();
     for (_, members) in groups {
         let mut merged_atoms: HashSet<AtomIndex> = HashSet::new();
-        let mut merged_rings: Vec<Vec<AtomIndex>> = Vec::new();
+        let mut merged_rings: Vec<Ring> = Vec::new();
         let mut seen_rings: HashSet<Vec<AtomIndex>> = HashSet::new();
         for &idx in &members {
             merged_atoms.extend(aromatic_systems[idx].0.iter());
             for ring in &aromatic_systems[idx].1 {
-                let mut normalized = ring.clone();
+                let mut normalized = ring.atoms().to_vec();
                 normalized.sort_unstable();
                 if seen_rings.insert(normalized) {
                     merged_rings.push(ring.clone());

@@ -8,6 +8,7 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
 use umol_data::SpinState;
 
+use crate::atom::AromaticValence;
 use crate::graph_ir::algorithms::bcc::biconnected_components;
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::Atom;
@@ -87,6 +88,21 @@ impl Molecule {
 
     pub fn atom(&self, index: AtomIndex) -> Option<&Atom> {
         self.graph.node_weight(index)
+    }
+
+    // Atom properties
+    pub fn atom_valence(&self, index: AtomIndex) -> u8 {
+        self.atom(index).map(|a| a.valence()).unwrap_or(0)
+    }
+
+    pub fn atom_aromatic_valence(&self, index: AtomIndex) -> u8 {
+        self.atom(index)
+            .map(|a| a.aromatic_valence())
+            .map(|v| match v {
+                AromaticValence::Valence(n) => n,
+                AromaticValence::None => 0,
+            })
+            .unwrap_or(0)
     }
 
     // Bonds
@@ -582,5 +598,31 @@ mod tests {
             .collect();
         actual_sizes.sort_unstable();
         assert_eq!(actual_sizes, expected_sizes);
+    }
+
+    #[test]
+    fn test_atom_aromatic_valence_resolved_semantics() {
+        let mut aromatic_builder = MoleculeBuilder::new();
+        let aromatic_atom = aromatic_builder.add_atom(AtomBuilder::new(Element::C));
+        aromatic_builder
+            .atom_mut(aromatic_atom)
+            .expect("atom should exist")
+            .set_candidates(SmallVec::from_elem(spec!("{Cv2a1H}"), 1));
+        let aromatic = aromatic_builder
+            .build(&ResolveConfig::default())
+            .expect("aromatic molecule should build");
+        assert_eq!(aromatic.atom_aromatic_valence(aromatic_atom), 1);
+
+        let mut non_aromatic_builder = MoleculeBuilder::new();
+        let non_aromatic_atom = non_aromatic_builder.add_atom(AtomBuilder::new(Element::C));
+        non_aromatic_builder
+            .atom_mut(non_aromatic_atom)
+            .expect("atom should exist")
+            .set_candidates(SmallVec::from_elem(spec!("{Cv4}"), 1));
+        let non_aromatic = non_aromatic_builder
+            .build(&ResolveConfig::default())
+            .expect("non-aromatic molecule should build");
+        assert_eq!(non_aromatic.atom_aromatic_valence(non_aromatic_atom), 0);
+        assert_eq!(non_aromatic.atom_aromatic_valence(AtomIndex::new(999)), 0);
     }
 }

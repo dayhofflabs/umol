@@ -15,7 +15,7 @@ pub use self::hueckel_rule::*;
 use crate::graph_ir::config::AromaticityStrategy;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
-use crate::graph_ir::rings::MoleculeRings;
+use crate::graph_ir::rings::{MoleculeRings, Ring};
 
 /// Per-atom contribution to an aromatic system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -50,33 +50,33 @@ impl AromaticContribution {
 pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
     charge: i8,
-    rings: Vec<Vec<AtomIndex>>,
+    rings: Vec<Ring>,
 }
 
 impl AromaticSystem {
+    fn normalized_contributions<I>(contributions: I) -> Vec<AromaticContribution>
+    where
+        I: IntoIterator<Item = AromaticContribution>,
+    {
+        let mut contributions: Vec<AromaticContribution> = contributions.into_iter().collect();
+        contributions.sort_unstable();
+        contributions.dedup_by_key(|c| c.atom);
+        contributions
+    }
+
     pub fn new<I>(contributions: I) -> Self
     where
         I: IntoIterator<Item = AromaticContribution>,
     {
-        let mut contributions: Vec<AromaticContribution> = contributions.into_iter().collect();
-        contributions.sort_unstable();
-        contributions.dedup_by_key(|c| c.atom);
-        Self {
-            contributions,
-            charge: 0,
-            rings: Vec::new(),
-        }
+        Self::with_rings(contributions, Vec::new())
     }
 
-    pub fn with_rings<I>(contributions: I, rings: Vec<Vec<AtomIndex>>) -> Self
+    pub fn with_rings<I>(contributions: I, rings: Vec<Ring>) -> Self
     where
         I: IntoIterator<Item = AromaticContribution>,
     {
-        let mut contributions: Vec<AromaticContribution> = contributions.into_iter().collect();
-        contributions.sort_unstable();
-        contributions.dedup_by_key(|c| c.atom);
         Self {
-            contributions,
+            contributions: Self::normalized_contributions(contributions),
             charge: 0,
             rings,
         }
@@ -102,7 +102,7 @@ impl AromaticSystem {
         self.charge = charge;
     }
 
-    pub fn rings(&self) -> &[Vec<AtomIndex>] {
+    pub fn rings(&self) -> &[Ring] {
         &self.rings
     }
 

@@ -18,6 +18,66 @@ impl RingIndex {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ring {
+    atoms: Vec<AtomIndex>,
+    bonds: Vec<BondIndex>,
+}
+
+impl Ring {
+    pub fn new(atoms: Vec<AtomIndex>, bonds: Vec<BondIndex>) -> Result<Self, String> {
+        if atoms.len() < 3 {
+            return Err("ring must contain at least 3 atoms".to_string());
+        }
+        if atoms.len() != bonds.len() {
+            return Err("ring atoms/bonds length mismatch".to_string());
+        }
+        Ok(Self { atoms, bonds })
+    }
+
+    pub fn atoms(&self) -> &[AtomIndex] {
+        &self.atoms
+    }
+
+    pub fn bonds(&self) -> &[BondIndex] {
+        &self.bonds
+    }
+
+    pub fn len(&self) -> usize {
+        self.atoms.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.atoms.is_empty()
+    }
+
+    pub fn shared_atoms(&self, other: &Ring) -> Vec<AtomIndex> {
+        let (small, large) = if self.atoms.len() <= other.atoms.len() {
+            (&self.atoms, &other.atoms)
+        } else {
+            (&other.atoms, &self.atoms)
+        };
+        small
+            .iter()
+            .copied()
+            .filter(|atom| large.contains(atom))
+            .collect()
+    }
+
+    pub fn shared_bonds(&self, other: &Ring) -> Vec<BondIndex> {
+        let (small, large) = if self.bonds.len() <= other.bonds.len() {
+            (&self.bonds, &other.bonds)
+        } else {
+            (&other.bonds, &self.bonds)
+        };
+        small
+            .iter()
+            .copied()
+            .filter(|bond| large.contains(bond))
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RingRelation {
     Identical,
@@ -39,15 +99,17 @@ pub struct RingGraphEdge {
 #[derive(Debug, Clone)]
 pub struct RingGraph {
     edges: Vec<RingGraphEdge>,
+    neighbors: Vec<Vec<(RingIndex, RingRelation)>>,
 }
 
 impl RingGraph {
-    pub fn from_rings(rings: &MoleculeRings) -> Self {
+    pub fn from_ring_list(rings: &[Ring]) -> Self {
         let mut edges = Vec::new();
-        let indices: Vec<RingIndex> = rings.ring_indices().collect();
+        let mut neighbors = vec![Vec::new(); rings.len()];
+        let indices: Vec<RingIndex> = (0..rings.len()).map(|i| RingIndex(i as u32)).collect();
         for (i, &a) in indices.iter().enumerate() {
             for &b in &indices[i + 1..] {
-                let relation = rings.ring_relation(a, b);
+                let relation = classify_ring_relation(&rings[a.index()], &rings[b.index()]);
                 if relation == RingRelation::Disjoint || relation == RingRelation::Identical {
                     continue;
                 }
@@ -56,10 +118,15 @@ impl RingGraph {
                     target: b,
                     relation,
                 });
+                neighbors[a.index()].push((b, relation));
+                neighbors[b.index()].push((a, relation));
             }
         }
         edges.sort_by_key(|e| (e.source, e.target, e.relation as u8));
-        Self { edges }
+        for n in &mut neighbors {
+            n.sort_by_key(|(idx, rel)| (*idx, *rel as u8));
+        }
+        Self { edges, neighbors }
     }
 
     pub fn edges(&self) -> &[RingGraphEdge] {
@@ -67,16 +134,21 @@ impl RingGraph {
     }
 
     pub fn neighbors(&self, ring: RingIndex) -> Vec<(RingIndex, RingRelation)> {
-        let mut neighbors = Vec::new();
-        for edge in &self.edges {
-            if edge.source == ring {
-                neighbors.push((edge.target, edge.relation));
-            } else if edge.target == ring {
-                neighbors.push((edge.source, edge.relation));
-            }
+        self.neighbors.get(ring.index()).cloned().unwrap_or_default()
+    }
+
+    pub fn relation(&self, a: RingIndex, b: RingIndex) -> RingRelation {
+        if a == b {
+            return RingRelation::Identical;
         }
-        neighbors.sort_by_key(|(neighbor, relation)| (*neighbor, *relation as u8));
-        neighbors
+        self.neighbors
+            .get(a.index())
+            .and_then(|neighbors| {
+                neighbors
+                    .iter()
+                    .find_map(|(idx, rel)| (*idx == b).then_some(*rel))
+            })
+            .unwrap_or(RingRelation::Disjoint)
     }
 }
 
@@ -84,91 +156,58 @@ impl RingGraph {
 /// Set of simple cycles up to max_ring_size. Not a minimal cycle basis.
 pub struct MoleculeRings {
     pub max_ring_size: usize,
-    pub ring_atoms: Vec<Vec<AtomIndex>>,
-    pub ring_bonds: Vec<Vec<BondIndex>>,
-    pub atom_rings: BTreeMap<AtomIndex, Vec<RingIndex>>,
-    pub bond_rings: BTreeMap<BondIndex, Vec<RingIndex>>,
+    pub rings: Vec<Ring>,
+    pub atom_to_rings: BTreeMap<AtomIndex, Vec<RingIndex>>,
+    pub bond_to_rings: BTreeMap<BondIndex, Vec<RingIndex>>,
+    ring_graph: RingGraph,
 }
 
 impl MoleculeRings {
     pub fn empty() -> Self {
         Self {
             max_ring_size: 0,
-            ring_atoms: Vec::new(),
-            ring_bonds: Vec::new(),
-            atom_rings: BTreeMap::new(),
-            bond_rings: BTreeMap::new(),
+            rings: Vec::new(),
+            atom_to_rings: BTreeMap::new(),
+            bond_to_rings: BTreeMap::new(),
+            ring_graph: RingGraph {
+                edges: Vec::new(),
+                neighbors: Vec::new(),
+            },
         }
     }
 
     pub fn ring_count(&self) -> usize {
-        self.ring_atoms.len()
+        self.rings.len()
     }
 
     pub fn ring_indices(&self) -> impl Iterator<Item = RingIndex> {
-        (0..self.ring_atoms.len()).map(|i| RingIndex(i as u32))
+        (0..self.rings.len()).map(|i| RingIndex(i as u32))
     }
 
-    pub fn ring(&self, idx: RingIndex) -> Option<&[AtomIndex]> {
-        self.ring_atoms.get(idx.index()).map(|v| v.as_slice())
+    pub fn rings(&self) -> &[Ring] {
+        &self.rings
+    }
+
+    pub fn ring(&self, idx: RingIndex) -> Option<&Ring> {
+        self.rings.get(idx.index())
     }
 
     pub fn shared_atoms(&self, a: RingIndex, b: RingIndex) -> Vec<AtomIndex> {
         let (Some(ra), Some(rb)) = (self.ring(a), self.ring(b)) else {
             return Vec::new();
         };
-        let atoms_a: HashSet<AtomIndex> = ra.iter().copied().collect();
-        rb.iter()
-            .copied()
-            .filter(|atom| atoms_a.contains(atom))
-            .collect()
+        ra.shared_atoms(rb)
     }
 
     pub fn shared_bonds(&self, a: RingIndex, b: RingIndex) -> Vec<BondIndex> {
-        let (Some(ba), Some(bb)) = (
-            self.ring_bonds.get(a.index()),
-            self.ring_bonds.get(b.index()),
-        ) else {
+        let (Some(ra), Some(rb)) = (self.ring(a), self.ring(b)) else {
             return Vec::new();
         };
-        let bonds_b: HashSet<BondIndex> = bb.iter().copied().collect();
-        ba.iter()
-            .copied()
-            .filter(|bond| bonds_b.contains(bond))
-            .collect()
+        ra.shared_bonds(rb)
     }
 
     pub fn ring_relation(&self, a: RingIndex, b: RingIndex) -> RingRelation {
-        if a == b {
-            return RingRelation::Identical;
-        }
-        let shared = self.shared_bonds(a, b);
-        if shared.is_empty() {
-            return match self.shared_atoms(a, b).len() {
-                0 => RingRelation::Disjoint,
-                1 => RingRelation::Spiro,
-                _ => RingRelation::MultiSpiro,
-            };
-        }
-        if shared.len() == 1 {
-            return RingRelation::Fused;
-        }
-        let Some(bonds_a) = self.ring_bonds.get(a.index()) else {
-            return RingRelation::Disjoint;
-        };
-        let n = bonds_a.len();
-        let shared_set: HashSet<BondIndex> = shared.into_iter().collect();
-        let mut runs = 0usize;
-        for i in 0..n {
-            if shared_set.contains(&bonds_a[i]) && !shared_set.contains(&bonds_a[(i + n - 1) % n]) {
-                runs += 1;
-            }
-        }
-        if runs <= 1 {
-            RingRelation::Bridged
-        } else {
-            RingRelation::Noncontiguous
-        }
+        self.ring_graph.relation(a, b)
     }
 
     pub fn are_spiro(&self, a: RingIndex, b: RingIndex) -> bool {
@@ -185,8 +224,10 @@ impl MoleculeRings {
 
     pub fn ring_spiro_neighbors(&self, i: RingIndex) -> Vec<RingIndex> {
         let mut result: Vec<RingIndex> = self
-            .ring_indices()
-            .filter(|&j| j != i && self.are_spiro(i, j))
+            .ring_graph
+            .neighbors(i)
+            .into_iter()
+            .filter_map(|(j, relation)| (relation == RingRelation::Spiro).then_some(j))
             .collect();
         result.sort_unstable();
         result
@@ -194,8 +235,10 @@ impl MoleculeRings {
 
     pub fn ring_fused_neighbors(&self, i: RingIndex) -> Vec<RingIndex> {
         let mut result: Vec<RingIndex> = self
-            .ring_indices()
-            .filter(|&j| j != i && self.are_fused(i, j))
+            .ring_graph
+            .neighbors(i)
+            .into_iter()
+            .filter_map(|(j, relation)| (relation == RingRelation::Fused).then_some(j))
             .collect();
         result.sort_unstable();
         result
@@ -203,8 +246,10 @@ impl MoleculeRings {
 
     pub fn ring_bridged_neighbors(&self, i: RingIndex) -> Vec<RingIndex> {
         let mut result: Vec<RingIndex> = self
-            .ring_indices()
-            .filter(|&j| j != i && self.are_bridged(i, j))
+            .ring_graph
+            .neighbors(i)
+            .into_iter()
+            .filter_map(|(j, relation)| (relation == RingRelation::Bridged).then_some(j))
             .collect();
         result.sort_unstable();
         result
@@ -249,33 +294,33 @@ impl MoleculeRings {
     }
 
     pub fn is_ring_atom(&self, atom: AtomIndex) -> bool {
-        self.atom_rings.contains_key(&atom)
+        self.atom_to_rings.contains_key(&atom)
     }
 
     pub fn atom_smallest_ring_size(&self, atom: AtomIndex) -> Option<usize> {
-        self.atom_rings.get(&atom).and_then(|ring_indices| {
+        self.atom_to_rings.get(&atom).and_then(|ring_indices| {
             ring_indices
                 .iter()
-                .map(|i| self.ring_atoms[i.index()].len())
+                .map(|i| self.rings[i.index()].len())
                 .min()
         })
     }
 
     pub fn is_ring_bond(&self, bond: BondIndex) -> bool {
-        self.bond_rings.contains_key(&bond)
+        self.bond_to_rings.contains_key(&bond)
     }
 
     pub fn bond_smallest_ring_size(&self, bond: BondIndex) -> Option<usize> {
-        self.bond_rings.get(&bond).and_then(|ring_indices| {
+        self.bond_to_rings.get(&bond).and_then(|ring_indices| {
             ring_indices
                 .iter()
-                .map(|i| self.ring_atoms[i.index()].len())
+                .map(|i| self.rings[i.index()].len())
                 .min()
         })
     }
 
     pub fn ring_graph(&self) -> RingGraph {
-        RingGraph::from_rings(self)
+        self.ring_graph.clone()
     }
 }
 
@@ -358,7 +403,7 @@ impl RingEnumerator {
         adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
         bond_map: &HashMap<(AtomIndex, AtomIndex), BondIndex>,
     ) -> MoleculeRings {
-        let mut all_rings: Vec<Vec<AtomIndex>> = Vec::new();
+        let mut all_ring_atoms: Vec<Vec<AtomIndex>> = Vec::new();
         for component in bcc {
             let component_set: HashSet<AtomIndex> = component.iter().copied().collect();
             let mut sub_adj: HashMap<AtomIndex, Vec<AtomIndex>> = HashMap::new();
@@ -406,37 +451,74 @@ impl RingEnumerator {
                     .map(|cycle| cycle.into_iter().map(|i| component_atoms[i]).collect())
                     .collect::<Vec<Vec<AtomIndex>>>();
             rings.truncate(self.max_rings_per_component);
-            all_rings.extend(rings);
+            all_ring_atoms.extend(rings);
         }
 
-        let mut atom_rings: BTreeMap<AtomIndex, Vec<RingIndex>> = BTreeMap::new();
-        let mut bond_rings: BTreeMap<BondIndex, Vec<RingIndex>> = BTreeMap::new();
-        let mut ring_bonds: Vec<Vec<BondIndex>> = Vec::with_capacity(all_rings.len());
-        for (idx, ring) in all_rings.iter().enumerate() {
+        let mut atom_to_rings: BTreeMap<AtomIndex, Vec<RingIndex>> = BTreeMap::new();
+        let mut bond_to_rings: BTreeMap<BondIndex, Vec<RingIndex>> = BTreeMap::new();
+        let mut rings: Vec<Ring> = Vec::with_capacity(all_ring_atoms.len());
+        for (idx, ring_atoms) in all_ring_atoms.iter().enumerate() {
             let ring_idx = RingIndex(idx as u32);
-            for &atom in ring {
-                atom_rings.entry(atom).or_default().push(ring_idx);
+            for &atom in ring_atoms {
+                atom_to_rings.entry(atom).or_default().push(ring_idx);
             }
-            let n = ring.len();
+            let n = ring_atoms.len();
             let mut bonds = Vec::with_capacity(n);
             for i in 0..n {
-                let a = ring[i];
-                let b = ring[(i + 1) % n];
+                let a = ring_atoms[i];
+                let b = ring_atoms[(i + 1) % n];
                 if let Some(&bond) = bond_map.get(&(a, b)) {
-                    bond_rings.entry(bond).or_default().push(ring_idx);
+                    bond_to_rings.entry(bond).or_default().push(ring_idx);
                     bonds.push(bond);
                 }
             }
-            ring_bonds.push(bonds);
+            rings.push(
+                Ring::new(ring_atoms.clone(), bonds)
+                    .expect("enumerated ring must have aligned atom/bond cycle"),
+            );
         }
+
+        let ring_graph = RingGraph::from_ring_list(&rings);
 
         MoleculeRings {
             max_ring_size: self.max_ring_size,
-            ring_atoms: all_rings,
-            ring_bonds,
-            atom_rings,
-            bond_rings,
+            rings,
+            atom_to_rings,
+            bond_to_rings,
+            ring_graph,
         }
+    }
+}
+
+fn classify_ring_relation(a: &Ring, b: &Ring) -> RingRelation {
+    let shared_bonds = a.shared_bonds(b);
+    if shared_bonds.is_empty() {
+        return match a.shared_atoms(b).len() {
+            0 => RingRelation::Disjoint,
+            1 => RingRelation::Spiro,
+            _ => RingRelation::MultiSpiro,
+        };
+    }
+
+    if shared_bonds.len() == 1 {
+        return RingRelation::Fused;
+    }
+
+    let bonds_a = a.bonds();
+    let n = bonds_a.len();
+    let mut runs = 0usize;
+    for i in 0..n {
+        let curr_shared = shared_bonds.contains(&bonds_a[i]);
+        let prev_shared = shared_bonds.contains(&bonds_a[(i + n - 1) % n]);
+        if curr_shared && !prev_shared {
+            runs += 1;
+        }
+    }
+
+    if runs <= 1 {
+        RingRelation::Bridged
+    } else {
+        RingRelation::Noncontiguous
     }
 }
 
@@ -819,7 +901,7 @@ mod tests {
         #[case] ring_index: RingIndex,
         #[case] expected: Option<Vec<AtomIndex>>,
     ) {
-        let ring = rings.ring(ring_index).map(|v| v.to_vec());
+        let ring = rings.ring(ring_index).map(|v| v.atoms().to_vec());
         assert_eq!(ring, expected);
     }
 

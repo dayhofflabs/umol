@@ -8,6 +8,15 @@ use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use umol_data::SpinState;
 
+use super::topology::{
+    DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
+    TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
+};
+use super::{
+    AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
+    NoncovalentBondIndex,
+};
+use crate::atom::AromaticValence;
 use crate::graph_ir::algorithms::bcc::biconnected_components;
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::AtomBuilder;
@@ -18,14 +27,7 @@ use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::multicenter::MulticenterBond;
 use crate::graph_ir::noncovalent::NoncovalentBond;
 use crate::graph_ir::symmetry::compute_symmetry;
-use super::topology::{
-    DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
-    TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
-};
-use super::{
-    AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
-    NoncovalentBondIndex,
-};
+use crate::graph_ir::AtomTypeSpec;
 /// Builder for constructing a `Molecule`. Carries `AtomBuilder` nodes during
 /// resolution phases; `build()` finalizes each atom and produces a `Molecule`.
 ///
@@ -245,19 +247,6 @@ impl MoleculeBuilder {
         self.graph.node_indices()
     }
 
-    /// Atoms that have at least one candidate with a non-None aromatic valence.
-    pub fn aromatic_candidate_atoms(&self) -> impl Iterator<Item = AtomIndex> + '_ {
-        self.atom_indices().filter(|&atom| {
-            self.atom(atom)
-                .map(|a| {
-                    a.candidates()
-                        .iter()
-                        .any(|c| c.aromatic_valence().is_aromatic())
-                })
-                .unwrap_or(false)
-        })
-    }
-
     pub fn atoms(&self) -> impl Iterator<Item = &AtomBuilder> + '_ {
         self.graph.node_weights()
     }
@@ -282,6 +271,65 @@ impl MoleculeBuilder {
         self.graph
             .node_weight_mut(index)
             .map(|old| std::mem::replace(old, atom))
+    }
+
+    // Atom properties
+    fn atom_candidate_property<T>(
+        &self,
+        index: AtomIndex,
+        getter: impl Fn(&AtomTypeSpec) -> T,
+    ) -> Option<T> {
+        self.atom(index)
+            .map(|a| a.candidates().iter().next().map(getter))
+            .flatten()
+    }
+
+    pub fn atom_valence(&self, index: AtomIndex) -> u8 {
+        self.atom_candidate_property(index, |c| c.valence())
+            .unwrap_or(0)
+    }
+
+    pub fn atom_aromatic_valence(&self, index: AtomIndex) -> u8 {
+        self.atom(index)
+            .and_then(|a| {
+                a.candidates()
+                    .iter()
+                    .find_map(|c| match c.aromatic_valence() {
+                        AromaticValence::Valence(n) => Some(n),
+                        AromaticValence::None => None,
+                    })
+            })
+            .unwrap_or(0)
+    }
+
+    // Atom aromatic hints
+    /// Returns true if this atom should be treated as aromatic based on
+    /// its own aromatic_hint or any incident bond's aromatic_hint.
+    pub fn atom_aromatic_hint(&self, index: AtomIndex) -> bool {
+        if let Some(atom) = self.atom(index) {
+            if atom.aromatic_hint() == Some(true) {
+                return true;
+            }
+        }
+        self.atom_bonds(index)
+            .any(|b| b.aromatic_hint() == Some(true))
+    }
+
+    /// Atoms that have at least one candidate with a non-None aromatic valence.
+    pub fn aromatic_candidate_atoms(&self) -> impl Iterator<Item = AtomIndex> + '_ {
+        self.atom_indices().filter(|&atom| {
+            self.atom_has_aromatic_candidate(atom)
+        })
+    }
+
+    pub fn atom_has_aromatic_candidate(&self, index: AtomIndex) -> bool {
+        self.atom(index)
+            .map(|a| {
+                a.candidates()
+                    .iter()
+                    .any(|c| c.aromatic_valence().is_aromatic())
+            })
+            .unwrap_or(false)
     }
 
     // Bonds
@@ -589,34 +637,8 @@ impl MoleculeBuilder {
         self.graph.edges(index).map(|e| e.weight())
     }
 
-    /// Returns true if this atom should be treated as aromatic based on
-    /// its own aromatic_hint or any incident bond's aromatic_hint.
-    pub fn atom_aromatic_hint(&self, index: AtomIndex) -> bool {
-        if let Some(atom) = self.atom(index) {
-            if atom.aromatic_hint() == Some(true) {
-                return true;
-            }
-        }
-        self.atom_bonds(index)
-            .any(|b| b.aromatic_hint() == Some(true))
-    }
-
     pub fn atom_bond_order_sum(&self, index: AtomIndex) -> u8 {
         self.graph.edges(index).map(|e| e.weight().order()).sum()
-    }
-
-    pub fn atom_bond_order_sum_with_aromatic(&self, index: AtomIndex, aromatic_weight: f32) -> f32 {
-        self.graph
-            .edges(index)
-            .map(|e| {
-                let b = e.weight();
-                if b.aromatic_hint() == Some(true) {
-                    aromatic_weight
-                } else {
-                    b.order() as f32
-                }
-            })
-            .sum()
     }
 
     pub fn connecting_bond_index(&self, a: AtomIndex, b: AtomIndex) -> Option<BondIndex> {
@@ -997,5 +1019,28 @@ mod tests {
             .collect();
         actual_sizes.sort_unstable();
         assert_eq!(actual_sizes, expected_sizes);
+    }
+
+    #[test]
+    fn test_atom_aromatic_valence_finds_aromatic_candidate_not_just_first() {
+        let mut builder = MoleculeBuilder::new();
+        let atom = builder.add_atom(AtomBuilder::new(Element::C));
+        builder
+            .atom_mut(atom)
+            .expect("atom should exist")
+            .set_candidates(SmallVec::from_vec(vec![spec!("{Cv4}"), spec!("{Cv2a1H}")]));
+        assert_eq!(builder.atom_aromatic_valence(atom), 1);
+    }
+
+    #[test]
+    fn test_atom_aromatic_valence_zero_for_non_aromatic_or_missing() {
+        let mut builder = MoleculeBuilder::new();
+        let atom = builder.add_atom(AtomBuilder::new(Element::C));
+        builder
+            .atom_mut(atom)
+            .expect("atom should exist")
+            .set_candidates(SmallVec::from_elem(spec!("{Cv4}"), 1));
+        assert_eq!(builder.atom_aromatic_valence(atom), 0);
+        assert_eq!(builder.atom_aromatic_valence(AtomIndex::new(999)), 0);
     }
 }

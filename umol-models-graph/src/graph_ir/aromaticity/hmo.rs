@@ -11,12 +11,11 @@ use umol_data::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
 use super::{AromaticContribution, AromaticSystem};
-use crate::atom::AromaticValence;
 use crate::graph_ir::config::ElementScope;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::rings::MoleculeRings;
+use crate::graph_ir::rings::{MoleculeRings, Ring};
 
 #[derive(Clone, Debug)]
 pub struct HmoAromaticity {
@@ -48,14 +47,7 @@ impl HmoAromaticity {
                 .atom(atom)
                 .ok_or_else(|| ResolutionError::AromaticityInconsistent("missing atom".into()))?;
             let element = atom_data.element();
-            let valence = atom_data
-                .candidates()
-                .iter()
-                .find_map(|c| match c.aromatic_valence() {
-                    AromaticValence::Valence(e) => Some(e),
-                    AromaticValence::None => None,
-                })
-                .unwrap_or(0);
+            let valence = builder.atom_aromatic_valence(atom);
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
                 ResolutionError::AromaticityInconsistent(format!(
                     "no Van-Catledge parameters for {:?} with {} pi-electrons",
@@ -112,10 +104,7 @@ impl HmoAromaticity {
                 if !self.is_element_supported(atom_data.element()) {
                     return false;
                 }
-                atom_data
-                    .candidates()
-                    .iter()
-                    .any(|c| c.aromatic_valence().is_aromatic())
+                builder.atom_has_aromatic_candidate(atom)
             })
             .collect();
 
@@ -166,27 +155,17 @@ impl HmoAromaticity {
                     .atom_indices
                     .iter()
                     .map(|&atom| {
-                        let valence = builder
-                            .atom(atom)
-                            .and_then(|a| {
-                                a.candidates()
-                                    .iter()
-                                    .find_map(|c| match c.aromatic_valence() {
-                                        AromaticValence::Valence(e) => Some(e),
-                                        AromaticValence::None => None,
-                                    })
-                            })
-                            .unwrap_or(0);
+                        let valence = builder.atom_aromatic_valence(atom);
                         AromaticContribution::new(atom, valence)
                     })
                     .collect();
 
                 let component_set: HashSet<AtomIndex> = component.iter().copied().collect();
-                let rings: Vec<Vec<AtomIndex>> = rings
+                let rings: Vec<Ring> = rings
                     .ring_indices()
                     .filter_map(|i| rings.ring(i))
-                    .filter(|cycle| cycle.iter().all(|a| component_set.contains(a)))
-                    .map(|cycle| cycle.to_vec())
+                    .filter(|cycle| cycle.atoms().iter().all(|a| component_set.contains(a)))
+                    .cloned()
                     .collect();
 
                 candidates.push(AromaticSystem::with_rings(contributions, rings));
