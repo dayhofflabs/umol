@@ -59,6 +59,9 @@ atom_typing:
           - 13
         electrons: 14
         charge: 0
+        ring_graph:
+          - "0-1:f"
+          - "1-2:f"
 counts:
   success: true
   summary:
@@ -115,3 +118,6 @@ counts:
           - 13
         electrons: 14
         charge: 0
+        ring_graph:
+          - "0-1:f"
+          - "1-2:f"

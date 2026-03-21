@@ -12,13 +12,13 @@ use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::config::{ElementScope, RingLimits};
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::rings::{MoleculeRings, Ring, RingIndex};
+use crate::graph_ir::rings::{RingSet, Ring, RingIndex};
 
 /// HueckelRule aromaticity model. Parameterized by element scope and ring scope.
 #[derive(Clone, Debug)]
 pub struct HueckelRuleAromaticity {
-    element_scope: ElementScope,
-    pub(crate) ring_limits: RingLimits,
+    pub element_scope: ElementScope,
+    pub ring_limits: RingLimits,
 }
 
 impl HueckelRuleAromaticity {
@@ -32,7 +32,7 @@ impl HueckelRuleAromaticity {
     pub fn find_from_rings(
         &self,
         builder: &MoleculeBuilder,
-        rings: &MoleculeRings,
+        rings: &RingSet,
     ) -> Vec<AromaticSystem> {
         let eligible_cycles: Vec<RingIndex> = rings
             .ring_indices()
@@ -138,10 +138,10 @@ impl HueckelRuleAromaticity {
 
     /// Enumerate fused ring combinations by iteratively merging rings that
     /// share at least one bond. Uses the `fused_neighbors` relationship from
-    /// `MoleculeRings` and bounds exploration to `max_fused_combination`.
+    /// `RingSet` and bounds exploration to `max_fused_combination`.
     fn enumerate_fused_combinations(
         &self,
-        rings: &MoleculeRings,
+        rings: &RingSet,
         eligible: &[RingIndex],
     ) -> Vec<(HashSet<AtomIndex>, Vec<Ring>)> {
         let max_combo = self.ring_limits.max_fused_combination;

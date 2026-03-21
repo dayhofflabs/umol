@@ -16,6 +16,7 @@ use umol_models_graph::graph_ir::{
     resolve_molecule_with, AromaticConstraint, AtomTypeQuery, HydrogenConstraint, Molecule,
     ResolutionError, ResolveConfig, TopologyNodeRef, TopologyProjection, ValenceStrategy,
 };
+use umol_models_graph::graph_ir::rings::{RingRelation, RingSet};
 use umol_models_graph::table_ir::{
     Atom as TableAtom, Bond as TableBond, BondDonation, BondOrder, Molecule as TableMolecule,
 };
@@ -73,6 +74,8 @@ struct AromaticSystemSummary {
     atoms: Vec<usize>,
     electrons: u8,
     charge: i8,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ring_graph: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -362,13 +365,30 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
     let mut aromatic_systems: Vec<AromaticSystemSummary> = mol
         .aromatic_systems()
         .map(|system| {
-            let mut atoms: Vec<usize> = system.atoms().map(|ai| canon_pos[ai.index()]).collect();
+            let system_atoms: Vec<_> = system.atoms().collect();
+            let mut atoms: Vec<usize> = system_atoms.iter().map(|ai| canon_pos[ai.index()]).collect();
             atoms.sort_unstable();
+            let display_ring_set = RingSet::induced_from_molecule_atoms(mol, &system_atoms);
+            let mut ring_graph: Vec<String> = display_ring_set
+                .ring_graph()
+                .edges()
+                .iter()
+                .map(|edge| {
+                    format!(
+                        "{}-{}:{}",
+                        edge.source.index(),
+                        edge.target.index(),
+                        ring_relation_code(edge.relation)
+                    )
+                })
+                .collect();
+            ring_graph.sort_unstable();
 
             AromaticSystemSummary {
                 atoms,
                 electrons: system.electron_count(),
                 charge: system.charge(),
+                ring_graph,
             }
         })
         .collect();
@@ -386,6 +406,17 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         atoms,
         bonds,
         aromatic_systems,
+    }
+}
+
+fn ring_relation_code(relation: RingRelation) -> &'static str {
+    match relation {
+        RingRelation::Fused => "f",
+        RingRelation::Spiro => "s",
+        RingRelation::Bridged => "b",
+        RingRelation::MultiSpiro => "m",
+        RingRelation::Noncontiguous => "n",
+        RingRelation::Disjoint | RingRelation::Identical => "d",
     }
 }
 

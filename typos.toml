@@ -1,5 +1,5 @@
 [files]
-extend-exclude = ["element.rs", "isotope_data.rs", ]
+extend-exclude = ["element.rs", "isotope_data.rs"]
 
 [default.extend-words]
 ALS = "ALS"
@@ -10,6 +10,7 @@ FO = "FO"
 LOD = "LOD"
 sir = "sir"
 gir = "gir"
+mis = "mis"
 UNCATALOGUED = "UNCATALOGUED"
 # Element symbols
 H = "H"

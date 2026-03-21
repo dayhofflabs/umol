@@ -15,7 +15,7 @@ pub use self::hueckel_rule::*;
 use crate::graph_ir::config::AromaticityStrategy;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
-use crate::graph_ir::rings::{MoleculeRings, Ring};
+use crate::graph_ir::rings::{RingSet, Ring};
 
 /// Per-atom contribution to an aromatic system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -147,7 +147,7 @@ impl AromaticityModel {
     pub fn aromatic_systems(
         &self,
         builder: &MoleculeBuilder,
-        rings: &MoleculeRings,
+        rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, ResolutionError> {
         match self {
             Self::HueckelRule(m) => Ok(m.find_from_rings(builder, rings)),

@@ -15,12 +15,12 @@ use crate::graph_ir::config::ElementScope;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::rings::{MoleculeRings, Ring};
+use crate::graph_ir::rings::{RingSet, Ring};
 
 #[derive(Clone, Debug)]
 pub struct HmoAromaticity {
-    element_scope: ElementScope,
-    stabilization_threshold: f64,
+    pub element_scope: ElementScope,
+    pub stabilization_threshold: f64,
 }
 
 impl HmoAromaticity {
@@ -92,7 +92,7 @@ impl HmoAromaticity {
     pub fn find_from_rings(
         &self,
         builder: &MoleculeBuilder,
-        rings: &MoleculeRings,
+        rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, ResolutionError> {
         let pi_atoms: Vec<AtomIndex> = builder
             .atom_indices()

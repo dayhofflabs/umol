@@ -13,7 +13,7 @@ use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::algorithms::mis::maximum_independent_set;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
-use crate::graph_ir::rings::{MoleculeRings, Ring, RingIndex};
+use crate::graph_ir::rings::{RingSet, Ring, RingIndex};
 
 #[derive(Clone, Debug)]
 pub struct ClarAromaticity;
@@ -22,13 +22,14 @@ impl ClarAromaticity {
     pub fn find_from_rings(
         &self,
         builder: &MoleculeBuilder,
-        rings: &MoleculeRings,
+        rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, ResolutionError> {
-        let has_non_benzenoid_aromatic = rings.rings().iter().flat_map(|r| r.atoms()).any(|&atom| {
-            builder.atom(atom).is_some_and(|a| {
-                builder.atom_has_aromatic_candidate(atom) && a.element() != Element::C
-            })
-        });
+        let has_non_benzenoid_aromatic =
+            rings.rings().iter().flat_map(|r| r.atoms()).any(|&atom| {
+                builder.atom(atom).is_some_and(|a| {
+                    builder.atom_has_aromatic_candidate(atom) && a.element() != Element::C
+                })
+            });
         if has_non_benzenoid_aromatic {
             return Err(ResolutionError::AromaticityInconsistent(
                 "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
@@ -47,7 +48,8 @@ impl ClarAromaticity {
                         builder
                             .atom(atom)
                             .map(|a| {
-                                a.element() == Element::C && builder.atom_has_aromatic_candidate(atom)
+                                a.element() == Element::C
+                                    && builder.atom_has_aromatic_candidate(atom)
                             })
                             .unwrap_or(false)
                     })
@@ -79,26 +81,29 @@ impl ClarAromaticity {
             .filter_map(|&ring_idx| rings.ring(ring_idx).cloned())
             .collect();
 
-        Ok(vec![AromaticSystem::with_rings(contributions, selected_rings)])
+        Ok(vec![AromaticSystem::with_rings(
+            contributions,
+            selected_rings,
+        )])
     }
 }
 
-fn select_disjoint_sextets(rings: &MoleculeRings, candidates: &[RingIndex]) -> Vec<RingIndex> {
+fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIndex]) -> Vec<RingIndex> {
     if candidates.is_empty() {
         return Vec::new();
     }
 
     // Domain adapter invariant: candidates are mapped to contiguous integer
     // ids in stable input order, then mapped back after MIS selection.
-        let candidate_atoms: Vec<HashSet<AtomIndex>> = candidates
-            .iter()
-            .map(|&ring_idx| {
-                rings
-                    .ring(ring_idx)
-                    .map(|ring| ring.atoms().iter().copied().collect())
-                    .unwrap_or_default()
-            })
-            .collect();
+    let candidate_atoms: Vec<HashSet<AtomIndex>> = candidates
+        .iter()
+        .map(|&ring_idx| {
+            rings
+                .ring(ring_idx)
+                .map(|ring| ring.atoms().iter().copied().collect())
+                .unwrap_or_default()
+        })
+        .collect();
 
     let n = candidates.len();
     let mut conflict_adj: Vec<Vec<usize>> = vec![Vec::new(); n];
@@ -211,7 +216,7 @@ mod tests {
         builder
     }
 
-    fn hex_ring_indices(builder: &MoleculeBuilder, ring_info: &MoleculeRings) -> Vec<RingIndex> {
+    fn hex_ring_indices(builder: &MoleculeBuilder, ring_info: &RingSet) -> Vec<RingIndex> {
         ring_info
             .ring_indices()
             .filter(|&i| {
@@ -265,14 +270,16 @@ mod tests {
             expected_atoms
         );
         if let Some(system) = systems.first() {
-            let ring_set: std::collections::HashSet<RingIndex> = system
+            let ring_set: HashSet<RingIndex> = system
                 .rings()
                 .iter()
                 .filter_map(|ring| {
-                    rings.ring_indices().find(|&idx| rings.ring(idx) == Some(ring))
+                    rings
+                        .ring_indices()
+                        .find(|&idx| rings.ring(idx) == Some(ring))
                 })
                 .collect();
-            let expected_selected: std::collections::HashSet<RingIndex> =
+            let expected_selected: HashSet<RingIndex> =
                 select_disjoint_sextets(&rings, &hex_ring_indices(&builder, &rings))
                     .into_iter()
                     .collect();
