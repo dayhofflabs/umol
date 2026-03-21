@@ -6,14 +6,15 @@ use crate::graph_ir::aromaticity::AromaticityModel;
 use crate::graph_ir::atom::AtomBuilder;
 use crate::graph_ir::bond::BondBuilder;
 use crate::graph_ir::config::{
-    AromaticityHintPolicy, ResolveConfig, TopologyResolveFlags, ValenceMatchPolicy,
+    AromaticityHintPolicy, AromaticityStrategy, ResolveConfig, TopologyResolveFlags,
+    ValenceMatchPolicy,
 };
 use crate::graph_ir::dative::DativeBond;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, Molecule, MoleculeBuilder};
 use crate::graph_ir::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
 use crate::graph_ir::noncovalent::NoncovalentBond;
-use crate::graph_ir::rings::RingEnumerator;
+use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 use crate::graph_ir::valence::ValenceMatcher;
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
@@ -186,7 +187,13 @@ fn resolve_aromaticity_with(
     }
 
     let model = AromaticityModel::new(&config.aromaticity.aromaticity_strategy);
-    let enumerator = RingEnumerator::new(&config.aromaticity.enumeration_strategy);
+    let ring_family = match config.aromaticity.aromaticity_strategy {
+        AromaticityStrategy::Clar => RingFamily::InducedBenzenoid,
+        AromaticityStrategy::HueckelRule { .. } | AromaticityStrategy::Hmo { .. } => {
+            RingFamily::Simple
+        }
+    };
+    let enumerator = RingEnumerator::new(ring_family, &config.aromaticity.enumeration_strategy);
     let rings = enumerator.enumerate_builder(builder);
     for system in model.aromatic_systems(builder, &rings)? {
         builder.add_aromatic_system(system);

@@ -307,7 +307,7 @@ mod tests {
     use crate::atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
-    use crate::graph_ir::rings::RingEnumerator;
+    use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
     const C1: &str = "{Cv2a1H}";
 
@@ -449,8 +449,8 @@ mod tests {
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let ring_info =
-            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+        let ring_info = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
+            .enumerate_builder(&builder);
         let systems = hmo_model.find_from_rings(&builder, &ring_info).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(

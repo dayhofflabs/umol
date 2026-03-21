@@ -4,6 +4,8 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
+use umol_data::Element;
+
 use crate::graph_ir::algorithms::bcc::biconnected_components;
 use crate::graph_ir::algorithms::cycles::enumerate_simple_cycles;
 use crate::graph_ir::config::RingEnumerationStrategy;
@@ -93,6 +95,7 @@ pub enum RingRelation {
 pub enum RingFamily {
     Simple,
     Induced,
+    InducedBenzenoid,
     Mcb,
     Relevant,
     Essential,
@@ -285,23 +288,24 @@ impl RingSet {
             }
         }
 
-        let mut rings: Vec<Ring> = enumerate_simple_cycles(component_atoms.len(), &adj_int, component_atoms.len())
-            .into_iter()
-            .filter(|cycle| is_induced_cycle(cycle, &adj_int))
-            .filter_map(|cycle| {
-                let ring_atoms: Vec<AtomIndex> =
-                    cycle.into_iter().map(|i| component_atoms[i]).collect();
-                let n = ring_atoms.len();
-                let mut ring_bonds = Vec::with_capacity(n);
-                for i in 0..n {
-                    let a = ring_atoms[i];
-                    let b = ring_atoms[(i + 1) % n];
-                    let bond = *bond_map.get(&(a, b))?;
-                    ring_bonds.push(bond);
-                }
-                Ring::new(ring_atoms, ring_bonds).ok()
-            })
-            .collect();
+        let mut rings: Vec<Ring> =
+            enumerate_simple_cycles(component_atoms.len(), &adj_int, component_atoms.len())
+                .into_iter()
+                .filter(|cycle| is_induced_cycle(cycle, &adj_int))
+                .filter_map(|cycle| {
+                    let ring_atoms: Vec<AtomIndex> =
+                        cycle.into_iter().map(|i| component_atoms[i]).collect();
+                    let n = ring_atoms.len();
+                    let mut ring_bonds = Vec::with_capacity(n);
+                    for i in 0..n {
+                        let a = ring_atoms[i];
+                        let b = ring_atoms[(i + 1) % n];
+                        let bond = *bond_map.get(&(a, b))?;
+                        ring_bonds.push(bond);
+                    }
+                    Ring::new(ring_atoms, ring_bonds).ok()
+                })
+                .collect();
         rings.sort_by_key(|ring| {
             let mut atoms: Vec<usize> = ring.atoms().iter().map(|a| a.index()).collect();
             atoms.sort_unstable();
@@ -465,14 +469,16 @@ impl RingSet {
 }
 
 pub struct RingEnumerator {
+    family: RingFamily,
     aromatic_only: bool,
     max_ring_size: usize,
     max_rings_per_component: usize,
 }
 
 impl RingEnumerator {
-    pub fn new(strategy: &RingEnumerationStrategy) -> Self {
+    pub fn new(family: RingFamily, strategy: &RingEnumerationStrategy) -> Self {
         Self {
+            family,
             aromatic_only: strategy.aromatic_only,
             max_ring_size: strategy.max_ring_size,
             max_rings_per_component: strategy.max_rings_per_component,
@@ -487,25 +493,48 @@ impl RingEnumerator {
                 bond_map.insert((b, a), bond);
             }
         }
-        let (adj, bcc) = if self.aromatic_only {
-            let full_adj = builder.adjacency_list();
-            let pi_atoms: HashSet<AtomIndex> = builder
-                .atom_indices()
-                .filter(|&atom| builder.atom_aromatic_hint(atom))
-                .collect();
-            let adj = induced_subgraph_adjacency_list(&full_adj, &pi_atoms);
-            let mut atoms: Vec<AtomIndex> = pi_atoms.iter().copied().collect();
-            atoms.sort_unstable();
-            let bcc = molecule_biconnected_components(&atoms, &adj);
-            (adj, bcc)
-        } else {
-            let adj = builder.adjacency_list();
-            let mut atoms: Vec<AtomIndex> = builder.atom_indices().collect();
-            atoms.sort_unstable();
-            let bcc = molecule_biconnected_components(&atoms, &adj);
-            (adj, bcc)
-        };
-        self.build(&bcc, &adj, &bond_map)
+        let full_adj = builder.adjacency_list();
+
+        match self.family {
+            RingFamily::Simple | RingFamily::Induced => {
+                let (adj, bcc) = if self.aromatic_only {
+                    let pi_atoms: HashSet<AtomIndex> = builder
+                        .atom_indices()
+                        .filter(|&atom| builder.atom_aromatic_hint(atom))
+                        .collect();
+                    let adj = induced_subgraph_adjacency_list(&full_adj, &pi_atoms);
+                    let mut atoms: Vec<AtomIndex> = pi_atoms.iter().copied().collect();
+                    atoms.sort_unstable();
+                    let bcc = molecule_biconnected_components(&atoms, &adj);
+                    (adj, bcc)
+                } else {
+                    let adj = full_adj;
+                    let mut atoms: Vec<AtomIndex> = builder.atom_indices().collect();
+                    atoms.sort_unstable();
+                    let bcc = molecule_biconnected_components(&atoms, &adj);
+                    (adj, bcc)
+                };
+                self.build(&bcc, &adj, &bond_map)
+            }
+            RingFamily::InducedBenzenoid => {
+                let aromatic_carbons: HashSet<AtomIndex> = builder
+                    .atom_indices()
+                    .filter(|&atom| {
+                        builder.atom(atom).is_some_and(|a| {
+                            a.element() == Element::C && builder.atom_has_aromatic_candidate(atom)
+                        })
+                    })
+                    .collect();
+                let adj = induced_subgraph_adjacency_list(&full_adj, &aromatic_carbons);
+                let mut atoms: Vec<AtomIndex> = aromatic_carbons.iter().copied().collect();
+                atoms.sort_unstable();
+                let bcc = molecule_biconnected_components(&atoms, &adj);
+                self.build_induced_benzenoid(&bcc, &adj, &bond_map)
+            }
+            RingFamily::Mcb | RingFamily::Relevant | RingFamily::Essential => {
+                todo!()
+            }
+        }
     }
 
     pub fn enumerate_molecule(&self, molecule: &Molecule) -> RingSet {
@@ -516,25 +545,48 @@ impl RingEnumerator {
                 bond_map.insert((b, a), bond);
             }
         }
-        let (adj, bcc) = if self.aromatic_only {
-            let full_adj = molecule.adjacency_list();
-            let pi_atoms: HashSet<AtomIndex> = molecule
-                .atom_indices()
-                .filter(|&atom| molecule.atom(atom).is_some_and(|a| a.is_aromatic()))
-                .collect();
-            let adj = induced_subgraph_adjacency_list(&full_adj, &pi_atoms);
-            let mut atoms: Vec<AtomIndex> = pi_atoms.iter().copied().collect();
-            atoms.sort_unstable();
-            let bcc = molecule_biconnected_components(&atoms, &adj);
-            (adj, bcc)
-        } else {
-            let adj = molecule.adjacency_list();
-            let mut atoms: Vec<AtomIndex> = molecule.atom_indices().collect();
-            atoms.sort_unstable();
-            let bcc = molecule_biconnected_components(&atoms, &adj);
-            (adj, bcc)
-        };
-        self.build(&bcc, &adj, &bond_map)
+        let full_adj = molecule.adjacency_list();
+
+        match self.family {
+            RingFamily::Simple | RingFamily::Induced => {
+                let (adj, bcc) = if self.aromatic_only {
+                    let pi_atoms: HashSet<AtomIndex> = molecule
+                        .atom_indices()
+                        .filter(|&atom| molecule.atom(atom).is_some_and(|a| a.is_aromatic()))
+                        .collect();
+                    let adj = induced_subgraph_adjacency_list(&full_adj, &pi_atoms);
+                    let mut atoms: Vec<AtomIndex> = pi_atoms.iter().copied().collect();
+                    atoms.sort_unstable();
+                    let bcc = molecule_biconnected_components(&atoms, &adj);
+                    (adj, bcc)
+                } else {
+                    let adj = full_adj;
+                    let mut atoms: Vec<AtomIndex> = molecule.atom_indices().collect();
+                    atoms.sort_unstable();
+                    let bcc = molecule_biconnected_components(&atoms, &adj);
+                    (adj, bcc)
+                };
+                self.build(&bcc, &adj, &bond_map)
+            }
+            RingFamily::InducedBenzenoid => {
+                let aromatic_carbons: HashSet<AtomIndex> = molecule
+                    .atom_indices()
+                    .filter(|&atom| {
+                        molecule.atom(atom).is_some_and(|a| {
+                            a.element() == Element::C && molecule.atom_aromatic_valence(atom) > 0
+                        })
+                    })
+                    .collect();
+                let adj = induced_subgraph_adjacency_list(&full_adj, &aromatic_carbons);
+                let mut atoms: Vec<AtomIndex> = aromatic_carbons.iter().copied().collect();
+                atoms.sort_unstable();
+                let bcc = molecule_biconnected_components(&atoms, &adj);
+                self.build_induced_benzenoid(&bcc, &adj, &bond_map)
+            }
+            RingFamily::Mcb | RingFamily::Relevant | RingFamily::Essential => {
+                todo!()
+            }
+        }
     }
 
     fn build(
@@ -611,9 +663,19 @@ impl RingEnumerator {
             );
         }
 
+        let is_aromatic_scope = self.aromatic_only || self.family == RingFamily::InducedBenzenoid;
+        let rings = if self.family == RingFamily::Induced {
+            rings
+                .into_iter()
+                .filter(|ring| is_induced_ring(ring, adj))
+                .collect()
+        } else {
+            rings
+        };
+
         RingSet::from_rings(
-            RingFamily::Simple,
-            if self.aromatic_only {
+            self.family,
+            if is_aromatic_scope {
                 RingScope::AromaticSubgraph
             } else {
                 RingScope::All
@@ -622,6 +684,97 @@ impl RingEnumerator {
             rings,
         )
     }
+
+    fn build_induced_benzenoid(
+        &self,
+        bcc: &[Vec<AtomIndex>],
+        adj: &HashMap<AtomIndex, Vec<AtomIndex>>,
+        bond_map: &HashMap<(AtomIndex, AtomIndex), BondIndex>,
+    ) -> RingSet {
+        let mut rings: Vec<Ring> = Vec::new();
+        for component in bcc {
+            let mut component_atoms = component.clone();
+            component_atoms.sort_unstable();
+            if component_atoms.len() < 6 {
+                continue;
+            }
+            let atom_to_id: HashMap<AtomIndex, usize> = component_atoms
+                .iter()
+                .copied()
+                .enumerate()
+                .map(|(i, a)| (a, i))
+                .collect();
+            let mut adj_int: Vec<Vec<usize>> = vec![Vec::new(); component_atoms.len()];
+            for &atom in &component_atoms {
+                let mut neighbors = adj
+                    .get(&atom)
+                    .map(|ns| {
+                        ns.iter()
+                            .filter_map(|&n| atom_to_id.get(&n).copied())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                neighbors.sort_unstable();
+                neighbors.dedup();
+                adj_int[atom_to_id[&atom]] = neighbors;
+            }
+
+            let mut component_rings: Vec<Ring> =
+                enumerate_simple_cycles(component_atoms.len(), &adj_int, 6)
+                    .into_iter()
+                    .filter(|cycle| cycle.len() == 6)
+                    .filter_map(|cycle| {
+                        let ring_atoms: Vec<AtomIndex> =
+                            cycle.into_iter().map(|i| component_atoms[i]).collect();
+                        let mut ring_bonds = Vec::with_capacity(6);
+                        for i in 0..6 {
+                            let a = ring_atoms[i];
+                            let b = ring_atoms[(i + 1) % 6];
+                            let bond = *bond_map.get(&(a, b))?;
+                            ring_bonds.push(bond);
+                        }
+                        Ring::new(ring_atoms, ring_bonds).ok()
+                    })
+                    .collect();
+
+            component_rings.sort_by_key(|ring| {
+                let mut atoms: Vec<usize> = ring.atoms().iter().map(|a| a.index()).collect();
+                atoms.sort_unstable();
+                atoms
+            });
+            component_rings.truncate(self.max_rings_per_component);
+            rings.extend(component_rings);
+        }
+
+        RingSet::from_rings(
+            RingFamily::InducedBenzenoid,
+            RingScope::AromaticSubgraph,
+            6,
+            rings,
+        )
+    }
+}
+
+fn is_induced_ring(ring: &Ring, adj: &HashMap<AtomIndex, Vec<AtomIndex>>) -> bool {
+    if ring.len() < 3 {
+        return false;
+    }
+    let atoms = ring.atoms();
+    let n = atoms.len();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let adjacent_in_cycle = j == i + 1 || (i == 0 && j == n - 1);
+            if adjacent_in_cycle {
+                continue;
+            }
+            let a = atoms[i];
+            let b = atoms[j];
+            if adj.get(&a).is_some_and(|ns| ns.contains(&b)) {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 fn is_induced_cycle(cycle: &[usize], adj: &[Vec<usize>]) -> bool {
@@ -739,11 +892,14 @@ mod tests {
     use crate::graph_ir::config::{ResolveConfig, RingEnumerationStrategy};
 
     fn enumerate(builder: &MoleculeBuilder, max_ring_size: usize) -> RingSet {
-        RingEnumerator::new(&RingEnumerationStrategy {
-            aromatic_only: false,
-            max_ring_size,
-            max_rings_per_component: usize::MAX,
-        })
+        RingEnumerator::new(
+            RingFamily::Simple,
+            &RingEnumerationStrategy {
+                aromatic_only: false,
+                max_ring_size,
+                max_rings_per_component: usize::MAX,
+            },
+        )
         .enumerate_builder(builder)
     }
 
@@ -752,29 +908,38 @@ mod tests {
         max_ring_size: usize,
         max_rings_per_component: usize,
     ) -> RingSet {
-        RingEnumerator::new(&RingEnumerationStrategy {
-            aromatic_only: false,
-            max_ring_size,
-            max_rings_per_component,
-        })
+        RingEnumerator::new(
+            RingFamily::Simple,
+            &RingEnumerationStrategy {
+                aromatic_only: false,
+                max_ring_size,
+                max_rings_per_component,
+            },
+        )
         .enumerate_builder(builder)
     }
 
     fn enumerate_molecule(molecule: &Molecule, max_ring_size: usize) -> RingSet {
-        RingEnumerator::new(&RingEnumerationStrategy {
-            aromatic_only: false,
-            max_ring_size,
-            max_rings_per_component: usize::MAX,
-        })
+        RingEnumerator::new(
+            RingFamily::Simple,
+            &RingEnumerationStrategy {
+                aromatic_only: false,
+                max_ring_size,
+                max_rings_per_component: usize::MAX,
+            },
+        )
         .enumerate_molecule(molecule)
     }
 
     fn enumerate_aromatic(builder: &MoleculeBuilder, max_ring_size: usize) -> RingSet {
-        RingEnumerator::new(&RingEnumerationStrategy {
-            aromatic_only: true,
-            max_ring_size,
-            max_rings_per_component: usize::MAX,
-        })
+        RingEnumerator::new(
+            RingFamily::Simple,
+            &RingEnumerationStrategy {
+                aromatic_only: true,
+                max_ring_size,
+                max_rings_per_component: usize::MAX,
+            },
+        )
         .enumerate_builder(builder)
     }
 

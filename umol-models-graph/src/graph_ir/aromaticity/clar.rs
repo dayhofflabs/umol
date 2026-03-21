@@ -13,7 +13,7 @@ use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::algorithms::mis::maximum_independent_set;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
-use crate::graph_ir::rings::{RingSet, Ring, RingIndex};
+use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 
 #[derive(Clone, Debug)]
 pub struct ClarAromaticity;
@@ -24,12 +24,11 @@ impl ClarAromaticity {
         builder: &MoleculeBuilder,
         rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, ResolutionError> {
-        let has_non_benzenoid_aromatic =
-            rings.rings().iter().flat_map(|r| r.atoms()).any(|&atom| {
-                builder.atom(atom).is_some_and(|a| {
-                    builder.atom_has_aromatic_candidate(atom) && a.element() != Element::C
-                })
-            });
+        let has_non_benzenoid_aromatic = builder.atom_indices().any(|atom| {
+            builder
+                .atom(atom)
+                .is_some_and(|a| builder.atom_has_aromatic_candidate(atom) && a.element() != Element::C)
+        });
         if has_non_benzenoid_aromatic {
             return Err(ResolutionError::AromaticityInconsistent(
                 "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
@@ -128,7 +127,7 @@ mod tests {
     use crate::atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
-    use crate::graph_ir::rings::RingEnumerator;
+    use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
     const C1: &str = "{Cv2a1H}";
     const C0: &str = "{Cv4}";
@@ -243,7 +242,8 @@ mod tests {
         #[case] expected_sextets: usize,
     ) {
         let ring_info =
-            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+            RingEnumerator::new(RingFamily::InducedBenzenoid, &RingEnumerationStrategy::default())
+                .enumerate_builder(&builder);
         let candidates = hex_ring_indices(&builder, &ring_info);
         let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), expected_sextets);
@@ -261,7 +261,8 @@ mod tests {
         #[case] expected_atoms: Option<usize>,
     ) {
         let rings =
-            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+            RingEnumerator::new(RingFamily::InducedBenzenoid, &RingEnumerationStrategy::default())
+                .enumerate_builder(&builder);
         let model = ClarAromaticity;
         let systems = model.find_from_rings(&builder, &rings).unwrap();
         assert_eq!(systems.len(), expected_systems);
@@ -293,14 +294,15 @@ mod tests {
     #[case::furan(make_ring(&["{O/1v2a2}", C1, C1, C1, C1]))]
     fn test_clar_model_find_from_rings_error(#[case] builder: MoleculeBuilder) {
         let rings =
-            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+            RingEnumerator::new(RingFamily::InducedBenzenoid, &RingEnumerationStrategy::default())
+                .enumerate_builder(&builder);
         let model = ClarAromaticity;
         assert!(model.find_from_rings(&builder, &rings).is_err());
     }
 
     #[rstest]
     fn test_clar_solver(phenanthrene: MoleculeBuilder) {
-        let ring_info = RingEnumerator::new(&RingEnumerationStrategy::default())
+        let ring_info = RingEnumerator::new(RingFamily::InducedBenzenoid, &RingEnumerationStrategy::default())
             .enumerate_builder(&phenanthrene);
         let candidates = hex_ring_indices(&phenanthrene, &ring_info);
         let sextets = select_disjoint_sextets(&ring_info, &candidates);

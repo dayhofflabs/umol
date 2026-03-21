@@ -259,7 +259,7 @@ mod tests {
     use crate::atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
-    use crate::graph_ir::rings::RingEnumerator;
+    use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
     fn daylight_model() -> HueckelRuleAromaticity {
         HueckelRuleAromaticity::new(
@@ -439,8 +439,8 @@ mod tests {
         #[case] expected_atoms: usize,
         #[case] expected_electrons: u8,
     ) {
-        let rings =
-            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+        let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
+            .enumerate_builder(&builder);
         let model = daylight_model();
         let systems = model.find_from_rings(&builder, &rings);
         assert_eq!(systems.len(), 1);
@@ -459,8 +459,8 @@ mod tests {
         #[case] builder: MoleculeBuilder,
         #[case] model: HueckelRuleAromaticity,
     ) {
-        let rings =
-            RingEnumerator::new(&RingEnumerationStrategy::default()).enumerate_builder(&builder);
+        let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
+            .enumerate_builder(&builder);
         let systems = model.find_from_rings(&builder, &rings);
         assert!(systems.is_empty());
     }
