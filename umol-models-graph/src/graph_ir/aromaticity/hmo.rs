@@ -10,12 +10,11 @@ use nalgebra::{DMatrix, SymmetricEigen};
 use umol_data::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
-use super::{AromaticContribution, AromaticSystem};
+use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::graph_ir::config::ElementScope;
-use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::builder::MoleculeBuilder;
 use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::rings::{RingSet, Ring};
+use crate::graph_ir::rings::{Ring, RingSet};
 
 #[derive(Clone, Debug)]
 pub struct HmoAromaticity {
@@ -35,7 +34,7 @@ impl HmoAromaticity {
         &self,
         builder: &MoleculeBuilder,
         pi_atoms: &[AtomIndex],
-    ) -> Result<HmoCalculator, ResolutionError> {
+    ) -> Result<HmoCalculator, AromaticityError> {
         let atom_to_idx: HashMap<AtomIndex, usize> =
             pi_atoms.iter().enumerate().map(|(i, &a)| (a, i)).collect();
 
@@ -45,11 +44,11 @@ impl HmoAromaticity {
         for &atom in pi_atoms {
             let atom_data = builder
                 .atom(atom)
-                .ok_or_else(|| ResolutionError::AromaticityInconsistent("missing atom".into()))?;
+                .ok_or_else(|| AromaticityError::HmoMissingAtom("missing atom".into()))?;
             let element = atom_data.element();
             let valence = builder.atom_aromatic_valence(atom);
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
-                ResolutionError::AromaticityInconsistent(format!(
+                AromaticityError::HmoMissingParameters(format!(
                     "no Van-Catledge parameters for {:?} with {} pi-electrons",
                     element, valence
                 ))
@@ -66,7 +65,7 @@ impl HmoAromaticity {
                     if j > i {
                         let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(
                             || {
-                                ResolutionError::AromaticityInconsistent(format!(
+                                AromaticityError::HmoMissingParameters(format!(
                                     "no Van-Catledge k_XY for {:?}-{:?}",
                                     atom_types[i], atom_types[j]
                                 ))
@@ -93,7 +92,7 @@ impl HmoAromaticity {
         &self,
         builder: &MoleculeBuilder,
         rings: &RingSet,
-    ) -> Result<Vec<AromaticSystem>, ResolutionError> {
+    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
         let pi_atoms: Vec<AtomIndex> = builder
             .atom_indices()
             .filter(|&atom| {
@@ -190,25 +189,25 @@ impl HmoCalculator {
         electron_count: u32,
         h_values: Vec<f64>,
         bonds: Vec<(usize, usize, f64)>,
-    ) -> Result<Self, ResolutionError> {
+    ) -> Result<Self, AromaticityError> {
         if pi_atoms.is_empty() {
-            return Err(ResolutionError::AromaticityInconsistent(
+            return Err(AromaticityError::HmoInvalidInput(
                 "empty pi-system for HMO".to_string(),
             ));
         }
         if electron_count == 0 {
-            return Err(ResolutionError::AromaticityInconsistent(
+            return Err(AromaticityError::HmoInvalidInput(
                 "zero pi-electrons".to_string(),
             ));
         }
         if electron_count % 2 != 0 {
-            return Err(ResolutionError::AromaticityInconsistent(
+            return Err(AromaticityError::HmoInvalidInput(
                 "open-shell pi-system (odd electron count) not supported by HMO".to_string(),
             ));
         }
         let orbital_count = (electron_count / 2) as usize;
         if orbital_count > pi_atoms.len() {
-            return Err(ResolutionError::AromaticityInconsistent(
+            return Err(AromaticityError::HmoInvalidInput(
                 "more electron pairs than orbitals".to_string(),
             ));
         }

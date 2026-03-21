@@ -9,9 +9,8 @@ use std::collections::HashSet;
 
 use umol_data::Element;
 
-use super::{AromaticContribution, AromaticSystem};
+use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::graph_ir::algorithms::mis::maximum_independent_set;
-use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 
@@ -23,14 +22,14 @@ impl ClarAromaticity {
         &self,
         builder: &MoleculeBuilder,
         rings: &RingSet,
-    ) -> Result<Vec<AromaticSystem>, ResolutionError> {
+    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
         let has_non_benzenoid_aromatic = builder.atom_indices().any(|atom| {
             builder
                 .atom(atom)
                 .is_some_and(|a| builder.atom_has_aromatic_candidate(atom) && a.element() != Element::C)
         });
         if has_non_benzenoid_aromatic {
-            return Err(ResolutionError::AromaticityInconsistent(
+            return Err(AromaticityError::ClarInputError(
                 "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
                     .to_string(),
             ));

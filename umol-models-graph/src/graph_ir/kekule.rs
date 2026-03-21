@@ -6,8 +6,22 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use thiserror::Error;
+
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::molecule::{AtomIndex, BondIndex, MoleculeBuilder};
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum KekulizationError {
+    #[error("no valid kekulization assignment found")]
+    NoAssignment,
+    #[error("kekulization backtrack limit exceeded ({limit})")]
+    BacktrackLimitExceeded { limit: usize },
+    #[error("unsupported kekulization algorithm: {0}")]
+    UnsupportedAlgorithm(String),
+    #[error("invalid aromatic system: {0}")]
+    InvalidSystem(String),
+}
 
 /// Result of Kekulization for one aromatic system.
 #[derive(Clone, Debug)]
@@ -47,10 +61,10 @@ pub fn kekulize(
     builder: &MoleculeBuilder,
     system: &AromaticSystem,
     config: &KekuleConfig,
-) -> Option<KekuleAssignment> {
+) -> Result<KekuleAssignment, KekulizationError> {
     let aromatic_atoms: HashSet<AtomIndex> = system.atoms().collect();
     if aromatic_atoms.is_empty() {
-        return Some(KekuleAssignment {
+        return Ok(KekuleAssignment {
             bond_orders: BTreeMap::new(),
         });
     }
@@ -121,11 +135,17 @@ pub fn kekulize(
             let (bond_idx, _, _) = aromatic_bonds[i];
             result.insert(bond_idx, order);
         }
-        Some(KekuleAssignment {
+        Ok(KekuleAssignment {
             bond_orders: result,
         })
     } else {
-        None
+        if backtracks >= config.max_backtrack_steps {
+            Err(KekulizationError::BacktrackLimitExceeded {
+                limit: config.max_backtrack_steps,
+            })
+        } else {
+            Err(KekulizationError::NoAssignment)
+        }
     }
 }
 
@@ -245,7 +265,7 @@ mod tests {
         let (builder, system) = make_benzene_system();
         let config = KekuleConfig::default();
         let result = kekulize(&builder, &system, &config);
-        assert!(result.is_some());
+        assert!(result.is_ok());
         let assignment = result.unwrap();
         assert_eq!(assignment.bond_orders.len(), 6);
         let doubles: usize = assignment.bond_orders.values().filter(|&&v| v == 2).count();
@@ -277,7 +297,7 @@ mod tests {
         let (builder, system) = make_naphthalene_system();
         let config = KekuleConfig::default();
         let result = kekulize(&builder, &system, &config);
-        assert!(result.is_some());
+        assert!(result.is_ok());
         let assignment = result.unwrap();
         let doubles: usize = assignment.bond_orders.values().filter(|&&v| v == 2).count();
         assert_eq!(doubles, 5); // Naphthalene has 5 double bonds in Kekule form.

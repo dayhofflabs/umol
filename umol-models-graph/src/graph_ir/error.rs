@@ -1,6 +1,8 @@
 use thiserror::Error;
 use umol_data::Element;
 
+use crate::graph_ir::aromaticity::AromaticityError;
+use crate::graph_ir::kekule::KekulizationError;
 use crate::diagnostics::Diagnostic;
 use crate::table_ir::bond::BondOrder;
 
@@ -32,6 +34,10 @@ pub enum ResolutionError {
 
     #[error("Aromaticity inconsistent: {0}")]
     AromaticityInconsistent(String),
+    #[error(transparent)]
+    Aromaticity(#[from] AromaticityError),
+    #[error(transparent)]
+    Kekulization(#[from] KekulizationError),
 
     // TODO: Semantically incorrect: molecular charge is not stored. Restructure
     #[error("Molecular charge mismatch: explicit {explicit}, from atoms {atom_sum}")]

@@ -116,7 +116,7 @@ fn resolve_topology_with(
                         }
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(MulticenterSet::topology_only(
+                Ok::<MulticenterSet, ResolutionError>(MulticenterSet::topology_only(
                     contributions.iter().map(|c| c.atom()),
                 ))
             })

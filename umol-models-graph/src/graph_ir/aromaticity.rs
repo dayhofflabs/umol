@@ -12,10 +12,26 @@ pub mod hueckel_rule;
 pub use self::clar::*;
 pub use self::hmo::*;
 pub use self::hueckel_rule::*;
+use thiserror::Error;
 use crate::graph_ir::config::AromaticityStrategy;
-use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
-use crate::graph_ir::rings::{RingSet, Ring};
+use crate::graph_ir::rings::{Ring, RingSet};
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum AromaticityError {
+    #[error("ring enumeration error: {0}")]
+    RingEnumeration(String),
+    #[error("hueckel input error: {0}")]
+    HueckelInputError(String),
+    #[error("hmo missing atom: {0}")]
+    HmoMissingAtom(String),
+    #[error("hmo missing parameters: {0}")]
+    HmoMissingParameters(String),
+    #[error("hmo invalid input: {0}")]
+    HmoInvalidInput(String),
+    #[error("clar input error: {0}")]
+    ClarInputError(String),
+}
 
 /// Per-atom contribution to an aromatic system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -148,7 +164,7 @@ impl AromaticityModel {
         &self,
         builder: &MoleculeBuilder,
         rings: &RingSet,
-    ) -> Result<Vec<AromaticSystem>, ResolutionError> {
+    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
         match self {
             Self::HueckelRule(m) => Ok(m.find_from_rings(builder, rings)),
             Self::Hmo(m) => m.find_from_rings(builder, rings),

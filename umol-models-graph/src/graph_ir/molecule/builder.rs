@@ -45,6 +45,33 @@ pub struct MoleculeBuilder {
 }
 
 impl MoleculeBuilder {
+    pub fn from_molecule(molecule: &Molecule) -> Self {
+        let mut builder = Self::with_capacity(molecule.atom_count(), molecule.bond_count());
+
+        let mut atom_map: HashMap<AtomIndex, AtomIndex> = HashMap::new();
+        for atom_idx in molecule.atom_indices() {
+            let atom = molecule.atom(atom_idx).expect("atom index must be valid");
+            let new_idx = builder.add_atom(atom.to_builder());
+            atom_map.insert(atom_idx, new_idx);
+        }
+
+        for bond_idx in molecule.bond_indices() {
+            let bond = molecule.bond(bond_idx).expect("bond index must be valid");
+            let (a, b) = molecule
+                .bond_atom_indices(bond_idx)
+                .expect("bond index must be valid");
+            let new_a = *atom_map.get(&a).expect("source atom must be mapped");
+            let new_b = *atom_map.get(&b).expect("source atom must be mapped");
+            builder.add_bond_unchecked(new_a, new_b, bond.to_builder());
+        }
+
+        builder.dative_bonds = molecule.dative_bonds().cloned().collect();
+        builder.aromatic_systems = molecule.aromatic_systems().cloned().collect();
+        builder.multicenter_bonds = molecule.multicenter_bonds().cloned().collect();
+        builder.noncovalent_bonds = molecule.noncovalent_bonds().cloned().collect();
+        builder
+    }
+
     pub fn new() -> Self {
         Self {
             graph: StableGraph::default(),
@@ -454,6 +481,10 @@ impl MoleculeBuilder {
 
     pub fn add_aromatic_system(&mut self, system: AromaticSystem) {
         self.aromatic_systems.push(system);
+    }
+
+    pub fn clear_aromatic_systems(&mut self) {
+        self.aromatic_systems.clear();
     }
 
     pub fn remove_aromatic_system(&mut self, index: AromaticSystemIndex) -> Option<AromaticSystem> {
