@@ -6,8 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use umol_data::Element;
 
-use crate::graph_ir::algorithms::bcc::biconnected_components;
-use crate::graph_ir::algorithms::cycles::enumerate_simple_cycles;
+use crate::algorithms::{biconnected_components, enumerate_simple_cycles};
 use crate::graph_ir::config::RingEnumerationStrategy;
 use crate::graph_ir::molecule::{AtomIndex, BondIndex, Molecule, MoleculeBuilder};
 

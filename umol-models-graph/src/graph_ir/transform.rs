@@ -205,7 +205,9 @@ mod tests {
 
     fn benzene_kekule() -> Molecule {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<_> = (0..6).map(|_| builder.add_atom(carbon_aromatic_1())).collect();
+        let atoms: Vec<_> = (0..6)
+            .map(|_| builder.add_atom(carbon_aromatic_1()))
+            .collect();
         for i in 0..6 {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
         }
@@ -216,7 +218,9 @@ mod tests {
 
     fn naphthalene_kekule() -> Molecule {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<_> = (0..10).map(|_| builder.add_atom(carbon_aromatic_1())).collect();
+        let atoms: Vec<_> = (0..10)
+            .map(|_| builder.add_atom(carbon_aromatic_1()))
+            .collect();
         let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
         for (a, b) in ring1_edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
@@ -267,12 +271,17 @@ mod tests {
     #[test]
     fn ordering_kekulize_then_aromatize() {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<_> = (0..6).map(|_| builder.add_atom(carbon_aromatic_1())).collect();
+        let atoms: Vec<_> = (0..6)
+            .map(|_| builder.add_atom(carbon_aromatic_1()))
+            .collect();
         for i in 0..6 {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
         }
         builder.add_aromatic_system(AromaticSystem::new(
-            atoms.iter().copied().map(|a| AromaticContribution::new(a, 1)),
+            atoms
+                .iter()
+                .copied()
+                .map(|a| AromaticContribution::new(a, 1)),
         ));
         let mol = builder
             .build(&ResolveConfig::default())
@@ -330,12 +339,17 @@ mod tests {
     #[test]
     fn kekulize_failure_is_deterministic() {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<_> = (0..3).map(|_| builder.add_atom(carbon_aromatic_1())).collect();
+        let atoms: Vec<_> = (0..3)
+            .map(|_| builder.add_atom(carbon_aromatic_1()))
+            .collect();
         for i in 0..3 {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 3], BondBuilder::new(1, None));
         }
         builder.add_aromatic_system(AromaticSystem::new(
-            atoms.iter().copied().map(|a| AromaticContribution::new(a, 1)),
+            atoms
+                .iter()
+                .copied()
+                .map(|a| AromaticContribution::new(a, 1)),
         ));
         let mol = builder
             .build(&ResolveConfig::default())
@@ -345,10 +359,9 @@ mod tests {
         )]);
         let mut builder = MoleculeBuilder::from_molecule(&mol);
         let err = seq.apply(&mut builder).expect_err("kekulize should fail");
-        assert!(
-            err.to_string()
-                .contains("kekulization failed for aromatic system 0")
-        );
+        assert!(err
+            .to_string()
+            .contains("kekulization failed for aromatic system 0"));
     }
 
     #[test]

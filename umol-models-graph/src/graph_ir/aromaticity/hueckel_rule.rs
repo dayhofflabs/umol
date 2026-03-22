@@ -10,9 +10,8 @@ use petgraph::unionfind::UnionFind;
 
 use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::config::{ElementScope, RingLimits};
-use crate::graph_ir::molecule::builder::MoleculeBuilder;
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::rings::{RingSet, Ring, RingIndex};
+use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 
 /// HueckelRule aromaticity model. Parameterized by element scope and ring scope.
 #[derive(Clone, Debug)]
@@ -118,7 +117,9 @@ impl HueckelRuleAromaticity {
         if len < self.ring_limits.min_ring_size || len > self.ring_limits.max_ring_size {
             return false;
         }
-        ring.atoms().iter().all(|&a| self.is_atom_eligible(builder, a))
+        ring.atoms()
+            .iter()
+            .all(|&a| self.is_atom_eligible(builder, a))
     }
 
     fn check_4n_plus_2(&self, electron_count: u32) -> bool {

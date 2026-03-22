@@ -1,6 +1,5 @@
 //! Graph-based molecular intermediate representation.
 
-pub(crate) mod algorithms;
 pub mod aromaticity;
 pub mod atom;
 pub mod atom_type;
@@ -16,6 +15,7 @@ pub mod noncovalent;
 pub mod resolver;
 pub mod rings;
 pub mod symmetry;
+pub mod transform;
 pub mod valence;
 
 pub use aromaticity::*;
@@ -33,4 +33,5 @@ pub use noncovalent::*;
 pub use resolver::*;
 pub use rings::*;
 pub use symmetry::*;
+pub use transform::*;
 pub use valence::*;

@@ -16,8 +16,8 @@ use super::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
     NoncovalentBondIndex,
 };
+use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
-use crate::graph_ir::algorithms::bcc::biconnected_components;
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::AtomBuilder;
 use crate::graph_ir::bond::BondBuilder;
@@ -344,9 +344,8 @@ impl MoleculeBuilder {
 
     /// Atoms that have at least one candidate with a non-None aromatic valence.
     pub fn aromatic_candidate_atoms(&self) -> impl Iterator<Item = AtomIndex> + '_ {
-        self.atom_indices().filter(|&atom| {
-            self.atom_has_aromatic_candidate(atom)
-        })
+        self.atom_indices()
+            .filter(|&atom| self.atom_has_aromatic_candidate(atom))
     }
 
     pub fn atom_has_aromatic_candidate(&self, index: AtomIndex) -> bool {

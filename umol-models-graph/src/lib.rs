@@ -1,5 +1,6 @@
 //! Graph-based molecular models.
 
+pub mod algorithms;
 pub mod atom;
 pub mod bond;
 pub mod diagnostics;
@@ -8,4 +9,3 @@ pub mod io;
 pub mod position;
 pub mod span;
 pub mod table_ir;
-pub mod transform;

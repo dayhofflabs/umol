@@ -9,10 +9,11 @@ pub mod clar;
 pub mod hmo;
 pub mod hueckel_rule;
 
-pub use self::clar::*;
-pub use self::hmo::*;
-pub use self::hueckel_rule::*;
+pub use clar::*;
+pub use hmo::*;
+pub use hueckel_rule::*;
 use thiserror::Error;
+
 use crate::graph_ir::config::AromaticityStrategy;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 use crate::graph_ir::rings::{Ring, RingSet};
