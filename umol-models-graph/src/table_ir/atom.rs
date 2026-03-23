@@ -2,11 +2,11 @@
 
 use std::collections::HashMap;
 
-use umol_data::{Element, NamedIsotope};
+use umol_data::{Element, NamedIsotope, SpinMultiplicity};
 
 use super::error::ConversionError;
 use super::rgroup::RGroup;
-use crate::atom::{Chirality, ImplicitHydrogens, UnpairedElectrons};
+use crate::atom::{Chirality, ImplicitHydrogens};
 use crate::span::Span;
 
 /// Basic Atom IR
@@ -18,7 +18,8 @@ pub struct Atom {
     pub implicit_hydrogens: Option<ImplicitHydrogens>,
     pub valence: Option<u8>,
     pub lone_pairs: Option<u8>,
-    pub unpaired_electrons: Option<UnpairedElectrons>,
+    pub unpaired_electrons: Option<u8>,
+    pub multiplicity: Option<SpinMultiplicity>,
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
@@ -38,6 +39,7 @@ impl Atom {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: None,
             chirality: None,
             class: None,
@@ -56,6 +58,7 @@ impl Atom {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
@@ -75,6 +78,7 @@ impl Atom {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
@@ -94,6 +98,7 @@ impl Atom {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: Some(true),
             chirality: None,
             class: None,
@@ -113,6 +118,7 @@ impl Atom {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: Some(true),
             chirality: None,
             class: None,
@@ -236,7 +242,8 @@ pub struct ExtendedAtom {
     pub implicit_hydrogens: Option<ImplicitHydrogens>,
     pub valence: Option<u8>,
     pub lone_pairs: Option<u8>,
-    pub unpaired_electrons: Option<UnpairedElectrons>,
+    pub unpaired_electrons: Option<u8>,
+    pub multiplicity: Option<SpinMultiplicity>,
     pub aromatic: Option<bool>,
     pub chirality: Option<Chirality>,
     pub class: Option<u32>,
@@ -269,6 +276,7 @@ impl ExtendedAtom {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: None,
             chirality: None,
             class: None,
@@ -337,6 +345,7 @@ impl From<Atom> for ExtendedAtom {
             valence: atom.valence,
             lone_pairs: atom.lone_pairs,
             unpaired_electrons: atom.unpaired_electrons,
+            multiplicity: atom.multiplicity,
             aromatic: atom.aromatic,
             chirality: atom.chirality,
             class: atom.class,
@@ -385,6 +394,7 @@ impl TryFrom<ExtendedAtom> for Atom {
             valence: extended.valence,
             lone_pairs: extended.lone_pairs,
             unpaired_electrons: extended.unpaired_electrons,
+            multiplicity: extended.multiplicity,
             aromatic: extended.aromatic,
             chirality: extended.chirality,
             class: extended.class,
@@ -511,7 +521,8 @@ mod tests {
             implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(3)),
             valence: Some(3),
             lone_pairs: None,
-            unpaired_electrons: Some(UnpairedElectrons::from_count(1)),
+            unpaired_electrons: Some(1),
+            multiplicity: Some(SpinMultiplicity::Doublet),
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
@@ -530,10 +541,8 @@ mod tests {
         );
         assert_eq!(extended.valence, Some(3));
         assert_eq!(extended.lone_pairs, None);
-        assert_eq!(
-            extended.unpaired_electrons,
-            Some(UnpairedElectrons::from_count(1))
-        );
+        assert_eq!(extended.unpaired_electrons, Some(1));
+        assert_eq!(extended.multiplicity, Some(SpinMultiplicity::Doublet));
         assert_eq!(extended.aromatic, Some(true));
         assert_eq!(extended.chirality, Some(Chirality::Clockwise));
         assert_eq!(extended.class, Some(5));
@@ -550,6 +559,7 @@ mod tests {
             valence: Some(1),
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: Some(false),
             chirality: None,
             class: None,
@@ -578,6 +588,7 @@ mod tests {
         assert_eq!(atom.valence, Some(1));
         assert_eq!(atom.lone_pairs, None);
         assert!(atom.unpaired_electrons.is_none());
+        assert!(atom.multiplicity.is_none());
         assert_eq!(atom.aromatic, Some(false));
     }
 
@@ -606,6 +617,7 @@ mod tests {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: None,
             chirality: None,
             class: None,
@@ -643,7 +655,8 @@ mod tests {
             implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(2)),
             valence: None,
             lone_pairs: None,
-            unpaired_electrons: Some(UnpairedElectrons::from_count(1)),
+            unpaired_electrons: Some(1),
+            multiplicity: Some(SpinMultiplicity::Doublet),
             aromatic: Some(true),
             chirality: Some(Chirality::Clockwise),
             class: Some(5),
@@ -677,6 +690,7 @@ mod tests {
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: None,
             chirality: None,
             class: None,
@@ -710,6 +724,7 @@ mod tests {
             valence: Some(3),
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic: Some(false),
             chirality: Some(Chirality::CounterClockwise),
             span: None,
@@ -728,6 +743,7 @@ mod tests {
         assert_eq!(atom.valence, atom2.valence);
         assert_eq!(atom.lone_pairs, atom2.lone_pairs);
         assert_eq!(atom.unpaired_electrons, atom2.unpaired_electrons);
+        assert_eq!(atom.multiplicity, atom2.multiplicity);
         assert_eq!(atom.aromatic, atom2.aromatic);
         assert_eq!(atom.chirality, atom2.chirality);
         assert_eq!(atom.class, atom2.class);

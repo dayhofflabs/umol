@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Zr/2^2}"
+      - "{Zr/1^2}"
     bonds: []
 counts:
   success: true

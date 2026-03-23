@@ -7,7 +7,7 @@ use serde::de::{Deserializer, Error as SerdeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
-use umol::error::DataError;
+use thiserror::Error;
 
 /// Spin multiplicity descriptor (2S+1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Display, EnumString)]
@@ -55,22 +55,56 @@ impl SpinMultiplicity {
     }
 }
 
-/// Shorthand macro for spin multiplicity.
-/// Allows using multiplicity names directly without quotes.
+/// Shorthand macro for spin-state literals parsed via `SpinState::from_str`.
+///
+// Syntax: `s{^nxm}` (e.g. `s{^2x3}`)
 #[macro_export]
-macro_rules! mult {
-    ($state:ident) => {
-        SpinMultiplicity::$state
-    };
+macro_rules! spin {
+    ($s:expr) => {{
+        $crate::SpinState::from_str($s).expect("invalid spin state")
+    }};
 }
 
-/// Check whether a (unpaired_electrons, multiplicity) pair is physically valid.
-///
-/// Valid multiplicities for `n` unpaired electrons are `n%2+1, n%2+3, ..., n+1`.
-pub fn is_valid_spin_state(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> bool {
-    let m = multiplicity.multiplicity();
-    let n = unpaired_electrons;
-    m <= n + 1 && m % 2 == (n + 1) % 2
+/// Error for invalid spin-state values and parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum SpinStateError {
+    #[error("expected spin literal format 's{{^nxm}}'")]
+    InvalidFormat,
+
+    #[error("expected digits after '^'")]
+    MissingUnpairedDigits,
+
+    #[error("invalid unpaired electron count")]
+    InvalidUnpairedElectrons,
+
+    #[error("expected digits after 'x'")]
+    MissingMultiplicityDigits,
+
+    #[error("invalid multiplicity value")]
+    InvalidMultiplicity,
+
+    #[error("unexpected token '{token}', expected '^' or 'x'")]
+    UnexpectedToken { token: char },
+
+    #[error("missing '^n' in spin literal")]
+    MissingUnpairedField,
+
+    #[error("missing 'xm' in spin literal")]
+    MissingMultiplicityField,
+
+    #[error(
+        "unpaired electron count exceeds maximum: {unpaired_electrons} > {MAX_UNPAIRED_ELECTRONS}"
+    )]
+    UnpairedElectronsExceedMax { unpaired_electrons: u8 },
+
+    #[error("spin state is underdetermined")]
+    Underdetermined,
+
+    #[error("incompatible spin state combination: {unpaired_electrons} unpaired electrons, {multiplicity}")]
+    Incompatible {
+        unpaired_electrons: u8,
+        multiplicity: SpinMultiplicity,
+    },
 }
 
 /// Validated (unpaired_electrons, multiplicity) pair.
@@ -78,7 +112,7 @@ pub fn is_valid_spin_state(unpaired_electrons: u8, multiplicity: SpinMultiplicit
 /// Invariant: `m <= n+1` and `m` has the same parity as `n+1`, where
 /// `m = multiplicity.multiplicity()` and `n = unpaired_electrons`.
 ///
-/// String format: `"{n},{multiplicity_name}"`, e.g. `"2,singlet"`, `"0,singlet"`.
+/// String format (canonical): `"s{^nxm}"`, e.g. `"s{^2x1}"`, `"s{^0x1}"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SpinState {
     unpaired_electrons: u8,
@@ -86,26 +120,36 @@ pub struct SpinState {
 }
 
 impl SpinState {
-    /// Create a spin state, panicking on invalid input.
-    pub fn new(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> Self {
-        Self::try_new(unpaired_electrons, multiplicity).unwrap_or_else(|| {
-            panic!(
-                "invalid spin state: {} unpaired electrons, {} multiplicity",
-                unpaired_electrons,
-                multiplicity.multiplicity()
-            )
-        })
+    /// Check whether `(unpaired_electrons, multiplicity)` is physically valid.
+    ///
+    /// Valid multiplicities for `n` unpaired electrons are `n%2+1, n%2+3, ..., n+1`.
+    pub fn are_compatible(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> bool {
+        let m = multiplicity.multiplicity();
+        let n = unpaired_electrons;
+        m <= n + 1 && m % 2 == (n + 1) % 2
     }
 
-    /// Create a spin state, returning `None` if the combination is invalid.
-    pub fn try_new(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> Option<Self> {
-        if is_valid_spin_state(unpaired_electrons, multiplicity) {
-            Some(Self {
+    /// Create a spin state, panicking on invalid input.
+    pub fn new(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> Self {
+        Self::try_new(unpaired_electrons, multiplicity)
+            .unwrap_or_else(|e| panic!("invalid spin state: {}", e))
+    }
+
+    /// Create a spin state, returning a domain error if the combination is invalid.
+    pub fn try_new(
+        unpaired_electrons: u8,
+        multiplicity: SpinMultiplicity,
+    ) -> Result<Self, SpinStateError> {
+        if Self::are_compatible(unpaired_electrons, multiplicity) {
+            Ok(Self {
                 unpaired_electrons,
                 multiplicity,
             })
         } else {
-            None
+            Err(SpinStateError::Incompatible {
+                unpaired_electrons,
+                multiplicity,
+            })
         }
     }
 
@@ -144,15 +188,20 @@ impl SpinState {
         Self::max_multiplicity(unpaired as u8)
     }
 
+    /// Check if molecular spin state is compatible with electron count.
+    pub fn is_compatible_with(&self, electrons: u8) -> bool {
+        self.unpaired_electrons <= electrons && (electrons - self.unpaired_electrons) % 2 == 0
+    }
+
     /// Check whether this molecular spin state is achievable by coupling
     /// the given atomic spin states.
     ///
     /// Uses sequential angular momentum coupling: for spins S1, S2, the
     /// total S ranges from |S1-S2| to S1+S2 in integer steps. The set of
     /// allowed S values is order-independent.
-    pub fn is_compatible(&self, states: &[SpinState]) -> bool {
-        let ue: u32 = states.iter().map(|s| s.unpaired_electrons as u32).sum();
-        if self.unpaired_electrons as u32 != ue {
+    pub fn is_constructible_from(&self, states: &[SpinState]) -> bool {
+        let unpaired: u32 = states.iter().map(|s| s.unpaired_electrons as u32).sum();
+        if self.unpaired_electrons as u32 != unpaired {
             return false;
         }
 
@@ -187,30 +236,80 @@ impl SpinState {
 
 impl fmt::Display for SpinState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{},{}", self.unpaired_electrons, self.multiplicity)
+        write!(
+            f,
+            "s{{^{}x{}}}",
+            self.unpaired_electrons,
+            self.multiplicity.multiplicity()
+        )
     }
 }
 
 impl FromStr for SpinState {
-    type Err = DataError;
+    type Err = SpinStateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (n_str, m_str) = s.split_once(',').ok_or_else(|| {
-            DataError::InvalidSpinState(format!("expected 'n,multiplicity', got '{}'", s))
-        })?;
-        let n: u8 = n_str.trim().parse().map_err(|_| {
-            DataError::InvalidSpinState(format!("invalid unpaired electrons: '{}'", n_str))
-        })?;
-        let m: SpinMultiplicity = m_str.trim().parse().map_err(|_| {
-            DataError::InvalidSpinState(format!("invalid multiplicity: '{}'", m_str))
-        })?;
-        Self::try_new(n, m).ok_or_else(|| {
-            DataError::InvalidSpinState(format!(
-                "inconsistent spin state: {} unpaired electrons, {}",
-                n, m
-            ))
-        })
+        let trimmed = s.trim();
+        let body = trimmed
+            .strip_prefix("s{")
+            .and_then(|rest| rest.strip_suffix('}'))
+            .ok_or(SpinStateError::InvalidFormat)?;
+        parse_spin_literal(body)
     }
+}
+
+fn parse_spin_literal(body: &str) -> Result<SpinState, SpinStateError> {
+    let mut rest = body.trim();
+    let mut unpaired: Option<u8> = None;
+    let mut multiplicity: Option<SpinMultiplicity> = None;
+
+    while !rest.is_empty() {
+        rest = rest.trim_start();
+        let Some(head) = rest.chars().next() else {
+            break;
+        };
+        match head {
+            '^' => {
+                let digits_len = rest[1..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .map(char::len_utf8)
+                    .sum::<usize>();
+                if digits_len == 0 {
+                    return Err(SpinStateError::MissingUnpairedDigits);
+                }
+                let n: u8 = rest[1..1 + digits_len]
+                    .parse()
+                    .map_err(|_| SpinStateError::InvalidUnpairedElectrons)?;
+                unpaired = Some(n);
+                rest = &rest[1 + digits_len..];
+            }
+            'x' => {
+                let digits_len = rest[1..]
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .map(char::len_utf8)
+                    .sum::<usize>();
+                if digits_len == 0 {
+                    return Err(SpinStateError::MissingMultiplicityDigits);
+                }
+                let m_u8: u8 = rest[1..1 + digits_len]
+                    .parse()
+                    .map_err(|_| SpinStateError::InvalidMultiplicity)?;
+                let m = SpinMultiplicity::from_multiplicity(m_u8)
+                    .ok_or(SpinStateError::InvalidMultiplicity)?;
+                multiplicity = Some(m);
+                rest = &rest[1 + digits_len..];
+            }
+            _ => {
+                return Err(SpinStateError::UnexpectedToken { token: head });
+            }
+        }
+    }
+
+    let n = unpaired.ok_or(SpinStateError::MissingUnpairedField)?;
+    let m = multiplicity.ok_or(SpinStateError::MissingMultiplicityField)?;
+    SpinState::try_new(n, m)
 }
 
 impl Serialize for SpinState {
@@ -229,6 +328,7 @@ impl<'de> Deserialize<'de> for SpinState {
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use pretty_assertions::assert_eq;
 
     use super::*;
 
@@ -287,10 +387,11 @@ mod tests {
     }
 
     #[test]
-    fn test_mult_macro() {
-        assert_eq!(mult!(Singlet), SpinMultiplicity::Singlet);
-        assert_eq!(mult!(Doublet), SpinMultiplicity::Doublet);
-        assert_eq!(mult!(Triplet), SpinMultiplicity::Triplet);
+    fn test_spin_macro() {
+        assert_eq!(
+            spin!("s{^2x3}"),
+            SpinState::new(2, SpinMultiplicity::Triplet)
+        );
     }
 
     #[rstest]
@@ -311,12 +412,8 @@ mod tests {
     #[case(2, SpinMultiplicity::Quartet, false)]
     #[case(3, SpinMultiplicity::Singlet, false)]
     #[case(3, SpinMultiplicity::Triplet, false)]
-    fn test_is_valid_spin_state(
-        #[case] n: u8,
-        #[case] m: SpinMultiplicity,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(is_valid_spin_state(n, m), expected);
+    fn test_are_compatible(#[case] n: u8, #[case] m: SpinMultiplicity, #[case] expected: bool) {
+        assert_eq!(SpinState::are_compatible(n, m), expected);
     }
 
     #[rstest]
@@ -337,7 +434,7 @@ mod tests {
     #[case(1, SpinMultiplicity::Doublet)]
     #[case(2, SpinMultiplicity::Singlet)]
     fn test_spin_state_try_new(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        assert!(SpinState::try_new(n, m).is_some());
+        assert!(SpinState::try_new(n, m).is_ok());
     }
 
     #[rstest]
@@ -345,7 +442,7 @@ mod tests {
     #[case(1, SpinMultiplicity::Singlet)]
     #[case(2, SpinMultiplicity::Doublet)]
     fn test_spin_state_try_new_invalid(#[case] n: u8, #[case] m: SpinMultiplicity) {
-        assert!(SpinState::try_new(n, m).is_none());
+        assert!(SpinState::try_new(n, m).is_err());
     }
 
     #[test]
@@ -378,11 +475,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(0, SpinMultiplicity::Singlet, "0,singlet")]
-    #[case(1, SpinMultiplicity::Doublet, "1,doublet")]
-    #[case(2, SpinMultiplicity::Singlet, "2,singlet")]
-    #[case(2, SpinMultiplicity::Triplet, "2,triplet")]
-    #[case(3, SpinMultiplicity::Quartet, "3,quartet")]
+    #[case(0, SpinMultiplicity::Singlet, "s{^0x1}")]
+    #[case(1, SpinMultiplicity::Doublet, "s{^1x2}")]
+    #[case(2, SpinMultiplicity::Singlet, "s{^2x1}")]
+    #[case(2, SpinMultiplicity::Triplet, "s{^2x3}")]
+    #[case(3, SpinMultiplicity::Quartet, "s{^3x4}")]
     fn test_spin_state_to_string(
         #[case] n: u8,
         #[case] m: SpinMultiplicity,
@@ -392,12 +489,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case("0,singlet", 0, SpinMultiplicity::Singlet)]
-    #[case("1,doublet", 1, SpinMultiplicity::Doublet)]
-    #[case("2,singlet", 2, SpinMultiplicity::Singlet)]
-    #[case("2,triplet", 2, SpinMultiplicity::Triplet)]
-    #[case("3,quartet", 3, SpinMultiplicity::Quartet)]
-    #[case(" 2 , triplet ", 2, SpinMultiplicity::Triplet)]
+    #[case("s{^0x1}", 0, SpinMultiplicity::Singlet)]
+    #[case("s{^1x2}", 1, SpinMultiplicity::Doublet)]
+    #[case("s{^2x1}", 2, SpinMultiplicity::Singlet)]
+    #[case("s{^2x3}", 2, SpinMultiplicity::Triplet)]
+    #[case("s{^3x4}", 3, SpinMultiplicity::Quartet)]
+    #[case("s{ ^2 x3 }", 2, SpinMultiplicity::Triplet)]
     fn test_spin_state_parse(
         #[case] input: &str,
         #[case] expected_n: u8,
@@ -412,9 +509,12 @@ mod tests {
     #[case("")]
     #[case("singlet")]
     #[case("0")]
-    #[case("0,nosuchplet")]
-    #[case("x,singlet")]
-    #[case("1,singlet")] // invalid combination
+    #[case("s{}")]
+    #[case("s{^2}")]
+    #[case("s{x3}")]
+    #[case("s{^2x2}")] // invalid parity for n=2
+    #[case("s{^x3}")]
+    #[case("s{^2x}")]
     fn test_spin_state_parse_error(#[case] input: &str) {
         assert!(input.parse::<SpinState>().is_err());
     }
@@ -440,69 +540,49 @@ mod tests {
         assert_eq!(state, parsed);
     }
 
-    #[test]
-    fn test_high_spin_empty() {
-        let hs = SpinState::high_spin(&[]).unwrap();
-        assert_eq!(hs, SpinState::closed_shell());
+    #[rustfmt::skip]
+    #[rstest]
+    #[case(vec![], spin!("s{^0x1}"))]
+    #[case(vec![spin!("s{^1x2}")], spin!("s{^1x2}"))]
+    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^2x3}"))]
+    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x7}"))]
+    #[case(vec![spin!("s{^2x1}"), spin!("s{^1x2}")], spin!("s{^3x4}"))]
+    fn test_high_spin(#[case] states: Vec<SpinState>, #[case] expected: SpinState) {
+        let hs = SpinState::high_spin(&states).unwrap();
+        assert_eq!(hs, expected);
     }
 
-    #[test]
-    fn test_high_spin_single_doublet() {
-        let d = SpinState::new(1, SpinMultiplicity::Doublet);
-        let hs = SpinState::high_spin(&[d]).unwrap();
-        assert_eq!(hs.unpaired_electrons(), 1);
-        assert_eq!(hs.multiplicity(), SpinMultiplicity::Doublet);
+    #[rstest]
+    #[case(spin!("s{^0x1}"), 0, true)]
+    #[case(spin!("s{^1x2}"), 1, true)]
+    #[case(spin!("s{^0x1}"), 1, false)]
+    #[case(spin!("s{^2x3}"), 0, false)]
+    fn test_is_compatible_with(
+        #[case] state: SpinState,
+        #[case] electrons: u8,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(state.is_compatible_with(electrons), expected);
     }
 
-    #[test]
-    fn test_high_spin_two_doublets() {
-        let d = SpinState::new(1, SpinMultiplicity::Doublet);
-        let hs = SpinState::high_spin(&[d, d]).unwrap();
-        assert_eq!(hs.unpaired_electrons(), 2);
-        assert_eq!(hs.multiplicity(), SpinMultiplicity::Triplet);
-    }
-
-    #[test]
-    fn test_high_spin_three_triplets() {
-        let t = SpinState::new(2, SpinMultiplicity::Triplet);
-        let hs = SpinState::high_spin(&[t, t, t]).unwrap();
-        assert_eq!(hs.unpaired_electrons(), 6);
-        assert_eq!(hs.multiplicity(), SpinMultiplicity::Septet);
-    }
-
-    #[test]
-    fn test_high_spin_low_spin_atom() {
-        // 2 unpaired electrons in singlet (open-shell singlet atom)
-        let os = SpinState::new(2, SpinMultiplicity::Singlet);
-        let d = SpinState::new(1, SpinMultiplicity::Doublet);
-        let hs = SpinState::high_spin(&[os, d]).unwrap();
-        assert_eq!(hs.unpaired_electrons(), 3);
-        assert_eq!(hs.multiplicity(), SpinMultiplicity::Quartet);
-    }
-
-    #[test]
-    fn test_is_compatible_empty() {
-        assert!(SpinState::closed_shell().is_compatible(&[]));
-        assert!(!SpinState::new(1, SpinMultiplicity::Doublet).is_compatible(&[]));
-    }
-
-    #[test]
-    fn test_is_compatible_two_doublets() {
-        let d = SpinState::new(1, SpinMultiplicity::Doublet);
-        assert!(!SpinState::closed_shell().is_compatible(&[d, d]));
-        assert!(SpinState::new(2, SpinMultiplicity::Singlet).is_compatible(&[d, d]));
-        assert!(SpinState::new(2, SpinMultiplicity::Triplet).is_compatible(&[d, d]));
-        assert!(!SpinState::new(4, SpinMultiplicity::Quintet).is_compatible(&[d, d]));
-    }
-
-    #[test]
-    fn test_is_compatible_three_triplets() {
-        let t = SpinState::new(2, SpinMultiplicity::Triplet);
-        let states = [t, t, t];
-        assert!(SpinState::new(6, SpinMultiplicity::Singlet).is_compatible(&states));
-        assert!(SpinState::new(6, SpinMultiplicity::Triplet).is_compatible(&states));
-        assert!(SpinState::new(6, SpinMultiplicity::Quintet).is_compatible(&states));
-        assert!(SpinState::new(6, SpinMultiplicity::Septet).is_compatible(&states));
-        assert!(!SpinState::new(1, SpinMultiplicity::Doublet).is_compatible(&states));
+    #[rustfmt::skip]
+    #[rstest]
+    #[case(vec![], spin!("s{^0x1}"), true)]
+    #[case(vec![], spin!("s{^1x2}"), false)]
+    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^0x1}"), false)]
+    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^2x1}"), true)]
+    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^2x3}"), true)]
+    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^4x5}"), false)]
+    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x1}"), true)]
+    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x3}"), true)]
+    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x5}"), true)]
+    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x7}"), true)]
+    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^1x2}"), false)]
+    fn test_is_constructible_from(
+        #[case] states: Vec<SpinState>,
+        #[case] target: SpinState,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(target.is_constructible_from(&states), expected);
     }
 }

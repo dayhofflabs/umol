@@ -6,11 +6,100 @@ use std::str::FromStr;
 use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
-use umol_data::{Element, SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
+use thiserror::Error;
+use umol_data::{Element, SpinMultiplicity, SpinState, SpinStateError, MAX_UNPAIRED_ELECTRONS};
 
 use crate::atom::{AromaticValence, ImplicitHydrogens};
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum AtomError {
+    #[error("atom type spec must use {{...}} notation")]
+    InvalidSpecFormat,
+    #[error("atom type query must use ?{{...}} notation")]
+    InvalidQueryFormat,
+    #[error("empty atom type spec")]
+    EmptySpec,
+    #[error("empty atom type query")]
+    EmptyQuery,
+    #[error("invalid element token")]
+    InvalidElement,
+    #[error("duplicate charge token")]
+    DuplicateChargeToken,
+    #[error("invalid charge token")]
+    InvalidCharge,
+    #[error("invalid implicit hydrogens token")]
+    InvalidImplicitHydrogens,
+    #[error("invalid lone-pairs token")]
+    InvalidLonePairs,
+    #[error("invalid unpaired-electrons token")]
+    InvalidUnpairedElectrons,
+    #[error("invalid multiplicity token")]
+    InvalidMultiplicity,
+    #[error("invalid valence token")]
+    InvalidValence,
+    #[error("invalid donated-pairs token")]
+    InvalidDonatedPairs,
+    #[error("invalid accepted-pairs token")]
+    InvalidAcceptedPairs,
+    #[error("invalid aromatic-valence token")]
+    InvalidAromaticValence,
+    #[error("invalid multicenter-valence token")]
+    InvalidMulticenterValence,
+    #[error("unpaired electrons exceed maximum: {unpaired_electrons} > {max_unpaired_electrons}")]
+    UnpairedElectronsLiteralExceedMax {
+        unpaired_electrons: u8,
+        max_unpaired_electrons: u8,
+    },
+    #[error(transparent)]
+    SpinState(#[from] SpinStateError),
+    #[error("unexpected token '{token}'")]
+    UnexpectedToken { token: char },
+    #[error("charge {charge} out of bounds for {element}: expected [{min_charge}, {max_charge}]")]
+    ChargeOutOfBounds {
+        element: Element,
+        charge: i8,
+        min_charge: i8,
+        max_charge: i8,
+    },
+    #[error("valence {valence} exceeds max {max_valence} for {element}")]
+    ValenceExceedsMax {
+        element: Element,
+        valence: u8,
+        max_valence: u8,
+    },
+    #[error(
+        "unpaired electrons {unpaired_electrons} exceed max {max_unpaired_electrons} for {element}"
+    )]
+    UnpairedElectronsExceedMax {
+        element: Element,
+        unpaired_electrons: u8,
+        max_unpaired_electrons: u8,
+    },
+    #[error(
+        "implicit hydrogens {implicit_hydrogens} exceed max {max_implicit_hydrogens} for {element}"
+    )]
+    ImplicitHydrogensExceedMax {
+        element: Element,
+        implicit_hydrogens: u8,
+        max_implicit_hydrogens: u8,
+    },
+    #[error(
+        "electron invariant mismatch for {element}: inv_o={orbital_invariant}, inv_e={electron_invariant}"
+    )]
+    ElectronInvariantMismatch {
+        element: Element,
+        orbital_invariant: i16,
+        electron_invariant: i16,
+    },
+}
+
+impl From<AtomError> for ResolutionError {
+    fn from(value: AtomError) -> Self {
+        ResolutionError::InvalidAtom(value.to_string())
+    }
+}
 
 /// Constraint for matching implicit hydrogen information in atom type queries.
 ///
@@ -110,14 +199,8 @@ impl AtomTypeSpec {
         accepted_pairs: u8,
         aromatic_valence: AromaticValence,
         multicenter_valence: u8,
-    ) -> Result<Self, ResolutionError> {
-        let spin = SpinState::try_new(unpaired_electrons, multiplicity).ok_or_else(|| {
-            ResolutionError::InvalidAtomSpec(format!(
-                "invalid spin state: {} unpaired electrons, {} multiplicity",
-                unpaired_electrons,
-                multiplicity.multiplicity()
-            ))
-        })?;
+    ) -> Result<Self, AtomError> {
+        let spin = SpinState::try_new(unpaired_electrons, multiplicity)?;
         Ok(Self {
             element,
             charge,
@@ -183,6 +266,85 @@ impl AtomTypeSpec {
     pub fn is_aromatic(&self) -> bool {
         self.aromatic_valence.is_aromatic()
     }
+
+    pub fn check_invariants(&self) -> Result<(), AtomError> {
+        let (min_charge, max_charge) = self.element.charge_bounds();
+        if self.charge < min_charge || self.charge > max_charge {
+            return Err(AtomError::ChargeOutOfBounds {
+                element: self.element,
+                charge: self.charge,
+                min_charge,
+                max_charge,
+            });
+        }
+
+        let max_valence = self.element.max_valence();
+        if self.valence > max_valence {
+            return Err(AtomError::ValenceExceedsMax {
+                element: self.element,
+                valence: self.valence,
+                max_valence,
+            });
+        }
+
+        let unpaired_electrons = self.spin.unpaired_electrons();
+        let max_unpaired_electrons = self.element.max_unpaired_electrons();
+        if unpaired_electrons > max_unpaired_electrons {
+            return Err(AtomError::UnpairedElectronsExceedMax {
+                element: self.element,
+                unpaired_electrons,
+                max_unpaired_electrons,
+            });
+        }
+
+        let max_implicit_hydrogens = self.element.max_implicit_hydrogens();
+        if self.implicit_hydrogens > max_implicit_hydrogens {
+            return Err(AtomError::ImplicitHydrogensExceedMax {
+                element: self.element,
+                implicit_hydrogens: self.implicit_hydrogens,
+                max_implicit_hydrogens,
+            });
+        }
+
+        let aromatic_valence = self.aromatic_valence.valence() as i16;
+        let aromatic_increment = aromatic_increment(self.aromatic_valence) as i16;
+        let total_e_inv_o = unpaired_electrons as i16
+            + (2 * self.lone_pairs as i16)
+            + (2 * self.donated_pairs as i16)
+            + (2 * self.accepted_pairs as i16)
+            + (2 * self.implicit_hydrogens as i16)
+            + (2 * self.valence as i16)
+            + aromatic_valence
+            + aromatic_increment
+            + (self.multicenter_valence as i16);
+
+        let total_e_inv_e = (self.element.valence_electrons() as i16) - (self.charge as i16)
+            + (self.implicit_hydrogens as i16)
+            + (self.valence as i16)
+            + aromatic_increment
+            + (self.multicenter_valence as i16)
+            + (2 * self.accepted_pairs as i16);
+
+        if total_e_inv_o != total_e_inv_e {
+            return Err(AtomError::ElectronInvariantMismatch {
+                element: self.element,
+                orbital_invariant: total_e_inv_o,
+                electron_invariant: total_e_inv_e,
+            });
+        }
+
+        Ok(())
+    }
+}
+
+fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
+    match aromatic_valence {
+        AromaticValence::None => 0,
+        AromaticValence::Valence(0) => 0,
+        AromaticValence::Valence(1) => 1,
+        AromaticValence::Valence(2) => 0,
+        AromaticValence::Valence(_) => 0,
+    }
 }
 
 impl Display for AtomTypeSpec {
@@ -231,26 +393,19 @@ impl Display for AtomTypeSpec {
 }
 
 impl FromStr for AtomTypeSpec {
-    type Err = ResolutionError;
+    type Err = AtomError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if !s.starts_with('{') || !s.ends_with('}') {
-            return Err(ResolutionError::InvalidAtomSpec(format!(
-                "atom type spec must be braced: {}",
-                s
-            )));
+        let trimmed = s.trim();
+        if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+            return Err(AtomError::InvalidSpecFormat);
         }
-        let body = &s[1..s.len() - 1];
+        let body = &trimmed[1..trimmed.len() - 1];
         let mut chars = body.chars().peekable();
 
-        let first = chars
-            .next()
-            .ok_or_else(|| ResolutionError::InvalidAtomSpec("empty atom type spec".to_string()))?;
+        let first = chars.next().ok_or(AtomError::EmptySpec)?;
         if !first.is_ascii_uppercase() {
-            return Err(ResolutionError::InvalidAtomSpec(format!(
-                "invalid element in {}",
-                s
-            )));
+            return Err(AtomError::InvalidElement);
         }
         let mut elem = String::new();
         elem.push(first);
@@ -264,9 +419,7 @@ impl FromStr for AtomTypeSpec {
                 }
             }
         }
-        let element: Element = elem
-            .parse()
-            .map_err(|_| ResolutionError::InvalidAtomSpec(format!("invalid element: {}", elem)))?;
+        let element: Element = elem.parse().map_err(|_| AtomError::InvalidElement)?;
 
         let mut charge = None;
         let mut implicit_hydrogens = 0u8;
@@ -287,78 +440,61 @@ impl FromStr for AtomTypeSpec {
             while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
                 number.push(chars.next().unwrap());
             }
-            let num_u8 = |default: u8| -> Result<u8, ResolutionError> {
+            let num_u8 = |default: u8, error: AtomError| -> Result<u8, AtomError> {
                 if number.is_empty() {
                     Ok(default)
                 } else {
-                    number.parse::<u8>().map_err(|_| {
-                        ResolutionError::InvalidAtomSpec(format!(
-                            "invalid numeric token '{}' in {}",
-                            number, s
-                        ))
-                    })
+                    number.parse::<u8>().map_err(|_| error)
                 }
             };
             match token {
                 '+' => {
                     if charge.is_some() {
-                        return Err(ResolutionError::InvalidAtomSpec(
-                            "duplicate charge token".to_string(),
-                        ));
+                        return Err(AtomError::DuplicateChargeToken);
                     }
-                    charge = Some(num_u8(1)? as i8);
+                    charge = Some(num_u8(1, AtomError::InvalidCharge)? as i8);
                 }
                 '-' => {
                     if charge.is_some() {
-                        return Err(ResolutionError::InvalidAtomSpec(
-                            "duplicate charge token".to_string(),
-                        ));
+                        return Err(AtomError::DuplicateChargeToken);
                     }
-                    charge = Some(-(num_u8(1)? as i8));
+                    charge = Some(-(num_u8(1, AtomError::InvalidCharge)? as i8));
                 }
-                'H' => implicit_hydrogens = num_u8(1)?,
-                '/' => lone_pairs = num_u8(1)?,
-                '^' => unpaired_electrons = num_u8(1)?,
+                'H' => implicit_hydrogens = num_u8(1, AtomError::InvalidImplicitHydrogens)?,
+                '/' => lone_pairs = num_u8(1, AtomError::InvalidLonePairs)?,
+                '^' => unpaired_electrons = num_u8(1, AtomError::InvalidUnpairedElectrons)?,
                 'x' => {
-                    let m = num_u8(1)?;
-                    multiplicity =
-                        Some(SpinMultiplicity::from_multiplicity(m).ok_or_else(|| {
-                            ResolutionError::InvalidAtomSpec(format!(
-                                "invalid multiplicity {} in {}",
-                                m, s
-                            ))
-                        })?);
+                    let m = num_u8(1, AtomError::InvalidMultiplicity)?;
+                    multiplicity = Some(
+                        SpinMultiplicity::from_multiplicity(m)
+                            .ok_or_else(|| AtomError::InvalidMultiplicity)?,
+                    );
                 }
-                'v' => valence = num_u8(1)?,
-                '>' => donated_pairs = num_u8(1)?,
-                '<' => accepted_pairs = num_u8(1)?,
-                'a' => aromatic_valence = AromaticValence::Valence(num_u8(1)?),
-                'm' => multicenter_valence = num_u8(1)?,
+                'v' => valence = num_u8(1, AtomError::InvalidValence)?,
+                '>' => donated_pairs = num_u8(1, AtomError::InvalidDonatedPairs)?,
+                '<' => accepted_pairs = num_u8(1, AtomError::InvalidAcceptedPairs)?,
+                'a' => {
+                    aromatic_valence =
+                        AromaticValence::Valence(num_u8(1, AtomError::InvalidAromaticValence)?)
+                }
+                'm' => multicenter_valence = num_u8(1, AtomError::InvalidMulticenterValence)?,
                 _ => {
-                    return Err(ResolutionError::InvalidAtomSpec(format!(
-                        "unknown token '{}' in {}",
-                        token, s
-                    )))
+                    return Err(AtomError::UnexpectedToken { token });
                 }
             }
         }
 
         if unpaired_electrons > MAX_UNPAIRED_ELECTRONS {
-            return Err(ResolutionError::InvalidAtomSpec(format!(
-                "unpaired electrons {} exceeds max ({})",
-                unpaired_electrons, MAX_UNPAIRED_ELECTRONS
-            )));
+            return Err(AtomError::UnpairedElectronsLiteralExceedMax {
+                unpaired_electrons,
+                max_unpaired_electrons: MAX_UNPAIRED_ELECTRONS,
+            });
         }
 
         let multiplicity = match multiplicity {
             Some(m) => m,
             None => SpinState::max_multiplicity(unpaired_electrons)
-                .ok_or_else(|| {
-                    ResolutionError::InvalidAtomSpec(format!(
-                        "cannot derive multiplicity for {} unpaired electrons in {}",
-                        unpaired_electrons, s
-                    ))
-                })?
+                .ok_or(SpinStateError::Underdetermined)?
                 .multiplicity(),
         };
 
@@ -538,26 +674,19 @@ impl Display for AtomTypeQuery {
 }
 
 impl FromStr for AtomTypeQuery {
-    type Err = ResolutionError;
+    type Err = AtomError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if !s.starts_with("?{") || !s.ends_with('}') {
-            return Err(ResolutionError::InvalidAtomSpec(format!(
-                "atom type query must use ?{{...}} notation: {}",
-                s
-            )));
+        let trimmed = s.trim();
+        if !trimmed.starts_with("?{") || !trimmed.ends_with('}') {
+            return Err(AtomError::InvalidQueryFormat);
         }
-        let body = &s[2..s.len() - 1];
+        let body = &trimmed[2..trimmed.len() - 1];
         let mut chars = body.chars().peekable();
 
-        let first = chars
-            .next()
-            .ok_or_else(|| ResolutionError::InvalidAtomSpec("empty atom type query".to_string()))?;
+        let first = chars.next().ok_or(AtomError::EmptyQuery)?;
         if !first.is_ascii_uppercase() {
-            return Err(ResolutionError::InvalidAtomSpec(format!(
-                "invalid element in {}",
-                s
-            )));
+            return Err(AtomError::InvalidElement);
         }
         let mut elem = String::new();
         elem.push(first);
@@ -571,9 +700,7 @@ impl FromStr for AtomTypeQuery {
                 }
             }
         }
-        let element: Element = elem
-            .parse()
-            .map_err(|_| ResolutionError::InvalidAtomSpec(format!("invalid element: {}", elem)))?;
+        let element: Element = elem.parse().map_err(|_| AtomError::InvalidElement)?;
 
         let mut query = AtomTypeQuery::unconstrained(element);
         let mut seen_charge = false;
@@ -586,35 +713,26 @@ impl FromStr for AtomTypeQuery {
             while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
                 number.push(chars.next().unwrap());
             }
-            let num_u8 = |default: u8| -> Result<u8, ResolutionError> {
+            let num_u8 = |default: u8, error: AtomError| -> Result<u8, AtomError> {
                 if number.is_empty() {
                     Ok(default)
                 } else {
-                    number.parse::<u8>().map_err(|_| {
-                        ResolutionError::InvalidAtomSpec(format!(
-                            "invalid numeric token '{}' in {}",
-                            number, s
-                        ))
-                    })
+                    number.parse::<u8>().map_err(|_| error)
                 }
             };
             match token {
                 '+' => {
                     if seen_charge {
-                        return Err(ResolutionError::InvalidAtomSpec(
-                            "duplicate charge token".to_string(),
-                        ));
+                        return Err(AtomError::DuplicateChargeToken);
                     }
-                    query.charge = Some(num_u8(1)? as i8);
+                    query.charge = Some(num_u8(1, AtomError::InvalidCharge)? as i8);
                     seen_charge = true;
                 }
                 '-' => {
                     if seen_charge {
-                        return Err(ResolutionError::InvalidAtomSpec(
-                            "duplicate charge token".to_string(),
-                        ));
+                        return Err(AtomError::DuplicateChargeToken);
                     }
-                    query.charge = Some(-(num_u8(1)? as i8));
+                    query.charge = Some(-(num_u8(1, AtomError::InvalidCharge)? as i8));
                     seen_charge = true;
                 }
                 'H' => {
@@ -625,24 +743,26 @@ impl FromStr for AtomTypeQuery {
                         chars.next();
                         query.implicit_hydrogens = Some(HydrogenConstraint::Normal);
                     } else {
-                        query.implicit_hydrogens = Some(HydrogenConstraint::Hydrogens(num_u8(1)?));
+                        query.implicit_hydrogens = Some(HydrogenConstraint::Hydrogens(num_u8(
+                            1,
+                            AtomError::InvalidImplicitHydrogens,
+                        )?));
                     }
                 }
-                '/' => query.lone_pairs = Some(num_u8(1)?),
-                '^' => query.unpaired_electrons = Some(num_u8(1)?),
-                'x' => {
-                    let m = num_u8(1)?;
-                    query.multiplicity =
-                        Some(SpinMultiplicity::from_multiplicity(m).ok_or_else(|| {
-                            ResolutionError::InvalidAtomSpec(format!(
-                                "invalid multiplicity {} in {}",
-                                m, s
-                            ))
-                        })?);
+                '/' => query.lone_pairs = Some(num_u8(1, AtomError::InvalidLonePairs)?),
+                '^' => {
+                    query.unpaired_electrons = Some(num_u8(1, AtomError::InvalidUnpairedElectrons)?)
                 }
-                'v' => query.valence = Some(num_u8(1)?),
-                '>' => query.donated_pairs = Some(num_u8(1)?),
-                '<' => query.accepted_pairs = Some(num_u8(1)?),
+                'x' => {
+                    let m = num_u8(1, AtomError::InvalidMultiplicity)?;
+                    query.multiplicity = Some(
+                        SpinMultiplicity::from_multiplicity(m)
+                            .ok_or_else(|| AtomError::InvalidMultiplicity)?,
+                    );
+                }
+                'v' => query.valence = Some(num_u8(1, AtomError::InvalidValence)?),
+                '>' => query.donated_pairs = Some(num_u8(1, AtomError::InvalidDonatedPairs)?),
+                '<' => query.accepted_pairs = Some(num_u8(1, AtomError::InvalidAcceptedPairs)?),
                 'a' => {
                     if chars.peek() == Some(&'*') {
                         chars.next();
@@ -651,15 +771,18 @@ impl FromStr for AtomTypeQuery {
                         chars.next();
                         query.aromatic_valence = Some(AromaticConstraint::None);
                     } else {
-                        query.aromatic_valence = Some(AromaticConstraint::Valence(num_u8(1)?));
+                        query.aromatic_valence = Some(AromaticConstraint::Valence(num_u8(
+                            1,
+                            AtomError::InvalidAromaticValence,
+                        )?));
                     }
                 }
-                'm' => query.multicenter_valence = Some(num_u8(1)?),
+                'm' => {
+                    query.multicenter_valence =
+                        Some(num_u8(1, AtomError::InvalidMulticenterValence)?)
+                }
                 _ => {
-                    return Err(ResolutionError::InvalidAtomSpec(format!(
-                        "unknown token '{}' in {}",
-                        token, s
-                    )))
+                    return Err(AtomError::UnexpectedToken { token });
                 }
             }
         }
@@ -706,7 +829,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::Element;
+    use umol_data::{Element, SpinStateError};
 
     use super::*;
 
@@ -733,6 +856,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::atom("{N}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
+    #[case::outer_spaced("  {N}  ", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
     #[case::charge_plus("{N+}", Element::N, 1, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
     #[case::charge_minus("{N-}", Element::N, -1, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
     #[case::charge_minus_1("{N-1}", Element::N, -1, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0)]
@@ -779,6 +903,22 @@ mod tests {
         assert_eq!(spec.multicenter_valence(), multicenter_valence, "multicenter valence mismatch for {}", input);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::invalid_format("N", AtomError::InvalidSpecFormat)]
+    #[case::empty_spec("{}", AtomError::EmptySpec)]
+    #[case::invalid_element("{n}", AtomError::InvalidElement)]
+    #[case::duplicate_charge("{N+-}", AtomError::DuplicateChargeToken)]
+    #[case::invalid_multiplicity("{Nx11}", AtomError::InvalidMultiplicity)]
+    #[case::invalid_spin("{N^2x2}", AtomError::SpinState(SpinStateError::Incompatible {
+        unpaired_electrons: 2,
+        multiplicity: SpinMultiplicity::Doublet,
+    }))]
+    #[case::unexpected_token("{Nq1}", AtomError::UnexpectedToken { token: 'q' })]
+    fn test_atom_type_spec_from_str_error(#[case] input: &str, #[case] expected: AtomError) {
+        assert_eq!(AtomTypeSpec::from_str(input).unwrap_err(), expected);
+    }
+
     #[rstest]
     #[case::aromatic_a2("{C-Hv2a2}")]
     #[case::aromatic_a0("{C+Hv2a0}")]
@@ -794,7 +934,24 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::valid("{C+0v4a0m0}", None)]
+    #[case::charge_out_of_bounds("{C+5}", Some(AtomError::ChargeOutOfBounds { element: Element::C, charge: 5, min_charge: -4, max_charge: 1 }))]
+    #[case::valence_exceeds_max("{Hv2}", Some(AtomError::ValenceExceedsMax { element: Element::H, valence: 2, max_valence: 1, }))]
+    #[case::unpaired_exceeds_max("{O^3x2}", Some(AtomError::UnpairedElectronsExceedMax { element: Element::O, unpaired_electrons: 3, max_unpaired_electrons: 2 }))]
+    #[case::implicit_hydrogens_exceed_max("{OH4}", Some(AtomError::ImplicitHydrogensExceedMax { element: Element::O, implicit_hydrogens: 4, max_implicit_hydrogens: 3 }))]
+    #[case::electron_invariant_mismatch("{Cv1}", Some(AtomError::ElectronInvariantMismatch { element: Element::C, orbital_invariant: 2, electron_invariant: 5 }))]
+    fn test_atom_type_spec_check_invariants(
+        #[case] input: &str,
+        #[case] expected: Option<AtomError>,
+    ) {
+        let spec = AtomTypeSpec::from_str(input).unwrap();
+        assert_eq!(spec.check_invariants().err(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::unconstrained("?{C}", Element::C, None, None, None, None, None, None, None, None)]
+    #[case::outer_spaced("  ?{C}  ", Element::C, None, None, None, None, None, None, None, None)]
     #[case::hydrogen_any("?{CH*}", Element::C, None, Some(HydrogenConstraint::Any), None, None, None, None, None, None)]
     #[case::hydrogen_normal("?{CH=}", Element::C, None, Some(HydrogenConstraint::Normal), None, None, None, None, None, None)]
     #[case::spaced_aromatic_none("?{B a!}", Element::B, None, None, None, None, None, None, Some(AromaticConstraint::None), None)]
@@ -823,6 +980,18 @@ mod tests {
         assert_eq!(query.valence, valence, "valence mismatch for {}", input);
         assert_eq!(query.aromatic_valence, aromatic_valence, "aromatic valence mismatch for {}", input);
         assert_eq!(query.multicenter_valence, multicenter_valence, "multicenter valence mismatch for {}", input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::invalid_format("{C}", AtomError::InvalidQueryFormat)]
+    #[case::empty_query("?{}", AtomError::EmptyQuery)]
+    #[case::invalid_element("?{c}", AtomError::InvalidElement)]
+    #[case::duplicate_charge("?{C+-}", AtomError::DuplicateChargeToken)]
+    #[case::invalid_multiplicity("?{Cx11}", AtomError::InvalidMultiplicity)]
+    #[case::unexpected_token("?{Cq1}", AtomError::UnexpectedToken { token: 'q' })]
+    fn test_atom_type_query_from_str_error(#[case] input: &str, #[case] expected: AtomError) {
+        assert_eq!(AtomTypeQuery::from_str(input).unwrap_err(), expected);
     }
 
     #[rstest]

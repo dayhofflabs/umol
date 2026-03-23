@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Fm/6}"
+      - "{Fm/7}"
     bonds: []

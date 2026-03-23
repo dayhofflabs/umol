@@ -12,7 +12,7 @@
 
 [He]
 0 = [
-    "{He/1}", # He atom, s2
+    "{He}", # He atom, s0
 ]
 
 [Li]
@@ -172,7 +172,7 @@
 
 [Ne]
 0 = [
-    "{Ne/4}", # Ne atom, s2p6
+    "{Ne}", # Ne atom, s0
 ]
 
 [Na]
@@ -300,7 +300,7 @@
 
 [Ar]
 0 = [
-    "{Ar/4}", # Ar atom, s2p6
+    "{Ar}", # Ar atom, s0
 ]
 
 [K]
@@ -425,10 +425,10 @@
 
 [Zn]
 0 = [
-    "{Zn/6}", # Zn atom, s2d10
+    "{Zn/1}", # Zn atom, s2
 ]
 2 = [
-    "{Zn+2/5}", # Zn2+, d10
+    "{Zn+2}", # Zn2+, s0
 ]
 
 [Ga]
@@ -545,7 +545,7 @@
 
 [Zr]
 0 = [
-    "{Zr/2^2}", # Zr atom, s2d2
+    "{Zr/1^2}", # Zr atom, s2d2
 ]
 4 = [
     "{Zr+4}", # Zr4+, d0
@@ -619,10 +619,10 @@
 
 [Cd]
 0 = [
-    "{Cd/6}", # Cd atom, s2d10
+    "{Cd/1}", # Cd atom, s2
 ]
 2 = [
-    "{Cd+2/5}", # Cd2+, d10
+    "{Cd+2}", # Cd2+, s0
 ]
 
 [In]

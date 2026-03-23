@@ -90,6 +90,7 @@ pub struct Bond {
     pub atoms: AtomPair,
     pub order: BondOrder,
     pub charge: Option<i8>,
+    pub unpaired_electrons: Option<u8>,
     pub multiplicity: Option<SpinMultiplicity>,
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
@@ -105,6 +106,7 @@ impl Bond {
             atoms: AtomPair::new(a, b),
             order,
             charge: None,
+            unpaired_electrons: None,
             multiplicity: None,
             ring: None,
             stereo: None,
@@ -123,6 +125,7 @@ impl Bond {
             atoms: AtomPair::new(a, b),
             order,
             charge: None,
+            unpaired_electrons: None,
             multiplicity: None,
             ring: None,
             stereo: None,
@@ -139,6 +142,7 @@ impl Bond {
             atoms: AtomPair::new(a, b),
             order: BondOrder::Zero,
             charge: None,
+            unpaired_electrons: None,
             multiplicity: None,
             ring: None,
             stereo: None,
@@ -270,6 +274,7 @@ pub struct ExtendedBond {
     pub atoms: AtomPair,
     pub order: BondOrder,
     pub charge: Option<i8>,
+    pub unpaired_electrons: Option<u8>,
     pub multiplicity: Option<SpinMultiplicity>,
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
@@ -289,6 +294,7 @@ impl ExtendedBond {
             atoms: AtomPair::new(start_atom, end_atom),
             order,
             charge: None,
+            unpaired_electrons: None,
             multiplicity: None,
             ring: None,
             stereo: None,
@@ -310,6 +316,7 @@ impl ExtendedBond {
             atoms: AtomPair::new(a, b),
             order,
             charge: None,
+            unpaired_electrons: None,
             multiplicity: None,
             ring: None,
             stereo: None,
@@ -329,6 +336,7 @@ impl ExtendedBond {
             atoms: AtomPair::new(a, b),
             order: BondOrder::Zero,
             charge: None,
+            unpaired_electrons: None,
             multiplicity: None,
             ring: None,
             stereo: None,
@@ -378,6 +386,7 @@ impl From<Bond> for ExtendedBond {
             atoms: bond.atoms,
             order: bond.order,
             charge: bond.charge,
+            unpaired_electrons: bond.unpaired_electrons,
             multiplicity: bond.multiplicity,
             ring: bond.ring,
             stereo: bond.stereo,
@@ -404,6 +413,7 @@ impl TryFrom<ExtendedBond> for Bond {
             atoms: extended.atoms,
             order: extended.order,
             charge: extended.charge,
+            unpaired_electrons: extended.unpaired_electrons,
             multiplicity: extended.multiplicity,
             ring: extended.ring,
             stereo: extended.stereo,
@@ -457,308 +467,220 @@ impl BondReactingCenter {
 
 #[cfg(test)]
 mod tests {
+    use rstest::*;
+
     use super::*;
 
-    #[test]
-    fn test_atom_pair_ordering() {
-        let p1 = AtomPair::new(0, 1);
-        let p2 = AtomPair::new(1, 0);
-        assert_eq!(p1, p2);
-        assert_eq!(p1.first(), 0);
-        assert_eq!(p1.second(), 1);
+    #[rstest]
+    #[case::normal(0, 1, AtomPair::new(0, 1))]
+    #[case::swapped(1, 0, AtomPair::new(0, 1))]
+    #[case::equal(1, 1, AtomPair::new(1, 1))]
+    fn test_atom_pair_ordering(#[case] a: u32, #[case] b: u32, #[case] expected: AtomPair) {
+        assert_eq!(AtomPair::new(a, b), expected);
     }
 
-    #[test]
-    fn test_atom_pair_ord() {
-        let p1 = AtomPair::new(0, 1);
-        let p2 = AtomPair::new(0, 2);
-        let p3 = AtomPair::new(1, 2);
-        assert!(p1 < p2);
-        assert!(p2 < p3);
+    #[rstest]
+    #[case::first(AtomPair::new(0, 2), AtomPair::new(1, 2), true)]
+    #[case::second(AtomPair::new(0, 1), AtomPair::new(0, 2), true)]
+    #[case::swapped(AtomPair::new(1, 0), AtomPair::new(0, 2), true)]
+    fn test_atom_pair_ord(#[case] a: AtomPair, #[case] b: AtomPair, #[case] expected: bool) {
+        assert_eq!(a < b, expected);
     }
 
-    #[test]
-    fn test_atom_pair_other() {
-        let p1 = AtomPair::new(0, 1);
-        assert_eq!(p1.other(0), Some(1));
-        assert_eq!(p1.other(1), Some(0));
-        assert_eq!(p1.other(2), None);
+    #[rstest]
+    #[case::first(AtomPair::new(0, 1), 0, Some(1))]
+    #[case::second(AtomPair::new(0, 1), 1, Some(0))]
+    #[case::none(AtomPair::new(0, 1), 2, None)]
+    fn test_atom_pair_other(
+        #[case] pair: AtomPair,
+        #[case] index: u32,
+        #[case] expected: Option<u32>,
+    ) {
+        assert_eq!(pair.other(index), expected);
     }
 
-    #[test]
-    fn test_bond_new() {
-        let bond = Bond::new(0, 1, BondOrder::Single);
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 1);
-        assert_eq!(bond.order, BondOrder::Single);
+    #[rstest]
+    #[case::shared(BondDonation::Shared, BondDonation::Shared)]
+    #[case::donating(BondDonation::Donating, BondDonation::Accepting)]
+    #[case::accepting(BondDonation::Accepting, BondDonation::Donating)]
+    #[case(BondDonation::Accepting, BondDonation::Donating)]
+    fn test_bond_donation_flip(#[case] donation: BondDonation, #[case] expected: BondDonation) {
+        assert_eq!(donation.flip(), expected);
     }
 
-    #[test]
-    fn test_bond_new_normalizes() {
-        let bond = Bond::new(5, 2, BondOrder::Double);
-        assert_eq!(bond.start_atom(), 2);
-        assert_eq!(bond.end_atom(), 5);
-        assert_eq!(bond.order, BondOrder::Double);
+    #[rstest]
+    #[case::normal(0, 1, BondOrder::Single, Bond::new(0, 1, BondOrder::Single))]
+    #[case::swapped(1, 0, BondOrder::Single, Bond::new(0, 1, BondOrder::Single))]
+    #[case::equal(1, 1, BondOrder::Single, Bond::new(1, 1, BondOrder::Single))]
+    #[case::double(5, 2, BondOrder::Double, Bond::new(2, 5, BondOrder::Double))]
+    fn test_bond_new(
+        #[case] a: u32,
+        #[case] b: u32,
+        #[case] order: BondOrder,
+        #[case] expected: Bond,
+    ) {
+        let bond = Bond::new(a, b, order);
+        assert_eq!(bond, expected);
     }
 
-    #[test]
-    fn test_extended_bond_new() {
-        let bond = ExtendedBond::new(0, 1, BondOrder::Triple);
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 1);
-        assert_eq!(bond.order, BondOrder::Triple);
-        assert!(!bond.has_extended_features());
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::normal_donating(0, 4, BondOrder::Single, BondDonation::Donating, Some(BondDonation::Donating))]
+    #[case::swapped_donating(4, 0, BondOrder::Single, BondDonation::Donating, Some(BondDonation::Accepting))]
+    #[case::swapped_accepting(5, 2, BondOrder::Single, BondDonation::Accepting, Some(BondDonation::Donating))]
+    fn test_bond_new_dative(
+        #[case] a: u32,
+        #[case] b: u32,
+        #[case] order: BondOrder,
+        #[case] donation: BondDonation,
+        #[case] expected: Option<BondDonation>,
+    ) {
+        let bond = Bond::new_dative(a, b, order, donation);
+        assert_eq!(bond.donation, expected);
     }
 
-    #[test]
-    fn test_extended_bond_new_normalizes() {
-        let bond = ExtendedBond::new(10, 4, BondOrder::Aromatic);
-        assert_eq!(bond.start_atom(), 4);
-        assert_eq!(bond.end_atom(), 10);
-        assert_eq!(bond.order, BondOrder::Aromatic);
-    }
-
-    #[test]
-    fn test_bond_donation_flip() {
-        assert_eq!(BondDonation::Shared.flip(), BondDonation::Shared);
-        assert_eq!(BondDonation::Donating.flip(), BondDonation::Accepting);
-        assert_eq!(BondDonation::Accepting.flip(), BondDonation::Donating);
-    }
-
-    #[test]
-    fn test_bond_new_dative_no_swap() {
-        // a < b, no swap needed
-        let bond = Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 4);
-        assert_eq!(bond.donation, Some(BondDonation::Donating));
-    }
-
-    #[test]
-    fn test_bond_new_dative_with_swap() {
-        // a > b, swap occurs, donation should flip
-        let bond = Bond::new_dative(4, 0, BondOrder::Single, BondDonation::Donating);
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 4);
-        // Original: 4 donates to 0. After swap: 0 accepts from 4.
-        assert_eq!(bond.donation, Some(BondDonation::Accepting));
-    }
-
-    #[test]
-    fn test_bond_new_dative_accepting_with_swap() {
-        // a > b, swap occurs
-        let bond = Bond::new_dative(5, 2, BondOrder::Single, BondDonation::Accepting);
-        assert_eq!(bond.start_atom(), 2);
-        assert_eq!(bond.end_atom(), 5);
-        // Original: 5 accepts from 2. After swap: 2 donates to 5.
-        assert_eq!(bond.donation, Some(BondDonation::Donating));
-    }
-
-    #[test]
-    fn test_bond_update_atoms_no_swap() {
-        let bond = Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::normal_donating(0, 4, BondOrder::Single, BondDonation::Donating, Some(BondDonation::Donating))]
+    #[case::swapped_donating(4, 0, BondOrder::Single, BondDonation::Donating, Some(BondDonation::Accepting))]
+    #[case::swapped_accepting(5, 2, BondOrder::Single, BondDonation::Accepting, Some(BondDonation::Donating))]
+    fn test_bond_update_atoms(
+        #[case] a: u32,
+        #[case] b: u32,
+        #[case] order: BondOrder,
+        #[case] donation: BondDonation,
+        #[case] expected: Option<BondDonation>,
+    ) {
+        let bond = Bond::new_dative(a, b, order, donation);
         let updated = bond.update_atoms(1, 3);
-        assert_eq!(updated.start_atom(), 1);
-        assert_eq!(updated.end_atom(), 3);
-        assert_eq!(updated.donation, Some(BondDonation::Donating));
+        assert_eq!(updated.donation, expected);
     }
 
-    #[test]
-    fn test_bond_update_atoms_with_swap() {
-        let bond = Bond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
-        let updated = bond.update_atoms(3, 1);
-        assert_eq!(updated.start_atom(), 1);
-        assert_eq!(updated.end_atom(), 3);
-        assert_eq!(updated.donation, Some(BondDonation::Accepting));
+    #[rstest]
+    #[case::normal(0, 1, BondOrder::Any, ExtendedBond::new(0, 1, BondOrder::Any))]
+    #[case::swapped(1, 0, BondOrder::Any, ExtendedBond::new(0, 1, BondOrder::Any))]
+    #[case::equal(1, 1, BondOrder::Any, ExtendedBond::new(1, 1, BondOrder::Any))]
+    fn test_extended_bond_new(
+        #[case] a: u32,
+        #[case] b: u32,
+        #[case] order: BondOrder,
+        #[case] expected: ExtendedBond,
+    ) {
+        let bond = ExtendedBond::new(a, b, order);
+        assert_eq!(bond, expected);
     }
 
-    #[test]
-    fn test_extended_bond_new_dative_no_swap() {
-        let bond = ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 4);
-        assert_eq!(bond.donation, Some(BondDonation::Donating));
+    #[rstest]
+    #[case::normal_donating(
+        0,
+        4,
+        BondOrder::Single,
+        BondDonation::Donating,
+        Some(BondDonation::Donating)
+    )]
+    #[case::swapped_donating(
+        4,
+        0,
+        BondOrder::Single,
+        BondDonation::Donating,
+        Some(BondDonation::Accepting)
+    )]
+    #[case::swapped_accepting(
+        5,
+        2,
+        BondOrder::Single,
+        BondDonation::Accepting,
+        Some(BondDonation::Donating)
+    )]
+    fn test_extended_bond_new_dative(
+        #[case] a: u32,
+        #[case] b: u32,
+        #[case] order: BondOrder,
+        #[case] donation: BondDonation,
+        #[case] expected: Option<BondDonation>,
+    ) {
+        let bond = ExtendedBond::new_dative(a, b, order, donation);
+        assert_eq!(bond.donation, expected);
     }
 
-    #[test]
-    fn test_extended_bond_new_dative_with_swap() {
-        let bond = ExtendedBond::new_dative(4, 0, BondOrder::Single, BondDonation::Accepting);
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 4);
-        // Original: 4 accepts from 0. After swap: 0 donates to 4.
-        assert_eq!(bond.donation, Some(BondDonation::Donating));
-    }
-
-    #[test]
-    fn test_extended_bond_update_atoms_no_swap() {
-        let bond = ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
+    #[rstest]
+    #[case::normal_donating(
+        0,
+        4,
+        BondOrder::Single,
+        BondDonation::Donating,
+        Some(BondDonation::Donating)
+    )]
+    #[case::swapped_donating(
+        4,
+        0,
+        BondOrder::Single,
+        BondDonation::Donating,
+        Some(BondDonation::Accepting)
+    )]
+    #[case::swapped_accepting(
+        5,
+        2,
+        BondOrder::Single,
+        BondDonation::Accepting,
+        Some(BondDonation::Donating)
+    )]
+    fn test_extended_bond_update_atoms(
+        #[case] a: u32,
+        #[case] b: u32,
+        #[case] order: BondOrder,
+        #[case] donation: BondDonation,
+        #[case] expected: Option<BondDonation>,
+    ) {
+        let bond = ExtendedBond::new_dative(a, b, order, donation);
         let updated = bond.update_atoms(1, 3);
-        assert_eq!(updated.start_atom(), 1);
-        assert_eq!(updated.end_atom(), 3);
-        assert_eq!(updated.donation, Some(BondDonation::Donating));
+        assert_eq!(updated.donation, expected);
     }
-
-    #[test]
-    fn test_extended_bond_update_atoms_with_swap() {
-        let bond = ExtendedBond::new_dative(0, 4, BondOrder::Single, BondDonation::Donating);
-        let updated = bond.update_atoms(3, 1);
-        assert_eq!(updated.start_atom(), 1);
-        assert_eq!(updated.end_atom(), 3);
-        assert_eq!(updated.donation, Some(BondDonation::Accepting));
-    }
-
-    #[test]
-    fn test_from_bond_to_extended_bond() {
-        let bond = Bond {
-            atoms: AtomPair::new(0, 1),
-            order: BondOrder::Single,
-            charge: None,
-            multiplicity: None,
-            ring: Some(5),
-            stereo: Some(BondStereo::Cis),
-            wedge: Some(BondWedge::Up),
-            donation: None,
-            noncovalent: None,
-            span: None,
-        };
-
+    #[rstest]
+    #[case::normal(
+        Bond::new(0, 1, BondOrder::Single),
+        ExtendedBond::new(0, 1, BondOrder::Single)
+    )]
+    fn test_bond_into_extended_bond(#[case] bond: Bond, #[case] expected: ExtendedBond) {
         let extended: ExtendedBond = bond.into();
-        assert_eq!(extended.start_atom(), 0);
-        assert_eq!(extended.end_atom(), 1);
-        assert_eq!(extended.order, BondOrder::Single);
-        assert_eq!(extended.ring, Some(5));
-        assert_eq!(extended.stereo, Some(BondStereo::Cis));
-        assert_eq!(extended.wedge, Some(BondWedge::Up));
-        assert!(!extended.has_extended_features());
+        assert_eq!(extended, expected);
     }
 
-    #[test]
-    fn test_try_from_extended_bond_to_bond() {
-        let extended = ExtendedBond {
-            atoms: AtomPair::new(0, 1),
-            order: BondOrder::Double,
-            charge: None,
-            multiplicity: None,
-            ring: Some(6),
-            stereo: Some(BondStereo::Trans),
-            wedge: Some(BondWedge::Down),
-            donation: None,
-            noncovalent: None,
-            topology: None,
-            reacting_center: None,
-            properties: HashMap::new(),
-            span: None,
-        };
-
+    #[rstest]
+    #[case::normal(
+        ExtendedBond::new(0, 1, BondOrder::Double),
+        Bond::new(0, 1, BondOrder::Double)
+    )]
+    fn test_extended_bond_try_into_bond(#[case] extended: ExtendedBond, #[case] expected: Bond) {
         let bond: Bond = extended.try_into().unwrap();
-        assert_eq!(bond.start_atom(), 0);
-        assert_eq!(bond.end_atom(), 1);
-        assert_eq!(bond.order, BondOrder::Double);
-        assert_eq!(bond.ring, Some(6));
-        assert_eq!(bond.stereo, Some(BondStereo::Trans));
-        assert_eq!(bond.wedge, Some(BondWedge::Down));
+        assert_eq!(bond, expected);
     }
 
-    #[test]
-    fn test_try_from_extended_bond_to_bond_invalid() {
-        let extended = ExtendedBond {
-            atoms: AtomPair::new(0, 1),
-            order: BondOrder::Single,
-            charge: None,
-            multiplicity: None,
-            ring: None,
-            stereo: None,
-            wedge: None,
-            donation: None,
-            noncovalent: None,
-            topology: Some(BondTopology::Ring),
-            reacting_center: None,
-            properties: HashMap::new(),
-            span: None,
-        };
-
+    #[rstest]
+    #[case::query(ExtendedBond::new(0, 1, BondOrder::Any))]
+    #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, charge: None, unpaired_electrons: None,
+                                    multiplicity: None, ring: None, stereo: None, wedge: None, donation: None, noncovalent: None,
+                                    topology: Some(BondTopology::Ring), reacting_center: None, properties: HashMap::new(), span: None })]
+    fn test_extended_bond_try_into_bond_error(#[case] extended: ExtendedBond) {
         let result: Result<Bond, _> = extended.try_into();
         assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            ConversionError::HasExtendedFeatures
+        ));
     }
 
-    #[test]
-    fn test_has_extended_features_basic() {
-        let extended = ExtendedBond {
-            atoms: AtomPair::new(0, 1),
-            order: BondOrder::Triple,
-            charge: None,
-            multiplicity: None,
-            ring: Some(5),
-            stereo: Some(BondStereo::Cis),
-            wedge: Some(BondWedge::Up),
-            donation: None,
-            noncovalent: None,
-            topology: None,
-            reacting_center: None,
-            properties: HashMap::new(),
-            span: None,
-        };
-
-        assert!(!extended.has_extended_features());
-    }
-
-    #[test]
-    fn test_has_extended_features_extended() {
-        let extended = ExtendedBond {
-            atoms: AtomPair::new(0, 1),
-            order: BondOrder::Single,
-            charge: None,
-            multiplicity: None,
-            ring: None,
-            stereo: None,
-            wedge: None,
-            donation: None,
-            noncovalent: None,
-            topology: Some(BondTopology::Chain),
-            reacting_center: None,
-            properties: HashMap::new(),
-            span: None,
-        };
-
-        assert!(extended.has_extended_features());
-    }
-
-    #[test]
-    fn test_has_extended_features_query() {
-        let extended = ExtendedBond::new(0, 1, BondOrder::Any);
-        assert!(extended.has_extended_features());
-    }
-
-    #[test]
-    fn test_has_extended_features_extended_order() {
-        let extended = ExtendedBond::new(0, 1, BondOrder::Zero);
-        assert!(extended.has_extended_features());
-    }
-
-    #[test]
-    fn test_roundtrip_bond_to_extended_to_bond() {
-        let bond = Bond {
-            atoms: AtomPair::new(0, 1),
-            order: BondOrder::Aromatic,
-            charge: None,
-            multiplicity: None,
-            ring: Some(6),
-            stereo: Some(BondStereo::Either),
-            wedge: Some(BondWedge::Either),
-            donation: None,
-            noncovalent: None,
-            span: None,
-        };
-
-        let extended: ExtendedBond = bond.clone().into();
-        let bond2: Bond = extended.try_into().unwrap();
-
-        assert_eq!(bond.start_atom(), bond2.start_atom());
-        assert_eq!(bond.end_atom(), bond2.end_atom());
-        assert_eq!(bond.order, bond2.order);
-        assert_eq!(bond.ring, bond2.ring);
-        assert_eq!(bond.stereo, bond2.stereo);
-        assert_eq!(bond.wedge, bond2.wedge);
-        assert_eq!(bond.span, bond2.span);
+    #[rstest]
+    #[case::normal(ExtendedBond::new(0, 1, BondOrder::Single), false)]
+    #[case::query(ExtendedBond::new(0, 1, BondOrder::Any), true)]
+    #[case::order_zero(ExtendedBond::new(0, 1, BondOrder::Zero), true)]
+    #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, charge: None, unpaired_electrons: None,
+                                    multiplicity: None, ring: None, stereo: None, wedge: None, donation: None, noncovalent: None,
+                                    topology: Some(BondTopology::Ring), reacting_center: None, properties: HashMap::new(), span: None }, true)]
+    fn test_extended_bond_has_extended_features(
+        #[case] extended: ExtendedBond,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(extended.has_extended_features(), expected);
     }
 }

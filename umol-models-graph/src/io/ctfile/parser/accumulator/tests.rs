@@ -5,7 +5,7 @@ use rstest::*;
 use umol_data::{e, Element, NamedIsotope};
 
 use super::*;
-use crate::atom::{ImplicitHydrogens, UnpairedElectrons};
+use crate::atom::ImplicitHydrogens;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,
@@ -47,7 +47,8 @@ fn triatomic_molecule() -> Molecule {
 fn with_properties(mut single_atom: Molecule) -> Molecule {
     if let Some(atom) = single_atom.atoms.get_mut(0) {
         atom.charge = Some(1);
-        atom.unpaired_electrons = Some(UnpairedElectrons::from_count(1)); // Doublet: 1 unpaired electron
+        atom.unpaired_electrons = Some(1);
+        atom.multiplicity = None;
         atom.isotope_mass = Some(13);
         atom.label = Some("existing".to_string());
         atom.value = Some("existing".to_string());
@@ -85,7 +86,8 @@ fn with_extended_properties(mut single_extended_atom: ExtendedMolecule) -> Exten
         atom.label = Some("existing".to_string());
         atom.value = Some("existing".to_string());
         atom.charge = Some(1);
-        atom.unpaired_electrons = Some(UnpairedElectrons::from_count(1)); // Doublet: 1 unpaired electron
+        atom.unpaired_electrons = Some(1);
+        atom.multiplicity = None;
         atom.isotope_mass = Some(13);
         atom.ring_bond_count = Some(RingBondCount::R2);
         atom.substitution_count = Some(SubstitutionCount::S2);
@@ -343,10 +345,8 @@ fn test_apply_radical(mut single_atom: Molecule) {
         .unwrap();
 
     let atom = &single_atom.atoms[0];
-    assert_eq!(
-        atom.unpaired_electrons,
-        Some(UnpairedElectrons::from_count(1))
-    );
+    assert_eq!(atom.unpaired_electrons, Some(1));
+    assert!(atom.multiplicity.is_none());
     assert_eq!(atom.charge, None);
 }
 
@@ -385,10 +385,8 @@ fn test_apply_radical_overwrite(mut with_properties: Molecule) {
         .unwrap();
 
     let atom = &with_properties.atoms[0];
-    assert_eq!(
-        atom.unpaired_electrons,
-        Some(UnpairedElectrons::from_count(0))
-    ); // Singlet: 0 unpaired electrons
+    assert_eq!(atom.unpaired_electrons, Some(0)); // Singlet: 0 unpaired electrons
+    assert!(atom.multiplicity.is_none());
     assert_eq!(atom.charge, None);
 }
 
@@ -704,10 +702,8 @@ fn test_apply_extended_radical(mut single_extended_atom: ExtendedMolecule) {
         .unwrap();
 
     let atom = &single_extended_atom.atoms[0];
-    assert_eq!(
-        atom.unpaired_electrons,
-        Some(UnpairedElectrons::from_count(1))
-    );
+    assert_eq!(atom.unpaired_electrons, Some(1));
+    assert!(atom.multiplicity.is_none());
     assert_eq!(atom.charge, None);
 }
 
@@ -746,10 +742,8 @@ fn test_apply_extended_radical_overwrite(mut with_extended_properties: ExtendedM
         .unwrap();
 
     let atom = &with_extended_properties.atoms[0];
-    assert_eq!(
-        atom.unpaired_electrons,
-        Some(UnpairedElectrons::from_count(0))
-    ); // Singlet: 0 unpaired electrons
+    assert_eq!(atom.unpaired_electrons, Some(0)); // Singlet: 0 unpaired electrons
+    assert!(atom.multiplicity.is_none());
     assert_eq!(atom.charge, None);
 }
 

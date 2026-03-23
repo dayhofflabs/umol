@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Cf+2/4}"
+      - "{Cf+2/5}"
     bonds: []

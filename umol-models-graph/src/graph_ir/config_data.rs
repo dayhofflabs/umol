@@ -125,6 +125,15 @@ impl AtomTypeRegistry {
         self.recompute_hash();
     }
 
+    /// Returns true if all charge-specific registry specs satisfy atom invariants.
+    /// This is an optional consistency check and is not enforced at load time.
+    pub fn verify_specs(&self) -> bool {
+        self.atom_types
+            .iter()
+            .filter(|((_, charge), _)| charge.is_some())
+            .all(|(_, specs)| specs.iter().all(|spec| spec.check_invariants().is_ok()))
+    }
+
     pub fn specs_for_element(&self, element: Element) -> &[AtomTypeSpec] {
         self.atom_types
             .get(&(element, None))
@@ -175,7 +184,6 @@ static DEFAULT_ATOM_TYPE_REGISTRY: LazyLock<AtomTypeRegistry> = LazyLock::new(||
 /// Per-element valence data for counts-based validation.
 #[derive(Debug, Clone)]
 pub struct ValenceEntry {
-    pub outer_electrons: u8,
     pub allowed_valences: Vec<i8>,
     pub allowed_aromatic_valences: Vec<u8>,
 }
@@ -189,7 +197,6 @@ pub struct ValenceTable {
 
 #[derive(Deserialize)]
 struct ValenceEntryToml {
-    outer_electrons: u8,
     allowed_valences: Vec<i8>,
     #[serde(default)]
     allowed_aromatic_valences: Vec<u8>,
@@ -223,9 +230,8 @@ impl ValenceTable {
         for (element, entry) in &self.entries {
             let _ = write!(
                 buf,
-                "{}:{}:{:?}:{:?}\n",
+                "{}:{:?}:{:?}\n",
                 element,
-                entry.outer_electrons,
                 entry.allowed_valences,
                 entry.allowed_aromatic_valences
             );
@@ -248,7 +254,6 @@ impl ValenceTable {
             entries.insert(
                 element,
                 ValenceEntry {
-                    outer_electrons: entry.outer_electrons,
                     allowed_valences: entry.allowed_valences,
                     allowed_aromatic_valences: entry.allowed_aromatic_valences,
                 },
@@ -271,7 +276,7 @@ impl ValenceTable {
     /// For charged atoms with specific allowed valences, looks up the
     /// isoelectronic element (atomic_number − charge) following RDKit's
     /// effective-atomic-number convention. Walks `allowed_valences` in order:
-    /// `-1` means unconstrained (implicit H = max(0, outer_electrons − charge
+    /// `-1` means unconstrained (implicit H = max(0, valence_electrons − charge
     /// − explicit_valence)); otherwise the first allowed value ≥
     /// `explicit_valence` gives `implicit_h = allowed − explicit_valence`.
     ///
@@ -286,7 +291,8 @@ impl ValenceTable {
             return Some(0);
         }
         let entry = self.entries.get(&element)?;
-        let num_electrons = (entry.outer_electrons as i16) - (charge as i16);
+        // Element metadata is the canonical source of valence electron counts.
+        let num_electrons = (element.valence_electrons() as i16) - (charge as i16);
 
         let effective_valences = if charge != 0 && !entry.allowed_valences.contains(&-1) {
             let eff_entry = self.entries.get(&element.shift(-charge)?)?;
@@ -311,23 +317,23 @@ impl ValenceTable {
 ///
 /// ```ignore
 /// let table = valence_table! {
-///     C => 4, [4],
-///     N => 5, [3],
-///     S => 6, [2, 4, 6],
-///     Fe => 8, [-1],
+///     C => [4],
+///     N => [3],
+///     S => [2, 4, 6],
+///     Fe => [-1],
 /// };
 /// ```
 #[macro_export]
 macro_rules! valence_table {
-    ($($el:ident => $outer:expr, [$($v:expr),* $(,)?]),* $(,)?) => {{
+    ($($el:ident => [$($v:expr),* $(,)?]),* $(,)?) => {{
         let mut table = $crate::graph_ir::config_data::ValenceTable::empty();
         $(
             table.insert(
                 <umol_data::Element as std::str::FromStr>::from_str(stringify!($el))
                     .expect("invalid element symbol in valence_table!"),
                 $crate::graph_ir::config_data::ValenceEntry {
-                    outer_electrons: $outer,
                     allowed_valences: vec![$($v),*],
+                    allowed_aromatic_valences: vec![],
                 },
             );
         )*
@@ -376,8 +382,10 @@ impl NormalValenceTable {
 }
 
 static DEFAULT_NORMAL_VALENCE_TABLE: LazyLock<NormalValenceTable> = LazyLock::new(|| {
-    NormalValenceTable::from_toml_str(include_str!("../../config/default-normal-valence-table.toml"))
-        .expect("built-in default normal valence table must be valid")
+    NormalValenceTable::from_toml_str(include_str!(
+        "../../config/default-normal-valence-table.toml"
+    ))
+    .expect("built-in default normal valence table must be valid")
 });
 
 #[cfg(test)]
@@ -424,15 +432,13 @@ mod tests {
         let table = ValenceTable::from_toml_str(
             r#"
         [H]
-        outer_electrons = 1
         allowed_valences = [1]
         "#,
         )
         .unwrap();
         assert!(table.entry(Element::H).is_some());
-        assert_eq!(table.entry(Element::H).unwrap().outer_electrons, 1);
         assert_eq!(table.entry(Element::H).unwrap().allowed_valences, [1]);
-        assert_eq!(table.content_hash_hex(), "9b2eb23f510cbec2");
+        assert_eq!(table.content_hash_hex(), "5c81fe410a7e98a0");
     }
 
     #[test]
@@ -452,16 +458,14 @@ mod tests {
     #[test]
     fn test_valence_table_unconstrained() {
         let table = ValenceTable::default_table();
-        // Fe has [-1], outer_electrons=8
+        // Fe has [-1], valence_electrons=8
         assert_eq!(table.compute_implicit_hydrogens(Element::Fe, 0, 3), Some(5));
         assert_eq!(table.compute_implicit_hydrogens(Element::Fe, 2, 3), Some(3));
     }
 
     #[test]
     fn test_valence_table_missing() {
-        let table =
-            ValenceTable::from_toml_str("[H]\nouter_electrons = 1\nallowed_valences = [1]\n")
-                .unwrap();
+        let table = ValenceTable::from_toml_str("[H]\nallowed_valences = [1]\n").unwrap();
         assert_eq!(table.compute_implicit_hydrogens(Element::C, 0, 0), None);
     }
 

@@ -58,7 +58,11 @@ alwaysApply: true
 - Take existing high-quality crates into account for solving a problem. Prefer high-quality
   external crates to manual code. If in doubt, ask.
 - Use `rstest` table tests instead of multiple discrete tests, use `rstest` fixtures to factor
-  out shared domain objects. Use `test_` prefix in all test functions.
+  out shared domain objects. 
+- Use `test_` prefix in all test functions.  Test names should contain the struct / enum + method
+  name + "error" or "invalid" suffix as necessary. Avoid the BDD style with test names describing
+  behavior. The cases in the rstest table tests should describe the input concisely.
+
 
 ## Do not embellish code with long comments
 

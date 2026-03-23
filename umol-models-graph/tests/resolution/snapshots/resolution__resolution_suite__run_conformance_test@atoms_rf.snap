@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Rf/1}"
+      - "{Rf/2}"
     bonds: []

@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Eu+3/2}"
+      - "{Eu+3/3}"
     bonds: []

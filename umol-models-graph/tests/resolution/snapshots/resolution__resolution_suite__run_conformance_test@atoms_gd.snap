@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Gd/4}"
+      - "{Gd/5}"
     bonds: []

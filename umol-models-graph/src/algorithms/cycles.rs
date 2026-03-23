@@ -96,7 +96,14 @@ mod tests {
 
     #[test]
     fn simple_ring() {
-        let adj = vec![vec![1, 5], vec![0, 2], vec![1, 3], vec![2, 4], vec![3, 5], vec![4, 0]];
+        let adj = vec![
+            vec![1, 5],
+            vec![0, 2],
+            vec![1, 3],
+            vec![2, 4],
+            vec![3, 5],
+            vec![4, 0],
+        ];
         let cycles = enumerate_simple_cycles(6, &adj, 6);
         assert_eq!(cycles, vec![vec![0, 1, 2, 3, 4, 5]]);
     }
@@ -124,7 +131,10 @@ mod tests {
     fn max_size_cutoff() {
         let adj = vec![vec![1, 4], vec![0, 2], vec![1, 3], vec![2, 4], vec![3, 0]];
         assert!(enumerate_simple_cycles(5, &adj, 4).is_empty());
-        assert_eq!(enumerate_simple_cycles(5, &adj, 5), vec![vec![0, 1, 2, 3, 4]]);
+        assert_eq!(
+            enumerate_simple_cycles(5, &adj, 5),
+            vec![vec![0, 1, 2, 3, 4]]
+        );
     }
 
     #[test]

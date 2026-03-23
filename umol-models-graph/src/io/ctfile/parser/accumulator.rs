@@ -10,7 +10,7 @@ use super::convert::{
     convert_atom_isotope_mass_number, convert_attachment_point_code, convert_radical_type_code,
     convert_ring_bond_count_code, convert_substitution_count_code, convert_unsaturated_atom_code,
 };
-use crate::atom::{ImplicitHydrogens, UnpairedElectrons};
+use crate::atom::ImplicitHydrogens;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::properties::{PropertyEntries, SGroupDataEntry};
@@ -705,11 +705,13 @@ impl PropertyAccumulator {
             if let Some(charge) = props.charge {
                 atom.charge = Some(charge);
                 atom.unpaired_electrons = None; // charge overrides radical from atom block
+                atom.multiplicity = None;
             }
 
             // Apply radical (unpaired electrons)
             if let Some(unpaired_electrons) = props.unpaired_electrons {
-                atom.unpaired_electrons = Some(UnpairedElectrons::from_count(unpaired_electrons));
+                atom.unpaired_electrons = Some(unpaired_electrons);
+                atom.multiplicity = None;
                 atom.charge = None; // radical overrides charge from atom block
             }
 
@@ -776,11 +778,13 @@ impl PropertyAccumulator {
             if let Some(charge) = props.charge {
                 atom.charge = Some(charge);
                 atom.unpaired_electrons = None; // charge overrides radical from atom block
+                atom.multiplicity = None;
             }
 
             // Apply radical (unpaired electrons)
             if let Some(unpaired_electrons) = props.unpaired_electrons {
-                atom.unpaired_electrons = Some(UnpairedElectrons::from_count(unpaired_electrons));
+                atom.unpaired_electrons = Some(unpaired_electrons);
+                atom.multiplicity = None;
                 atom.charge = None; // radical overrides charge from atom block
             }
 

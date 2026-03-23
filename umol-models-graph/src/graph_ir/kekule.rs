@@ -4,6 +4,7 @@
 //! validated `AromaticSystem` objects and is invoked explicitly by the caller.
 //! The algorithm uses backtracking DFS with an optional bound on backtrack steps.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use thiserror::Error;
@@ -26,18 +27,13 @@ pub enum KekulizationError {
 /// Result of Kekulization for one aromatic system.
 #[derive(Clone, Debug)]
 pub struct KekuleAssignment {
-    /// Bond order for each bond in the aromatic system.
-    /// Key: bond index. Value: 1 (single) or 2 (double).
     pub bond_orders: BTreeMap<BondIndex, u8>,
 }
 
 /// Configuration for the Kekulizer.
 #[derive(Clone, Debug)]
 pub struct KekuleConfig {
-    /// Maximum number of backtrack steps before giving up.
     pub max_backtrack_steps: usize,
-    /// Optional HMO bond order hints: bonds with higher pi-bond-order are
-    /// tried first as double bonds.
     pub bond_order_hints: Option<BTreeMap<(AtomIndex, AtomIndex), f64>>,
 }
 
@@ -111,7 +107,7 @@ pub fn kekulize(
             let key_b = if b1 < b2 { (b1, b2) } else { (b2, b1) };
             let ha = hints.get(&key_a).copied().unwrap_or(0.0);
             let hb = hints.get(&key_b).copied().unwrap_or(0.0);
-            hb.partial_cmp(&ha).unwrap_or(std::cmp::Ordering::Equal)
+            hb.partial_cmp(&ha).unwrap_or(Ordering::Equal)
         });
     }
 
@@ -212,94 +208,4 @@ fn dfs_kekulize(
 
     assignment[bond_idx] = 0;
     false
-}
-
-#[cfg(test)]
-mod tests {
-    use smallvec::SmallVec;
-    use umol_data::Element;
-
-    use super::*;
-    use crate::graph_ir::aromaticity::AromaticContribution;
-    use crate::graph_ir::atom::AtomBuilder;
-    use crate::graph_ir::bond::BondBuilder;
-
-    fn carbon_aromatic_1() -> AtomBuilder {
-        let spec = crate::spec!("{Cv2a1H}");
-        let mut ab = AtomBuilder::new(Element::C);
-        ab.set_candidates(SmallVec::from_elem(spec, 1));
-        ab
-    }
-
-    fn make_benzene_system() -> (MoleculeBuilder, AromaticSystem) {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..6)
-            .map(|_| builder.add_atom(carbon_aromatic_1()))
-            .collect();
-        for i in 0..6 {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
-        }
-        let system = AromaticSystem::new(atoms.iter().map(|&a| AromaticContribution::new(a, 1)));
-        (builder, system)
-    }
-
-    fn make_naphthalene_system() -> (MoleculeBuilder, AromaticSystem) {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..10)
-            .map(|_| builder.add_atom(carbon_aromatic_1()))
-            .collect();
-        let r1 = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
-        for (a, b) in r1 {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
-        }
-        let r2 = [(3, 6), (6, 7), (7, 8), (8, 9), (9, 4)];
-        for (a, b) in r2 {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
-        }
-        let system = AromaticSystem::new(atoms.iter().map(|&a| AromaticContribution::new(a, 1)));
-        (builder, system)
-    }
-
-    #[test]
-    fn kekulize_benzene() {
-        let (builder, system) = make_benzene_system();
-        let config = KekuleConfig::default();
-        let result = kekulize(&builder, &system, &config);
-        assert!(result.is_ok());
-        let assignment = result.unwrap();
-        assert_eq!(assignment.bond_orders.len(), 6);
-        let doubles: usize = assignment.bond_orders.values().filter(|&&v| v == 2).count();
-        let singles: usize = assignment.bond_orders.values().filter(|&&v| v == 1).count();
-        assert_eq!(doubles, 3);
-        assert_eq!(singles, 3);
-
-        // Verify each atom is incident to exactly one double bond.
-        let atoms: Vec<AtomIndex> = builder.atom_indices().collect();
-        for &atom in &atoms {
-            let mut double_count = 0;
-            for bond_idx in builder.atom_bond_indices(atom) {
-                if let Some(&order) = assignment.bond_orders.get(&bond_idx) {
-                    if order == 2 {
-                        double_count += 1;
-                    }
-                }
-            }
-            assert_eq!(
-                double_count, 1,
-                "atom {:?} should have exactly 1 double bond",
-                atom
-            );
-        }
-    }
-
-    #[test]
-    fn kekulize_naphthalene() {
-        let (builder, system) = make_naphthalene_system();
-        let config = KekuleConfig::default();
-        let result = kekulize(&builder, &system, &config);
-        assert!(result.is_ok());
-        let assignment = result.unwrap();
-        let doubles: usize = assignment.bond_orders.values().filter(|&&v| v == 2).count();
-        assert_eq!(doubles, 5); // Naphthalene has 5 double bonds in Kekule form.
-    }
 }

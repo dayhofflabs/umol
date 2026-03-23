@@ -10,13 +10,13 @@ use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use umol_data::SpinMultiplicity;
-use umol_models_graph::atom::{ImplicitHydrogens, UnpairedElectrons};
+use umol_models_graph::atom::ImplicitHydrogens;
 use umol_models_graph::graph_ir::config_data::ValenceTable;
+use umol_models_graph::graph_ir::rings::{RingRelation, RingSet};
 use umol_models_graph::graph_ir::{
     resolve_molecule_with, AromaticConstraint, AtomTypeQuery, HydrogenConstraint, Molecule,
     ResolutionError, ResolveConfig, TopologyNodeRef, TopologyProjection, ValenceStrategy,
 };
-use umol_models_graph::graph_ir::rings::{RingRelation, RingSet};
 use umol_models_graph::table_ir::{
     Atom as TableAtom, Bond as TableBond, BondDonation, BondOrder, Molecule as TableMolecule,
 };
@@ -140,10 +140,8 @@ fn parse_atom_token(
         },
     };
     atom.lone_pairs = query.lone_pairs;
-
-    if let Some(unpaired) = query.unpaired_electrons {
-        atom.unpaired_electrons = Some(UnpairedElectrons::new(unpaired, query.multiplicity));
-    }
+    atom.unpaired_electrons = query.unpaired_electrons;
+    atom.multiplicity = query.multiplicity;
 
     atom.aromatic = match query.aromatic_valence {
         Some(AromaticConstraint::Any | AromaticConstraint::Valence(_)) => Some(true),
@@ -366,7 +364,10 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         .aromatic_systems()
         .map(|system| {
             let system_atoms: Vec<_> = system.atoms().collect();
-            let mut atoms: Vec<usize> = system_atoms.iter().map(|ai| canon_pos[ai.index()]).collect();
+            let mut atoms: Vec<usize> = system_atoms
+                .iter()
+                .map(|ai| canon_pos[ai.index()])
+                .collect();
             atoms.sort_unstable();
             let display_ring_set = RingSet::induced_from_molecule_atoms(mol, &system_atoms);
             let mut ring_graph: Vec<String> = display_ring_set

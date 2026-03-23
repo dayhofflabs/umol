@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Pu+7}"
+      - "{Pu+7^1}"
     bonds: []

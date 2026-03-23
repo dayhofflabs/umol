@@ -4,7 +4,6 @@ use rstest::*;
 use umol_data::SpinMultiplicity;
 
 use super::super::*;
-use crate::atom::UnpairedElectrons;
 use crate::bond::BondNoncovalent;
 use crate::position::Point3D;
 use crate::table_ir::{
@@ -163,9 +162,13 @@ fn cx_atom_values(#[case] input: &[u8], #[case] expected: Vec<Option<String>>) {
 
 #[rustfmt::skip]
 #[rstest]
-#[case::monovalent(b"C |^1:0|", UnpairedElectrons { count: 1, multiplicity: None })]
-#[case::divalent_triplet(b"C |^4:0|", UnpairedElectrons { count: 2, multiplicity: Some(SpinMultiplicity::Triplet)})]
-fn cx_radicals(#[case] input: &[u8], #[case] expected: UnpairedElectrons) {
+#[case::monovalent(b"C |^1:0|", 1, None)]
+#[case::divalent_triplet(b"C |^4:0|", 2, Some(SpinMultiplicity::Triplet))]
+fn cx_radicals(
+    #[case] input: &[u8],
+    #[case] expected_unpaired: u8,
+    #[case] expected_multiplicity: Option<SpinMultiplicity>,
+) {
     let input_str = input.to_str_lossy();
 
     let res = parse_basic_cxsmiles(input);
@@ -176,7 +179,8 @@ fn cx_radicals(#[case] input: &[u8], #[case] expected: UnpairedElectrons) {
         res
     );
     let mol = res.unwrap();
-    assert_eq!(mol.atoms[0].unpaired_electrons, Some(expected));
+    assert_eq!(mol.atoms[0].unpaired_electrons, Some(expected_unpaired));
+    assert_eq!(mol.atoms[0].multiplicity, expected_multiplicity);
 
     let res = parse_extended_cxsmiles(input);
     assert!(
@@ -186,7 +190,8 @@ fn cx_radicals(#[case] input: &[u8], #[case] expected: UnpairedElectrons) {
         res
     );
     let mol = res.unwrap();
-    assert_eq!(mol.atoms[0].unpaired_electrons, Some(expected));
+    assert_eq!(mol.atoms[0].unpaired_electrons, Some(expected_unpaired));
+    assert_eq!(mol.atoms[0].multiplicity, expected_multiplicity);
 }
 
 #[rstest]

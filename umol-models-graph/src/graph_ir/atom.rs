@@ -5,8 +5,8 @@ use std::str::FromStr;
 use smallvec::SmallVec;
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
-use crate::atom::{AromaticValence, Chirality, ImplicitHydrogens, UnpairedElectrons};
-use crate::graph_ir::atom_type::AtomTypeSpec;
+use crate::atom::{AromaticValence, Chirality, ImplicitHydrogens};
+use crate::graph_ir::atom_type::{AtomError, AtomTypeSpec};
 use crate::graph_ir::error::ResolutionError;
 use crate::table_ir::atom::Atom as TableAtom;
 
@@ -17,7 +17,7 @@ pub struct Atom {
     element: Element,
     isotope_mass: Option<u32>,
     charge: i8,
-    hydrogens: u8,
+    implicit_hydrogens: u8,
     lone_pairs: u8,
     spin: SpinState,
     valence: u8,
@@ -28,6 +28,7 @@ pub struct Atom {
 }
 
 impl Atom {
+    // TODO: Which simple, infallible constructor should be added?
     pub fn element(&self) -> Element {
         self.element
     }
@@ -40,8 +41,8 @@ impl Atom {
         self.charge
     }
 
-    pub fn hydrogens(&self) -> u8 {
-        self.hydrogens
+    pub fn implicit_hydrogens(&self) -> u8 {
+        self.implicit_hydrogens
     }
 
     pub fn lone_pairs(&self) -> u8 {
@@ -88,7 +89,7 @@ impl Atom {
         AtomTypeSpec::new(
             self.element,
             self.charge,
-            self.hydrogens,
+            self.implicit_hydrogens,
             self.lone_pairs,
             self.spin.unpaired_electrons(),
             self.spin.multiplicity(),
@@ -107,12 +108,10 @@ impl Atom {
             element: self.element,
             isotope_mass: self.isotope_mass,
             charge: Some(self.charge),
-            implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(self.hydrogens)),
+            implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(self.implicit_hydrogens)),
             lone_pairs: Some(self.lone_pairs),
-            unpaired_electrons: Some(UnpairedElectrons::new(
-                self.spin.unpaired_electrons(),
-                Some(self.spin.multiplicity()),
-            )),
+            unpaired_electrons: Some(self.spin.unpaired_electrons()),
+            multiplicity: Some(self.spin.multiplicity()),
             aromatic_hint: None,
             chirality_hint: None,
             candidates: SmallVec::from_elem(spec, 1),
@@ -130,7 +129,8 @@ pub struct AtomBuilder {
     charge: Option<i8>,
     implicit_hydrogens: Option<ImplicitHydrogens>,
     lone_pairs: Option<u8>,
-    unpaired_electrons: Option<UnpairedElectrons>,
+    unpaired_electrons: Option<u8>,
+    multiplicity: Option<SpinMultiplicity>,
     aromatic_hint: Option<bool>,
     chirality_hint: Option<Chirality>,
     candidates: SmallVec<[AtomTypeSpec; 4]>,
@@ -145,6 +145,7 @@ impl AtomBuilder {
             implicit_hydrogens: None,
             lone_pairs: None,
             unpaired_electrons: None,
+            multiplicity: None,
             aromatic_hint: None,
             chirality_hint: None,
             candidates: SmallVec::new(),
@@ -159,6 +160,7 @@ impl AtomBuilder {
             implicit_hydrogens: atom.implicit_hydrogens,
             lone_pairs: atom.lone_pairs,
             unpaired_electrons: atom.unpaired_electrons,
+            multiplicity: atom.multiplicity,
             aromatic_hint: atom.aromatic,
             chirality_hint: atom.chirality,
             candidates: SmallVec::new(),
@@ -193,11 +195,11 @@ impl AtomBuilder {
     }
 
     pub fn unpaired_electrons(&self) -> Option<u8> {
-        self.unpaired_electrons.map(|u| u.count)
+        self.unpaired_electrons
     }
 
     pub fn multiplicity(&self) -> Option<SpinMultiplicity> {
-        self.unpaired_electrons.and_then(|u| u.multiplicity)
+        self.multiplicity
     }
 
     pub fn aromatic_hint(&self) -> Option<bool> {
@@ -222,12 +224,12 @@ impl AtomBuilder {
         self
     }
 
-    pub fn set_hydrogens(&mut self, hydrogens: u8) -> &mut Self {
+    pub fn set_implicit_hydrogens(&mut self, hydrogens: u8) -> &mut Self {
         self.implicit_hydrogens = Some(ImplicitHydrogens::Hydrogens(hydrogens));
         self
     }
 
-    pub fn infer_hydrogens(&mut self) -> &mut Self {
+    pub fn normal_implicit_hydrogens(&mut self) -> &mut Self {
         self.implicit_hydrogens = Some(ImplicitHydrogens::Normal);
         self
     }
@@ -237,16 +239,25 @@ impl AtomBuilder {
         self
     }
 
-    pub fn set_unpaired_electrons(&mut self, unpaired_electrons: u8) -> &mut Self {
-        let multiplicity = self.unpaired_electrons.and_then(|u| u.multiplicity);
-        self.unpaired_electrons = Some(UnpairedElectrons::new(unpaired_electrons, multiplicity));
-        self
+    pub fn set_unpaired_electrons(
+        &mut self,
+        unpaired_electrons: u8,
+    ) -> Result<&mut Self, ResolutionError> {
+        if let Some(m) = self.multiplicity {
+            SpinState::try_new(unpaired_electrons, m)?;
+        }
+        self.unpaired_electrons = Some(unpaired_electrons);
+        Ok(self)
     }
 
-    pub fn set_multiplicity(&mut self, multiplicity: SpinMultiplicity) -> &mut Self {
-        let count = self.unpaired_electrons.map(|u| u.count).unwrap_or(0);
-        self.unpaired_electrons = Some(UnpairedElectrons::new(count, Some(multiplicity)));
-        self
+    pub fn set_multiplicity(
+        &mut self,
+        multiplicity: SpinMultiplicity,
+    ) -> Result<&mut Self, ResolutionError> {
+        let count = self.unpaired_electrons.unwrap_or(0);
+        SpinState::try_new(count, multiplicity)?;
+        self.multiplicity = Some(multiplicity);
+        Ok(self)
     }
 
     pub fn set_aromatic_hint(&mut self, aromatic: bool) -> &mut Self {
@@ -271,12 +282,7 @@ impl AtomBuilder {
         self
     }
 
-    /// Build the final `Atom` from the builder state.
-    ///
-    /// Requires exactly one valence candidate remaining (resolution phases
-    /// must have narrowed the set). All fields on that candidate become the
-    /// definite atom properties.
-    pub fn build(&self) -> Result<Atom, ResolutionError> {
+    fn checked_candidate(&self) -> Result<&AtomTypeSpec, ResolutionError> {
         let candidate = match self.candidates.len() {
             0 => {
                 return Err(ResolutionError::ValenceNoMatch(format!(
@@ -296,11 +302,58 @@ impl AtomBuilder {
             }
         };
 
+        if self
+            .charge
+            .is_some_and(|charge| charge != candidate.charge())
+            || self.implicit_hydrogens.is_some_and(
+                |h| matches!(h, ImplicitHydrogens::Hydrogens(n) if n != candidate.implicit_hydrogens()),
+            )
+            || self
+                .lone_pairs
+                .is_some_and(|lone_pairs| lone_pairs != candidate.lone_pairs())
+            || self
+                .unpaired_electrons
+                .is_some_and(|u| u != candidate.unpaired_electrons())
+            || self
+                .multiplicity
+                .is_some_and(|m| m != candidate.multiplicity())
+        {
+            return Err(ResolutionError::ValenceViolation(
+                self.element,
+                format!("atom candidate mismatch for {}", candidate),
+            ));
+        }
+
+        if let Err(error) = candidate.check_invariants() {
+            return Err(ResolutionError::ValenceViolation(
+                self.element,
+                format!(
+                    "atom invariant verification failed for {}: {}",
+                    candidate, error
+                ),
+            ));
+        }
+
+        Ok(candidate)
+    }
+
+    pub fn can_build(&self) -> bool {
+        self.checked_candidate().is_ok()
+    }
+
+    /// Build the final `Atom` from the builder state.
+    ///
+    /// Requires exactly one valence candidate remaining (resolution phases
+    /// must have narrowed the set). All fields on that candidate become the
+    /// definite atom properties.
+    pub fn build(&self) -> Result<Atom, ResolutionError> {
+        let candidate = self.checked_candidate()?;
+
         Ok(Atom {
             element: self.element,
             isotope_mass: self.isotope_mass,
             charge: candidate.charge(),
-            hydrogens: candidate.implicit_hydrogens(),
+            implicit_hydrogens: candidate.implicit_hydrogens(),
             lone_pairs: candidate.lone_pairs(),
             spin: candidate.spin(),
             valence: candidate.valence(),
@@ -313,18 +366,22 @@ impl AtomBuilder {
 }
 
 impl FromStr for AtomBuilder {
-    type Err = ResolutionError;
+    type Err = AtomError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let spec: AtomTypeSpec = s.parse()?;
-        let mut builder = AtomBuilder::new(spec.element());
-        builder.set_charge(spec.charge());
-        builder.set_hydrogens(spec.implicit_hydrogens());
-        builder.set_lone_pairs(spec.lone_pairs());
-        builder.set_unpaired_electrons(spec.unpaired_electrons());
-        builder.set_multiplicity(spec.multiplicity());
-        builder.add_candidate(spec);
-        Ok(builder)
+        Ok(AtomBuilder {
+            element: spec.element(),
+            isotope_mass: None,
+            charge: Some(spec.charge()),
+            implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(spec.implicit_hydrogens())),
+            lone_pairs: Some(spec.lone_pairs()),
+            unpaired_electrons: Some(spec.unpaired_electrons()),
+            multiplicity: Some(spec.multiplicity()),
+            aromatic_hint: None,
+            chirality_hint: None,
+            candidates: SmallVec::from_elem(spec, 1),
+        })
     }
 }
 

@@ -70,6 +70,8 @@ pub struct Molecule {
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
+    charge: i32,
+    spin: SpinState,
 }
 
 impl Molecule {
@@ -192,11 +194,11 @@ impl Molecule {
 
     // Charge
     pub fn charge(&self) -> i32 {
-        todo!()
+        self.charge
     }
 
     pub fn spin(&self) -> SpinState {
-        todo!()
+        self.spin
     }
 
     // Topology
@@ -551,6 +553,7 @@ impl Molecule {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use rstest::*;
     use smallvec::SmallVec;
     use umol_data::Element;

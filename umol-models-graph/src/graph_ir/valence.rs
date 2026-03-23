@@ -3,11 +3,11 @@
 use smallvec::SmallVec;
 use umol_data::{Element, SpinState, MAX_UNPAIRED_ELECTRONS};
 
+use crate::atom::{AromaticValence, ImplicitHydrogens};
 use crate::graph_ir::atom::AtomBuilder;
 use crate::graph_ir::atom_type::{AtomTypeQuery, AtomTypeSpec, HydrogenConstraint};
-use crate::atom::{AromaticValence, ImplicitHydrogens};
 use crate::graph_ir::config::ValenceStrategy;
-use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceEntry, ValenceTable};
+use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 
 pub enum ValenceMatcher {
@@ -81,7 +81,13 @@ fn infer_normal_implicit_hydrogens(builder: &MoleculeBuilder, atom_index: AtomIn
             Some(3_u8.saturating_sub(explicit_valence))
         } else if matches!(
             element,
-            Element::B | Element::N | Element::O | Element::P | Element::S | Element::Se | Element::As
+            Element::B
+                | Element::N
+                | Element::O
+                | Element::P
+                | Element::S
+                | Element::Se
+                | Element::As
         ) {
             Some(0)
         } else {
@@ -122,7 +128,6 @@ fn counts_candidates(
         };
         return build_aromatic_spec(
             aromatic_valences,
-            entry,
             element,
             charge,
             valence,
@@ -152,13 +157,11 @@ fn counts_candidates(
         accepted_pairs,
         AromaticValence::None,
         &atom,
-        entry,
     )
 }
 
 fn build_aromatic_spec(
     allowed_aromatic_valences: &[u8],
-    entry: &ValenceEntry,
     element: Element,
     charge: i8,
     valence: u8,
@@ -171,7 +174,8 @@ fn build_aromatic_spec(
         return SmallVec::new();
     }
 
-    let effective_electrons = (entry.outer_electrons as i16) - (charge as i16);
+    // Element metadata is the canonical source of valence electron counts.
+    let effective_electrons = (element.valence_electrons() as i16) - (charge as i16);
     let mut candidates = SmallVec::new();
 
     for &a in allowed_aromatic_valences {
@@ -182,8 +186,7 @@ fn build_aromatic_spec(
         let implicit_hydrogens = match atom.implicit_hydrogens() {
             Some(ImplicitHydrogens::Hydrogens(h)) => h,
             Some(ImplicitHydrogens::Normal) => {
-                let Some(h) =
-                    infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
+                let Some(h) = infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
                 else {
                     continue;
                 };
@@ -214,7 +217,6 @@ fn build_aromatic_spec(
             accepted_pairs,
             AromaticValence::Valence(a),
             atom,
-            entry,
         ) {
             candidates.push(spec);
         }
@@ -253,7 +255,6 @@ fn build_spec(
     accepted_pairs: u8,
     aromatic_valence: AromaticValence,
     atom: &AtomBuilder,
-    entry: &ValenceEntry,
 ) -> SmallVec<[AtomTypeSpec; 4]> {
     match try_build_spec(
         element,
@@ -264,7 +265,6 @@ fn build_spec(
         accepted_pairs,
         aromatic_valence,
         atom,
-        entry,
     ) {
         Some(spec) => SmallVec::from_elem(spec, 1),
         None => SmallVec::new(),
@@ -280,23 +280,46 @@ fn try_build_spec(
     accepted_pairs: u8,
     aromatic_valence: AromaticValence,
     atom: &AtomBuilder,
-    entry: &ValenceEntry,
 ) -> Option<AtomTypeSpec> {
     let total_valence = valence + implicit_hydrogens;
-    let num_electrons = (entry.outer_electrons as i16) - (charge as i16);
+    // Element metadata is the canonical source of valence electron counts.
+    let num_electrons = (element.valence_electrons() as i16) - (charge as i16);
     let unassigned = num_electrons - (total_valence as i16) - (aromatic_valence.valence() as i16);
     if unassigned < 0 {
         return None;
     }
-    let unpaired_unassigned = (unassigned % 2) as u8;
-    let lone_pairs_unassigned = (unassigned / 2) as u8;
-    let unpaired = atom.unpaired_electrons().unwrap_or(unpaired_unassigned);
+
+    // Resolve (unpaired, lone_pairs) from one shared electron budget.
+    // If the input fixes either value, infer the other consistently.
+    let (unpaired, lone_pairs) = match (atom.unpaired_electrons(), atom.lone_pairs()) {
+        (None, None) => ((unassigned % 2) as u8, (unassigned / 2) as u8),
+        (Some(unpaired), None) => {
+            let remaining = unassigned - (unpaired as i16);
+            if remaining < 0 || remaining % 2 != 0 {
+                return None;
+            }
+            (unpaired, (remaining / 2) as u8)
+        }
+        (None, Some(lone_pairs)) => {
+            let remaining = unassigned - (2 * lone_pairs as i16);
+            if remaining < 0 {
+                return None;
+            }
+            (remaining as u8, lone_pairs)
+        }
+        (Some(unpaired), Some(lone_pairs)) => {
+            if (unpaired as i16) + (2 * lone_pairs as i16) != unassigned {
+                return None;
+            }
+            (unpaired, lone_pairs)
+        }
+    };
     if unpaired > MAX_UNPAIRED_ELECTRONS {
         return None;
     }
-    let lone_pairs = atom.lone_pairs().unwrap_or(lone_pairs_unassigned);
+
     let spin = match atom.multiplicity() {
-        Some(m) => SpinState::try_new(unpaired, m)?,
+        Some(m) => SpinState::try_new(unpaired, m).ok()?,
         None => SpinState::max_multiplicity(unpaired)?,
     };
     AtomTypeSpec::new(

@@ -351,7 +351,7 @@ mod tests {
         assert_eq!(
             mol.atom(mol.atom_indices().next().unwrap())
                 .unwrap()
-                .hydrogens(),
+                .implicit_hydrogens(),
             0
         );
     }
@@ -368,7 +368,7 @@ mod tests {
         assert_eq!(
             mol.atom(mol.atom_indices().next().unwrap())
                 .unwrap()
-                .hydrogens(),
+                .implicit_hydrogens(),
             0
         );
     }

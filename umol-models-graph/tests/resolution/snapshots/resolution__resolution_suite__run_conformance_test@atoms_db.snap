@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Db/1}"
+      - "{Db/2^1}"
     bonds: []

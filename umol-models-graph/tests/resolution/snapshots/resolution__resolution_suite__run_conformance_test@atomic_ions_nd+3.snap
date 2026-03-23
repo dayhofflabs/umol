@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Nd+3^1}"
+      - "{Nd+3/1^1}"
     bonds: []

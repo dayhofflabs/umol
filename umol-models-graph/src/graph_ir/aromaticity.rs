@@ -13,6 +13,7 @@ pub use clar::*;
 pub use hmo::*;
 pub use hueckel_rule::*;
 use thiserror::Error;
+use umol_data::SpinState;
 
 use crate::graph_ir::config::AromaticityStrategy;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
@@ -58,7 +59,6 @@ impl AromaticContribution {
     }
 }
 
-// TODO: Add multiplicity field
 /// An aromatic system consisting of atoms and number of electrons contributed.
 /// Charge is delocalized charge, not assignable to any individual atom.
 /// Each atom can participate in at most one aromatic system, appears only once
@@ -67,6 +67,7 @@ impl AromaticContribution {
 pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
     charge: i8,
+    spin: SpinState,
     rings: Vec<Ring>,
 }
 
@@ -95,6 +96,7 @@ impl AromaticSystem {
         Self {
             contributions: Self::normalized_contributions(contributions),
             charge: 0,
+            spin: SpinState::closed_shell(),
             rings,
         }
     }
@@ -117,6 +119,14 @@ impl AromaticSystem {
 
     pub fn set_charge(&mut self, charge: i8) {
         self.charge = charge;
+    }
+
+    pub fn spin(&self) -> SpinState {
+        self.spin
+    }
+
+    pub fn set_spin(&mut self, spin: SpinState) {
+        self.spin = spin;
     }
 
     pub fn rings(&self) -> &[Ring] {

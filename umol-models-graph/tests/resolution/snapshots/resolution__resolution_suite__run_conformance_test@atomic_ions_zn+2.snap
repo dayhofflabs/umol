@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Zn+2/5}"
+      - "{Zn+2}"
     bonds: []
 counts:
   success: true

@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Dy/5}"
+      - "{Dy/6}"
     bonds: []

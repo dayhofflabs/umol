@@ -1,5 +1,6 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
+assertion_line: 510
 expression: results
 ---
 category: inorganic_small
@@ -23,7 +24,7 @@ counts:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{C/1^2v2}"
+      - "{C^2v2}"
       - "{Hv1}"
       - "{Hv1}"
     bonds:

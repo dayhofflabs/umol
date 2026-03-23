@@ -77,7 +77,9 @@ fn bcc_dfs(
                     components.push(component);
                 }
             }
-        } else if Some(v) != parent && disc[v].expect("v must be discovered") < disc[u].expect("u discovered") {
+        } else if Some(v) != parent
+            && disc[v].expect("v must be discovered") < disc[u].expect("u discovered")
+        {
             edge_stack.push((u, v));
             let disc_v = disc[v].expect("v must be discovered");
             if disc_v < low[u] {
@@ -139,13 +141,7 @@ mod tests {
 
     #[test]
     fn disconnected_graph() {
-        let adj = vec![
-            vec![1, 2],
-            vec![0, 2],
-            vec![0, 1],
-            vec![4],
-            vec![3],
-        ];
+        let adj = vec![vec![1, 2], vec![0, 2], vec![0, 1], vec![4], vec![3]];
         let components = biconnected_components(5, &adj);
         assert_eq!(components, vec![vec![0, 1, 2]]);
     }

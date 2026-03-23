@@ -22,7 +22,6 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::rgroup::rgroup_symbol;
 use crate::position::{all_zero, Point3D};
-use crate::atom::UnpairedElectrons;
 use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, WildcardAtom};
 
 /// Parse atom block (basic atoms only)
@@ -225,7 +224,8 @@ pub fn atom_input<'inp>(
         } else {
             (None, None)
         };
-        let unpaired_electrons = unpaired_count.map(UnpairedElectrons::from_count);
+        let unpaired_electrons = unpaired_count;
+        let multiplicity = None;
 
         // Stereo parity (39-41)
         let chirality = if input.len() >= 42 {
@@ -324,6 +324,7 @@ pub fn atom_input<'inp>(
                     valence,
                     lone_pairs: None,
                     unpaired_electrons,
+                    multiplicity,
                     aromatic: None,
                     chirality,
                     class,
@@ -441,7 +442,8 @@ pub fn extended_atom_input<'inp>(
         } else {
             (None, None)
         };
-        let unpaired_electrons = unpaired_count.map(UnpairedElectrons::from_count);
+        let unpaired_electrons = unpaired_count;
+        let multiplicity = None;
 
         // Stereo parity (39-41)
         let chirality = if input.len() >= 42 {
@@ -545,6 +547,7 @@ pub fn extended_atom_input<'inp>(
                     valence,
                     lone_pairs: None,
                     unpaired_electrons,
+                    multiplicity,
                     inversion_retention,
                     exact_change,
                     aromatic: None,

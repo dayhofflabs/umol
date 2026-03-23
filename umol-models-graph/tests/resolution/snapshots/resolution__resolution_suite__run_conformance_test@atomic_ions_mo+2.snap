@@ -1,5 +1,6 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
+assertion_line: 510
 expression: results
 ---
 category: atomic_ions
@@ -19,5 +20,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Mo+2/2^2}"
+      - "{Mo+2/1^2}"
     bonds: []

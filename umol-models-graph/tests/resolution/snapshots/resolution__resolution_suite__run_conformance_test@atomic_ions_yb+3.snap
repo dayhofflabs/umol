@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Yb+3/5^1}"
+      - "{Yb+3/6^1}"
     bonds: []

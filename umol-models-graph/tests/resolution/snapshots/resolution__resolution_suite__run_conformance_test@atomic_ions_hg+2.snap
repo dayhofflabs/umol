@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Hg+2}"
+      - "{Hg+2/5}"
     bonds: []

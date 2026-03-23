@@ -1,5 +1,6 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
+assertion_line: 510
 expression: results
 ---
 category: atomic_ions
@@ -19,5 +20,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Fe+3/2^5}"
+      - "{Fe+3^5}"
     bonds: []

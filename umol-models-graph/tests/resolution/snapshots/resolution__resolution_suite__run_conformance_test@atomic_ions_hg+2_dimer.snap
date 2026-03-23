@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{Hg+v1}"
-      - "{Hg+v1}"
+      - "{Hg+/5v1}"
+      - "{Hg+/5v1}"
     bonds:
       - "-"

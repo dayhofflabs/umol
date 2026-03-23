@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Sm+2/2}"
+      - "{Sm+2/3}"
     bonds: []

@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Lr/7^1}"
+      - "{Lr/1^1}"
     bonds: []

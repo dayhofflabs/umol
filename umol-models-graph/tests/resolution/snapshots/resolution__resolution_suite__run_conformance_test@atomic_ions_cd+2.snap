@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Cd+2/5}"
+      - "{Cd+2}"
     bonds: []
 counts:
   success: true

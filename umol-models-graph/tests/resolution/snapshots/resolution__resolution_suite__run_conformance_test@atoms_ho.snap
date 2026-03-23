@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Ho/5^1}"
+      - "{Ho/6^1}"
     bonds: []

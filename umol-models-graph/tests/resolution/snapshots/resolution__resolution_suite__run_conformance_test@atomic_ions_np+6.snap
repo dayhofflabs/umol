@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Np+6}"
+      - "{Np+6^1}"
     bonds: []

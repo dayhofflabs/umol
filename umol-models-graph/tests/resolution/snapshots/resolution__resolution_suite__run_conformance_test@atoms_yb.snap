@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Yb/7}"
+      - "{Yb/8}"
     bonds: []

@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Md+2/5^1}"
+      - "{Md+2/6^1}"
     bonds: []

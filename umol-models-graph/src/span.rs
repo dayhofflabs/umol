@@ -1,5 +1,6 @@
 //! Span type for TableIR.
 
+// TODO: Move to table_ir::span.rs
 use std::fmt;
 
 /// Span type for TableIR.

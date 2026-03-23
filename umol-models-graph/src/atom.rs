@@ -3,36 +3,11 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_data::SpinMultiplicity;
-
 /// Implicit hydrogens (Normal - inferred from normal valences)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImplicitHydrogens {
     Hydrogens(u8),
     Normal,
-}
-
-/// Unpaired electron configuration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct UnpairedElectrons {
-    pub count: u8,
-    pub multiplicity: Option<SpinMultiplicity>,
-}
-
-impl UnpairedElectrons {
-    pub fn new(count: u8, multiplicity: Option<SpinMultiplicity>) -> Self {
-        Self {
-            count,
-            multiplicity,
-        }
-    }
-
-    pub fn from_count(count: u8) -> Self {
-        Self {
-            count,
-            multiplicity: None,
-        }
-    }
 }
 
 /// Chirality.
@@ -48,6 +23,7 @@ pub enum Chirality {
     Octahedral { arr: u32 },
 }
 
+// TODO: Move to graph_ir::atom.rs
 /// Aromatic valence of an atom: none (non-aromatic) or contributing valence (n >= 0)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AromaticValence {

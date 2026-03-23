@@ -31,7 +31,7 @@ impl VanCatledgeParams {
 
     const H_X: [f64; Self::N] = [
         0.00,  // C
-       -0.45,  // B
+        -0.45, // B
         0.51,  // N1
         1.37,  // N2
         0.97,  // O1
@@ -105,8 +105,9 @@ impl VanCatledgeParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case::carbon(Element::C, 1, Some(0.0))]
@@ -117,11 +118,7 @@ mod tests {
     #[case::sulfur_2(Element::S, 2, Some(1.11))]
     #[case::chlorine(Element::Cl, 2, Some(1.48))]
     #[case::unknown(Element::He, 0, None)]
-    fn test_h_x(
-        #[case] element: Element,
-        #[case] pi_electrons: u8,
-        #[case] expected: Option<f64>,
-    ) {
+    fn test_h_x(#[case] element: Element, #[case] pi_electrons: u8, #[case] expected: Option<f64>) {
         assert_eq!(VanCatledgeParams::h_x(element, pi_electrons), expected);
     }
 
@@ -151,7 +148,12 @@ mod tests {
                 assert!(
                     (kxy - kyx).abs() < 1e-10,
                     "k_XY not symmetric for ({:?},{}) vs ({:?},{}): {} != {}",
-                    ex, nx, ey, ny, kxy, kyx
+                    ex,
+                    nx,
+                    ey,
+                    ny,
+                    kxy,
+                    kyx
                 );
             }
         }

@@ -22,7 +22,6 @@ use umol_data::SpinMultiplicity;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
-use crate::atom::UnpairedElectrons;
 use crate::bond::BondNoncovalent;
 use crate::position::Point3D;
 use crate::table_ir::{
@@ -61,7 +60,7 @@ pub enum CxEntry {
     /// Atom values: $_AV:value;value;...$
     Values(Vec<(u32, String)>),
     /// Radical electrons: ^n:idx,idx,...
-    Radicals(Vec<(u32, UnpairedElectrons)>),
+    Radicals(Vec<(u32, (u8, Option<SpinMultiplicity>))>),
     /// Wiggly bonds: w:, wU:, wD: encoded as `<atom_idx>.<bond_idx>`
     WigglyBonds(Vec<(u32, u32, BondWedge)>),
     /// Cis double bonds: c:
@@ -154,11 +153,12 @@ pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), 
                 }
             }
             CxEntry::Radicals(radicals) => {
-                for (idx, unpaired) in radicals {
+                for (idx, (unpaired, multiplicity)) in radicals {
                     let Some(atom) = mol.atoms.get_mut(idx as usize) else {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
                     };
                     atom.unpaired_electrons = Some(unpaired);
+                    atom.multiplicity = multiplicity;
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
@@ -319,7 +319,8 @@ pub fn update_extended_molecule(
                     let Some(atom) = mol.atoms.get_mut(idx as usize) else {
                         return Err(ParseError::AtomIndexOutOfBounds { atom_idx: idx });
                     };
-                    atom.unpaired_electrons = Some(unpaired);
+                    atom.unpaired_electrons = Some(unpaired.0);
+                    atom.multiplicity = unpaired.1;
                 }
             }
             CxEntry::WigglyBonds(wiggly) => {
@@ -1449,16 +1450,16 @@ fn parse_labels(input: &[u8]) -> IResult<&[u8], CxEntry> {
 }
 
 /// Convert CXSMILES radical code (1-7) to unpaired electrons.
-fn convert_radical_code(code: u8) -> UnpairedElectrons {
+fn convert_radical_code(code: u8) -> (u8, Option<SpinMultiplicity>) {
     match code {
-        1 => UnpairedElectrons::from_count(1),
-        2 => UnpairedElectrons::from_count(2),
-        3 => UnpairedElectrons::new(2, Some(SpinMultiplicity::Singlet)),
-        4 => UnpairedElectrons::new(2, Some(SpinMultiplicity::Triplet)),
-        5 => UnpairedElectrons::from_count(3),
-        6 => UnpairedElectrons::new(3, Some(SpinMultiplicity::Doublet)),
-        7 => UnpairedElectrons::new(3, Some(SpinMultiplicity::Quartet)),
-        _ => UnpairedElectrons::from_count(1),
+        1 => (1, None),
+        2 => (2, None),
+        3 => (2, Some(SpinMultiplicity::Singlet)),
+        4 => (2, Some(SpinMultiplicity::Triplet)),
+        5 => (3, None),
+        6 => (3, Some(SpinMultiplicity::Doublet)),
+        7 => (3, Some(SpinMultiplicity::Quartet)),
+        _ => (1, None),
     }
 }
 
@@ -2389,8 +2390,8 @@ mod tests {
     #[case::coordinate_bond(b"|C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
     #[case::coordinate_bond_multiple(b"|C:0.1,2.3|", vec![CxEntry::CoordinateBonds(vec![(0, 1), (2, 3)])])]
     #[case::hydrogen_bond(b"|H:1.2|", vec![CxEntry::HydrogenBonds(vec![(1, 2)])])]
-    #[case::radicals_multiple_atoms(b"|^1:0,1,2|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None }),
-        (1, UnpairedElectrons { count: 1, multiplicity: None }), (2, UnpairedElectrons { count: 1, multiplicity: None })])])]
+    #[case::radicals_multiple_atoms(b"|^1:0,1,2|", vec![CxEntry::Radicals(vec![(0, (1, None)),
+        (1, (1, None)), (2, (1, None))])])]
     #[case::wiggly_bonds(b"|w:0.1,2.3|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondWedge::Either), (2, 3, BondWedge::Either)])])]
     #[case::cis_bonds(b"|c:0,1|", vec![CxEntry::CisBonds(vec![0, 1])])]
     #[case::trans_bonds(b"|t:0,1|", vec![CxEntry::TransBonds(vec![0, 1])])]
@@ -2400,8 +2401,8 @@ mod tests {
     #[case::atom_values(b"$_AV:value1;value2;value3$|", vec![CxEntry::Values(vec![(0, "value1".to_string()), (1, "value2".to_string()), (2, "value3".to_string())])])]
     #[case::coordinates_2d(b"|(1.5,2.5;3.5,4.5)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.5, 2.5, 0.0), Point3D::new(3.5, 4.5, 0.0)])])]
     #[case::coordinates_3d(b"|(1,2,3;4,5,6)|", vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0), Point3D::new(4.0, 5.0, 6.0)])])]
-    #[case::combined_entries(b"|^1:0,1,(1.0,2.0;3.0,4.0),C:2.3|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None }),
-        (1, UnpairedElectrons { count: 1, multiplicity: None })]), CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 0.0), Point3D::new(3.0, 4.0, 0.0)]), CxEntry::CoordinateBonds(vec![(2, 3)])])]
+    #[case::combined_entries(b"|^1:0,1,(1.0,2.0;3.0,4.0),C:2.3|", vec![CxEntry::Radicals(vec![(0, (1, None)),
+        (1, (1, None))]), CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 0.0), Point3D::new(3.0, 4.0, 0.0)]), CxEntry::CoordinateBonds(vec![(2, 3)])])]
     fn test_parse_cx_annotations(#[case] input: &[u8], #[case] expected: Vec<CxEntry>) {
         let result = parse_cx_annotations(input, SmilesParseFlags::default());
         let input_str = input.to_str_lossy();
@@ -2462,7 +2463,7 @@ mod tests {
     #[case::empty(b"||", vec![])]
     #[case::coordinate_bond(b"|C:0.1|", vec![CxEntry::CoordinateBonds(vec![(0, 1)])])]
     #[case::hydrogen_bond(b"|H:1.2|", vec![CxEntry::HydrogenBonds(vec![(1, 2)])])]
-    #[case::radicals(b"|^1:0|", vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None })])])]
+    #[case::radicals(b"|^1:0|", vec![CxEntry::Radicals(vec![(0, (1, None))])])]
     #[case::wiggly_bonds(b"|w:0.1|", vec![CxEntry::WigglyBonds(vec![(0, 1, BondWedge::Either)])])]
     #[case::cis_bonds(b"|c:0|", vec![CxEntry::CisBonds(vec![0])])]
     #[case::trans_bonds(b"|t:0|", vec![CxEntry::TransBonds(vec![0])])]
@@ -2566,8 +2567,8 @@ mod tests {
     #[case::coordinates(vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0)])], |mol: &Molecule| mol.positions == Some(vec![Point3D::new(1.0, 2.0, 3.0)]))]
     #[case::labels(vec![CxEntry::Labels(vec![(0, "C1".to_string()), (1, "N1".to_string())])], |mol: &Molecule| mol.atoms[0].label == Some("C1".to_string()) && mol.atoms[1].label == Some("N1".to_string()))]
     #[case::values(vec![CxEntry::Values(vec![(0, "val0".to_string())])], |mol: &Molecule| mol.atoms[0].value == Some("val0".to_string()))]
-    #[case::radicals(vec![CxEntry::Radicals(vec![(0, UnpairedElectrons { count: 1, multiplicity: None })])],
-        |mol: &Molecule| mol.atoms[0].unpaired_electrons == Some(UnpairedElectrons { count: 1, multiplicity: None }))]
+    #[case::radicals(vec![CxEntry::Radicals(vec![(0, (1, None))])],
+        |mol: &Molecule| mol.atoms[0].unpaired_electrons == Some(1) && mol.atoms[0].multiplicity.is_none())]
     #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(0, 0, BondWedge::Either)])], |mol: &Molecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
     #[case::cis_bonds(vec![CxEntry::CisBonds(vec![0])], |mol: &Molecule| mol.bonds[0].stereo == Some(BondStereo::Cis))]
     #[case::trans_bonds(vec![CxEntry::TransBonds(vec![1])], |mol: &Molecule| mol.bonds[1].stereo == Some(BondStereo::Trans))]
@@ -2594,8 +2595,8 @@ mod tests {
     #[case::coordinates(vec![CxEntry::Coordinates(vec![Point3D::new(1.0, 2.0, 3.0)])], |mol: &ExtendedMolecule| mol.positions == Some(vec![Point3D::new(1.0, 2.0, 3.0)]))]
     #[case::labels(vec![CxEntry::Labels(vec![(0, "C1".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].label == Some("C1".to_string()))]
     #[case::values(vec![CxEntry::Values(vec![(1, "val1".to_string())])], |mol: &ExtendedMolecule| mol.atoms[1].value == Some("val1".to_string()))]
-    #[case::radicals(vec![CxEntry::Radicals(vec![(2, UnpairedElectrons { count: 2, multiplicity: None })])],
-        |mol: &ExtendedMolecule| mol.atoms[2].unpaired_electrons == Some(UnpairedElectrons { count: 2, multiplicity: None }))]
+    #[case::radicals(vec![CxEntry::Radicals(vec![(2, (2, None))])],
+        |mol: &ExtendedMolecule| mol.atoms[2].unpaired_electrons == Some(2) && mol.atoms[2].multiplicity.is_none())]
     #[case::wiggly_bonds(vec![CxEntry::WigglyBonds(vec![(1, 0, BondWedge::Either)])], |mol: &ExtendedMolecule| mol.bonds[0].wedge == Some(BondWedge::Either))]
     #[case::cis_bonds(vec![CxEntry::CisBonds(vec![1])], |mol: &ExtendedMolecule| mol.bonds[1].stereo == Some(BondStereo::Cis))]
     #[case::trans_bonds(vec![CxEntry::TransBonds(vec![0])], |mol: &ExtendedMolecule| mol.bonds[0].stereo == Some(BondStereo::Trans))]
