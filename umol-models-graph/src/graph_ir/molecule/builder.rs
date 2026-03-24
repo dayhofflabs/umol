@@ -61,7 +61,7 @@ pub struct MoleculeBuilder {
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
-    charge: Option<i32>,
+    charge: Option<i8>,
     spin: Option<SpinState>,
 }
 
@@ -626,7 +626,7 @@ impl MoleculeBuilder {
     }
 
     // Molecular charge and spin
-    pub fn charge(&self) -> Option<i32> {
+    pub fn charge(&self) -> Option<i8> {
         self.charge
     }
 
@@ -634,7 +634,7 @@ impl MoleculeBuilder {
         self.spin
     }
 
-    pub fn set_charge(&mut self, charge: i32) {
+    pub fn set_charge(&mut self, charge: i8) {
         self.charge = Some(charge);
     }
 
@@ -872,18 +872,18 @@ impl MoleculeBuilder {
             graph.add_edge(new_a, new_b, bond_builder.build()?);
         }
 
-        let atom_charge: i32 = graph.node_weights().map(|a| a.charge() as i32).sum();
-        let bond_charge: i32 = graph.edge_weights().map(|b| b.charge() as i32).sum();
-        let aromatic_charge: i32 = self
+        let atom_charge: i8 = graph.node_weights().map(|a| a.charge()).sum();
+        let bond_charge: i8 = graph.edge_weights().map(|b| b.charge()).sum();
+        let aromatic_charge: i8 = self
             .aromatic_systems
             .iter()
-            .map(|system| system.charge() as i32)
+            .map(|system| system.charge())
             .sum();
-        let multicenter_charge: i32 = self
+        let multicenter_charge: i8 = self
             .multicenter_bonds
             .iter()
             .flat_map(|bond| bond.sets().iter())
-            .map(|set| set.charge() as i32)
+            .map(|set| set.charge())
             .sum();
         let charge = atom_charge + bond_charge + aromatic_charge + multicenter_charge;
 

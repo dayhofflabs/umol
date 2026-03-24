@@ -47,7 +47,7 @@ pub enum ResolutionError {
     Kekulization(#[from] KekulizationError),
 
     #[error("Molecular charge mismatch: explicit {explicit}, from atoms {atom_sum}")]
-    MolecularChargeMismatch { explicit: i32, atom_sum: i32 },
+    MolecularChargeMismatch { explicit: i8, atom_sum: i8 },
     #[error(
         "Molecular spin incompatible: {explicit_unpaired} unpaired electrons (multiplicity {explicit_multiplicity}) \
          from atoms (total unpaired: {atom_unpaired_sum})"

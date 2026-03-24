@@ -70,7 +70,7 @@ pub struct Molecule {
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
-    charge: i32,
+    charge: i8,
     spin: SpinState,
 }
 
@@ -193,7 +193,7 @@ impl Molecule {
     }
 
     // Charge
-    pub fn charge(&self) -> i32 {
+    pub fn charge(&self) -> i8 {
         self.charge
     }
 
