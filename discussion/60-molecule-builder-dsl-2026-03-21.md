@@ -22,9 +22,8 @@ natively: a molecule is an EDN map whose keys are relation names and whose value
 vectors of tuples. The semantic operations — matching, transformation, resolution — are
 instances of Datalog-with-arithmetic evaluation: rules of the form
 `LHS-pattern → RHS-pattern` with bound variables and arithmetic guards. EDN is the data
-layer; the rule evaluator is the computation layer. No JVM is required: a Rust
-EDN/Clojure reader (`clojure-reader`) can serve as the host reader while the Datalog
-rule evaluator remains part of umol itself.
+layer; the rule evaluator is the computation layer. No JVM is required: `edn-rs` is vendored as the host EDN reader (see O13); the Datalog
+rule evaluator is part of umol itself.
 
 
 ## Term algebra
@@ -37,8 +36,10 @@ Fully resolved molecules. All attribute slots are concrete values. Extension = s
 Values of type `Molecule`.
 
 ```edn
-{:atoms   {:c1 #atom "Cv4H3"  :o1 #atom "Ov2H1"}
- :bonds   [[:c1 :o1 :single]]
+{:umol/kind    :molecular-graph
+ :umol/version 1
+ :atoms   {:c #atom "CH3v1"  :o #atom "OH/2v1"}
+ :bonds   [[:c :o :single]]
  :charge  0
  :spin    #spin "^0x1"}
 ```
@@ -177,47 +178,77 @@ The atom spec is a compact positional token string encoding all per-atom attribu
 Depending on the context, the spec is submitted to the atom or the query parser.
 
 ```
-atom-spec    ::= element spec*
-spec         ::= charge | valence | H-spec | lone-pairs | spin-inline | av | mv | ap | dp
+atom-spec    ::= element spec*   ; tokens in any order; canonical Display order listed below
 
-element      ::= [A-Z][a-z]*
+element      ::= [A-Z][a-z]*     ; standard symbol, or '*' (any) or '(' el ('|' el)+ ')' (set)
 charge       ::= [+-] value-expr
-valence      ::= 'v' value-expr
 H-spec       ::= 'H' value-expr
 lone-pairs   ::= '/' value-expr
 spin-inline  ::= '^' value-expr 'x' value-expr   ; (unpaired, 2S+1) — shared with #spin
-av           ::= 'a' value-expr                   ; aromatic valence
+valence      ::= 'v' value-expr
+dp           ::= '>' value-expr                   ; donated pairs (dative donor)
+ap           ::= '<' value-expr                   ; accepted pairs (dative acceptor)
+av           ::= 'a' value-expr                   ; aromatic valence (π electrons contributed)
 mv           ::= 'm' value-expr                   ; multicenter valence
-ap           ::= '<' value-expr                   ; accepted pairs
-dp           ::= '>' value-expr                   ; donated pairs
 
+; Canonical Display order: element, charge, H, /, spin, v, >, <, a, m
+; Parser accepts any order (first character of each token is unambiguous).
 
 value-expr   ::= nat                              ; L1, L2, L3: concrete value
                | '*'                              ; L2, L3:     wildcard (unconstrained)
-               | '?' id                           ; L3 LHS:     bind variable
-               | '?' id cmp nat                   ; L3 LHS:     bind with guard
-               | '(' id op nat ')'                ; L3 RHS:     arithmetic over bound var
+               | '(' '?' id ')'                   ; L3 LHS:     bind variable
+               | '(' '?' id cmp nat ')'           ; L3 LHS:     bind with guard
+               | '(' '?' id op nat ')'            ; L3 RHS:     arithmetic over bound var
 
-cmp          ::= '>=' | '<=' | '>' | '<' | '='
+cmp          ::= '>=' | '<='  | '='
 op           ::= '+' | '-' | '*' | '/'
+id           ::= [a-zA-Z][a-zA-Z0-9_]*
 ```
 
-Tag:
-- `#atom "Cv4H2"` — ground spec; accepted in ground and constraint contexts
-- `#atom "C?v4H*"` — constraint spec; accepted in constraint/rule contexts
+All variable forms are wrapped in parentheses: `(?id)`, `(?id>=n)`, `(?id-1)`. The `?`
+sigil only appears inside `(...)`, never in the outer positional stream. This eliminates
+all lexical ambiguity between guards (`>=`, `<=`) and the `>` / `<` dp/ap tokens.
+Bare `>` and `<` in the outer stream always mean dp/ap, never comparisons.
 
-The binding forms (`?id`, `?id>=n`) and arithmetic expressions (`(?h-1)`) are only
-well-formed inside a rule (Level 3). They are parse errors in standalone molecule maps.
+Tags:
+- `#atom "CH3v1"` — ground spec; accepted in L1 ground terms and rule context
+- `#atom "C?v4H*"` — constraint spec (wildcards); rule/query context only
+
+The `*` element wildcard and element sets (`(C|N|O)`) are constraint-only: invalid in
+ground specs. Binding and arithmetic forms are rule-only: parse errors in standalone
+molecule maps.
+
+**`v` semantics.** `v` is the σ-bond sum to non-H atoms — explicit covalent bonds in
+`:bonds` only. Implicit H bonds are not counted. `H` is a separate explicit count of
+implicit hydrogens. For methanol C bonded to O with 3 implicit H: v=1, H=3.
+
+**Aromatic valence semantics.** `av` = π electrons contributed by this atom to its
+aromatic system. N with a lone pair in a pyrrole ring: av=2. Pyridine N (p orbital in
+π system): av=1. Carbocation [CH⁺] (empty p orbital): av=0. `:electrons` in the
+`:aromatic` section equals Σ av_i over the system's member atoms. `AromaticSystem.charge`
+is recorded separately for charge conservation bookkeeping; the av assignments already
+encode the electronic state of the atom in the charged species.
+
+**Electron invariant.** Every ground-term atom spec is validated by:
+```
+inv_o = unpaired + 2·lone_pairs + 2·donated + 2·accepted + 2·H + 2·v + av + ai + mc
+inv_e = valence_electrons(element) − charge + H + v + ai + mc + 2·accepted
+```
+where `ai` = `aromatic_increment(av)` (1 for av=1, 0 otherwise). Valid spec: inv_o = inv_e.
 
 Examples:
 
 | Payload | Meaning |
 |---|---|
-| `Cv4H4` | Carbon, valence 4, 4 implicit H (methane) |
-| `Nv3H2/1` | Nitrogen, valence 3, 2H, 1 lone pair (amine) |
+| `CH4` | Carbon, 4 implicit H (methane; v omitted since 0) |
+| `CH3v1` | Carbon, 3H, valence 1 (methyl group bonded to one non-H atom) |
+| `NH2/1v3` | Nitrogen, 2H, 1 lone pair, v=3 (ammonia-like, but bonded to 3 non-H) |
+| `OH/2v1` | Oxygen, 1H, 2 lone pairs, v=1 (hydroxyl) |
+| `CH1v2a1` | Carbon, 1H, 2 σ-bonds, aromatic π contribution 1 (ring C in indole) |
+| `Cv3a1` | Carbon, no H, 3 σ-bonds, aromatic π contribution 1 (junction C in indole) |
 | `C?v4H*` | Carbon, valence 4 required, H count unconstrained |
-| `C?v4H?h>=1` | Carbon, valence 4, bind H count to `h`, guard h ≥ 1 |
-| `C?v4H(?h-1)` | Carbon, valence 4, H count = h−1 (rule RHS) |
+| `CH(?h>=1)v4` | Carbon, H count bound to `h` with guard h ≥ 1, v=4 |
+| `CH(?h-1)v4` | Carbon, H count = h−1 (rule RHS), v=4 |
 
 ### Bond spec
 
@@ -228,26 +259,29 @@ dispatches to the bond spec parser; no outer delimiters in the payload.
 ```
 bond-spec     ::= order charge? spin-inline? aromatic-hint?
 
-order         ::= 'o' value-expr
-charge        ::= [+-] value-expr
+order         ::= value-expr          ; first char: digit, '*', or '('
+charge        ::= [+-] value-expr     ; first char: + or -
 spin-inline   ::= '^' value-expr 'x' value-expr
 aromatic-hint ::= 'a' ('0' | '1')
 
 value-expr    ::= (same grammar as atom spec value-expr)
 ```
 
+The parser dispatches by leading character: a digit, `*`, or `(` starts `order`;
+`+`/`-` starts `charge`; `^` starts `spin-inline`; `a` starts `aromatic-hint`.
+
 The canonical bond entry is `[:atom-a :atom-b #bond "..."]`. Shorthands:
 
 | Shorthand | Expands to |
 |---|---|
-| `[:a :b :single]` | `[:a :b #bond "o1"]` |
-| `[:a :b :double]` | `[:a :b #bond "o2"]` |
-| `[:a :b :triple]` | `[:a :b #bond "o3"]` |
-| `[:a :b :aromatic]` | `[:a :b #bond "o1a1"]` |
+| `[:a :b :single]` | `[:a :b #bond "1"]` |
+| `[:a :b :double]` | `[:a :b #bond "2"]` |
+| `[:a :b :triple]` | `[:a :b #bond "3"]` |
+| `[:a :b :aromatic]` | `[:a :b #bond "1a1"]` |
 
 Full `#bond` form is required for charged bonds, radical bonds, or any bond where the
-shorthand is ambiguous. Examples: `#bond "o1+1^1x2"` (radical cation single bond),
-`#bond "o2^2x3"` (triplet double bond).
+shorthand is ambiguous. Examples: `#bond "1+1^1x2"` (radical cation single bond),
+`#bond "2^2x3"` (triplet double bond).
 
 **Aromatic hint lifecycle.** The `a1` flag in the bond spec is a SMILES/MOL parse
 artifact. It marks a bond that originated from an aromatic bond token (lowercase atom
@@ -272,7 +306,7 @@ perception has not yet run. This is a valid transient representation but not a
 canonical ground term.
 
 Bond pattern variables follow the same grammar as atom spec value expressions:
-`#bond "o?k"` binds bond order to `k`; `#bond "o?k>=2"` adds a guard; `#bond "o?k"`
+`#bond "(?k)"` binds bond order to `k`; `#bond "(?k>=2)"` adds a guard; `#bond "(?k)"`
 on the rule RHS preserves the matched order.
 
 ### Spin spec
@@ -298,16 +332,16 @@ rule for alcohol oxidation must handle primary (`CH₂OH → CHO`, H: 2→1) and
 (`CHOH → CO`, H: 1→0) cases with one template.
 
 ```edn
-{:lhs {:atoms {:ca #atom "C?v4H?h>=1"  :o #atom "O?v2H1"}
+{:lhs {:atoms {:ca #atom "CH(?h>=1)v4"  :o #atom "OH1v2"}
        :bonds [[:ca :o :single]]}
- :rhs {:atoms {:ca #atom "C?v4H(?h-1)" :o #atom "O?v2H0"}
+ :rhs {:atoms {:ca #atom "CH(?h-1)v4"   :o #atom "Hv2"}
        :bonds [[:ca :o :double]]}}
 ```
 
-- `?h` binds the matched H-count on the LHS.
-- `?h>=1` is an inline guard (prevents H going negative).
-- `(?h-1)` is a computed attribute on the RHS.
-- The same rule applies to both cases because `?h` is universally quantified.
+- `(?h>=1)` is a guarded binding: bind H count to `h`, guard h ≥ 1 (prevents going negative).
+- `(?h-1)` is computed: H count = h−1 on the RHS.
+- The same rule applies to both primary and secondary alcohols because `?h` is universally
+  quantified over all matching H-counts.
 
 The grammar extension is additive: `value-expr` in the atom spec string gains binding and
 arithmetic forms that are parse errors outside rule context.
@@ -426,11 +460,11 @@ type carry independent variable bindings:
 
 ```edn
 ; Diol oxidation — :h1 and :h2 do not interfere
-{:lhs {:atoms {:c1 #atom "C?v*H?h1>=1" :o1 #atom "O?v2H1"
-               :c2 #atom "C?v*H?h2>=1" :o2 #atom "O?v2H1"}
+{:lhs {:atoms {:c1 #atom "CH(?h1>=1)v*" :o1 #atom "OH1v2"
+               :c2 #atom "CH(?h2>=1)v*" :o2 #atom "OH1v2"}
        :bonds [[:c1 :o1 :single] [:c2 :o2 :single] [:c1 :c2 :single]]}
- :rhs {:atoms {:c1 #atom "C?v*H(?h1-1)" :o1 #atom "O?v2H0"
-               :c2 #atom "C?v*H(?h2-1)" :o2 #atom "O?v2H0"}
+ :rhs {:atoms {:c1 #atom "CH(?h1-1)v*"  :o1 #atom "Hv2"
+               :c2 #atom "CH(?h2-1)v*"  :o2 #atom "Hv2"}
        :bonds [[:c1 :o1 :double] [:c2 :o2 :double] [:c1 :c2 :single]]}}
 ```
 
@@ -440,12 +474,12 @@ migrate between product molecules:
 
 ```edn
 ; SN2: amine + alkyl chloride → secondary amine + HCl
-{:lhs [{:atoms {:n #atom "N?v3H2"}}
-       {:atoms {:c #atom "C?v4H?m" :lg #atom "Clv1"}
+{:lhs [{:atoms {:n #atom "NH2v3"}}
+       {:atoms {:c #atom "CH(?m)v4" :lg #atom "Clv1"}
         :bonds [[:c :lg :single]]}]
- :rhs [{:atoms {:n #atom "N?v4H1" :c #atom "C?v4H?m"}
+ :rhs [{:atoms {:n #atom "NH1v4" :c #atom "CH(?m)v4"}
         :bonds [[:n :c :single]]}
-       {:atoms {:lg #atom "Clv1H1"}}]}
+       {:atoms {:lg #atom "ClH1v1"}}]}
 ```
 
 `:n`, `:c`, `:lg` are mapped; `:lg` migrates to the second product. No additional mapping
@@ -473,7 +507,7 @@ promotion — at which point topology sugar adds no value over writing named ato
 ```edn
 {:umol/kind    :molecular-graph
  :umol/version 1
- :atoms   {:c #atom "Cv4H3"  :o #atom "Ov2H1"}
+ :atoms   {:c #atom "CH3v1"  :o #atom "OH/2v1"}
  :bonds   [[:c :o :single]]
  :charge  0
  :spin    #spin "^0x1"}
@@ -484,12 +518,12 @@ promotion — at which point topology sugar adds no value over writing named ato
 ```edn
 {:umol/kind    :molecular-graph
  :umol/version 1
- :atoms   {:n   #atom "Nv2a2H1"
-           :c2  #atom "Cv2a1H1"  :c3  #atom "Cv2a1H1"
-           :c3a #atom "Cv3a2"
-           :c4  #atom "Cv2a1H1"  :c5  #atom "Cv2a1H1"
-           :c6  #atom "Cv2a1H1"  :c7  #atom "Cv2a1H1"
-           :c7a #atom "Cv3a2"}
+ :atoms   {:n   #atom "NH1v2a2"
+           :c2  #atom "CH1v2a1"  :c3  #atom "CH1v2a1"
+           :c3a #atom "Cv3a1"
+           :c4  #atom "CH1v2a1"  :c5  #atom "CH1v2a1"
+           :c6  #atom "CH1v2a1"  :c7  #atom "CH1v2a1"
+           :c7a #atom "Cv3a1"}
  :bonds   [[:n :c2 :single] [:c2 :c3 :single] [:c3 :c3a :single]
            [:c3a :c4 :single] [:c4 :c5 :single] [:c5 :c6 :single]
            [:c6 :c7 :single] [:c7 :c7a :single] [:c7a :n :single]
@@ -564,7 +598,7 @@ Languages* and Parr's *Language Implementation Patterns*:
 
 ## Open questions
 
-No open questions currently.
+*(none)*
 
 
 ## Resolved questions
@@ -595,7 +629,9 @@ DSL parse/serialization layer (symbol table); core builder remains label-agnosti
 
 **O5 — Aromatic system decomposition.** Keep per-atom aromatic valence on atoms (`av`) and
 system membership/metadata in `:aromatic`. Keep `:electrons` authorable but validate against
-member contributions and charge. `rings` stays derived from topology/perception.
+member contributions and charge. `rings` is a computed property (derived from topology/perception),
+is never serialized in DSL output, and should be removed from `AromaticSystem` or moved to a
+transient perception-result type.
 
 **O6 — Dative directionality.** In `:dative` entries, tuple order is semantic:
 `[:donor :acceptor ...]`.
@@ -607,7 +643,7 @@ member contributions and charge. `rings` stays derived from topology/perception.
 `:ring`, and `:edge-types` in formal schema as preprocessing sugar expanded before builder
 ingestion.
 
-**O9 — `:aromatic` bond shorthand.** Keep `[:a :b :aromatic] -> [:a :b #bond "o1a1"]` as
+**O9 — `:aromatic` bond shorthand.** Keep `[:a :b :aromatic] -> [:a :b #bond "1a1"]` as
 input-only transient sugar; never emit in canonical ground-term serialization.
 
 **O10 — Top-level `:charge` in canonical terms.** `:charge` remains optional summary/guard
@@ -619,13 +655,56 @@ optional constraints) rather than reusing covalent `bond-spec`.
 
 **O12 — Charge type range.** Moot in this document (molecular charge type updated in code).
 
-**O13 — Host reader and parser responsibility split.** The host reader should be
-`clojure-reader` (replacing earlier `edn-rs` mention). EDN/Clojure syntax parsing stays in
-the host reader crate; umol implements domain semantics (`#atom`, `#bond`, `#spin`,
-context checks, lowering) in its own code. No custom EDN parser should be written.
+**O13 — Host EDN reader.** Vendor `edn-rs`. Runtime deps are `regex` (already in umol)
+and `ordered-float` (not needed; feature flag off). `edn-derive` is a dev-dependency of
+`edn-rs` only; not in umol's dependency tree. `clojure-reader` is rejected: it is a
+Clojure superset, not a pure EDN reader, and imports Clojure-specific notation. Since
+`edn-rs` dispatches tagged literals eagerly, `#atom`/`#bond`/`#spin`/`#chain` handlers
+record raw strings as opaque `TaggedValue` variants; the full spec parser runs in the
+lowering pass where context is available.
 
-**O14 — Parse mode naming.** Mode name is `Conformance` (not `ConformanceAtom`) to keep
-scope open for conformance-level parsing of atoms, bonds, and aromatic-system sections.
+**O14 — Rule definition form.** Rule libraries are EDN maps binding names to rule maps:
+`{:oxidize-alcohol {:lhs {...} :rhs {...}} :kekulize {...} ...}`. The map form is pure
+data, composes with EDN `merge`, and requires no special-form machinery. Level 4 calls
+reference rules by keyword: `(apply-rule :oxidize-alcohol mol)`. Rule files are EDN
+documents containing a single such map (or a sequence of maps merged at load time).
+
+**O15 — Binding notation: parens for all variable forms.** The `?` sigil appears only
+inside `(...)`, never in the outer positional token stream. LHS binding: `H(?h)`;
+guarded binding: `H(?h>=1)`; RHS arithmetic: `H(?h-1)`. Bare `>` and `<` in the outer
+stream always mean `dp`/`ap`, never comparison operators. Comparison operators `>=`,
+`<=`, `=` appear only inside `(...)`. This eliminates all lexical ambiguity between
+guards and donated/accepted-pairs tokens, and removes the need to define variable name
+termination rules relative to token-prefix characters.
+
+**O16 — Guards: Datalog-style S-expressions.** The `:guards` list holds prefix
+S-expressions over variables bound in the LHS: `(>= ?h 1)`, `(= ?v1 ?v2)`,
+`(!= molecule/charge 0)`. Variables use the `?` prefix. Molecule-level computed
+properties (charge, multiplicity) are accessible as `molecule/<prop>`. `:expect` is
+sugar over a `:guards` entry on a computed molecule property.
+
+**O17 — Fragment merge collision policy.** `merge` fails with an error on duplicate
+atom labels. Namespaced labels (`:benzene/c1`, `:pyrrole/n1`) are the standard
+prevention mechanism. A Level 4 `(prefix-labels fragment :prefix/)` operation renames
+all labels in a fragment before merge, enabling collision-free composition of
+anonymously authored fragments.
+
+**O18 — Spin multiplicity keywords.** DSL keywords map directly to `SpinMultiplicity`
+enum variants (lowercased): `:singlet` through `:decet` (Singlet=1 through Decet=10,
+matching `umol-data/src/spin.rs`). No other multiplicity representations are valid in
+the DSL.
+
+**O19 — `v` semantics.** `v` = σ-bond sum to non-H atoms: the sum of covalent bond
+orders of bonds appearing in `:bonds`, excluding implicit H bonds. Implicit H count is
+the separate `H` field. The electron invariant `inv_o = inv_e` validates every ground
+atom spec. Consequence: methanol C has `v=1` (one C–O bond) and `H=3`; methanol O has
+`v=1`, `H=1`, and `lone_pairs=2`.
+
+**O20 — Lone pairs in ground terms.** Lone pairs are required in ground atom specs
+wherever the electron invariant demands them (e.g., every oxygen, nitrogen, halogen).
+Omitting lone pairs produces an invariant mismatch at parse time. An authoring
+shorthand or a "lone-pair inference" mode for common elements may be added as a Level 4
+convenience, but the canonical ground term always carries explicit lone pairs.
 
 **Q1 — Repeat notation.** Superseded by topology notation and Level 4 composition.
 Topology notation (`:topology` + `:nodes` + `:types`) handles congeneric series and
@@ -649,8 +728,8 @@ surface is named atoms, not integer indices, and identity is checked semanticall
 rule engine, not textually.
 
 **Q2 — Bond pattern variables.** Confirmed. Bond specs use identical `value-expr` grammar
-to atom specs: `#bond "o?k"` binds bond order; `#bond "o?k>=2"` adds an inline guard;
-`#bond "o?k"` on a rule RHS passes the matched order through unchanged. Maximum
+to atom specs: `#bond "(?k)"` binds bond order; `#bond "(?k>=2)"` adds an inline guard;
+`#bond "(?k)"` on a rule RHS passes the matched order through unchanged. Maximum
 consistency between atom and bond query grammar; implementation work only.
 
 **Q3 — Feature matching semantics.** Resolved by a uniform compositional principle:

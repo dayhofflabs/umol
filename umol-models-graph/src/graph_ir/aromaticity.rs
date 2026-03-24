@@ -68,6 +68,7 @@ pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
     charge: i8,
     spin: SpinState,
+    // TODO: Check if this computed property should be removed.
     rings: Vec<Ring>,
 }
 
