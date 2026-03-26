@@ -26,10 +26,13 @@ pub enum BondPredicate {
 pub fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
     let (remaining, prefix) = take(2usize)(i)?;
     match prefix {
-        "#c" => charge_predicate(remaining),
-        "#u" => unpaired_predicate(remaining),
-        "#s" => multiplicity_predicate(remaining),
-        _ => Err(Err::Error(ParseError::UnknownBondPredicate)),
+        "#c" => bond_charge_predicate(remaining),
+        "#u" => bond_unpaired_predicate(remaining),
+        "#s" => bond_multiplicity_predicate(remaining),
+        p if p.starts_with("#") => Err(Err::Failure(ParseError::UnknownBondPredicate(
+            p.to_string(),
+        ))),
+        _ => Err(Err::Failure(ParseError::TrailingInput(i.to_string()))),
     }
 }
 
@@ -37,7 +40,7 @@ pub fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
 ///
 /// Tries full `value_dsl::<i8>` first; falls back to bare `+` (+1) or `-` (-1).
 /// Optional whitespace between the tag letter and the payload is allowed.
-pub fn charge_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
+pub fn bond_charge_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
     preceded(
         multispace0,
         alt((
@@ -52,7 +55,7 @@ pub fn charge_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
 /// Body parser for `#u` — unpaired electrons (`u8`); omitted payload = 1.
 ///
 /// Optional whitespace between the tag letter and the payload is allowed.
-pub fn unpaired_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
+pub fn bond_unpaired_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
     preceded(
         multispace0,
         alt((
@@ -66,7 +69,7 @@ pub fn unpaired_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
 /// Body parser for `#s` — spin multiplicity (`u8`); omitted payload = 1.
 ///
 /// Optional whitespace between the tag letter and the payload is allowed.
-pub fn multiplicity_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
+pub fn bond_multiplicity_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
     preceded(
         multispace0,
         alt((

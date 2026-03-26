@@ -1,9 +1,10 @@
 //! Bond-string DSL parser — `spec/umol-dsl-spec.md` §7.5.
 
 use nom::character::complete::multispace0;
+use nom::combinator::all_consuming;
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, terminated};
-use nom::{Err as NomErr, IResult, Parser};
+use nom::{Err, IResult, Parser};
 
 use super::error::ParseError;
 use super::predicates::{bond_predicate, BondPredicate};
@@ -18,14 +19,41 @@ pub struct BondAst {
     pub multiplicity: Option<ValueAst<u8>>,
 }
 
+/// Parse a bond subgrammar string
+pub fn parse_bond_dsl(input: &str) -> Result<BondAst, ParseError> {
+    all_consuming(bond_dsl)
+        .parse(input)
+        .map(|(_, result)| result)
+        .map_err(|e| match e {
+            Err::Error(e) | Err::Failure(e) => e,
+            Err::Incomplete(_) => ParseError::Incomplete,
+        })
+}
+
+/// Bond subgrammar parser
+pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, ParseError> {
+    let (remaining, (order, preds)) = pair(
+        delimited(multispace0, bond_order, multispace0),
+        many0(terminated(bond_predicate, multispace0)),
+    )
+    .parse(i)?;
+
+    let mut ast = BondAst {
+        order,
+        charge: None,
+        unpaired: None,
+        multiplicity: None,
+    };
+    update_bond_ast(&mut ast, preds).map_err(|e| Err::Error(e))?;
+    Ok((remaining, ast))
+}
+
 /// Parse the bond order prefix (`value_dsl::<u8>`).
 pub fn bond_order(i: &str) -> IResult<&str, ValueAst<u8>, ParseError> {
-    value_dsl::<u8>(i)
+    value_dsl::<u8>(i).map_err(|_| Err::Failure(ParseError::InvalidBondOrder(i.to_string())))
 }
 
 /// Merge a list of bond predicates into a `BondAst`.
-///
-/// Returns `Err(ParseError::DuplicateBondPredicate(tag))` on duplicate.
 fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), ParseError> {
     for pred in preds {
         match pred {
@@ -52,163 +80,73 @@ fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), P
     Ok(())
 }
 
-/// Combinator parser for a full bond-string (without `all_consuming`).
-pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, ParseError> {
-    let (remaining, (order, preds)) = pair(
-        delimited(multispace0, bond_order, multispace0),
-        many0(terminated(bond_predicate, multispace0)),
-    )
-    .parse(i)?;
-
-    let mut ast = BondAst {
-        order,
-        charge: None,
-        unpaired: None,
-        multiplicity: None,
-    };
-    update_bond_ast(&mut ast, preds).map_err(|e| NomErr::Error(e))?;
-    Ok((remaining, ast))
-}
-
-/// Top-level entry point: parse a complete bond-string.
-///
-/// Errors are domain-meaningful; `ParseError::NomError` never escapes this function.
-pub fn parse_bond_dsl(input: &str) -> Result<BondAst, ParseError> {
-    match bond_dsl(input) {
-        Ok((remaining, ast)) => {
-            let rest = remaining.trim_start_matches(|c: char| c.is_ascii_whitespace());
-            if rest.is_empty() {
-                Ok(ast)
-            } else if rest.starts_with('#') {
-                Err(ParseError::UnknownBondPredicate)
-            } else {
-                Err(ParseError::TrailingContent)
-            }
-        }
-        Err(NomErr::Incomplete(_)) => Err(ParseError::Incomplete),
-        Err(NomErr::Error(e) | NomErr::Failure(e)) => match e {
-            dup @ ParseError::DuplicateBondPredicate(_) => Err(dup),
-            _ => Err(ParseError::InvalidBondOrder),
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use nom::Parser;
     use pretty_assertions::assert_eq;
-    use rstest::rstest;
+    use rstest::*;
 
     use super::*;
 
-    fn lit_u8(n: u8) -> ValueAst<u8> {
-        ValueAst::Lit(n)
-    }
-
-    fn lit_i8(n: i8) -> ValueAst<i8> {
-        ValueAst::Lit(n)
-    }
-
-    fn ast(
-        order: u8,
-        charge: Option<i8>,
-        unpaired: Option<u8>,
-        multiplicity: Option<u8>,
-    ) -> BondAst {
-        BondAst {
-            order: lit_u8(order),
-            charge: charge.map(lit_i8),
-            unpaired: unpaired.map(lit_u8),
-            multiplicity: multiplicity.map(lit_u8),
-        }
-    }
-
     #[rstest]
-    #[case("1", ast(1, None, None, None))]
-    #[case("2", ast(2, None, None, None))]
-    #[case("3", ast(3, None, None, None))]
-    #[case("  1  ", ast(1, None, None, None))]
-    #[case("1#c+2", ast(1, Some(2), None, None))]
-    #[case("1#c-2", ast(1, Some(-2), None, None))]
-    #[case("1#c0", ast(1, Some(0), None, None))]
-    #[case("1#c+", ast(1, Some(1), None, None))]
-    #[case("1#c-",  ast(1, Some(-1), None, None))]
-    #[case("1#c +", ast(1, Some(1), None, None))]
-    #[case("1#c -", ast(1, Some(-1), None, None))]
-    #[case("1#c +2", ast(1, Some(2), None, None))]
-    #[case("1#u3", ast(1, None, Some(3), None))]
-    #[case("1#u", ast(1, None, Some(1), None))]
-    #[case("1#s2", ast(1, None, None, Some(2)))]
-    #[case("1#s", ast(1, None, None, Some(1)))]
-    #[case("2#c+#u2", ast(2, Some(1), Some(2), None))]
-    #[case("2#c-1#s3", ast(2, Some(-1), None, Some(3)))]
-    #[case("1#c0#u1#s1", ast(1, Some(0), Some(1), Some(1)))]
-    #[case("1 #c+ #u2", ast(1, Some(1), Some(2), None))]
-    fn test_parse_ok(#[case] input: &str, #[case] expected: BondAst) {
-        let result = parse_bond_dsl(input);
+    #[case::single("1", BondAst { order: ValueAst::Lit(1), charge: None, unpaired: None, multiplicity: None })]
+    #[case::double("2", BondAst { order: ValueAst::Lit(2), charge: None, unpaired: None, multiplicity: None })]
+    #[case::triple("3", BondAst { order: ValueAst::Lit(3), charge: None, unpaired: None, multiplicity: None })]
+    #[case::quadruple("4", BondAst { order: ValueAst::Lit(4), charge: None, unpaired: None, multiplicity: None })]
+    #[case::single_whitespace("  1  ", BondAst { order: ValueAst::Lit(1), charge: None, unpaired: None, multiplicity: None })]
+    #[case::single_pos_charge("1#c+2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(2)), unpaired: None, multiplicity: None })]
+    #[case::single_neg_charge("1#c-2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(-2)), unpaired: None, multiplicity: None })]
+    #[case::single_zero_charge("1#c0", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired: None, multiplicity: None })]
+    #[case::single_plus_only("1#c+", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(1)), unpaired: None, multiplicity: None })]
+    #[case::single_minus_only("1#c-",  BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(-1)), unpaired: None, multiplicity: None })]
+    #[case::single_plus_whitespace("1#c +", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(1)), unpaired: None, multiplicity: None })]
+    #[case::single_minus_whitespace("1#c -", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(-1)), unpaired: None, multiplicity: None })]
+    #[case::single_pos_charge_whitespace("1#c +2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(2)), unpaired: None, multiplicity: None })]
+    #[case::double_unpaired("2#u3", BondAst { order: ValueAst::Lit(2), charge: None, unpaired: Some(ValueAst::Lit(3)), multiplicity: None })]
+    #[case::single_u_only("1#u", BondAst { order: ValueAst::Lit(1), charge: None, unpaired: Some(ValueAst::Lit(1)), multiplicity: None })]
+    #[case::single_mult("1#s2", BondAst { order: ValueAst::Lit(1), charge: None, unpaired: None, multiplicity: Some(ValueAst::Lit(2)) })]
+    #[case::single_s_only("1#s", BondAst { order: ValueAst::Lit(1), charge: None, unpaired: None, multiplicity: Some(ValueAst::Lit(1)) })]
+    #[case::double_charge_unpaired("2#c+#u2", BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), unpaired: Some(ValueAst::Lit(2)), multiplicity: None })]
+    #[case::double_charge_mult("2#c-1#s3", BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(-1)), unpaired: None, multiplicity: Some(ValueAst::Lit(3)) })]
+    #[case::double_charge_unpaired_mult("1#c0#u1#s1", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired: Some(ValueAst::Lit(1)), multiplicity: Some(ValueAst::Lit(1)) })]
+    #[case::double_plus_only_unpaired("1 #c+ #u2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(1)), unpaired: Some(ValueAst::Lit(2)), multiplicity: None })]
+    fn test_bond_dsl(#[case] input: &str, #[case] expected: BondAst) {
+        let result = bond_dsl(input);
         assert!(
             result.is_ok(),
             "{input:?} should succeed, got {:?}",
             result.unwrap_err()
         );
-        assert_eq!(result.unwrap(), expected);
+        let (remaining, ast) = result.unwrap();
+        assert!(
+            remaining.is_empty(),
+            "{input:?} should have consumed all input, remaining: {remaining:?}"
+        );
+        assert_eq!(ast, expected);
     }
 
     #[rstest]
-    #[case("1# c", ParseError::UnknownBondPredicate)]
-    #[case("1#x", ParseError::UnknownBondPredicate)]
-    #[case("1#c+ foo", ParseError::TrailingContent)]
-    #[case("", ParseError::InvalidBondOrder)]
-    fn test_parse_err(#[case] input: &str, #[case] expected: ParseError) {
-        let result = parse_bond_dsl(input);
-        assert_eq!(result, Err(expected), "{input:?}");
-    }
-
-    #[rstest]
-    #[case("1#c+#c-", "#c")]
-    #[case("1#u2#u3", "#u")]
-    #[case("1#s1#s2", "#s")]
-    fn test_parse_duplicate(#[case] input: &str, #[case] tag: &str) {
-        let result = parse_bond_dsl(input);
-        assert_eq!(
-            result,
-            Err(ParseError::DuplicateBondPredicate(tag.to_string())),
-            "{input:?}"
+    #[case::empty("", ParseError::InvalidBondOrder("".to_string()))]
+    #[case::tag_whitespace("1# c", ParseError::UnknownBondPredicate("# ".to_string()))]
+    #[case::invalid_tag("1#x", ParseError::UnknownBondPredicate("#x".to_string()))]
+    #[case::trailing("1#c+ foo", ParseError::TrailingInput("foo".to_string()))]
+    #[case::dup_charge("1#c+#c-", ParseError::DuplicateBondPredicate("#c".to_string()))]
+    #[case::dup_unpaired("1#u2#u3", ParseError::DuplicateBondPredicate("#u".to_string()))]
+    #[case::dup_multiplicity("1#s1#s2", ParseError::DuplicateBondPredicate("#s".to_string()))]
+    fn test_parse_invalid(#[case] input: &str, #[case] expected: ParseError) {
+        let result = bond_dsl(input);
+        assert!(
+            result.is_err(),
+            "{input:?} should fail, got {:?}",
+            result.unwrap_err()
         );
-    }
-
-    #[test]
-    fn test_bond_dsl_partial_remainder() {
-        let result = bond_dsl.parse("1#c+ rest");
-        assert!(result.is_ok(), "expected Ok, got {:?}", result.unwrap_err());
-        let (remaining, ast) = result.unwrap();
-        assert_eq!(remaining, "rest");
+        let err = match result.unwrap_err() {
+            Err::Error(e) | Err::Failure(e) => e,
+            Err::Incomplete(_) => ParseError::Incomplete,
+        };
         assert_eq!(
-            ast,
-            BondAst {
-                order: lit_u8(1),
-                charge: Some(lit_i8(1)),
-                unpaired: None,
-                multiplicity: None
-            }
-        );
-    }
-
-    #[test]
-    fn test_bond_dsl_stops_before_hash_unknown() {
-        // bond_dsl stops when it encounters an unknown predicate tag, leaving it unconsumed
-        let result = bond_dsl.parse("2#u #x remaining");
-        assert!(result.is_ok(), "expected Ok, got {:?}", result.unwrap_err());
-        let (remaining, ast) = result.unwrap();
-        assert_eq!(remaining, "#x remaining");
-        assert_eq!(
-            ast,
-            BondAst {
-                order: lit_u8(2),
-                charge: None,
-                unpaired: Some(lit_u8(1)),
-                multiplicity: None
-            }
+            err, expected,
+            "{:?} should fail with {:?}, got {:?}",
+            input, expected, err
         );
     }
 }

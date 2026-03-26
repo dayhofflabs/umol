@@ -7,18 +7,20 @@ use thiserror::Error;
 pub enum ParseError {
     #[error("Invalid number")]
     InvalidNumber,
-    #[error("Invalid bond order")]
-    InvalidBondOrder,
-    #[error("Unknown bond predicate")]
-    UnknownBondPredicate,
+    #[error("Invalid bond order: {0}")]
+    InvalidBondOrder(String),
+    #[error("Unknown bond predicate: {0}")]
+    UnknownBondPredicate(String),
     #[error("Duplicate {0} bond predicate")]
     DuplicateBondPredicate(String),
-    #[error("Trailing content in bond string")]
-    TrailingContent,
+    #[error("Invalid bond data {0}")]
+    InvalidBondData(String),
     #[error("Incomplete input")]
     Incomplete,
-    #[error("Invalid value DSL: {0}")]
-    InvalidValueDsl(String),
+    #[error("Trailing input: {0:?}")]
+    TrailingInput(String),
+    #[error("Invalid value: {0}")]
+    InvalidValue(String),
     #[error("Nom error: {0:?}")]
     NomError(NomErrorKind),
 }

@@ -4,9 +4,8 @@ use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0, satisfy};
 use nom::combinator::{all_consuming, map, opt, recognize, value};
-use nom::error::ErrorKind;
 use nom::multi::{many0, separated_list1};
-use nom::sequence::{delimited, pair, preceded};
+use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
 
 use super::error::ParseError;
@@ -17,61 +16,29 @@ pub enum ValueAst<T: IntParser> {
     Wildcard,
     LitSet(Vec<T>),
     Lit(T),
-    Bool(BoolExpr<T>),
+    Expr(Expr<T>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BoolExpr<T: IntParser> {
-    pub disjuncts: Vec<AndExpr<T>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AndExpr<T: IntParser> {
-    pub conjuncts: Vec<NotExpr<T>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NotExpr<T: IntParser> {
-    Not(Box<NotExpr<T>>),
-    Block(Box<BoolExpr<T>>),
-    Rel(RelExpr<T>),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelExpr<T: IntParser> {
-    pub left: MemExpr<T>,
-    pub right: Option<(RelOp, MemExpr<T>)>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MemExpr<T: IntParser> {
-    pub expr: AddExpr<T>,
-    pub set: Option<Vec<T>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AddExpr<T: IntParser> {
-    pub head: MultExpr<T>,
-    pub tail: Vec<(AddOp, MultExpr<T>)>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MultExpr<T: IntParser> {
-    pub head: UnaryExpr<T>,
-    pub tail: Vec<(MultOp, UnaryExpr<T>)>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UnaryExpr<T: IntParser> {
-    pub negate: bool,
-    pub base: BaseExpr<T>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BaseExpr<T: IntParser> {
+pub enum Expr<T: IntParser> {
     Lit(T),
     Var(String),
-    Paren(Box<AddExpr<T>>),
+    Neg(Box<Expr<T>>),
+    BinOp(Box<Expr<T>>, ArithOp, Box<Expr<T>>),
+    Mem(Box<Expr<T>>, Vec<T>),
+    Rel(Box<Expr<T>>, RelOp, Box<Expr<T>>),
+    Not(Box<Expr<T>>),
+    And(Vec<Expr<T>>),
+    Or(Vec<Expr<T>>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,106 +50,118 @@ pub enum RelOp {
     Gt,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AddOp {
-    Add,
-    Sub,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MultOp {
-    Mul,
-    Div,
-    Rem,
-}
-
 pub fn parse_value_dsl<T: IntParser>(input: &str) -> Result<ValueAst<T>, ParseError> {
     all_consuming(value_dsl::<T>)
         .parse(input)
         .map(|(_, v)| v)
         .map_err(|e| match e {
-            Err::Error(_) | Err::Failure(_) => ParseError::InvalidValueDsl(input.to_string()),
+            Err::Error(e) | Err::Failure(e) => e,
             Err::Incomplete(_) => ParseError::Incomplete,
         })
 }
 
 pub fn value_dsl<T: IntParser>(i: &str) -> IResult<&str, ValueAst<T>, ParseError> {
     alt((
+        map(
+            terminated(T::nom_parser(), (multispace0, terminator)),
+            ValueAst::Lit,
+        ),
         value(ValueAst::Wildcard, tag("*")),
         map(lit_set::<T>, ValueAst::LitSet),
-        map(
-            pair(T::nom_parser(), preceded(multispace0, terminator)),
-            |(n, _)| ValueAst::Lit(n),
-        ),
-        map(bool_expr::<T>, ValueAst::Bool),
+        map(bool_expr::<T>, ValueAst::Expr),
     ))
     .parse(i)
+    .map_err(|_| Err::Error(ParseError::InvalidValue(i.to_string())))
 }
 
 fn terminator(i: &str) -> IResult<&str, (), ParseError> {
     if i.is_empty() || i.starts_with('#') {
         Ok((i, ()))
     } else {
-        Err(Err::Error(ParseError::NomError(ErrorKind::Verify)))
+        Err(Err::Error(ParseError::InvalidValue(i.to_string())))
     }
 }
 
-fn bool_expr<T: IntParser>(i: &str) -> IResult<&str, BoolExpr<T>, ParseError> {
-    map(separated_list1(ws_sym('|'), and_expr), |disjuncts| {
-        BoolExpr { disjuncts }
-    })
+fn bool_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
+    map(
+        pair(and_expr::<T>, many0(preceded(op_char('|'), and_expr::<T>))),
+        |(first, rest)| {
+            if rest.is_empty() {
+                first
+            } else {
+                let mut disjuncts = vec![first];
+                disjuncts.extend(rest);
+                Expr::Or(disjuncts)
+            }
+        },
+    )
     .parse(i)
 }
 
-fn and_expr<T: IntParser>(i: &str) -> IResult<&str, AndExpr<T>, ParseError> {
-    map(separated_list1(ws_sym('&'), not_expr), |conjuncts| {
-        AndExpr { conjuncts }
-    })
+fn and_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
+    map(
+        pair(not_expr::<T>, many0(preceded(op_char('&'), not_expr::<T>))),
+        |(first, rest)| {
+            if rest.is_empty() {
+                first
+            } else {
+                let mut conjuncts = vec![first];
+                conjuncts.extend(rest);
+                Expr::And(conjuncts)
+            }
+        },
+    )
     .parse(i)
 }
 
-fn not_expr<T: IntParser>(i: &str) -> IResult<&str, NotExpr<T>, ParseError> {
+fn not_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
     alt((
         map(preceded((char('!'), multispace0), not_expr), |n| {
-            NotExpr::Not(Box::new(n))
+            Expr::Not(Box::new(n))
         }),
-        map(rel_expr, NotExpr::Rel),
+        rel_expr,
         map(
             delimited(
                 char('('),
                 delimited(multispace0, bool_expr::<T>, multispace0),
                 char(')'),
             ),
-            |b| NotExpr::Block(Box::new(b)),
+            |b| b,
         ),
     ))
     .parse(i)
 }
 
-fn rel_expr<T: IntParser>(i: &str) -> IResult<&str, RelExpr<T>, ParseError> {
+fn rel_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
     map(
         pair(
-            mem_expr,
+            mem_expr::<T>,
             opt(preceded(
                 multispace0,
-                pair(rel_op, preceded(multispace0, mem_expr)),
+                pair(rel_op, preceded(multispace0, mem_expr::<T>)),
             )),
         ),
-        |(left, right)| RelExpr { left, right },
+        |(left, right)| match right {
+            None => left,
+            Some((op, r)) => Expr::Rel(Box::new(left), op, Box::new(r)),
+        },
     )
     .parse(i)
 }
 
-fn mem_expr<T: IntParser>(i: &str) -> IResult<&str, MemExpr<T>, ParseError> {
+fn mem_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
     map(
         pair(
-            add_expr,
+            add_expr::<T>,
             opt(preceded(
                 multispace0,
-                preceded(map(tag("::"), |_| ()), preceded(multispace0, lit_set)),
+                preceded(map(tag("::"), |_| ()), preceded(multispace0, lit_set::<T>)),
             )),
         ),
-        |(expr, set)| MemExpr { expr, set },
+        |(expr, set)| match set {
+            None => expr,
+            Some(s) => Expr::Mem(Box::new(expr), s),
+        },
     )
     .parse(i)
 }
@@ -192,7 +171,7 @@ pub(crate) fn lit_set<T: IntParser>(i: &str) -> IResult<&str, Vec<T>, ParseError
         char('{'),
         delimited(
             multispace0,
-            separated_list1(ws_sym(','), T::nom_parser()),
+            separated_list1(op_char(','), T::nom_parser()),
             multispace0,
         ),
         char('}'),
@@ -211,7 +190,7 @@ fn rel_op(i: &str) -> IResult<&str, RelOp, ParseError> {
     .parse(i)
 }
 
-fn add_expr<T: IntParser>(i: &str) -> IResult<&str, AddExpr<T>, ParseError> {
+fn add_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
     map(
         pair(
             mult_expr::<T>,
@@ -220,16 +199,24 @@ fn add_expr<T: IntParser>(i: &str) -> IResult<&str, AddExpr<T>, ParseError> {
                 mult_expr::<T>,
             )),
         ),
-        |(head, tail)| AddExpr { head, tail },
+        |(head, tail)| {
+            tail.into_iter().fold(head, |acc, (op, rhs)| {
+                Expr::BinOp(Box::new(acc), op, Box::new(rhs))
+            })
+        },
     )
     .parse(i)
 }
 
-fn add_op(i: &str) -> IResult<&str, AddOp, ParseError> {
-    alt((value(AddOp::Add, char('+')), value(AddOp::Sub, char('-')))).parse(i)
+fn add_op(i: &str) -> IResult<&str, ArithOp, ParseError> {
+    alt((
+        value(ArithOp::Add, char('+')),
+        value(ArithOp::Sub, char('-')),
+    ))
+    .parse(i)
 }
 
-fn mult_expr<T: IntParser>(i: &str) -> IResult<&str, MultExpr<T>, ParseError> {
+fn mult_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
     map(
         pair(
             unary_expr::<T>,
@@ -238,21 +225,25 @@ fn mult_expr<T: IntParser>(i: &str) -> IResult<&str, MultExpr<T>, ParseError> {
                 unary_expr::<T>,
             )),
         ),
-        |(head, tail)| MultExpr { head, tail },
+        |(head, tail)| {
+            tail.into_iter().fold(head, |acc, (op, rhs)| {
+                Expr::BinOp(Box::new(acc), op, Box::new(rhs))
+            })
+        },
     )
     .parse(i)
 }
 
-fn mult_op(i: &str) -> IResult<&str, MultOp, ParseError> {
+fn mult_op(i: &str) -> IResult<&str, ArithOp, ParseError> {
     alt((
-        value(MultOp::Mul, char('*')),
-        value(MultOp::Div, char('/')),
-        value(MultOp::Rem, char('%')),
+        value(ArithOp::Mul, char('*')),
+        value(ArithOp::Div, char('/')),
+        value(ArithOp::Rem, char('%')),
     ))
     .parse(i)
 }
 
-fn unary_expr<T: IntParser>(i: &str) -> IResult<&str, UnaryExpr<T>, ParseError> {
+fn unary_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
     map(
         pair(
             map(
@@ -261,22 +252,28 @@ fn unary_expr<T: IntParser>(i: &str) -> IResult<&str, UnaryExpr<T>, ParseError> 
             ),
             base_expr::<T>,
         ),
-        |(negate, base)| UnaryExpr { negate, base },
+        |(negate, base)| {
+            if negate {
+                Expr::Neg(Box::new(base))
+            } else {
+                base
+            }
+        },
     )
     .parse(i)
 }
 
-fn base_expr<T: IntParser>(i: &str) -> IResult<&str, BaseExpr<T>, ParseError> {
+fn base_expr<T: IntParser>(i: &str) -> IResult<&str, Expr<T>, ParseError> {
     alt((
-        map(T::nom_parser(), BaseExpr::Lit),
-        map(preceded(char('?'), parse_id), BaseExpr::Var),
+        map(T::nom_parser(), Expr::Lit),
+        map(preceded(char('?'), parse_id), Expr::Var),
         map(
             delimited(
                 char('('),
                 delimited(multispace0, add_expr::<T>, multispace0),
                 char(')'),
             ),
-            |a| BaseExpr::Paren(Box::new(a)),
+            |a| a,
         ),
     ))
     .parse(i)
@@ -293,120 +290,55 @@ pub(crate) fn parse_id(i: &str) -> IResult<&str, String, ParseError> {
     .parse(i)
 }
 
-pub(crate) fn ws_sym<'a>(c: char) -> impl Parser<&'a str, Output = char, Error = ParseError> {
+pub(crate) fn op_char<'a>(c: char) -> impl Parser<&'a str, Output = char, Error = ParseError> {
     delimited(multispace0, char(c), multispace0)
 }
 
 #[cfg(test)]
 mod tests {
-    use nom::combinator::all_consuming;
-    use nom::error::ErrorKind as NomErrorKind;
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
 
-    fn lit(n: u8) -> UnaryExpr<u8> {
-        UnaryExpr {
-            negate: false,
-            base: BaseExpr::Lit(n),
-        }
+    fn elit(n: u8) -> Expr<u8> {
+        Expr::Lit(n)
     }
 
-    fn var(name: &str) -> UnaryExpr<u8> {
-        UnaryExpr {
-            negate: false,
-            base: BaseExpr::Var(name.into()),
-        }
+    fn evar(s: &str) -> Expr<u8> {
+        Expr::Var(s.into())
     }
 
-    fn mult1(head: UnaryExpr<u8>, tail: Vec<(MultOp, UnaryExpr<u8>)>) -> MultExpr<u8> {
-        MultExpr { head, tail }
+    fn enot(e: Expr<u8>) -> Expr<u8> {
+        Expr::Not(Box::new(e))
     }
 
-    fn add1(head: MultExpr<u8>, tail: Vec<(AddOp, MultExpr<u8>)>) -> AddExpr<u8> {
-        AddExpr { head, tail }
+    fn eadd(l: Expr<u8>, r: Expr<u8>) -> Expr<u8> {
+        Expr::BinOp(Box::new(l), ArithOp::Add, Box::new(r))
     }
 
-    fn mem(expr: AddExpr<u8>, set: Option<Vec<u8>>) -> MemExpr<u8> {
-        MemExpr { expr, set }
+    fn esub(l: Expr<u8>, r: Expr<u8>) -> Expr<u8> {
+        Expr::BinOp(Box::new(l), ArithOp::Sub, Box::new(r))
     }
 
-    fn ax_nat(n: u8) -> AddExpr<u8> {
-        add1(mult1(lit(n), vec![]), vec![])
+    fn emul(l: Expr<u8>, r: Expr<u8>) -> Expr<u8> {
+        Expr::BinOp(Box::new(l), ArithOp::Mul, Box::new(r))
     }
 
-    fn ax_var(s: &str) -> AddExpr<u8> {
-        add1(mult1(var(s), vec![]), vec![])
+    fn ediv(l: Expr<u8>, r: Expr<u8>) -> Expr<u8> {
+        Expr::BinOp(Box::new(l), ArithOp::Div, Box::new(r))
     }
 
-    fn ax_var_add(s: &str, n: u8) -> AddExpr<u8> {
-        add1(
-            mult1(var(s), vec![]),
-            vec![(AddOp::Add, mult1(lit(n), vec![]))],
-        )
+    fn emem(e: Expr<u8>, set: Vec<u8>) -> Expr<u8> {
+        Expr::Mem(Box::new(e), set)
     }
 
-    fn ax_lit_add(a: u8, b: u8) -> AddExpr<u8> {
-        add1(
-            mult1(lit(a), vec![]),
-            vec![(AddOp::Add, mult1(lit(b), vec![]))],
-        )
+    fn erel(l: Expr<u8>, op: RelOp, r: Expr<u8>) -> Expr<u8> {
+        Expr::Rel(Box::new(l), op, Box::new(r))
     }
 
-    fn ax_lit_sub(a: u8, b: u8) -> AddExpr<u8> {
-        add1(
-            mult1(lit(a), vec![]),
-            vec![(AddOp::Sub, mult1(lit(b), vec![]))],
-        )
-    }
-
-    fn ax_lit_mul(a: u8, b: u8) -> AddExpr<u8> {
-        add1(mult1(lit(a), vec![(MultOp::Mul, lit(b))]), vec![])
-    }
-
-    fn ax_lit_div(a: u8, b: u8) -> AddExpr<u8> {
-        add1(mult1(lit(a), vec![(MultOp::Div, lit(b))]), vec![])
-    }
-
-    fn ax_paren_times(inner: AddExpr<u8>, k: u8) -> AddExpr<u8> {
-        add1(
-            mult1(
-                UnaryExpr {
-                    negate: false,
-                    base: BaseExpr::Paren(Box::new(inner)),
-                },
-                vec![(MultOp::Mul, lit(k))],
-            ),
-            vec![],
-        )
-    }
-
-    fn mem_nat(n: u8) -> MemExpr<u8> {
-        mem(ax_nat(n), None)
-    }
-
-    fn mem_var(s: &str) -> MemExpr<u8> {
-        mem(ax_var(s), None)
-    }
-
-    fn rel_only(left: MemExpr<u8>) -> RelExpr<u8> {
-        RelExpr { left, right: None }
-    }
-
-    fn rel_eq(left: MemExpr<u8>, r: MemExpr<u8>) -> RelExpr<u8> {
-        RelExpr {
-            left,
-            right: Some((RelOp::Eq, r)),
-        }
-    }
-
-    fn vx_rel_single(rel: RelExpr<u8>) -> ValueAst<u8> {
-        ValueAst::Bool(BoolExpr {
-            disjuncts: vec![AndExpr {
-                conjuncts: vec![NotExpr::Rel(rel)],
-            }],
-        })
+    fn vexpr(e: Expr<u8>) -> ValueAst<u8> {
+        ValueAst::Expr(e)
     }
 
     #[rustfmt::skip]
@@ -415,24 +347,26 @@ mod tests {
     #[case::num("0", ValueAst::Lit(0))]
     #[case::set("{0,1,2}", ValueAst::LitSet(vec![0, 1, 2]))]
     #[case::set_spaced("{ 0, 1 ,2}", ValueAst::LitSet(vec![0, 1, 2]))]
-    #[case::sum("1+2", vx_rel_single(rel_only(mem(ax_lit_add(1, 2), None))))]
-    #[case::sum_spaced("1 + 2", vx_rel_single(rel_only(mem(ax_lit_add(1, 2), None))))]
-    #[case::diff("1-2", vx_rel_single(rel_only(mem(ax_lit_sub(1, 2), None))))]
-    #[case::diff_spaced("1 - 2", vx_rel_single(rel_only(mem(ax_lit_sub(1, 2), None))))]
-    #[case::mult("1*2", vx_rel_single(rel_only(mem(ax_lit_mul(1, 2), None))))]
-    #[case::mult_spaced("1 * 2", vx_rel_single(rel_only(mem(ax_lit_mul(1, 2), None))))]
-    #[case::div("2/2", vx_rel_single(rel_only(mem(ax_lit_div(2, 2), None))))]
-    #[case::div_spaced("2 / 2", vx_rel_single(rel_only(mem(ax_lit_div(2, 2), None))))]
-    #[case::var("?h", vx_rel_single(rel_only(mem_var("h"))))]
-    #[case::var_2char("?ha", vx_rel_single(rel_only(mem_var("ha"))))]
-    #[case::var_number("?h1", vx_rel_single(rel_only(mem_var("h1"))))]
-    #[case::var_underscore("?h_", vx_rel_single(rel_only(mem_var("h_"))))]
-    #[case::membership("?h + 0 :: {0,1}", vx_rel_single(rel_only(mem(ax_var_add("h", 0), Some(vec![0, 1])))))]
-    #[case::double_neg("--0", vx_rel_single(rel_only(mem_nat(0))))]
-    #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueAst::Bool(BoolExpr { disjuncts: vec![AndExpr { conjuncts:
-        vec![ NotExpr::Not(Box::new(NotExpr::Rel(rel_eq(mem_var("h"), mem_nat(0))))), NotExpr::Rel(rel_eq(mem_var("v"), mem_nat(1))) ] }] }))]
-    #[case::paren_arith("(0 + 1) * 1", vx_rel_single(rel_only(mem(ax_paren_times(ax_lit_add(0, 1), 1), None))))]
-    fn test_value_dsl_ok(#[case] input: &str, #[case] expected: ValueAst<u8>) {
+    #[case::sum("1+2", vexpr(eadd(elit(1), elit(2))))]
+    #[case::sum_spaced("1 + 2", vexpr(eadd(elit(1), elit(2))))]
+    #[case::diff("1-2", vexpr(esub(elit(1), elit(2))))]
+    #[case::diff_spaced("1 - 2", vexpr(esub(elit(1), elit(2))))]
+    #[case::mult("1*2", vexpr(emul(elit(1), elit(2))))]
+    #[case::mult_spaced("1 * 2", vexpr(emul(elit(1), elit(2))))]
+    #[case::div("2/2", vexpr(ediv(elit(2), elit(2))))]
+    #[case::div_spaced("2 / 2", vexpr(ediv(elit(2), elit(2))))]
+    #[case::var("?h", vexpr(evar("h")))]
+    #[case::var_2char("?ha", vexpr(evar("ha")))]
+    #[case::var_number("?h1", vexpr(evar("h1")))]
+    #[case::var_underscore("?h_", vexpr(evar("h_")))]
+    #[case::membership("?h + 0 :: {0,1}", vexpr(emem(eadd(evar("h"), elit(0)), vec![0, 1])))]
+    #[case::double_neg("--0", vexpr(elit(0)))]
+    #[case::not_and_precedence("! ?h == 0 & ?v == 1", vexpr(Expr::And(vec![
+        enot(erel(evar("h"), RelOp::Eq, elit(0))),
+        erel(evar("v"), RelOp::Eq, elit(1)),
+    ])))]
+    #[case::paren_arith("(0 + 1) * 1", vexpr(emul(eadd(elit(0), elit(1)), elit(1))))]
+    fn test_value_dsl(#[case] input: &str, #[case] expected: ValueAst<u8>) {
         let result = value_dsl(input);
         assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input, result.clone().unwrap_err());
         let (remaining, value) = result.unwrap();
@@ -441,65 +375,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::literal("1#v3", ValueAst::Lit(1), "#v3")]
-    fn test_value_dsl_literal(
-        #[case] input: &str,
-        #[case] expected_value: ValueAst<u8>,
-        #[case] expected_remaining: &str,
-    ) {
-        let result = value_dsl::<u8>.parse("1#v3");
-        assert!(
-            result.is_ok(),
-            "{:?} should have succeeded, error: {:?}",
-            input,
-            result.clone().unwrap_err()
-        );
-        let (remaining, value) = result.unwrap();
-        assert_eq!(value, expected_value);
-        assert_eq!(remaining, expected_remaining);
-    }
-
-    #[rstest]
-    #[case::empty("", NomErrorKind::Char)]
-    #[case::invalid_char("[]", NomErrorKind::Char)]
-    #[case::bare_open_paren("(", NomErrorKind::Char)]
-    #[case::bare_close_paren(")", NomErrorKind::Char)]
-    #[case::whitespace_id("? h", NomErrorKind::Char)]
-    #[case::adjacent_ops("a + * 3", NomErrorKind::Char)]
-    #[case::bare_plus("+", NomErrorKind::Char)]
-    #[case::bare_minus("-", NomErrorKind::Char)]
-    #[case::bare_equal("=", NomErrorKind::Char)]
-    #[case::bare_lt("<", NomErrorKind::Char)]
-    #[case::bare_gt("<", NomErrorKind::Char)]
-    #[case::leading_op("/ 3", NomErrorKind::Char)]
-    #[case::wildcard_num("* 3", NomErrorKind::Eof)]
-    #[case::missing_id("? ", NomErrorKind::Char)]
-    #[case::invalid_id_1("?&x ", NomErrorKind::Char)]
-    #[case::invalid_id_2("?_x ", NomErrorKind::Char)]
-    #[case::triple_q("???", NomErrorKind::Char)]
-    #[case::empty_set("{}", NomErrorKind::Char)]
-    #[case::empty_mem("?h :: {}", NomErrorKind::Eof)]
-    #[case::unclosed_paren_add("(0 + 1", NomErrorKind::Char)]
-    fn test_parse_value_dsl_invalid(#[case] input: &str, #[case] expected_kind: NomErrorKind) {
-        let result = all_consuming(value_dsl::<u8>).parse(input);
-        assert!(
-            result.is_err(),
-            "{:?} should have failed, output: {:?}",
-            input,
-            result.clone().unwrap()
-        );
-        let got_kind = match &result {
-            Err(Err::Error(ParseError::NomError(k)))
-            | Err(Err::Failure(ParseError::NomError(k))) => *k,
-            Err(Err::Error(e)) | Err(Err::Failure(e)) => {
-                panic!("{input:?}: unexpected error variant {e:?}")
-            }
-            Err(Err::Incomplete(_)) => panic!("{input:?}: unexpected Incomplete"),
-            Ok(_) => unreachable!(),
+    #[case::empty("")]
+    #[case::invalid_char("[]")]
+    #[case::bare_open_paren("(")]
+    #[case::bare_close_paren(")")]
+    #[case::whitespace_id("? h")]
+    #[case::adjacent_ops("a + * 3")]
+    #[case::bare_plus("+")]
+    #[case::bare_minus("-")]
+    #[case::bare_equal("=")]
+    #[case::bare_lt("<")]
+    #[case::bare_gt(">")]
+    #[case::leading_op("/ 3")]
+    #[case::missing_id("? ")]
+    #[case::invalid_id_1("?&x ")]
+    #[case::invalid_id_2("?_x ")]
+    #[case::triple_q("???")]
+    #[case::empty_set("{}")]
+    #[case::unclosed_paren_add("(0 + 1")]
+    fn test_value_dsl_error(#[case] input: &str) {
+        let result = value_dsl::<u8>(input);
+        assert!(result.is_err(), "{input:?} should fail, got {result:?}");
+        let err = match result.unwrap_err() {
+            Err::Error(e) | Err::Failure(e) => e,
+            Err::Incomplete(_) => ParseError::Incomplete,
         };
         assert_eq!(
-            got_kind, expected_kind,
-            "{input:?}: expected error kind {expected_kind:?}, got {got_kind:?}"
+            err,
+            ParseError::InvalidValue(input.to_string()),
+            "{:?} should fail with InvalidValue, got {:?}",
+            input,
+            err
         );
     }
 }
