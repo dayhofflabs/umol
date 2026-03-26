@@ -1,10 +1,10 @@
-//! `value-expr` — `spec/umol-dsl-spec.md` §5.
+//! `value-dsl` — `spec/umol-dsl-spec.md` §5.
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, multispace0, satisfy};
 use nom::combinator::{all_consuming, map, opt, recognize, value};
-use nom::error::{Error as NomError, ErrorKind};
+use nom::error::ErrorKind;
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded};
 use nom::{Err, IResult, Parser};
@@ -13,69 +13,69 @@ use super::error::ParseError;
 use super::utils::IntParser;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ValueExpr<T: IntParser> {
+pub enum ValueAst<T: IntParser> {
     Wildcard,
-    NatSet(Vec<T>),
+    LitSet(Vec<T>),
     Lit(T),
     Bool(BoolExpr<T>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct BoolExpr<T: IntParser> {
+pub struct BoolExpr<T: IntParser> {
     pub disjuncts: Vec<AndExpr<T>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct AndExpr<T: IntParser> {
+pub struct AndExpr<T: IntParser> {
     pub conjuncts: Vec<NotExpr<T>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum NotExpr<T: IntParser> {
+pub enum NotExpr<T: IntParser> {
     Not(Box<NotExpr<T>>),
     Block(Box<BoolExpr<T>>),
     Rel(RelExpr<T>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct RelExpr<T: IntParser> {
+pub struct RelExpr<T: IntParser> {
     pub left: MemExpr<T>,
     pub right: Option<(RelOp, MemExpr<T>)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct MemExpr<T: IntParser> {
+pub struct MemExpr<T: IntParser> {
     pub expr: AddExpr<T>,
     pub set: Option<Vec<T>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct AddExpr<T: IntParser> {
+pub struct AddExpr<T: IntParser> {
     pub head: MultExpr<T>,
     pub tail: Vec<(AddOp, MultExpr<T>)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct MultExpr<T: IntParser> {
+pub struct MultExpr<T: IntParser> {
     pub head: UnaryExpr<T>,
     pub tail: Vec<(MultOp, UnaryExpr<T>)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct UnaryExpr<T: IntParser> {
+pub struct UnaryExpr<T: IntParser> {
     pub negate: bool,
     pub base: BaseExpr<T>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum BaseExpr<T: IntParser> {
+pub enum BaseExpr<T: IntParser> {
     Lit(T),
     Var(String),
     Paren(Box<AddExpr<T>>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum RelOp {
+pub enum RelOp {
     Le,
     Ge,
     Eq,
@@ -84,61 +84,64 @@ pub(crate) enum RelOp {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AddOp {
+pub enum AddOp {
     Add,
     Sub,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum MultOp {
+pub enum MultOp {
     Mul,
     Div,
     Rem,
 }
 
-pub(crate) fn parse_value_expr<T: IntParser>(input: &str) -> Result<ValueExpr<T>, ParseError> {
-    all_consuming(value_expr::<T>)
+pub fn parse_value_dsl<T: IntParser>(input: &str) -> Result<ValueAst<T>, ParseError> {
+    all_consuming(value_dsl::<T>)
         .parse(input)
         .map(|(_, v)| v)
-        .map_err(ParseError::value_from_nom)
+        .map_err(|e| match e {
+            Err::Error(_) | Err::Failure(_) => ParseError::InvalidValueDsl(input.to_string()),
+            Err::Incomplete(_) => ParseError::Incomplete,
+        })
 }
 
-pub(crate) fn value_expr<T: IntParser>(i: &str) -> IResult<&str, ValueExpr<T>> {
+pub fn value_dsl<T: IntParser>(i: &str) -> IResult<&str, ValueAst<T>, ParseError> {
     alt((
-        value(ValueExpr::Wildcard, tag("*")),
-        map(nat_set::<T>, ValueExpr::NatSet),
+        value(ValueAst::Wildcard, tag("*")),
+        map(lit_set::<T>, ValueAst::LitSet),
         map(
             pair(T::nom_parser(), preceded(multispace0, terminator)),
-            |(n, _)| ValueExpr::Lit(n),
+            |(n, _)| ValueAst::Lit(n),
         ),
-        map(bool_expr::<T>, ValueExpr::Bool),
+        map(bool_expr::<T>, ValueAst::Bool),
     ))
     .parse(i)
 }
 
-fn terminator(i: &str) -> IResult<&str, ()> {
+fn terminator(i: &str) -> IResult<&str, (), ParseError> {
     if i.is_empty() || i.starts_with('#') {
         Ok((i, ()))
     } else {
-        Err(Err::Error(NomError::new(i, ErrorKind::Verify)))
+        Err(Err::Error(ParseError::NomError(ErrorKind::Verify)))
     }
 }
 
-fn bool_expr<T: IntParser>(i: &str) -> IResult<&str, BoolExpr<T>> {
+fn bool_expr<T: IntParser>(i: &str) -> IResult<&str, BoolExpr<T>, ParseError> {
     map(separated_list1(ws_sym('|'), and_expr), |disjuncts| {
         BoolExpr { disjuncts }
     })
     .parse(i)
 }
 
-fn and_expr<T: IntParser>(i: &str) -> IResult<&str, AndExpr<T>> {
+fn and_expr<T: IntParser>(i: &str) -> IResult<&str, AndExpr<T>, ParseError> {
     map(separated_list1(ws_sym('&'), not_expr), |conjuncts| {
         AndExpr { conjuncts }
     })
     .parse(i)
 }
 
-fn not_expr<T: IntParser>(i: &str) -> IResult<&str, NotExpr<T>> {
+fn not_expr<T: IntParser>(i: &str) -> IResult<&str, NotExpr<T>, ParseError> {
     alt((
         map(preceded((char('!'), multispace0), not_expr), |n| {
             NotExpr::Not(Box::new(n))
@@ -156,7 +159,7 @@ fn not_expr<T: IntParser>(i: &str) -> IResult<&str, NotExpr<T>> {
     .parse(i)
 }
 
-fn rel_expr<T: IntParser>(i: &str) -> IResult<&str, RelExpr<T>> {
+fn rel_expr<T: IntParser>(i: &str) -> IResult<&str, RelExpr<T>, ParseError> {
     map(
         pair(
             mem_expr,
@@ -170,13 +173,13 @@ fn rel_expr<T: IntParser>(i: &str) -> IResult<&str, RelExpr<T>> {
     .parse(i)
 }
 
-fn mem_expr<T: IntParser>(i: &str) -> IResult<&str, MemExpr<T>> {
+fn mem_expr<T: IntParser>(i: &str) -> IResult<&str, MemExpr<T>, ParseError> {
     map(
         pair(
             add_expr,
             opt(preceded(
                 multispace0,
-                preceded(map(tag("::"), |_| ()), preceded(multispace0, nat_set)),
+                preceded(map(tag("::"), |_| ()), preceded(multispace0, lit_set)),
             )),
         ),
         |(expr, set)| MemExpr { expr, set },
@@ -184,7 +187,7 @@ fn mem_expr<T: IntParser>(i: &str) -> IResult<&str, MemExpr<T>> {
     .parse(i)
 }
 
-fn nat_set<T: IntParser>(i: &str) -> IResult<&str, Vec<T>> {
+pub(crate) fn lit_set<T: IntParser>(i: &str) -> IResult<&str, Vec<T>, ParseError> {
     delimited(
         char('{'),
         delimited(
@@ -197,7 +200,7 @@ fn nat_set<T: IntParser>(i: &str) -> IResult<&str, Vec<T>> {
     .parse(i)
 }
 
-fn rel_op(i: &str) -> IResult<&str, RelOp> {
+fn rel_op(i: &str) -> IResult<&str, RelOp, ParseError> {
     alt((
         value(RelOp::Le, tag("<=")),
         value(RelOp::Ge, tag(">=")),
@@ -208,7 +211,7 @@ fn rel_op(i: &str) -> IResult<&str, RelOp> {
     .parse(i)
 }
 
-fn add_expr<T: IntParser>(i: &str) -> IResult<&str, AddExpr<T>> {
+fn add_expr<T: IntParser>(i: &str) -> IResult<&str, AddExpr<T>, ParseError> {
     map(
         pair(
             mult_expr::<T>,
@@ -222,11 +225,11 @@ fn add_expr<T: IntParser>(i: &str) -> IResult<&str, AddExpr<T>> {
     .parse(i)
 }
 
-fn add_op(i: &str) -> IResult<&str, AddOp> {
+fn add_op(i: &str) -> IResult<&str, AddOp, ParseError> {
     alt((value(AddOp::Add, char('+')), value(AddOp::Sub, char('-')))).parse(i)
 }
 
-fn mult_expr<T: IntParser>(i: &str) -> IResult<&str, MultExpr<T>> {
+fn mult_expr<T: IntParser>(i: &str) -> IResult<&str, MultExpr<T>, ParseError> {
     map(
         pair(
             unary_expr::<T>,
@@ -240,7 +243,7 @@ fn mult_expr<T: IntParser>(i: &str) -> IResult<&str, MultExpr<T>> {
     .parse(i)
 }
 
-fn mult_op(i: &str) -> IResult<&str, MultOp> {
+fn mult_op(i: &str) -> IResult<&str, MultOp, ParseError> {
     alt((
         value(MultOp::Mul, char('*')),
         value(MultOp::Div, char('/')),
@@ -249,7 +252,7 @@ fn mult_op(i: &str) -> IResult<&str, MultOp> {
     .parse(i)
 }
 
-fn unary_expr<T: IntParser>(i: &str) -> IResult<&str, UnaryExpr<T>> {
+fn unary_expr<T: IntParser>(i: &str) -> IResult<&str, UnaryExpr<T>, ParseError> {
     map(
         pair(
             map(
@@ -263,7 +266,7 @@ fn unary_expr<T: IntParser>(i: &str) -> IResult<&str, UnaryExpr<T>> {
     .parse(i)
 }
 
-fn base_expr<T: IntParser>(i: &str) -> IResult<&str, BaseExpr<T>> {
+fn base_expr<T: IntParser>(i: &str) -> IResult<&str, BaseExpr<T>, ParseError> {
     alt((
         map(T::nom_parser(), BaseExpr::Lit),
         map(preceded(char('?'), parse_id), BaseExpr::Var),
@@ -279,7 +282,7 @@ fn base_expr<T: IntParser>(i: &str) -> IResult<&str, BaseExpr<T>> {
     .parse(i)
 }
 
-fn parse_id(i: &str) -> IResult<&str, String> {
+pub(crate) fn parse_id(i: &str) -> IResult<&str, String, ParseError> {
     map(
         recognize(pair(
             satisfy(|c: char| c.is_ascii_alphabetic()),
@@ -290,12 +293,13 @@ fn parse_id(i: &str) -> IResult<&str, String> {
     .parse(i)
 }
 
-fn ws_sym<'a>(c: char) -> impl Parser<&'a str, Output = char, Error = NomError<&'a str>> {
+pub(crate) fn ws_sym<'a>(c: char) -> impl Parser<&'a str, Output = char, Error = ParseError> {
     delimited(multispace0, char(c), multispace0)
 }
 
 #[cfg(test)]
 mod tests {
+    use nom::combinator::all_consuming;
     use nom::error::ErrorKind as NomErrorKind;
     use pretty_assertions::assert_eq;
     use rstest::*;
@@ -397,8 +401,8 @@ mod tests {
         }
     }
 
-    fn vx_rel_single(rel: RelExpr<u8>) -> ValueExpr<u8> {
-        ValueExpr::Bool(BoolExpr {
+    fn vx_rel_single(rel: RelExpr<u8>) -> ValueAst<u8> {
+        ValueAst::Bool(BoolExpr {
             disjuncts: vec![AndExpr {
                 conjuncts: vec![NotExpr::Rel(rel)],
             }],
@@ -407,10 +411,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::star("*", ValueExpr::Wildcard)]
-    #[case::num("0", ValueExpr::Lit(0))]
-    #[case::set("{0,1,2}", ValueExpr::NatSet(vec![0, 1, 2]))]
-    #[case::set_spaced("{ 0, 1 ,2}", ValueExpr::NatSet(vec![0, 1, 2]))]
+    #[case::star("*", ValueAst::Wildcard)]
+    #[case::num("0", ValueAst::Lit(0))]
+    #[case::set("{0,1,2}", ValueAst::LitSet(vec![0, 1, 2]))]
+    #[case::set_spaced("{ 0, 1 ,2}", ValueAst::LitSet(vec![0, 1, 2]))]
     #[case::sum("1+2", vx_rel_single(rel_only(mem(ax_lit_add(1, 2), None))))]
     #[case::sum_spaced("1 + 2", vx_rel_single(rel_only(mem(ax_lit_add(1, 2), None))))]
     #[case::diff("1-2", vx_rel_single(rel_only(mem(ax_lit_sub(1, 2), None))))]
@@ -425,25 +429,25 @@ mod tests {
     #[case::var_underscore("?h_", vx_rel_single(rel_only(mem_var("h_"))))]
     #[case::membership("?h + 0 :: {0,1}", vx_rel_single(rel_only(mem(ax_var_add("h", 0), Some(vec![0, 1])))))]
     #[case::double_neg("--0", vx_rel_single(rel_only(mem_nat(0))))]
-    #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueExpr::Bool(BoolExpr { disjuncts: vec![AndExpr { conjuncts:
+    #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueAst::Bool(BoolExpr { disjuncts: vec![AndExpr { conjuncts:
         vec![ NotExpr::Not(Box::new(NotExpr::Rel(rel_eq(mem_var("h"), mem_nat(0))))), NotExpr::Rel(rel_eq(mem_var("v"), mem_nat(1))) ] }] }))]
     #[case::paren_arith("(0 + 1) * 1", vx_rel_single(rel_only(mem(ax_paren_times(ax_lit_add(0, 1), 1), None))))]
-    fn test_parse_value_expr(#[case] input: &str, #[case] expected: ValueExpr<u8>) {
-        let result = value_expr(input);
+    fn test_value_dsl_ok(#[case] input: &str, #[case] expected: ValueAst<u8>) {
+        let result = value_dsl(input);
         assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input, result.clone().unwrap_err());
-        let (remaining, value) = result.unwrap(); 
+        let (remaining, value) = result.unwrap();
         assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input, remaining);
         assert_eq!(value, expected);
     }
 
     #[rstest]
-    #[case::literal("1#v3", ValueExpr::Lit(1), "#v3")]
-    fn test_value_expr_literal(
+    #[case::literal("1#v3", ValueAst::Lit(1), "#v3")]
+    fn test_value_dsl_literal(
         #[case] input: &str,
-        #[case] expected_value: ValueExpr<u8>,
+        #[case] expected_value: ValueAst<u8>,
         #[case] expected_remaining: &str,
     ) {
-        let result = value_expr::<u8>.parse("1#v3");
+        let result = value_dsl::<u8>.parse("1#v3");
         assert!(
             result.is_ok(),
             "{:?} should have succeeded, error: {:?}",
@@ -468,26 +472,34 @@ mod tests {
     #[case::bare_lt("<", NomErrorKind::Char)]
     #[case::bare_gt("<", NomErrorKind::Char)]
     #[case::leading_op("/ 3", NomErrorKind::Char)]
+    #[case::wildcard_num("* 3", NomErrorKind::Eof)]
     #[case::missing_id("? ", NomErrorKind::Char)]
     #[case::invalid_id_1("?&x ", NomErrorKind::Char)]
     #[case::invalid_id_2("?_x ", NomErrorKind::Char)]
     #[case::triple_q("???", NomErrorKind::Char)]
     #[case::empty_set("{}", NomErrorKind::Char)]
+    #[case::empty_mem("?h :: {}", NomErrorKind::Eof)]
     #[case::unclosed_paren_add("(0 + 1", NomErrorKind::Char)]
-    fn test_parse_value_expr_invalid(#[case] input: &str, #[case] expected_kind: NomErrorKind) {
-        let result = value_expr::<u8>(input);
+    fn test_parse_value_dsl_invalid(#[case] input: &str, #[case] expected_kind: NomErrorKind) {
+        let result = all_consuming(value_dsl::<u8>).parse(input);
         assert!(
             result.is_err(),
             "{:?} should have failed, output: {:?}",
             input,
             result.clone().unwrap()
         );
-        assert!(
-            matches!(result.clone(), Err(Err::Error(e)) if e.code == expected_kind),
-            "{:?} should have failed with error kind {:?}, got {:?}",
-            input,
-            expected_kind,
-            result.clone().unwrap_err().map(|e| e.code)
+        let got_kind = match &result {
+            Err(Err::Error(ParseError::NomError(k)))
+            | Err(Err::Failure(ParseError::NomError(k))) => *k,
+            Err(Err::Error(e)) | Err(Err::Failure(e)) => {
+                panic!("{input:?}: unexpected error variant {e:?}")
+            }
+            Err(Err::Incomplete(_)) => panic!("{input:?}: unexpected Incomplete"),
+            Ok(_) => unreachable!(),
+        };
+        assert_eq!(
+            got_kind, expected_kind,
+            "{input:?}: expected error kind {expected_kind:?}, got {got_kind:?}"
         );
     }
 }

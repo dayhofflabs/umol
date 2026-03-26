@@ -1,22 +1,34 @@
 //! Domain errors for DSL parsing.
 
-use nom::error::Error as NomError;
-use nom::Err;
+use nom::error::{ErrorKind as NomErrorKind, ParseError as NomParseError};
 use thiserror::Error;
 
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ParseError {
-    #[error("Invalid value expression {0}")]
-    InvalidValueExpr(String),
+    #[error("Invalid number")]
+    InvalidNumber,
+    #[error("Invalid bond order")]
+    InvalidBondOrder,
+    #[error("Unknown bond predicate")]
+    UnknownBondPredicate,
+    #[error("Duplicate {0} bond predicate")]
+    DuplicateBondPredicate(String),
+    #[error("Trailing content in bond string")]
+    TrailingContent,
     #[error("Incomplete input")]
     Incomplete,
+    #[error("Invalid value DSL: {0}")]
+    InvalidValueDsl(String),
+    #[error("Nom error: {0:?}")]
+    NomError(NomErrorKind),
 }
 
-impl ParseError {
-    pub(crate) fn value_from_nom(err: Err<NomError<&str>>) -> Self {
-        match err {
-            Err::Error(e) | Err::Failure(e) => ParseError::InvalidValueExpr(e.input.to_string()),
-            Err::Incomplete(_) => ParseError::Incomplete,
-        }
+impl<I> NomParseError<I> for ParseError {
+    fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
+        ParseError::NomError(kind)
+    }
+
+    fn append(_input: I, _kind: NomErrorKind, other: Self) -> Self {
+        other
     }
 }

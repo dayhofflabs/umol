@@ -188,7 +188,7 @@ id  ::= [a-zA-Z][a-zA-Z0-9_]*
 
 **Top-level `nat`.** A **`nat`** forms a complete top-level **`value-expr`** only when it is **cut** by **end of the substring being tokenized** or by the **next predicate** (**`#`** *tag* on the atom-string / bond-string), after optional whitespace — e.g. **`#h1#v3`** yields **`1`** then **`3`**. If the next non-whitespace character is anything else (e.g. **`+`** in **`1+2`**), parsing **MUST NOT** treat the **`nat`** as this alternative; it falls through to **`bool-expr`**. Implementations **MAY** represent this form as **`Lit`** distinct from a trivial relational **`bool-expr`**. The common **Ground** case (**`#h3`**, **`#v0`**, …) is typically this shape.
 
-**Top-level `nat-set`.** A **`value-expr`** may be **only** a **`nat-set`** (after the usual ignored whitespace between **`value-expr`** tokens, **§7.1**). It denotes a **finite numeric disjunction** for the **one** quantity fixed by the enclosing predicate tag (**§7.3**, **§7.5**): that quantity **MUST** equal one of the listed **`nat`** values. This is the same constraint **shape** as **`order-set`** for bond **order** and **`element-set`** for the **element** prefix, applied at the **predicate payload** level (e.g. **`#h{1,2,3}`** with payload **`{1,2,3}`**). It **MUST NOT** introduce a numeric **`?id`**; implementations **MAY** lower it to **`bool-expr`** internally. The form ***arith* `::` *nat-set*** on **`mem-expr`** is unchanged: it constrains the **arithmetic** value on the left of **`::`**, not an implicit slot quantity by bare **`{…}`** alone.
+**Top-level `nat-set`.** A **`value-expr`** may be **only** a **`nat-set`** (after the usual ignored whitespace between **`value-expr`** tokens, **§7.1**). It denotes a **finite numeric disjunction** for the **one** quantity fixed by the enclosing predicate tag (**§7.3**, **§7.5**): that quantity **MUST** equal one of the listed **`nat`** values. This is the same constraint **shape** as a top-level **`nat-set`** in **bond-string** **`order`** (**§7.5**) and **`element-set`** for the **element** prefix, applied at the **predicate payload** level (e.g. **`#h{1,2,3}`** with payload **`{1,2,3}`**). It **MUST NOT** introduce a numeric **`?id`**; implementations **MAY** lower it to **`bool-expr`** internally. The form ***arith* `::` *nat-set*** on **`mem-expr`** is unchanged: it constrains the **arithmetic** value on the left of **`::`**, not an implicit slot quantity by bare **`{…}`** alone.
 
 **`unary-expr`** is **`sign`*** **`base-expr`**: zero or more leading **`+`** / **`-`**, then **`nat`**, **`?id`**, or parenthesized **`add-expr`**. Examples: **`#c+1`**, **`#c-2`**, **`#c--1`**. A **`sign`** with **no** following **`base-expr`** is **invalid** in the general grammar; **`#c`** additionally accepts a payload consisting **only** of **`+`** or **`-`** (after trimming whitespace) as **+1** or **−1** (**§7.3**).
 
@@ -250,7 +250,7 @@ When a **predicate** (**§7.3**, **§7.5**) allows a **decimal-only** payload an
 | Atom tag | Omitted numeral = 1 (decimal-only payloads) |
 |----------|-----------------------------------------------|
 | **`#c`** | **no** — charge **MUST** be explicit (**`#c0`**, **`#c+`**, **`#c-`**, **`#c+2`**, **`#c-2`**, …); empty **`#c`** is **invalid** |
-| **`#h`** | yes, when the payload is decimal-only; **`#h:`**, **`#h*`**, etc. are **special** (**§7.3**) |
+| **`#h`** | yes, when the payload is decimal-only; **`#h=`**, **`#h*`**, etc. are **special** (**§7.3**) |
 | **`#n` `#u` `#s` `#v` `#d` `#r` `#m`** | yes, when the payload is decimal-only |
 | **`#a`** | yes when decimal-only; **`#a*`**, **`#a!`** are **special** (**§7.3**) |
 | **`#i`** | **no** — isotope mass requires a non-empty **`nat`** (or non-**Ground** **`value-expr`** where allowed) |
@@ -261,11 +261,10 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 ### 5.4 Wildcards, sets, logic, arithmetic
 
-- The only **wildcard** in **`value-expr`** is **`*`**, aside from **`element`** / **`order`** **`element-set`** / **`element-bind`** / **`order-set`** / **`order-bind`** (**§7.4**, **§7.5**).
-- **No** regex-style `{m,n}` on the string. **`{` `}`** in **`value-expr`** is either a top-level **`nat-set`** (this section) or **`nat-set`** after **`::`** on **`mem-expr`**. **`{` `}`** in **element** position is **element-set** (**§7.4**). **`{` `}`** in **order** is **order-set** (**§7.5**).
-- **`bool-expr`**: **infix** **`&` `|` `!`**, **relations**, **`::`**, **`+ - * / %`**, unary **`-`**, **`?id`**, **`nat`**, **`(`** **`add-expr`** **`)`**. **Nominal** **element** binds stay in **`element-ref`** / **`element-bind`** (**§7.4**).
+- The **`*`** **wildcard** is allowed in **`value-expr`**, **`element`**, and **`order`**
+- **`bool-expr`**: **infix** **`&` `|` `!`**, **relations**, **`::`**, **`+ - * / %`**, unary **`-`**, **`?id`**, **`nat`**, **`(`** **`add-expr`** **`)`**.
 
-**Ground:** no **`bool-expr`** (no **`?`**, **`::`**, relations, logic), no **`element-bind`**, no **`element-ref`**; predicate payloads are **`decimal-tail`** / **`nat`** / top-level **`nat-set`** (and tag-specific literals such as **`#h:`**) only where allowed.
+**Ground:** no **`bool-expr`** (no **`?`**, **`::`**, relations, logic), no **`element-bind`**, no **`element-ref`**; predicate payloads are **`decimal-tail`** / **`nat`** / top-level **`nat-set`** (and tag-specific literals such as **`#h=`**) only where allowed.
 
 **Query:** **`bool-expr`** where allowed; **`decimal-tail`**; **element** / **order** extensions as allowed.
 
@@ -309,7 +308,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Payload extraction.** A **predicate** is **`#`**, one **tag** character **`[A-Za-z_]`**, and a **payload** consisting of all following characters up to (but not including) the **next** **`#`** or **end of string**, after **whitespace normalization** for the purpose of **tokenizing** the payload as **`value-expr`**: the payload text **MAY** contain ignored whitespace between **`value-expr`** tokens as in **§5**. The **payload** **MUST NOT** contain **`#`**.
 
-**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`C#h:`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**, **`(?e :: {Cl,Br})#v(?q == 2)`**.
+**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`C#h=`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**, **`(?e :: {Cl,Br})#v(?q == 2)`**.
 
 - A **`nat`** and an **`id`** contain **no** internal whitespace.
 - A **relational** token is **`<=`**, **`>=`**, **`==`**, or a **single** **`<`** or **`>`** that is **not** part of **`<=` `>=`**. **Multi-character** tokens are one lexical unit.
@@ -348,7 +347,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Bond order** (**§7.6**) uses a **discrete** model; **fractional** bond orders **MUST NOT** appear in the **bond-string**. **Aromatic** connectivity **MUST NOT** be encoded as a bond **order** in **`#bond`**; use the molecule map’s **`:aromatic`** section (**§4**) and ordinary **`:bonds`** entries.
 
-### 7.3 Atom string
+### 7.3 Atom subgrammar
 
 ```
 atom-string ::= element atom-predicate*
@@ -374,7 +373,7 @@ tag ::= [A-Za-z_]
 
 | Form | Tag | Meaning |
 |------|-----|---------|
-| **`:`** (payload is a single colon) | **`#h`** | **Normal / valence-model implicit hydrogen**: implicit H count is whatever the valence model assigns for this **`element`** and the rest of the atom’s fields (**Query** / **Rule** indeterminacy **MAY** apply). |
+| **`=`** (payload is a single equals sign) | **`#h`** | **Normal / valence-model implicit hydrogen**: implicit H count is whatever the valence model assigns for this **`element`** and the rest of the atom’s fields (**Query** / **Rule** indeterminacy **MAY** apply). |
 | **`*`** | **`#h`** | **Wildcard** implicit H count (**Query** / **Rule**). |
 | **`*`** | **`#a`** | **Wildcard** aromatic π contribution (**Query** / **Rule**). |
 | **`!`** | **`#a`** | **Non-numeric** aromatic marker: atom participates in an aromatic π system without fixing a numeric **`#a`** contribution (**Ground** / **Query** / **Rule** per implementation). |
@@ -386,7 +385,7 @@ Other **`#h`** / **`#a`** payloads use the usual **`value-expr`** / **`decimal-t
 |-----|---------|
 | **`#i`** | Isotope mass |
 | **`#c`** | Formal charge |
-| **`#h`** | Implicit H count; **special** **`#h:`**, **`#h*`** (**§7.3**) |
+| **`#h`** | Implicit H count; **special** **`#h=`**, **`#h*`** (**§7.3**) |
 | **`#n`** | Lone pairs (nonbonding pair count) |
 | **`#u`** | Unpaired electron count |
 | **`#s`** | Spin multiplicity (2S+1) |
@@ -398,9 +397,9 @@ Other **`#h`** / **`#a`** payloads use the usual **`value-expr`** / **`decimal-t
 
 **Convention:** use **lowercase** ASCII for **`tag`** letters in authoring.
 
-### 7.4 Element and parallel **`order`** shape
+### 7.4 Element and bond **`order`** (via **`value-expr`**)
 
-The **`element`** nonterminal (**atom-string** prefix) and the **`order`** nonterminal (**bond-string** prefix, **§7.5**) share the **same core five alternatives**: **literal** | **wildcard `*`** | **brace set** | **`(?` *id* `::` *set* `)`** | **`(?` *id* `)`**. Only the **literal** and **set** entry types differ (**`element-literal`** / **`element-set`** vs **`nat`** / **`order-set`**). **`order`** **additionally** allows **`value-expr`** as a **sixth** alternative (**§7.5**) for **arithmetic** on bond order (e.g. **`?o+1`**).
+The **`element`** nonterminal (**atom-string** prefix) is **literal** | **wildcard `*`** | **brace set** | **`(?` *id* `::` *set* `)`** | **`(?` *id* `)`** (**§7.4** grammar below). The **bond-string** **`order`** prefix (**§7.5**) is a single **`value-expr`** (**§5**), which **subsumes** literal **`nat`**, **`*`**, brace **`nat-set`**, **`(?` *id* `::` *set* `)`**, **`(?` *id* `)`**, and **arithmetic** / logic (e.g. **`1+1`**, **`?o+1`**) where allowed by context.
 
 ```
 element ::= element-literal | '*' | element-set | element-bind | element-ref
@@ -418,49 +417,46 @@ element-literal ::= [A-Z][a-z]*
 
 Optional ASCII whitespace inside **`element-bind`** after **`(`**, before **`)`**, around **`::`**, and around commas in the inner **`element-set`**, per **§7.1**.
 
-### 7.5 Bond string
+### 7.5 Bond subgrammar
 
-**Bond-string** uses a **separate** namespace from **atom-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on bonds (**§7.2**). The **`order`** prefix parallels **`element`** (**§7.4**) for **literal** / **`*`** / **brace set** / **`(?` *id* `::` *set* `)`** / **`(?` *id* `)`**; **`order`** also allows a full **`value-expr`** so bond order **MAY** be written with **arithmetic** (e.g. **`1+1`**, **`?o+1`**).
+**Bond-string** uses a **separate** namespace from **atom-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on bonds (**§7.2**). The **`order`** prefix is a **`value-expr`** (**§5**); see **§7.4** for the parallel with **`element`**.
 
 ```
 bond-string ::= order bond-predicate*
 
 bond-predicate ::= '#' tag payload
 
-order ::= '*' | order-set | order-bind | order-ref | value-expr
-
-order-set ::= '{' order-entry (',' order-entry)* '}'
-order-entry ::= nat
-order-bind ::= '(' '?' id '::' order-set ')'
-order-ref ::= '(' '?' id ')'
+order ::= value-expr
 ```
 
-**Segmentation.** Let **`order-text`** be the substring of the **`bond-string`** from the first character after any leading whitespace up to (but not including) the first **`#`** that starts a **`bond-predicate`** (**`#`** immediately followed by **`tag`**), or the whole **trimmed** string if there is no such **`#`**. **`order-text`** **MUST** match **`order`**.
+**Segmentation.** Let **`order-text`** be the substring of the **`bond-string`** from the first character after any leading whitespace up to (but not including) the first **`#`** that starts a **`bond-predicate`** (**`#`** immediately followed by a **tag** letter, with **no** whitespace between **`#`** and the tag), or the whole **trimmed** string if there is no such **`#`**. **`order-text`** **MUST** be parsed as **`value-expr`** (**§5**).
 
-**Parsing `order-text`:** after trimming, if it begins with **`{`**, parse **`order-set`**; if with **`(`**, parse **`order-bind`** or **`order-ref`**; if it is **exactly** **`*`**, the order is a **wildcard**; otherwise parse **`order-text`** in full as **`value-expr`** (**§5**).
+**Bond predicates.** **Zero or more** **`bond-predicate`** units follow **`order`**. **At most one** predicate per **tag** letter among **`c`**, **`u`**, **`s`**. **Canonical** predicate order (stable serialization): **`#c`**, **`#u`**, **`#s`**. No other **`#tag`** letters are defined in **bond-string** in this revision.
 
-- **`order-set`**: **one or more** **`order-entry`** values; in **Ground** each **MUST** be **1**, **2**, **3**, or **4**.
-- **Zero or more** **`bond-predicate`** units follow. **At most one** per **tag** kind in the table below. In this revision these three tags are the **only** defined bond predicates.
-- **`payload`** is parsed as **`value-expr`** (**§5**) where allowed.
+**Whitespace** between **`#`** and the **tag** letter is **invalid** (**§7.1**).
+
+**`#c` (bond formal charge).** After **`#c`**, parse **either** a full **`value-expr`** (**§5**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`value-expr`**, not **`#c+`** followed by junk.)
+
+**`#u`** / **`#s`.** After **`#u`** or **`#s`**, parse a **`value-expr`** (**§5**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.3** for decimal-only slots). **No** extra lookahead is required beyond **`value-expr`** termination and the next predicate or end of string.
 
 | Tag | Meaning (bond namespace) |
 |-----|---------------------------|
-| **`#c`** | Bond formal charge |
-| **`#u`** | Unpaired electrons (bond centered) |
-| **`#s`** | Spin multiplicity (2S+1) (bond centered) |
+| **`#c`** | Bond formal charge (**`i8`**, **§7.2**) |
+| **`#u`** | Unpaired electrons (bond centered); **`u8`** |
+| **`#s`** | Spin multiplicity (2S+1) (bond centered); **`u8`** |
 
-**Bond order values** in **`#bond`** **MUST NOT** be **fractional** after evaluation. **Aromatic** bond **order** as a distinct category **MUST NOT** be used in **`order`**; use **§4** instead.
+**Bond order values** in **`#bond`** **MUST NOT** be **fractional** after evaluation (**§7.6**). **Aromatic** bond **order** as a distinct category **MUST NOT** be used in **`order`**; use **§4** instead.
 
 ### 7.6 Bond order
 
-**Semantic model** for **covalent** bond order in **`#bond`**:
+**Semantic model** for **covalent** bond order in **`#bond`** (the **`order`** nonterminal is **`value-expr`**, **§7.5**):
 
-- **Discrete** orders **1**, **2**, **3**, and **4** after any **arithmetic** and binding (**§7.5**).
-- **Any** order: **`*`** in **`order`** (**Query** / **Rule**).
-- **Finite set**: **`order-set`** (e.g. **`{1,2,3}`** or **`{2}`**).
-- **Arithmetic and constraints**: **`value-expr`** as **`order`**, including **`add-expr`** (e.g. **`1+1`**, **`?o+1`**), **`::`** **`nat-set`**, **`bool-expr`**, and **`?id`** binds, subject to **Ground** restrictions below.
+- **Discrete** orders **1**, **2**, **3**, and **4** after any **arithmetic** and binding.
+- **Any** order: **`*`** as **`value-expr`** (**Query** / **Rule**).
+- **Finite set**: top-level **`nat-set`** in **`value-expr`** (e.g. **`{1,2,3}`** or **`{2}`**).
+- **Arithmetic and constraints**: full **`value-expr`** on **`order`**, including **`add-expr`**, **`::`** **`nat-set`**, **`bool-expr`**, and **`?id`** binds, subject to **Ground** restrictions below.
 
-In **Ground**, **`order-text`** **MUST** denote a single definite order in **{1,2,3,4}**: **`*`**, **`order-set`** whose entries are **only** **1**–**4**, **`order-bind`** / **`order-ref`** only where the implementation resolves them to one value, or **`value-expr`** that is **only** **`sign`*** **`nat`** with value **1**–**4** (no **`?`**, **`::`**, relations, logic, or **`(`** … **`)`**). **Query** / **Rule** **MAY** use the full **`value-expr`** grammar on **`order`**.
+In **Ground**, **`order-text`** **MUST** denote a single definite order in **{1,2,3,4}**: **`*`**, a top-level **`nat-set`** whose entries are **only** **1**–**4**, **`(?` *id* `::` *set* `)`** / **`(?` *id* `)`** only where the implementation resolves them to one value, or **`value-expr`** that is **only** **`sign`*** **`nat`** with value **1**–**4** (no **`?`**, **`::`**, relations, logic, or **`(`** … **`)`**). **Query** / **Rule** **MAY** use the full **`value-expr`** grammar on **`order`**.
 
 This section does **not** define **`bond-keyword`** shorthands; see **§7.7**.
 
