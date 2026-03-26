@@ -62,5 +62,5 @@
 | 57-sssr-needed-2026-03-11.md                                   | Informational | 2026-03-11   |
 | 58-aromaticity-perception-2026-03-11.md                        | Completed     | 2026-03-15   |
 | 59-aromaticity-perception-review-2026-03-12.md                 | Completed     | 2026-03-15   |
-| 60-molecule-builder-dsl-2026-03-21.md                          | Active        | 2026-03-21   |
+| 60-molecule-builder-dsl-2026-03-21.md                          | Active        | 2026-03-24   |
 | 61-spin-state-builder-2026-03-22.md                            | Completed     | 2026-03-22   |

@@ -57,7 +57,7 @@ impl SpinMultiplicity {
 
 /// Shorthand macro for spin-state literals parsed via `SpinState::from_str`.
 ///
-// Syntax: `s{^nxm}` (e.g. `s{^2x3}`)
+/// Syntax: `^nxm` (e.g. `^2x3`).
 #[macro_export]
 macro_rules! spin {
     ($s:expr) => {{
@@ -68,7 +68,7 @@ macro_rules! spin {
 /// Error for invalid spin-state values and parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum SpinStateError {
-    #[error("expected spin literal format 's{{^nxm}}'")]
+    #[error("expected spin literal format '^nxm'")]
     InvalidFormat,
 
     #[error("expected digits after '^'")]
@@ -112,7 +112,7 @@ pub enum SpinStateError {
 /// Invariant: `m <= n+1` and `m` has the same parity as `n+1`, where
 /// `m = multiplicity.multiplicity()` and `n = unpaired_electrons`.
 ///
-/// String format (canonical): `"s{^nxm}"`, e.g. `"s{^2x1}"`, `"s{^0x1}"`.
+/// String format (canonical): `"^nxm"`, e.g. `"^2x1"`, `"^0x1"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SpinState {
     unpaired_electrons: u8,
@@ -238,7 +238,7 @@ impl fmt::Display for SpinState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "s{{^{}x{}}}",
+            "^{}x{}",
             self.unpaired_electrons,
             self.multiplicity.multiplicity()
         )
@@ -249,16 +249,12 @@ impl FromStr for SpinState {
     type Err = SpinStateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let trimmed = s.trim();
-        let body = trimmed
-            .strip_prefix("s{")
-            .and_then(|rest| rest.strip_suffix('}'))
-            .ok_or(SpinStateError::InvalidFormat)?;
-        parse_spin_literal(body)
+        parse_spin_literal(s.trim())
     }
 }
 
-fn parse_spin_literal(body: &str) -> Result<SpinState, SpinStateError> {
+/// Parses canonical spin text `^nxm` (e.g. `^0x1`, `^2x3`).
+pub fn parse_spin_literal(body: &str) -> Result<SpinState, SpinStateError> {
     let mut rest = body.trim();
     let mut unpaired: Option<u8> = None;
     let mut multiplicity: Option<SpinMultiplicity> = None;
@@ -327,8 +323,8 @@ impl<'de> Deserialize<'de> for SpinState {
 
 #[cfg(test)]
 mod tests {
-    use rstest::*;
     use pretty_assertions::assert_eq;
+    use rstest::*;
 
     use super::*;
 
@@ -388,10 +384,7 @@ mod tests {
 
     #[test]
     fn test_spin_macro() {
-        assert_eq!(
-            spin!("s{^2x3}"),
-            SpinState::new(2, SpinMultiplicity::Triplet)
-        );
+        assert_eq!(spin!("^2x3"), SpinState::new(2, SpinMultiplicity::Triplet));
     }
 
     #[rstest]
@@ -475,11 +468,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(0, SpinMultiplicity::Singlet, "s{^0x1}")]
-    #[case(1, SpinMultiplicity::Doublet, "s{^1x2}")]
-    #[case(2, SpinMultiplicity::Singlet, "s{^2x1}")]
-    #[case(2, SpinMultiplicity::Triplet, "s{^2x3}")]
-    #[case(3, SpinMultiplicity::Quartet, "s{^3x4}")]
+    #[case(0, SpinMultiplicity::Singlet, "^0x1")]
+    #[case(1, SpinMultiplicity::Doublet, "^1x2")]
+    #[case(2, SpinMultiplicity::Singlet, "^2x1")]
+    #[case(2, SpinMultiplicity::Triplet, "^2x3")]
+    #[case(3, SpinMultiplicity::Quartet, "^3x4")]
     fn test_spin_state_to_string(
         #[case] n: u8,
         #[case] m: SpinMultiplicity,
@@ -489,12 +482,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case("s{^0x1}", 0, SpinMultiplicity::Singlet)]
-    #[case("s{^1x2}", 1, SpinMultiplicity::Doublet)]
-    #[case("s{^2x1}", 2, SpinMultiplicity::Singlet)]
-    #[case("s{^2x3}", 2, SpinMultiplicity::Triplet)]
-    #[case("s{^3x4}", 3, SpinMultiplicity::Quartet)]
-    #[case("s{ ^2 x3 }", 2, SpinMultiplicity::Triplet)]
+    #[case("^0x1", 0, SpinMultiplicity::Singlet)]
+    #[case("^1x2", 1, SpinMultiplicity::Doublet)]
+    #[case("^2x1", 2, SpinMultiplicity::Singlet)]
+    #[case("^2x3", 2, SpinMultiplicity::Triplet)]
+    #[case("^3x4", 3, SpinMultiplicity::Quartet)]
+    #[case(" ^2 x3 ", 2, SpinMultiplicity::Triplet)]
     fn test_spin_state_parse(
         #[case] input: &str,
         #[case] expected_n: u8,
@@ -509,12 +502,12 @@ mod tests {
     #[case("")]
     #[case("singlet")]
     #[case("0")]
-    #[case("s{}")]
-    #[case("s{^2}")]
-    #[case("s{x3}")]
-    #[case("s{^2x2}")] // invalid parity for n=2
-    #[case("s{^x3}")]
-    #[case("s{^2x}")]
+    #[case("^")]
+    #[case("^2")]
+    #[case("x3")]
+    #[case("^2x2")] // invalid parity for n=2
+    #[case("^x3")]
+    #[case("^2x")]
     fn test_spin_state_parse_error(#[case] input: &str) {
         assert!(input.parse::<SpinState>().is_err());
     }
@@ -542,21 +535,21 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(vec![], spin!("s{^0x1}"))]
-    #[case(vec![spin!("s{^1x2}")], spin!("s{^1x2}"))]
-    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^2x3}"))]
-    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x7}"))]
-    #[case(vec![spin!("s{^2x1}"), spin!("s{^1x2}")], spin!("s{^3x4}"))]
+    #[case(vec![], spin!("^0x1"))]
+    #[case(vec![spin!("^1x2")], spin!("^1x2"))]
+    #[case(vec![spin!("^1x2"), spin!("^1x2")], spin!("^2x3"))]
+    #[case(vec![spin!("^2x3"), spin!("^2x3"), spin!("^2x3")], spin!("^6x7"))]
+    #[case(vec![spin!("^2x1"), spin!("^1x2")], spin!("^3x4"))]
     fn test_high_spin(#[case] states: Vec<SpinState>, #[case] expected: SpinState) {
         let hs = SpinState::high_spin(&states).unwrap();
         assert_eq!(hs, expected);
     }
 
     #[rstest]
-    #[case(spin!("s{^0x1}"), 0, true)]
-    #[case(spin!("s{^1x2}"), 1, true)]
-    #[case(spin!("s{^0x1}"), 1, false)]
-    #[case(spin!("s{^2x3}"), 0, false)]
+    #[case(spin!("^0x1"), 0, true)]
+    #[case(spin!("^1x2"), 1, true)]
+    #[case(spin!("^0x1"), 1, false)]
+    #[case(spin!("^2x3"), 0, false)]
     fn test_is_compatible_with(
         #[case] state: SpinState,
         #[case] electrons: u8,
@@ -567,17 +560,17 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(vec![], spin!("s{^0x1}"), true)]
-    #[case(vec![], spin!("s{^1x2}"), false)]
-    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^0x1}"), false)]
-    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^2x1}"), true)]
-    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^2x3}"), true)]
-    #[case(vec![spin!("s{^1x2}"), spin!("s{^1x2}")], spin!("s{^4x5}"), false)]
-    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x1}"), true)]
-    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x3}"), true)]
-    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x5}"), true)]
-    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^6x7}"), true)]
-    #[case(vec![spin!("s{^2x3}"), spin!("s{^2x3}"), spin!("s{^2x3}")], spin!("s{^1x2}"), false)]
+    #[case(vec![], spin!("^0x1"), true)]
+    #[case(vec![], spin!("^1x2"), false)]
+    #[case(vec![spin!("^1x2"), spin!("^1x2")], spin!("^0x1"), false)]
+    #[case(vec![spin!("^1x2"), spin!("^1x2")], spin!("^2x1"), true)]
+    #[case(vec![spin!("^1x2"), spin!("^1x2")], spin!("^2x3"), true)]
+    #[case(vec![spin!("^1x2"), spin!("^1x2")], spin!("^4x5"), false)]
+    #[case(vec![spin!("^2x3"), spin!("^2x3"), spin!("^2x3")], spin!("^6x1"), true)]
+    #[case(vec![spin!("^2x3"), spin!("^2x3"), spin!("^2x3")], spin!("^6x3"), true)]
+    #[case(vec![spin!("^2x3"), spin!("^2x3"), spin!("^2x3")], spin!("^6x5"), true)]
+    #[case(vec![spin!("^2x3"), spin!("^2x3"), spin!("^2x3")], spin!("^6x7"), true)]
+    #[case(vec![spin!("^2x3"), spin!("^2x3"), spin!("^2x3")], spin!("^1x2"), false)]
     fn test_is_constructible_from(
         #[case] states: Vec<SpinState>,
         #[case] target: SpinState,

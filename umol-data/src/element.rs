@@ -27,7 +27,7 @@ static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, (i8, i8), u8, u8); 11
     (1, 1, 1.0080, "H", 1, 1, 1, 1, (-1, 1), 1, 0),    // H
     (2, 4, 4.0026, "He", 1, 32, 0, 0, (0, 0), 0, 0),   // He: no valence electrons
     (3, 7, 6.94, "Li", 2, 1, 1, 1, (-1, 1), 1, 1),     // Li
-    (4, 9, 9.0122, "Be", 2, 2, 2, 2, (0, 2), 1, 2),   // Be
+    (4, 9, 9.0122, "Be", 2, 2, 2, 2, (0, 2), 1, 2),    // Be
     (5, 11, 10.81, "B", 2, 27, 3, 4, (-3, 3), 1, 4),   // B
     (6, 12, 12.011, "C", 2, 28, 4, 4, (-4, 1), 2, 4),  // C
     (7, 14, 14.007, "N", 2, 29, 5, 4, (-3, 1), 3, 4),  // N
@@ -859,9 +859,9 @@ macro_rules! e {
 #[allow(clippy::too_many_arguments)]
 mod tests {
     use float_cmp::*;
+    use pretty_assertions::assert_eq;
     use rstest::*;
     use serde_json;
-    use pretty_assertions::assert_eq;
 
     use super::*;
 

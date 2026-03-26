@@ -11,6 +11,8 @@ LOD = "LOD"
 sir = "sir"
 gir = "gir"
 mis = "mis"
+edn = "edn"
+EDN = "EDN"
 UNCATALOGUED = "UNCATALOGUED"
 # Element symbols
 H = "H"

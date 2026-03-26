@@ -2,6 +2,10 @@
 
 Version 1.1 (2026-02-12)
 
+### Note
+
+Review the BALSA specification [ChemRxiv](https://doi.org/10.26434/chemrxiv-2022-01ltp)
+
 ### Preface
 
 This document is not intended as an extension or alternative to the official OpenSMILES specification (http://opensmiles.org/opensmiles.html). Rather, it formalizes aspects of the official spec where the original is ambiguous or lacks formal structure, providing precise lexical rules, grammar, and semantic constraints suitable for implementation.

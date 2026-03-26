@@ -3,82 +3,65 @@ description: general coding guidelines
 alwaysApply: true
 ---
 
-## Do not write code unless explicitly asked
+1. Do not write code unless explicitly asked
 
-- **NEVER** proceed with an implementation as a response to a "how?" question.
-- Describe implementation design before coding if it was not discussed before.
-- Only write enough code to fulfill the user requirements.
-- Do not "future-proof" code. Ask whether edge cases need to be considered.
-- Avoid superfluous and excessive commenting of the code; make the actual code legible instead.
+A. **NEVER** proceed with an implementation as a response to a "how?" question.
+B. Describe implementation design before coding if it was not discussed before.
+C. Only write enough code to fulfill the user requirements.
+D. Do not "future-proof" code. Ask whether edge cases need to be considered.
+E. Avoid superfluous and excessive commenting of the code; make the actual code legible instead.
 
-## Do not assume, ask
+2. Do not assume, ask
 
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+A. State your assumptions explicitly. If uncertain, ask.
+B. If multiple interpretations exist, present them - don't pick silently.
+C. If a simpler approach exists, say so. Push back when warranted.
+D. If something is unclear, stop. Name what's confusing. Ask.
 
-## Do not take initiative in being the architect
+3. Do not take initiative in being the architect
 
-- Write minimum code that solves the problem. Nothing speculative.
-- **NEVER** change the design based on your internal deliberations.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-- Ignore backward compatibility in this project.
+A. Write minimum code that solves the problem. Nothing speculative.
+B. **NEVER** change the design based on your internal deliberations.
+C. No "flexibility" or "configurability" that wasn't requested.
+D. No error handling for impossible scenarios.
+E. If you write 200 lines and it could be 50, rewrite it.
+F. **NEVER** consider backward compatibility in design decisions
 
-## Surgical Changes
+4. Surgical Changes
 
-- Touch only what you must. Clean up only your own mess.
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+A. Touch only what you must. Clean up only your own mess.
+B. Don't "improve" adjacent code, comments, or formatting.
+C. Don't refactor things that aren't broken.
+D. Match existing style, even if you'd do it differently.
+E. If you notice unrelated dead code, mention it - don't delete it.
+F. Remove imports/variables/functions that YOUR changes made unused.
+G. Don't remove pre-existing dead code unless asked.
 
-## Do not reduce or redefine scope
+5. Do not reinvent wheels
 
-- **DO NOT** create placeholder code just to cover a task. All coding tasks imply real coding,
-  not placeholder code.
-- **DO NOT** mark code tasks as completed based on placeholder code.
-- **DO NOT** remove or simplify code during refactors to keep the tests passing. Break such
-  refactor tasks into multiple steps, accepting that tests will not pass after the first step.
+A. Before writing new code, check whether the codebase already provides the needed functionality.
+B. **DO NOT** reimplement logic that existing functions, methods, or crates already handle.
+C. Prefer calling existing code over rolling your own, even if the existing API isn't a perfect fit.
+D. If in doubt whether something already exists, search first and ask.
 
-## Do not reinvent wheels
+6. Use modern Rust (edition 2021) and leverage the ecosystem.
 
-- Before writing new code, check whether the codebase already provides the needed functionality.
-- **DO NOT** reimplement logic that existing functions, methods, or crates already handle.
-- Prefer calling existing code over rolling your own, even if the existing API isn't a perfect fit.
-- If in doubt whether something already exists, search first and ask.
+A. Use <module>.rs for file names instead of <module>/mod.rs.
+B. Prefer high-quality external crates to manual code. If in doubt, ask.
+C. Use `rstest` table tests instead of multiple discrete tests, use `rstest` fixtures.
+D. Use `test_` prefix in all test functions. Test names should contain the struct / enum + method
+name + "error" or "invalid" suffix as necessary.
 
-## Use modern Rust (edition 2021) and leverage the ecosystem.
+7. Do not embellish code with long comments
 
-- Use <module>.rs for file names instead of <module>/mod.rs.
-- Take existing high-quality crates into account for solving a problem. Prefer high-quality
-  external crates to manual code. If in doubt, ask.
-- Use `rstest` table tests instead of multiple discrete tests, use `rstest` fixtures to factor
-  out shared domain objects. 
-- Use `test_` prefix in all test functions.  Test names should contain the struct / enum + method
-  name + "error" or "invalid" suffix as necessary. Avoid the BDD style with test names describing
-  behavior. The cases in the rstest table tests should describe the input concisely.
+A. **DO NOT** use comments to separate code sections like `Functions of XX`, `Structs for YY`.
+B. **DO NOT** use non-text characters for emphasis or embellishment like `---- XXX ----`. No comment art.
+C. **DO NOT** introduce discussion, implementation details, or any self-talk in the comments.
+D. **DO NOT** explain the obvious. Type, trait, and variable names should be enough to convey meaning.
 
+8. Project targets
 
-## Do not embellish code with long comments
-
-- **DO NOT** use comments to separate code sections like `Functions of XX`, `Structs for YY`. If the
-  module is too long or combines too many different concerns, explore splitting the module.
-  If in doubt, ask.
-- **DO NOT** use non-text characters for emphasis or embellishment like `---- XXX ----`. No comment art.
-- **DO NOT** introduce design, implementation details, or any self-talk in the comments. Describe
-  the purpose of the code.
-- **DO NOT** explain the obvious. Type, trait, and variable names should be expressive enough to convey
-  the necessary meaning.
-
-## Project targets
-
-- Prefer speed over generality; simple, direct implementations first.
-- Prefer meaningful variable and function names to comments.
-- Respect existing names and modules; do not invent naming conventions.
-- Tests should be small, focused, and fast; prefer table test.
-- For multi-step tasks, state a brief plan.
+A. Prefer speed over generality; simple, direct implementations first.
+B. Prefer meaningful variable and function names to comments.
+C. Respect existing names and modules; do not invent naming conventions.
+D. For multi-step tasks, state a brief plan.
