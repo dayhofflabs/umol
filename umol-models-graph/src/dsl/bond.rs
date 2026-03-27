@@ -13,10 +13,10 @@ use super::value::{value_dsl, ValueAst};
 /// Parsed bond-string AST.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BondAst {
-    pub order: ValueAst<u8>,
-    pub charge: Option<ValueAst<i8>>,
-    pub unpaired: Option<ValueAst<u8>>,
-    pub multiplicity: Option<ValueAst<u8>>,
+    pub order: ValueAst,
+    pub charge: Option<ValueAst>,
+    pub unpaired: Option<ValueAst>,
+    pub multiplicity: Option<ValueAst>,
 }
 
 /// Parse a bond subgrammar string
@@ -48,9 +48,9 @@ pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, ParseError> {
     Ok((remaining, ast))
 }
 
-/// Parse the bond order prefix (`value_dsl::<u8>`).
-pub fn bond_order(i: &str) -> IResult<&str, ValueAst<u8>, ParseError> {
-    value_dsl::<u8>(i).map_err(|_| Err::Failure(ParseError::InvalidBondOrder(i.to_string())))
+/// Parse the bond order prefix.
+pub fn bond_order(i: &str) -> IResult<&str, ValueAst, ParseError> {
+    value_dsl(i).map_err(|_| Err::Failure(ParseError::InvalidBondOrder(i.to_string())))
 }
 
 /// Merge a list of bond predicates into a `BondAst`.

@@ -25,6 +25,24 @@ pub enum ParseError {
     NomError(NomErrorKind),
 }
 
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum MatchError {
+    #[error("No match")]
+    NoMatch,
+    #[error("Evaluation error: {0}")]
+    EvaluationError(#[from] EvaluationError),
+}
+
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum EvaluationError {
+    #[error("Unbound variable: {0}")]
+    UnboundVariable(String),
+    #[error("Division by zero")]
+    DivisionByZero,
+    #[error("Type mismatch")]
+    TypeMismatch,
+}
+
 impl<I> NomParseError<I> for ParseError {
     fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
         ParseError::NomError(kind)

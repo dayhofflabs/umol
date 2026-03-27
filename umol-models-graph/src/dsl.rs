@@ -3,5 +3,4 @@
 pub mod bond;
 pub mod error;
 pub mod predicates;
-pub mod utils;
 pub mod value;
