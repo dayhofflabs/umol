@@ -16,6 +16,15 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED*
 
 **EDN and rules.** EDN carries the relational structure. **Rule** evaluation (pattern **LHS** → product **RHS**, **§6**) is a separate computation layer: it **MAY** consume and produce molecule maps that use the same surface notation.
 
+**Term algebra levels (non-normative sketch).** Four levels of expressiveness exist in this algebra, each a strict superset of the previous:
+
+- **L1 — Ground**: fully instantiated molecules; no wildcards, binds, or logic. Every numeric slot is a concrete integer; element is a single symbol. The atom-string and bond-string parsers in the current reference implementation target this level.
+- **L2 — Constraint / Query**: adds wildcards (**`*`**), element/numeric sets, **`bool-expr`**, and **`?id`** references. Sufficient for substructure queries.
+- **L3 — Rule**: adds **`element-bind`** / **`element-ref`**, cross-atom **`id`** scope (**§6**), and **`:guards`** on molecule maps. Sufficient for transformation rules.
+- **L4 — Compound**: rules whose RHS produces molecule maps that are themselves L2/L3 terms; higher-order composition. Not further specified in this revision.
+
+The subgrammars in **§5**, **§7** define forms that are syntactically valid across all levels; which forms are *semantically* allowed depends on which level is in force (**§3**).
+
 **Case sensitivity.** **`atom-string`**, **`bond-string`**, and **`value-expr`** lexing (**§5**, **§7**) is **case-sensitive** throughout: e.g. **`#a`** and **`#A`** are distinct predicate tags; **`?x`** and **`?X`** are distinct **`id`**s; **`element-literal`** (**§7.4**) follows **IUPAC** element casing (**`Cl`**, **`Br`**, not arbitrary case folding). Implementations **MUST NOT** treat these fragments as case-insensitive (unlike **Fortran**-style languages).
 
 ---
@@ -376,7 +385,7 @@ tag ::= [A-Za-z_]
 | **`=`** (payload is a single equals sign) | **`#h`** | **Normal / valence-model implicit hydrogen**: implicit H count is whatever the valence model assigns for this **`element`** and the rest of the atom’s fields (**Query** / **Rule** indeterminacy **MAY** apply). |
 | **`*`** | **`#h`** | **Wildcard** implicit H count (**Query** / **Rule**). |
 | **`*`** | **`#a`** | **Wildcard** aromatic π contribution (**Query** / **Rule**). |
-| **`!`** | **`#a`** | **Non-numeric** aromatic marker: atom participates in an aromatic π system without fixing a numeric **`#a`** contribution (**Ground** / **Query** / **Rule** per implementation). |
+| **`!`** | **`#a`** | Atom is **not** a member of any aromatic system. Distinct from **`#a0`**: a **`#a0`** atom *is* in an aromatic system and contributes **zero** π electrons (e.g. a carbocation with an empty p orbital participating in a ring current); a **`#a!`** atom has no aromatic membership at all. In **Ground**, a **`#a!`** atom **MUST NOT** appear in any **`:aromatic`** entry. |
 | **`+`** / **`-`** (alone) | **`#c`** | **+1** / **−1** formal charge (**§7.3** above). |
 
 Other **`#h`** / **`#a`** payloads use the usual **`value-expr`** / **`decimal-tail`** rules (**§5**, **§5.3**).
@@ -462,7 +471,16 @@ This section does **not** define **`bond-keyword`** shorthands; see **§7.7**.
 
 ### 7.7 Bond and atom literals
 
-**Bond entry shorthands.** A **`bond-keyword`** as the **`:bond`** value of a **`covalent-bond-entry`** (**§4**) **MAY** stand for a fixed **`#bond`** payload. **Normative** expansion table and reserved keywords **will be specified here** (e.g. **`:single`**, **`:double`**, **`:triple`** → **`#bond "1"`**, **`"2"`**, **`"3"`**). Until that table is added, implementations **SHOULD** remain compatible with the reference **MoleculeBuilder** keyword set.
+**Bond entry shorthands.** A **`bond-keyword`** as the **`:bond`** value of a **`covalent-bond-entry`** (**§4**) is a fixed **EDN keyword** that expands to an equivalent **`#bond`** payload. Normative expansion table:
+
+| Keyword | Expands to | Bond order |
+|---------|-----------|------------|
+| **`:single`** | **`#bond "1"`** | 1 |
+| **`:double`** | **`#bond "2"`** | 2 |
+| **`:triple`** | **`#bond "3"`** | 3 |
+| **`:quadruple`** | **`#bond "4"`** | 4 |
+
+Implementations **MUST** accept these four keywords wherever **`bond-spec`** is expected. No other **`bond-keyword`** values are defined in this revision; unrecognized keywords **MUST** be rejected.
 
 **Atom literals.** The **EDN** **`#atom`** tag and **atom-string** payload are fully defined by **§7.3** / **§7.4**. **Additional** tagged atom forms or keywords **MAY** be listed here when introduced.
 
@@ -481,3 +499,76 @@ base-arith ::= nat | '?' id | '(' arith-expr ')'
 Precedence of **`mult-op`** over **`add-op`** unchanged. **Membership** **`::`**, **relations** (**`==`**, **`<`**, …), and **logic** (**§5.1**) would still apply **outside** this **`arith-expr`** layer as today. **`sign`*** prefixes (**§5**) would extend to **`arith-expr`** leaves as needed.
 
 **Other** (non-normative placeholders): functions (**`min`**, **`abs`**, …), typed variables, cross-atom **`id`** scope, **chained** relations **`a < b < c`**, etc.
+
+---
+
+## 8. Molecule map examples (non-normative)
+
+Examples use the **named** **`:atoms`** form. Bond entries show **`:id`** as required.
+
+### 8.1 Methanol (CH₃OH) — Ground, L1
+
+```clojure
+{:atoms {:C  #atom "C#h3"
+         :O  #atom "O#h1"
+         :H  #atom "H"}
+ :bonds [{:id :b1 :a :C :b :O :bond :single}
+         {:id :b2 :a :O :b :H :bond :single}]}
+```
+
+The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one wishes to name). Implicit H counts on **`C`** (**`#h3`**) and **`O`** (**`#h1`**) already account for the remaining hydrogens.
+
+### 8.2 Indole — Ground, L1, aromatic ring
+
+```clojure
+{:atoms {:N   #atom "N#h1"
+         :C2  #atom "C"
+         :C3  #atom "C"
+         :C3a #atom "C"
+         :C4  #atom "C#h1"
+         :C5  #atom "C#h1"
+         :C6  #atom "C#h1"
+         :C7  #atom "C#h1"
+         :C7a #atom "C"}
+ :bonds [{:id :b1 :a :N   :b :C2  :bond :single}
+         {:id :b2 :a :C2  :b :C3  :bond :double}
+         {:id :b3 :a :C3  :b :C3a :bond :single}
+         {:id :b4 :a :C3a :b :C7a :bond :single}
+         {:id :b5 :a :C7a :b :N   :bond :single}
+         {:id :b6 :a :C3a :b :C4  :bond :single}
+         {:id :b7 :a :C4  :b :C5  :bond :double}
+         {:id :b8 :a :C5  :b :C6  :bond :single}
+         {:id :b9 :a :C6  :b :C7  :bond :double}
+         {:id :b10 :a :C7  :b :C7a :bond :single}]
+ :aromatic [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a]}
+            {:id :ar2 :atoms [:C3a :C4 :C5 :C6 :C7 :C7a]}]}
+```
+
+Covalent bonds carry the σ-skeleton orders; the aromatic π system is expressed in **`:aromatic`**.
+
+### 8.3 Substructure query — L2
+
+Match any carbon with at least two implicit hydrogens that is directly bonded to a nitrogen:
+
+```clojure
+{:atoms {:C #atom "C#h(?h >= 2)"
+         :N #atom "N"}
+ :bonds [{:id :b1 :a :C :b :N :bond :single}]}
+```
+
+**`(?h >= 2)`** is a **`bool-expr`** payload on **`#h`**; **`?h`** is bound to the matched atom's implicit H count.
+
+### 8.4 Transformation rule — L3
+
+Replace a primary amine carbon (C with three H and bonded to NH₂) with a quaternary carbon (no H, same bond to nitrogen):
+
+```clojure
+{:lhs {:atoms {:C #atom "C#h3"
+               :N #atom "N#h2"}
+       :bonds [{:id :b1 :a :C :b :N :bond :single}]}
+ :rhs {:atoms {:C #atom "C#h0"
+               :N #atom "N#h2"}
+       :bonds [{:id :b1 :a :C :b :N :bond :single}]}}
+```
+
+(The **`:lhs`** / **`:rhs`** wrapping is a rule-level convention, not a molecule map key — not normative here.)

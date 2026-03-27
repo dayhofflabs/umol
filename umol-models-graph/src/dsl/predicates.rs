@@ -1,4 +1,4 @@
-//! Bond predicate parsers — `#c`, `#u`, `#s` dispatch.
+//! Bond and atom predicate parsers.
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take};
@@ -7,75 +7,90 @@ use nom::combinator::{map, success, value};
 use nom::sequence::preceded;
 use nom::{Err, IResult, Parser};
 
+use super::atom::{AromaticExpr, HydrogenExpr, IsotopeExpr, isotope_expr};
 use super::error::ParseError;
 use super::value::{value_dsl, ValueAst};
 
-/// A single parsed bond predicate.
+pub(crate) fn optional_value(i: &str) -> IResult<&str, ValueAst, ParseError> {
+    preceded(multispace0, alt((value_dsl, success(ValueAst::Lit(1))))).parse(i)
+}
+
+pub(crate) fn charge_value(i: &str) -> IResult<&str, ValueAst, ParseError> {
+    preceded(
+        multispace0,
+        alt((
+            value_dsl,
+            value(ValueAst::Lit(1), tag("+")),
+            value(ValueAst::Lit(-1), tag("-")),
+        )),
+    )
+    .parse(i)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BondPredicate {
     Charge(ValueAst),
-    Unpaired(ValueAst),
+    UnpairedElectrons(ValueAst),
     Multiplicity(ValueAst),
 }
 
-/// Parse one bond predicate (`#c…`, `#u…`, or `#s…`).
-///
-/// Expects input starting at `#`. Consumes the 2-char prefix via `take(2)`,
-/// dispatches on the prefix string, then calls the appropriate body parser
-/// on the remainder.
 pub fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
     let (remaining, prefix) = take(2usize)(i)?;
     match prefix {
-        "#c" => bond_charge_predicate(remaining),
-        "#u" => bond_unpaired_predicate(remaining),
-        "#s" => bond_multiplicity_predicate(remaining),
-        p if p.starts_with("#") => Err(Err::Failure(ParseError::UnknownBondPredicate(
-            p.to_string(),
-        ))),
+        "#c" => map(charge_value, BondPredicate::Charge).parse(remaining),
+        "#u" => map(optional_value, BondPredicate::UnpairedElectrons).parse(remaining),
+        "#s" => map(optional_value, BondPredicate::Multiplicity).parse(remaining),
+        p if p.starts_with("#") => Err(Err::Failure(ParseError::UnknownBondPredicate(p.to_string()))),
         _ => Err(Err::Failure(ParseError::TrailingInput(i.to_string()))),
     }
 }
 
-/// Body parser for `#c` — formal bond charge.
-///
-/// Tries full `value_dsl` first; falls back to bare `+` (+1) or `-` (-1).
-/// Optional whitespace between the tag letter and the payload is allowed.
-pub fn bond_charge_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
-    preceded(
-        multispace0,
-        alt((
-            map(value_dsl, BondPredicate::Charge),
-            value(BondPredicate::Charge(ValueAst::Lit(1)), tag("+")),
-            value(BondPredicate::Charge(ValueAst::Lit(-1)), tag("-")),
-        )),
-    )
-    .parse(i)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AtomPredicate {
+    IsotopeMass(IsotopeExpr),
+    Charge(ValueAst),
+    ImplicitHydrogens(HydrogenExpr),
+    LonePairs(ValueAst),
+    UnpairedElectrons(ValueAst),
+    Multiplicity(ValueAst),
+    Valence(ValueAst),
+    DonatedPairs(ValueAst),
+    AcceptedPairs(ValueAst),
+    AromaticValence(AromaticExpr),
+    MulticenterValence(ValueAst),
 }
 
-/// Body parser for `#u` — unpaired electrons; omitted payload = 1.
-///
-/// Optional whitespace between the tag letter and the payload is allowed.
-pub fn bond_unpaired_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
-    preceded(
-        multispace0,
-        alt((
-            map(value_dsl, BondPredicate::Unpaired),
-            success(BondPredicate::Unpaired(ValueAst::Lit(1))),
-        )),
-    )
-    .parse(i)
-}
-
-/// Body parser for `#s` — spin multiplicity; omitted payload = 1.
-///
-/// Optional whitespace between the tag letter and the payload is allowed.
-pub fn bond_multiplicity_predicate(i: &str) -> IResult<&str, BondPredicate, ParseError> {
-    preceded(
-        multispace0,
-        alt((
-            map(value_dsl, BondPredicate::Multiplicity),
-            success(BondPredicate::Multiplicity(ValueAst::Lit(1))),
-        )),
-    )
-    .parse(i)
+pub fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, ParseError> {
+    let (remaining, prefix) = take(2usize)(i)?;
+    match prefix {
+        "#i" => preceded(multispace0, map(isotope_expr, AtomPredicate::IsotopeMass)).parse(remaining),
+        "#c" => map(charge_value, AtomPredicate::Charge).parse(remaining),
+        "#h" => preceded(
+            multispace0,
+            alt((
+                value(AtomPredicate::ImplicitHydrogens(HydrogenExpr::Normal), tag("=")),
+                map(value_dsl, |v| AtomPredicate::ImplicitHydrogens(HydrogenExpr::Value(v))),
+                success(AtomPredicate::ImplicitHydrogens(HydrogenExpr::Value(ValueAst::Lit(1)))),
+            )),
+        )
+        .parse(remaining),
+        "#n" => map(optional_value, AtomPredicate::LonePairs).parse(remaining),
+        "#u" => map(optional_value, AtomPredicate::UnpairedElectrons).parse(remaining),
+        "#s" => map(optional_value, AtomPredicate::Multiplicity).parse(remaining),
+        "#v" => map(optional_value, AtomPredicate::Valence).parse(remaining),
+        "#d" => map(optional_value, AtomPredicate::DonatedPairs).parse(remaining),
+        "#r" => map(optional_value, AtomPredicate::AcceptedPairs).parse(remaining),
+        "#a" => preceded(
+            multispace0,
+            alt((
+                value(AtomPredicate::AromaticValence(AromaticExpr::None), tag("!")),
+                map(value_dsl, |v| AtomPredicate::AromaticValence(AromaticExpr::Value(v))),
+                success(AtomPredicate::AromaticValence(AromaticExpr::Value(ValueAst::Lit(1)))),
+            )),
+        )
+        .parse(remaining),
+        "#m" => map(optional_value, AtomPredicate::MulticenterValence).parse(remaining),
+        p if p.starts_with("#") => Err(Err::Failure(ParseError::UnknownAtomPredicate(p.to_string()))),
+        _ => Err(Err::Failure(ParseError::TrailingInput(i.to_string()))),
+    }
 }

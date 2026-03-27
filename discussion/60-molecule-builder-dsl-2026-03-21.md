@@ -1108,6 +1108,69 @@ The current discussion narrows the scope artificially. Examples:
   could be potentially treated with HMO. The current system requires ring systems.
   could be represented as multicenter bonds (delocalized bonds)
 
+**O27 — Molecule-level representation of genuine indeterminacy: `Family` types.**
+
+O25 and O26 address atom-level ambiguity (`AtomTypeSet`, spin multiplicity). The
+parallel question at the molecule level is: what is the type of a molecule that has
+not been — and perhaps cannot be — resolved to a single ground term?
+
+*Two semantically distinct families.* Not all multi-candidate situations are alike.
+The combining semantics differ:
+
+- **`SumFamily`** — the molecule is in exactly one state; the family represents
+  epistemic uncertainty or conditional selection. High-spin vs. low-spin Fe²⁺ is the
+  canonical case: the two ground-term structures are mutually exclusive physical states.
+  The correct operation on a `SumFamily` is `select(criterion) → Molecule`. The
+  criterion is external to the graph model (ligand field, annotation, experimental
+  state).
+
+- **`ProductFamily`** — all members contribute simultaneously; properties are
+  evaluated as weighted combinations over the whole family. Resonance structures of
+  the allyl radical are the canonical case: neither Kekulé form is the correct
+  structure; the bond order 1.5 emerges from combining both. The correct operation
+  is `combine(family, property, weights) → Value`.
+
+The distinction is not representational but semantic: you cannot tell from a list of
+ground-term molecules which combining rule applies. The combining semantics must be
+part of the family type.
+
+*What the existing design already provides.* Rules already return `Option<Set<Molecule>>`
+— this is a `SumFamily` produced by rule application. Level 4 calls like
+`select-tautomer` are the `select(criterion)` operation. The `aromatic` and `mc`
+sections are lossy compressions of a `ProductFamily`: they store the aggregate result
+(electron count, participating atoms) without retaining the individual resonance
+contributors or their weights. Kekulization (a rule) produces a `SumFamily` of Kekulé
+structures; the `:aromatic` representation is what you store when you choose to average
+rather than enumerate.
+
+*The gap.* `Set<Molecule>` is a Rust-level rule-application result, not a first-class
+document type. There is no molecule map representation for "I have these two spin
+states and have not selected yet." Making `Family<Sum>` a serializable document type
+would allow unresolved spin states to be carried through a pipeline and annotated
+downstream. `Family<Product>` with explicit weights (resonance coefficients) is
+likewise absent; the `aromatic`/`mc` sections are its implicit compressed form.
+
+*Resolution context extension.* The current builder context requires resolution to a
+singleton or failure. A third mode — **family context** — would allow the resolver
+to produce `Family<Sum>` when the candidate set is finite but not singleton, rather
+than failing with `ValenceAmbiguous`. The change is: store the candidate set and
+continue rather than error; defer failure to `MoleculeBuilder::build` only if >1
+candidates remain after all narrowing phases. This is consistent with the
+`AtomTypeSet` proposal in O26, extended to the molecule level.
+
+*Practical scope.* For the spin-state case, `Family<Sum>` at the molecule level adds
+little beyond what `AtomTypeSet` at the atom level already provides — the family is
+just the Cartesian product of per-atom candidate sets. The more useful application
+is a `Family<Sum>` produced by a spin-state rule as a Level 4 operation, stored as
+a persistent document object awaiting annotation. `Family<Product>` for explicit
+resonance (with weights) is a larger addition and is deferred.
+
+*Pending decision.* Extend the resolution pipeline to produce `Family<Sum>` rather
+than `ValenceAmbiguous` when the candidate set is finite and the indeterminacy is
+genuine (registry-declared, not a missing-input error). Defer explicit `Family<Product>`
+with weights; the `aromatic`/`mc` compressed representation covers the practical
+cases for now.
+
 ## Resolved questions
 
 **O1 — `#atom` tag unification and type-directed lowering.** Use `#atom` as the single

@@ -21,16 +21,24 @@ pub enum ParseError {
     TrailingInput(String),
     #[error("Invalid value: {0}")]
     InvalidValue(String),
+    #[error("Invalid atom element: {0}")]
+    InvalidAtomElement(String),
+    #[error("Unknown atom predicate: {0}")]
+    UnknownAtomPredicate(String),
+    #[error("Duplicate {0} atom predicate")]
+    DuplicateAtomPredicate(String),
     #[error("Nom error: {0:?}")]
     NomError(NomErrorKind),
-}
-
-#[derive(Clone, Debug, PartialEq, Error)]
-pub enum MatchError {
-    #[error("No match")]
-    NoMatch,
-    #[error("Evaluation error: {0}")]
-    EvaluationError(#[from] EvaluationError),
+    #[error("EDN parse error: {0}")]
+    EdnParse(String),
+    #[error("Missing required key: {0}")]
+    MissingKey(String),
+    #[error("Invalid molecule map: {0}")]
+    InvalidMoleculeMap(String),
+    #[error("Duplicate structural id: {0}")]
+    DuplicateId(String),
+    #[error("Unknown atom endpoint: {0}")]
+    UnknownEndpoint(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Error)]
