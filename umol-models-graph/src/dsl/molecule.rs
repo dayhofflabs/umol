@@ -446,7 +446,7 @@ mod tests {
         MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(),
         AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None, implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None,
         unpaired_electrons: None, multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None })])), ..Default::default() })]
-    #[case::alias_indexed(r#"{:atoms [:ch] :bonds []} :aliases {:ch #atom "C #h1"}"#,
+    #[case::alias_indexed(r#"{:atoms [:ch] :bonds [] :aliases {:ch #atom "C #h1"}}"#,
         MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
         implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
         multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }]), ..Default::default() })]
