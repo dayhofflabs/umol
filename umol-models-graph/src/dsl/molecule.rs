@@ -91,8 +91,13 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
     let top = edn::read_string(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
     let map = extract_map(&top, "top level")?;
 
+    let aliases = match map_get(map, "aliases") {
+        Some(edn) => parse_aliases(edn)?,
+        None => IndexMap::new(),
+    };
     let atoms = parse_atoms(
         map_get(map, "atoms").ok_or_else(|| ParseError::MissingKey(":atoms".to_string()))?,
+        &aliases,
     )?;
     let bonds = parse_covalent_bonds(
         map_get(map, "bonds").ok_or_else(|| ParseError::MissingKey(":bonds".to_string()))?,
@@ -134,13 +139,37 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
     Ok(ast)
 }
 
-fn parse_atoms(edn: &Edn<'_>) -> Result<Atoms, ParseError> {
+fn parse_aliases<'e>(edn: &'e Edn<'e>) -> Result<IndexMap<String, AtomAst>, ParseError> {
+    let m = extract_map(edn, "aliases")?;
+    let mut aliases = IndexMap::new();
+    for (k, v) in m {
+        let name = extract_label(k)?;
+        let atom = parse_atom_dsl(extract_tagged_str(v, "atom")?)?;
+        aliases.insert(name, atom);
+    }
+    Ok(aliases)
+}
+
+fn resolve_atom<'e>(
+    edn: &'e Edn<'e>,
+    aliases: &IndexMap<String, AtomAst>,
+) -> Result<AtomAst, ParseError> {
+    match edn {
+        Edn::Key(name) => aliases
+            .get(*name)
+            .cloned()
+            .ok_or_else(|| ParseError::UnknownAlias((*name).to_string())),
+        _ => Ok(parse_atom_dsl(extract_tagged_str(edn, "atom")?)?),
+    }
+}
+
+fn parse_atoms(edn: &Edn<'_>, aliases: &IndexMap<String, AtomAst>) -> Result<Atoms, ParseError> {
     match edn {
         Edn::Map(m) => {
             let mut named = IndexMap::new();
             for (k, v) in m {
                 let label = extract_label(k)?;
-                let atom = parse_atom_dsl(extract_tagged_str(v, "atom")?)?;
+                let atom = resolve_atom(v, aliases)?;
                 named.insert(label, atom);
             }
             Ok(Atoms::Named(named))
@@ -148,7 +177,7 @@ fn parse_atoms(edn: &Edn<'_>) -> Result<Atoms, ParseError> {
         Edn::Vector(items) => {
             let atoms = items
                 .iter()
-                .map(|e| parse_atom_dsl(extract_tagged_str(e, "atom")?))
+                .map(|e| resolve_atom(e, aliases))
                 .collect::<Result<_, _>>()?;
             Ok(Atoms::Indexed(atoms))
         }
@@ -413,6 +442,17 @@ mod tests {
     #[case::spin(r##"{:atoms {:N #atom "N #u3"} :bonds [] :spin "#u3"}"##, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("N".to_string(),
         AtomAst { element: ElementExpr::Lit(Element::N), isotope_mass: None, implicit_hydrogens: None, charge: None, lone_pairs: None, unpaired_electrons: Some(ValueAst::Lit(3)),
         multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None, })])), spin: Some(spin!("#u3 #s4")), ..Default::default() })]
+    #[case::alias_named(r#"{:atoms {:C :ch} :bonds [] :aliases {:ch #atom "C #h1"}}"#,
+        MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(),
+        AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None, implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None,
+        unpaired_electrons: None, multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None })])), ..Default::default() })]
+    #[case::alias_indexed(r#"{:atoms [:ch] :bonds []} :aliases {:ch #atom "C #h1"}"#,
+        MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
+        implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
+        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }]), ..Default::default() })]
+    #[case::alias_reused(r#"{:atoms [:n :n] :bonds [[:0 :1 :single]] :aliases {:n #atom "N"}}"#,
+        MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
+        bonds: vec![CovalentBond { id: None, a: "0".to_string(), b: "1".to_string(), bond: BondSpec::Single }], ..Default::default() })]
     fn test_parse_molecule_dsl(#[case] input: &str, #[case] expected: MoleculeAst) {
         let result = parse_molecule_dsl(input);
         assert!(
@@ -425,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dative_bonds() {
+    fn test_parse_molecule_dsl_dative() {
         let result = parse_molecule_dsl(
             r#"{:atoms {:B #atom "B #h3" :N #atom "N #h3"}
                 :bonds []
@@ -444,17 +484,12 @@ mod tests {
     }
 
     #[test]
-    fn test_aromatic_systems() {
+    fn test_parse_molecule_dsl_aromatic() {
         let result = parse_molecule_dsl(
-            r#"{:atoms {:C1 #atom "C #h1 #v2 #a1" :C2 #atom "C #h1 #v2 #a1" :C3 #atom "C #h1 #v2 #a1"
-                        :C4 #atom "C #h1 #v2 #a1" :C5 #atom "C #h1 #v2 #a1" :C6 #atom "C #h1 #v2 #a1"}
-                :bonds [{:id :b1 :a :C1 :b :C2 :bond :single}
-                        {:id :b2 :a :C2 :b :C3 :bond :single}
-                        {:id :b3 :a :C3 :b :C4 :bond :single}
-                        {:id :b4 :a :C4 :b :C5 :bond :single}
-                        {:id :b5 :a :C5 :b :C6 :bond :single}
-                        {:id :b6 :a :C6 :b :C1 :bond :single}]
-                :aromatic [{:id :ar1 :atoms [:C1 :C2 :C3 :C4 :C5 :C6]}]}"#,
+            r#"{:atoms {:C1 :ch :C2 :ch :C3 :ch :C4 :ch :C5 :ch :C6 :ch}
+                :bonds [[:C1 :C2 :single] [:C2 :C3 :single] [:C3 :C4 :single] [:C4 :C5 :single] [:C5 :C6 :single] [:C6 :C1 :single]]
+                :aromatic [{:id :ar1 :atoms [:C1 :C2 :C3 :C4 :C5 :C6]}]
+                :aliases {:ch #atom "C #h1 #v2 #a1"}}"#,
         )
         .unwrap();
         assert_eq!(result.aromatic_systems.len(), 1);
@@ -474,6 +509,7 @@ mod tests {
     #[case::duplicate_id(r#"{:atoms {:C #atom "C" :O #atom "O" :N #atom "N"} :bonds [{:id :b1 :a :C :b :O :bond :single} {:id :b1 :a :O :b :N :bond :single}]}"#,
         ParseError::DuplicateId("b1".to_string()))]
     #[case::bad_atom_string(r##"{:atoms {:X #atom "#h3"} :bonds []}"##, ParseError::InvalidElement("#h3".to_string()))]
+    #[case::unknown_alias(r#"{:atoms {:C :ch} :bonds []}"#, ParseError::UnknownAlias("ch".to_string()))]
     fn test_parse_molecule_map_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = parse_molecule_dsl(input);
         assert!(

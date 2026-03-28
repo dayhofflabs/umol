@@ -40,6 +40,8 @@ pub enum ParseError {
     DuplicateId(String),
     #[error("Unknown atom endpoint: {0}")]
     InvalidAtomIndex(String),
+    #[error("Unknown alias: {0}")]
+    UnknownAlias(String),
     #[error("Invalid spin state: {0}")]
     InvalidSpinState(#[from] SpinStateError),
 }
