@@ -184,7 +184,7 @@ impl BondBuilder {
         let spin = match (self.unpaired_electrons, self.multiplicity) {
             (Some(unpaired), Some(multiplicity)) => SpinState::try_new(unpaired, multiplicity),
             (Some(unpaired), None) => SpinState::max_multiplicity(unpaired).ok_or(
-                SpinStateError::UnpairedElectronsExceedMax {
+                SpinStateError::UnpairedElectronsOutOfRange {
                     unpaired_electrons: unpaired,
                 },
             ),
