@@ -88,7 +88,11 @@ pub struct MoleculeAst {
 
 /// Parse a molecule AST from a EDN string
 pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
-    let top = edn::read_string(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    let (top, rest) = edn::read(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    let rest = rest.trim();
+    if !rest.is_empty() {
+        return Err(ParseError::EdnParse(format!("unexpected trailing content: {rest}")));
+    }
     let map = extract_map(&top, "top level")?;
 
     let aliases = match map_get(map, "aliases") {
@@ -510,6 +514,7 @@ mod tests {
         ParseError::DuplicateId("b1".to_string()))]
     #[case::bad_atom_string(r##"{:atoms {:X #atom "#h3"} :bonds []}"##, ParseError::InvalidElement("#h3".to_string()))]
     #[case::unknown_alias(r#"{:atoms {:C :ch} :bonds []}"#, ParseError::UnknownAlias("ch".to_string()))]
+    #[case::trailing_content(r#"{:atoms {:C #atom "C"} :bonds []} :extra :junk"#, ParseError::EdnParse("unexpected trailing content: :extra :junk".to_string()))]
     fn test_parse_molecule_map_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = parse_molecule_dsl(input);
         assert!(
