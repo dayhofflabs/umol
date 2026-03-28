@@ -26,6 +26,12 @@ pub enum ElementExpr {
     Ref(String),
 }
 
+impl ElementExpr {
+    pub fn new(element: Element) -> Self {
+        Self::Lit(element)
+    }
+}
+
 /// Isotope-mass position (`#i` payload).
 ///
 /// Categorical like `ElementExpr`: indexed by mass number, no arithmetic.
@@ -44,6 +50,12 @@ pub enum HydrogenExpr {
     /// `#h=` — implicit H count from the valence model.
     Normal,
     Value(ValueAst),
+}
+
+impl HydrogenExpr {
+    pub fn from_value(value: ValueAst) -> Self {
+        Self::Value(value)
+    }
 }
 
 /// `#a` payload — `!` (non-member) is not a `ValueAst`.
@@ -88,6 +100,10 @@ impl AtomAst {
             multicenter_valence: None,
         }
     }
+
+    pub fn from_element(element: Element) -> Self {
+        Self::new(ElementExpr::Lit(element))
+    }
 }
 
 fn element_literal(i: &str) -> IResult<&str, Element, ParseError> {
@@ -98,7 +114,7 @@ fn element_literal(i: &str) -> IResult<&str, Element, ParseError> {
     .parse(i)?;
     match Element::from_symbol(sym) {
         Some(el) => Ok((rest, el)),
-        None => Err(Err::Error(ParseError::InvalidAtomElement(sym.to_string()))),
+        None => Err(Err::Error(ParseError::InvalidElement(sym.to_string()))),
     }
 }
 
@@ -148,7 +164,7 @@ pub(crate) fn element_expr(i: &str) -> IResult<&str, ElementExpr, ParseError> {
         map(element_literal, ElementExpr::Lit),
     ))
     .parse(i)
-    .map_err(|_| Err::Error(ParseError::InvalidAtomElement(i.to_string())))
+    .map_err(|_| Err::Error(ParseError::InvalidElement(i.to_string())))
 }
 
 fn isotope_set(i: &str) -> IResult<&str, Vec<u32>, ParseError> {
@@ -299,6 +315,7 @@ fn update_atom_ast(ast: &mut AtomAst, preds: Vec<AtomPredicate>) -> Result<(), P
 
 #[cfg(test)]
 mod tests {
+    use nom::Err;
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_data::Element;
@@ -306,7 +323,6 @@ mod tests {
     use super::*;
     use crate::dsl::error::ParseError;
     use crate::dsl::value::{Expr, RelOp, ValueAst};
-    use nom::Err;
 
     #[rustfmt::skip]
     #[rstest]
@@ -316,8 +332,8 @@ mod tests {
     #[case::wildcard("*", ElementExpr::Wildcard)]
     #[case::set("{C,N,O}", ElementExpr::Set(vec![Element::C, Element::N, Element::O]))]
     #[case::set_spaced("{ C, N}", ElementExpr::Set(vec![Element::C, Element::N]))]
-    #[case::bind("(?e :: {C,N})", ElementExpr::Bind { id: "e".into(), set: vec![Element::C, Element::N] })]
-    #[case::ref_("(?e)", ElementExpr::Ref("e".into()))]
+    #[case::bind("(?e :: {C,N})", ElementExpr::Bind { id: "e".to_string(), set: vec![Element::C, Element::N] })]
+    #[case::ref_("(?e)", ElementExpr::Ref("e".to_string()))]
     fn test_element_expr(#[case] input: &str, #[case] expected: ElementExpr) {
         let result = element_expr(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
@@ -333,7 +349,11 @@ mod tests {
     #[case::unknown_element("Xx")]
     fn test_element_expr_invalid(#[case] input: &str) {
         let result = element_expr(input);
-        assert!(result.is_err(), "{input:?} should fail, got {:?}", result.unwrap());
+        assert!(
+            result.is_err(),
+            "{input:?} should fail, got {:?}",
+            result.unwrap()
+        );
     }
 
     #[rustfmt::skip]
@@ -341,8 +361,8 @@ mod tests {
     #[case::lit("12", IsotopeExpr::Lit(12))]
     #[case::wildcard("*", IsotopeExpr::Wildcard)]
     #[case::set("{12,13,14}", IsotopeExpr::Set(vec![12, 13, 14]))]
-    #[case::bind("(?m :: {12,13})", IsotopeExpr::Bind { id: "m".into(), set: vec![12, 13] })]
-    #[case::ref_("(?m)", IsotopeExpr::Ref("m".into()))]
+    #[case::bind("(?m :: {12,13})", IsotopeExpr::Bind { id: "m".to_string(), set: vec![12, 13] })]
+    #[case::ref_("(?m)", IsotopeExpr::Ref("m".to_string()))]
     fn test_isotope_expr(#[case] input: &str, #[case] expected: IsotopeExpr) {
         let result = isotope_expr(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
@@ -386,7 +406,7 @@ mod tests {
     #[case::ch3v1("C#h3#v1", AtomAst { implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))), valence: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::nh2n1v3("N#h2#n1#v3", AtomAst { implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(2))), lone_pairs: Some(ValueAst::Lit(1)), valence: Some(ValueAst::Lit(3)), ..AtomAst::new(ElementExpr::Lit(Element::N)) })]
     #[case::fe_highspin("Fe#c+2#u4#s5", AtomAst { charge: Some(ValueAst::Lit(2)), unpaired_electrons: Some(ValueAst::Lit(4)), multiplicity: Some(ValueAst::Lit(5)), ..AtomAst::new(ElementExpr::Lit(Element::Fe)) })]
-    #[case::h_expr("C#h(?h >= 1)", AtomAst { implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))))), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
+    #[case::h_expr("C#h(?h >= 1)", AtomAst { implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     fn test_atom_dsl(#[case] input: &str, #[case] expected: AtomAst) {
         let result = atom_dsl(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
@@ -396,8 +416,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty("", ParseError::InvalidAtomElement("".to_string()))]
-    #[case::no_element("#h3", ParseError::InvalidAtomElement("#h3".to_string()))]
+    #[case::empty("", ParseError::InvalidElement("".to_string()))]
+    #[case::no_element("#h3", ParseError::InvalidElement("#h3".to_string()))]
     #[case::unknown_pred("C#x", ParseError::UnknownAtomPredicate("#x".to_string()))]
     #[case::dup_h("C#h3#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
     #[case::dup_charge("C#c+#c-", ParseError::DuplicateAtomPredicate("#c".to_string()))]
@@ -405,11 +425,18 @@ mod tests {
     #[case::trailing("C#h3 foo", ParseError::TrailingInput("foo".to_string()))]
     fn test_atom_dsl_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = atom_dsl(input);
-        assert!(result.is_err(), "{input:?} should fail, got {:?}", result.unwrap());
+        assert!(
+            result.is_err(),
+            "{input:?} should fail, got {:?}",
+            result.unwrap()
+        );
         let err = match result.unwrap_err() {
             Err::Error(e) | Err::Failure(e) => e,
             Err::Incomplete(_) => ParseError::Incomplete,
         };
-        assert_eq!(err, expected, "{input:?} should fail with {expected:?}, got {err:?}");
+        assert_eq!(
+            err, expected,
+            "{input:?} should fail with {expected:?}, got {err:?}"
+        );
     }
 }

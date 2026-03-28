@@ -481,15 +481,15 @@ mod tests {
     #[case::mult_spaced("1 * 2", ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Mul, Box::new(Expr::Lit(2)))))]
     #[case::div("2/2", ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Div, Box::new(Expr::Lit(2)))))]
     #[case::div_spaced("2 / 2", ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Div, Box::new(Expr::Lit(2)))))]
-    #[case::var("?h", ValueAst::Expr(Expr::Var("h".into())))]
-    #[case::var_2char("?ha", ValueAst::Expr(Expr::Var("ha".into())))]
-    #[case::var_number("?h1", ValueAst::Expr(Expr::Var("h1".into())))]
-    #[case::var_underscore("?h_", ValueAst::Expr(Expr::Var("h_".into())))]
-    #[case::membership("?h + 0 :: {0,1}", ValueAst::Expr(Expr::Mem(Box::new(Expr::BinOp(Box::new(Expr::Var("h".into())), ArithOp::Add, Box::new(Expr::Lit(0)))), vec![0, 1])))]
+    #[case::var("?h", ValueAst::Expr(Expr::Var("h".to_string())))]
+    #[case::var_2char("?ha", ValueAst::Expr(Expr::Var("ha".to_string())))]
+    #[case::var_number("?h1", ValueAst::Expr(Expr::Var("h1".to_string())))]
+    #[case::var_underscore("?h_", ValueAst::Expr(Expr::Var("h_".to_string())))]
+    #[case::membership("?h + 0 :: {0,1}", ValueAst::Expr(Expr::Mem(Box::new(Expr::BinOp(Box::new(Expr::Var("h".to_string())), ArithOp::Add, Box::new(Expr::Lit(0)))), vec![0, 1])))]
     #[case::double_neg("--0", ValueAst::Expr(Expr::Lit(0)))]
     #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueAst::Expr(Expr::And(vec![
-        Expr::Not(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
-        Expr::Rel(Box::new(Expr::Var("v".into())), RelOp::Eq, Box::new(Expr::Lit(1))),
+        Expr::Not(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Eq, Box::new(Expr::Lit(0))))),
+        Expr::Rel(Box::new(Expr::Var("v".to_string())), RelOp::Eq, Box::new(Expr::Lit(1))),
     ])))]
     #[case::paren_arith("(0 + 1) * 1", ValueAst::Expr(Expr::BinOp(Box::new(Expr::BinOp(Box::new(Expr::Lit(0)), ArithOp::Add, Box::new(Expr::Lit(1)))), ArithOp::Mul, Box::new(Expr::Lit(1)))))]
     fn test_value_dsl(#[case] input: &str, #[case] expected: ValueAst) {
@@ -538,7 +538,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::lit(Expr::Lit(5), Bindings::new(), 5)]
-    #[case::var_bound(Expr::Var("x".into()), Bindings::from([("x".to_string(), 3)]), 3)]
+    #[case::var_bound(Expr::Var("x".to_string()), Bindings::from([("x".to_string(), 3)]), 3)]
     #[case::neg(Expr::Neg(Box::new(Expr::Lit(3))), Bindings::new(), -3)]
     #[case::add(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))), Bindings::new(), 5)]
     #[case::sub(Expr::BinOp(Box::new(Expr::Lit(5)), ArithOp::Sub, Box::new(Expr::Lit(3))), Bindings::new(), 2)]
@@ -553,7 +553,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::var_unbound(Expr::Var("x".into()), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
+    #[case::var_unbound(Expr::Var("x".to_string()), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
     #[case::div_zero(Expr::BinOp(Box::new(Expr::Lit(10)), ArithOp::Div, Box::new(Expr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
     #[case::rem_zero(Expr::BinOp(Box::new(Expr::Lit(10)), ArithOp::Rem, Box::new(Expr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
     #[case::type_mismatch(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1))), Bindings::new(), EvaluationError::TypeMismatch)]
@@ -583,7 +583,7 @@ mod tests {
     #[case::and_false(Expr::And(vec![Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Lt, Box::new(Expr::Lit(2))), Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Gt, Box::new(Expr::Lit(2)))]), Bindings::new(), false)]
     #[case::or_true(Expr::Or(vec![Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(2))), Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Lt, Box::new(Expr::Lit(2)))]), Bindings::new(), true)]
     #[case::or_false(Expr::Or(vec![Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(2))), Expr::Rel(Box::new(Expr::Lit(3)), RelOp::Lt, Box::new(Expr::Lit(2)))]), Bindings::new(), false)]
-    #[case::var_in_rel(Expr::Rel(Box::new(Expr::Var("x".into())), RelOp::Gt, Box::new(Expr::Lit(0))), Bindings::from([("x".to_string(), 5)]), true)]
+    #[case::var_in_rel(Expr::Rel(Box::new(Expr::Var("x".to_string())), RelOp::Gt, Box::new(Expr::Lit(0))), Bindings::from([("x".to_string(), 5)]), true)]
     fn test_evaluate_bool(#[case] expr: Expr, #[case] vars: Bindings, #[case] expected: bool) {
         let result = expr.evaluate_bool(&vars);
         assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", expr, result.clone().unwrap_err());
@@ -592,7 +592,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::unbound_in_rel(Expr::Rel(Box::new(Expr::Var("x".into())), RelOp::Gt, Box::new(Expr::Lit(0))), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
+    #[case::unbound_in_rel(Expr::Rel(Box::new(Expr::Var("x".to_string())), RelOp::Gt, Box::new(Expr::Lit(0))), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
     #[case::type_mismatch(Expr::Lit(1), Bindings::new(), EvaluationError::TypeMismatch)]
     fn test_evaluate_bool_invalid(#[case] expr: Expr, #[case] vars: Bindings, #[case] expected: EvaluationError) {
         let result = expr.evaluate_bool(&vars);
@@ -605,13 +605,13 @@ mod tests {
     #[case::wildcard(ValueAst::Wildcard, 3, true)]
     #[case::lit_match(ValueAst::Lit(3), 3,  true)]
     #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, true)]
-    #[case::expr_var(ValueAst::Expr(Expr::Var("h".into())), 5, true)]
+    #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, true)]
     #[case::expr_lit_match(ValueAst::Expr(Expr::Lit(3)), 3, true)]
-    #[case::expr_rel_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))), 3, true)]
-    #[case::expr_mem_match(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".into())), vec![0, 1])), 1, true)]
+    #[case::expr_rel_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 3, true)]
+    #[case::expr_mem_match(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1])), 1, true)]
     #[case::lit_no_match(ValueAst::Lit(3), 4, false)]
     #[case::expr_lit_no_match(ValueAst::Expr(Expr::Lit(3)), 4, false)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))), 0, false)]
+    #[case::expr_rel_no_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 0, false)]
     fn test_matches(#[case] pattern: ValueAst, #[case] value: i32, #[case] expected: bool) {
         assert_eq!(pattern.matches(value), expected);
     }
@@ -621,10 +621,10 @@ mod tests {
     #[case::wildcard(ValueAst::Wildcard, 3, Bindings::new())]
     #[case::lit_match(ValueAst::Lit(3), 3, Bindings::new())]
     #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, Bindings::new())]
-    #[case::expr_var(ValueAst::Expr(Expr::Var("h".into())), 5, Bindings::from([("h".to_string(), 5)]))]
+    #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, Bindings::from([("h".to_string(), 5)]))]
     #[case::expr_lit_match(ValueAst::Expr(Expr::Lit(3)), 3, Bindings::new())]
-    #[case::expr_rel_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))), 3, Bindings::from([("h".to_string(), 3)]))]
-    #[case::expr_mem_match(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".into())), vec![0, 1])), 1, Bindings::from([("h".to_string(), 1)]))]
+    #[case::expr_rel_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 3, Bindings::from([("h".to_string(), 3)]))]
+    #[case::expr_mem_match(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1])), 1, Bindings::from([("h".to_string(), 1)]))]
     fn test_capture(#[case] pattern: ValueAst, #[case] value: i32, #[case] expected: Bindings) {
         assert_eq!(pattern.capture(value), Some(expected));
     }
@@ -633,7 +633,7 @@ mod tests {
     #[rstest]
     #[case::lit_no_match(ValueAst::Lit(3), 4)]
     #[case::expr_lit_no_match(ValueAst::Expr(Expr::Lit(3)), 4)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))), 0)]
+    #[case::expr_rel_no_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 0)]
     fn test_capture_no_match(#[case] pattern: ValueAst, #[case] value: i32) {
         assert_eq!(pattern.capture(value), None);
     }

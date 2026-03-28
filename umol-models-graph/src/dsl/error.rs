@@ -2,6 +2,7 @@
 
 use nom::error::{ErrorKind as NomErrorKind, ParseError as NomParseError};
 use thiserror::Error;
+use umol_data::SpinStateError;
 
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ParseError {
@@ -22,7 +23,7 @@ pub enum ParseError {
     #[error("Invalid value: {0}")]
     InvalidValue(String),
     #[error("Invalid atom element: {0}")]
-    InvalidAtomElement(String),
+    InvalidElement(String),
     #[error("Unknown atom predicate: {0}")]
     UnknownAtomPredicate(String),
     #[error("Duplicate {0} atom predicate")]
@@ -38,7 +39,9 @@ pub enum ParseError {
     #[error("Duplicate structural id: {0}")]
     DuplicateId(String),
     #[error("Unknown atom endpoint: {0}")]
-    UnknownEndpoint(String),
+    InvalidAtomIndex(String),
+    #[error("Invalid spin state: {0}")]
+    InvalidSpinState(#[from] SpinStateError),
 }
 
 #[derive(Clone, Debug, PartialEq, Error)]
@@ -60,3 +63,6 @@ impl<I> NomParseError<I> for ParseError {
         other
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum LoweringError {}

@@ -43,7 +43,7 @@ impl HmoAromaticity {
         for &atom in pi_atoms {
             let atom_data = builder
                 .atom(atom)
-                .ok_or_else(|| AromaticityError::HmoMissingAtom("missing atom".into()))?;
+                .ok_or_else(|| AromaticityError::HmoMissingAtom("missing atom".to_string()))?;
             let element = atom_data.element();
             let valence = builder.atom_aromatic_valence(atom);
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
