@@ -324,6 +324,7 @@ fn try_build_spec(
     };
     AtomTypeSpec::new(
         element,
+        None,
         charge,
         implicit_hydrogens,
         lone_pairs,

@@ -61,7 +61,7 @@ impl AtomTypeRegistry {
         let mut buf = String::new();
         for ((element, charge), specs) in &self.atom_types {
             let _ = write!(buf, "{},{:?}:", element, charge);
-            let mut spec_strs: Vec<String> = specs.iter().map(|s| s.to_string()).collect();
+            let mut spec_strs: Vec<String> = specs.iter().map(|s| s.to_spec_str()).collect();
             spec_strs.sort();
             for s in &spec_strs {
                 let _ = write!(buf, "{},", s);

@@ -10,6 +10,13 @@ use thiserror::Error;
 use umol_data::{Element, SpinMultiplicity, SpinState, SpinStateError, MAX_UNPAIRED_ELECTRONS};
 
 use crate::atom::{AromaticValence, ImplicitHydrogens};
+use crate::dsl::atom::{
+    AromaticMode, AtomAst, AtomLowerConfig, ChargeMode, ImplicitHydrogenMode, IsotopeMode,
+};
+use crate::dsl::error::LoweringError;
+use crate::dsl::lowering::FromAst;
+use crate::dsl::predicates::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExpr};
+use crate::dsl::value::ValueAst;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 
@@ -157,23 +164,10 @@ impl AromaticConstraint {
 }
 
 /// Atom typing specification for valence resolution.
-///
-/// String notation:
-/// - `{El...}` where `El` is an element symbol.
-/// - tokens are optional and can appear in any order:
-///   - `+n` / `-n` charge (default 0, bare `+`/`-` means 1)
-///   - `Hn` hydrogens
-///   - `/n` lone pairs
-///   - `^n` unpaired electrons
-///   - `xn` multiplicity (default `unpaired + 1`)
-///   - `vn` valence
-///   - `>n` donated pairs
-///   - `<n` accepted pairs
-///   - `an` aromatic valence (n >= 0) or none (non-aromatic)
-///   - `mn` multicenter valence
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AtomTypeSpec {
     element: Element,
+    isotope_mass: Option<u32>,
     charge: i8,
     implicit_hydrogens: u8,
     lone_pairs: u8,
@@ -189,6 +183,7 @@ impl AtomTypeSpec {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         element: Element,
+        isotope_mass: Option<u32>,
         charge: i8,
         implicit_hydrogens: u8,
         lone_pairs: u8,
@@ -203,6 +198,7 @@ impl AtomTypeSpec {
         let spin = SpinState::try_new(unpaired_electrons, multiplicity)?;
         Ok(Self {
             element,
+            isotope_mass,
             charge,
             implicit_hydrogens,
             lone_pairs,
@@ -213,6 +209,10 @@ impl AtomTypeSpec {
             aromatic_valence,
             multicenter_valence,
         })
+    }
+
+    pub fn isotope_mass(&self) -> Option<u32> {
+        self.isotope_mass
     }
 
     pub fn element(&self) -> Element {
@@ -347,55 +347,57 @@ fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
     }
 }
 
-impl Display for AtomTypeSpec {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{{}", self.element)?;
+impl AtomTypeSpec {
+    /// Serialize to the legacy `{El...}` spec string format.
+    pub fn to_spec_str(&self) -> String {
+        let mut s = format!("{{{}", self.element);
+        if let Some(n) = self.isotope_mass {
+            s.push_str(&format!(" i{}", n));
+        }
         match self.charge {
             0 => {}
-            1 => write!(f, "+")?,
-            -1 => write!(f, "-")?,
-            c if c < 0 => write!(f, "{}", c)?,
-            c => write!(f, "+{}", c)?,
+            1 => s.push('+'),
+            -1 => s.push('-'),
+            c if c < 0 => s.push_str(&c.to_string()),
+            c => s.push_str(&format!("+{}", c)),
         }
         if self.implicit_hydrogens > 0 {
             if self.implicit_hydrogens == 1 {
-                write!(f, "H")?;
+                s.push('H');
             } else {
-                write!(f, "H{}", self.implicit_hydrogens)?;
+                s.push_str(&format!("H{}", self.implicit_hydrogens));
             }
         }
         if self.lone_pairs > 0 {
-            write!(f, "/{}", self.lone_pairs)?;
+            s.push_str(&format!("/{}", self.lone_pairs));
         }
         let n = self.spin.unpaired_electrons();
         let m = self.spin.multiplicity();
         if n > 0 {
-            write!(f, "^{}", n)?;
+            s.push_str(&format!("^{}", n));
         }
         if m.multiplicity() != n + 1 {
-            write!(f, "x{}", m.multiplicity())?;
+            s.push_str(&format!("x{}", m.multiplicity()));
         }
         if self.valence > 0 {
-            write!(f, "v{}", self.valence)?;
+            s.push_str(&format!("v{}", self.valence));
         }
         if self.donated_pairs > 0 {
-            write!(f, ">{}", self.donated_pairs)?;
+            s.push_str(&format!(">{}", self.donated_pairs));
         }
         if self.accepted_pairs > 0 {
-            write!(f, "<{}", self.accepted_pairs)?;
+            s.push_str(&format!("<{}", self.accepted_pairs));
         }
-        write!(f, "{}", self.aromatic_valence)?;
+        s.push_str(&self.aromatic_valence.to_string());
         if self.multicenter_valence > 0 {
-            write!(f, "m{}", self.multicenter_valence)?;
+            s.push_str(&format!("m{}", self.multicenter_valence));
         }
-        write!(f, "}}")
+        s.push('}');
+        s
     }
-}
 
-impl FromStr for AtomTypeSpec {
-    type Err = AtomError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    /// Parse from the legacy `{El...}` spec string format.
+    pub fn from_spec_str(s: &str) -> Result<Self, AtomError> {
         let trimmed = s.trim();
         if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
             return Err(AtomError::InvalidSpecFormat);
@@ -500,6 +502,7 @@ impl FromStr for AtomTypeSpec {
 
         Self::new(
             element,
+            None,
             charge.unwrap_or(0),
             implicit_hydrogens,
             lone_pairs,
@@ -516,14 +519,14 @@ impl FromStr for AtomTypeSpec {
 
 impl Serialize for AtomTypeSpec {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+        serializer.serialize_str(&self.to_spec_str())
     }
 }
 
 impl<'de> Deserialize<'de> for AtomTypeSpec {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        s.parse().map_err(de::Error::custom)
+        Self::from_spec_str(&s).map_err(de::Error::custom)
     }
 }
 
@@ -804,12 +807,206 @@ impl<'de> Deserialize<'de> for AtomTypeQuery {
     }
 }
 
+impl FromAst<AtomAst> for AtomTypeSpec {
+    fn from_ast(ast: AtomAst, cfg: &AtomLowerConfig) -> Result<Self, LoweringError> {
+        let element = match ast.element {
+            ElementExpr::Lit(e) => e,
+            _ => return Err(LoweringError::NonGround { field: "element" }),
+        };
+
+        let isotope_mass = match ast.isotope_mass {
+            Some(IsotopeExpr::Lit(n)) => Some(n),
+            Some(IsotopeExpr::Natural) => None,
+            None => match cfg.isotope_mode {
+                IsotopeMode::Normal => None,
+                IsotopeMode::Provided => {
+                    return Err(LoweringError::MissingField {
+                        field: "isotope_mass",
+                    })
+                }
+            },
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "isotope_mass",
+                })
+            }
+        };
+
+        let charge: i8 = match ast.charge {
+            Some(ValueAst::Lit(n)) => i8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                field: "charge",
+                value: n as i64,
+            })?,
+            None => match cfg.charge_mode {
+                ChargeMode::Zero | ChargeMode::Provided => 0,
+            },
+            Some(_) => return Err(LoweringError::NonGround { field: "charge" }),
+        };
+
+        let implicit_hydrogens: u8 = match ast.implicit_hydrogens {
+            Some(HydrogenExpr::Value(ValueAst::Lit(n))) => {
+                u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                    field: "implicit_hydrogens",
+                    value: n as i64,
+                })?
+            }
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "implicit_hydrogens",
+                })
+            }
+            None => match cfg.implicit_h_mode {
+                ImplicitHydrogenMode::Zero | ImplicitHydrogenMode::Provided => 0,
+                ImplicitHydrogenMode::Normal => {
+                    return Err(LoweringError::NonGround {
+                        field: "implicit_hydrogens",
+                    })
+                }
+            },
+        };
+
+        let lone_pairs: u8 = match ast.lone_pairs {
+            Some(ValueAst::Lit(n)) => u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                field: "lone_pairs",
+                value: n as i64,
+            })?,
+            None => 0,
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "lone_pairs",
+                })
+            }
+        };
+
+        let unpaired_electrons: u8 = match ast.unpaired_electrons {
+            Some(ValueAst::Lit(n)) => u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                field: "unpaired_electrons",
+                value: n as i64,
+            })?,
+            None => 0,
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "unpaired_electrons",
+                })
+            }
+        };
+
+        let multiplicity = match ast.multiplicity {
+            Some(ValueAst::Lit(n)) => {
+                let n_u8 = u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                    field: "multiplicity",
+                    value: n as i64,
+                })?;
+                SpinMultiplicity::from_multiplicity(n_u8)
+                    .ok_or(LoweringError::InvalidMultiplicity(n_u8))?
+            }
+            None => SpinMultiplicity::from_multiplicity(unpaired_electrons + 1)
+                .ok_or(LoweringError::InvalidMultiplicity(unpaired_electrons + 1))?,
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "multiplicity",
+                })
+            }
+        };
+
+        let valence: u8 = match ast.valence {
+            Some(ValueAst::Lit(n)) => u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                field: "valence",
+                value: n as i64,
+            })?,
+            None => 0,
+            Some(_) => return Err(LoweringError::NonGround { field: "valence" }),
+        };
+
+        let donated_pairs: u8 = match ast.donated_pairs {
+            Some(ValueAst::Lit(n)) => u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                field: "donated_pairs",
+                value: n as i64,
+            })?,
+            None => 0,
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "donated_pairs",
+                })
+            }
+        };
+
+        let accepted_pairs: u8 = match ast.accepted_pairs {
+            Some(ValueAst::Lit(n)) => u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                field: "accepted_pairs",
+                value: n as i64,
+            })?,
+            None => 0,
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "accepted_pairs",
+                })
+            }
+        };
+
+        let aromatic_valence = match ast.aromatic_valence {
+            Some(AromaticExpr::None) => AromaticValence::None,
+            Some(AromaticExpr::Value(ValueAst::Lit(n))) => {
+                let n_u8 = u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                    field: "aromatic_valence",
+                    value: n as i64,
+                })?;
+                AromaticValence::Valence(n_u8)
+            }
+            Some(AromaticExpr::Value(_)) => {
+                return Err(LoweringError::NonGround {
+                    field: "aromatic_valence",
+                })
+            }
+            None => match cfg.aromatic_mode {
+                AromaticMode::None | AromaticMode::Provided => AromaticValence::None,
+                AromaticMode::Any => {
+                    return Err(LoweringError::NonGround {
+                        field: "aromatic_valence",
+                    })
+                }
+            },
+        };
+
+        let multicenter_valence: u8 = match ast.multicenter_valence {
+            Some(ValueAst::Lit(n)) => u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                field: "multicenter_valence",
+                value: n as i64,
+            })?,
+            None => 0,
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "multicenter_valence",
+                })
+            }
+        };
+
+        AtomTypeSpec::new(
+            element,
+            isotope_mass,
+            charge,
+            implicit_hydrogens,
+            lone_pairs,
+            unpaired_electrons,
+            multiplicity,
+            valence,
+            donated_pairs,
+            accepted_pairs,
+            aromatic_valence,
+            multicenter_valence,
+        )
+        .map_err(|e| match e {
+            AtomError::SpinState(spin_err) => LoweringError::SpinState(spin_err),
+            e => LoweringError::Atom(e.to_string()),
+        })
+    }
+}
+
 /// Public shorthand for parsing a single atom type specification.
 #[macro_export]
 macro_rules! spec {
     ($s:expr) => {{
-        use std::str::FromStr;
-        $crate::graph_ir::atom_type::AtomTypeSpec::from_str($s).unwrap()
+        $crate::graph_ir::atom_type::AtomTypeSpec::from_spec_str($s).unwrap()
     }};
 }
 
@@ -829,9 +1026,10 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::{Element, SpinStateError};
+    use umol_data::{Element, SpinMultiplicity, SpinStateError};
 
     use super::*;
+    use crate::dsl::error::LoweringError;
 
     #[test]
     fn test_aromatic_valence_display() {
@@ -875,7 +1073,7 @@ mod tests {
     #[case::multicenter_valence_1("{Nm1}", Element::N, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 1)]
     #[case::complete("{N-H/1^2x1v2a1m2}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
     #[case::permuted("{N^2v2a1m2-H/1^2x1}", Element::N, -1, 1, 1, 2, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 2)]
-    fn test_atom_type_spec_from_str(
+    fn test_atom_type_spec_from_spec_str(
         #[case] input: &str,
         #[case] element: Element,
         #[case] charge: i8,
@@ -889,8 +1087,9 @@ mod tests {
         #[case] aromatic_valence: AromaticValence,
         #[case] multicenter_valence: u8,
     ) {
-        let spec = AtomTypeSpec::from_str(input).unwrap();
+        let spec = AtomTypeSpec::from_spec_str(input).unwrap();
         assert_eq!(spec.element(), element, "element mismatch for {}", input);
+        assert_eq!(spec.isotope_mass(), None, "isotope_mass mismatch for {}", input);
         assert_eq!(spec.charge(), charge, "charge mismatch for {}", input);
         assert_eq!(spec.implicit_hydrogens(), hydrogens, "hydrogens mismatch for {}", input);
         assert_eq!(spec.lone_pairs(), lone_pairs, "lone pairs mismatch for {}", input);
@@ -915,8 +1114,8 @@ mod tests {
         multiplicity: SpinMultiplicity::Doublet,
     }))]
     #[case::unexpected_token("{Nq1}", AtomError::UnexpectedToken { token: 'q' })]
-    fn test_atom_type_spec_from_str_error(#[case] input: &str, #[case] expected: AtomError) {
-        assert_eq!(AtomTypeSpec::from_str(input).unwrap_err(), expected);
+    fn test_atom_type_spec_from_spec_str_error(#[case] input: &str, #[case] expected: AtomError) {
+        assert_eq!(AtomTypeSpec::from_spec_str(input).unwrap_err(), expected);
     }
 
     #[rstest]
@@ -926,25 +1125,24 @@ mod tests {
     #[case::multicenter_m2("{C-H/1^2x1v2m2}")]
     // TODO: Fix multicenter valence
     // #[case::multicenter_m0("{C-H/1^2x1v2m0}")]
-    fn test_atom_type_spec_display_roundtrip(#[case] input: &str) {
-        let parsed = AtomTypeSpec::from_str(input).unwrap();
-        let formatted = parsed.to_string();
+    fn test_atom_type_spec_str_roundtrip(#[case] input: &str) {
+        let parsed = AtomTypeSpec::from_spec_str(input).unwrap();
+        let formatted = parsed.to_spec_str();
         assert_eq!(input, formatted);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valid("{C+0v4a0m0}", None)]
-    #[case::charge_out_of_bounds("{C+5}", Some(AtomError::ChargeOutOfBounds { element: Element::C, charge: 5, min_charge: -4, max_charge: 1 }))]
-    #[case::valence_exceeds_max("{Hv2}", Some(AtomError::ValenceExceedsMax { element: Element::H, valence: 2, max_valence: 1, }))]
-    #[case::unpaired_exceeds_max("{O^3x2}", Some(AtomError::UnpairedElectronsExceedMax { element: Element::O, unpaired_electrons: 3, max_unpaired_electrons: 2 }))]
-    #[case::implicit_hydrogens_exceed_max("{OH4}", Some(AtomError::ImplicitHydrogensExceedMax { element: Element::O, implicit_hydrogens: 4, max_implicit_hydrogens: 3 }))]
-    #[case::electron_invariant_mismatch("{Cv1}", Some(AtomError::ElectronInvariantMismatch { element: Element::C, orbital_invariant: 2, electron_invariant: 5 }))]
+    #[case::valid(AtomTypeSpec::new(Element::C, None, 0, 0, 0, 0, SpinMultiplicity::Singlet, 4, 0, 0, AromaticValence::Valence(0), 0).unwrap(), None)]
+    #[case::charge_out_of_bounds(AtomTypeSpec::new(Element::C, None, 5, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap(), Some(AtomError::ChargeOutOfBounds { element: Element::C, charge: 5, min_charge: -4, max_charge: 1 }))]
+    #[case::valence_exceeds_max(AtomTypeSpec::new(Element::H, None, 0, 0, 0, 0, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::None, 0).unwrap(), Some(AtomError::ValenceExceedsMax { element: Element::H, valence: 2, max_valence: 1 }))]
+    #[case::unpaired_exceeds_max(AtomTypeSpec::new(Element::O, None, 0, 0, 0, 3, SpinMultiplicity::Doublet, 0, 0, 0, AromaticValence::None, 0).unwrap(), Some(AtomError::UnpairedElectronsExceedMax { element: Element::O, unpaired_electrons: 3, max_unpaired_electrons: 2 }))]
+    #[case::implicit_hydrogens_exceed_max(AtomTypeSpec::new(Element::O, None, 0, 4, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap(), Some(AtomError::ImplicitHydrogensExceedMax { element: Element::O, implicit_hydrogens: 4, max_implicit_hydrogens: 3 }))]
+    #[case::electron_invariant_mismatch(AtomTypeSpec::new(Element::C, None, 0, 0, 0, 0, SpinMultiplicity::Singlet, 1, 0, 0, AromaticValence::None, 0).unwrap(), Some(AtomError::ElectronInvariantMismatch { element: Element::C, orbital_invariant: 2, electron_invariant: 5 }))]
     fn test_atom_type_spec_check_invariants(
-        #[case] input: &str,
+        #[case] spec: AtomTypeSpec,
         #[case] expected: Option<AtomError>,
     ) {
-        let spec = AtomTypeSpec::from_str(input).unwrap();
         assert_eq!(spec.check_invariants().err(), expected);
     }
 
@@ -1022,5 +1220,54 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(constraint.matches(valence), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::carbon("C", None, 0, 0, 0, SpinMultiplicity::Singlet, 0, AromaticValence::None)]
+    #[case::isotope("C#i12", Some(12), 0, 0, 0, SpinMultiplicity::Singlet, 0, AromaticValence::None)]
+    #[case::isotope_natural("C#i=", None, 0, 0, 0, SpinMultiplicity::Singlet, 0, AromaticValence::None)]
+    #[case::charge_h_valence("C#c-1#h4#v4", None, -1, 4, 0, SpinMultiplicity::Singlet, 4, AromaticValence::None)]
+    #[case::fe_highspin("Fe#c+2#u4#s5", None, 2, 0, 4, SpinMultiplicity::Quintet, 0, AromaticValence::None)]
+    #[case::aromatic("C#a1", None, 0, 0, 0, SpinMultiplicity::Singlet, 0, AromaticValence::Valence(1))]
+    #[case::aromatic_none("C#a!", None, 0, 0, 0, SpinMultiplicity::Singlet, 0, AromaticValence::None)]
+    fn test_lower_atom_ast(
+        #[case] input: &str,
+        #[case] isotope_mass: Option<u32>,
+        #[case] charge: i8,
+        #[case] implicit_hydrogens: u8,
+        #[case] unpaired_electrons: u8,
+        #[case] multiplicity: SpinMultiplicity,
+        #[case] valence: u8,
+        #[case] aromatic_valence: AromaticValence,
+    ) {
+        use crate::dsl::atom::parse_atom_dsl;
+        use crate::dsl::lowering::LowerAst;
+
+        let ast = parse_atom_dsl(input).expect("atom DSL should parse");
+        let spec: AtomTypeSpec = ast.lower().expect("lowering should succeed");
+        assert_eq!(spec.element(), Element::from_symbol(&input[..input.find(|c: char| !c.is_ascii_alphabetic()).unwrap_or(input.len())]).unwrap_or(Element::C), "element mismatch");
+        assert_eq!(spec.isotope_mass(), isotope_mass, "isotope_mass mismatch for {input}");
+        assert_eq!(spec.charge(), charge, "charge mismatch for {input}");
+        assert_eq!(spec.implicit_hydrogens(), implicit_hydrogens, "implicit_hydrogens mismatch for {input}");
+        assert_eq!(spec.unpaired_electrons(), unpaired_electrons, "unpaired_electrons mismatch for {input}");
+        assert_eq!(spec.multiplicity(), multiplicity, "multiplicity mismatch for {input}");
+        assert_eq!(spec.valence(), valence, "valence mismatch for {input}");
+        assert_eq!(spec.aromatic_valence(), aromatic_valence, "aromatic_valence mismatch for {input}");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard_element("*", LoweringError::NonGround { field: "element" })]
+    #[case::nonground_h("C#h*", LoweringError::NonGround { field: "implicit_hydrogens" })]
+    #[case::normal_h("C#h=", LoweringError::NonGround { field: "implicit_hydrogens" })]
+    #[case::spin_incompatible("Fe#u2#s4", LoweringError::SpinState(SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::Quartet }))]
+    fn test_lower_atom_ast_error(#[case] input: &str, #[case] expected: LoweringError) {
+        use crate::dsl::atom::parse_atom_dsl;
+        use crate::dsl::lowering::LowerAst;
+
+        let ast = parse_atom_dsl(input).expect("atom DSL should parse");
+        let result: Result<AtomTypeSpec, _> = ast.lower();
+        assert_eq!(result.unwrap_err(), expected, "expected error for {input}");
     }
 }

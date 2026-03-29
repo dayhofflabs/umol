@@ -88,6 +88,7 @@ impl Atom {
     pub fn to_spec(&self) -> AtomTypeSpec {
         AtomTypeSpec::new(
             self.element,
+            self.isotope_mass,
             self.charge,
             self.implicit_hydrogens,
             self.lone_pairs,
@@ -292,7 +293,7 @@ impl AtomBuilder {
             }
             1 => &self.candidates[0],
             n => {
-                let specs: Vec<String> = self.candidates.iter().map(|s| s.to_string()).collect();
+                let specs: Vec<String> = self.candidates.iter().map(|s| s.to_spec_str()).collect();
                 return Err(ResolutionError::ValenceAmbiguous(format!(
                     "{} valence matches for {:?}: {}",
                     n,
@@ -320,7 +321,7 @@ impl AtomBuilder {
         {
             return Err(ResolutionError::ValenceViolation(
                 self.element,
-                format!("atom candidate mismatch for {}", candidate),
+                format!("atom candidate mismatch for {}", candidate.to_spec_str()),
             ));
         }
 
@@ -329,7 +330,7 @@ impl AtomBuilder {
                 self.element,
                 format!(
                     "atom invariant verification failed for {}: {}",
-                    candidate, error
+                    candidate.to_spec_str(), error
                 ),
             ));
         }
@@ -369,7 +370,7 @@ impl FromStr for AtomBuilder {
     type Err = AtomError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let spec: AtomTypeSpec = s.parse()?;
+        let spec = AtomTypeSpec::from_spec_str(s)?;
         Ok(AtomBuilder {
             element: spec.element(),
             isotope_mass: None,

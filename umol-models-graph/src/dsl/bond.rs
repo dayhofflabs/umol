@@ -7,6 +7,7 @@ use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
 
 use super::error::ParseError;
+use super::lowering::LowerAst;
 use super::predicates::{bond_order, bond_predicate, BondPredicate};
 use super::value::ValueAst;
 
@@ -17,6 +18,24 @@ pub struct BondAst {
     pub charge: Option<ValueAst>,
     pub unpaired_electrons: Option<ValueAst>,
     pub multiplicity: Option<ValueAst>,
+}
+
+impl LowerAst for BondAst {
+    type Config = BondLowerConfig;
+}
+
+/// Bond lowering configuration
+#[derive(Clone, Debug, Default)]
+pub struct BondLowerConfig {
+    pub charge_mode: ChargeMode,
+}
+
+/// Charge interpretation mode
+#[derive(Clone, Debug, Default)]
+pub enum ChargeMode {
+    Zero,
+    #[default]
+    Provided,
 }
 
 /// Parse a bond subgrammar string
