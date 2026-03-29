@@ -35,11 +35,11 @@ pub(super) fn extract_tagged_str<'e>(edn: &'e Edn<'e>, tag: &str) -> Result<&'e 
     match edn {
         Edn::Tagged(t, v) if *t == tag => match v.as_ref() {
             Edn::Str(s) => Ok(s),
-            _ => Err(ParseError::InvalidAtomDsl(format!(
+            _ => Err(ParseError::InvalidAtomSpec(format!(
                 "#{tag} value must be a string"
             ))),
         },
-        _ => Err(ParseError::InvalidAtomDsl(format!(
+        _ => Err(ParseError::InvalidAtomSpec(format!(
             "expected #{tag} tagged literal"
         ))),
     }

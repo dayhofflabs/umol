@@ -222,7 +222,7 @@ fn parse_bond_spec(edn: &Edn<'_>) -> Result<BondSpec, ParseError> {
     match edn {
         Edn::Tagged(t, v) if *t == "bond" => match v.as_ref() {
             Edn::Str(s) => Ok(BondSpec::Literal(parse_bond_dsl(s)?)),
-            _ => Err(ParseError::InvalidBondDsl(
+            _ => Err(ParseError::InvalidBondSpec(
                 "#bond must be followed by a string".to_string(),
             )),
         },
@@ -230,7 +230,7 @@ fn parse_bond_spec(edn: &Edn<'_>) -> Result<BondSpec, ParseError> {
         Edn::Key("double") => Ok(BondSpec::Double),
         Edn::Key("triple") => Ok(BondSpec::Triple),
         Edn::Key("quadruple") => Ok(BondSpec::Quadruple),
-        _ => Err(ParseError::InvalidBondDsl(
+        _ => Err(ParseError::InvalidBondSpec(
             "bond spec must be #bond \"...\" or a keyword shorthand".to_string(),
         )),
     }
@@ -533,8 +533,8 @@ mod tests {
     #[case::unknown_alias(r#"{:atoms {:C :ch} :bonds []}"#, ParseError::UnknownAlias("ch".to_string()))]
     #[case::trailing_content(r#"{:atoms {:C #atom "C"} :bonds []} :extra :junk"#, ParseError::EdnParse("unexpected trailing content: :extra :junk".to_string()))]
     #[case::duplicate_atom_bond_id(r#"{:atoms {:b1 #atom "C" :O #atom "O"} :bonds [{:id :b1 :a :b1 :b :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
-    #[case::duplicate_bond_ids_cross_section(r#"{:atoms {:C #atom "C" :O #atom "O"} :bonds [{:id :b1 :a :C :b :O :bond :single}] :dative [{:id :b1 :donor :C :acceptor :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
-    #[case::duplicate_atom_id_and_alias(r#"{:aliases [:C #atom "N"] :atoms {:C #atom "C"} :bonds []}"#, ParseError::DuplicateId("C".to_string()))]
+    #[case::duplicate_bond_dative_id(r#"{:atoms {:C #atom "C" :O #atom "O"} :bonds [{:id :b1 :a :C :b :O :bond :single}] :dative [{:id :b1 :donor :C :acceptor :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
+    #[case::duplicate_id_alias(r#"{:aliases [:C #atom "N"] :atoms {:C #atom "C"} :bonds []}"#, ParseError::DuplicateId("C".to_string()))]
     #[case::duplicate_alias(r#"{:aliases [:ch #atom "C #h1" :ch #atom "C #h2"] :atoms [] :bonds []}"#, ParseError::DuplicateId("ch".to_string()))]
     fn test_parse_molecule_map_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = parse_molecule_dsl(input);
