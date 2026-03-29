@@ -78,20 +78,26 @@ molecule-map ::=
     [:aromatic     aromatic-list]
     [:multicenter  multicenter-list]
     [:noncovalent  noncovalent-list]
+    [:aliases      alias-map]
     [:charge       int | nil]
     [:spin         spin-literal | nil]
     [:expect   { :charge int :multiplicity keyword }]
     [:guards   [ logic-expr* ]]
   }
 
-atom-collection ::= { keyword → #atom "atom-string" }+
-                  | [ #atom "atom-string"* ]
+alias-map       ::= [ keyword #atom "atom-string" ]*
+
+atom-collection ::= { keyword → atom-spec }+
+                  | [ atom-spec* ]
+
+atom-spec ::= #atom "atom-string" | keyword
 
 covalent-bond-list ::= [ covalent-bond-entry* ]
 dative-bond-list   ::= [ dative-bond-entry* ]
 
-covalent-bond-entry ::= { :id keyword :a keyword :b keyword :bond bond-spec }
-dative-bond-entry   ::= { :id keyword :donor keyword :acceptor keyword :bond bond-spec }
+covalent-bond-entry ::= { [:id keyword] :a keyword :b keyword :bond bond-spec }
+                      | [ keyword keyword bond-spec ]
+dative-bond-entry   ::= { [:id keyword] :donor keyword :acceptor keyword :bond bond-spec }
 
 bond-spec ::= #bond "bond-string" | bond-keyword
 
@@ -99,14 +105,16 @@ aromatic-list    ::= [ aromatic-entry* ]
 multicenter-list ::= [ multicenter-entry* ]
 noncovalent-list ::= [ noncovalent-entry* ]
 
-aromatic-entry    ::= { :id keyword :atoms [ keyword+ ] }
-multicenter-entry ::= { :id keyword :atoms [ keyword+ ] }
-noncovalent-entry ::= { :id keyword :a keyword :b keyword :bond noncovalent-spec }
+aromatic-entry    ::= { [:id keyword] :atoms [ keyword+ ] }
+multicenter-entry ::= { [:id keyword] :atoms [ keyword+ ] }
+noncovalent-entry ::= { [:id keyword] :a keyword :b keyword :bond noncovalent-spec }
 
 noncovalent-spec ::= bond-spec
 ```
 
-**`:id`**. Each **`covalent-bond-entry`**, **`dative-bond-entry`**, **`aromatic-entry`**, **`multicenter-entry`**, and **`noncovalent-entry`** **MUST** include **`:id`** with an EDN **keyword** value. **`:id`** values **MUST** be **pairwise distinct** across **all** such entries in the **same** **molecule map** (every list combined). **`:id`** is a **stable handle** for external reference; this specification does not define how ids are allocated.
+**`:id`**. Each structural entry **MAY** include **`:id`** with an EDN **keyword** value. When present, **`:id`** values **MUST** be **pairwise distinct** across **all** entries in the **same** **molecule map** (every list combined) and **MUST** be distinct from all aliases.
+
+**`:aliases`**. The **`alias-map`** defines named atom shorthands scoped to the enclosing molecule map. Each value **MUST** be a **`#atom`** tagged literal. An **`atom-spec`** that is a bare **keyword** (not a **`#atom`** tagged literal) is an alias reference and **MUST** resolve to a key in **`:aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error.
 
 **Endpoints.** Every atom site referenced from a structural relation **MUST** exist under **`:atoms`**:
 

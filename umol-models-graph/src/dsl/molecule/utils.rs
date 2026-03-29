@@ -18,16 +18,14 @@ pub(super) fn extract_map<'e>(
 ) -> Result<&'e BTreeMap<Edn<'e>, Edn<'e>>, ParseError> {
     match edn {
         Edn::Map(m) => Ok(m),
-        _ => Err(ParseError::InvalidMoleculeMap(format!(
-            "expected EDN map for {ctx}"
-        ))),
+        _ => Err(ParseError::EdnParse(format!("expected EDN map for {ctx}"))),
     }
 }
 
 pub(super) fn extract_label(edn: &Edn<'_>) -> Result<String, ParseError> {
     match edn {
         Edn::Key(s) => Ok((*s).to_string()),
-        _ => Err(ParseError::InvalidMoleculeMap(
+        _ => Err(ParseError::EdnParse(
             "expected EDN keyword as label".to_string(),
         )),
     }
@@ -37,11 +35,11 @@ pub(super) fn extract_tagged_str<'e>(edn: &'e Edn<'e>, tag: &str) -> Result<&'e 
     match edn {
         Edn::Tagged(t, v) if *t == tag => match v.as_ref() {
             Edn::Str(s) => Ok(s),
-            _ => Err(ParseError::InvalidMoleculeMap(format!(
+            _ => Err(ParseError::InvalidAtomDsl(format!(
                 "#{tag} value must be a string"
             ))),
         },
-        _ => Err(ParseError::InvalidMoleculeMap(format!(
+        _ => Err(ParseError::InvalidAtomDsl(format!(
             "expected #{tag} tagged literal"
         ))),
     }
@@ -55,8 +53,9 @@ pub(super) fn extract_list<'e, T>(
     match map_get(map, key) {
         None => Ok(Vec::new()),
         Some(Edn::Vector(v)) => v.iter().map(f).collect(),
-        Some(_) => Err(ParseError::InvalidMoleculeMap(format!(
-            ":{key} must be a vector"
-        ))),
+        Some(_) => Err(ParseError::WrongFieldType {
+            field: key.to_owned(),
+            expected: "vector".to_owned(),
+        }),
     }
 }

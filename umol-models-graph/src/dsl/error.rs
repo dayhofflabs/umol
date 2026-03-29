@@ -34,8 +34,17 @@ pub enum ParseError {
     EdnParse(String),
     #[error("Missing required key: {0}")]
     MissingKey(String),
-    #[error("Invalid molecule map: {0}")]
-    InvalidMoleculeMap(String),
+    #[error("expected {expected} for :{field}")]
+    WrongFieldType {
+        field: String,
+        expected: String,
+    },
+    #[error("invalid atom DSL: {0}")]
+    InvalidAtomDsl(String),
+    #[error("invalid bond DSL: {0}")]
+    InvalidBondDsl(String),
+    #[error("invalid bond entry: expected map-based {{[:id keyword] :a :b :bond}} or vector-based [a b bond-spec]")]
+    InvalidBond,
     #[error("Duplicate structural id: {0}")]
     DuplicateId(String),
     #[error("Unknown atom endpoint: {0}")]

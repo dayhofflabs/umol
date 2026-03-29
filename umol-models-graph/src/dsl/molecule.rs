@@ -47,7 +47,7 @@ pub struct CovalentBond {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DativeBond {
-    pub id: String,
+    pub id: Option<String>,
     pub donor: String,
     pub acceptor: String,
     pub bond: BondSpec,
@@ -55,19 +55,19 @@ pub struct DativeBond {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AromaticSystem {
-    pub id: String,
+    pub id: Option<String>,
     pub atoms: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MulticenterBond {
-    pub id: String,
+    pub id: Option<String>,
     pub atoms: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoncovalentBond {
-    pub id: String,
+    pub id: Option<String>,
     pub a: String,
     pub b: String,
     pub bond: BondSpec,
@@ -103,6 +103,13 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
         map_get(map, "atoms").ok_or_else(|| ParseError::MissingKey(":atoms".to_string()))?,
         &aliases,
     )?;
+    if let Atoms::Named(m) = &atoms {
+        for label in m.keys() {
+            if aliases.contains_key(label) {
+                return Err(ParseError::DuplicateId(label.clone()));
+            }
+        }
+    }
     let bonds = parse_covalent_bonds(
         map_get(map, "bonds").ok_or_else(|| ParseError::MissingKey(":bonds".to_string()))?,
     )?;
@@ -114,18 +121,20 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
         Some(Edn::Int(n)) => Some(*n),
         Some(Edn::Nil) | None => None,
         Some(_) => {
-            return Err(ParseError::InvalidMoleculeMap(
-                ":charge must be an integer or nil".to_string(),
-            ))
+            return Err(ParseError::WrongFieldType {
+                field: "charge".to_string(),
+                expected: "integer or nil".to_string(),
+            })
         }
     };
     let spin = match map_get(map, "spin") {
         Some(edn @ Edn::Str(_)) => Some(parse_spin_state(edn)?),
         Some(Edn::Nil) | None => None,
         Some(_) => {
-            return Err(ParseError::InvalidMoleculeMap(
-                ":spin must be a string or nil".to_string(),
-            ))
+            return Err(ParseError::WrongFieldType {
+                field: "spin".to_string(),
+                expected: "string or nil".to_string(),
+            })
         }
     };
 
@@ -143,12 +152,29 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
     Ok(ast)
 }
 
-fn parse_aliases<'e>(edn: &'e Edn<'e>) -> Result<IndexMap<String, AtomAst>, ParseError> {
-    let m = extract_map(edn, "aliases")?;
+fn parse_aliases(edn: &Edn<'_>) -> Result<IndexMap<String, AtomAst>, ParseError> {
+    let v = match edn {
+        Edn::Vector(v) => v,
+        _ => {
+            return Err(ParseError::WrongFieldType {
+                field: "aliases".to_string(),
+                expected: "flat vector of keyword/atom-spec pairs".to_string(),
+            })
+        }
+    };
+    if v.len() % 2 != 0 {
+        return Err(ParseError::WrongFieldType {
+            field: "aliases".to_string(),
+            expected: "flat vector of keyword/atom-spec pairs (even length)".to_string(),
+        });
+    }
     let mut aliases = IndexMap::new();
-    for (k, v) in m {
-        let name = extract_label(k)?;
-        let atom = parse_atom_dsl(extract_tagged_str(v, "atom")?)?;
+    for pair in v.chunks(2) {
+        let name = extract_label(&pair[0])?;
+        if aliases.contains_key(&name) {
+            return Err(ParseError::DuplicateId(name));
+        }
+        let atom = parse_atom_dsl(extract_tagged_str(&pair[1], "atom")?)?;
         aliases.insert(name, atom);
     }
     Ok(aliases)
@@ -185,9 +211,10 @@ fn parse_atoms(edn: &Edn<'_>, aliases: &IndexMap<String, AtomAst>) -> Result<Ato
                 .collect::<Result<_, _>>()?;
             Ok(Atoms::Indexed(atoms))
         }
-        _ => Err(ParseError::InvalidMoleculeMap(
-            ":atoms must be a map or vector".to_string(),
-        )),
+        _ => Err(ParseError::WrongFieldType {
+            field: "atoms".to_string(),
+            expected: "map or vector".to_string(),
+        }),
     }
 }
 
@@ -195,7 +222,7 @@ fn parse_bond_spec(edn: &Edn<'_>) -> Result<BondSpec, ParseError> {
     match edn {
         Edn::Tagged(t, v) if *t == "bond" => match v.as_ref() {
             Edn::Str(s) => Ok(BondSpec::Literal(parse_bond_dsl(s)?)),
-            _ => Err(ParseError::InvalidMoleculeMap(
+            _ => Err(ParseError::InvalidBondDsl(
                 "#bond must be followed by a string".to_string(),
             )),
         },
@@ -203,7 +230,7 @@ fn parse_bond_spec(edn: &Edn<'_>) -> Result<BondSpec, ParseError> {
         Edn::Key("double") => Ok(BondSpec::Double),
         Edn::Key("triple") => Ok(BondSpec::Triple),
         Edn::Key("quadruple") => Ok(BondSpec::Quadruple),
-        _ => Err(ParseError::InvalidMoleculeMap(
+        _ => Err(ParseError::InvalidBondDsl(
             "bond spec must be #bond \"...\" or a keyword shorthand".to_string(),
         )),
     }
@@ -212,9 +239,10 @@ fn parse_bond_spec(edn: &Edn<'_>) -> Result<BondSpec, ParseError> {
 fn parse_covalent_bonds(edn: &Edn<'_>) -> Result<Vec<CovalentBond>, ParseError> {
     match edn {
         Edn::Vector(v) => v.iter().map(parse_covalent_bond).collect(),
-        _ => Err(ParseError::InvalidMoleculeMap(
-            ":bonds must be a vector".to_string(),
-        )),
+        _ => Err(ParseError::WrongFieldType {
+            field: "bonds".to_string(),
+            expected: "vector".to_string(),
+        }),
     }
 }
 
@@ -222,9 +250,7 @@ fn parse_covalent_bond(edn: &Edn<'_>) -> Result<CovalentBond, ParseError> {
     match edn {
         Edn::Vector(v) => {
             if v.len() != 3 {
-                return Err(ParseError::InvalidMoleculeMap(
-                    "vector bond entry must be [atom1 atom2 bond]".to_string(),
-                ));
+                return Err(ParseError::InvalidBond);
             }
             Ok(CovalentBond {
                 id: None,
@@ -236,10 +262,7 @@ fn parse_covalent_bond(edn: &Edn<'_>) -> Result<CovalentBond, ParseError> {
         Edn::Map(_) => {
             let m = extract_map(edn, "covalent bond entry")?;
             Ok(CovalentBond {
-                id: Some(extract_label(
-                    map_get(m, "id")
-                        .ok_or_else(|| ParseError::MissingKey(":id in bond entry".to_string()))?,
-                )?),
+                id: map_get(m, "id").map(extract_label).transpose()?,
                 a: extract_label(
                     map_get(m, "a")
                         .ok_or_else(|| ParseError::MissingKey(":a in bond entry".to_string()))?,
@@ -254,19 +277,14 @@ fn parse_covalent_bond(edn: &Edn<'_>) -> Result<CovalentBond, ParseError> {
                 )?,
             })
         }
-        _ => Err(ParseError::InvalidMoleculeMap(
-            "bond entry must be a map {:id ... :a ... :b ... :bond ...} or vector [atom1 atom2 bond]".to_string(),
-        )),
+        _ => Err(ParseError::InvalidBond),
     }
 }
 
 fn parse_dative_bond(edn: &Edn<'_>) -> Result<DativeBond, ParseError> {
     let m = extract_map(edn, "dative bond entry")?;
     Ok(DativeBond {
-        id: extract_label(
-            map_get(m, "id")
-                .ok_or_else(|| ParseError::MissingKey(":id in dative entry".to_string()))?,
-        )?,
+        id: map_get(m, "id").map(extract_label).transpose()?,
         donor: extract_label(
             map_get(m, "donor")
                 .ok_or_else(|| ParseError::MissingKey(":donor in dative entry".to_string()))?,
@@ -284,18 +302,16 @@ fn parse_dative_bond(edn: &Edn<'_>) -> Result<DativeBond, ParseError> {
 
 fn parse_aromatic_system(edn: &Edn<'_>) -> Result<AromaticSystem, ParseError> {
     let m = extract_map(edn, "aromatic entry")?;
-    let id = extract_label(
-        map_get(m, "id")
-            .ok_or_else(|| ParseError::MissingKey(":id in aromatic entry".to_string()))?,
-    )?;
+    let id = map_get(m, "id").map(extract_label).transpose()?;
     let atoms = match map_get(m, "atoms")
         .ok_or_else(|| ParseError::MissingKey(":atoms in aromatic entry".to_string()))?
     {
         Edn::Vector(v) => v.iter().map(extract_label).collect::<Result<_, _>>()?,
         _ => {
-            return Err(ParseError::InvalidMoleculeMap(
-                ":atoms in aromatic entry must be a vector".to_string(),
-            ))
+            return Err(ParseError::WrongFieldType {
+                field: "atoms".to_string(),
+                expected: "vector of keywords".to_string(),
+            })
         }
     };
     Ok(AromaticSystem { id, atoms })
@@ -303,18 +319,16 @@ fn parse_aromatic_system(edn: &Edn<'_>) -> Result<AromaticSystem, ParseError> {
 
 fn parse_multicenter_bond(edn: &Edn<'_>) -> Result<MulticenterBond, ParseError> {
     let m = extract_map(edn, "multicenter entry")?;
-    let id = extract_label(
-        map_get(m, "id")
-            .ok_or_else(|| ParseError::MissingKey(":id in multicenter entry".to_string()))?,
-    )?;
+    let id = map_get(m, "id").map(extract_label).transpose()?;
     let atoms = match map_get(m, "atoms")
         .ok_or_else(|| ParseError::MissingKey(":atoms in multicenter entry".to_string()))?
     {
         Edn::Vector(v) => v.iter().map(extract_label).collect::<Result<_, _>>()?,
         _ => {
-            return Err(ParseError::InvalidMoleculeMap(
-                ":atoms in multicenter entry must be a vector".to_string(),
-            ))
+            return Err(ParseError::WrongFieldType {
+                field: "atoms".to_string(),
+                expected: "vector of keywords".to_string(),
+            })
         }
     };
     Ok(MulticenterBond { id, atoms })
@@ -323,10 +337,7 @@ fn parse_multicenter_bond(edn: &Edn<'_>) -> Result<MulticenterBond, ParseError> 
 fn parse_noncovalent_bond(edn: &Edn<'_>) -> Result<NoncovalentBond, ParseError> {
     let m = extract_map(edn, "noncovalent bond entry")?;
     Ok(NoncovalentBond {
-        id: extract_label(
-            map_get(m, "id")
-                .ok_or_else(|| ParseError::MissingKey(":id in noncovalent entry".to_string()))?,
-        )?,
+        id: map_get(m, "id").map(extract_label).transpose()?,
         a: extract_label(
             map_get(m, "a")
                 .ok_or_else(|| ParseError::MissingKey(":a in noncovalent entry".to_string()))?,
@@ -345,9 +356,10 @@ fn parse_noncovalent_bond(edn: &Edn<'_>) -> Result<NoncovalentBond, ParseError> 
 fn parse_spin_state(edn: &Edn<'_>) -> Result<SpinState, ParseError> {
     match edn {
         Edn::Str(s) => Ok(SpinState::from_str(s)?),
-        _ => Err(ParseError::InvalidMoleculeMap(
-            ":spin must be a string".to_string(),
-        )),
+        _ => Err(ParseError::WrongFieldType {
+            field: "spin".to_string(),
+            expected: "string".to_string(),
+        }),
     }
 }
 
@@ -358,14 +370,19 @@ fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
     };
 
     let mut seen_ids: HashSet<&str> = HashSet::new();
+    if let Atoms::Named(m) = &ast.atoms {
+        for label in m.keys() {
+            seen_ids.insert(label.as_str());
+        }
+    }
     for id in ast
         .bonds
         .iter()
         .filter_map(|e| e.id.as_deref())
-        .chain(ast.dative_bonds.iter().map(|e| e.id.as_str()))
-        .chain(ast.aromatic_systems.iter().map(|e| e.id.as_str()))
-        .chain(ast.multicenter_bonds.iter().map(|e| e.id.as_str()))
-        .chain(ast.noncovalent_bonds.iter().map(|e| e.id.as_str()))
+        .chain(ast.dative_bonds.iter().filter_map(|e| e.id.as_deref()))
+        .chain(ast.aromatic_systems.iter().filter_map(|e| e.id.as_deref()))
+        .chain(ast.multicenter_bonds.iter().filter_map(|e| e.id.as_deref()))
+        .chain(ast.noncovalent_bonds.iter().filter_map(|e| e.id.as_deref()))
     {
         if !seen_ids.insert(id) {
             return Err(ParseError::DuplicateId(id.to_string()));
@@ -446,15 +463,15 @@ mod tests {
     #[case::spin(r##"{:atoms {:N #atom "N #u3"} :bonds [] :spin "#u3"}"##, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("N".to_string(),
         AtomAst { element: ElementExpr::Lit(Element::N), isotope_mass: None, implicit_hydrogens: None, charge: None, lone_pairs: None, unpaired_electrons: Some(ValueAst::Lit(3)),
         multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None, })])), spin: Some(spin!("#u3 #s4")), ..Default::default() })]
-    #[case::alias_named(r#"{:atoms {:C :ch} :bonds [] :aliases {:ch #atom "C #h1"}}"#,
+    #[case::alias_named(r#"{:atoms {:C :ch} :bonds [] :aliases [:ch #atom "C #h1"]}"#,
         MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(),
         AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None, implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None,
         unpaired_electrons: None, multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None })])), ..Default::default() })]
-    #[case::alias_indexed(r#"{:atoms [:ch] :bonds [] :aliases {:ch #atom "C #h1"}}"#,
+    #[case::alias_indexed(r#"{:atoms [:ch] :bonds [] :aliases [:ch #atom "C #h1"]}"#,
         MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
         implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
         multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }]), ..Default::default() })]
-    #[case::alias_reused(r#"{:atoms [:n :n] :bonds [[:0 :1 :single]] :aliases {:n #atom "N"}}"#,
+    #[case::alias_reused(r#"{:atoms [:n :n] :bonds [[:0 :1 :single]] :aliases [:n #atom "N"]}"#,
         MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
         bonds: vec![CovalentBond { id: None, a: "0".to_string(), b: "1".to_string(), bond: BondSpec::Single }], ..Default::default() })]
     fn test_parse_molecule_dsl(#[case] input: &str, #[case] expected: MoleculeAst) {
@@ -479,7 +496,7 @@ mod tests {
         assert_eq!(
             result.dative_bonds,
             vec![DativeBond {
-                id: "d1".to_string(),
+                id: Some("d1".to_string()),
                 donor: "N".to_string(),
                 acceptor: "B".to_string(),
                 bond: BondSpec::Single,
@@ -493,11 +510,11 @@ mod tests {
             r#"{:atoms {:C1 :ch :C2 :ch :C3 :ch :C4 :ch :C5 :ch :C6 :ch}
                 :bonds [[:C1 :C2 :single] [:C2 :C3 :single] [:C3 :C4 :single] [:C4 :C5 :single] [:C5 :C6 :single] [:C6 :C1 :single]]
                 :aromatic [{:id :ar1 :atoms [:C1 :C2 :C3 :C4 :C5 :C6]}]
-                :aliases {:ch #atom "C #h1 #v2 #a1"}}"#,
+                :aliases [:ch #atom "C #h1 #v2 #a1"]}"#,
         )
         .unwrap();
         assert_eq!(result.aromatic_systems.len(), 1);
-        assert_eq!(result.aromatic_systems[0].id, "ar1");
+        assert_eq!(result.aromatic_systems[0].id, Some("ar1".to_string()));
         assert_eq!(
             result.aromatic_systems[0].atoms,
             vec!["C1", "C2", "C3", "C4", "C5", "C6"]
@@ -506,7 +523,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::non_map("3", ParseError::InvalidMoleculeMap("expected EDN map for top level".to_string()))]
+    #[case::non_map("3", ParseError::EdnParse("expected EDN map for top level".to_string()))]
     #[case::missing_atoms(r#"{:bonds []}"#, ParseError::MissingKey(":atoms".to_string()))]
     #[case::missing_bonds(r#"{:atoms {:C #atom "C"}}"#, ParseError::MissingKey(":bonds".to_string()))]
     #[case::unknown_endpoint(r#"{:atoms {:C #atom "C"} :bonds [{:id :b1 :a :C :b :X :bond :single}]}"#, ParseError::InvalidAtomIndex("X".to_string()))]
@@ -515,6 +532,10 @@ mod tests {
     #[case::bad_atom_string(r##"{:atoms {:X #atom "#h3"} :bonds []}"##, ParseError::InvalidElement("#h3".to_string()))]
     #[case::unknown_alias(r#"{:atoms {:C :ch} :bonds []}"#, ParseError::UnknownAlias("ch".to_string()))]
     #[case::trailing_content(r#"{:atoms {:C #atom "C"} :bonds []} :extra :junk"#, ParseError::EdnParse("unexpected trailing content: :extra :junk".to_string()))]
+    #[case::duplicate_atom_bond_id(r#"{:atoms {:b1 #atom "C" :O #atom "O"} :bonds [{:id :b1 :a :b1 :b :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
+    #[case::duplicate_bond_ids_cross_section(r#"{:atoms {:C #atom "C" :O #atom "O"} :bonds [{:id :b1 :a :C :b :O :bond :single}] :dative [{:id :b1 :donor :C :acceptor :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
+    #[case::duplicate_atom_id_and_alias(r#"{:aliases [:C #atom "N"] :atoms {:C #atom "C"} :bonds []}"#, ParseError::DuplicateId("C".to_string()))]
+    #[case::duplicate_alias(r#"{:aliases [:ch #atom "C #h1" :ch #atom "C #h2"] :atoms [] :bonds []}"#, ParseError::DuplicateId("ch".to_string()))]
     fn test_parse_molecule_map_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = parse_molecule_dsl(input);
         assert!(
