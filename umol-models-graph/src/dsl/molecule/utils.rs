@@ -1,4 +1,4 @@
-//! EDN parsing utilities for molecule DSL.
+//! EDN parsing utilities for molecule DSL
 
 use std::collections::BTreeMap;
 

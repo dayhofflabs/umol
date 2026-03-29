@@ -1,4 +1,4 @@
-//! Domain errors for DSL parsing.
+//! Domain errors for DSL parsing
 
 use nom::error::{ErrorKind as NomErrorKind, ParseError as NomParseError};
 use thiserror::Error;

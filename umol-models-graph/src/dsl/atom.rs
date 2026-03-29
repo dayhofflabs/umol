@@ -1,72 +1,21 @@
-//! Atom-string DSL parser — `spec/umol-dsl-spec.md` §7.3 / §7.4.
+//! Atom-string DSL parser
 
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::{char, multispace0, satisfy, u32 as nom_u32};
-use nom::combinator::{all_consuming, map, recognize, value};
-use nom::multi::{many0, separated_list1};
-use nom::sequence::{delimited, pair, preceded, terminated};
+use nom::character::complete::multispace0;
+use nom::combinator::all_consuming;
+use nom::multi::many0;
+use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
 use umol_data::Element;
 
 use super::error::ParseError;
-use super::predicates::{atom_predicate, AtomPredicate};
-use super::value::{op_char, parse_id, ValueAst};
+use super::lowering::LowerAst;
+use super::predicates::{
+    atom_predicate, element_expr, AromaticExpr, AtomPredicate, ElementExpr, HydrogenExpr,
+    IsotopeExpr,
+};
+use super::value::ValueAst;
 
-/// Element position of an atom-string.
-///
-/// Categorical: supports literal, wildcard, set, bind, and reference.
-/// No arithmetic; no numeric ordering.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ElementExpr {
-    Lit(Element),
-    Wildcard,
-    Set(Vec<Element>),
-    Bind { id: String, set: Vec<Element> },
-    Ref(String),
-}
-
-impl ElementExpr {
-    pub fn new(element: Element) -> Self {
-        Self::Lit(element)
-    }
-}
-
-/// Isotope-mass position (`#i` payload).
-///
-/// Categorical like `ElementExpr`: indexed by mass number, no arithmetic.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum IsotopeExpr {
-    Lit(u32),
-    Wildcard,
-    Set(Vec<u32>),
-    Bind { id: String, set: Vec<u32> },
-    Ref(String),
-}
-
-/// `#h` payload — `=` (valence-model H) is not a `ValueAst`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum HydrogenExpr {
-    /// `#h=` — implicit H count from the valence model.
-    Normal,
-    Value(ValueAst),
-}
-
-impl HydrogenExpr {
-    pub fn from_value(value: ValueAst) -> Self {
-        Self::Value(value)
-    }
-}
-
-/// `#a` payload — `!` (non-member) is not a `ValueAst`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AromaticExpr {
-    /// `#a!` — atom is not a member of any aromatic system.
-    None,
-    Value(ValueAst),
-}
-
-/// Parsed atom-string AST.
+/// Parsed atom-string AST
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AtomAst {
     pub element: ElementExpr,
@@ -106,116 +55,54 @@ impl AtomAst {
     }
 }
 
-fn element_literal(i: &str) -> IResult<&str, Element, ParseError> {
-    let (rest, sym) = recognize(pair(
-        satisfy(|c: char| c.is_ascii_uppercase()),
-        many0(satisfy(|c: char| c.is_ascii_lowercase())),
-    ))
-    .parse(i)?;
-    match Element::from_symbol(sym) {
-        Some(el) => Ok((rest, el)),
-        None => Err(Err::Error(ParseError::InvalidElement(sym.to_string()))),
-    }
+impl LowerAst for AtomAst {
+    type Config = AtomLowerConfig;
 }
 
-fn element_set(i: &str) -> IResult<&str, Vec<Element>, ParseError> {
-    delimited(
-        char('{'),
-        delimited(
-            multispace0,
-            separated_list1(op_char(','), element_literal),
-            multispace0,
-        ),
-        char('}'),
-    )
-    .parse(i)
+/// Isotope interpretation mode
+#[derive(Clone, Debug, Default)]
+pub enum IsotopeMode {
+    #[default]
+    Normal,
+    Provided,
 }
 
-fn element_bind(i: &str) -> IResult<&str, (String, Vec<Element>), ParseError> {
-    delimited(
-        char('('),
-        pair(
-            delimited(multispace0, preceded(char('?'), parse_id), multispace0),
-            preceded(
-                pair(tag("::"), multispace0),
-                terminated(element_set, multispace0),
-            ),
-        ),
-        char(')'),
-    )
-    .parse(i)
+/// Charge interpretation mode
+#[derive(Clone, Debug, Default)]
+pub enum ChargeMode {
+    Zero,
+    #[default]
+    Provided,
 }
 
-fn element_ref(i: &str) -> IResult<&str, String, ParseError> {
-    delimited(
-        char('('),
-        delimited(multispace0, preceded(char('?'), parse_id), multispace0),
-        char(')'),
-    )
-    .parse(i)
+/// Implicit hydrogen interpretation mode
+#[derive(Clone, Debug, Default)]
+pub enum ImplicitHydrogenMode {
+    Zero,
+    Normal,
+    #[default]
+    Provided,
 }
 
-pub(crate) fn element_expr(i: &str) -> IResult<&str, ElementExpr, ParseError> {
-    alt((
-        value(ElementExpr::Wildcard, char('*')),
-        map(element_set, ElementExpr::Set),
-        map(element_bind, |(id, set)| ElementExpr::Bind { id, set }),
-        map(element_ref, ElementExpr::Ref),
-        map(element_literal, ElementExpr::Lit),
-    ))
-    .parse(i)
-    .map_err(|_| Err::Error(ParseError::InvalidElement(i.to_string())))
+/// Aromatic interpretation mode
+#[derive(Clone, Debug, Default)]
+pub enum AromaticMode {
+    None,
+    Any,
+    #[default]
+    Provided,
 }
 
-fn isotope_set(i: &str) -> IResult<&str, Vec<u32>, ParseError> {
-    delimited(
-        char('{'),
-        delimited(
-            multispace0,
-            separated_list1(op_char(','), nom_u32),
-            multispace0,
-        ),
-        char('}'),
-    )
-    .parse(i)
+/// Atom lowering configuration
+#[derive(Clone, Debug, Default)]
+pub struct AtomLowerConfig {
+    pub isotope_mode: IsotopeMode,
+    pub charge_mode: ChargeMode,
+    pub implicit_h_mode: ImplicitHydrogenMode,
+    pub aromatic_mode: AromaticMode,
 }
 
-fn isotope_bind(i: &str) -> IResult<&str, (String, Vec<u32>), ParseError> {
-    delimited(
-        char('('),
-        pair(
-            delimited(multispace0, preceded(char('?'), parse_id), multispace0),
-            preceded(
-                pair(tag("::"), multispace0),
-                terminated(isotope_set, multispace0),
-            ),
-        ),
-        char(')'),
-    )
-    .parse(i)
-}
-
-fn isotope_ref(i: &str) -> IResult<&str, String, ParseError> {
-    delimited(
-        char('('),
-        delimited(multispace0, preceded(char('?'), parse_id), multispace0),
-        char(')'),
-    )
-    .parse(i)
-}
-
-pub(crate) fn isotope_expr(i: &str) -> IResult<&str, IsotopeExpr, ParseError> {
-    alt((
-        value(IsotopeExpr::Wildcard, char('*')),
-        map(isotope_set, IsotopeExpr::Set),
-        map(isotope_bind, |(id, set)| IsotopeExpr::Bind { id, set }),
-        map(isotope_ref, IsotopeExpr::Ref),
-        map(nom_u32, IsotopeExpr::Lit),
-    ))
-    .parse(i)
-}
-
-/// Parse a complete atom-string.
+/// Parse a complete atom-string
 pub fn parse_atom_dsl(input: &str) -> Result<AtomAst, ParseError> {
     all_consuming(atom_dsl)
         .parse(input)
@@ -226,7 +113,7 @@ pub fn parse_atom_dsl(input: &str) -> Result<AtomAst, ParseError> {
         })
 }
 
-/// Atom-string parser (does not require consuming all input).
+/// Atom-string parser (does not require consuming all input)
 pub fn atom_dsl(i: &str) -> IResult<&str, AtomAst, ParseError> {
     let (remaining, (element, preds)) = pair(
         delimited(multispace0, element_expr, multispace0),
@@ -326,59 +213,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon("C", ElementExpr::Lit(Element::C))]
-    #[case::iron("Fe", ElementExpr::Lit(Element::Fe))]
-    #[case::chlorine("Cl", ElementExpr::Lit(Element::Cl))]
-    #[case::wildcard("*", ElementExpr::Wildcard)]
-    #[case::set("{C,N,O}", ElementExpr::Set(vec![Element::C, Element::N, Element::O]))]
-    #[case::set_spaced("{ C, N}", ElementExpr::Set(vec![Element::C, Element::N]))]
-    #[case::bind("(?e :: {C,N})", ElementExpr::Bind { id: "e".to_string(), set: vec![Element::C, Element::N] })]
-    #[case::ref_("(?e)", ElementExpr::Ref("e".to_string()))]
-    fn test_element_expr(#[case] input: &str, #[case] expected: ElementExpr) {
-        let result = element_expr(input);
-        assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
-        let (remaining, expr) = result.unwrap();
-        assert!(remaining.is_empty(), "{input:?} should consume all input, remaining: {remaining:?}");
-        assert_eq!(expr, expected);
-    }
-
-    #[rstest]
-    #[case::empty("")]
-    #[case::lowercase("c")]
-    #[case::invalid("123")]
-    #[case::unknown_element("Xx")]
-    fn test_element_expr_invalid(#[case] input: &str) {
-        let result = element_expr(input);
-        assert!(
-            result.is_err(),
-            "{input:?} should fail, got {:?}",
-            result.unwrap()
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit("12", IsotopeExpr::Lit(12))]
-    #[case::wildcard("*", IsotopeExpr::Wildcard)]
-    #[case::set("{12,13,14}", IsotopeExpr::Set(vec![12, 13, 14]))]
-    #[case::bind("(?m :: {12,13})", IsotopeExpr::Bind { id: "m".to_string(), set: vec![12, 13] })]
-    #[case::ref_("(?m)", IsotopeExpr::Ref("m".to_string()))]
-    fn test_isotope_expr(#[case] input: &str, #[case] expected: IsotopeExpr) {
-        let result = isotope_expr(input);
-        assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
-        let (remaining, expr) = result.unwrap();
-        assert!(remaining.is_empty(), "{input:?} should consume all input, remaining: {remaining:?}");
-        assert_eq!(expr, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::carbon("C", AtomAst::new(ElementExpr::Lit(Element::C)))]
     #[case::iron("Fe", AtomAst::new(ElementExpr::Lit(Element::Fe)))]
     #[case::chlorine("Cl", AtomAst::new(ElementExpr::Lit(Element::Cl)))]
     #[case::whitespace("  C  ", AtomAst::new(ElementExpr::Lit(Element::C)))]
     #[case::wildcard("*", AtomAst::new(ElementExpr::Wildcard))]
     #[case::isotope("C#i12", AtomAst { isotope_mass: Some(IsotopeExpr::Lit(12)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
+    #[case::isotope_natural("C#i=", AtomAst { isotope_mass: Some(IsotopeExpr::Natural), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::charge_pos("C#c+2", AtomAst { charge: Some(ValueAst::Lit(2)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::charge_neg("C#c-2", AtomAst { charge: Some(ValueAst::Lit(-2)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::charge_plus("C#c+", AtomAst { charge: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]

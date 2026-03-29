@@ -91,7 +91,9 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
     let (top, rest) = edn::read(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
     let rest = rest.trim();
     if !rest.is_empty() {
-        return Err(ParseError::EdnParse(format!("unexpected trailing content: {rest}")));
+        return Err(ParseError::EdnParse(format!(
+            "unexpected trailing content: {rest}"
+        )));
     }
     let map = extract_map(&top, "top level")?;
 
@@ -420,8 +422,6 @@ fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
         check(&e.b)?;
     }
 
-    // TODO: Add charge and spin validation
-
     Ok(())
 }
 
@@ -431,7 +431,7 @@ mod tests {
     use rstest::*;
     use umol_data::{e, spin, Element};
 
-    use super::super::atom::{ElementExpr, HydrogenExpr};
+    use super::super::predicates::{ElementExpr, HydrogenExpr};
     use super::super::value::ValueAst;
     use super::*;
 

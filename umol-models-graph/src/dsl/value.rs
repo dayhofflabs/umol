@@ -1,4 +1,4 @@
-//! `value-dsl` — `spec/umol-dsl-spec.md` §5.
+//! `value-dsl` — `spec/umol-dsl-spec.md` §5
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ use nom::{Err, IResult, Parser};
 
 use super::error::{EvaluationError, ParseError};
 
-/// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
+/// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`]
 pub type Bindings = HashMap<String, i32>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,16 +55,16 @@ pub enum RelOp {
 }
 
 impl ValueAst {
-    /// Match a concrete integer value against this pattern.
+    /// Match a concrete integer value against this pattern
     pub fn matches(&self, value: i32) -> bool {
         self.capture(value).is_some()
     }
 
-    /// Match a concrete integer value against this pattern, returning variable bindings.
+    /// Match a concrete integer value against this pattern, returning variable bindings
     ///
     /// Variables in the pattern are bound to `value`. For boolean expressions the
     /// predicate is evaluated with those bindings; for arithmetic expressions the
-    /// result is compared to `value`.
+    /// result is compared to `value`
     pub fn capture(&self, value: i32) -> Option<Bindings> {
         match self {
             ValueAst::Wildcard => Some(Bindings::new()),
@@ -101,7 +101,7 @@ impl ValueAst {
     }
 }
 
-/// Recursively bind every variable in `expr` to `value`.
+/// Recursively bind every variable in `expr` to `value`
 fn collect_bindings(expr: &Expr, value: i32, bindings: &mut Bindings) {
     match expr {
         Expr::Var(name) => {
@@ -135,10 +135,10 @@ impl Expr {
         )
     }
 
-    /// Evaluate an arithmetic expression to an `i32`.
+    /// Evaluate an arithmetic expression to an `i32`
     ///
     /// Returns [`EvaluationError::TypeMismatch`] if called on a boolean-domain
-    /// expression (`Rel`, `Mem`, `Not`, `And`, `Or`).
+    /// expression (`Rel`, `Mem`, `Not`, `And`, `Or`)
     pub fn evaluate(&self, vars: &Bindings) -> Result<i32, EvaluationError> {
         match self {
             Expr::Lit(n) => Ok(*n),
@@ -176,10 +176,10 @@ impl Expr {
         }
     }
 
-    /// Evaluate a boolean expression to a `bool`.
+    /// Evaluate a boolean expression to a `bool`
     ///
     /// Returns [`EvaluationError::TypeMismatch`] if called on an arithmetic-domain
-    /// expression (`Lit`, `Var`, `Neg`, `BinOp`).
+    /// expression (`Lit`, `Var`, `Neg`, `BinOp`)
     pub fn evaluate_bool(&self, vars: &Bindings) -> Result<bool, EvaluationError> {
         match self {
             Expr::Rel(l, op, r) => {

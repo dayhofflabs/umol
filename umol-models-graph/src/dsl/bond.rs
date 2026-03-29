@@ -1,4 +1,4 @@
-//! Bond-string DSL parser — `spec/umol-dsl-spec.md` §7.5.
+//! Bond-string DSL parser
 
 use nom::character::complete::multispace0;
 use nom::combinator::all_consuming;
@@ -7,10 +7,10 @@ use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
 
 use super::error::ParseError;
-use super::predicates::{bond_predicate, BondPredicate};
-use super::value::{value_dsl, ValueAst};
+use super::predicates::{bond_order, bond_predicate, BondPredicate};
+use super::value::ValueAst;
 
-/// Parsed bond-string AST.
+/// Parsed bond-string AST
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BondAst {
     pub order: ValueAst,
@@ -48,12 +48,7 @@ pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, ParseError> {
     Ok((remaining, ast))
 }
 
-/// Parse the bond order prefix.
-pub fn bond_order(i: &str) -> IResult<&str, ValueAst, ParseError> {
-    value_dsl(i).map_err(|_| Err::Failure(ParseError::InvalidBondOrder(i.to_string())))
-}
-
-/// Merge a list of bond predicates into a `BondAst`.
+/// Merge a list of bond predicates into a `BondAst`
 fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), ParseError> {
     for pred in preds {
         match pred {
