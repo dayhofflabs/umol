@@ -1,5 +1,6 @@
 //! Atom type and builder for GraphIR.
 
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use smallvec::SmallVec;
@@ -135,6 +136,98 @@ impl Atom {
             aromatic_valence: spec.aromatic_valence(),
             multicenter_valence: spec.multicenter_valence(),
         }
+    }
+}
+
+impl Display for Atom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.element)?;
+
+        if let IsotopeMass::MassNumber(m) = self.isotope_mass {
+            write!(f, "#i{}", m)?;
+        }
+
+        match self.charge {
+            0 => {}
+            1 => write!(f, "#c+")?,
+            -1 => write!(f, "#c-")?,
+            c if c > 0 => write!(f, "#c+{}", c)?,
+            c => write!(f, "#c{}", c)?,
+        }
+
+        if self.implicit_hydrogens > 0 {
+            if self.implicit_hydrogens == 1 {
+                write!(f, "#h")?;
+            } else {
+                write!(f, "#h{}", self.implicit_hydrogens)?;
+            }
+        }
+
+        if self.lone_pairs > 0 {
+            if self.lone_pairs == 1 {
+                write!(f, "#n")?;
+            } else {
+                write!(f, "#n{}", self.lone_pairs)?;
+            }
+        }
+
+        let unpaired = self.spin.unpaired_electrons();
+        if unpaired > 0 {
+            if unpaired == 1 {
+                write!(f, "#u")?;
+            } else {
+                write!(f, "#u{}", unpaired)?;
+            }
+        }
+
+        let multiplicity = self.spin.multiplicity().multiplicity();
+        if multiplicity != unpaired + 1 {
+            if multiplicity == 1 {
+                write!(f, "#s")?;
+            } else {
+                write!(f, "#s{}", multiplicity)?;
+            }
+        }
+
+        if self.valence > 0 {
+            if self.valence == 1 {
+                write!(f, "#v")?;
+            } else {
+                write!(f, "#v{}", self.valence)?;
+            }
+        }
+
+        if self.donated_pairs > 0 {
+            if self.donated_pairs == 1 {
+                write!(f, "#d")?;
+            } else {
+                write!(f, "#d{}", self.donated_pairs)?;
+            }
+        }
+
+        if self.accepted_pairs > 0 {
+            if self.accepted_pairs == 1 {
+                write!(f, "#r")?;
+            } else {
+                write!(f, "#r{}", self.accepted_pairs)?;
+            }
+        }
+
+        match self.aromatic_valence {
+            AromaticValence::None => {}
+            AromaticValence::Valence(1) => write!(f, "#a")?,
+            AromaticValence::Valence(n) => write!(f, "#a{}", n)?,
+        }
+
+        if self.multicenter_valence > 0 {
+            if self.multicenter_valence == 1 {
+                write!(f, "#m")?;
+            } else {
+                write!(f, "#m{}", self.multicenter_valence)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -481,5 +574,35 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err, expected, "{input:?} should fail with {expected:?}, got {err:?}"
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::defaults(
+        Atom::from_spec(AtomTypeSpec::new(Element::He, None, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
+        "He"
+    )]
+    #[case::charge_plus_one(
+        Atom::from_spec(AtomTypeSpec::new(Element::C, None, 1, 3, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
+        "C#c+#h3"
+    )]
+    #[case::charge_minus_one(
+        Atom::from_spec(AtomTypeSpec::new(Element::C, None, -1, 3, 1, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
+        "C#c-#h3#n"
+    )]
+    #[case::isotope_mass(
+        Atom::from_spec(AtomTypeSpec::new(Element::C, Some(13), 0, 4, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
+        "C#i13#h4"
+    )]
+    #[case::aromatic_one_omit_payload(
+        Atom::from_spec(AtomTypeSpec::new(Element::C, None, 0, 1, 0, 0, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 0).unwrap()),
+        "C#h#v2#a"
+    )]
+    #[case::non_default_multiplicity(
+        Atom::from_spec(AtomTypeSpec::new(Element::C, None, 0, 0, 1, 2, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
+        "C#n#u2#s"
+    )]
+    fn test_atom_display(#[case] atom: Atom, #[case] expected: &str) {
+        assert_eq!(atom.to_string(), expected);
     }
 }
