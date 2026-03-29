@@ -5,17 +5,18 @@ use std::str::FromStr;
 use smallvec::SmallVec;
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
-use crate::atom::{AromaticValence, Chirality, ImplicitHydrogens};
+use self::parser::parse_ground_atom_dsl;
+use crate::atom::{AromaticValence, Chirality, ImplicitHydrogens, IsotopeMass};
 use crate::graph_ir::atom_type::{AtomError, AtomTypeSpec};
 use crate::graph_ir::error::ResolutionError;
 use crate::table_ir::atom::Atom as TableAtom;
+mod parser;
 
-/// Resolved atom in GraphIR. All fields are definite.
-/// Created via `AtomBuilder::build()` after resolution phases complete.
+/// Atom in GraphIR (ground term)
 #[derive(Debug, Clone, PartialEq)]
 pub struct Atom {
     element: Element,
-    isotope_mass: Option<u32>,
+    isotope_mass: IsotopeMass,
     charge: i8,
     implicit_hydrogens: u8,
     lone_pairs: u8,
@@ -28,12 +29,11 @@ pub struct Atom {
 }
 
 impl Atom {
-    // TODO: Which simple, infallible constructor should be added?
     pub fn element(&self) -> Element {
         self.element
     }
 
-    pub fn isotope_mass(&self) -> Option<u32> {
+    pub fn isotope_mass(&self) -> IsotopeMass {
         self.isotope_mass
     }
 
@@ -88,7 +88,7 @@ impl Atom {
     pub fn to_spec(&self) -> AtomTypeSpec {
         AtomTypeSpec::new(
             self.element,
-            self.isotope_mass,
+            self.isotope_mass.mass_number(),
             self.charge,
             self.implicit_hydrogens,
             self.lone_pairs,
@@ -107,7 +107,7 @@ impl Atom {
         let spec = self.to_spec();
         AtomBuilder {
             element: self.element,
-            isotope_mass: self.isotope_mass,
+            isotope_mass: self.isotope_mass.mass_number(),
             charge: Some(self.charge),
             implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(self.implicit_hydrogens)),
             lone_pairs: Some(self.lone_pairs),
@@ -117,6 +117,32 @@ impl Atom {
             chirality_hint: None,
             candidates: SmallVec::from_elem(spec, 1),
         }
+    }
+
+    pub(crate) fn from_spec(spec: AtomTypeSpec) -> Self {
+        Self {
+            element: spec.element(),
+            isotope_mass: spec
+                .isotope_mass()
+                .map_or(IsotopeMass::Natural, IsotopeMass::MassNumber),
+            charge: spec.charge(),
+            implicit_hydrogens: spec.implicit_hydrogens(),
+            lone_pairs: spec.lone_pairs(),
+            spin: spec.spin(),
+            valence: spec.valence(),
+            donated_pairs: spec.donated_pairs(),
+            accepted_pairs: spec.accepted_pairs(),
+            aromatic_valence: spec.aromatic_valence(),
+            multicenter_valence: spec.multicenter_valence(),
+        }
+    }
+}
+
+impl FromStr for Atom {
+    type Err = AtomError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_ground_atom_dsl(s)?.to_atom()
     }
 }
 
@@ -330,7 +356,8 @@ impl AtomBuilder {
                 self.element,
                 format!(
                     "atom invariant verification failed for {}: {}",
-                    candidate.to_spec_str(), error
+                    candidate.to_spec_str(),
+                    error
                 ),
             ));
         }
@@ -352,7 +379,9 @@ impl AtomBuilder {
 
         Ok(Atom {
             element: self.element,
-            isotope_mass: self.isotope_mass,
+            isotope_mass: self
+                .isotope_mass
+                .map_or(IsotopeMass::Natural, IsotopeMass::MassNumber),
             charge: candidate.charge(),
             implicit_hydrogens: candidate.implicit_hydrogens(),
             lone_pairs: candidate.lone_pairs(),
@@ -393,4 +422,64 @@ macro_rules! atom {
             .parse::<$crate::graph_ir::atom::AtomBuilder>()
             .expect("invalid atom spec")
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use pretty_assertions::assert_eq;
+    use rstest::rstest;
+    use umol_data::{Element, SpinMultiplicity, SpinState};
+
+    use super::*;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::element("He", Atom { element: Element::He, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 0, lone_pairs: 0,
+        spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+    #[case::whitespace("  He  ", Atom { element: Element::He, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 0, lone_pairs: 0,
+        spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+    #[case::hydrogens("C#h4", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+    #[case::isotope_natural("C#i=#h4", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+    #[case::charge_plus("C#c+#h3", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 1, implicit_hydrogens: 3, lone_pairs: 0,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+    #[case::charge_minus("C#c-#h3#n1", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: -1, implicit_hydrogens: 3, lone_pairs: 1,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+    #[case::aromatic_none("C#a!#h4", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+    #[case::no_charg("C#a#h1#v2", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 1, lone_pairs: 0,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::Valence(1), multicenter_valence: 0 })]
+    fn test_atom_from_str(
+        #[case] input: &str,
+        #[case] expected: Atom,
+    ) {
+        let result = Atom::from_str(input);
+        assert!(result.is_ok(), "from_str should succeed for {}", input);
+        let atom = result.unwrap();
+        assert_eq!(atom, expected, "from_str mismatch for {}", input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unknown_element("X", AtomError::InvalidElement("X".to_string()))]
+    #[case::unknown_predicate("C#x1", AtomError::UnexpectedTag("#x".to_string()))]
+    #[case::duplicate_charge("C#c+#c-", AtomError::DuplicateTag("#c".to_string()))]
+    #[case::duplicate_h("C#h3#h2", AtomError::DuplicateTag("#h".to_string()))]
+    #[case::non_ground_payload("C#h*", AtomError::InvalidImplicitHydrogens("*".to_string()))]
+    #[case::malformed_number("C#vabc", AtomError::InvalidValence("abc".to_string()))]
+    #[case::trailing_input("C foo", AtomError::UnexpectedTag("f".to_string()))]
+    fn test_atom_from_str_invalid(#[case] input: &str, #[case] expected: AtomError) {
+        let result = Atom::from_str(input);
+        assert!(
+            result.is_err(),
+            "{input:?} should fail, got {:?}",
+            result.unwrap()
+        );
+        let err = result.unwrap_err();
+        assert_eq!(err, expected, "{input:?} should fail with {expected:?}, got {err:?}"
+        );
+    }
 }

@@ -2,6 +2,7 @@
 
 pub mod aromaticity;
 pub mod atom;
+pub mod atom_pattern;
 pub mod atom_type;
 pub mod bond;
 pub mod config;
@@ -20,6 +21,7 @@ pub mod valence;
 
 pub use aromaticity::*;
 pub use atom::*;
+pub use atom_pattern::*;
 pub use atom_type::*;
 pub use bond::*;
 pub use config::*;
