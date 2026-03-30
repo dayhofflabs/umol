@@ -6,7 +6,7 @@ use umol_data::{Element, SpinState, MAX_UNPAIRED_ELECTRONS};
 use crate::atom::{AromaticValence, ImplicitHydrogens};
 use crate::graph_ir::atom::Atom;
 use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::atom_type::{AtomTypeQuery, AtomTypeSpec, HydrogenConstraint};
+use crate::graph_ir::atom_type::{AtomTypeQuery, HydrogenConstraint};
 use crate::graph_ir::config::ValenceStrategy;
 use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
@@ -219,7 +219,7 @@ fn build_aromatic_spec(
         if remaining < 0 || remaining % 2 != 0 {
             continue;
         }
-        if let Some(spec) = try_build_spec(
+        if let Some(atom_out) = try_build_atom(
             element,
             charge,
             implicit_hydrogens,
@@ -229,7 +229,7 @@ fn build_aromatic_spec(
             AromaticValence::Valence(a),
             atom,
         ) {
-            candidates.push(Atom::from_spec(spec));
+            candidates.push(atom_out);
         }
     }
 
@@ -267,7 +267,7 @@ fn build_spec(
     aromatic_valence: AromaticValence,
     atom: &AtomPattern,
 ) -> SmallVec<[Atom; 4]> {
-    match try_build_spec(
+    match try_build_atom(
         element,
         charge,
         implicit_hydrogens,
@@ -277,12 +277,12 @@ fn build_spec(
         aromatic_valence,
         atom,
     ) {
-        Some(spec) => SmallVec::from_elem(Atom::from_spec(spec), 1),
+        Some(atom) => SmallVec::from_elem(atom, 1),
         None => SmallVec::new(),
     }
 }
 
-fn try_build_spec(
+fn try_build_atom(
     element: Element,
     charge: i8,
     implicit_hydrogens: u8,
@@ -291,7 +291,7 @@ fn try_build_spec(
     accepted_pairs: u8,
     aromatic_valence: AromaticValence,
     atom: &AtomPattern,
-) -> Option<AtomTypeSpec> {
+) -> Option<Atom> {
     let total_valence = valence + implicit_hydrogens;
     // Element metadata is the canonical source of valence electron counts.
     let num_electrons = (element.valence_electrons() as i16) - (charge as i16);
@@ -333,7 +333,7 @@ fn try_build_spec(
         Some(m) => SpinState::try_new(unpaired, m).ok()?,
         None => SpinState::max_multiplicity(unpaired)?,
     };
-    AtomTypeSpec::new(
+    Atom::try_new(
         element,
         None,
         charge,

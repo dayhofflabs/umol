@@ -157,7 +157,7 @@ impl AtomTypeRegistry {
         self.atom_types
             .iter()
             .filter(|((_, charge), _)| charge.is_some())
-            .all(|(_, atoms)| atoms.iter().all(|atom| atom.to_spec().check_invariants().is_ok()))
+            .all(|(_, atoms)| atoms.iter().all(|atom| atom.check_invariants().is_ok()))
     }
 
     pub fn specs_for_element(&self, element: Element) -> &[Atom] {

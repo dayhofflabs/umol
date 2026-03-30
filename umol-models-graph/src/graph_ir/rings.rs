@@ -825,8 +825,8 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::atom::{Atom, AtomBuilder};
-    use crate::spec;
+    use crate::graph_ir::atom::Atom;
+    use crate::graph_ir::atom_pattern::AtomPattern;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::{ResolveConfig, RingEnumerationStrategy};
 
@@ -890,7 +890,7 @@ mod tests {
     #[fixture]
     fn single_atom_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
-        builder.add_atom(AtomBuilder::new(Element::C));
+        builder.add_atom(AtomPattern::new(Element::C));
         builder
     }
 
@@ -898,7 +898,7 @@ mod tests {
     fn chain_builder(#[default(5)] n: usize) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..n)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n - 1 {
             builder.add_bond_unchecked(atoms[i], atoms[i + 1], BondBuilder::new(1, None));
@@ -910,7 +910,7 @@ mod tests {
     fn ring_builder(#[default(6)] n: usize) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..n)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
@@ -923,7 +923,7 @@ mod tests {
     fn disjoint_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..12)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..6 {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
@@ -943,7 +943,7 @@ mod tests {
     fn spiro_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..5)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let edges = [(0, 1), (1, 2), (2, 0), (0, 3), (3, 4), (4, 0)];
         for (a, b) in edges {
@@ -957,7 +957,7 @@ mod tests {
     fn fused_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..10)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
         for (a, b) in ring1_edges {
@@ -975,7 +975,7 @@ mod tests {
     fn bridged_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..5)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let edges = [(0, 2), (2, 1), (0, 3), (3, 1), (0, 4), (4, 1)];
         for (a, b) in edges {
@@ -989,7 +989,7 @@ mod tests {
     fn multi_spiro_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..6)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let edges = [(0, 1), (1, 2), (0, 3), (3, 2), (0, 4), (4, 2), (0, 5), (5, 2)];
         for (a, b) in edges {
@@ -1003,7 +1003,7 @@ mod tests {
     fn cubane_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..8)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let edges = [
             (0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
@@ -1020,9 +1020,9 @@ mod tests {
     fn substituted_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..6)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
-        let methyl = builder.add_atom(AtomBuilder::new(Element::C));
+        let methyl = builder.add_atom(AtomPattern::new(Element::C));
         for i in 0..6 {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
         }
@@ -1034,7 +1034,7 @@ mod tests {
     #[fixture]
     fn ring_molecule(#[default(6)] n: usize) -> Molecule {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_resolved_atom(Atom::from_spec(spec!("{CH2v2}")))).collect();
+        let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_resolved_atom("C#h2#v2".parse::<Atom>().unwrap())).collect();
         for i in 0..n {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
         }
@@ -1091,9 +1091,11 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let aromatic: Vec<AtomIndex> = (0..6)
             .map(|_| {
-                let mut a = AtomBuilder::new(Element::C);
-                a.set_aromatic_hint(true);
-                builder.add_atom(a)
+                let idx = builder.add_atom(AtomPattern::new(Element::C));
+                builder
+                    .set_atom_aromatic_hint(idx, true)
+                    .expect("newly added atom index must be valid");
+                idx
             })
             .collect();
         for i in 0..6 {
@@ -1104,7 +1106,7 @@ mod tests {
             );
         }
         let sat: Vec<AtomIndex> = (0..6)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..6 {
             builder.add_bond_unchecked(sat[i], sat[(i + 1) % 6], BondBuilder::new(1, None));

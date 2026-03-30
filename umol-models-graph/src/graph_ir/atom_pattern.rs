@@ -4,7 +4,7 @@ use umol_data::{Element, SpinMultiplicity, SpinState};
 
 use crate::atom::{AromaticValence, IsotopeMass};
 use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_type::{AtomError, AtomTypeSpec};
+use crate::graph_ir::atom_type::AtomError;
 use crate::table_ir::atom::Atom as TableAtom;
 
 /// Transitional atom pattern type.
@@ -231,7 +231,7 @@ impl AtomPattern {
         let aromatic_valence = self.aromatic_valence.unwrap_or(AromaticValence::None);
         let multicenter_valence = self.multicenter_valence.unwrap_or(0);
 
-        let spec = AtomTypeSpec::new(
+        Atom::try_new(
             element,
             isotope_mass.mass_number(),
             charge,
@@ -244,8 +244,7 @@ impl AtomPattern {
             accepted_pairs,
             aromatic_valence,
             multicenter_valence,
-        )?;
-        Ok(Atom::from_spec(spec))
+        )
     }
 
     pub fn matches_atom(&self, atom: &Atom) -> bool {

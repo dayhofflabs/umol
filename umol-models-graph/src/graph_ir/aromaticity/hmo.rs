@@ -302,19 +302,17 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::graph_ir::atom::Atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
-    use crate::spec;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
-    const C1: &str = "{Cv2a1H}";
+    const C1: &str = "C#h#v2#a";
 
     fn make_ring(atom_specs: &[&str]) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
+            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         let n = atoms.len();
         for i in 0..n {
@@ -327,7 +325,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
+            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         for &(a, b) in edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
@@ -374,12 +372,12 @@ mod tests {
 
     #[fixture]
     fn pyridine() -> MoleculeBuilder {
-        make_ring(&["{N/1v2a1}", C1, C1, C1, C1, C1])
+        make_ring(&["N#n#v2#a", C1, C1, C1, C1, C1])
     }
 
     #[fixture]
     fn pyrrole() -> MoleculeBuilder {
-        make_ring(&["{Nv2a2H}", C1, C1, C1, C1])
+        make_ring(&["N#h#v2#a2", C1, C1, C1, C1])
     }
 
     #[fixture]

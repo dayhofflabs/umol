@@ -521,7 +521,7 @@ mod tests {
 
     use super::*;
     use crate::bond::BondNoncovalent;
-    use crate::graph_ir::atom::AtomBuilder;
+    use crate::graph_ir::atom_pattern::AtomPattern;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::dative::DativeBond;
     use crate::graph_ir::molecule::MoleculeBuilder;
@@ -531,9 +531,9 @@ mod tests {
     #[fixture]
     fn c3_molecule() -> MoleculeBuilder {
         let mut b = MoleculeBuilder::new();
-        let a0 = b.add_atom(AtomBuilder::new(Element::C));
-        let a1 = b.add_atom(AtomBuilder::new(Element::C));
-        let a2 = b.add_atom(AtomBuilder::new(Element::C));
+        let a0 = b.add_atom(AtomPattern::new(Element::C));
+        let a1 = b.add_atom(AtomPattern::new(Element::C));
+        let a2 = b.add_atom(AtomPattern::new(Element::C));
         b.add_bond_unchecked(a0, a1, BondBuilder::new(1, Some(false)));
         b.add_bond_unchecked(a1, a2, BondBuilder::new(1, Some(false)));
         b
@@ -542,9 +542,9 @@ mod tests {
     #[fixture]
     fn c3_molecule_reordered() -> MoleculeBuilder {
         let mut b = MoleculeBuilder::new();
-        let a2 = b.add_atom(AtomBuilder::new(Element::C));
-        let a1 = b.add_atom(AtomBuilder::new(Element::C));
-        let a0 = b.add_atom(AtomBuilder::new(Element::C));
+        let a2 = b.add_atom(AtomPattern::new(Element::C));
+        let a1 = b.add_atom(AtomPattern::new(Element::C));
+        let a0 = b.add_atom(AtomPattern::new(Element::C));
         b.add_bond_unchecked(a0, a1, BondBuilder::new(1, Some(false)));
         b.add_bond_unchecked(a1, a2, BondBuilder::new(1, Some(false)));
         b
@@ -553,8 +553,8 @@ mod tests {
     #[fixture]
     fn n_c_dative_molecule() -> MoleculeBuilder {
         let mut b = MoleculeBuilder::new();
-        let a0 = b.add_atom(AtomBuilder::new(Element::N));
-        let a1 = b.add_atom(AtomBuilder::new(Element::C));
+        let a0 = b.add_atom(AtomPattern::new(Element::N));
+        let a1 = b.add_atom(AtomPattern::new(Element::C));
         b.add_dative_bond(DativeBond::new(a0, a1, 1));
         b
     }
@@ -562,9 +562,9 @@ mod tests {
     #[fixture]
     fn bh2_multicenter_molecule() -> MoleculeBuilder {
         let mut b = MoleculeBuilder::new();
-        let a0 = b.add_atom(AtomBuilder::new(Element::B));
-        let a1 = b.add_atom(AtomBuilder::new(Element::H));
-        let a2 = b.add_atom(AtomBuilder::new(Element::H));
+        let a0 = b.add_atom(AtomPattern::new(Element::B));
+        let a1 = b.add_atom(AtomPattern::new(Element::H));
+        let a2 = b.add_atom(AtomPattern::new(Element::H));
         b.add_multicenter_bond(MulticenterBond::new([MulticenterSet::topology_only([
             a0, a1, a2,
         ])]));
@@ -574,8 +574,8 @@ mod tests {
     #[fixture]
     fn o_h_noncovalent_molecule() -> MoleculeBuilder {
         let mut b = MoleculeBuilder::new();
-        let a0 = b.add_atom(AtomBuilder::new(Element::O));
-        let a1 = b.add_atom(AtomBuilder::new(Element::H));
+        let a0 = b.add_atom(AtomPattern::new(Element::O));
+        let a1 = b.add_atom(AtomPattern::new(Element::H));
         b.add_noncovalent_bond(NoncovalentBond::new(a0, a1, BondNoncovalent::Hydrogen));
         b
     }

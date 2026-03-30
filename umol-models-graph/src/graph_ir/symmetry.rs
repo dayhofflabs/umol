@@ -282,7 +282,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::AtomBuilder;
+    use crate::graph_ir::atom_pattern::AtomPattern;
 
     #[test]
     fn empty() {
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn single_atom() {
         let mut b = MoleculeBuilder::new();
-        let a = b.add_atom(AtomBuilder::new(Element::C));
+        let a = b.add_atom(AtomPattern::new(Element::C));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
         assert_eq!(sym.orbit_representative(a), a);
@@ -311,8 +311,8 @@ mod tests {
     #[test]
     fn h2_equivalent() {
         let mut b = MoleculeBuilder::new();
-        let h1 = b.add_atom(AtomBuilder::new(Element::H));
-        let h2 = b.add_atom(AtomBuilder::new(Element::H));
+        let h1 = b.add_atom(AtomPattern::new(Element::H));
+        let h2 = b.add_atom(AtomPattern::new(Element::H));
         b.add_bond(h1, h2, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
@@ -328,8 +328,8 @@ mod tests {
     #[test]
     fn hf_distinct() {
         let mut b = MoleculeBuilder::new();
-        let h = b.add_atom(AtomBuilder::new(Element::H));
-        let f = b.add_atom(AtomBuilder::new(Element::F));
+        let h = b.add_atom(AtomPattern::new(Element::H));
+        let f = b.add_atom(AtomPattern::new(Element::F));
         b.add_bond(h, f, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 2);
@@ -346,7 +346,7 @@ mod tests {
     fn square_uniform_bonds() {
         let mut b = MoleculeBuilder::new();
         let c: Vec<_> = (0..4)
-            .map(|_| b.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| b.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..4 {
             b.add_bond(c[i], c[(i + 1) % 4], BondBuilder::new(1, None));
@@ -372,9 +372,9 @@ mod tests {
     fn linear_mixed_bond_orders() {
         // C=C-C: all three atoms in distinct orbits
         let mut b = MoleculeBuilder::new();
-        let c1 = b.add_atom(AtomBuilder::new(Element::C));
-        let c2 = b.add_atom(AtomBuilder::new(Element::C));
-        let c3 = b.add_atom(AtomBuilder::new(Element::C));
+        let c1 = b.add_atom(AtomPattern::new(Element::C));
+        let c2 = b.add_atom(AtomPattern::new(Element::C));
+        let c3 = b.add_atom(AtomPattern::new(Element::C));
         b.add_bond(c1, c2, BondBuilder::new(2, None));
         b.add_bond(c2, c3, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
@@ -397,7 +397,7 @@ mod tests {
         // C=C-C=C cycle: all atoms equivalent
         let mut b = MoleculeBuilder::new();
         let c: Vec<_> = (0..4)
-            .map(|_| b.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| b.add_atom(AtomPattern::new(Element::C)))
             .collect();
         b.add_bond(c[0], c[1], BondBuilder::new(2, None));
         b.add_bond(c[1], c[2], BondBuilder::new(1, None));
@@ -424,9 +424,9 @@ mod tests {
     fn water() {
         // H-O-H: two orbits (O and the two H's)
         let mut b = MoleculeBuilder::new();
-        let h1 = b.add_atom(AtomBuilder::new(Element::H));
-        let o = b.add_atom(AtomBuilder::new(Element::O));
-        let h2 = b.add_atom(AtomBuilder::new(Element::H));
+        let h1 = b.add_atom(AtomPattern::new(Element::H));
+        let o = b.add_atom(AtomPattern::new(Element::O));
+        let h2 = b.add_atom(AtomPattern::new(Element::H));
         b.add_bond(h1, o, BondBuilder::new(1, None));
         b.add_bond(o, h2, BondBuilder::new(1, None));
         let sym = compute_symmetry(&b);
@@ -449,7 +449,7 @@ mod tests {
         // 6 C atoms in a ring, all single bonds: all equivalent
         let mut b = MoleculeBuilder::new();
         let c: Vec<_> = (0..6)
-            .map(|_| b.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| b.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..6 {
             b.add_bond(c[i], c[(i + 1) % 6], BondBuilder::new(1, None));
@@ -481,9 +481,9 @@ mod tests {
     #[test]
     fn canonical_order_deterministic() {
         let mut b = MoleculeBuilder::new();
-        b.add_atom(AtomBuilder::new(Element::C));
-        b.add_atom(AtomBuilder::new(Element::N));
-        b.add_atom(AtomBuilder::new(Element::O));
+        b.add_atom(AtomPattern::new(Element::C));
+        b.add_atom(AtomPattern::new(Element::N));
+        b.add_atom(AtomPattern::new(Element::O));
         let order1 = compute_symmetry(&b).canonical_order();
         let order2 = compute_symmetry(&b).canonical_order();
         assert_eq!(order1, order2);

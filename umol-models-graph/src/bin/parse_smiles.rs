@@ -42,7 +42,7 @@ fn main() {
             println!("\nresolved atoms:");
             for ai in mol.atom_indices() {
                 let atom = mol.atom(ai).unwrap();
-                println!("  [{}] {}", ai.index(), atom.to_spec().to_spec_str());
+                println!("  [{}] {}", ai.index(), atom);
             }
         }
         Err(e) => {

@@ -123,20 +123,17 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::graph_ir::atom::Atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
-    use crate::spec;
-
-    const C1: &str = "{Cv2a1H}";
-    const C0: &str = "{Cv4}";
+    const C1: &str = "C#h#v2#a";
+    const C0: &str = "C#v4";
 
     fn make_ring(atom_specs: &[&str]) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
+            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         let n = atoms.len();
         for i in 0..n {
@@ -149,7 +146,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
+            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         for &(a, b) in edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
@@ -187,7 +184,7 @@ mod tests {
     fn coronene() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..24)
-            .map(|_| builder.add_resolved_atom(Atom::from_spec(spec!(C1))))
+            .map(|_| builder.add_resolved_atom(C1.parse().unwrap()))
             .collect();
         for i in 0..6 {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
@@ -293,9 +290,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::pyrrole(make_ring(&["{Nv2a2H}", C1, C1, C1, C1]))]
-    #[case::pyridine(make_ring(&["{N/1v2a1}", C1, C1, C1, C1, C1]))]
-    #[case::furan(make_ring(&["{O/1v2a2}", C1, C1, C1, C1]))]
+    #[case::pyrrole(make_ring(&["N#h#v2#a2", C1, C1, C1, C1]))]
+    #[case::pyridine(make_ring(&["N#n#v2#a", C1, C1, C1, C1, C1]))]
+    #[case::furan(make_ring(&["O#n#v2#a2", C1, C1, C1, C1]))]
     fn test_clar_model_find_from_rings_error(#[case] builder: MoleculeBuilder) {
         let rings = RingEnumerator::new(
             RingFamily::InducedBenzenoid,

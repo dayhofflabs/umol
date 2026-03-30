@@ -257,11 +257,9 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::atom::Atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
-    use crate::spec;
 
     fn daylight_model() -> HueckelRuleAromaticity {
         HueckelRuleAromaticity::new(
@@ -295,7 +293,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
+            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         let n = atoms.len();
         for i in 0..n {
@@ -308,7 +306,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
+            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         for &(a, b) in edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
@@ -316,8 +314,8 @@ mod tests {
         builder
     }
 
-    const C1: &str = "{Cv2a1H}";
-    const C0: &str = "{Cv4}";
+    const C1: &str = "C#h#v2#a";
+    const C0: &str = "C#v4";
 
     #[fixture]
     fn benzene() -> MoleculeBuilder {
@@ -326,38 +324,38 @@ mod tests {
 
     #[fixture]
     fn pyridine() -> MoleculeBuilder {
-        make_ring(&["{N/1v2a1}", C1, C1, C1, C1, C1])
+        make_ring(&["N#n#v2#a", C1, C1, C1, C1, C1])
     }
 
     #[fixture]
     fn pyrrole() -> MoleculeBuilder {
-        make_ring(&["{Nv2a2H}", C1, C1, C1, C1])
+        make_ring(&["N#h#v2#a2", C1, C1, C1, C1])
     }
 
     #[fixture]
     fn furan() -> MoleculeBuilder {
-        make_ring(&["{O/1v2a2}", C1, C1, C1, C1])
+        make_ring(&["O#n#v2#a2", C1, C1, C1, C1])
     }
 
     #[fixture]
     fn thiophene() -> MoleculeBuilder {
-        make_ring(&["{S/1v2a2}", C1, C1, C1, C1])
+        make_ring(&["S#n#v2#a2", C1, C1, C1, C1])
     }
 
     #[fixture]
     fn imidazole() -> MoleculeBuilder {
-        make_ring(&["{N/1v2a1}", C1, C1, "{Nv2a2H}", C1])
+        make_ring(&["N#n#v2#a", C1, C1, "N#h#v2#a2", C1])
     }
 
     #[fixture]
     // 6 neutral C (a=1) + 1 C+ (a=0), charge-separated representation
     fn tropylium() -> MoleculeBuilder {
-        make_ring(&[C1, C1, C1, C1, C1, C1, "{C+v2a0H}"])
+        make_ring(&[C1, C1, C1, C1, C1, C1, "C#c+#h#v2#a0"])
     }
 
     #[fixture]
     fn cyclopentadienyl_anion() -> MoleculeBuilder {
-        make_ring(&["{C-v2a2H}"; 5])
+        make_ring(&["C#c-#h#v2#a2"; 5])
     }
 
     #[rustfmt::skip]
@@ -419,8 +417,9 @@ mod tests {
 
     #[fixture]
     fn borazine() -> MoleculeBuilder {
+        // B contributes 0π electrons (empty p orbital); N contributes 2π (lone pair).
         make_ring(&[
-            "{Bv2a1H}", "{Nv2a2H}", "{Bv2a1H}", "{Nv2a2H}", "{Bv2a1H}", "{Nv2a2H}",
+            "B#h#v2#a0", "N#h#v2#a2", "B#h#v2#a0", "N#h#v2#a2", "B#h#v2#a0", "N#h#v2#a2",
         ])
     }
 
@@ -455,7 +454,6 @@ mod tests {
     #[case::cyclohexane(cyclohexane(), daylight_model())]
     #[case::cubane(cubane(), daylight_model())]
     #[case::borazine_daylight(borazine(), daylight_model())]
-    #[case::borazine_permissive(borazine(), permissive_model())]
     #[case::pyrrole_mdl(pyrrole(), mdl_model())]
     fn test_find_from_rings_non_aromatic(
         #[case] builder: MoleculeBuilder,
@@ -465,5 +463,17 @@ mod tests {
             .enumerate_builder(&builder);
         let systems = model.find_from_rings(&builder, &rings);
         assert!(systems.is_empty());
+    }
+
+    #[rstest]
+    fn test_borazine_permissive_aromatic(borazine: MoleculeBuilder) {
+        // B contributes 0π, N contributes 2π: 6 total → Hückel 4(1)+2 aromatic.
+        // The daylight model excludes B, so only the permissive model finds this system.
+        let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
+            .enumerate_builder(&borazine);
+        let systems = permissive_model().find_from_rings(&borazine, &rings);
+        assert_eq!(systems.len(), 1);
+        assert_eq!(systems[0].contributions().len(), 6);
+        assert_eq!(systems[0].electron_count(), 6);
     }
 }

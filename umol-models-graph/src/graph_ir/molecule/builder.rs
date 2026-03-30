@@ -975,7 +975,7 @@ impl MoleculeBuilder {
                 ));
             }
 
-            if let Err(error) = candidate.to_spec().check_invariants() {
+            if let Err(error) = candidate.check_invariants() {
                 return Err(ResolutionError::ValenceViolation(
                     pattern.element(),
                     format!("atom invariant verification failed for {}: {}", candidate, error),
@@ -1101,11 +1101,11 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::atom::AtomBuilder;
+    use crate::graph_ir::atom::Atom;
+    use crate::graph_ir::atom_pattern::AtomPattern;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::ResolveConfig;
     use crate::graph_ir::molecule::Molecule;
-    use crate::spec;
 
     #[fixture]
     fn empty_builder() -> MoleculeBuilder {
@@ -1115,7 +1115,7 @@ mod tests {
     #[fixture]
     fn single_atom_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
-        builder.add_atom(AtomBuilder::new(Element::C));
+        builder.add_atom(AtomPattern::new(Element::C));
         builder
     }
 
@@ -1123,7 +1123,7 @@ mod tests {
     fn ring_builder(#[default(6)] n: usize) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..n)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
@@ -1135,7 +1135,7 @@ mod tests {
     fn chain_builder(#[default(5)] n: usize) -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..n)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n - 1 {
             builder.add_bond_unchecked(atoms[i], atoms[i + 1], BondBuilder::new(1, None));
@@ -1147,7 +1147,7 @@ mod tests {
     fn naphthalene_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..10)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
         for (a, b) in ring1_edges {
@@ -1165,7 +1165,7 @@ mod tests {
     fn cubane_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..8)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let edges = [
             (0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
@@ -1181,7 +1181,7 @@ mod tests {
     fn spiro_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..5)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let edges = [(0, 1), (1, 2), (2, 0), (0, 3), (3, 4), (4, 0)];
         for (a, b) in edges {
@@ -1194,7 +1194,7 @@ mod tests {
     fn bridged_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..6)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let ring1_edges = [(0, 2), (2, 1), (1, 3), (3, 0)];
         for (a, b) in ring1_edges {
@@ -1209,10 +1209,10 @@ mod tests {
 
     #[fixture]
     fn naphthalene_molecule(mut naphthalene_builder: MoleculeBuilder) -> Molecule {
-        let carbon = spec!("{Cv4}");
+        let carbon: Atom = "C#v4".parse().unwrap();
         for atom in naphthalene_builder.atom_indices().collect::<Vec<_>>() {
             naphthalene_builder
-                .set_atom_candidates(atom, SmallVec::from_elem(Atom::from_spec(carbon), 1))
+                .set_atom_candidates(atom, SmallVec::from_elem(carbon, 1))
                 .expect("atom should exist");
         }
         naphthalene_builder
@@ -1244,13 +1244,13 @@ mod tests {
     #[test]
     fn test_atom_aromatic_valence_finds_aromatic_candidate_not_just_first() {
         let mut builder = MoleculeBuilder::new();
-        let atom = builder.add_atom(AtomBuilder::new(Element::C));
+        let atom = builder.add_atom(AtomPattern::new(Element::C));
         builder
             .set_atom_candidates(
                 atom,
                 SmallVec::from_vec(vec![
-                    Atom::from_spec(spec!("{Cv4}")),
-                    Atom::from_spec(spec!("{Cv2a1H}")),
+                    "C#v4".parse::<Atom>().unwrap(),
+                    "C#h#v2#a".parse::<Atom>().unwrap(),
                 ]),
             )
             .expect("atom should exist");
@@ -1260,9 +1260,9 @@ mod tests {
     #[test]
     fn test_atom_aromatic_valence_zero_for_non_aromatic_or_missing() {
         let mut builder = MoleculeBuilder::new();
-        let atom = builder.add_atom(AtomBuilder::new(Element::C));
+        let atom = builder.add_atom(AtomPattern::new(Element::C));
         builder
-            .set_atom_candidates(atom, SmallVec::from_elem(Atom::from_spec(spec!("{Cv4}")), 1))
+            .set_atom_candidates(atom, SmallVec::from_elem("C#v4".parse::<Atom>().unwrap(), 1))
             .expect("atom should exist");
         assert_eq!(builder.atom_aromatic_valence(atom), 0);
         assert_eq!(builder.atom_aromatic_valence(AtomIndex::new(999)), 0);

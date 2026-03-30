@@ -559,17 +559,17 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::atom::{Atom, AtomBuilder};
+    use crate::graph_ir::atom::Atom;
+    use crate::graph_ir::atom_pattern::AtomPattern;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::ResolveConfig;
     use crate::graph_ir::molecule::Molecule;
-    use crate::spec;
 
     #[fixture]
     fn naphthalene_molecule() -> Molecule {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..10)
-            .map(|_| builder.add_atom(AtomBuilder::new(Element::C)))
+            .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
         for (a, b) in ring1_edges {
@@ -579,10 +579,10 @@ mod tests {
         for (a, b) in ring2_edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
         }
-        let carbon = spec!("{Cv4}");
+        let carbon: Atom = "C#v4".parse().unwrap();
         for atom in builder.atom_indices().collect::<Vec<_>>() {
             builder
-                .set_atom_candidates(atom, SmallVec::from_elem(Atom::from_spec(carbon), 1))
+                .set_atom_candidates(atom, SmallVec::from_elem(carbon, 1))
                 .expect("atom should exist");
         }
         builder
@@ -605,11 +605,11 @@ mod tests {
     #[test]
     fn test_atom_aromatic_valence_resolved_semantics() {
         let mut aromatic_builder = MoleculeBuilder::new();
-        let aromatic_atom = aromatic_builder.add_atom(AtomBuilder::new(Element::C));
+        let aromatic_atom = aromatic_builder.add_atom(AtomPattern::new(Element::C));
         aromatic_builder
             .set_atom_candidates(
                 aromatic_atom,
-                SmallVec::from_elem(Atom::from_spec(spec!("{Cv2a1H}")), 1),
+                SmallVec::from_elem("C#h#v2#a".parse::<Atom>().unwrap(), 1),
             )
             .expect("atom should exist");
         let aromatic = aromatic_builder
@@ -618,11 +618,11 @@ mod tests {
         assert_eq!(aromatic.atom_aromatic_valence(aromatic_atom), 1);
 
         let mut non_aromatic_builder = MoleculeBuilder::new();
-        let non_aromatic_atom = non_aromatic_builder.add_atom(AtomBuilder::new(Element::C));
+        let non_aromatic_atom = non_aromatic_builder.add_atom(AtomPattern::new(Element::C));
         non_aromatic_builder
             .set_atom_candidates(
                 non_aromatic_atom,
-                SmallVec::from_elem(Atom::from_spec(spec!("{Cv4}")), 1),
+                SmallVec::from_elem("C#v4".parse::<Atom>().unwrap(), 1),
             )
             .expect("atom should exist");
         let non_aromatic = non_aromatic_builder
