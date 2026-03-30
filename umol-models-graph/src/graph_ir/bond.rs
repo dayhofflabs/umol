@@ -1,5 +1,6 @@
 //! Bond types for GraphIR.
 
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use thiserror::Error;
@@ -79,6 +80,40 @@ impl FromStr for Bond {
         let ast = parse_bond_dsl(s).map_err(|e| BondError::InvalidState(e.to_string()))?;
         Bond::from_ast(ast, &BondLowerConfig::default())
             .map_err(|e| BondError::InvalidState(e.to_string()))
+    }
+}
+
+impl Display for Bond {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.order)?;
+
+        match self.charge {
+            0 => {}
+            1 => write!(f, "#c+")?,
+            -1 => write!(f, "#c-")?,
+            c if c > 0 => write!(f, "#c+{}", c)?,
+            c => write!(f, "#c{}", c)?,
+        }
+
+        let unpaired = self.spin.unpaired_electrons();
+        if unpaired > 0 {
+            if unpaired == 1 {
+                write!(f, "#u")?;
+            } else {
+                write!(f, "#u{}", unpaired)?;
+            }
+        }
+
+        let multiplicity = self.spin.multiplicity().multiplicity();
+        if multiplicity != unpaired + 1 {
+            if multiplicity == 1 {
+                write!(f, "#s")?;
+            } else {
+                write!(f, "#s{}", multiplicity)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -197,10 +232,6 @@ impl BondPattern {
         })
     }
 
-    pub fn can_ground(&self) -> bool {
-        self.to_bond().is_ok()
-    }
-
     pub fn matches_bond(&self, bond: &Bond) -> bool {
         self.order.matches(bond.order())
             && self.charge.matches(bond.charge())
@@ -317,7 +348,6 @@ mod tests {
     #[case::electron_parity_mismatch(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) }, false)]
     #[case::max_unpaired_exceeded(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(10), ..BondPattern::new(1) }, false)]
     fn test_bond_pattern_can_ground(#[case] pattern: BondPattern, #[case] expected: bool) {
-        assert_eq!(pattern.can_ground(), expected);
         assert_eq!(pattern.to_bond().is_ok(), expected);
     }
 
@@ -399,5 +429,15 @@ mod tests {
         assert_eq!(bond.charge(), expected_charge);
         assert_eq!(bond.unpaired_electrons(), expected_unpaired);
         assert_eq!(bond.multiplicity(), expected_multiplicity);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::single("1")]
+    #[case::pos_charged_doublet("2#c+#u")]
+    #[case::triplet("2#u2")]
+    fn test_bond_display_roundtrip(#[case] input: &str) {
+        let bond: Bond = input.parse().expect("expected parse success");
+        assert_eq!(bond.to_string(), input);
     }
 }
