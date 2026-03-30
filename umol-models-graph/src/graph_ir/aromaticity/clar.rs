@@ -123,7 +123,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::bond::BondPattern;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
     const C1: &str = "C#h#v2#a";
@@ -137,7 +137,7 @@ mod tests {
             .collect();
         let n = atoms.len();
         for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
         }
         builder
     }
@@ -149,7 +149,7 @@ mod tests {
             .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         for &(a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -187,7 +187,7 @@ mod tests {
             .map(|_| builder.add_resolved_atom(C1.parse().unwrap()))
             .collect();
         for i in 0..6 {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondPattern::new(1));
         }
         for i in 0..6 {
             let a = i;
@@ -195,10 +195,10 @@ mod tests {
             let c = 6 + i * 3;
             let d = 6 + i * 3 + 1;
             let e = 6 + i * 3 + 2;
-            builder.add_bond_unchecked(atoms[a], atoms[c], BondBuilder::new(1, None));
-            builder.add_bond_unchecked(atoms[c], atoms[d], BondBuilder::new(1, None));
-            builder.add_bond_unchecked(atoms[d], atoms[e], BondBuilder::new(1, None));
-            builder.add_bond_unchecked(atoms[e], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[c], BondPattern::new(1));
+            builder.add_bond_unchecked(atoms[c], atoms[d], BondPattern::new(1));
+            builder.add_bond_unchecked(atoms[d], atoms[e], BondPattern::new(1));
+            builder.add_bond_unchecked(atoms[e], atoms[b], BondPattern::new(1));
         }
         for i in 0..6 {
             let this_last = 6 + i * 3 + 2;
@@ -206,7 +206,7 @@ mod tests {
             builder.add_bond_unchecked(
                 atoms[this_last],
                 atoms[next_first],
-                BondBuilder::new(1, None),
+                BondPattern::new(1),
             );
         }
         builder

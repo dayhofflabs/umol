@@ -5,7 +5,7 @@ use rstest::*;
 use umol_data::{e, Element, NamedIsotope};
 
 use super::*;
-use crate::atom::ImplicitHydrogens;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,

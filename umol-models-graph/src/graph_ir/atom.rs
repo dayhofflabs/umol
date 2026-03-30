@@ -5,10 +5,11 @@ use std::str::FromStr;
 
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
-use self::parser::parse_ground_atom_dsl;
 use crate::atom::{AromaticValence, IsotopeMass};
+use crate::dsl::atom::{parse_atom_dsl, AtomLowerConfig};
+use crate::dsl::error::LoweringError;
+use crate::dsl::lowering::FromAst;
 use crate::graph_ir::atom_type::AtomError;
-mod parser;
 
 /// Atom in GraphIR (ground term)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,6 +28,41 @@ pub struct Atom {
 }
 
 impl Atom {
+    /// Construct a new `Atom`, validating only spin compatibility.
+    /// Full electron invariant validation requires `check_invariants`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn try_new(
+        element: Element,
+        isotope_mass: Option<u32>,
+        charge: i8,
+        implicit_hydrogens: u8,
+        lone_pairs: u8,
+        unpaired_electrons: u8,
+        multiplicity: SpinMultiplicity,
+        valence: u8,
+        donated_pairs: u8,
+        accepted_pairs: u8,
+        aromatic_valence: AromaticValence,
+        multicenter_valence: u8,
+    ) -> Result<Self, AtomError> {
+        let spin = SpinState::try_new(unpaired_electrons, multiplicity)?;
+        Ok(Self {
+            element,
+            isotope_mass: isotope_mass.map_or(IsotopeMass::Natural, IsotopeMass::MassNumber),
+            charge,
+            implicit_hydrogens,
+            lone_pairs,
+            spin,
+            valence,
+            donated_pairs,
+            accepted_pairs,
+            aromatic_valence,
+            multicenter_valence,
+        })
+    }
+
+    // TODO: Add constructors that accept constraints
+
     pub fn element(&self) -> Element {
         self.element
     }
@@ -83,40 +119,8 @@ impl Atom {
         self.aromatic_valence.is_aromatic()
     }
 
-    /// Construct a new `Atom`, validating only spin compatibility.
-    /// Full electron invariant validation requires `check_invariants`.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn try_new(
-        element: Element,
-        isotope_mass: Option<u32>,
-        charge: i8,
-        implicit_hydrogens: u8,
-        lone_pairs: u8,
-        unpaired_electrons: u8,
-        multiplicity: SpinMultiplicity,
-        valence: u8,
-        donated_pairs: u8,
-        accepted_pairs: u8,
-        aromatic_valence: AromaticValence,
-        multicenter_valence: u8,
-    ) -> Result<Self, AtomError> {
-        let spin = SpinState::try_new(unpaired_electrons, multiplicity)?;
-        Ok(Self {
-            element,
-            isotope_mass: isotope_mass.map_or(IsotopeMass::Natural, IsotopeMass::MassNumber),
-            charge,
-            implicit_hydrogens,
-            lone_pairs,
-            spin,
-            valence,
-            donated_pairs,
-            accepted_pairs,
-            aromatic_valence,
-            multicenter_valence,
-        })
-    }
-
     /// Validate the electron invariant and field bounds of this atom.
+    /// TODO: Integrate into constraint resolution framework.
     pub fn check_invariants(&self) -> Result<(), AtomError> {
         let (min_charge, max_charge) = self.element.charge_bounds();
         if self.charge < min_charge || self.charge > max_charge {
@@ -191,7 +195,7 @@ impl Atom {
 
 fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
     match aromatic_valence {
-        AromaticValence::None => 0,
+        AromaticValence::NotAromatic => 0,
         AromaticValence::Valence(0) => 0,
         AromaticValence::Valence(1) => 1,
         AromaticValence::Valence(2) => 0,
@@ -274,7 +278,7 @@ impl Display for Atom {
         }
 
         match self.aromatic_valence {
-            AromaticValence::None => {}
+            AromaticValence::NotAromatic => {}
             AromaticValence::Valence(1) => write!(f, "#a")?,
             AromaticValence::Valence(n) => write!(f, "#a{}", n)?,
         }
@@ -295,11 +299,13 @@ impl FromStr for Atom {
     type Err = AtomError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_ground_atom_dsl(s)?.to_atom()
+        let ast = parse_atom_dsl(s).map_err(|e| AtomError::InvalidTag(e.to_string()))?;
+        Self::from_ast(ast, &AtomLowerConfig::default()).map_err(|e| match e {
+            LoweringError::SpinState(se) => AtomError::SpinState(se),
+            other => AtomError::InvalidTag(other.to_string()),
+        })
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -314,21 +320,23 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::element("He", Atom { element: Element::He, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 0, lone_pairs: 0,
-        spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+        spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
     #[case::whitespace("  He  ", Atom { element: Element::He, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 0, lone_pairs: 0,
-        spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+        spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
     #[case::hydrogens("C#h4", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
-            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
+    #[case::hydrogens_whitespace("C #h 4", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
+    #[case::isotope_mass_number("C#i13#h4", Atom { element: Element::C, isotope_mass: IsotopeMass::MassNumber(13), charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
     #[case::isotope_natural("C#i=#h4", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
-            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
     #[case::charge_plus("C#c+#h3", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 1, implicit_hydrogens: 3, lone_pairs: 0,
-            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
     #[case::charge_minus("C#c-#h3#n1", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: -1, implicit_hydrogens: 3, lone_pairs: 1,
-            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
     #[case::aromatic_none("C#a!#h4", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 4, lone_pairs: 0,
-            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::None, multicenter_valence: 0 })]
-    #[case::no_charg("C#a#h1#v2", Atom { element: Element::C, isotope_mass: IsotopeMass::Natural, charge: 0, implicit_hydrogens: 1, lone_pairs: 0,
-            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 2, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::Valence(1), multicenter_valence: 0 })]
+            spin: SpinState::new(0, SpinMultiplicity::Singlet), valence: 0, donated_pairs: 0, accepted_pairs: 0, aromatic_valence: AromaticValence::NotAromatic, multicenter_valence: 0 })]
     fn test_atom_from_str(
         #[case] input: &str,
         #[case] expected: Atom,
@@ -341,14 +349,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::unknown_element("X", AtomError::InvalidElement("X".to_string()))]
-    #[case::wildcard("*", AtomError::InvalidElement("*".to_string()))]
-    #[case::unknown_predicate("C#x1", AtomError::UnexpectedTag("#x".to_string()))]
-    #[case::duplicate_charge("C#c+#c-", AtomError::DuplicateTag("#c".to_string()))]
-    #[case::duplicate_h("C#h3#h2", AtomError::DuplicateTag("#h".to_string()))]
-    #[case::non_ground_payload("C#h*", AtomError::InvalidImplicitHydrogens("*".to_string()))]
-    #[case::malformed_number("C#vabc", AtomError::InvalidValence("abc".to_string()))]
-    #[case::trailing_input("C foo", AtomError::UnexpectedTag("f".to_string()))]
+    #[case::unknown_element("X", AtomError::InvalidTag("Invalid atom element: X".to_string()))]
+    #[case::wildcard("*", AtomError::InvalidTag("non-ground value for field 'element'".to_string()))]
+    #[case::unknown_predicate("C#x1", AtomError::InvalidTag("Unknown atom predicate: #x".to_string()))]
+    #[case::duplicate_charge("C#c+#c-", AtomError::InvalidTag("Duplicate #c atom predicate".to_string()))]
+    #[case::duplicate_h("C#h3#h2", AtomError::InvalidTag("Duplicate #h atom predicate".to_string()))]
+    #[case::non_ground_payload("C#h*", AtomError::InvalidTag("invalid atom spec: electron invariant mismatch for C: inv_o=0, inv_e=4".to_string()))]
+    #[case::malformed_number("C#vabc", AtomError::InvalidTag("Trailing input: \"abc\"".to_string()))]
+    #[case::trailing_input("C foo", AtomError::InvalidTag("Trailing input: \"foo\"".to_string()))]
     fn test_atom_from_str_invalid(#[case] input: &str, #[case] expected: AtomError) {
         let result = Atom::from_str(input);
         assert!(
@@ -361,14 +369,13 @@ mod tests {
         );
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::defaults(Atom::try_new(Element::He, None, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap(), "He")]
-    #[case::charge_plus(Atom::try_new(Element::C, None, 1, 3, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap(), "C#c+#h3")]
-    #[case::charge_minus(Atom::try_new(Element::C, None, -1, 3, 1, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap(), "C#c-#h3#n")]
-    #[case::isotope_mass(Atom::try_new(Element::C, Some(13), 0, 4, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap(), "C#i13#h4")]
-    #[case::aromatic(Atom::try_new(Element::C, None, 0, 1, 0, 0, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 0).unwrap(), "C#h#v2#a")]
-    #[case::multiplicity(Atom::try_new(Element::C, None, 0, 0, 1, 2, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap(), "C#n#u2#s")]
+    #[case::defaults("He".parse::<Atom>().unwrap(), "He")]
+    #[case::charge_plus("C#c+#h3".parse::<Atom>().unwrap(), "C#c+#h3")]
+    #[case::charge_minus("C#c-#h3#n1".parse::<Atom>().unwrap(), "C#c-#h3#n")]
+    #[case::isotope_mass("C#i13#h4".parse::<Atom>().unwrap(), "C#i13#h4")]
+    #[case::aromatic("C#h#v2#a1".parse::<Atom>().unwrap(), "C#h#v2#a")]
+    #[case::multiplicity("C#n#u2#s".parse::<Atom>().unwrap(), "C#n#u2#s")]
     fn test_atom_display(#[case] atom: Atom, #[case] expected: &str) {
         assert_eq!(atom.to_string(), expected);
     }

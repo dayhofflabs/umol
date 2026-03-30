@@ -302,7 +302,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::bond::BondPattern;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
@@ -316,7 +316,7 @@ mod tests {
             .collect();
         let n = atoms.len();
         for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
         }
         builder
     }
@@ -328,7 +328,7 @@ mod tests {
             .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
             .collect();
         for &(a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }

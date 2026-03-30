@@ -22,7 +22,7 @@ use crate::atom::AromaticValence;
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::Atom;
 use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::bond::BondBuilder;
+use crate::graph_ir::bond::BondPattern;
 use crate::graph_ir::config::ResolveConfig;
 use crate::graph_ir::dative::DativeBond;
 use crate::graph_ir::error::ResolutionError;
@@ -57,9 +57,10 @@ fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> 
 /// molecule construction.
 #[derive(Debug, Clone)]
 pub struct MoleculeBuilder {
-    graph: StableGraph<AtomPattern, BondBuilder, Undirected, u32>,
+    graph: StableGraph<AtomPattern, BondPattern, Undirected, u32>,
     atom_candidates: HashMap<AtomIndex, SmallVec<[Atom; 4]>>,
     atom_aromatic_hints: HashMap<AtomIndex, bool>,
+    bond_aromatic_hints: HashMap<BondIndex, bool>,
     atom_normal_implicit_hydrogens: HashSet<AtomIndex>,
     dative_bonds: Vec<DativeBond>,
     aromatic_systems: Vec<AromaticSystem>,
@@ -90,7 +91,7 @@ impl MoleculeBuilder {
                 .expect("bond index must be valid");
             let new_a = *atom_map.get(&a).expect("source atom must be mapped");
             let new_b = *atom_map.get(&b).expect("source atom must be mapped");
-            builder.add_bond_unchecked(new_a, new_b, bond.to_builder());
+            builder.add_bond_unchecked(new_a, new_b, BondPattern::from_bond(bond));
         }
 
         builder.dative_bonds = molecule.dative_bonds().cloned().collect();
@@ -107,6 +108,7 @@ impl MoleculeBuilder {
             graph: StableGraph::default(),
             atom_candidates: HashMap::new(),
             atom_aromatic_hints: HashMap::new(),
+            bond_aromatic_hints: HashMap::new(),
             atom_normal_implicit_hydrogens: HashSet::new(),
             dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
@@ -122,6 +124,7 @@ impl MoleculeBuilder {
             graph: StableGraph::with_capacity(atom_capacity, bond_capacity),
             atom_candidates: HashMap::with_capacity(atom_capacity),
             atom_aromatic_hints: HashMap::with_capacity(atom_capacity),
+            bond_aromatic_hints: HashMap::with_capacity(bond_capacity),
             atom_normal_implicit_hydrogens: HashSet::with_capacity(atom_capacity),
             dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
@@ -396,6 +399,14 @@ impl MoleculeBuilder {
         self.atom_aromatic_hints.get(&index).copied()
     }
 
+    pub fn set_bond_aromatic_hint(&mut self, index: BondIndex, hint: bool) {
+        self.bond_aromatic_hints.insert(index, hint);
+    }
+
+    pub fn bond_aromatic_hint(&self, index: BondIndex) -> Option<bool> {
+        self.bond_aromatic_hints.get(&index).copied()
+    }
+
     pub fn set_atom_normal_implicit_hydrogens(&mut self, index: AtomIndex) -> Option<()> {
         if !self.graph.contains_node(index) {
             return None;
@@ -435,7 +446,7 @@ impl MoleculeBuilder {
             .and_then(|candidates| {
                 candidates.iter().find_map(|c| match c.aromatic_valence() {
                     AromaticValence::Valence(n) => Some(n),
-                    AromaticValence::None => None,
+                    AromaticValence::NotAromatic => None,
                 })
             })
             .unwrap_or(0)
@@ -448,8 +459,9 @@ impl MoleculeBuilder {
         if self.atom_explicit_aromatic_hint(index) == Some(true) {
             return true;
         }
-        self.atom_bonds(index)
-            .any(|b| b.aromatic_hint() == Some(true))
+        self.graph
+            .edges(index)
+            .any(|e| self.bond_aromatic_hints.get(&e.id()) == Some(&true))
     }
 
     /// Atoms that have at least one candidate with a non-None aromatic valence.
@@ -474,15 +486,15 @@ impl MoleculeBuilder {
         self.graph.edge_indices()
     }
 
-    pub fn bond(&self, index: BondIndex) -> Option<&BondBuilder> {
+    pub fn bond(&self, index: BondIndex) -> Option<&BondPattern> {
         self.graph.edge_weight(index)
     }
 
-    pub fn bond_mut(&mut self, index: BondIndex) -> Option<&mut BondBuilder> {
+    pub fn bond_mut(&mut self, index: BondIndex) -> Option<&mut BondPattern> {
         self.graph.edge_weight_mut(index)
     }
 
-    pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: BondBuilder) -> Option<BondIndex> {
+    pub fn add_bond(&mut self, a: AtomIndex, b: AtomIndex, bond: BondPattern) -> Option<BondIndex> {
         if !self.graph.contains_node(a) || !self.graph.contains_node(b) {
             return None;
         }
@@ -493,7 +505,7 @@ impl MoleculeBuilder {
         &mut self,
         a: AtomIndex,
         b: AtomIndex,
-        bond: BondBuilder,
+        bond: BondPattern,
     ) -> BondIndex {
         debug_assert!(
             self.graph.contains_node(a),
@@ -508,11 +520,11 @@ impl MoleculeBuilder {
         self.graph.add_edge(a, b, bond)
     }
 
-    pub fn remove_bond(&mut self, index: BondIndex) -> Option<BondBuilder> {
+    pub fn remove_bond(&mut self, index: BondIndex) -> Option<BondPattern> {
         self.graph.remove_edge(index)
     }
 
-    pub fn replace_bond(&mut self, index: BondIndex, bond: BondBuilder) -> Option<BondBuilder> {
+    pub fn replace_bond(&mut self, index: BondIndex, bond: BondPattern) -> Option<BondPattern> {
         self.graph
             .edge_weight_mut(index)
             .map(|old| std::mem::replace(old, bond))
@@ -770,7 +782,7 @@ impl MoleculeBuilder {
         self.graph.edges(index).map(|e| e.id())
     }
 
-    pub fn atom_bonds(&self, index: AtomIndex) -> impl Iterator<Item = &BondBuilder> + '_ {
+    pub fn atom_bonds(&self, index: AtomIndex) -> impl Iterator<Item = &BondPattern> + '_ {
         self.graph.edges(index).map(|e| e.weight())
     }
 
@@ -782,7 +794,7 @@ impl MoleculeBuilder {
         self.graph.edges_connecting(a, b).next().map(|e| e.id())
     }
 
-    pub fn connecting_bond(&self, a: AtomIndex, b: AtomIndex) -> Option<&BondBuilder> {
+    pub fn connecting_bond(&self, a: AtomIndex, b: AtomIndex) -> Option<&BondPattern> {
         self.graph.edges_connecting(a, b).next().map(|e| e.weight())
     }
 
@@ -992,7 +1004,7 @@ impl MoleculeBuilder {
             let bond_builder = self.graph.edge_weight(old_edge).unwrap();
             let new_a = index_map[a.index()].unwrap();
             let new_b = index_map[b.index()].unwrap();
-            graph.add_edge(new_a, new_b, bond_builder.build()?);
+            graph.add_edge(new_a, new_b, bond_builder.to_bond().map_err(ResolutionError::from)?);
         }
 
         let atom_charge: i8 = graph.node_weights().map(|a| a.charge()).sum();
@@ -1103,7 +1115,7 @@ mod tests {
     use super::*;
     use crate::graph_ir::atom::Atom;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::bond::BondPattern;
     use crate::graph_ir::config::ResolveConfig;
     use crate::graph_ir::molecule::Molecule;
 
@@ -1126,7 +1138,7 @@ mod tests {
             .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
         }
         builder
     }
@@ -1138,7 +1150,7 @@ mod tests {
             .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n - 1 {
-            builder.add_bond_unchecked(atoms[i], atoms[i + 1], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[i + 1], BondPattern::new(1));
         }
         builder
     }
@@ -1151,11 +1163,11 @@ mod tests {
             .collect();
         let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
         for (a, b) in ring1_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         let ring2_edges = [(3, 6), (6, 7), (7, 8), (8, 9), (9, 4)];
         for (a, b) in ring2_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -1172,7 +1184,7 @@ mod tests {
             (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7),
         ];
         for (a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -1185,7 +1197,7 @@ mod tests {
             .collect();
         let edges = [(0, 1), (1, 2), (2, 0), (0, 3), (3, 4), (4, 0)];
         for (a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -1198,11 +1210,11 @@ mod tests {
             .collect();
         let ring1_edges = [(0, 2), (2, 1), (1, 3), (3, 0)];
         for (a, b) in ring1_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         let ring2_edges = [(0, 4), (4, 1), (1, 5), (5, 0)];
         for (a, b) in ring2_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }

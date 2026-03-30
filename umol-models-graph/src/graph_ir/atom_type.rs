@@ -9,13 +9,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use umol_data::{Element, SpinMultiplicity, SpinStateError};
 
-use crate::atom::{AromaticValence, ImplicitHydrogens};
+use crate::atom::AromaticValence;
+use crate::graph_ir::atom_pattern::HydrogenPattern;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 use crate::graph_ir::Atom;
+use crate::table_ir::atom::ImplicitHydrogens;
 
-
-
+// TODO: Incorporate relevant variants into ValidationError, remove this enum.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum AtomError {
     // Deprecated: legacy `?{...}` atom type query parser only.
@@ -132,7 +133,7 @@ pub enum AromaticConstraint {
 impl AromaticConstraint {
     pub fn matches(&self, av: AromaticValence) -> bool {
         match self {
-            AromaticConstraint::None => av == AromaticValence::None,
+            AromaticConstraint::None => av == AromaticValence::NotAromatic,
             AromaticConstraint::Any => av.is_aromatic(),
             AromaticConstraint::Valence(n) => av == AromaticValence::Valence(*n),
         }
@@ -179,8 +180,11 @@ impl AtomTypeQuery {
         let hydrogen_constraint = if builder.atom_has_normal_implicit_hydrogens(atom_index) {
             Some(HydrogenConstraint::Normal)
         } else {
-            atom.implicit_hydrogens()
-                .map(HydrogenConstraint::from_implicit_hydrogens)
+            match &atom.implicit_hydrogens {
+                HydrogenPattern::Is(h) => Some(HydrogenConstraint::Hydrogens(*h)),
+                HydrogenPattern::Normal => Some(HydrogenConstraint::Normal),
+                HydrogenPattern::Any => None,
+            }
         };
         let aromatic_constraint = if builder.atom_aromatic_hint(atom_index) {
             Some(AromaticConstraint::Any)
@@ -196,11 +200,11 @@ impl AtomTypeQuery {
         };
         Self {
             element: atom.element(),
-            charge: atom.charge(),
+            charge: atom.charge.into_option(),
             implicit_hydrogens: hydrogen_constraint,
-            lone_pairs: atom.lone_pairs(),
-            unpaired_electrons: atom.unpaired_electrons(),
-            multiplicity: atom.multiplicity(),
+            lone_pairs: atom.lone_pairs.into_option(),
+            unpaired_electrons: atom.unpaired_electrons.into_option(),
+            multiplicity: atom.multiplicity.into_option(),
             valence: Some(valence),
             donated_pairs: Some(donated_pairs),
             accepted_pairs: Some(accepted_pairs),
@@ -362,16 +366,12 @@ impl FromStr for AtomTypeQuery {
                         chars.next();
                         query.implicit_hydrogens = Some(HydrogenConstraint::Normal);
                     } else {
-                        query.implicit_hydrogens = Some(HydrogenConstraint::Hydrogens(num_u8(
-                            1,
-                            "H",
-                        )?));
+                        query.implicit_hydrogens =
+                            Some(HydrogenConstraint::Hydrogens(num_u8(1, "H")?));
                     }
                 }
                 '/' => query.lone_pairs = Some(num_u8(1, "/")?),
-                '^' => {
-                    query.unpaired_electrons = Some(num_u8(1, "^")?)
-                }
+                '^' => query.unpaired_electrons = Some(num_u8(1, "^")?),
                 'x' => {
                     let m = num_u8(1, "x")?;
                     query.multiplicity = Some(
@@ -390,15 +390,10 @@ impl FromStr for AtomTypeQuery {
                         chars.next();
                         query.aromatic_valence = Some(AromaticConstraint::None);
                     } else {
-                        query.aromatic_valence = Some(AromaticConstraint::Valence(num_u8(
-                            1,
-                            "a",
-                        )?));
+                        query.aromatic_valence = Some(AromaticConstraint::Valence(num_u8(1, "a")?));
                     }
                 }
-                'm' => {
-                    query.multicenter_valence = Some(num_u8(1, "m")?)
-                }
+                'm' => query.multicenter_valence = Some(num_u8(1, "m")?),
                 _ => {
                     return Err(AtomError::UnexpectedTag(token.to_string()));
                 }
@@ -441,26 +436,6 @@ mod tests {
     use umol_data::{Element, SpinMultiplicity};
 
     use super::*;
-
-    #[test]
-    fn test_aromatic_valence_display() {
-        assert_eq!(AromaticValence::None.to_string(), "");
-        assert_eq!(AromaticValence::Valence(0).to_string(), "a0");
-        assert_eq!(AromaticValence::Valence(1).to_string(), "a1");
-    }
-
-    #[test]
-    fn test_aromatic_valence_from_str() {
-        assert!(AromaticValence::from_str("").is_err());
-        assert_eq!(
-            AromaticValence::from_str("a0").unwrap(),
-            AromaticValence::Valence(0)
-        );
-        assert_eq!(
-            AromaticValence::from_str("a1").unwrap(),
-            AromaticValence::Valence(1)
-        );
-    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -524,12 +499,12 @@ mod tests {
     #[rstest]
     #[case::any_matches_a1(AromaticConstraint::Any, AromaticValence::Valence(1), true)]
     #[case::any_matches_a0(AromaticConstraint::Any, AromaticValence::Valence(0), true)]
-    #[case::any_rejects_none(AromaticConstraint::Any, AromaticValence::None, false)]
-    #[case::none_matches_none(AromaticConstraint::None, AromaticValence::None, true)]
+    #[case::any_rejects_none(AromaticConstraint::Any, AromaticValence::NotAromatic, false)]
+    #[case::none_matches_none(AromaticConstraint::None, AromaticValence::NotAromatic, true)]
     #[case::none_rejects_a1(AromaticConstraint::None, AromaticValence::Valence(1), false)]
     #[case::exact_matches(AromaticConstraint::Valence(2), AromaticValence::Valence(2), true)]
     #[case::exact_rejects_wrong(AromaticConstraint::Valence(2), AromaticValence::Valence(1), false)]
-    #[case::exact_rejects_none(AromaticConstraint::Valence(1), AromaticValence::None, false)]
+    #[case::exact_rejects_none(AromaticConstraint::Valence(1), AromaticValence::NotAromatic, false)]
     fn test_aromatic_constraint_matches(
         #[case] constraint: AromaticConstraint,
         #[case] valence: AromaticValence,
@@ -537,5 +512,4 @@ mod tests {
     ) {
         assert_eq!(constraint.matches(valence), expected);
     }
-
 }

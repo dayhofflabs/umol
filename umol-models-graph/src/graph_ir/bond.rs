@@ -5,31 +5,26 @@ use std::str::FromStr;
 use thiserror::Error;
 use umol_data::{SpinMultiplicity, SpinState, SpinStateError};
 
-use crate::graph_ir::error::ResolutionError;
+use crate::dsl::bond::{parse_bond_dsl, BondAst, BondLowerConfig, ChargeMode};
+use crate::dsl::error::LoweringError;
+use crate::dsl::lowering::FromAst;
+use crate::dsl::value::ValueAst;
+use crate::graph_ir::atom_pattern::Pattern;
+use crate::graph_ir::error::{ResolutionError, ValidationError};
 use crate::table_ir::bond::{Bond as TableBond, BondOrder};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum BondError {
-    #[error("bond spec must use b{{...}} notation")]
-    InvalidFormat,
-    #[error("bond spec is empty")]
-    EmptySpec,
-    #[error("bond order token 'o<n>' is required")]
-    MissingOrder,
-    #[error("duplicate token '{token}'")]
-    DuplicateToken { token: char },
-    #[error("invalid bond order token")]
-    InvalidOrder,
-    #[error("invalid charge token")]
-    InvalidCharge,
-    #[error("invalid multiplicity token")]
-    InvalidMultiplicity,
-    #[error("invalid aromatic hint token; expected a0 or a1")]
-    InvalidAromaticHint,
-    #[error("unexpected token '{token}'")]
-    UnexpectedToken { token: char },
+    #[error("invalid bond order value: {0}")]
+    InvalidOrder(String),
+    #[error("invalid charge value: {0}")]
+    InvalidCharge(String),
+    #[error("invalid multiplicity value: {0}")]
+    InvalidMultiplicity(String),
     #[error(transparent)]
     SpinState(#[from] SpinStateError),
+    #[error("invalid bond state: {0}")]
+    InvalidState(String),
 }
 
 impl From<BondError> for ResolutionError {
@@ -75,343 +70,271 @@ impl Bond {
     pub fn order(&self) -> u8 {
         self.order
     }
+}
 
-    pub fn to_builder(&self) -> BondBuilder {
-        BondBuilder {
-            order: self.order,
-            charge: Some(self.charge),
-            unpaired_electrons: Some(self.spin.unpaired_electrons()),
-            multiplicity: Some(self.spin.multiplicity()),
-            aromatic_hint: None,
-        }
+impl FromStr for Bond {
+    type Err = BondError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let ast = parse_bond_dsl(s).map_err(|e| BondError::InvalidState(e.to_string()))?;
+        Bond::from_ast(ast, &BondLowerConfig::default())
+            .map_err(|e| BondError::InvalidState(e.to_string()))
     }
 }
 
-/// Mutable bond representation used during resolution phases.
-/// Carries an aromaticity hint that is consumed by Kekulization;
-/// `build()` produces the final `Bond` with a definite order.
+/// Bond pattern: carries order/charge/spin fields as `Pattern<T>` through the
+/// resolution pipeline, grounding to `Bond` via `to_bond()`.
+///
+/// Fields are public to allow direct mutation in transform/kekulize code.
+/// Aromaticity hints are stored separately on `MoleculeBuilder`, not here.
 #[derive(Debug, Clone, PartialEq)]
-pub struct BondBuilder {
-    order: u8,
-    charge: Option<i8>,
-    unpaired_electrons: Option<u8>,
-    multiplicity: Option<SpinMultiplicity>,
-    aromatic_hint: Option<bool>,
+pub struct BondPattern {
+    pub order: Pattern<u8>,
+    pub charge: Pattern<i8>,
+    pub unpaired_electrons: Pattern<u8>,
+    pub multiplicity: Pattern<SpinMultiplicity>,
 }
 
-impl BondBuilder {
-    pub fn new(order: u8, aromatic_hint: Option<bool>) -> Self {
+impl BondPattern {
+    /// Minimal pattern: concrete order, all other fields unconstrained.
+    pub fn new(order: u8) -> Self {
         Self {
-            order,
-            charge: None,
-            unpaired_electrons: None,
-            multiplicity: None,
-            aromatic_hint,
+            order: Pattern::Is(order),
+            charge: Pattern::Any,
+            unpaired_electrons: Pattern::Any,
+            multiplicity: Pattern::Any,
         }
     }
 
-    pub fn order(&self) -> u8 {
-        self.order
+    /// Create a pattern from a concrete ground bond.
+    pub fn from_bond(bond: &Bond) -> Self {
+        Self {
+            order: Pattern::Is(bond.order()),
+            charge: Pattern::Is(bond.charge()),
+            unpaired_electrons: Pattern::Is(bond.unpaired_electrons()),
+            multiplicity: Pattern::Is(bond.multiplicity()),
+        }
     }
 
-    pub fn charge(&self) -> Option<i8> {
-        self.charge
-    }
-
-    pub fn multiplicity(&self) -> Option<SpinMultiplicity> {
-        self.multiplicity
-    }
-
-    pub fn unpaired_electrons(&self) -> Option<u8> {
-        self.unpaired_electrons
-    }
-
-    pub fn aromatic_hint(&self) -> Option<bool> {
-        self.aromatic_hint
-    }
-
-    pub fn set_order(&mut self, order: u8) {
-        self.order = order;
-    }
-
-    pub fn set_charge(&mut self, charge: i8) {
-        self.charge = Some(charge);
-    }
-
-    pub fn set_unpaired_electrons(&mut self, unpaired_electrons: u8) {
-        self.unpaired_electrons = Some(unpaired_electrons);
-    }
-
-    pub fn set_multiplicity(&mut self, multiplicity: SpinMultiplicity) {
-        self.multiplicity = Some(multiplicity);
-    }
-
-    pub fn set_aromatic_hint(&mut self, aromatic: Option<bool>) {
-        self.aromatic_hint = aromatic;
-    }
-
+    /// Create a pattern from a table IR bond.
+    ///
+    /// Aromatic order is normalized to 1; the caller is responsible for
+    /// recording the aromatic hint on `MoleculeBuilder` via
+    /// `set_bond_aromatic_hint`.
     pub fn from_table_bond(bond: &TableBond) -> Self {
         debug_assert!(
             !bond.order.is_query(),
-            "query bond orders must be resolved before conversion to BondBuilder"
+            "query bond orders must be resolved before conversion to BondPattern"
         );
-        let (order, aromatic_hint) = match bond.order {
-            BondOrder::Aromatic => (1, Some(true)),
-            o => (
+        let order = match bond.order {
+            BondOrder::Aromatic => Pattern::Is(1),
+            o => Pattern::Is(
                 o.value()
                     .expect("non-query, non-aromatic bond order must have a value"),
-                Some(false),
             ),
         };
         Self {
             order,
-            charge: bond.charge,
-            unpaired_electrons: bond.unpaired_electrons,
-            multiplicity: bond.multiplicity,
-            aromatic_hint,
+            charge: bond.charge.map_or(Pattern::Any, Pattern::Is),
+            unpaired_electrons: bond.unpaired_electrons.map_or(Pattern::Any, Pattern::Is),
+            multiplicity: bond.multiplicity.map_or(Pattern::Any, Pattern::Is),
         }
     }
 
-    fn checked_spin_and_charge(&self) -> Result<(i8, SpinState), ResolutionError> {
-        let charge = self.charge.unwrap_or(0);
-        let electrons: i16 = 2 * self.order as i16 - charge as i16;
+    /// Return the concrete order. Panics if `order` is `Any`.
+    pub fn order(&self) -> u8 {
+        match self.order {
+            Pattern::Is(o) => o,
+            Pattern::Any => panic!("bond order is not ground"),
+        }
+    }
+
+    /// Ground this pattern into a concrete bond.
+    ///
+    /// `order` must be `Is`; `Any` on other fields defaults to 0 / closed-shell.
+    pub fn to_bond(&self) -> Result<Bond, ValidationError> {
+        let order = match self.order {
+            Pattern::Is(o) => o,
+            Pattern::Any => return Err(ValidationError::NonGround { field: "order" }),
+        };
+
+        let charge = match self.charge {
+            Pattern::Any => 0,
+            Pattern::Is(c) => c,
+        };
+
+        let electrons: i16 = 2 * order as i16 - charge as i16;
         if electrons < 0 {
-            return Err(ResolutionError::BondInvariantViolation(format!(
-                "bond state is not buildable: order={}, charge={:?}, unpaired_electrons={:?}, multiplicity={:?}",
-                self.order, self.charge, self.unpaired_electrons, self.multiplicity
-            )));
+            return Err(ValidationError::Bond(BondError::InvalidState(format!(
+                "bond electron count is negative: order={order}, charge={charge}"
+            ))));
         }
-        let spin = match (self.unpaired_electrons, self.multiplicity) {
-            (Some(unpaired), Some(multiplicity)) => SpinState::try_new(unpaired, multiplicity),
-            (Some(unpaired), None) => SpinState::max_multiplicity(unpaired).ok_or(
-                SpinStateError::UnpairedElectronsOutOfRange {
-                    unpaired_electrons: unpaired,
-                },
-            ),
-            (None, Some(multiplicity)) => {
-                SpinState::try_new(multiplicity.multiplicity() - 1, multiplicity)
+
+        let unpaired = self.unpaired_electrons.into_option();
+        let mult = self.multiplicity.into_option();
+        let spin = match (unpaired, mult) {
+            (Some(u), Some(m)) => SpinState::try_new(u, m).map_err(BondError::SpinState)?,
+            (Some(u), None) => SpinState::max_multiplicity(u).ok_or_else(|| {
+                BondError::InvalidState(format!("unpaired electrons {u} out of range"))
+            })?,
+            (None, Some(m)) => {
+                SpinState::try_new(m.multiplicity() - 1, m).map_err(BondError::SpinState)?
             }
-            (None, None) => Ok(SpinState::closed_shell()),
-        }
-        .map_err(|_e| {
-            ResolutionError::BondInvariantViolation(format!(
-                "bond state is not buildable: order={}, charge={:?}, unpaired_electrons={:?}, multiplicity={:?}",
-                self.order, self.charge, self.unpaired_electrons, self.multiplicity
-            ))
-        })?;
+            (None, None) => SpinState::closed_shell(),
+        };
+
         if !spin.is_compatible_with(electrons as u8) {
-            return Err(ResolutionError::BondInvariantViolation(format!(
-                "bond state is not buildable: order={}, charge={:?}, unpaired_electrons={:?}, multiplicity={:?}",
-                self.order, self.charge, self.unpaired_electrons, self.multiplicity
-            )));
+            return Err(ValidationError::Bond(BondError::InvalidState(format!(
+                "bond spin is not compatible with electron count: order={order}, charge={charge}, \
+                 unpaired_electrons={unpaired:?}, multiplicity={mult:?}"
+            ))));
         }
-        Ok((charge, spin))
-    }
 
-    pub fn can_build(&self) -> bool {
-        self.checked_spin_and_charge().is_ok()
-    }
-
-    pub fn build(&self) -> Result<Bond, ResolutionError> {
-        let (charge, spin) = self.checked_spin_and_charge()?;
         Ok(Bond {
-            order: self.order,
+            order,
             charge,
             spin,
         })
     }
-}
 
-impl FromStr for BondBuilder {
-    type Err = BondError;
+    pub fn can_ground(&self) -> bool {
+        self.to_bond().is_ok()
+    }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let trimmed = s.trim();
-        let body = trimmed
-            .strip_prefix("b{")
-            .and_then(|rest| rest.strip_suffix('}'))
-            .ok_or(BondError::InvalidFormat)?;
-        if body.trim().is_empty() {
-            return Err(BondError::EmptySpec);
-        }
-
-        let mut chars = body.chars().peekable();
-
-        let mut order: Option<u8> = None;
-        let mut charge: Option<i8> = None;
-        let mut unpaired_electrons: Option<u8> = None;
-        let mut multiplicity: Option<SpinMultiplicity> = None;
-        let mut aromatic_hint: Option<bool> = None;
-
-        while let Some(token) = chars.next() {
-            if token.is_ascii_whitespace() {
-                continue;
-            }
-
-            let mut number = String::new();
-            while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
-                number.push(chars.next().expect("peeked digit must exist"));
-            }
-
-            match token {
-                'o' => {
-                    if order.is_some() {
-                        return Err(BondError::DuplicateToken { token });
-                    }
-                    if number.is_empty() {
-                        return Err(BondError::InvalidOrder);
-                    }
-                    order = Some(number.parse::<u8>().map_err(|_| BondError::InvalidOrder)?);
-                }
-                '+' | '-' => {
-                    if charge.is_some() {
-                        return Err(BondError::DuplicateToken { token });
-                    }
-                    let magnitude = if number.is_empty() {
-                        1
-                    } else {
-                        number.parse::<i8>().map_err(|_| BondError::InvalidCharge)?
-                    };
-                    charge = Some(if token == '-' { -magnitude } else { magnitude });
-                }
-                '^' => {
-                    if unpaired_electrons.is_some() {
-                        return Err(BondError::DuplicateToken { token });
-                    }
-                    let n = if number.is_empty() {
-                        1
-                    } else {
-                        number
-                            .parse::<u8>()
-                            .map_err(|_| BondError::InvalidMultiplicity)?
-                    };
-                    unpaired_electrons = Some(n);
-                }
-                'x' => {
-                    if multiplicity.is_some() {
-                        return Err(BondError::DuplicateToken { token });
-                    }
-                    let m = if number.is_empty() {
-                        1
-                    } else {
-                        number
-                            .parse::<u8>()
-                            .map_err(|_| BondError::InvalidMultiplicity)?
-                    };
-                    multiplicity = Some(
-                        SpinMultiplicity::from_multiplicity(m)
-                            .ok_or(BondError::InvalidMultiplicity)?,
-                    );
-                }
-                'a' => {
-                    if aromatic_hint.is_some() {
-                        return Err(BondError::DuplicateToken { token });
-                    }
-                    let hint = match number.as_str() {
-                        "0" => false,
-                        "1" => true,
-                        _ => return Err(BondError::InvalidAromaticHint),
-                    };
-                    aromatic_hint = Some(hint);
-                }
-                _ => return Err(BondError::UnexpectedToken { token }),
-            }
-        }
-
-        let order = order.ok_or(BondError::MissingOrder)?;
-        if let (Some(unpaired), Some(mult)) = (unpaired_electrons, multiplicity) {
-            SpinState::try_new(unpaired, mult)?;
-        }
-
-        let mut builder = BondBuilder::new(order, aromatic_hint);
-        if let Some(charge) = charge {
-            builder.set_charge(charge);
-        }
-        if let Some(unpaired) = unpaired_electrons {
-            builder.set_unpaired_electrons(unpaired);
-        }
-        if let Some(mult) = multiplicity {
-            builder.set_multiplicity(mult);
-        }
-        Ok(builder)
+    pub fn matches_bond(&self, bond: &Bond) -> bool {
+        self.order.matches(bond.order())
+            && self.charge.matches(bond.charge())
+            && self.unpaired_electrons.matches(bond.unpaired_electrons())
+            && self.multiplicity.matches(bond.multiplicity())
     }
 }
 
-#[macro_export]
-macro_rules! bond {
-    ($spec:expr) => {
-        $spec
-            .parse::<$crate::graph_ir::bond::BondBuilder>()
-            .expect("invalid bond spec")
-    };
+impl FromAst<BondAst> for BondPattern {
+    fn from_ast(ast: BondAst, cfg: &BondLowerConfig) -> Result<Self, LoweringError> {
+        let order = match ast.order {
+            ValueAst::Lit(n) => {
+                Pattern::Is(u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                    field: "order",
+                    value: n as i64,
+                })?)
+            }
+            ValueAst::Wildcard => Pattern::Any,
+            _ => return Err(LoweringError::NonGround { field: "order" }),
+        };
+
+        let charge = match ast.charge.or_else(|| match cfg.charge_mode {
+            ChargeMode::Zero => Some(ValueAst::Lit(0)),
+            ChargeMode::Provided => None,
+        }) {
+            None => Pattern::Any,
+            Some(ValueAst::Wildcard) => Pattern::Any,
+            Some(ValueAst::Lit(n)) => Pattern::Is(
+                i8::try_from(n).map_err(|_| LoweringError::NonGround { field: "charge" })?,
+            ),
+            Some(_) => return Err(LoweringError::NonGround { field: "charge" }),
+        };
+
+        let lower_u8_opt =
+            |v: Option<ValueAst>, field: &'static str| -> Result<Pattern<u8>, LoweringError> {
+                match v {
+                    None => Ok(Pattern::Any),
+                    Some(ValueAst::Wildcard) => Ok(Pattern::Any),
+                    Some(ValueAst::Lit(n)) => u8::try_from(n)
+                        .map(Pattern::Is)
+                        .map_err(|_| LoweringError::NonGround { field }),
+                    Some(_) => Err(LoweringError::NonGround { field }),
+                }
+            };
+
+        let multiplicity = match ast.multiplicity {
+            None => Pattern::Any,
+            Some(ValueAst::Wildcard) => Pattern::Any,
+            Some(ValueAst::Lit(n)) => {
+                let m = u8::try_from(n).map_err(|_| LoweringError::NonGround {
+                    field: "multiplicity",
+                })?;
+                Pattern::Is(
+                    SpinMultiplicity::from_multiplicity(m)
+                        .ok_or(LoweringError::InvalidMultiplicity(m))?,
+                )
+            }
+            Some(_) => {
+                return Err(LoweringError::NonGround {
+                    field: "multiplicity",
+                })
+            }
+        };
+
+        Ok(BondPattern {
+            order,
+            charge,
+            unpaired_electrons: lower_u8_opt(ast.unpaired_electrons, "unpaired_electrons")?,
+            multiplicity,
+        })
+    }
+}
+
+impl FromAst<BondAst> for Bond {
+    fn from_ast(ast: BondAst, cfg: &BondLowerConfig) -> Result<Self, LoweringError> {
+        let pattern = BondPattern::from_ast(ast, cfg)?;
+        pattern.to_bond().map_err(|e| match e {
+            ValidationError::NonGround { field } => LoweringError::NonGround { field },
+            ValidationError::InvalidMultiplicity(n) => LoweringError::InvalidMultiplicity(n),
+            ValidationError::Bond(be) => match be {
+                BondError::SpinState(se) => LoweringError::SpinState(se),
+                other => LoweringError::Atom(other.to_string()),
+            },
+            other => LoweringError::Atom(other.to_string()),
+        })
+    }
+}
+
+impl FromStr for BondPattern {
+    type Err = LoweringError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let ast = parse_bond_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
+        Self::from_ast(ast, &BondLowerConfig::default())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::{SpinMultiplicity, SpinStateError};
+    use umol_data::SpinMultiplicity;
 
     use super::*;
+    use crate::table_ir::bond::BondOrder;
 
-    fn bond_builder_with_state(
-        order: u8,
-        charge: Option<i8>,
-        unpaired_electrons: Option<u8>,
-        multiplicity: Option<SpinMultiplicity>,
-    ) -> BondBuilder {
-        let mut builder = BondBuilder::new(order, None);
-        if let Some(charge) = charge {
-            builder.set_charge(charge);
-        }
-        if let Some(unpaired_electrons) = unpaired_electrons {
-            builder.set_unpaired_electrons(unpaired_electrons);
-        }
-        if let Some(multiplicity) = multiplicity {
-            builder.set_multiplicity(multiplicity);
-        }
-        builder
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::closed_shell(BondPattern::new(1), true)]
+    #[case::high_spin(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) }, true)]
+    #[case::from_multiplicity(BondPattern { charge: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(2) }, true)]
+    #[case::negative_electrons(BondPattern { charge: Pattern::Is(1), ..BondPattern::new(0) }, false)]
+    #[case::incompatible_spin_pair(BondPattern { unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(1) }, false)]
+    #[case::electron_parity_mismatch(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) }, false)]
+    #[case::max_unpaired_exceeded(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(10), ..BondPattern::new(1) }, false)]
+    fn test_bond_pattern_can_ground(#[case] pattern: BondPattern, #[case] expected: bool) {
+        assert_eq!(pattern.can_ground(), expected);
+        assert_eq!(pattern.to_bond().is_ok(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::closed_shell(1, None, None, None, true)]
-    #[case::high_spin(1, Some(1), Some(1), None, true)]
-    #[case::from_multiplicity(2, Some(0), None, Some(SpinMultiplicity::Triplet), true)]
-    #[case::negative_electrons(0, Some(1), None, None, false)]
-    #[case::incompatible_spin_pair(1, None, Some(0), Some(SpinMultiplicity::Triplet), false)]
-    #[case::electron_parity_mismatch(1, Some(0), Some(1), None, false)]
-    #[case::max_unpaired_exceeded(1, Some(0), Some(10), None, false)]
-    fn test_bond_builder_can_build(
-        #[case] order: u8,
-        #[case] charge: Option<i8>,
-        #[case] unpaired_electrons: Option<u8>,
-        #[case] multiplicity: Option<SpinMultiplicity>,
-        #[case] expected: bool,
-    ) {
-        let builder = bond_builder_with_state(order, charge, unpaired_electrons, multiplicity);
-        assert_eq!(builder.can_build(), expected);
-        assert_eq!(builder.build().is_ok(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::closed_shell(1, None, None, None, 0, 0, SpinMultiplicity::Singlet)]
-    #[case::high_spin(1, Some(1), Some(1), None, 1, 1, SpinMultiplicity::Doublet)]
-    #[case::from_multiplicity(2, Some(0), None, Some(SpinMultiplicity::Triplet), 0, 2, SpinMultiplicity::Triplet)]
-    #[case::complete(1, Some(0), Some(2), Some(SpinMultiplicity::Singlet), 0, 2, SpinMultiplicity::Singlet)]
-    fn test_bond_builder_build(
-        #[case] order: u8,
-        #[case] charge: Option<i8>,
-        #[case] unpaired_electrons: Option<u8>,
-        #[case] multiplicity: Option<SpinMultiplicity>,
+    #[case::closed_shell(BondPattern::new(1), 0, 0, SpinMultiplicity::Singlet)]
+    #[case::high_spin(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) }, 1, 1, SpinMultiplicity::Doublet)]
+    #[case::from_multiplicity(BondPattern { charge: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(2) }, 0, 2, SpinMultiplicity::Triplet)]
+    #[case::complete(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) }, 0, 2, SpinMultiplicity::Singlet)]
+    fn test_bond_pattern_to_bond(
+        #[case] pattern: BondPattern,
         #[case] expected_charge: i8,
         #[case] expected_unpaired: u8,
         #[case] expected_multiplicity: SpinMultiplicity,
     ) {
-        let builder = bond_builder_with_state(order, charge, unpaired_electrons, multiplicity);
-        let bond = builder.build().expect("expected build success");
-        assert_eq!(bond.order(), order);
+        let bond = pattern.to_bond().expect("expected ground success");
+        assert_eq!(bond.order(), pattern.order());
         assert_eq!(bond.charge(), expected_charge);
         assert_eq!(bond.unpaired_electrons(), expected_unpaired);
         assert_eq!(bond.multiplicity(), expected_multiplicity);
@@ -419,65 +342,62 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic(1, BondOrder::Aromatic, Some(1), Some(1), Some(SpinMultiplicity::Doublet), Some(true))]
-    #[case::single(1, BondOrder::Single, None, None, None, Some(false))]
-    #[case::double(2, BondOrder::Double, Some(-1), Some(1), Some(SpinMultiplicity::Doublet), Some(false))]
-    fn test_bond_builder_from_table_bond(
+    #[case::aromatic(1, BondOrder::Aromatic, None, None, None)]
+    #[case::single(1, BondOrder::Single, None, None, None)]
+    #[case::double(2, BondOrder::Double, Some(-1), Some(1), Some(SpinMultiplicity::Doublet))]
+    fn test_bond_pattern_from_table_bond(
         #[case] expected_order: u8,
         #[case] order: BondOrder,
         #[case] charge: Option<i8>,
         #[case] unpaired_electrons: Option<u8>,
         #[case] multiplicity: Option<SpinMultiplicity>,
-        #[case] expected_aromatic_hint: Option<bool>,
     ) {
         let mut bond = TableBond::new(0, 1, order);
         bond.charge = charge;
         bond.unpaired_electrons = unpaired_electrons;
         bond.multiplicity = multiplicity;
 
-        let builder = BondBuilder::from_table_bond(&bond);
-        assert_eq!(builder.order(), expected_order);
-        assert_eq!(builder.charge(), charge);
-        assert_eq!(builder.unpaired_electrons(), unpaired_electrons);
-        assert_eq!(builder.multiplicity(), multiplicity);
-        assert_eq!(builder.aromatic_hint(), expected_aromatic_hint);
+        let pattern = BondPattern::from_table_bond(&bond);
+        assert_eq!(pattern.order, Pattern::Is(expected_order));
+        assert_eq!(pattern.charge, charge.map_or(Pattern::Any, Pattern::Is));
+        assert_eq!(pattern.unpaired_electrons, unpaired_electrons.map_or(Pattern::Any, Pattern::Is));
+        assert_eq!(pattern.multiplicity, multiplicity.map_or(Pattern::Any, Pattern::Is));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::order_only("b{o1}", 1, None, None, None, None)]
-    #[case::full("b{o2+1^1x2a1}", 2, Some(1), Some(1), Some(SpinMultiplicity::Doublet), Some(true))]
-    #[case::spaced(" b{ o1 -2 ^2 x1 a0 } ", 1, Some(-2), Some(2), Some(SpinMultiplicity::Singlet), Some(false))]
-    fn test_bond_builder_from_str(
+    #[case::single("1", Pattern::Is(1), Pattern::Any, Pattern::Any, Pattern::Any)]
+    #[case::double_charged("2#c+", Pattern::Is(2), Pattern::Is(1), Pattern::Any, Pattern::Any)]
+    #[case::full("1#c0#u1#s2", Pattern::Is(1), Pattern::Is(0), Pattern::Is(1), Pattern::Is(SpinMultiplicity::Doublet))]
+    fn test_bond_pattern_from_str(
+        #[case] input: &str,
+        #[case] expected_order: Pattern<u8>,
+        #[case] expected_charge: Pattern<i8>,
+        #[case] expected_unpaired: Pattern<u8>,
+        #[case] expected_multiplicity: Pattern<SpinMultiplicity>,
+    ) {
+        let pattern: BondPattern = input.parse().expect("expected parse success");
+        assert_eq!(pattern.order, expected_order);
+        assert_eq!(pattern.charge, expected_charge);
+        assert_eq!(pattern.unpaired_electrons, expected_unpaired);
+        assert_eq!(pattern.multiplicity, expected_multiplicity);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::single("1", 1, 0, 0, SpinMultiplicity::Singlet)]
+    #[case::double_high_spin("2#c+#u1", 2, 1, 1, SpinMultiplicity::Doublet)]
+    fn test_bond_from_str(
         #[case] input: &str,
         #[case] expected_order: u8,
-        #[case] expected_charge: Option<i8>,
-        #[case] expected_unpaired_electrons: Option<u8>,
-        #[case] expected_multiplicity: Option<SpinMultiplicity>,
-        #[case] expected_aromatic_hint: Option<bool>,
+        #[case] expected_charge: i8,
+        #[case] expected_unpaired: u8,
+        #[case] expected_multiplicity: SpinMultiplicity,
     ) {
-        let builder: BondBuilder = input.parse().expect("expected parse success");
-        assert_eq!(builder.order(), expected_order);
-        assert_eq!(builder.charge(), expected_charge);
-        assert_eq!(builder.unpaired_electrons(), expected_unpaired_electrons);
-        assert_eq!(builder.multiplicity(), expected_multiplicity);
-        assert_eq!(builder.aromatic_hint(), expected_aromatic_hint);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::missing_tag("{o1}", BondError::InvalidFormat)]
-    #[case::empty("b{}", BondError::EmptySpec)]
-    #[case::missing_order("b{+1}", BondError::MissingOrder)]
-    #[case::duplicate_order("b{o1o2}", BondError::DuplicateToken { token: 'o' })]
-    #[case::invalid_order("b{o}", BondError::InvalidOrder)]
-    #[case::invalid_aromatic("b{o1a2}", BondError::InvalidAromaticHint)]
-    #[case::unexpected_token("b{o1q2}", BondError::UnexpectedToken { token: 'q' })]
-    #[case::invalid_spin_pair("b{o1^0x3}", BondError::SpinState(SpinStateError::Incompatible {
-        unpaired_electrons: 0,
-        multiplicity: SpinMultiplicity::Triplet,
-    }))]
-    fn test_bond_builder_from_str_error(#[case] input: &str, #[case] expected: BondError) {
-        assert_eq!(input.parse::<BondBuilder>().unwrap_err(), expected);
+        let bond: Bond = input.parse().expect("expected parse success");
+        assert_eq!(bond.order(), expected_order);
+        assert_eq!(bond.charge(), expected_charge);
+        assert_eq!(bond.unpaired_electrons(), expected_unpaired);
+        assert_eq!(bond.multiplicity(), expected_multiplicity);
     }
 }

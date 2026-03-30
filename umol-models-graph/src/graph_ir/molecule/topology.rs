@@ -522,7 +522,7 @@ mod tests {
     use super::*;
     use crate::bond::BondNoncovalent;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::bond::BondPattern;
     use crate::graph_ir::dative::DativeBond;
     use crate::graph_ir::molecule::MoleculeBuilder;
     use crate::graph_ir::multicenter::{MulticenterBond, MulticenterSet};
@@ -534,8 +534,8 @@ mod tests {
         let a0 = b.add_atom(AtomPattern::new(Element::C));
         let a1 = b.add_atom(AtomPattern::new(Element::C));
         let a2 = b.add_atom(AtomPattern::new(Element::C));
-        b.add_bond_unchecked(a0, a1, BondBuilder::new(1, Some(false)));
-        b.add_bond_unchecked(a1, a2, BondBuilder::new(1, Some(false)));
+        b.add_bond_unchecked(a0, a1, BondPattern::new(1));
+        b.add_bond_unchecked(a1, a2, BondPattern::new(1));
         b
     }
 
@@ -545,8 +545,8 @@ mod tests {
         let a2 = b.add_atom(AtomPattern::new(Element::C));
         let a1 = b.add_atom(AtomPattern::new(Element::C));
         let a0 = b.add_atom(AtomPattern::new(Element::C));
-        b.add_bond_unchecked(a0, a1, BondBuilder::new(1, Some(false)));
-        b.add_bond_unchecked(a1, a2, BondBuilder::new(1, Some(false)));
+        b.add_bond_unchecked(a0, a1, BondPattern::new(1));
+        b.add_bond_unchecked(a1, a2, BondPattern::new(1));
         b
     }
 

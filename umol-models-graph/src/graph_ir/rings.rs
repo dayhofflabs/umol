@@ -827,7 +827,7 @@ mod tests {
     use super::*;
     use crate::graph_ir::atom::Atom;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::bond::BondPattern;
     use crate::graph_ir::config::{ResolveConfig, RingEnumerationStrategy};
 
     fn enumerate(builder: &MoleculeBuilder, max_ring_size: usize) -> RingSet {
@@ -901,7 +901,7 @@ mod tests {
             .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n - 1 {
-            builder.add_bond_unchecked(atoms[i], atoms[i + 1], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[i + 1], BondPattern::new(1));
         }
         builder
     }
@@ -913,7 +913,7 @@ mod tests {
             .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
         }
         builder
     }
@@ -926,13 +926,13 @@ mod tests {
             .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..6 {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondPattern::new(1));
         }
         for i in 6..12 {
             builder.add_bond_unchecked(
                 atoms[i],
                 atoms[6 + ((i + 1 - 6) % 6)],
-                BondBuilder::new(1, None),
+                BondPattern::new(1),
             );
         }
         builder
@@ -947,7 +947,7 @@ mod tests {
             .collect();
         let edges = [(0, 1), (1, 2), (2, 0), (0, 3), (3, 4), (4, 0)];
         for (a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -961,11 +961,11 @@ mod tests {
             .collect();
         let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
         for (a, b) in ring1_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         let ring2_edges = [(3, 6), (6, 7), (7, 8), (8, 9), (9, 4)];
         for (a, b) in ring2_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -979,7 +979,7 @@ mod tests {
             .collect();
         let edges = [(0, 2), (2, 1), (0, 3), (3, 1), (0, 4), (4, 1)];
         for (a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -993,7 +993,7 @@ mod tests {
             .collect();
         let edges = [(0, 1), (1, 2), (0, 3), (3, 2), (0, 4), (4, 2), (0, 5), (5, 2)];
         for (a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -1010,7 +1010,7 @@ mod tests {
             (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7),
         ];
         for (a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         builder
     }
@@ -1024,10 +1024,10 @@ mod tests {
             .collect();
         let methyl = builder.add_atom(AtomPattern::new(Element::C));
         for i in 0..6 {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondPattern::new(1));
         }
         // Attach methyl group to C1 (atom 0)
-        builder.add_bond_unchecked(atoms[0], methyl, BondBuilder::new(1, None));
+        builder.add_bond_unchecked(atoms[0], methyl, BondPattern::new(1));
         builder
     }
 
@@ -1036,7 +1036,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_resolved_atom("C#h2#v2".parse::<Atom>().unwrap())).collect();
         for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
         }
         builder
             .build(&ResolveConfig::default())
@@ -1099,19 +1099,20 @@ mod tests {
             })
             .collect();
         for i in 0..6 {
-            builder.add_bond_unchecked(
+            let bond_idx = builder.add_bond_unchecked(
                 aromatic[i],
                 aromatic[(i + 1) % 6],
-                BondBuilder::new(1, Some(true)),
+                BondPattern::new(1),
             );
+            builder.set_bond_aromatic_hint(bond_idx, true);
         }
         let sat: Vec<AtomIndex> = (0..6)
             .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..6 {
-            builder.add_bond_unchecked(sat[i], sat[(i + 1) % 6], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(sat[i], sat[(i + 1) % 6], BondPattern::new(1));
         }
-        builder.add_bond_unchecked(aromatic[0], sat[0], BondBuilder::new(1, None));
+        builder.add_bond_unchecked(aromatic[0], sat[0], BondPattern::new(1));
         builder
     }
 

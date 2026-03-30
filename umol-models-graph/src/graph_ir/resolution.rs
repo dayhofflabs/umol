@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::graph_ir::aromaticity::AromaticityModel;
 use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::bond::BondBuilder;
+use crate::graph_ir::bond::BondPattern;
 use crate::graph_ir::config::{
     AromaticityHintPolicy, AromaticityStrategy, ResolveConfig, TopologyResolveFlags,
     ValenceMatchPolicy,
@@ -16,7 +16,7 @@ use crate::graph_ir::multicenter::{MulticenterBond, MulticenterContribution, Mul
 use crate::graph_ir::noncovalent::NoncovalentBond;
 use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 use crate::graph_ir::valence::ValenceMatcher;
-use crate::atom::ImplicitHydrogens;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 /// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
@@ -106,7 +106,10 @@ fn resolve_topology_with(
         ) {
             builder.add_dative_bond(DativeBond::from_table_bond(bond, &node_indices));
         } else {
-            builder.add_bond_unchecked(a, b, BondBuilder::from_table_bond(bond));
+            let bond_idx = builder.add_bond_unchecked(a, b, BondPattern::from_table_bond(bond));
+        if bond.order == crate::table_ir::bond::BondOrder::Aromatic {
+            builder.set_bond_aromatic_hint(bond_idx, true);
+        }
         }
     }
 
@@ -239,8 +242,7 @@ fn validate_aromatic_hints(
     }
 
     for bond_index in builder.bond_indices() {
-        let bond = builder.bond(bond_index).expect("bond_index must be valid");
-        if bond.aromatic_hint() != Some(true) {
+        if builder.bond_aromatic_hint(bond_index) != Some(true) {
             continue;
         }
         let (a, b) = builder

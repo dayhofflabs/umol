@@ -102,7 +102,7 @@ impl Molecule {
             .map(|a| a.aromatic_valence())
             .map(|v| match v {
                 AromaticValence::Valence(n) => n,
-                AromaticValence::None => 0,
+                AromaticValence::NotAromatic => 0,
             })
             .unwrap_or(0)
     }
@@ -561,7 +561,7 @@ mod tests {
     use super::*;
     use crate::graph_ir::atom::Atom;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondBuilder;
+    use crate::graph_ir::bond::BondPattern;
     use crate::graph_ir::config::ResolveConfig;
     use crate::graph_ir::molecule::Molecule;
 
@@ -573,11 +573,11 @@ mod tests {
             .collect();
         let ring1_edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)];
         for (a, b) in ring1_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         let ring2_edges = [(3, 6), (6, 7), (7, 8), (8, 9), (9, 4)];
         for (a, b) in ring2_edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
+            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
         }
         let carbon: Atom = "C#v4".parse().unwrap();
         for atom in builder.atom_indices().collect::<Vec<_>>() {

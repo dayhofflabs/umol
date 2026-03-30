@@ -6,8 +6,15 @@ use umol_data::{Element, NamedIsotope, SpinMultiplicity};
 
 use super::error::ConversionError;
 use super::rgroup::RGroup;
-use crate::atom::{Chirality, ImplicitHydrogens};
+use crate::atom::Chirality;
 use crate::span::Span;
+
+/// Implicit hydrogens: either an explicit count or the "normal valence" inference rule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImplicitHydrogens {
+    Normal,
+    Hydrogens(u8),
+}
 
 /// Basic Atom IR
 #[derive(Clone, Debug, PartialEq)]

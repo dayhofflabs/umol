@@ -7,7 +7,8 @@ use umol_data::Element;
 
 use super::super::*;
 use super::utils::{build_from_graph, find_chiral_center, find_stereo_bond};
-use crate::atom::{Chirality, ImplicitHydrogens};
+use crate::atom::Chirality;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{BondOrder, BondWedge};
 
 fn hydrogens_to_count(h: Option<ImplicitHydrogens>) -> Option<u8> {

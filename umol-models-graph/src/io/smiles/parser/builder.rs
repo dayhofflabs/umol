@@ -4,7 +4,8 @@ use std::mem;
 
 use umol_data::Element;
 
-use crate::atom::{Chirality, ImplicitHydrogens};
+use crate::atom::Chirality;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::span::Span;
 use crate::table_ir::{
     Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedAtom,

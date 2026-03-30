@@ -12,7 +12,7 @@ use umol_data::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_type::AtomTypeQuery;
+use crate::graph_ir::atom_pattern::{AtomPattern, ElementPattern};
 use crate::graph_ir::error::ResolutionError;
 
 /// Atom type registry for GraphIR.
@@ -172,9 +172,13 @@ impl AtomTypeRegistry {
             .map_or(&[], |v| v.as_slice())
     }
 
-    pub fn candidates_for(&self, query: &AtomTypeQuery) -> SmallVec<[Atom; 4]> {
+    pub fn candidates_for(&self, query: &AtomPattern) -> SmallVec<[Atom; 4]> {
+        let element = match &query.element {
+            ElementPattern::Is(e) => *e,
+            _ => return SmallVec::new(),
+        };
         self.atom_types
-            .get(&(query.element, query.charge))
+            .get(&(element, query.charge.into_option()))
             .into_iter()
             .flatten()
             .filter(|atom| query.matches_atom(atom))

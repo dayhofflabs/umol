@@ -7,7 +7,7 @@ use nauty_Traces_sys::*;
 use umol_data::{Element, SpinMultiplicity};
 
 use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::bond::BondBuilder;
+use crate::graph_ir::bond::BondPattern;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 
 /// Vertex color for nauty partitioning.
@@ -29,17 +29,24 @@ enum VertexColor {
 }
 
 fn atom_color(ab: &AtomPattern) -> VertexColor {
+    use crate::graph_ir::atom_pattern::{HydrogenPattern, IsotopePattern};
     VertexColor::Atom {
         element: ab.element(),
-        isotope_mass: ab.isotope_mass(),
-        charge: ab.charge(),
-        hydrogens: ab.hydrogen_count(),
-        unpaired_electrons: ab.unpaired_electrons(),
-        multiplicity: ab.multiplicity(),
+        isotope_mass: match ab.isotope_mass {
+            IsotopePattern::Is(n) => Some(n),
+            _ => None,
+        },
+        charge: ab.charge.into_option(),
+        hydrogens: match ab.implicit_hydrogens {
+            HydrogenPattern::Is(h) => Some(h),
+            _ => None,
+        },
+        unpaired_electrons: ab.unpaired_electrons.into_option(),
+        multiplicity: ab.multiplicity.into_option(),
     }
 }
 
-fn bond_color(b: &BondBuilder) -> VertexColor {
+fn bond_color(b: &BondPattern) -> VertexColor {
     VertexColor::Bond {
         order: b.order(),
         donation: 0,
@@ -313,7 +320,7 @@ mod tests {
         let mut b = MoleculeBuilder::new();
         let h1 = b.add_atom(AtomPattern::new(Element::H));
         let h2 = b.add_atom(AtomPattern::new(Element::H));
-        b.add_bond(h1, h2, BondBuilder::new(1, None));
+        b.add_bond(h1, h2, BondPattern::new(1));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
         assert!(sym.same_orbit(h1, h2));
@@ -330,7 +337,7 @@ mod tests {
         let mut b = MoleculeBuilder::new();
         let h = b.add_atom(AtomPattern::new(Element::H));
         let f = b.add_atom(AtomPattern::new(Element::F));
-        b.add_bond(h, f, BondBuilder::new(1, None));
+        b.add_bond(h, f, BondPattern::new(1));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 2);
         assert!(!sym.same_orbit(h, f));
@@ -349,7 +356,7 @@ mod tests {
             .map(|_| b.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..4 {
-            b.add_bond(c[i], c[(i + 1) % 4], BondBuilder::new(1, None));
+            b.add_bond(c[i], c[(i + 1) % 4], BondPattern::new(1));
         }
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
@@ -375,8 +382,8 @@ mod tests {
         let c1 = b.add_atom(AtomPattern::new(Element::C));
         let c2 = b.add_atom(AtomPattern::new(Element::C));
         let c3 = b.add_atom(AtomPattern::new(Element::C));
-        b.add_bond(c1, c2, BondBuilder::new(2, None));
-        b.add_bond(c2, c3, BondBuilder::new(1, None));
+        b.add_bond(c1, c2, BondPattern::new(2));
+        b.add_bond(c2, c3, BondPattern::new(1));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 3);
         assert!(!sym.same_orbit(c1, c2));
@@ -399,10 +406,10 @@ mod tests {
         let c: Vec<_> = (0..4)
             .map(|_| b.add_atom(AtomPattern::new(Element::C)))
             .collect();
-        b.add_bond(c[0], c[1], BondBuilder::new(2, None));
-        b.add_bond(c[1], c[2], BondBuilder::new(1, None));
-        b.add_bond(c[2], c[3], BondBuilder::new(2, None));
-        b.add_bond(c[3], c[0], BondBuilder::new(1, None));
+        b.add_bond(c[0], c[1], BondPattern::new(2));
+        b.add_bond(c[1], c[2], BondPattern::new(1));
+        b.add_bond(c[2], c[3], BondPattern::new(2));
+        b.add_bond(c[3], c[0], BondPattern::new(1));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);
         assert!(sym.same_orbit(c[0], c[1]));
@@ -427,8 +434,8 @@ mod tests {
         let h1 = b.add_atom(AtomPattern::new(Element::H));
         let o = b.add_atom(AtomPattern::new(Element::O));
         let h2 = b.add_atom(AtomPattern::new(Element::H));
-        b.add_bond(h1, o, BondBuilder::new(1, None));
-        b.add_bond(o, h2, BondBuilder::new(1, None));
+        b.add_bond(h1, o, BondPattern::new(1));
+        b.add_bond(o, h2, BondPattern::new(1));
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 2);
         assert!(sym.same_orbit(h1, h2));
@@ -452,7 +459,7 @@ mod tests {
             .map(|_| b.add_atom(AtomPattern::new(Element::C)))
             .collect();
         for i in 0..6 {
-            b.add_bond(c[i], c[(i + 1) % 6], BondBuilder::new(1, None));
+            b.add_bond(c[i], c[(i + 1) % 6], BondPattern::new(1));
         }
         let sym = compute_symmetry(&b);
         assert_eq!(sym.num_orbits(), 1);

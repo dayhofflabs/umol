@@ -35,44 +35,44 @@
 [B]
 0 = [
     "B #v3",       # BX3, BH3
-    "B #v2 #h",    # X2BH
-    "B #v1 #h2",   # XBH2
+    "B #v2 #h",    # BX2H
+    "B #v1 #h2",   # BXH2
     "B #h3",       # BH3
     "B #u1 #v2",   # BX2, BH2, BO
-    "B #u1 #v #h", # XBH
+    "B #u1 #v #h", # BXH
     "B #u1 #h2",   # BH2
     "B #n1 #v",    # BX, BH, BF
     "B #n1 #u",    # B atom, s2p1
 ]
 -1 = [
     "B #c- #v4",      # [BX4]-, BO2-
-    "B #c- #v3 #h",   # [BX3H]-
+    "B #c- #v3 #h",   # BX3H-
     "B #c- #v2 #h2",  # [BX2H2]-
     "B #c- #v #h3",   # [BXH3]-
     "B #c- #h4",      # [BH4]-
     "B #c- #n #v2",   # [BX2]-, BO-, [B-][N+]
-    "B #c- #n #v #h", # [BXH]-
+    "B #c- #n #v #h", # BXH-
     "B #c- #n #h2",   # [BH2]-
 ]
 
 [C]
 0 = [
     "C #v4",       # CX4, CH4
-    "C #v3 #h",    # X3CH
-    "C #v2 #h2",   # X2CH2
-    "C #v #h3",    # XCH3
+    "C #v3 #h",    # CX3H
+    "C #v2 #h2",   # CX2H2
+    "C #v #h3",    # CXH3
     "C #h4",       # CH4
     "C #v3 #a",    # C6H5X, C6H6
     "C #v2 #a #h", # C6H6
     "C #u #v3",    # CX3, CH3
-    "C #u #v2 #h", # XCH2
-    "C #u #v #h2", # XCH2
+    "C #u #v2 #h", # CX2H
+    "C #u #v #h2", # CXH2
     "C #u #h3",    # CH3
     "C #u2 #v2",   # CX2, CH2 (triplet)
-    "C #u2 #v #h", # XCH (triplet)
+    "C #u2 #v #h", # CXH (triplet)
     "C #u2 #h2",   # CH2 (triplet)
     "C #n #v2",    # CX2, CH2 (singlet)
-    "C #n #v #h",  # XCH (singlet)
+    "C #n #v #h",  # CXH (singlet)
     "C #n #h2",    # CH2 (singlet)
     "C #n #u #v",  # CX, CH (doublet)
     "C #n #u #h",  # CH (doublet)
@@ -81,33 +81,33 @@
     "C #n #u2",    # C atom, s2p2
 ]
 1 = [
-    "C #c+ #v3",        # [CX3]+, [CH3]+, [C-]#[O+]
-    "C #c+ #v2 #h",     # [XCH2]+
-    "C #c+ #v #h2",     # [XCH2]+
+    "C #c+ #v3",        # [CX3]+, [CH3]+, [C-][O+]
+    "C #c+ #v2 #h",     # CX2H+
+    "C #c+ #v #h2",     # [CXH2]+
     "C #c+ #v3 #a0",    # C7H6X+
-    "C #c+ #v2 #a0 #h", # C7H7+
+    "C #c+ #v2 #a0 #h", # [C7H7]+
     "C #c+ #h3",        # [CH3]+
 ]
 -1 = [
     "C #c- #n #v3",     # [CX3]-, CN-
-    "C #c- #n #v2 #h",  # [XCH2]-
+    "C #c- #n #v2 #h",  # CX2H-
     "C #c- #n #v #h2",  # [XCH2]-
     "C #c- #n #h3",     # [CH3]-
     "C #c- #v3 #a2",    # C5H4X-
-    "C #c- #v2 #a2 #h", # C5H5-
+    "C #c- #v2 #a2 #h", # [C5H5]-
 ]
 
 [N]
 0 = [
     "N #n #v3",      # N2, NH3, NX3, HONO, N2O3, HN=NH, H2N-NH2
-    "N #n #v2 #h",   # X2NH
-    "N #n #v #h2",   # XNH2
+    "N #n #v2 #h",   # NX2H
+    "N #n #v #h2",   # NXH2
     "N #n #h3",      # NH3
     "N #n #v2 #a",   # C5H5N
     "N #v3 #a2",     # C4H4NX, C4H4NH
     "N #v2 #a2 #h",  # C4H4NH
     "N #n #u #v2",   # NX2, NH2, NO
-    "N #n #u #v #h", # XNH
+    "N #n #u #v #h", # NXH
     "N #n #u #h2",   # NH2
     "N #n2 #v",      # NX, NH
     "N #n2 #h",      # NH
@@ -115,20 +115,20 @@
 ]
 1 = [
     "N #c+ #v4",       # [NX4]+, [NH4]+, [NO2]+, HONO2
-    "N #c+ #v3 #h",    # [XNH3]+
-    "N #c+ #v2 #h2",   # [X2NH2]+
-    "N #c+ #v #h3",    # [XNH3]+
+    "N #c+ #v3 #h",    # [NX3H]+
+    "N #c+ #v2 #h2",   # [NX2H2]+
+    "N #c+ #v #h3",    # [NXH3]+
     "N #c+ #h4",       # [NH4]+
     "N #c+ #v3 #a",    # C5H5N(+)X, C5H5N(+)H
     "N #c+ #v2 #a #h", # C5H5N(+)H
     "N #c+ #u #v3",    # O=N(+)^-O-
     "N #c+ #n #v2",    # [NX2]+, [NH2]+, NO+
-    "N #c+ #n #v #h",  # [XNH]+
+    "N #c+ #n #v #h",  # NXH+
     "N #c+ #n #h2",    # [NH2]+
 ]
 -1 = [
     "N #c- #n2 #v2",   # [NX2]-, [NH2]-
-    "N #c- #n2 #v #h", # [XNH]-
+    "N #c- #n2 #v #h", # NXH-
     "N #c- #n2 #h2",   # [NH2]-
 ]
 -3 = [
@@ -137,9 +137,9 @@
 
 [O]
 0 = [
-    "O #n2 #v2",    # O2, HO2, OX2
-    "O #n2 #v #h",  # XOH
-    "O #n2 #h2",    # H2O
+    "O #n2 #v2",    # O2, OH2, OX2
+    "O #n2 #v #h",  # OXH
+    "O #n2 #h2",    # OH2
     "O #n #v2 #a2", # C4H4O
     "O #n2 #u #v",  # OH, OX
     "O #n2 #u #h",  # OH
@@ -147,8 +147,8 @@
 ]
 1 = [
     "O #c+ #n #v3",    # [OX3]+, [OH3]+
-    "O #c+ #n #v2 #h", # [XOH2]+
-    "O #c+ #n #v #h2", # [XOH2]+
+    "O #c+ #n #v2 #h", # [OXH2]+
+    "O #c+ #n #v #h2", # [OXH2]+
     "O #c+ #n #h3",    # [OH3]+
     "O #c+ #n #v2 #a", # C5H5O+
     "O #c+ #n2 #v",    # OX+, OH+
@@ -207,9 +207,9 @@
 [Si]
 0 = [
     "Si #v4",     # SiH4, SiX4
-    "Si #v3 #h",  # X3SiH
-    "Si #v2 #h2", # X2SiH2
-    "Si #v #h3",  # XSiH3
+    "Si #v3 #h",  # SiX2H
+    "Si #v2 #h2", # SiX2H2
+    "Si #v #h3",  # SiXH3
     "Si #h4",     # SiH4
     "Si #u #v3",  # SiX3
     "Si #n #v2",  # SiX2 (singlet)
@@ -226,28 +226,28 @@
 [P]
 0 = [
     "P #n #v3",      # PH3, P2, XP3
-    "P #n #v2 #h",   # X2PH
-    "P #n #v #h2",   # XPH2
+    "P #n #v2 #h",   # PX2H
+    "P #n #v #h2",   # PXH2
     "P #n #h3",      # PH3
     "P #n #u #v2",   # PX2, PH2
-    "P #n #u #v #h", # XPH
-    "P #n #u #h2",   # XPH2
+    "P #n #u #v #h", # PXH
+    "P #n #u #h2",   # PXH2
     "P #v5",
     "P #n #u3",      # P atom, s2p3
 ]
 1 = [
     "P #c+ #v4",      # [PX4]+
-    "P #c+ #v3 #h",   # [XPH3]+
-    "P #c+ #v2 #h2",  # [X2PH2]+
-    "P #c+ #v #h3",   # [XPH3]+
+    "P #c+ #v3 #h",   # [PXH3]+
+    "P #c+ #v2 #h2",  # [PX2H2]+
+    "P #c+ #v #h3",   # [PXH3]+
     "P #c+ #h4",      # [PH4]+
     "P #c+ #n #v2",   # [PX2]+, [PH2]+
-    "P #c+ #n #v #h", # [XPH]+
+    "P #c+ #n #v #h", # PXH+
     "P #c+ #n #h2",   # [PH2]+
 ]
 -1 = [
     "P #c- #n2 #v2",   # [PX2]-
-    "P #c- #n2 #v #h", # [XPH]-
+    "P #c- #n2 #v #h", # PXH-
     "P #c- #n2 #h2",   # [PH2]-
 ]
 -3 = [
@@ -256,26 +256,26 @@
 
 [S]
 0 = [
-    "S #n2 #v2",     # H2S, S8, SX2, H2S2
-    "S #n2 #v #h",   # XHS, H2S2
-    "S #n2 #h2",     # H2S
+    "S #n2 #v2",     # SH2, S8, SX2, H2S2
+    "S #n2 #v #h",   # SXH, H2S2
+    "S #n2 #h2",     # SH2
     "S #n1 #v2 #a2", # C4H4S
-    "S #n2 #u #v1",  # XS, HS
-    "S #n2 #u #h",   # HS
+    "S #n2 #u #v1",  # SX, SH
+    "S #n2 #u #h",   # SH
     "S #n1 #v4",
     "S #v6",
     "S #n2 #u2",     # S atom, s2p4
 ]
 1 = [
-    "S #c+ #n #v3",     # XS3+, H3S+
-    "S #c+ #n #v2 #h",  # XHS2+
-    "S #c+ #n #v1 #h2", # XHS2+
-    "S #c+ #n #h3",     # H3S+
+    "S #c+ #n #v3",     # [SX3]+, [SH3]+
+    "S #c+ #n #v2 #h",  # [SX2H]+
+    "S #c+ #n #v1 #h2", # [SXH2]+
+    "S #c+ #n #h3",     # [SH3]+
     "S #c+ #n #v2 #a",  # C5H5S+
 ]
 -1 = [
-    "S #c- #n3 #v", # XS-, HS-
-    "S #c- #n3 #h", # HS-
+    "S #c- #n3 #v", # SX-, SH-
+    "S #c- #n3 #h", # SH-
 ]
 -2 = [
     "S #c-2 #n4", # S2-
@@ -283,8 +283,8 @@
 
 [Cl]
 0 = [
-    "Cl #n3 #v",     # HCl, ClX, HOCl
-    "Cl #n3 #h",     # HCl
+    "Cl #n3 #v",     # ClH, ClX, HOCl
+    "Cl #n3 #h",     # ClH
     "Cl #n2 #v3",    # ClF3, HOClO
     "Cl #n1 #u #v4", # ClO2
     "Cl #n1 #v5",    # ClF5, HOClO2
@@ -450,8 +450,8 @@
 0 = [
     "As #n #u3",     # As atom, s2p3
     "As #n #v3",     # AsX3
-    "As #n #v2 #h",  # X2AsH
-    "As #n #v #h2",  # XAsH2
+    "As #n #v2 #h",  # AsX2H
+    "As #n #v #h2",  # AsXH2
     "As #n #h3",     # AsH3
     "As #n #u #v2",  # AsX2
     "As #v3 #a2",    # C4H4AsX, C4H4AsH
@@ -470,25 +470,25 @@
 
 [Se]
 0 = [
-    "Se #n2 #v2",     # H2Se, Sen, SeX2
-    "Se #n2 #v #h",   # XHSe
-    "Se #n2 #h2",     # H2Se
+    "Se #n2 #v2",     # SeH2, Sen, SeX2
+    "Se #n2 #v #h",   # SeXH
+    "Se #n2 #h2",     # SeH2
     "Se #n1 #v2 #a2", # C4H4Se
     "Se #n2 #u #v",   # SeX, SeH
-    "Se #n2 #u #h",   # HSe
+    "Se #n2 #u #h",   # SeH
     "Se #n #v4",
     "Se #v6",
     "Se #n2 #u2",     # Se atom, s2p4
 ]
 1 = [
     "Se #c+ #n #v3",    # [SeX3]+, [H3Se]+
-    "Se #c+ #n #v2 #h", # [XHSe2]+
-    "Se #c+ #n #v #h2", # [XHSe2]+
+    "Se #c+ #n #v2 #h", # [SeX2H]+
+    "Se #c+ #n #v #h2", # [SeXH2]+
     "Se #c+ #n #h3",    # [H3Se]+
 ]
 -1 = [
     "Se #c- #n3 #v", # SeX-
-    "Se #c- #n3 #h", # HSe-
+    "Se #c- #n3 #h", # SeH-
 ]
 -2 = [
     "Se #c-2 #n4", # Se2-
@@ -497,7 +497,7 @@
 [Br]
 0 = [
     "Br #n3 #v",  # Br2, HBr, BrX, HOBr
-    "Br #n3 #h",  # HBr
+    "Br #n3 #h",  # BrH
     "Br #n2 #v3", # BrF3, HOBrO
     "Br #n #v5",  # BrF5, HOBrO2
     "Br #v7",     # HOBrO3
@@ -644,8 +644,8 @@
 0 = [
     "Sb #n #u3",    # Sb atom, s2p3
     "Sb #n #v3",    # SbX3
-    "Sb #n #v2 #h", # X2SbH
-    "Sb #n #v #h2", # XSbH2
+    "Sb #n #v2 #h", # SbX2H
+    "Sb #n #v #h2", # SbXH2
     "Sb #n #h3",    # SbH3
     "Sb #n #u #v2", # SbX2
 ]
@@ -662,9 +662,9 @@
 [Te]
 0 = [
     "Te #n2 #u2",   # Te atom, s2p4
-    "Te #n2 #v2",   # H2Te, Ten, TeX2
-    "Te #n2 #v #h", # XHTe
-    "Te #n2 #h2",   # H2Te
+    "Te #n2 #v2",   # TeH2, Ten, TeX2
+    "Te #n2 #v #h", # TeXH
+    "Te #n2 #h2",   # TeH2
     "Te #n2 #u #v", # TeX
 ]
 -1 = [
@@ -679,8 +679,8 @@
 
 [I]
 0 = [
-    "I #n3 #v",  # I2, IX, HOI
-    "I #n3 #h",  # HI
+    "I #n3 #v",  # I2, IX, IH, HOI
+    "I #n3 #h",  # IH
     "I #n2 #v3", # IF3, HOIO
     "I #n #v5",  # IF5, HOIO2
     "I #v7",     # IF7, HOIO3

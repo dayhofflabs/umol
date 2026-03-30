@@ -9,7 +9,8 @@ use super::super::*;
 use super::utils::{
     build_extended_from_graph, find_extended_chiral_center, find_extended_stereo_bond,
 };
-use crate::atom::{Chirality, ImplicitHydrogens};
+use crate::atom::Chirality;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{AtomSymbol, BondOrder, BondWedge, ExtendedMolecule};
 
 fn hydrogens_to_count(h: Option<ImplicitHydrogens>) -> Option<u8> {

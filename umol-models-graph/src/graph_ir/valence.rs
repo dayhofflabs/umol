@@ -3,10 +3,9 @@
 use smallvec::SmallVec;
 use umol_data::{Element, SpinState, MAX_UNPAIRED_ELECTRONS};
 
-use crate::atom::{AromaticValence, ImplicitHydrogens};
+use crate::atom::AromaticValence;
 use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::atom_type::{AtomTypeQuery, HydrogenConstraint};
+use crate::graph_ir::atom_pattern::{AtomPattern, HydrogenPattern, Pattern};
 use crate::graph_ir::config::ValenceStrategy;
 use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
@@ -57,21 +56,21 @@ fn atom_typing_candidates(
     builder: &MoleculeBuilder,
     atom_index: AtomIndex,
 ) -> SmallVec<[Atom; 4]> {
-    let mut query = AtomTypeQuery::from_builder_atom(builder, atom_index);
-    if query.implicit_hydrogens == Some(HydrogenConstraint::Normal) {
+    let mut pattern = AtomPattern::from_builder_atom(builder, atom_index);
+    if pattern.implicit_hydrogens == HydrogenPattern::Normal {
         let inferred = infer_normal_implicit_hydrogens(builder, atom_index);
         let Some(hydrogens) = inferred else {
             return SmallVec::new();
         };
-        query.implicit_hydrogens = Some(HydrogenConstraint::Hydrogens(hydrogens));
+        pattern.implicit_hydrogens = HydrogenPattern::Is(hydrogens);
     }
-    registry.candidates_for(&query)
+    registry.candidates_for(&pattern)
 }
 
 fn infer_normal_implicit_hydrogens(builder: &MoleculeBuilder, atom_index: AtomIndex) -> Option<u8> {
     let atom = builder.atom(atom_index).expect("atom_index must be valid");
     let element = atom.element();
-    let charge = atom.charge().unwrap_or(0);
+    let charge = match atom.charge { Pattern::Is(c) => c, Pattern::Any => 0 };
     let explicit_valence = builder.atom_bond_order_sum(atom_index);
 
     if builder.atom_aromatic_hint(atom_index) {
@@ -108,7 +107,7 @@ fn counts_candidates(
 ) -> SmallVec<[Atom; 4]> {
     let atom = builder.atom(atom_index).expect("atom_index must be valid");
     let element = atom.element();
-    let charge = atom.charge().unwrap_or(0);
+    let charge = match atom.charge { Pattern::Is(c) => c, Pattern::Any => 0 };
     let valence = builder.atom_bond_order_sum(atom_index);
     let (donated_pairs, accepted_pairs) = builder.atom_dative_bond_order_sums(atom_index);
 
@@ -140,8 +139,8 @@ fn counts_candidates(
         );
     }
 
-    let implicit_hydrogens = if let Some(h) = atom.hydrogen_count() {
-        h
+    let implicit_hydrogens = if let HydrogenPattern::Is(h) = &atom.implicit_hydrogens {
+        *h
     } else if allow_implicit_hydrogens {
         match table.compute_implicit_hydrogens(element, charge, valence) {
             Some(h) => h,
@@ -157,7 +156,7 @@ fn counts_candidates(
         valence,
         donated_pairs,
         accepted_pairs,
-        AromaticValence::None,
+        AromaticValence::NotAromatic,
         &atom,
     )
 }
@@ -186,24 +185,24 @@ fn build_aromatic_spec(
         if sigma_budget < valence as i16 {
             continue;
         }
-        let implicit_hydrogens = match atom.implicit_hydrogens() {
-            Some(ImplicitHydrogens::Hydrogens(h)) => h,
-            Some(ImplicitHydrogens::Normal) if normal_implicit_hydrogens => {
+        let implicit_hydrogens = match &atom.implicit_hydrogens {
+            HydrogenPattern::Is(h) => *h,
+            HydrogenPattern::Normal if normal_implicit_hydrogens => {
                 let Some(h) = infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
                 else {
                     continue;
                 };
                 h
             }
-            Some(ImplicitHydrogens::Normal) => continue,
-            None if normal_implicit_hydrogens => {
+            HydrogenPattern::Normal => continue,
+            HydrogenPattern::Any if normal_implicit_hydrogens => {
                 let Some(h) = infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
                 else {
                     continue;
                 };
                 h
             }
-            None => {
+            HydrogenPattern::Any => {
                 if allow_implicit_hydrogens {
                     (sigma_budget - valence as i16) as u8
                 } else {
@@ -302,23 +301,23 @@ fn try_build_atom(
 
     // Resolve (unpaired, lone_pairs) from one shared electron budget.
     // If the input fixes either value, infer the other consistently.
-    let (unpaired, lone_pairs) = match (atom.unpaired_electrons(), atom.lone_pairs()) {
-        (None, None) => ((unassigned % 2) as u8, (unassigned / 2) as u8),
-        (Some(unpaired), None) => {
+    let (unpaired, lone_pairs) = match (atom.unpaired_electrons, atom.lone_pairs) {
+        (Pattern::Any, Pattern::Any) => ((unassigned % 2) as u8, (unassigned / 2) as u8),
+        (Pattern::Is(unpaired), Pattern::Any) => {
             let remaining = unassigned - (unpaired as i16);
             if remaining < 0 || remaining % 2 != 0 {
                 return None;
             }
             (unpaired, (remaining / 2) as u8)
         }
-        (None, Some(lone_pairs)) => {
+        (Pattern::Any, Pattern::Is(lone_pairs)) => {
             let remaining = unassigned - (2 * lone_pairs as i16);
             if remaining < 0 {
                 return None;
             }
             (remaining as u8, lone_pairs)
         }
-        (Some(unpaired), Some(lone_pairs)) => {
+        (Pattern::Is(unpaired), Pattern::Is(lone_pairs)) => {
             if (unpaired as i16) + (2 * lone_pairs as i16) != unassigned {
                 return None;
             }
@@ -329,9 +328,9 @@ fn try_build_atom(
         return None;
     }
 
-    let spin = match atom.multiplicity() {
-        Some(m) => SpinState::try_new(unpaired, m).ok()?,
-        None => SpinState::max_multiplicity(unpaired)?,
+    let spin = match atom.multiplicity {
+        Pattern::Is(m) => SpinState::try_new(unpaired, m).ok()?,
+        Pattern::Any => SpinState::max_multiplicity(unpaired)?,
     };
     Atom::try_new(
         element,

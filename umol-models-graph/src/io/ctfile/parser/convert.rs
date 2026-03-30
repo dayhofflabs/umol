@@ -4,7 +4,8 @@
 
 use umol_data::{Element, Isotope};
 
-use crate::atom::{Chirality, ImplicitHydrogens};
+use crate::atom::Chirality;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::io::ctfile::error::ParseError;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomSymbol, AttachmentPointType,
@@ -423,7 +424,7 @@ mod tests {
     use umol_data::NamedIsotope;
 
     use super::*;
-    use crate::atom::ImplicitHydrogens;
+    use crate::table_ir::atom::ImplicitHydrogens;
     use crate::table_ir::WildcardAtom;
 
     #[rstest]

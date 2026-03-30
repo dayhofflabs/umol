@@ -6,7 +6,8 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
-use crate::atom::{Chirality, ImplicitHydrogens};
+use crate::atom::Chirality;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, RGroup, WildcardAtom,

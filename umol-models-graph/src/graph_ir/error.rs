@@ -3,6 +3,8 @@ use umol_data::{Element, SpinStateError};
 
 use crate::diagnostics::Diagnostic;
 use crate::graph_ir::aromaticity::AromaticityError;
+use crate::graph_ir::atom_type::AtomError;
+use crate::graph_ir::bond::BondError;
 use crate::graph_ir::kekule::KekulizationError;
 use crate::table_ir::bond::BondOrder;
 
@@ -64,6 +66,33 @@ pub enum ResolutionError {
         atom_unpaired_sum: u16,
         compatible_multiplicities: Vec<u8>,
     },
+}
+
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum ValidationError {
+    #[error("non-ground value for field '{field}'")]
+    NonGround { field: &'static str },
+    #[error("invalid spin multiplicity: {0}")]
+    InvalidMultiplicity(u8),
+    #[error(transparent)]
+    Atom(#[from] AtomError),
+    #[error(transparent)]
+    Bond(#[from] BondError),
+}
+
+impl From<ValidationError> for ResolutionError {
+    fn from(value: ValidationError) -> Self {
+        match value {
+            ValidationError::NonGround { field } => {
+                ResolutionError::InvalidBond(format!("non-ground field: {field}"))
+            }
+            ValidationError::InvalidMultiplicity(n) => {
+                ResolutionError::InvalidBond(format!("invalid multiplicity: {n}"))
+            }
+            ValidationError::Atom(ae) => ResolutionError::InvalidAtom(ae.to_string()),
+            ValidationError::Bond(be) => ResolutionError::InvalidBond(be.to_string()),
+        }
+    }
 }
 
 impl From<ResolutionError> for Diagnostic {

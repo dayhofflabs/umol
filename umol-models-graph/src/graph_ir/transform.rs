@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 
+use crate::graph_ir::atom_pattern::Pattern;
 use crate::graph_ir::aromaticity::{AromaticityError, AromaticityModel};
 use crate::graph_ir::config::{AromaticityStrategy, RingEnumerationStrategy};
 use crate::graph_ir::kekule::{kekulize, KekuleConfig, KekulizationError};
@@ -117,10 +118,8 @@ impl Transform for Aromatize {
             .flat_map(|ring| ring.bonds().iter().copied())
             .collect();
         for bond_idx in aromatic_bonds {
-            if let Some(bond) = builder.bond_mut(bond_idx) {
-                bond.set_order(1);
-                bond.set_aromatic_hint(Some(true));
-            }
+            builder.bond_mut(bond_idx).unwrap().order = Pattern::Is(1);
+            builder.set_bond_aromatic_hint(bond_idx, true);
         }
 
         builder.clear_aromatic_systems();
@@ -187,7 +186,7 @@ impl Transform for Kekulize {
 
             for (bond_idx, order) in assignment.bond_orders {
                 if let Some(bond) = builder.bond_mut(bond_idx) {
-                    bond.set_order(order);
+                    bond.order = Pattern::Is(order);
                 }
             }
         }

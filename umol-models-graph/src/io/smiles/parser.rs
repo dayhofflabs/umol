@@ -22,7 +22,7 @@ use self::utils::{
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
-use crate::atom::ImplicitHydrogens;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::span::Span;
 use crate::table_ir::{
     BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
