@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Ho/5^3}"
+      - "Ho#n5#u3"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Ho/6^1}"
+      - "Ho#n6#u"
     bonds: []

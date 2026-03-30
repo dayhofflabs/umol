@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 4
     topology: DaW
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{Cl/1v5}"
-      - "{O/2v2}"
-      - "{O/2v2}"
+      - "H#v"
+      - "O#n2#v2"
+      - "Cl#n#v5"
+      - "O#n2#v2"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"
@@ -27,11 +27,11 @@ counts:
     bond_count: 4
     topology: DaW
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{Cl/1v5}"
-      - "{O/2v2}"
-      - "{O/2v2}"
+      - "H#v"
+      - "O#n2#v2"
+      - "Cl#n#v5"
+      - "O#n2#v2"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"

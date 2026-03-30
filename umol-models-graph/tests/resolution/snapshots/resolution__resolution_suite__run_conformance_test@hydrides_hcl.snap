@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{ClH/3}"
+      - "Cl#h#n3"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{ClH/3}"
+      - "Cl#h#n3"
     bonds: []

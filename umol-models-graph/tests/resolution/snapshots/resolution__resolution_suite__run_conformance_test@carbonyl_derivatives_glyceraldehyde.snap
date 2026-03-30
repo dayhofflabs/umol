@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 5
     topology: EoEG
     atoms:
-      - "{CH2v2}"
-      - "{OH/2v1}"
-      - "{CHv3}"
-      - "{OH/2v1}"
-      - "{CHv3}"
-      - "{O/2v2}"
+      - "C#h2#v2"
+      - "O#h#n2#v"
+      - "C#h#v3"
+      - "O#h#n2#v"
+      - "C#h#v3"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"
@@ -29,12 +29,12 @@ counts:
     bond_count: 5
     topology: EoEG
     atoms:
-      - "{CH2v2}"
-      - "{OH/2v1}"
-      - "{CHv3}"
-      - "{OH/2v1}"
-      - "{CHv3}"
-      - "{O/2v2}"
+      - "C#h2#v2"
+      - "O#h#n2#v"
+      - "C#h#v3"
+      - "O#h#n2#v"
+      - "C#h#v3"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"

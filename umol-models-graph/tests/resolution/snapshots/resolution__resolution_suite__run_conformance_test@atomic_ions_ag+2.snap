@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Ag+2/4^1}"
+      - "Ag#c+2#n4#u"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Ag+2/4^1}"
+      - "Ag#c+2#n4#u"
     bonds: []

@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 1
     topology: A_
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "="
 counts:
@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "="

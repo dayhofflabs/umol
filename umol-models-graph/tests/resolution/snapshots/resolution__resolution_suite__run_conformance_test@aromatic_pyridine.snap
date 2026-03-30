@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 6
     topology: EoaW
     atoms:
-      - "{N/1v2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "N#n#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"
@@ -40,12 +40,12 @@ counts:
     bond_count: 6
     topology: EoaW
     atoms:
-      - "{N/1v2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "N#n#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"

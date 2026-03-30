@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 1
     topology: A_
     atoms:
-      - "{Se-/3v1}"
-      - "{Hv1}"
+      - "Se#c-#n3#v"
+      - "H#v"
     bonds:
       - "-"
 counts:
@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{Se-/3v1}"
-      - "{Hv1}"
+      - "Se#c-#n3#v"
+      - "H#v"
     bonds:
       - "-"

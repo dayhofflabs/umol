@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 1
     topology: A_
     atoms:
-      - "{I/3v1}"
-      - "{I/3v1}"
+      - "I#n3#v"
+      - "I#n3#v"
     bonds:
       - "-"
 counts:
@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{I/3v1}"
-      - "{I/3v1}"
+      - "I#n3#v"
+      - "I#n3#v"
     bonds:
       - "-"

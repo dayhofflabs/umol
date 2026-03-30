@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 4
     topology: "D{?"
     atoms:
-      - "{Siv4}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "Si#v4"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"
@@ -27,11 +27,11 @@ counts:
     bond_count: 4
     topology: "D{?"
     atoms:
-      - "{Siv4}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "Si#v4"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"

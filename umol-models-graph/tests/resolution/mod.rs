@@ -331,7 +331,7 @@ fn summarize(mol: &Molecule) -> ResolveSummary {
         .iter()
         .filter_map(|nidx| {
             if let Some(TopologyNodeRef::Atom(ai)) = tg.node_ref(*nidx) {
-                Some(mol.atom(ai).unwrap().to_spec().to_string())
+                Some(mol.atom(ai).unwrap().to_string())
             } else {
                 None
             }

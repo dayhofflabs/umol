@@ -1,6 +1,5 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
-assertion_line: 510
 expression: results
 ---
 category: inorganic_small
@@ -11,9 +10,9 @@ atom_typing:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{Si^2v2}"
-      - "{Hv1}"
-      - "{Hv1}"
+      - "Si#u2#v2"
+      - "H#v"
+      - "H#v"
     bonds:
       - "-"
       - "-"
@@ -24,9 +23,9 @@ counts:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{Si^2v2}"
-      - "{Hv1}"
-      - "{Hv1}"
+      - "Si#u2#v2"
+      - "H#v"
+      - "H#v"
     bonds:
       - "-"
       - "-"

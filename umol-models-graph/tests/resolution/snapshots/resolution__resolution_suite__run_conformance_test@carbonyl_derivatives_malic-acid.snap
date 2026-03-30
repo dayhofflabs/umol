@@ -10,15 +10,15 @@ atom_typing:
     bond_count: 8
     topology: Hw??CKE
     atoms:
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{OH/2v1}"
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "O#h#n2#v"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
     bonds:
       - "="
       - "-"
@@ -35,15 +35,15 @@ counts:
     bond_count: 8
     topology: Hw??CKE
     atoms:
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{OH/2v1}"
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "O#h#n2#v"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
     bonds:
       - "="
       - "-"

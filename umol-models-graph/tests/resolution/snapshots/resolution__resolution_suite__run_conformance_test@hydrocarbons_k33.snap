@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 9
     topology: EwZo
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "-"
       - "-"
@@ -33,12 +33,12 @@ counts:
     bond_count: 9
     topology: EwZo
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "-"
       - "-"

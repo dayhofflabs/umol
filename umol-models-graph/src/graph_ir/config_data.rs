@@ -11,21 +11,21 @@ use smallvec::SmallVec;
 use umol_data::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
-use crate::graph_ir::atom_type::{AtomTypeQuery, AtomTypeSpec};
+use crate::graph_ir::atom::Atom;
+use crate::graph_ir::atom_type::AtomTypeQuery;
 use crate::graph_ir::error::ResolutionError;
 
 /// Atom type registry for GraphIR.
 ///
-/// Each spec is stored under both `(element, Some(charge))` and `(element, None)`,
-/// enabling O(1) lookup for both charge-specific and element-only queries.
+/// Each atom is stored under both `(element, Some(charge))` and `(element, None)`
 #[derive(Debug, Clone)]
 pub struct AtomTypeRegistry {
-    atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomTypeSpec>>,
+    atom_types: BTreeMap<(Element, Option<i8>), Vec<Atom>>,
     content_hash: u64,
 }
 
-/// Two-level TOML map: element symbol -> charge string -> specs list.
-type AtomTypeRegistryToml = BTreeMap<String, BTreeMap<String, Vec<AtomTypeSpec>>>;
+/// Two-level TOML map: element symbol -> charge string -> atom list
+type AtomTypeRegistryToml = BTreeMap<String, BTreeMap<String, Vec<String>>>;
 
 impl AtomTypeRegistry {
     pub fn new() -> Self {
@@ -41,10 +41,10 @@ impl AtomTypeRegistry {
         &DEFAULT_ATOM_TYPE_REGISTRY
     }
 
-    pub fn from_specs(specs: impl IntoIterator<Item = AtomTypeSpec>) -> Self {
+    pub fn from_specs(specs: impl IntoIterator<Item = Atom>) -> Self {
         let mut reg = Self::new();
-        for spec in specs {
-            reg.add(spec);
+        for atom in specs {
+            reg.add(atom);
         }
         reg
     }
@@ -59,11 +59,11 @@ impl AtomTypeRegistry {
 
     fn recompute_hash(&mut self) {
         let mut buf = String::new();
-        for ((element, charge), specs) in &self.atom_types {
+        for ((element, charge), atoms) in &self.atom_types {
             let _ = write!(buf, "{},{:?}:", element, charge);
-            let mut spec_strs: Vec<String> = specs.iter().map(|s| s.to_spec_str()).collect();
-            spec_strs.sort();
-            for s in &spec_strs {
+            let mut atom_strs: Vec<String> = atoms.iter().map(ToString::to_string).collect();
+            atom_strs.sort();
+            for s in &atom_strs {
                 let _ = write!(buf, "{},", s);
             }
             buf.push('\n');
@@ -74,7 +74,7 @@ impl AtomTypeRegistry {
     pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
-        let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomTypeSpec>> = BTreeMap::new();
+        let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<Atom>> = BTreeMap::new();
         for (element_key, charges) in &parsed {
             let element: Element = element_key.parse().map_err(|_| {
                 ResolutionError::InvalidAtomTypeRegistry(format!(
@@ -82,21 +82,47 @@ impl AtomTypeRegistry {
                     element_key
                 ))
             })?;
-            for (charge_key, specs) in charges {
+            for (charge_key, atom_specs) in charges {
                 let charge: i8 = charge_key.parse().map_err(|_| {
                     ResolutionError::InvalidAtomTypeRegistry(format!(
                         "invalid charge '{}' for element {}",
                         charge_key, element_key
                     ))
                 })?;
+                let atoms: Vec<Atom> = atom_specs
+                    .iter()
+                    .map(|spec| {
+                        spec.parse::<Atom>().map_err(|e| {
+                            ResolutionError::InvalidAtomTypeRegistry(format!("{}: {}", spec, e))
+                        })
+                    })
+                    .collect::<Result<_, _>>()?;
+                for atom in &atoms {
+                    if atom.element() != element {
+                        return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                            "atom '{}' element {} does not match section element {}",
+                            atom,
+                            atom.element(),
+                            element
+                        )));
+                    }
+                    if atom.charge() != charge {
+                        return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                            "atom '{}' charge {} does not match section charge {}",
+                            atom,
+                            atom.charge(),
+                            charge
+                        )));
+                    }
+                }
                 atom_types
                     .entry((element, Some(charge)))
                     .or_default()
-                    .extend(specs.iter().copied());
+                    .extend(atoms.iter().cloned());
                 atom_types
                     .entry((element, None))
                     .or_default()
-                    .extend(specs.iter().copied());
+                    .extend(atoms.into_iter());
             }
         }
         let mut reg = AtomTypeRegistry {
@@ -113,15 +139,15 @@ impl AtomTypeRegistry {
         Self::from_toml_str(&input)
     }
 
-    pub fn add(&mut self, spec: AtomTypeSpec) {
+    pub fn add(&mut self, atom: Atom) {
         self.atom_types
-            .entry((spec.element(), Some(spec.charge())))
+            .entry((atom.element(), Some(atom.charge())))
             .or_default()
-            .push(spec);
+            .push(atom.clone());
         self.atom_types
-            .entry((spec.element(), None))
+            .entry((atom.element(), None))
             .or_default()
-            .push(spec);
+            .push(atom);
         self.recompute_hash();
     }
 
@@ -131,46 +157,46 @@ impl AtomTypeRegistry {
         self.atom_types
             .iter()
             .filter(|((_, charge), _)| charge.is_some())
-            .all(|(_, specs)| specs.iter().all(|spec| spec.check_invariants().is_ok()))
+            .all(|(_, atoms)| atoms.iter().all(|atom| atom.to_spec().check_invariants().is_ok()))
     }
 
-    pub fn specs_for_element(&self, element: Element) -> &[AtomTypeSpec] {
+    pub fn specs_for_element(&self, element: Element) -> &[Atom] {
         self.atom_types
             .get(&(element, None))
             .map_or(&[], |v| v.as_slice())
     }
 
-    pub fn specs_for_element_and_charge(&self, element: Element, charge: i8) -> &[AtomTypeSpec] {
+    pub fn specs_for_element_and_charge(&self, element: Element, charge: i8) -> &[Atom] {
         self.atom_types
             .get(&(element, Some(charge)))
             .map_or(&[], |v| v.as_slice())
     }
 
-    pub fn candidates_for(&self, query: &AtomTypeQuery) -> SmallVec<[AtomTypeSpec; 4]> {
+    pub fn candidates_for(&self, query: &AtomTypeQuery) -> SmallVec<[Atom; 4]> {
         self.atom_types
             .get(&(query.element, query.charge))
             .into_iter()
             .flatten()
-            .filter(|spec| query.matches(spec))
-            .copied()
+            .filter(|atom| query.matches_atom(atom))
+            .cloned()
             .collect()
     }
 }
 
 /// Public shorthand for defining atom type registries from spec strings.
 ///
-/// Takes a flat, comma-separated list of atom type spec literals.
+/// Takes a flat, comma-separated list of ground atom DSL literals.
 /// Element and charge keys are derived from each spec automatically.
 ///
 /// ```ignore
-/// let reg = registry!["{H+0v1}", "{C+0v4}", "{C+1v3}"];
+/// let reg = registry!["H#v", "C#v4", "C#c+#v3"];
 /// ```
 #[macro_export]
 macro_rules! registry {
     ($($spec:expr),* $(,)?) => {{
         let mut registry = $crate::graph_ir::config_data::AtomTypeRegistry::new();
         $(
-            registry.add($crate::spec!($spec));
+            registry.add($spec.parse::<$crate::graph_ir::atom::Atom>().expect("invalid atom ground DSL"));
         )*
         registry
     }};
@@ -398,10 +424,10 @@ mod tests {
     fn test_atom_type_registry_from_toml() {
         let input = r#"
 [C]
-0 = ["{C+0v4a0m0}"]
+0 = ["C#c0#v4#a0"]
 
 [O]
--1 = ["{O-1/3v1a0m0}"]
+-1 = ["O#c-#n3#v#a0"]
 "#;
         let registry = AtomTypeRegistry::from_toml_str(input).unwrap();
         assert_eq!(
@@ -412,7 +438,7 @@ mod tests {
             registry.specs_for_element_and_charge(Element::O, -1).len(),
             1
         );
-        assert_eq!(registry.content_hash_hex(), "cb498fccad4c230a");
+        assert_eq!(registry.content_hash_hex(), "8481b52c86d4605c");
     }
 
     #[test]
@@ -423,7 +449,7 @@ mod tests {
 
     #[test]
     fn test_registry_macro() {
-        let reg = registry!["{C+0v4}", "{C+1^3v3}"];
+        let reg = registry!["C#c0#v4", "C#c+#h3"];
         assert_eq!(reg.specs_for_element(Element::C).len(), 2);
     }
 

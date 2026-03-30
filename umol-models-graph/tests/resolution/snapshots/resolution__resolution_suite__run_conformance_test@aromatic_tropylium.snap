@@ -10,13 +10,13 @@ atom_typing:
     bond_count: 7
     topology: FoOaW
     atoms:
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{C+Hv2a0}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#c+#h#v2#a0"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"
@@ -43,13 +43,13 @@ counts:
     bond_count: 7
     topology: FoOaW
     atoms:
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{C+Hv2a0}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#c+#h#v2#a0"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"

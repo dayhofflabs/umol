@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 4
     topology: "D{?"
     atoms:
-      - "{Siv4}"
-      - "{Cl/3v1}"
-      - "{Cl/3v1}"
-      - "{Cl/3v1}"
-      - "{Cl/3v1}"
+      - "Si#v4"
+      - "Cl#n3#v"
+      - "Cl#n3#v"
+      - "Cl#n3#v"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"
@@ -27,11 +27,11 @@ counts:
     bond_count: 4
     topology: "D{?"
     atoms:
-      - "{Siv4}"
-      - "{Cl/3v1}"
-      - "{Cl/3v1}"
-      - "{Cl/3v1}"
-      - "{Cl/3v1}"
+      - "Si#v4"
+      - "Cl#n3#v"
+      - "Cl#n3#v"
+      - "Cl#n3#v"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"

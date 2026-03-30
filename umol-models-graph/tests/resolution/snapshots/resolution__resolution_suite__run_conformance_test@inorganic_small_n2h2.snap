@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 3
     topology: Cq
     atoms:
-      - "{N/1v3}"
-      - "{N/1v3}"
-      - "{Hv1}"
-      - "{Hv1}"
+      - "N#n#v3"
+      - "N#n#v3"
+      - "H#v"
+      - "H#v"
     bonds:
       - "="
       - "-"
@@ -25,10 +25,10 @@ counts:
     bond_count: 3
     topology: Cq
     atoms:
-      - "{N/1v3}"
-      - "{N/1v3}"
-      - "{Hv1}"
-      - "{Hv1}"
+      - "N#n#v3"
+      - "N#n#v3"
+      - "H#v"
+      - "H#v"
     bonds:
       - "="
       - "-"

@@ -10,14 +10,14 @@ atom_typing:
     bond_count: 8
     topology: GwEA?c
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{Cl/3v1}"
-      - "{CH2v2}"
-      - "{Cl/3v1}"
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "Cl#n3#v"
+      - "C#h2#v2"
+      - "Cl#n3#v"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"
@@ -34,14 +34,14 @@ counts:
     bond_count: 8
     topology: GwEA?c
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{Cl/3v1}"
-      - "{CH2v2}"
-      - "{Cl/3v1}"
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "Cl#n3#v"
+      - "C#h2#v2"
+      - "Cl#n3#v"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"

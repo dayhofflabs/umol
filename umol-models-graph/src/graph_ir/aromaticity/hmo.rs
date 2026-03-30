@@ -302,9 +302,10 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::atom;
+    use crate::graph_ir::atom::Atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
+    use crate::spec;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
     const C1: &str = "{Cv2a1H}";
@@ -313,7 +314,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_atom(atom!(s)))
+            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
             .collect();
         let n = atoms.len();
         for i in 0..n {
@@ -326,7 +327,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_atom(atom!(s)))
+            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
             .collect();
         for &(a, b) in edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));

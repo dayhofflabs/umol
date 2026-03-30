@@ -10,15 +10,15 @@ atom_typing:
     bond_count: 9
     topology: HoCB@CW
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{N+v4}"
-      - "{CH2v2}"
-      - "{O/2v2}"
-      - "{O-/3v1}"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "N#c+#v4"
+      - "C#h2#v2"
+      - "O#n2#v2"
+      - "O#c-#n3#v"
     bonds:
       - "-"
       - "-"
@@ -36,15 +36,15 @@ counts:
     bond_count: 9
     topology: HoCB@CW
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{N+v4}"
-      - "{CH2v2}"
-      - "{O/2v2}"
-      - "{O-/3v1}"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "N#c+#v4"
+      - "C#h2#v2"
+      - "O#n2#v2"
+      - "O#c-#n3#v"
     bonds:
       - "-"
       - "-"

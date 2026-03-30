@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 4
     topology: DbG
     atoms:
-      - "{CH3v1}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH3v1}"
-      - "{CH3v1}"
+      - "C#h3#v"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h3#v"
+      - "C#h3#v"
     bonds:
       - "-"
       - "-"
@@ -27,11 +27,11 @@ counts:
     bond_count: 4
     topology: DbG
     atoms:
-      - "{CH3v1}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH3v1}"
-      - "{CH3v1}"
+      - "C#h3#v"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h3#v"
+      - "C#h3#v"
     bonds:
       - "-"
       - "-"

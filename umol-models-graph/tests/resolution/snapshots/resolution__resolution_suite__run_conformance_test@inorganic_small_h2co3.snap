@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 5
     topology: "E`EG"
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{O/2v2}"
-      - "{Hv1}"
+      - "H#v"
+      - "O#n2#v2"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#n2#v2"
+      - "H#v"
     bonds:
       - "-"
       - "-"
@@ -29,12 +29,12 @@ counts:
     bond_count: 5
     topology: "E`EG"
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{O/2v2}"
-      - "{Hv1}"
+      - "H#v"
+      - "O#n2#v2"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#n2#v2"
+      - "H#v"
     bonds:
       - "-"
       - "-"

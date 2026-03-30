@@ -10,13 +10,13 @@ atom_typing:
     bond_count: 6
     topology: F~???
     atoms:
-      - "{Sv6}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "S#v6"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"
@@ -31,13 +31,13 @@ counts:
     bond_count: 6
     topology: F~???
     atoms:
-      - "{Sv6}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "S#v6"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"

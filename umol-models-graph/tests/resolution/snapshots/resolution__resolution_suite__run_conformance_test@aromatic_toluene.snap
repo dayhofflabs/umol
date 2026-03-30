@@ -10,13 +10,13 @@ atom_typing:
     bond_count: 7
     topology: FwGOW
     atoms:
-      - "{Cv3a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CH3v1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "C#v3#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h3#v"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"
@@ -42,13 +42,13 @@ counts:
     bond_count: 7
     topology: FwGOW
     atoms:
-      - "{Cv3a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CH3v1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "C#v3#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h3#v"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"

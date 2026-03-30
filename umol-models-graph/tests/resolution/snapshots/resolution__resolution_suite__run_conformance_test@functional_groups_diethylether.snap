@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 4
     topology: DaS
     atoms:
-      - "{CH3v1}"
-      - "{CH2v2}"
-      - "{O/2v2}"
-      - "{CH2v2}"
-      - "{CH3v1}"
+      - "C#h3#v"
+      - "C#h2#v2"
+      - "O#n2#v2"
+      - "C#h2#v2"
+      - "C#h3#v"
     bonds:
       - "-"
       - "-"
@@ -27,11 +27,11 @@ counts:
     bond_count: 4
     topology: DaS
     atoms:
-      - "{CH3v1}"
-      - "{CH2v2}"
-      - "{O/2v2}"
-      - "{CH2v2}"
-      - "{CH3v1}"
+      - "C#h3#v"
+      - "C#h2#v2"
+      - "O#n2#v2"
+      - "C#h2#v2"
+      - "C#h3#v"
     bonds:
       - "-"
       - "-"

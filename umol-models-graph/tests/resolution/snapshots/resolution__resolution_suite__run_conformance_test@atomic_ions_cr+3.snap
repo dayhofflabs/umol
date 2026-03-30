@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Cr+3^3}"
+      - "Cr#c+3#u3"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Cr+3/1^1}"
+      - "Cr#c+3#n#u"
     bonds: []

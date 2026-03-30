@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 1
     topology: A_
     atoms:
-      - "{Br/3v1}"
-      - "{Br/3v1}"
+      - "Br#n3#v"
+      - "Br#n3#v"
     bonds:
       - "-"
 counts:
@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{Br/3v1}"
-      - "{Br/3v1}"
+      - "Br#n3#v"
+      - "Br#n3#v"
     bonds:
       - "-"

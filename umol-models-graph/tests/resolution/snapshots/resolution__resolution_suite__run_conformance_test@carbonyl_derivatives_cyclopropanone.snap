@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 4
     topology: "C{"
     atoms:
-      - "{Cv4}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{O/2v2}"
+      - "C#v4"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"
@@ -26,10 +26,10 @@ counts:
     bond_count: 4
     topology: "C{"
     atoms:
-      - "{Cv4}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{O/2v2}"
+      - "C#v4"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"

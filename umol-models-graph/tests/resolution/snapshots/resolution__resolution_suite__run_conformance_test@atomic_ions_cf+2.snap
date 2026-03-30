@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Cf+2/3^4}"
+      - "Cf#c+2#n3#u4"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Cf+2/5}"
+      - "Cf#c+2#n5"
     bonds: []

@@ -1,6 +1,5 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
-assertion_line: 510
 expression: results
 ---
 category: atomic_ions
@@ -11,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Fe+2/1^4}"
+      - "Fe#c+2#n#u4"
     bonds: []
 counts:
   success: true
@@ -20,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Fe+2/1^4}"
+      - "Fe#c+2#n#u4"
     bonds: []

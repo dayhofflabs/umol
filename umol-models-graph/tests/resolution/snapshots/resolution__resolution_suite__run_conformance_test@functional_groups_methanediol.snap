@@ -10,9 +10,9 @@ atom_typing:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{CH2v2}"
-      - "{OH/2v1}"
-      - "{OH/2v1}"
+      - "C#h2#v2"
+      - "O#h#n2#v"
+      - "O#h#n2#v"
     bonds:
       - "-"
       - "-"
@@ -23,9 +23,9 @@ counts:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{CH2v2}"
-      - "{OH/2v1}"
-      - "{OH/2v1}"
+      - "C#h2#v2"
+      - "O#h#n2#v"
+      - "O#h#n2#v"
     bonds:
       - "-"
       - "-"

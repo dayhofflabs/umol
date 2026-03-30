@@ -10,14 +10,14 @@ atom_typing:
     bond_count: 9
     topology: GwCCGk
     atoms:
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
+      - "N#n#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
     bonds:
       - "-"
       - "-"
@@ -35,14 +35,14 @@ counts:
     bond_count: 9
     topology: GwCCGk
     atoms:
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
+      - "N#n#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
     bonds:
       - "-"
       - "-"

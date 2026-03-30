@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 3
     topology: Ce
     atoms:
-      - "{CH3v1}"
-      - "{CHv3}"
-      - "{CH3v1}"
-      - "{Cl/3v1}"
+      - "C#h3#v"
+      - "C#h#v3"
+      - "C#h3#v"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"
@@ -25,10 +25,10 @@ counts:
     bond_count: 3
     topology: Ce
     atoms:
-      - "{CH3v1}"
-      - "{CHv3}"
-      - "{CH3v1}"
-      - "{Cl/3v1}"
+      - "C#h3#v"
+      - "C#h#v3"
+      - "C#h3#v"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"

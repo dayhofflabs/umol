@@ -4,7 +4,8 @@ use smallvec::SmallVec;
 use umol_data::{Element, SpinState, MAX_UNPAIRED_ELECTRONS};
 
 use crate::atom::{AromaticValence, ImplicitHydrogens};
-use crate::graph_ir::atom::AtomBuilder;
+use crate::graph_ir::atom::Atom;
+use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::atom_type::{AtomTypeQuery, AtomTypeSpec, HydrogenConstraint};
 use crate::graph_ir::config::ValenceStrategy;
 use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
@@ -40,7 +41,7 @@ impl ValenceMatcher {
         &self,
         builder: &MoleculeBuilder,
         atom_index: AtomIndex,
-    ) -> SmallVec<[AtomTypeSpec; 4]> {
+    ) -> SmallVec<[Atom; 4]> {
         match self {
             Self::AtomTyping { registry } => atom_typing_candidates(registry, builder, atom_index),
             Self::Counts {
@@ -55,7 +56,7 @@ fn atom_typing_candidates(
     registry: &AtomTypeRegistry,
     builder: &MoleculeBuilder,
     atom_index: AtomIndex,
-) -> SmallVec<[AtomTypeSpec; 4]> {
+) -> SmallVec<[Atom; 4]> {
     let mut query = AtomTypeQuery::from_builder_atom(builder, atom_index);
     if query.implicit_hydrogens == Some(HydrogenConstraint::Normal) {
         let inferred = infer_normal_implicit_hydrogens(builder, atom_index);
@@ -104,7 +105,7 @@ fn counts_candidates(
     allow_implicit_hydrogens: bool,
     builder: &MoleculeBuilder,
     atom_index: AtomIndex,
-) -> SmallVec<[AtomTypeSpec; 4]> {
+) -> SmallVec<[Atom; 4]> {
     let atom = builder.atom(atom_index).expect("atom_index must be valid");
     let element = atom.element();
     let charge = atom.charge().unwrap_or(0);
@@ -134,6 +135,7 @@ fn counts_candidates(
             donated_pairs,
             accepted_pairs,
             allow_implicit_hydrogens,
+            builder.atom_has_normal_implicit_hydrogens(atom_index),
             &atom,
         );
     }
@@ -168,8 +170,9 @@ fn build_aromatic_spec(
     donated_pairs: u8,
     accepted_pairs: u8,
     allow_implicit_hydrogens: bool,
-    atom: &AtomBuilder,
-) -> SmallVec<[AtomTypeSpec; 4]> {
+    normal_implicit_hydrogens: bool,
+    atom: &AtomPattern,
+) -> SmallVec<[Atom; 4]> {
     if allowed_aromatic_valences.is_empty() {
         return SmallVec::new();
     }
@@ -185,7 +188,15 @@ fn build_aromatic_spec(
         }
         let implicit_hydrogens = match atom.implicit_hydrogens() {
             Some(ImplicitHydrogens::Hydrogens(h)) => h,
-            Some(ImplicitHydrogens::Normal) => {
+            Some(ImplicitHydrogens::Normal) if normal_implicit_hydrogens => {
+                let Some(h) = infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
+                else {
+                    continue;
+                };
+                h
+            }
+            Some(ImplicitHydrogens::Normal) => continue,
+            None if normal_implicit_hydrogens => {
                 let Some(h) = infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
                 else {
                     continue;
@@ -218,7 +229,7 @@ fn build_aromatic_spec(
             AromaticValence::Valence(a),
             atom,
         ) {
-            candidates.push(spec);
+            candidates.push(Atom::from_spec(spec));
         }
     }
 
@@ -254,8 +265,8 @@ fn build_spec(
     donated_pairs: u8,
     accepted_pairs: u8,
     aromatic_valence: AromaticValence,
-    atom: &AtomBuilder,
-) -> SmallVec<[AtomTypeSpec; 4]> {
+    atom: &AtomPattern,
+) -> SmallVec<[Atom; 4]> {
     match try_build_spec(
         element,
         charge,
@@ -266,7 +277,7 @@ fn build_spec(
         aromatic_valence,
         atom,
     ) {
-        Some(spec) => SmallVec::from_elem(spec, 1),
+        Some(spec) => SmallVec::from_elem(Atom::from_spec(spec), 1),
         None => SmallVec::new(),
     }
 }
@@ -279,7 +290,7 @@ fn try_build_spec(
     donated_pairs: u8,
     accepted_pairs: u8,
     aromatic_valence: AromaticValence,
-    atom: &AtomBuilder,
+    atom: &AtomPattern,
 ) -> Option<AtomTypeSpec> {
     let total_valence = valence + implicit_hydrogens;
     // Element metadata is the canonical source of valence electron counts.

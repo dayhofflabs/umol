@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 3
     topology: Cd
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{N/1v3}"
-      - "{O/2v2}"
+      - "H#v"
+      - "O#n2#v2"
+      - "N#n#v3"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"
@@ -25,10 +25,10 @@ counts:
     bond_count: 3
     topology: Cd
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{N/1v3}"
-      - "{O/2v2}"
+      - "H#v"
+      - "O#n2#v2"
+      - "N#n#v3"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"

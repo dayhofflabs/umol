@@ -10,8 +10,8 @@ atom_typing:
     bond_count: 1
     topology: A_
     atoms:
-      - "{CH3v1}"
-      - "{Cl/3v1}"
+      - "C#h3#v"
+      - "Cl#n3#v"
     bonds:
       - "-"
 counts:
@@ -21,7 +21,7 @@ counts:
     bond_count: 1
     topology: A_
     atoms:
-      - "{CH3v1}"
-      - "{Cl/3v1}"
+      - "C#h3#v"
+      - "Cl#n3#v"
     bonds:
       - "-"

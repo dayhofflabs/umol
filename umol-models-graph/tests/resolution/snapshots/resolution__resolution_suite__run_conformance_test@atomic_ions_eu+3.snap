@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Eu+3^6}"
+      - "Eu#c+3#u6"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Eu+3/3}"
+      - "Eu#c+3#n3"
     bonds: []

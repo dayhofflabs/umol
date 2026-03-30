@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 5
     topology: "E`_o"
     atoms:
-      - "{O/2v2}"
-      - "{N+v4}"
-      - "{O-/3v1}"
-      - "{N+v4}"
-      - "{O-/3v1}"
-      - "{O/2v2}"
+      - "O#n2#v2"
+      - "N#c+#v4"
+      - "O#c-#n3#v"
+      - "N#c+#v4"
+      - "O#c-#n3#v"
+      - "O#n2#v2"
     bonds:
       - "="
       - "-"
@@ -29,12 +29,12 @@ counts:
     bond_count: 5
     topology: "E`_o"
     atoms:
-      - "{O/2v2}"
-      - "{N+v4}"
-      - "{O-/3v1}"
-      - "{N+v4}"
-      - "{O-/3v1}"
-      - "{O/2v2}"
+      - "O#n2#v2"
+      - "N#c+#v4"
+      - "O#c-#n3#v"
+      - "N#c+#v4"
+      - "O#c-#n3#v"
+      - "O#n2#v2"
     bonds:
       - "="
       - "-"

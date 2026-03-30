@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 5
     topology: "E}??"
     atoms:
-      - "{Pv5}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "P#v5"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"
@@ -29,12 +29,12 @@ counts:
     bond_count: 5
     topology: "E}??"
     atoms:
-      - "{Pv5}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "P#v5"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"

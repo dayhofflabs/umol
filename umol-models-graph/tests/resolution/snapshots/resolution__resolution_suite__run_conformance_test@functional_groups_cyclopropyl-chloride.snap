@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 4
     topology: Ct
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{Cl/3v1}"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"
@@ -26,10 +26,10 @@ counts:
     bond_count: 4
     topology: Ct
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{Cl/3v1}"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"

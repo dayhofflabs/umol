@@ -10,9 +10,9 @@ atom_typing:
     bond_count: 2
     topology: Bg
     atoms:
-      - "{CH3v1}"
-      - "{NH/1v2}"
-      - "{NH2/1v1}"
+      - "C#h3#v"
+      - "N#h#n#v2"
+      - "N#h2#n#v"
     bonds:
       - "-"
       - "-"
@@ -23,9 +23,9 @@ counts:
     bond_count: 2
     topology: Bg
     atoms:
-      - "{CH3v1}"
-      - "{NH/1v2}"
-      - "{NH2/1v1}"
+      - "C#h3#v"
+      - "N#h#n#v2"
+      - "N#h2#n#v"
     bonds:
       - "-"
       - "-"

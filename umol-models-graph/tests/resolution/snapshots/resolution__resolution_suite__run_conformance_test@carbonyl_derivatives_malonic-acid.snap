@@ -10,13 +10,13 @@ atom_typing:
     bond_count: 6
     topology: Fw?Co
     atoms:
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
-      - "{CH2v2}"
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
+      - "C#h2#v2"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
     bonds:
       - "="
       - "-"
@@ -31,13 +31,13 @@ counts:
     bond_count: 6
     topology: Fw?Co
     atoms:
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
-      - "{CH2v2}"
-      - "{Cv4}"
-      - "{O/2v2}"
-      - "{OH/2v1}"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
+      - "C#h2#v2"
+      - "C#v4"
+      - "O#n2#v2"
+      - "O#h#n2#v"
     bonds:
       - "="
       - "-"

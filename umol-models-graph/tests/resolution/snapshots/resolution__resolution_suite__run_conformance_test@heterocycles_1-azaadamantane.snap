@@ -10,16 +10,16 @@ atom_typing:
     bond_count: 12
     topology: Iw@?OGKj?
     atoms:
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "N#n#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"
@@ -40,16 +40,16 @@ counts:
     bond_count: 12
     topology: Iw@?OGKj?
     atoms:
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "N#n#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"

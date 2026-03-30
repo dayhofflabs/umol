@@ -559,7 +559,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::atom::AtomBuilder;
+    use crate::graph_ir::atom::{Atom, AtomBuilder};
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::ResolveConfig;
     use crate::graph_ir::molecule::Molecule;
@@ -582,9 +582,8 @@ mod tests {
         let carbon = spec!("{Cv4}");
         for atom in builder.atom_indices().collect::<Vec<_>>() {
             builder
-                .atom_mut(atom)
-                .unwrap()
-                .set_candidates(SmallVec::from_elem(carbon, 1));
+                .set_atom_candidates(atom, SmallVec::from_elem(Atom::from_spec(carbon), 1))
+                .expect("atom should exist");
         }
         builder
             .build(&ResolveConfig::default())
@@ -608,9 +607,11 @@ mod tests {
         let mut aromatic_builder = MoleculeBuilder::new();
         let aromatic_atom = aromatic_builder.add_atom(AtomBuilder::new(Element::C));
         aromatic_builder
-            .atom_mut(aromatic_atom)
-            .expect("atom should exist")
-            .set_candidates(SmallVec::from_elem(spec!("{Cv2a1H}"), 1));
+            .set_atom_candidates(
+                aromatic_atom,
+                SmallVec::from_elem(Atom::from_spec(spec!("{Cv2a1H}")), 1),
+            )
+            .expect("atom should exist");
         let aromatic = aromatic_builder
             .build(&ResolveConfig::default())
             .expect("aromatic molecule should build");
@@ -619,9 +620,11 @@ mod tests {
         let mut non_aromatic_builder = MoleculeBuilder::new();
         let non_aromatic_atom = non_aromatic_builder.add_atom(AtomBuilder::new(Element::C));
         non_aromatic_builder
-            .atom_mut(non_aromatic_atom)
-            .expect("atom should exist")
-            .set_candidates(SmallVec::from_elem(spec!("{Cv4}"), 1));
+            .set_atom_candidates(
+                non_aromatic_atom,
+                SmallVec::from_elem(Atom::from_spec(spec!("{Cv4}")), 1),
+            )
+            .expect("atom should exist");
         let non_aromatic = non_aromatic_builder
             .build(&ResolveConfig::default())
             .expect("non-aromatic molecule should build");

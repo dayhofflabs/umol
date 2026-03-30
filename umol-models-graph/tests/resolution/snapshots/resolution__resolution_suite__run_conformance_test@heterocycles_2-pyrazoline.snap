@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 5
     topology: DpK
     atoms:
-      - "{NH/1v2}"
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CH2v2}"
+      - "N#h#n#v2"
+      - "N#n#v3"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"
@@ -28,11 +28,11 @@ counts:
     bond_count: 5
     topology: DpK
     atoms:
-      - "{NH/1v2}"
-      - "{N/1v3}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CH2v2}"
+      - "N#h#n#v2"
+      - "N#n#v3"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"

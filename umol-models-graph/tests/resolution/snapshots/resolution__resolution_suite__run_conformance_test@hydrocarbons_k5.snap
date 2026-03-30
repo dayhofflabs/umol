@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 10
     topology: "D~{"
     atoms:
-      - "{Cv4}"
-      - "{Cv4}"
-      - "{Cv4}"
-      - "{Cv4}"
-      - "{Cv4}"
+      - "C#v4"
+      - "C#v4"
+      - "C#v4"
+      - "C#v4"
+      - "C#v4"
     bonds:
       - "-"
       - "-"
@@ -33,11 +33,11 @@ counts:
     bond_count: 10
     topology: "D~{"
     atoms:
-      - "{Cv4}"
-      - "{Cv4}"
-      - "{Cv4}"
-      - "{Cv4}"
-      - "{Cv4}"
+      - "C#v4"
+      - "C#v4"
+      - "C#v4"
+      - "C#v4"
+      - "C#v4"
     bonds:
       - "-"
       - "-"

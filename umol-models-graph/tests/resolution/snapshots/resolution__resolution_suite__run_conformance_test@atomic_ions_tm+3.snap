@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Tm+3/5^2}"
+      - "Tm#c+3#n5#u2"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Tm+3/6}"
+      - "Tm#c+3#n6"
     bonds: []

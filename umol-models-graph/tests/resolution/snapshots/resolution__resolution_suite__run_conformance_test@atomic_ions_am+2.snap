@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Am+2^7}"
+      - "Am#c+2#u7"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Am+2/3^1}"
+      - "Am#c+2#n3#u"
     bonds: []

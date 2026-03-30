@@ -8,6 +8,7 @@ use umol_data::{Element, SpinMultiplicity, SpinState};
 
 use self::parser::parse_ground_atom_dsl;
 use crate::atom::{AromaticValence, Chirality, ImplicitHydrogens, IsotopeMass};
+use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::atom_type::{AtomError, AtomTypeSpec};
 use crate::graph_ir::error::ResolutionError;
 use crate::table_ir::atom::Atom as TableAtom;
@@ -508,6 +509,28 @@ impl FromStr for AtomBuilder {
     }
 }
 
+impl From<AtomBuilder> for AtomPattern {
+    fn from(value: AtomBuilder) -> Self {
+        AtomPattern {
+            element: Some(value.element),
+            isotope_mass: value.isotope_mass.map(IsotopeMass::MassNumber),
+            charge: value.charge,
+            implicit_hydrogens: match value.implicit_hydrogens {
+                Some(ImplicitHydrogens::Hydrogens(h)) => Some(h),
+                Some(ImplicitHydrogens::Normal) | None => None,
+            },
+            lone_pairs: value.lone_pairs,
+            unpaired_electrons: value.unpaired_electrons,
+            multiplicity: value.multiplicity,
+            valence: None,
+            donated_pairs: None,
+            accepted_pairs: None,
+            aromatic_valence: None,
+            multicenter_valence: None,
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! atom {
     ($spec:expr) => {
@@ -558,6 +581,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::unknown_element("X", AtomError::InvalidElement("X".to_string()))]
+    #[case::wildcard("*", AtomError::InvalidElement("*".to_string()))]
     #[case::unknown_predicate("C#x1", AtomError::UnexpectedTag("#x".to_string()))]
     #[case::duplicate_charge("C#c+#c-", AtomError::DuplicateTag("#c".to_string()))]
     #[case::duplicate_h("C#h3#h2", AtomError::DuplicateTag("#h".to_string()))]
@@ -578,30 +602,12 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::defaults(
-        Atom::from_spec(AtomTypeSpec::new(Element::He, None, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
-        "He"
-    )]
-    #[case::charge_plus_one(
-        Atom::from_spec(AtomTypeSpec::new(Element::C, None, 1, 3, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
-        "C#c+#h3"
-    )]
-    #[case::charge_minus_one(
-        Atom::from_spec(AtomTypeSpec::new(Element::C, None, -1, 3, 1, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
-        "C#c-#h3#n"
-    )]
-    #[case::isotope_mass(
-        Atom::from_spec(AtomTypeSpec::new(Element::C, Some(13), 0, 4, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
-        "C#i13#h4"
-    )]
-    #[case::aromatic_one_omit_payload(
-        Atom::from_spec(AtomTypeSpec::new(Element::C, None, 0, 1, 0, 0, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 0).unwrap()),
-        "C#h#v2#a"
-    )]
-    #[case::non_default_multiplicity(
-        Atom::from_spec(AtomTypeSpec::new(Element::C, None, 0, 0, 1, 2, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()),
-        "C#n#u2#s"
-    )]
+    #[case::defaults(Atom::from_spec(AtomTypeSpec::new(Element::He, None, 0, 0, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()), "He")]
+    #[case::charge_plus(Atom::from_spec(AtomTypeSpec::new(Element::C, None, 1, 3, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()), "C#c+#h3")]
+    #[case::charge_minus(Atom::from_spec(AtomTypeSpec::new(Element::C, None, -1, 3, 1, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()), "C#c-#h3#n")]
+    #[case::isotope_mass(Atom::from_spec(AtomTypeSpec::new(Element::C, Some(13), 0, 4, 0, 0, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()), "C#i13#h4")]
+    #[case::aromatic(Atom::from_spec(AtomTypeSpec::new(Element::C, None, 0, 1, 0, 0, SpinMultiplicity::Singlet, 2, 0, 0, AromaticValence::Valence(1), 0).unwrap()), "C#h#v2#a")]
+    #[case::multiplicity(Atom::from_spec(AtomTypeSpec::new(Element::C, None, 0, 0, 1, 2, SpinMultiplicity::Singlet, 0, 0, 0, AromaticValence::None, 0).unwrap()), "C#n#u2#s")]
     fn test_atom_display(#[case] atom: Atom, #[case] expected: &str) {
         assert_eq!(atom.to_string(), expected);
     }

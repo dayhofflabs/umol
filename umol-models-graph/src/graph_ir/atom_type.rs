@@ -19,6 +19,7 @@ use crate::dsl::predicates::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExp
 use crate::dsl::value::ValueAst;
 use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::Atom;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum AtomError {
@@ -311,7 +312,6 @@ impl AtomTypeSpec {
             + (self.implicit_hydrogens as i16)
             + (self.valence as i16)
             + aromatic_increment
-            + (self.multicenter_valence as i16)
             + (2 * self.accepted_pairs as i16);
 
         if total_e_inv_o != total_e_inv_e {
@@ -561,12 +561,15 @@ impl AtomTypeQuery {
         let atom = builder.atom(atom_index).expect("atom_index must be valid");
         let valence = builder.atom_bond_order_sum(atom_index);
         let (donated_pairs, accepted_pairs) = builder.atom_dative_bond_order_sums(atom_index);
-        let hydrogen_constraint = atom
-            .implicit_hydrogens()
-            .map(HydrogenConstraint::from_implicit_hydrogens);
+        let hydrogen_constraint = if builder.atom_has_normal_implicit_hydrogens(atom_index) {
+            Some(HydrogenConstraint::Normal)
+        } else {
+            atom.implicit_hydrogens()
+                .map(HydrogenConstraint::from_implicit_hydrogens)
+        };
         let aromatic_constraint = if builder.atom_aromatic_hint(atom_index) {
             Some(AromaticConstraint::Any)
-        } else if atom.aromatic_hint() == Some(false) {
+        } else if builder.atom_explicit_aromatic_hint(atom_index) == Some(false) {
             Some(AromaticConstraint::None)
         } else {
             None
@@ -612,6 +615,29 @@ impl AtomTypeQuery {
             && self
                 .multicenter_valence
                 .is_none_or(|v| v == spec.multicenter_valence())
+    }
+
+    pub fn matches_atom(&self, atom: &Atom) -> bool {
+        self.charge.is_none_or(|v| v == atom.charge())
+            && self
+                .implicit_hydrogens
+                .is_none_or(|v| v.matches(atom.implicit_hydrogens()))
+            && self.lone_pairs.is_none_or(|v| v == atom.lone_pairs())
+            && self
+                .unpaired_electrons
+                .is_none_or(|v| v == atom.unpaired_electrons())
+            && self.multiplicity.is_none_or(|v| v == atom.multiplicity())
+            && self.valence.is_none_or(|v| v == atom.valence())
+            && self.donated_pairs.is_none_or(|v| v == atom.donated_pairs())
+            && self
+                .accepted_pairs
+                .is_none_or(|v| v == atom.accepted_pairs())
+            && self
+                .aromatic_valence
+                .is_none_or(|c| c.matches(atom.aromatic_valence()))
+            && self
+                .multicenter_valence
+                .is_none_or(|v| v == atom.multicenter_valence())
     }
 
     pub fn is_aromatic(&self) -> bool {

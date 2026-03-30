@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 6
     topology: C~
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "-"
       - "-"
@@ -28,10 +28,10 @@ counts:
     bond_count: 6
     topology: C~
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "-"
       - "-"

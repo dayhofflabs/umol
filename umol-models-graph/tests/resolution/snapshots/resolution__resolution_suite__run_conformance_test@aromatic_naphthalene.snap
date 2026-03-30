@@ -10,16 +10,16 @@ atom_typing:
     bond_count: 11
     topology: IoA?_OoaW
     atoms:
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{Cv3a1}"
-      - "{Cv3a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#v3#a"
+      - "C#v3#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"
@@ -55,16 +55,16 @@ counts:
     bond_count: 11
     topology: IoA?_OoaW
     atoms:
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{Cv3a1}"
-      - "{Cv3a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
-      - "{CHv2a1}"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#v3#a"
+      - "C#v3#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
+      - "C#h#v2#a"
     bonds:
       - "-"
       - "-"

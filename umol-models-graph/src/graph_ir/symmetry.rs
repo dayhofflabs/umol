@@ -6,7 +6,7 @@ use std::os::raw::c_int;
 use nauty_Traces_sys::*;
 use umol_data::{Element, SpinMultiplicity};
 
-use crate::graph_ir::atom::AtomBuilder;
+use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::bond::BondBuilder;
 use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
 
@@ -28,7 +28,7 @@ enum VertexColor {
     },
 }
 
-fn atom_color(ab: &AtomBuilder) -> VertexColor {
+fn atom_color(ab: &AtomPattern) -> VertexColor {
     VertexColor::Atom {
         element: ab.element(),
         isotope_mass: ab.isotope_mass(),
@@ -282,6 +282,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
+    use crate::graph_ir::AtomBuilder;
 
     #[test]
     fn empty() {

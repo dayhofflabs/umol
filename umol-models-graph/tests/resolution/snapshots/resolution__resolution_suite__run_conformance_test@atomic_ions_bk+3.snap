@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Bk+3/1^6}"
+      - "Bk#c+3#n#u6"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Bk+3/4}"
+      - "Bk#c+3#n4"
     bonds: []

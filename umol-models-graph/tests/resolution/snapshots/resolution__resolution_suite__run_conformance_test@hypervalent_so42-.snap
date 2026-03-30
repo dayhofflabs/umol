@@ -10,11 +10,11 @@ atom_typing:
     bond_count: 4
     topology: "D{?"
     atoms:
-      - "{Sv6}"
-      - "{O/2v2}"
-      - "{O/2v2}"
-      - "{O-/3v1}"
-      - "{O-/3v1}"
+      - "S#v6"
+      - "O#n2#v2"
+      - "O#n2#v2"
+      - "O#c-#n3#v"
+      - "O#c-#n3#v"
     bonds:
       - "="
       - "="
@@ -27,11 +27,11 @@ counts:
     bond_count: 4
     topology: "D{?"
     atoms:
-      - "{Sv6}"
-      - "{O/2v2}"
-      - "{O/2v2}"
-      - "{O-/3v1}"
-      - "{O-/3v1}"
+      - "S#v6"
+      - "O#n2#v2"
+      - "O#n2#v2"
+      - "O#c-#n3#v"
+      - "O#c-#n3#v"
     bonds:
       - "="
       - "="

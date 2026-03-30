@@ -10,9 +10,9 @@ atom_typing:
     bond_count: 3
     topology: Bw
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{S/2v2}"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "S#n2#v2"
     bonds:
       - "-"
       - "-"
@@ -24,9 +24,9 @@ counts:
     bond_count: 3
     topology: Bw
     atoms:
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{S/2v2}"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "S#n2#v2"
     bonds:
       - "-"
       - "-"

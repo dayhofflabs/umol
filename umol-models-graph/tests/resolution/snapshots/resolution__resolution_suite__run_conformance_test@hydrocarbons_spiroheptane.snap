@@ -10,13 +10,13 @@ atom_typing:
     bond_count: 8
     topology: "F{CPO"
     atoms:
-      - "{Cv4}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "C#v4"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"
@@ -33,13 +33,13 @@ counts:
     bond_count: 8
     topology: "F{CPO"
     atoms:
-      - "{Cv4}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CH2v2}"
+      - "C#v4"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h2#v2"
     bonds:
       - "-"
       - "-"

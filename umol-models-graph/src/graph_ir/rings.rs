@@ -825,8 +825,8 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::atom;
-    use crate::graph_ir::atom::AtomBuilder;
+    use crate::graph_ir::atom::{Atom, AtomBuilder};
+    use crate::spec;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::{ResolveConfig, RingEnumerationStrategy};
 
@@ -1034,7 +1034,7 @@ mod tests {
     #[fixture]
     fn ring_molecule(#[default(6)] n: usize) -> Molecule {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_atom(atom!("{CH2v2}"))).collect();
+        let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_resolved_atom(Atom::from_spec(spec!("{CH2v2}")))).collect();
         for i in 0..n {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondBuilder::new(1, None));
         }

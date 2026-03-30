@@ -10,9 +10,9 @@ atom_typing:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{P/1^1v2}"
-      - "{Hv1}"
-      - "{Hv1}"
+      - "P#n#u#v2"
+      - "H#v"
+      - "H#v"
     bonds:
       - "-"
       - "-"
@@ -23,9 +23,9 @@ counts:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{P/1^1v2}"
-      - "{Hv1}"
-      - "{Hv1}"
+      - "P#n#u#v2"
+      - "H#v"
+      - "H#v"
     bonds:
       - "-"
       - "-"

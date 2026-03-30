@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 6
     topology: EoaW
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "="
       - "-"
@@ -30,12 +30,12 @@ counts:
     bond_count: 6
     topology: EoaW
     atoms:
-      - "{CHv3}"
-      - "{CHv3}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "C#h#v3"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "="
       - "-"

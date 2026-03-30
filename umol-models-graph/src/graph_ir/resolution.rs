@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::graph_ir::aromaticity::AromaticityModel;
-use crate::graph_ir::atom::AtomBuilder;
+use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::bond::BondBuilder;
 use crate::graph_ir::config::{
     AromaticityHintPolicy, AromaticityStrategy, ResolveConfig, TopologyResolveFlags,
@@ -16,6 +16,7 @@ use crate::graph_ir::multicenter::{MulticenterBond, MulticenterContribution, Mul
 use crate::graph_ir::noncovalent::NoncovalentBond;
 use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 use crate::graph_ir::valence::ValenceMatcher;
+use crate::atom::ImplicitHydrogens;
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 /// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
@@ -81,7 +82,18 @@ fn resolve_topology_with(
     let mut builder = MoleculeBuilder::with_capacity(n, m);
     let mut node_indices: Vec<AtomIndex> = Vec::with_capacity(n);
     for atom in &molecule.atoms {
-        node_indices.push(builder.add_atom(AtomBuilder::from_table_atom(atom)));
+        let idx = builder.add_atom(AtomPattern::from_table_atom(atom));
+        if let Some(aromatic) = atom.aromatic {
+            builder
+                .set_atom_aromatic_hint(idx, aromatic)
+                .expect("newly added atom index must be valid");
+        }
+        if atom.implicit_hydrogens == Some(ImplicitHydrogens::Normal) {
+            builder
+                .set_atom_normal_implicit_hydrogens(idx)
+                .expect("newly added atom index must be valid");
+        }
+        node_indices.push(idx);
     }
     for bond in &molecule.bonds {
         let a = node_indices[bond.atoms.first() as usize];
@@ -156,7 +168,7 @@ fn resolve_valence_with(
                 .atom(atom_index)
                 .expect("atom_index must be valid")
                 .element();
-            let specs: Vec<String> = candidates.iter().map(|s| s.to_spec_str()).collect();
+            let specs: Vec<String> = candidates.iter().map(ToString::to_string).collect();
             return Err(ResolutionError::ValenceAmbiguous(format!(
                 "atom {:?} at index {} has {} valence matches: {}",
                 element,
@@ -167,9 +179,8 @@ fn resolve_valence_with(
         }
 
         builder
-            .atom_mut(atom_index)
-            .expect("atom_index from atom_indices must be valid")
-            .set_candidates(candidates);
+            .set_atom_candidates(atom_index, candidates)
+            .expect("atom_index from atom_indices must be valid");
     }
 
     Ok(())
@@ -318,7 +329,7 @@ mod tests {
     fn config_with_h_registry() -> ResolveConfig {
         let mut config = ResolveConfig::default();
         config.valence.strategy = ValenceStrategy::AtomTyping {
-            registry: registry!["{H+0v1}"],
+            registry: registry!["H #v"],
         };
         config
     }
@@ -337,7 +348,7 @@ mod tests {
     fn config_with_ch_registry() -> ResolveConfig {
         let mut config = ResolveConfig::default();
         config.valence.strategy = ValenceStrategy::AtomTyping {
-            registry: registry!["{H+0v1}", "{C+0v3}", "{C+1v3}"],
+            registry: registry!["H #v", "C #u #v3", "C #c+ #v3"],
         };
         config
     }

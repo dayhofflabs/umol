@@ -10,9 +10,9 @@ atom_typing:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{S/1v4}"
-      - "{O/2v2}"
-      - "{O/2v2}"
+      - "S#n#v4"
+      - "O#n2#v2"
+      - "O#n2#v2"
     bonds:
       - "="
       - "="
@@ -23,9 +23,9 @@ counts:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{S/1v4}"
-      - "{O/2v2}"
-      - "{O/2v2}"
+      - "S#n#v4"
+      - "O#n2#v2"
+      - "O#n2#v2"
     bonds:
       - "="
       - "="

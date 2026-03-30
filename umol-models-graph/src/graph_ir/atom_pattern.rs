@@ -5,6 +5,7 @@ use umol_data::{Element, SpinMultiplicity, SpinState};
 use crate::atom::{AromaticValence, IsotopeMass};
 use crate::graph_ir::atom::Atom;
 use crate::graph_ir::atom_type::{AtomError, AtomTypeSpec};
+use crate::table_ir::atom::Atom as TableAtom;
 
 /// Transitional atom pattern type.
 ///
@@ -12,6 +13,7 @@ use crate::graph_ir::atom_type::{AtomError, AtomTypeSpec};
 /// during parsing and future query/pattern workflows.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AtomPattern {
+    // TODO: Check if this needs to be Option<Element> or Element
     pub element: Option<Element>,
     pub isotope_mass: Option<IsotopeMass>,
     pub charge: Option<i8>,
@@ -27,6 +29,84 @@ pub struct AtomPattern {
 }
 
 impl AtomPattern {
+    pub fn from_atom(atom: &Atom) -> Self {
+        Self {
+            element: Some(atom.element()),
+            isotope_mass: Some(atom.isotope_mass()),
+            charge: Some(atom.charge()),
+            implicit_hydrogens: Some(atom.implicit_hydrogens()),
+            lone_pairs: Some(atom.lone_pairs()),
+            unpaired_electrons: Some(atom.unpaired_electrons()),
+            multiplicity: Some(atom.multiplicity()),
+            valence: Some(atom.valence()),
+            donated_pairs: Some(atom.donated_pairs()),
+            accepted_pairs: Some(atom.accepted_pairs()),
+            aromatic_valence: Some(atom.aromatic_valence()),
+            multicenter_valence: Some(atom.multicenter_valence()),
+        }
+    }
+
+    pub fn new(element: Element) -> Self {
+        Self {
+            element: Some(element),
+            ..Self::default()
+        }
+    }
+
+    pub fn from_table_atom(atom: &TableAtom) -> Self {
+        Self {
+            element: Some(atom.element),
+            // TODO: Check SMILES spec if natural isotope is default
+            isotope_mass: atom.isotope_mass.map(IsotopeMass::MassNumber),
+            charge: atom.charge,
+            implicit_hydrogens: match atom.implicit_hydrogens {
+                Some(crate::atom::ImplicitHydrogens::Hydrogens(h)) => Some(h),
+                _ => None,
+            },
+            lone_pairs: atom.lone_pairs,
+            unpaired_electrons: atom.unpaired_electrons,
+            multiplicity: atom.multiplicity,
+            valence: None,
+            donated_pairs: None,
+            accepted_pairs: None,
+            aromatic_valence: None,
+            multicenter_valence: None,
+        }
+    }
+
+    pub fn element(&self) -> Element {
+        self.element.expect("atom pattern element must be set")
+    }
+
+    pub fn isotope_mass(&self) -> Option<u32> {
+        self.isotope_mass.and_then(|m| m.mass_number())
+    }
+
+    pub fn charge(&self) -> Option<i8> {
+        self.charge
+    }
+
+    pub fn hydrogen_count(&self) -> Option<u8> {
+        self.implicit_hydrogens
+    }
+
+    pub fn implicit_hydrogens(&self) -> Option<crate::atom::ImplicitHydrogens> {
+        self.implicit_hydrogens
+            .map(crate::atom::ImplicitHydrogens::Hydrogens)
+    }
+
+    pub fn lone_pairs(&self) -> Option<u8> {
+        self.lone_pairs
+    }
+
+    pub fn unpaired_electrons(&self) -> Option<u8> {
+        self.unpaired_electrons
+    }
+
+    pub fn multiplicity(&self) -> Option<SpinMultiplicity> {
+        self.multiplicity
+    }
+
     pub fn check_invariants(&self) -> Result<(), AtomError> {
         let element = self
             .element
@@ -109,7 +189,6 @@ impl AtomPattern {
             + (implicit_hydrogens as i16)
             + (valence as i16)
             + aromatic_increment
-            + (multicenter_valence as i16)
             + (2 * accepted_pairs as i16);
 
         if total_e_inv_o != total_e_inv_e {
@@ -167,6 +246,31 @@ impl AtomPattern {
             multicenter_valence,
         )?;
         Ok(Atom::from_spec(spec))
+    }
+
+    pub fn matches_atom(&self, atom: &Atom) -> bool {
+        self.element.is_none_or(|v| v == atom.element())
+            && self
+                .isotope_mass
+                .is_none_or(|v| v == atom.isotope_mass())
+            && self.charge.is_none_or(|v| v == atom.charge())
+            && self
+                .implicit_hydrogens
+                .is_none_or(|v| v == atom.implicit_hydrogens())
+            && self.lone_pairs.is_none_or(|v| v == atom.lone_pairs())
+            && self
+                .unpaired_electrons
+                .is_none_or(|v| v == atom.unpaired_electrons())
+            && self.multiplicity.is_none_or(|v| v == atom.multiplicity())
+            && self.valence.is_none_or(|v| v == atom.valence())
+            && self.donated_pairs.is_none_or(|v| v == atom.donated_pairs())
+            && self.accepted_pairs.is_none_or(|v| v == atom.accepted_pairs())
+            && self
+                .aromatic_valence
+                .is_none_or(|v| v == atom.aromatic_valence())
+            && self
+                .multicenter_valence
+                .is_none_or(|v| v == atom.multicenter_valence())
     }
 }
 

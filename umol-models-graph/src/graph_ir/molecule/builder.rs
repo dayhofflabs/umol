@@ -6,6 +6,7 @@ use std::vec::IntoIter;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
+use smallvec::SmallVec;
 use umol_data::{SpinMultiplicity, SpinState};
 
 use super::topology::{
@@ -19,7 +20,8 @@ use super::{
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::graph_ir::aromaticity::AromaticSystem;
-use crate::graph_ir::atom::AtomBuilder;
+use crate::graph_ir::atom::Atom;
+use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::bond::BondBuilder;
 use crate::graph_ir::config::ResolveConfig;
 use crate::graph_ir::dative::DativeBond;
@@ -27,7 +29,6 @@ use crate::graph_ir::error::ResolutionError;
 use crate::graph_ir::multicenter::MulticenterBond;
 use crate::graph_ir::noncovalent::NoncovalentBond;
 use crate::graph_ir::symmetry::compute_symmetry;
-use crate::graph_ir::AtomTypeSpec;
 
 fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> {
     let unpaired_total: u32 = states.iter().map(|s| s.unpaired_electrons() as u32).sum();
@@ -49,14 +50,17 @@ fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> 
     }
     Some(compatible)
 }
-/// Builder for constructing a `Molecule`. Carries `AtomBuilder` nodes during
+/// Builder for constructing a `Molecule`. Carries `AtomPattern` nodes during
 /// resolution phases; `build()` finalizes each atom and produces a `Molecule`.
 ///
 /// Used both by the resolution pipeline (from TableIR) and for manual
 /// molecule construction.
 #[derive(Debug, Clone)]
 pub struct MoleculeBuilder {
-    graph: StableGraph<AtomBuilder, BondBuilder, Undirected, u32>,
+    graph: StableGraph<AtomPattern, BondBuilder, Undirected, u32>,
+    atom_candidates: HashMap<AtomIndex, SmallVec<[Atom; 4]>>,
+    atom_aromatic_hints: HashMap<AtomIndex, bool>,
+    atom_normal_implicit_hydrogens: HashSet<AtomIndex>,
     dative_bonds: Vec<DativeBond>,
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
@@ -72,7 +76,10 @@ impl MoleculeBuilder {
         let mut atom_map: HashMap<AtomIndex, AtomIndex> = HashMap::new();
         for atom_idx in molecule.atom_indices() {
             let atom = molecule.atom(atom_idx).expect("atom index must be valid");
-            let new_idx = builder.add_atom(atom.to_builder());
+            let new_idx = builder.add_atom(AtomPattern::from_atom(atom));
+            builder
+                .set_atom_candidates(new_idx, SmallVec::from_elem(atom.clone(), 1))
+                .expect("newly added atom index must be valid");
             atom_map.insert(atom_idx, new_idx);
         }
 
@@ -98,6 +105,9 @@ impl MoleculeBuilder {
     pub fn new() -> Self {
         Self {
             graph: StableGraph::default(),
+            atom_candidates: HashMap::new(),
+            atom_aromatic_hints: HashMap::new(),
+            atom_normal_implicit_hydrogens: HashSet::new(),
             dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
@@ -110,6 +120,9 @@ impl MoleculeBuilder {
     pub fn with_capacity(atom_capacity: usize, bond_capacity: usize) -> Self {
         Self {
             graph: StableGraph::with_capacity(atom_capacity, bond_capacity),
+            atom_candidates: HashMap::with_capacity(atom_capacity),
+            atom_aromatic_hints: HashMap::with_capacity(atom_capacity),
+            atom_normal_implicit_hydrogens: HashSet::with_capacity(atom_capacity),
             dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
@@ -297,40 +310,117 @@ impl MoleculeBuilder {
         self.graph.node_indices()
     }
 
-    pub fn atoms(&self) -> impl Iterator<Item = &AtomBuilder> + '_ {
+    pub fn atoms(&self) -> impl Iterator<Item = &AtomPattern> + '_ {
         self.graph.node_weights()
     }
 
-    pub fn atom(&self, index: AtomIndex) -> Option<&AtomBuilder> {
+    pub fn atom(&self, index: AtomIndex) -> Option<&AtomPattern> {
         self.graph.node_weight(index)
     }
 
-    pub fn atom_mut(&mut self, index: AtomIndex) -> Option<&mut AtomBuilder> {
+    pub fn atom_mut(&mut self, index: AtomIndex) -> Option<&mut AtomPattern> {
         self.graph.node_weight_mut(index)
     }
 
-    pub fn add_atom(&mut self, atom: AtomBuilder) -> AtomIndex {
-        self.graph.add_node(atom)
+    pub fn add_atom(&mut self, atom: impl Into<AtomPattern>) -> AtomIndex {
+        self.graph.add_node(atom.into())
     }
 
-    pub fn remove_atom(&mut self, index: AtomIndex) -> Option<AtomBuilder> {
+    /// Add a fully-resolved atom as both pattern and sole candidate.
+    pub fn add_resolved_atom(&mut self, atom: Atom) -> AtomIndex {
+        let idx = self.add_atom(AtomPattern::from_atom(&atom));
+        self.atom_candidates
+            .insert(idx, SmallVec::from_elem(atom, 1));
+        idx
+    }
+
+    pub fn remove_atom(&mut self, index: AtomIndex) -> Option<AtomPattern> {
+        self.atom_candidates.remove(&index);
+        self.atom_aromatic_hints.remove(&index);
+        self.atom_normal_implicit_hydrogens.remove(&index);
         self.graph.remove_node(index)
     }
 
-    pub fn replace_atom(&mut self, index: AtomIndex, atom: AtomBuilder) -> Option<AtomBuilder> {
+    pub fn replace_atom(
+        &mut self,
+        index: AtomIndex,
+        atom: impl Into<AtomPattern>,
+    ) -> Option<AtomPattern> {
         self.graph
             .node_weight_mut(index)
-            .map(|old| std::mem::replace(old, atom))
+            .map(|old| std::mem::replace(old, atom.into()))
+    }
+
+    pub fn set_atom_candidates(
+        &mut self,
+        index: AtomIndex,
+        candidates: SmallVec<[Atom; 4]>,
+    ) -> Option<()> {
+        if !self.graph.contains_node(index) {
+            return None;
+        }
+        self.atom_candidates.insert(index, candidates);
+        Some(())
+    }
+
+    pub fn atom_candidates(&self, index: AtomIndex) -> &[Atom] {
+        self.atom_candidates
+            .get(&index)
+            .map_or(&[], |v| v.as_slice())
+    }
+
+    pub fn atom_candidates_mut(&mut self, index: AtomIndex) -> Option<&mut SmallVec<[Atom; 4]>> {
+        self.atom_candidates.get_mut(&index)
+    }
+
+    pub fn add_atom_candidate(&mut self, index: AtomIndex, candidate: Atom) -> Option<()> {
+        if !self.graph.contains_node(index) {
+            return None;
+        }
+        let entry = self.atom_candidates.entry(index).or_default();
+        if !entry.contains(&candidate) {
+            entry.push(candidate);
+        }
+        Some(())
+    }
+
+    pub fn set_atom_aromatic_hint(&mut self, index: AtomIndex, hint: bool) -> Option<()> {
+        if !self.graph.contains_node(index) {
+            return None;
+        }
+        self.atom_aromatic_hints.insert(index, hint);
+        Some(())
+    }
+
+    pub fn atom_explicit_aromatic_hint(&self, index: AtomIndex) -> Option<bool> {
+        self.atom_aromatic_hints.get(&index).copied()
+    }
+
+    pub fn set_atom_normal_implicit_hydrogens(&mut self, index: AtomIndex) -> Option<()> {
+        if !self.graph.contains_node(index) {
+            return None;
+        }
+        self.atom_normal_implicit_hydrogens.insert(index);
+        Some(())
+    }
+
+    pub fn clear_atom_normal_implicit_hydrogens(&mut self, index: AtomIndex) {
+        self.atom_normal_implicit_hydrogens.remove(&index);
+    }
+
+    pub fn atom_has_normal_implicit_hydrogens(&self, index: AtomIndex) -> bool {
+        self.atom_normal_implicit_hydrogens.contains(&index)
     }
 
     // Atom properties
     fn atom_candidate_property<T>(
         &self,
         index: AtomIndex,
-        getter: impl Fn(&AtomTypeSpec) -> T,
+        getter: impl Fn(&Atom) -> T,
     ) -> Option<T> {
-        self.atom(index)
-            .map(|a| a.candidates().iter().next().map(getter))
+        self.atom_candidates
+            .get(&index)
+            .map(|c| c.iter().next().map(getter))
             .flatten()
     }
 
@@ -340,14 +430,13 @@ impl MoleculeBuilder {
     }
 
     pub fn atom_aromatic_valence(&self, index: AtomIndex) -> u8 {
-        self.atom(index)
-            .and_then(|a| {
-                a.candidates()
-                    .iter()
-                    .find_map(|c| match c.aromatic_valence() {
-                        AromaticValence::Valence(n) => Some(n),
-                        AromaticValence::None => None,
-                    })
+        self.atom_candidates
+            .get(&index)
+            .and_then(|candidates| {
+                candidates.iter().find_map(|c| match c.aromatic_valence() {
+                    AromaticValence::Valence(n) => Some(n),
+                    AromaticValence::None => None,
+                })
             })
             .unwrap_or(0)
     }
@@ -356,10 +445,8 @@ impl MoleculeBuilder {
     /// Returns true if this atom should be treated as aromatic based on
     /// its own aromatic_hint or any incident bond's aromatic_hint.
     pub fn atom_aromatic_hint(&self, index: AtomIndex) -> bool {
-        if let Some(atom) = self.atom(index) {
-            if atom.aromatic_hint() == Some(true) {
-                return true;
-            }
+        if self.atom_explicit_aromatic_hint(index) == Some(true) {
+            return true;
         }
         self.atom_bonds(index)
             .any(|b| b.aromatic_hint() == Some(true))
@@ -372,12 +459,9 @@ impl MoleculeBuilder {
     }
 
     pub fn atom_has_aromatic_candidate(&self, index: AtomIndex) -> bool {
-        self.atom(index)
-            .map(|a| {
-                a.candidates()
-                    .iter()
-                    .any(|c| c.aromatic_valence().is_aromatic())
-            })
+        self.atom_candidates
+            .get(&index)
+            .map(|candidates| candidates.iter().any(|c| c.aromatic_valence().is_aromatic()))
             .unwrap_or(false)
     }
 
@@ -668,7 +752,7 @@ impl MoleculeBuilder {
         self.graph.neighbors(index)
     }
 
-    pub fn atom_neighbors(&self, index: AtomIndex) -> impl Iterator<Item = &AtomBuilder> + '_ {
+    pub fn atom_neighbors(&self, index: AtomIndex) -> impl Iterator<Item = &AtomPattern> + '_ {
         self.graph
             .neighbors(index)
             .map(|n| self.graph.node_weight(n).unwrap())
@@ -706,7 +790,7 @@ impl MoleculeBuilder {
         self.graph.edge_endpoints(index)
     }
 
-    pub fn bond_atoms(&self, index: BondIndex) -> Option<(&AtomBuilder, &AtomBuilder)> {
+    pub fn bond_atoms(&self, index: BondIndex) -> Option<(&AtomPattern, &AtomPattern)> {
         self.graph.edge_endpoints(index).map(|(a, b)| {
             (
                 self.graph.node_weight(a).unwrap(),
@@ -846,9 +930,9 @@ impl MoleculeBuilder {
             .filter(move |b| b.contains_atom(index))
     }
 
-    /// Build the final `Molecule` by finalizing each `AtomBuilder` into an `Atom`.
+    /// Build the final `Molecule` by finalizing each `AtomPattern` into an `Atom`.
     ///
-    /// Requires all atom builders to have exactly one valence candidate
+    /// Requires all atoms to have exactly one valence candidate
     /// remaining (i.e., resolution phases must have been run).
     pub fn build(self, _config: &ResolveConfig) -> Result<Molecule, ResolutionError> {
         let mut graph =
@@ -858,8 +942,47 @@ impl MoleculeBuilder {
         index_map.resize(self.graph.node_bound(), None);
 
         for old_idx in self.graph.node_indices() {
-            let builder = self.graph.node_weight(old_idx).unwrap();
-            let atom = builder.build()?;
+            let pattern = self.graph.node_weight(old_idx).unwrap();
+            let candidates = self.atom_candidates.get(&old_idx).ok_or_else(|| {
+                ResolutionError::ValenceNoMatch(format!(
+                    "no valence match for {:?}",
+                    pattern.element()
+                ))
+            })?;
+            let candidate = match candidates.as_slice() {
+                [] => {
+                    return Err(ResolutionError::ValenceNoMatch(format!(
+                        "no valence match for {:?}",
+                        pattern.element()
+                    )))
+                }
+                [single] => single,
+                many => {
+                    let specs: Vec<String> = many.iter().map(ToString::to_string).collect();
+                    return Err(ResolutionError::ValenceAmbiguous(format!(
+                        "{} valence matches for {:?}: {}",
+                        many.len(),
+                        pattern.element(),
+                        specs.join(", ")
+                    )));
+                }
+            };
+
+            if !pattern.matches_atom(candidate) {
+                return Err(ResolutionError::ValenceViolation(
+                    pattern.element(),
+                    format!("atom candidate mismatch for {}", candidate),
+                ));
+            }
+
+            if let Err(error) = candidate.to_spec().check_invariants() {
+                return Err(ResolutionError::ValenceViolation(
+                    pattern.element(),
+                    format!("atom invariant verification failed for {}: {}", candidate, error),
+                ));
+            }
+
+            let atom = candidate.clone();
             let new_idx = graph.add_node(atom);
             index_map[old_idx.index()] = Some(new_idx);
         }
@@ -1089,9 +1212,8 @@ mod tests {
         let carbon = spec!("{Cv4}");
         for atom in naphthalene_builder.atom_indices().collect::<Vec<_>>() {
             naphthalene_builder
-                .atom_mut(atom)
-                .unwrap()
-                .set_candidates(SmallVec::from_elem(carbon, 1));
+                .set_atom_candidates(atom, SmallVec::from_elem(Atom::from_spec(carbon), 1))
+                .expect("atom should exist");
         }
         naphthalene_builder
             .build(&ResolveConfig::default())
@@ -1124,9 +1246,14 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atom = builder.add_atom(AtomBuilder::new(Element::C));
         builder
-            .atom_mut(atom)
-            .expect("atom should exist")
-            .set_candidates(SmallVec::from_vec(vec![spec!("{Cv4}"), spec!("{Cv2a1H}")]));
+            .set_atom_candidates(
+                atom,
+                SmallVec::from_vec(vec![
+                    Atom::from_spec(spec!("{Cv4}")),
+                    Atom::from_spec(spec!("{Cv2a1H}")),
+                ]),
+            )
+            .expect("atom should exist");
         assert_eq!(builder.atom_aromatic_valence(atom), 1);
     }
 
@@ -1135,9 +1262,8 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atom = builder.add_atom(AtomBuilder::new(Element::C));
         builder
-            .atom_mut(atom)
-            .expect("atom should exist")
-            .set_candidates(SmallVec::from_elem(spec!("{Cv4}"), 1));
+            .set_atom_candidates(atom, SmallVec::from_elem(Atom::from_spec(spec!("{Cv4}")), 1))
+            .expect("atom should exist");
         assert_eq!(builder.atom_aromatic_valence(atom), 0);
         assert_eq!(builder.atom_aromatic_valence(AtomIndex::new(999)), 0);
     }

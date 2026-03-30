@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 4
     topology: Cr
     atoms:
-      - "{CHv3}"
-      - "{N/1v3}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "N#n#v3"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "="
       - "-"
@@ -26,10 +26,10 @@ counts:
     bond_count: 4
     topology: Cr
     atoms:
-      - "{CHv3}"
-      - "{N/1v3}"
-      - "{CHv3}"
-      - "{CHv3}"
+      - "C#h#v3"
+      - "N#n#v3"
+      - "C#h#v3"
+      - "C#h#v3"
     bonds:
       - "="
       - "-"

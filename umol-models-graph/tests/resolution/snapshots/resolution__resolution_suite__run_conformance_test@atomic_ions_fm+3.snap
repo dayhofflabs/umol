@@ -10,7 +10,7 @@ atom_typing:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Fm+3/4^3}"
+      - "Fm#c+3#n4#u3"
     bonds: []
 counts:
   success: true
@@ -19,5 +19,5 @@ counts:
     bond_count: 0
     topology: "@"
     atoms:
-      - "{Fm+3/5^1}"
+      - "Fm#c+3#n5#u"
     bonds: []

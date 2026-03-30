@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 3
     topology: Cw
     atoms:
-      - "{Si-/1v3}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "Si#c-#n#v3"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"
@@ -25,10 +25,10 @@ counts:
     bond_count: 3
     topology: Cw
     atoms:
-      - "{Si-/1v3}"
-      - "{F/3v1}"
-      - "{F/3v1}"
-      - "{F/3v1}"
+      - "Si#c-#n#v3"
+      - "F#n3#v"
+      - "F#n3#v"
+      - "F#n3#v"
     bonds:
       - "-"
       - "-"

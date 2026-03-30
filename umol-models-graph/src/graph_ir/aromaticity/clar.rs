@@ -123,10 +123,11 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::atom;
+    use crate::graph_ir::atom::Atom;
     use crate::graph_ir::bond::BondBuilder;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
+    use crate::spec;
 
     const C1: &str = "{Cv2a1H}";
     const C0: &str = "{Cv4}";
@@ -135,7 +136,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_atom(atom!(s)))
+            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
             .collect();
         let n = atoms.len();
         for i in 0..n {
@@ -148,7 +149,7 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = atom_specs
             .iter()
-            .map(|s| builder.add_atom(atom!(s)))
+            .map(|s| builder.add_resolved_atom(Atom::from_spec(spec!(s))))
             .collect();
         for &(a, b) in edges {
             builder.add_bond_unchecked(atoms[a], atoms[b], BondBuilder::new(1, None));
@@ -186,7 +187,7 @@ mod tests {
     fn coronene() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..24)
-            .map(|_| builder.add_atom(atom!(C1)))
+            .map(|_| builder.add_resolved_atom(Atom::from_spec(spec!(C1))))
             .collect();
         for i in 0..6 {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondBuilder::new(1, None));

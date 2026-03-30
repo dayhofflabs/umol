@@ -1,1211 +1,1213 @@
 [H]
 0 = [
-    "{Hv1}", # HX, H2
-    "{H^1}", # H atom, s1
+    "H #v", # HX, H2
+    "H #u", # H atom, s1
 ]
 1 = [
-    "{H+}", # H+
+    "H #c+", # H+
 ]
 -1 = [
-    "{H-/1}", # H-
+    "H #c- #n", # H-
 ]
 
 [He]
 0 = [
-    "{He}", # He atom, s0
+    "He", # He atom, s0
 ]
 
 [Li]
 0 = [
-    "{Liv1}", # LiX, Li2
-    "{Li^1}", # Li atom, s1
+    "Li #v", # LiX, Li2
+    "Li #u", # Li atom, s1
 ]
 1 = [
-    "{Li+}", # Li+
+    "Li #c+", # Li+
 ]
 
 [Be]
 0 = [
-    "{Be/1}", # Be atom, s2
+    "Be #n", # Be atom, s2
 ]
 2 = [
-    "{Be+2}", # Be2+
+    "Be #c+2", # Be2+
 ]
 
 [B]
 0 = [
-    "{Bv3}",    # BX3, BH3
-    "{Bv2H}",   # X2BH
-    "{Bv1H2}",  # XBH2
-    "{BH3}",    # BH3
-    "{B^1v2}",  # BX2, BH2, BO
-    "{B^1v1H}", # XBH
-    "{B^1H2}",  # BH2
-    "{B/1v1}",  # BX, BH, BF
-    "{B/1^1}",  # B atom, s2p1
+    "B #v3",       # BX3, BH3
+    "B #v2 #h",    # X2BH
+    "B #v1 #h2",   # XBH2
+    "B #h3",       # BH3
+    "B #u1 #v2",   # BX2, BH2, BO
+    "B #u1 #v #h", # XBH
+    "B #u1 #h2",   # BH2
+    "B #n1 #v",    # BX, BH, BF
+    "B #n1 #u",    # B atom, s2p1
 ]
 -1 = [
-    "{B-v4}",    # [BX4]-, BO2-
-    "{B-v1H3}",  # [BX3H]-
-    "{B-v2H2}",  # [BX2H2]-
-    "{B-v3H}",   # [BXH3]-
-    "{B-H4}",    # [BH4]-
-    "{B-/1v2}",  # [BX2]-, BO-, [B-][N+]
-    "{B-/1v1H}", # [BXH]-
-    "{B-/1H2}",  # [BH2]-
+    "B #c- #v4",      # [BX4]-, BO2-
+    "B #c- #v3 #h",   # [BX3H]-
+    "B #c- #v2 #h2",  # [BX2H2]-
+    "B #c- #v #h3",   # [BXH3]-
+    "B #c- #h4",      # [BH4]-
+    "B #c- #n #v2",   # [BX2]-, BO-, [B-][N+]
+    "B #c- #n #v #h", # [BXH]-
+    "B #c- #n #h2",   # [BH2]-
 ]
 
 [C]
 0 = [
-    "{Cv4}",     # CX4, CH4
-    "{Cv3H}",    # X3CH
-    "{Cv2H2}",   # X2CH2
-    "{Cv1H3}",   # XCH3
-    "{CH4}",     # CH4
-    "{Cv3a1}",   # C6H5X, C6H6
-    "{Cv2a1H}",  # C6H6
-    "{C^1v3}",   # CX3, CH3
-    "{C^1v2H}",  # XCH2
-    "{C^1v1H2}", # XCH2
-    "{C^1H3}",   # CH3
-    "{C^2v2}",   # CX2, CH2 (triplet)
-    "{C^2v1H}",  # XCH (triplet)
-    "{C^2H2}",   # CH2 (triplet)
-    "{C/1v2}",   # CX2, CH2 (singlet)
-    "{C/1v1H}",  # XCH (singlet)
-    "{C/1H2}",   # CH2 (singlet)
-    "{C/1^1v1}", # CX, CH (doublet)
-    "{C/1^2H}",  # CH (triplet)
-    "{C/1^2}",   # C atom, s2p2
+    "C #v4",       # CX4, CH4
+    "C #v3 #h",    # X3CH
+    "C #v2 #h2",   # X2CH2
+    "C #v #h3",    # XCH3
+    "C #h4",       # CH4
+    "C #v3 #a",    # C6H5X, C6H6
+    "C #v2 #a #h", # C6H6
+    "C #u #v3",    # CX3, CH3
+    "C #u #v2 #h", # XCH2
+    "C #u #v #h2", # XCH2
+    "C #u #h3",    # CH3
+    "C #u2 #v2",   # CX2, CH2 (triplet)
+    "C #u2 #v #h", # XCH (triplet)
+    "C #u2 #h2",   # CH2 (triplet)
+    "C #n #v2",    # CX2, CH2 (singlet)
+    "C #n #v #h",  # XCH (singlet)
+    "C #n #h2",    # CH2 (singlet)
+    "C #n #u #v",  # CX, CH (doublet)
+    "C #n #u #h",  # CH (doublet)
+    "C #u3 #v",    # CX, CH (quartet)
+    "C #u3 #h",    # CH (quartet)
+    "C #n #u2",    # C atom, s2p2
 ]
 1 = [
-    "{C+v3}",    # [CX3]+, [CH3]+, [C-]#[O+]
-    "{C+v2H}",   # [XCH2]+
-    "{C+v1H2}",  # [XCH2]+
-    "{C+v3a0}",  # C7H6X+
-    "{C+v2a0H}", # C7H7+
-    "{C+H3}",    # [CH3]+
+    "C #c+ #v3",        # [CX3]+, [CH3]+, [C-]#[O+]
+    "C #c+ #v2 #h",     # [XCH2]+
+    "C #c+ #v #h2",     # [XCH2]+
+    "C #c+ #v3 #a0",    # C7H6X+
+    "C #c+ #v2 #a0 #h", # C7H7+
+    "C #c+ #h3",        # [CH3]+
 ]
 -1 = [
-    "{C-/1v3}",   # [CX3]-, CN-
-    "{C-/1v2H}",  # [XCH2]-
-    "{C-/1v1H2}", # [XCH2]-
-    "{C-/1H3}",   # [CH3]-
-    "{C-v3a2}",   # C5H4X-
-    "{C-v2a2H}",  # C5H5-
+    "C #c- #n #v3",     # [CX3]-, CN-
+    "C #c- #n #v2 #h",  # [XCH2]-
+    "C #c- #n #v #h2",  # [XCH2]-
+    "C #c- #n #h3",     # [CH3]-
+    "C #c- #v3 #a2",    # C5H4X-
+    "C #c- #v2 #a2 #h", # C5H5-
 ]
 
 [N]
 0 = [
-    "{N/1v3}",   # N2, NH3, NX3, HONO, N2O3, HN=NH, H2N-NH2
-    "{N/1v2H}",  # X2NH
-    "{N/1v1H2}", # XNH2
-    "{N/1H3}",   # NH3
-    "{N/1v2a1}", # C5H5N
-    "{Nv3a2}",   # C4H4NX, C4H4NH
-    "{Nv2a2H}",  # C4H4NH
-    "{N/1^1v2}", # NX2, NH2, NO
-    "{N^1v1H}",  # XNH
-    "{N^1H2}",   # NH2
-    "{N/2v1}",   # NX, NH
-    "{N/2H}",    # NH
-    "{N/1^3}",   # N atom, s2p3
+    "N #n #v3",      # N2, NH3, NX3, HONO, N2O3, HN=NH, H2N-NH2
+    "N #n #v2 #h",   # X2NH
+    "N #n #v #h2",   # XNH2
+    "N #n #h3",      # NH3
+    "N #n #v2 #a",   # C5H5N
+    "N #v3 #a2",     # C4H4NX, C4H4NH
+    "N #v2 #a2 #h",  # C4H4NH
+    "N #n #u #v2",   # NX2, NH2, NO
+    "N #n #u #v #h", # XNH
+    "N #n #u #h2",   # NH2
+    "N #n2 #v",      # NX, NH
+    "N #n2 #h",      # NH
+    "N #n #u3",      # N atom, s2p3
 ]
 1 = [
-    "{N+v4}",    # [NX4]+, [NH4]+, [NO2]+, HONO2
-    "{N+v3H}",   # [XNH3]+
-    "{N+v2H2}",  # [X2NH2]+
-    "{N+v1H3}",  # [XNH3]+
-    "{N+H4}",    # [NH4]+
-    "{N+v3a1}",  # C5H5N(+)X, C5H5N(+)H
-    "{N+v2a1H}", # C5H5N(+)H
-    "{N+^1v3}",  # O=N(+)^-O-
-    "{N+/1v2}",  # [NX2]+, [NH2]+, NO+
-    "{N+/1v1H}", # [XNH]+
-    "{N+/1H2}",  # [NH2]+
+    "N #c+ #v4",       # [NX4]+, [NH4]+, [NO2]+, HONO2
+    "N #c+ #v3 #h",    # [XNH3]+
+    "N #c+ #v2 #h2",   # [X2NH2]+
+    "N #c+ #v #h3",    # [XNH3]+
+    "N #c+ #h4",       # [NH4]+
+    "N #c+ #v3 #a",    # C5H5N(+)X, C5H5N(+)H
+    "N #c+ #v2 #a #h", # C5H5N(+)H
+    "N #c+ #u #v3",    # O=N(+)^-O-
+    "N #c+ #n #v2",    # [NX2]+, [NH2]+, NO+
+    "N #c+ #n #v #h",  # [XNH]+
+    "N #c+ #n #h2",    # [NH2]+
 ]
 -1 = [
-    "{N-/2v2}",  # [NX2]-, [NH2]-
-    "{N-/2v1H}", # [XNH]-
-    "{N-/2H2}",  # [NH2]-
+    "N #c- #n2 #v2",   # [NX2]-, [NH2]-
+    "N #c- #n2 #v #h", # [XNH]-
+    "N #c- #n2 #h2",   # [NH2]-
 ]
 -3 = [
-    "{N-3/4}", # N3-
+    "N #c-3 #n4", # N3-
 ]
 
 [O]
 0 = [
-    "{O/2v2}",   # O2, HO2, OX2
-    "{O/2v1H}",  # XOH
-    "{O/2H2}",   # H2O
-    "{O/1v2a2}", # C4H4O
-    "{O/2^1v1}", # OH, OX
-    "{O/2^1H}",  # OH
-    "{O/2^2}",   # O atom, s2p4
+    "O #n2 #v2",    # O2, HO2, OX2
+    "O #n2 #v #h",  # XOH
+    "O #n2 #h2",    # H2O
+    "O #n #v2 #a2", # C4H4O
+    "O #n2 #u #v",  # OH, OX
+    "O #n2 #u #h",  # OH
+    "O #n2 #u2",    # O atom, s2p4
 ]
 1 = [
-    "{O+/1v3}",   # [OX3]+, [OH3]+
-    "{O+/1v2H}",  # [XOH2]+
-    "{O+/1v1H2}", # [XOH2]+
-    "{O+/1H3}",   # [OH3]+
-    "{O+/1v2a1}", # C5H5O+
-    "{O+/2v1}",   # OX+, OH+
-    "{O+/H3}",    # OH+
+    "O #c+ #n #v3",    # [OX3]+, [OH3]+
+    "O #c+ #n #v2 #h", # [XOH2]+
+    "O #c+ #n #v #h2", # [XOH2]+
+    "O #c+ #n #h3",    # [OH3]+
+    "O #c+ #n #v2 #a", # C5H5O+
+    "O #c+ #n2 #v",    # OX+, OH+
+    "O #c+ #n #h3",    # OH+
 ]
 -1 = [
-    "{O-/3v1}", # OX-, OH-
-    "{O-/3H}",  # OH-
+    "O #c- #n3 #v", # OX-, OH-
+    "O #c- #n3 #h", # OH-
 ]
 -2 = [
-    "{O-2/4}", # O2-
+    "O #c-2 #n4", # O2-
 ]
 
 [F]
 0 = [
-    "{F/3v1}", # F2, HF, FX
-    "{F/3H1}", # HF
-    "{F/3^1}", # F atom, s2p5
+    "F #n3 #v", # F2, HF, FX
+    "F #n3 #h", # HF
+    "F #n3 #u", # F atom, s2p5
 ]
 -1 = [
-    "{F-/4}", # F-
+    "F #c- #n4", # F-
 ]
 
 [Ne]
 0 = [
-    "{Ne}", # Ne atom, s0
+    "Ne", # Ne atom, s0
 ]
 
 [Na]
 0 = [
-    "{Na^1}", # Na atom, s1
+    "Na #u", # Na atom, s1
 ]
 1 = [
-    "{Na+}", # Na+
+    "Na #c+", # Na+
 ]
 
 [Mg]
 0 = [
-    "{Mgv2}",
-    "{Mg^1v1}",
-    "{Mg/1}",   # Mg atom, s2
+    "Mg #v2",
+    "Mg #u #v",
+    "Mg #n",    # Mg atom, s2
 ]
 2 = [
-    "{Mg+2}", # Mg2+
+    "Mg #c+2", # Mg2+
 ]
 
 [Al]
 0 = [
-    "{Alv3}",
-    "{Al/1^1}", # Al atom, s2p1
+    "Al #v3",
+    "Al #n #u", # Al atom, s2p1
 ]
 3 = [
-    "{Al+3}", # Al3+
+    "Al #c+3", # Al3+
 ]
 
 [Si]
 0 = [
-    "{Siv4}",   # SiH4, SiX4
-    "{Siv3H}",  # X3SiH
-    "{Siv2H2}", # X2SiH2
-    "{Siv1H3}", # XSiH3
-    "{SiH4}",   # SiH4
-    "{Si^1v3}", # SiX3
-    "{Si/1v2}", # SiX2 (singlet)
-    "{Si^2v2}", # SiX2 (triplet)
-    "{Si/1^2}", # Si atom, s2p2
+    "Si #v4",     # SiH4, SiX4
+    "Si #v3 #h",  # X3SiH
+    "Si #v2 #h2", # X2SiH2
+    "Si #v #h3",  # XSiH3
+    "Si #h4",     # SiH4
+    "Si #u #v3",  # SiX3
+    "Si #n #v2",  # SiX2 (singlet)
+    "Si #u2 #v2", # SiX2 (triplet)
+    "Si #n #u2",  # Si atom, s2p2
 ]
 1 = [
-    "{Si+v3}", # [SiX3]+
+    "Si #c+ #v3", # [SiX3]+
 ]
 -1 = [
-    "{Si-/1v3}", # [SiX3]-
+    "Si #c- #n #v3", # [SiX3]-
 ]
 
 [P]
 0 = [
-    "{P/1v3}",    # PH3, P2, XP3
-    "{P/1v2H}",   # X2PH
-    "{P/1v1H2}",  # XPH2
-    "{P/1H3}",    # PH3
-    "{P/1^1v2}",  # PX2, PH2
-    "{P/1^1v1H}", # XPH
-    "{P/1^1H2}",  # XPH2
-    "{Pv5}",
-    "{P/1^3}",    # P atom, s2p3
+    "P #n #v3",      # PH3, P2, XP3
+    "P #n #v2 #h",   # X2PH
+    "P #n #v #h2",   # XPH2
+    "P #n #h3",      # PH3
+    "P #n #u #v2",   # PX2, PH2
+    "P #n #u #v #h", # XPH
+    "P #n #u #h2",   # XPH2
+    "P #v5",
+    "P #n #u3",      # P atom, s2p3
 ]
 1 = [
-    "{P+v4}",    # [PX4]+
-    "{P+v3H}",   # [XPH3]+
-    "{P+v2H2}",  # [X2PH2]+
-    "{P+v1H3}",  # [XPH3]+
-    "{P+H4}",    # [PH4]+
-    "{P+/1v2}",  # [PX2]+, [PH2]+
-    "{P+/1v1H}", # [XPH]+
-    "{P+/1H2}",  # [PH2]+
+    "P #c+ #v4",      # [PX4]+
+    "P #c+ #v3 #h",   # [XPH3]+
+    "P #c+ #v2 #h2",  # [X2PH2]+
+    "P #c+ #v #h3",   # [XPH3]+
+    "P #c+ #h4",      # [PH4]+
+    "P #c+ #n #v2",   # [PX2]+, [PH2]+
+    "P #c+ #n #v #h", # [XPH]+
+    "P #c+ #n #h2",   # [PH2]+
 ]
 -1 = [
-    "{P-/2v2}",  # [PX2]-
-    "{P-/2v1H}", # [XPH]-
-    "{P-/2H2}",  # [PH2]-
+    "P #c- #n2 #v2",   # [PX2]-
+    "P #c- #n2 #v #h", # [XPH]-
+    "P #c- #n2 #h2",   # [PH2]-
 ]
 -3 = [
-    "{P-3/4}", # P3-
+    "P #c-3 #n4", # P3-
 ]
 
 [S]
 0 = [
-    "{S/2v2}",   # H2S, S8, SX2, H2S2
-    "{S/2v1H}",  # XHS, H2S2
-    "{S/2H2}",   # H2S
-    "{S/1v2a2}", # C4H4S
-    "{S/2^1v1}", # XS, HS
-    "{S/2^1H}",  # HS
-    "{S/1v4}",
-    "{Sv6}",
-    "{S/2^2}",   # S atom, s2p4
+    "S #n2 #v2",     # H2S, S8, SX2, H2S2
+    "S #n2 #v #h",   # XHS, H2S2
+    "S #n2 #h2",     # H2S
+    "S #n1 #v2 #a2", # C4H4S
+    "S #n2 #u #v1",  # XS, HS
+    "S #n2 #u #h",   # HS
+    "S #n1 #v4",
+    "S #v6",
+    "S #n2 #u2",     # S atom, s2p4
 ]
 1 = [
-    "{S+/1v3}",   # XS3+, H3S+
-    "{S+/1v2H}",  # XHS2+
-    "{S+/1v1H2}", # XHS2+
-    "{S+/1H3}",   # H3S+
-    "{S+/1v2a1}", # C5H5S+
+    "S #c+ #n #v3",     # XS3+, H3S+
+    "S #c+ #n #v2 #h",  # XHS2+
+    "S #c+ #n #v1 #h2", # XHS2+
+    "S #c+ #n #h3",     # H3S+
+    "S #c+ #n #v2 #a",  # C5H5S+
 ]
 -1 = [
-    "{S-/3v1}", # XS-, HS-
-    "{S-/3H}",  # HS-
+    "S #c- #n3 #v", # XS-, HS-
+    "S #c- #n3 #h", # HS-
 ]
 -2 = [
-    "{S-2/4}", # S2-
+    "S #c-2 #n4", # S2-
 ]
 
 [Cl]
 0 = [
-    "{Cl/3v1}",   # HCl, ClX, HOCl
-    "{Cl/3H1}",   # HCl
-    "{Cl/2v3}",   # ClF3, HOClO
-    "{Cl/1^1v4}", # ClO2
-    "{Cl/1v5}",   # ClF5, HOClO2
-    "{Cl^1v6}",   # ClO3
-    "{Clv7}",     # HOClO3
-    "{Cl/3^1}",   # Cl atom, s2p5
+    "Cl #n3 #v",     # HCl, ClX, HOCl
+    "Cl #n3 #h",     # HCl
+    "Cl #n2 #v3",    # ClF3, HOClO
+    "Cl #n1 #u #v4", # ClO2
+    "Cl #n1 #v5",    # ClF5, HOClO2
+    "Cl #u1 #v6",    # ClO3
+    "Cl #v7",        # HOClO3
+    "Cl #n3 #u1",    # Cl atom, s2p5
 ]
 1 = [
-    "{Cl+/3}",   # Cl+
-    "{Cl+/2v2}", # Cl-Cl(+)-Cl (DOI: 10.1021/ic950305s)
+    "Cl #c+ #n3",     # Cl+
+    "Cl #c+ #n2 #v2", # Cl-Cl(+)-Cl (DOI: 10.1021/ic950305s)
 ]
 -1 = [
-    "{Cl-/4}", # Cl-
+    "Cl #c- #n4", # Cl-
 ]
 
 [Ar]
 0 = [
-    "{Ar}", # Ar atom, s0
+    "Ar", # Ar atom, s0
 ]
 
 [K]
 0 = [
-    "{K^1}", # K atom, s1
+    "K #u", # K atom, s1
 ]
 1 = [
-    "{K+}", # K+
+    "K #c+", # K+
 ]
 
 [Ca]
 0 = [
-    "{Ca/1}", # Ca atom, s2
+    "Ca #n", # Ca atom, s2
 ]
 2 = [
-    "{Ca+2}", # Ca2+
+    "Ca #c+2", # Ca2+
 ]
 
 [Sc]
 0 = [
-    "{Sc/1^1}", # Sc atom, s2d1
+    "Sc #n #u", # Sc atom, s2d1
 ]
 3 = [
-    "{Sc+3}", # Sc3+, d0
+    "Sc #c+3", # Sc3+, d0
 ]
 
 [Ti]
 0 = [
-    "{Ti/1^2}", # Ti atom, s2d2
+    "Ti #n #u2", # Ti atom, s2d2
 ]
 3 = [
-    "{Ti+3^1}", # Ti3+, d1
+    "Ti #c+3 #u", # Ti3+, d1
 ]
 4 = [
-    "{Ti+4}", # Ti4+, d0
+    "Ti #c+4", # Ti4+, d0
 ]
 
 [V]
 0 = [
-    "{V/1^3}", # V atom, s2d3
+    "V #n #u3", # V atom, s2d3
 ]
 2 = [
-    "{V+2^3}", # V2+, d3
+    "V #c+2 #u3", #  #v2+, d3
 ]
 3 = [
-    "{V+3^2}", # V3+, d2
+    "V #c+3 #u2", #  #v3+, d2
 ]
 
 [Cr]
 0 = [
-    "{Cr^6}", # Cr atom, s1d5
+    "Cr #u6", # Cr atom, s1d5
 ]
 2 = [
-    "{Cr+2^4}",   # Cr2+, d4 high-spin
-    "{Cr+2/1^2}", # Cr2+, d4 low-spin
+    "Cr #c+2 #u4",    # Cr2+, d4 high-spin
+    "Cr #c+2 #n #u2", # Cr2+, d4 low-spin
 ]
 3 = [
-    "{Cr+3^3}", # Cr3+, d3
+    "Cr #c+3 #u3", # Cr3+, d3
 ]
 
 [Mn]
 0 = [
-    "{Mn/1^5}", # Mn atom, s2d5
+    "Mn #n #u5", # Mn atom, s2d5
 ]
 2 = [
-    "{Mn+2^5}",   # Mn2+, d5 high-spin
-    "{Mn+2/2^1}", # Mn2+, d5 low-spin
+    "Mn #c+2 #u5",    # Mn2+, d5 high-spin
+    "Mn #c+2 #n2 #u", # Mn2+, d5 low-spin
 
 ]
 3 = [
-    "{Mn+3^4}",   # Mn3+, d4 high-spin
-    "{Mn+3/1^2}", # Mn3+, d4 low-spin
+    "Mn #c+3 #u4",    # Mn3+, d4 high-spin
+    "Mn #c+3 #n #u2", # Mn3+, d4 low-spin
 ]
 
 [Fe]
 0 = [
-    "{Fe/2^4}", # Fe atom, s2d6
+    "Fe #n2 #u4", # Fe atom, s2d6
 ]
 2 = [
-    "{Fe+2/1^4}", # Fe2+, d6 high-spin
-    "{Fe+2/2^2}", # Fe2+, d6 intermediate-spin
-    "{Fe+2/3}",   # Fe2+, d6 low-spin
+    "Fe #c+2 #n #u4",  # Fe2+, d6 high-spin
+    "Fe #c+2 #n2 #u2", # Fe2+, d6 intermediate-spin
+    "Fe #c+2 #n3",     # Fe2+, d6 low-spin
 ]
 3 = [
-    "{Fe+3^5}",   # Fe3+, d5 high-spin
-    "{Fe+3/1^3}", # Fe3+, d5 intermediate-spin
-    "{Fe+3/2^1}", # Fe3+, d5 low-spin
+    "Fe #c+3 #u5",     # Fe3+, d5 high-spin
+    "Fe #c+3 #n1 #u3", # Fe3+, d5 intermediate-spin
+    "Fe #c+3 #n2 #u1", # Fe3+, d5 low-spin
 ]
 
 [Co]
 0 = [
-    "{Co/3^3}", # Co atom, s2d7
+    "Co #n3 #u3", # Co atom, s2d7
 ]
 2 = [
-    "{Co+2/2^3}", # Co2+, d7 high-spin
-    "{Co+2/3^1}", # Co2+, d7 low-spin
+    "Co #c+2 #n2 #u3", # Co2+, d7 high-spin
+    "Co #c+2 #n3 #u",  # Co2+, d7 low-spin
 ]
 3 = [
-    "{Co+3/3}",   # Co3+, d6 low-spin
-    "{Co+3/1^4}", # Co3+, d6 high-spin
+    "Co #c+3 #n3",    # Co3+, d6 low-spin
+    "Co #c+3 #n #u4", # Co3+, d6 high-spin
 ]
 
 [Ni]
 0 = [
-    "{Ni/4^2}", # Ni atom, s2d8
+    "Ni #n4 #u2", # Ni atom, s2d8
 ]
 2 = [
-    "{Ni+2/3^2}", # Ni2+, d8 high-spin
-    "{Ni+2/4}",   # Ni2+, d8 low-spin
+    "Ni #c+2 #n3 #u2", # Ni2+, d8 high-spin
+    "Ni #c+2 #n4",     # Ni2+, d8 low-spin
 ]
 
 [Cu]
 0 = [
-    "{Cu/5^1}", # Cu atom, s1d10
+    "Cu #n5 #u", # Cu atom, s1d10
 ]
 1 = [
-    "{Cu+/5}", # Cu+, d10
+    "Cu #c+ #n5", # Cu+, d10
 ]
 2 = [
-    "{Cu+2/4^1}", # Cu2+, d9
+    "Cu #c+2 #n4 #u", # Cu2+, d9
 ]
 
 [Zn]
 0 = [
-    "{Zn/1}", # Zn atom, s2
+    "Zn #n", # Zn atom, s2
 ]
 2 = [
-    "{Zn+2}", # Zn2+, s0
+    "Zn #c+2", # Zn2+, s0
 ]
 
 [Ga]
 0 = [
-    "{Ga/1^1}", # Ga atom, s2p1
+    "Ga #n #u", # Ga atom, s2p1
 ]
 3 = [
-    "{Ga+3}", # Ga3+
+    "Ga #c+3", # Ga3+
 ]
 
 [Ge]
 0 = [
-    "{Ge/1^2}", # Ge atom, s2p2
+    "Ge #n #u2", # Ge atom, s2p2
 ]
 
 [As]
 0 = [
-    "{As/1^3}",   # As atom, s2p3
-    "{As/1v3}",   # AsX3
-    "{As/1v2H}",  # X2AsH
-    "{As/1v1H2}", # XAsH2
-    "{As/1H3}",   # AsH3
-    "{As/1^1v2}", # AsX2
-    "{Asv3a2}",   # C4H4AsX, C4H4AsH
-    "{Asv2a2H}",  # C4H4AsH
-    "{As/1v2a1}", # C5H5As
+    "As #n #u3",     # As atom, s2p3
+    "As #n #v3",     # AsX3
+    "As #n #v2 #h",  # X2AsH
+    "As #n #v #h2",  # XAsH2
+    "As #n #h3",     # AsH3
+    "As #n #u #v2",  # AsX2
+    "As #v3 #a2",    # C4H4AsX, C4H4AsH
+    "As #v2 #a2 #h", # C4H4AsH
+    "As #n #v2 #a",  # C5H5As
 ]
 1 = [
-    "{As+v4}", # [AsX4]+
+    "As #c+ #v4", # [AsX4]+
 ]
 -1 = [
-    "{As-/2v2}", # [AsX2]-
+    "As #c- #n2 #v2", # [AsX2]-
 ]
 -3 = [
-    "{As-3/4}", # As3-
+    "As #c-3 #n4", # As3-
 ]
 
 [Se]
 0 = [
-    "{Se/2v2}",   # H2Se, Sen, SeX2
-    "{Se/2v1H}",  # XHSe
-    "{Se/2H2}",   # H2Se
-    "{Se/1v2a2}", # C4H4Se
-    "{Se/2^1v1}", # SeX, SeH
-    "{Se/2^1H}",  # HSe
-    "{Sev4}",
-    "{Sev6}",
-    "{Se/2^2}",   # Se atom, s2p4
+    "Se #n2 #v2",     # H2Se, Sen, SeX2
+    "Se #n2 #v #h",   # XHSe
+    "Se #n2 #h2",     # H2Se
+    "Se #n1 #v2 #a2", # C4H4Se
+    "Se #n2 #u #v",   # SeX, SeH
+    "Se #n2 #u #h",   # HSe
+    "Se #n #v4",
+    "Se #v6",
+    "Se #n2 #u2",     # Se atom, s2p4
 ]
 1 = [
-    "{Se+/1v3}",   # [SeX3]+, [H3Se]+
-    "{Se+/1v2H}",  # [XHSe2]+
-    "{Se+/1v1H2}", # [XHSe2]+
-    "{Se+/1H3}",   # [H3Se]+
+    "Se #c+ #n #v3",    # [SeX3]+, [H3Se]+
+    "Se #c+ #n #v2 #h", # [XHSe2]+
+    "Se #c+ #n #v #h2", # [XHSe2]+
+    "Se #c+ #n #h3",    # [H3Se]+
 ]
 -1 = [
-    "{Se-/3v1}", # SeX-
-    "{Se-/3H}",  # HSe-
+    "Se #c- #n3 #v", # SeX-
+    "Se #c- #n3 #h", # HSe-
 ]
 -2 = [
-    "{Se-2/4}", # Se2-
+    "Se #c-2 #n4", # Se2-
 ]
 
 [Br]
 0 = [
-    "{Br/3v1}", # Br2, HBr, BrX, HOBr
-    "{Br/3H1}", # HBr
-    "{Br/2v3}", # BrF3, HOBrO
-    "{Br/1v5}", # BrF5, HOBrO2
-    "{Brv7}",   # HOBrO3
-    "{Br/3^1}", # Br atom, s2p5
+    "Br #n3 #v",  # Br2, HBr, BrX, HOBr
+    "Br #n3 #h",  # HBr
+    "Br #n2 #v3", # BrF3, HOBrO
+    "Br #n #v5",  # BrF5, HOBrO2
+    "Br #v7",     # HOBrO3
+    "Br #n3 #u",  # Br atom, s2p5
 ]
 1 = [
-    "{Br+/3}",   # Br+
-    "{Br+/2v2}", # Br-Br(+)-Br, X-Br(+)-X  (DOI: 10.1021/ic950305s)
+    "Br #c+ #n3",     # Br+
+    "Br #c+ #n2 #v2", # Br-Br(+)-Br, X-Br(+)-X  (DOI: 10.1021/ic950305s)
 ]
 -1 = [
-    "{Br-/4}", # Br-
+    "Br #c- #n4", # Br-
 ]
 
 [Kr]
 0 = [
-    "{Kr/4}",   # Kr atom, s2p6
-    "{Kr/3m2}", # KrF2
+    "Kr #n4",     # Kr atom, s2p6
+    "Kr #n3 #m2", # KrF2
 ]
 1 = [
-    "{Kr+/3v1}",   # KrF+
-    "{Kr+/3<1v1}", # FKrF->KrF+, HCN->KrF
+    "Kr #c+ #n3 #v",    # KrF+
+    "Kr #c+ #n3 #r #v", # FKrF->KrF+, HCN->KrF
 ]
 
 [Rb]
 0 = [
-    "{Rb^1}", # Rb atom, s1
+    "Rb #u", # Rb atom, s1
 ]
 1 = [
-    "{Rb+}", # Rb+
+    "Rb #c+", # Rb+
 ]
 
 [Sr]
 0 = [
-    "{Sr/1}", # Sr atom, s2
+    "Sr #n", # Sr atom, s2
 ]
 2 = [
-    "{Sr+2}", # Sr2+
+    "Sr #c+2", # Sr2+
 ]
 
 [Y]
 0 = [
-    "{Y/1^1}", # Y atom, s1d1
+    "Y #n #u", # Y atom, s1d1
 ]
 3 = [
-    "{Y+3}", # Y3+, d0
+    "Y #c+3", # Y3+, d0
 ]
 
 [Zr]
 0 = [
-    "{Zr/1^2}", # Zr atom, s2d2
+    "Zr #n #u2", # Zr atom, s2d2
 ]
 4 = [
-    "{Zr+4}", # Zr4+, d0
+    "Zr #c+4", # Zr4+, d0
 ]
 
 [Nb]
 0 = [
-    "{Nb^5}", # Nb atom, s1d4
+    "Nb #u5", # Nb atom, s1d4
 ]
 3 = [
-    "{Nb+3^2}", # Nb3+, d2
+    "Nb #c+3 #u2", # Nb3+, d2
 ]
 
 [Mo]
 0 = [
-    "{Mo^6}", # Mo atom, s1d5
+    "Mo #u6", # Mo atom, s1d5
 ]
 2 = [
-    "{Mo+2^4}",   # Mo2+, d4 high-spin
-    "{Mo+2/1^2}", # Mo2+, d4 low-spin
+    "Mo #c+2 #u4",     # Mo2+, d4 high-spin
+    "Mo #c+2 #n1 #u2", # Mo2+, d4 low-spin
 ]
 3 = [
-    "{Mo+3^3}", # Mo3+, d3
+    "Mo #c+3 #u3", # Mo3+, d3
 ]
 
 [Tc]
 0 = [
-    "{Tc/1^5}", # Tc atom, s2d5
+    "Tc #n1 #u5", # Tc atom, s2d5
 ]
 
 [Ru]
 0 = [
-    "{Ru/2^4}", # Ru atom, s1d7
+    "Ru #n2 #u4", # Ru atom, s1d7
 ]
 2 = [
-    "{Ru+2/3}", # Ru2+, d6 low-spin
+    "Ru #c+2 #n3", # Ru2+, d6 low-spin
 ]
 3 = [
-    "{Ru+3/2^1}", # Ru3+, d5 low-spin
+    "Ru #c+3 #n2 #u", # Ru3+, d5 low-spin
 ]
 
 [Rh]
 0 = [
-    "{Rh/3^3}", # Rh atom, s1d8
+    "Rh #n3 #u3", # Rh atom, s1d8
 ]
 2 = [
-    "{Rh+2/3^1}", # Rh2+, d7 low-spin
+    "Rh #c+2 #n3 #u", # Rh2+, d7 low-spin
 ]
 3 = [
-    "{Rh+3/3}", # Rh3+, d6 low-spin
+    "Rh #c+3 #n3", # Rh3+, d6 low-spin
 ]
 
 [Pd]
 0 = [
-    "{Pd/5}", # Pd atom, d10
+    "Pd #n5", # Pd atom, d10
 ]
 2 = [
-    "{Pd+2/4}", # Pd2+ d8 low-spin
+    "Pd #c+2 #n4", # Pd2+ d8 low-spin
 ]
 
 [Ag]
 0 = [
-    "{Ag/5^1}", # Ag atom, s1d10
+    "Ag #n5 #u", # Ag atom, s1d10
 ]
 1 = [
-    "{Ag+/5}", # Ag+, d10
+    "Ag #c+ #n5", # Ag+, d10
 ]
 2 = [
-    "{Ag+2/4^1}", # Ag2+, d9
+    "Ag #c+2 #n4 #u", # Ag2+, d9
 ]
 
 [Cd]
 0 = [
-    "{Cd/1}", # Cd atom, s2
+    "Cd #n", # Cd atom, s2
 ]
 2 = [
-    "{Cd+2}", # Cd2+, s0
+    "Cd #c+2", # Cd2+, s0
 ]
 
 [In]
 0 = [
-    "{In/1^1}", # In atom, s2p1
+    "In #n #u", # In atom, s2p1
 ]
 3 = [
-    "{In+3}", # In3+
+    "In #c+3", # In3+
 ]
 
 [Sn]
 0 = [
-    "{Sn/1^2}", # Sn atom, s2p2
+    "Sn #n #u2", # Sn atom, s2p2
 ]
 
 [Sb]
 0 = [
-    "{Sb/1^3}",   # Sb atom, s2p3
-    "{Sb/1v3}",   # SbX3
-    "{Sb/1v2H}",  # X2SbH
-    "{Sb/1v1H2}", # XSbH2
-    "{Sb/1H3}",   # SbH3
-    "{Sb/1^1v2}", # SbX2
+    "Sb #n #u3",    # Sb atom, s2p3
+    "Sb #n #v3",    # SbX3
+    "Sb #n #v2 #h", # X2SbH
+    "Sb #n #v #h2", # XSbH2
+    "Sb #n #h3",    # SbH3
+    "Sb #n #u #v2", # SbX2
 ]
 1 = [
-    "{Sb+v4}", # [SbX4]+
+    "Sb #c+ #v4", # [SbX4]+
 ]
 -1 = [
-    "{Sb-/2v2}", # [SbX2]-
+    "Sb #c- #n2 #v2", # [SbX2]-
 ]
 -3 = [
-    "{Sb-3/4}", # Sb3-
+    "Sb #c-3 #n4", # Sb3-
 ]
 
 [Te]
 0 = [
-    "{Te/2^2}",   # Te atom, s2p4
-    "{Te/2v2}",   # H2Te, Ten, TeX2
-    "{Te/2v1H}",  # XHTe
-    "{Te/2H2}",   # H2Te
-    "{Te/2^1v1}", # TeX
+    "Te #n2 #u2",   # Te atom, s2p4
+    "Te #n2 #v2",   # H2Te, Ten, TeX2
+    "Te #n2 #v #h", # XHTe
+    "Te #n2 #h2",   # H2Te
+    "Te #n2 #u #v", # TeX
 ]
 -1 = [
-    "{Te-/3v1}", # TeX-
+    "Te #c- #n3 #v", # TeX-
 ]
 1 = [
-    "{Te+/1v3}", # [TeX3]+
+    "Te #c+ #n #v3", # [TeX3]+
 ]
 -2 = [
-    "{Te-2/4}", # Te2-
+    "Te #c-2 #n4", # Te2-
 ]
 
 [I]
 0 = [
-    "{I/3v1}", # I2, IX, HOI
-    "{I/3H1}", # HI
-    "{I/2v3}", # IF3, HOIO
-    "{I/1v5}", # IF5, HOIO2
-    "{Iv7}",   # IF7, HOIO3
-    "{I/3^1}", # I atom, s2p5
+    "I #n3 #v",  # I2, IX, HOI
+    "I #n3 #h",  # HI
+    "I #n2 #v3", # IF3, HOIO
+    "I #n #v5",  # IF5, HOIO2
+    "I #v7",     # IF7, HOIO3
+    "I #n3 #u",  # I atom, s2p5
 ]
 1 = [
-    "{I+/3}",   # I+
-    "{I+/2v2}", # I-I(+)-I, X-I(+)-X  (DOI: 10.1021/ic950305s)
+    "I #c+ #n3",     # I+
+    "I #c+ #n2 #v2", # I-I(+)-I, X-I(+)-X  (DOI: 10.1021/ic950305s)
 ]
 -1 = [
-    "{I-/4}", # I-
+    "I #c- #n4", # I-
 ]
 
 [Xe]
 0 = [
-    "{Xe/3m2}",    # XeF2, XeCl2, XeX2
-    "{Xe/2m4}",    # XeF4, XeOF2
-    "{Xe/1m6}",    # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-
-    "{Xe/1<v1m6}", # MeCN->XeO3
-    "{Xem8}",      # XeO2F4, XeO3F2, XeO4, H4XeO6, [XeO6]3-, [XeO6]4-
-    "{Xe/4}",      # Xe atom, s2p6
+    "Xe #n3 #m2",   # XeF2, XeCl2, XeX2
+    "Xe #n2 #m4",   # XeF4, XeOF2
+    "Xe #n #m6",    # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-
+    "Xe #n #r #m6", # MeCN->XeO3
+    "Xe #m8",       # XeO2F4, XeO3F2, XeO4, H4XeO6, [XeO6]3-, [XeO6]4-
+    "Xe #n4",       # Xe atom, s2p6
 ]
 1 = [
-    "{Xe+/3v1}",     # XeF+, XeCl+, XeX+
-    "{Xe+/3<1v1}",   # HF->XeF+, HCN->XeF+, MeCN->XeF+
-    "{Xe+/2v1m2}",   # [XeF3]+, [XeF2X]+
-    "{Xe+/1v1m4}",   # [XeF5]+, [XeOF3]+, XeO2F+
-    "{Xe+/1<1v1m4}", # F5XeF->[XeF5]+
+    "Xe #c+ #n3 #v",       # XeF+, XeCl+, XeX+
+    "Xe #c+ #n3 #r #v",    # HF->XeF+, HCN->XeF+, MeCN->XeF+
+    "Xe #c+ #n2 #v #m2",   # [XeF3]+, [XeF2X]+
+    "Xe #c+ #n #v #m4",    # [XeF5]+, [XeOF3]+, XeO2F+
+    "Xe #c+ #n #r #v #m4", # F5XeF->[XeF5]+
 ]
 -1 = [
-    "{Xe-/1v1m4}", # [XeF5]-
-    "{Xe-v1m6}",   # [XeF7]-, [XeO2F3]-, [XeOF5]-
+    "Xe #c- #n2 #v #m4", # [XeF5]-
+    "Xe #c- #n #v #m6",  # [XeF7]-, [XeO2F3]-, [XeOF5]-
 ]
 -2 = [
-    "{Xe-2v2m6}", # [XeF8]2-
+    "Xe #c-2 #n #v2 #m6", # [XeF8]2-
 ]
 
 [Cs]
 0 = [
-    "{Cs^1}", # Cs atom, s1
+    "Cs #u", # Cs atom, s1
 ]
 1 = [
-    "{Cs+}", # Cs+
+    "Cs #c+", # Cs+
 ]
 
 [Ba]
 0 = [
-    "{Ba/1}", # Ba atom, s2
+    "Ba #n", # Ba atom, s2
 ]
 2 = [
-    "{Ba+2}", # Ba2+
+    "Ba #c+2", # Ba2+
 ]
 
 [La]
 0 = [
-    "{La/1^1}", # La atom, s2d1
+    "La #n #u", # La atom, s2d1
 ]
 3 = [
-    "{La+3}", # La3+
+    "La #c+3", # La3+
 ]
 
 [Ce]
 0 = [
-    "{Ce/1^2x1}", # Ce atom, s2d1f1
+    "Ce #n #u2 #s", # Ce atom, s2d1f1
 ]
 3 = [
-    "{Ce+3^1}", # Ce3+, f1
+    "Ce #c+3 #u", # Ce3+, f1
 ]
 4 = [
-    "{Ce+4}", # Ce4+
+    "Ce #c+4", # Ce4+
 ]
 
 [Pr]
 0 = [
-    "{Pr/1^3}", # Pr atom, s2f3
+    "Pr #n #u3", # Pr atom, s2f3
 ]
 3 = [
-    "{Pr+3^2}", # Pr3+, f2
+    "Pr #c+3 #u2", # Pr3+, f2
 ]
 4 = [
-    "{Pr+4^1}", # Pr4+, f1
+    "Pr #c+4 #u1", # Pr4+, f1
 ]
 
 [Nd]
 0 = [
-    "{Nd/1^4}", # Nd atom, s2f4
+    "Nd #n #u4", # Nd atom, s2f4
 ]
 3 = [
-    "{Nd+3^3}", # Nd3+, f3
+    "Nd #c+3 #u3", # Nd3+, f3
 ]
 
 [Pm]
 0 = [
-    "{Pm/1^5}", # Pm atom, s2f5
+    "Pm #n #u5", # Pm atom, s2f5
 ]
 3 = [
-    "{Pm+3^4}", # Pm3+, f4
+    "Pm #c+3 #u4", # Pm3+, f4
 ]
 
 [Sm]
 0 = [
-    "{Sm/1^6}", # Sm atom, s2f6
+    "Sm #n #u6", # Sm atom, s2f6
 ]
 2 = [
-    "{Sm+2^6}", # Sm2+, f6
+    "Sm #c+2 #u6", # Sm2+, f6
 ]
 3 = [
-    "{Sm+3^5}", # Sm3+, f5
+    "Sm #c+3 #u5", # Sm3+, f5
 ]
 
 [Eu]
 0 = [
-    "{Eu/1^7}", # Eu atom, s2f7
+    "Eu #n #u7", # Eu atom, s2f7
 ]
 2 = [
-    "{Eu+2^7}", # Eu2+, f7
+    "Eu #c+2 #u7", # Eu2+, f7
 ]
 3 = [
-    "{Eu+3^6}", # Eu3+, f6
+    "Eu #c+3 #u6", # Eu3+, f6
 ]
 
 [Gd]
 0 = [
-    "{Gd/1^8}", # Gd atom, s2d1f7
+    "Gd #n #u8", # Gd atom, s2d1f7
 ]
 3 = [
-    "{Gd+3^7}", # Gd3+, f7
+    "Gd #c+3 #u7", # Gd3+, f7
 ]
 
 [Tb]
 0 = [
-    "{Tb/3^5}", # Tb atom, s2f9
+    "Tb #n3 #u5", # Tb atom, s2f9
 ]
 3 = [
-    "{Tb+3/1^6}", # Tb3+, f8
+    "Tb #c+3 #n #u6", # Tb3+, f8
 ]
 4 = [
-    "{Tb+4^7}", # Tb4+, f7
+    "Tb #c+4 #u7", # Tb4+, f7
 ]
 
 [Dy]
 0 = [
-    "{Dy/4^4}", # Dy atom, s2f10
+    "Dy #n4 #u4", # Dy atom, s2f10
 ]
 3 = [
-    "{Dy+3/2^5}", # Dy3+, f9
+    "Dy #c+3 #n2 #u5", # Dy3+, f9
 ]
 
 [Ho]
 0 = [
-    "{Ho/5^3}", # Ho atom, s2f11
+    "Ho #n5 #u3", # Ho atom, s2f11
 ]
 3 = [
-    "{Ho+3/3^4}", # Ho3+, f10
+    "Ho #c+3 #n3 #u4", # Ho3+, f10
 ]
 
 [Er]
 0 = [
-    "{Er/6^2}", # Er atom, s2f12
+    "Er #n6 #u2", # Er atom, s2f12
 ]
 3 = [
-    "{Er+3/4^3}", # Er3+, f11
+    "Er #c+3 #n4 #u3", # Er3+, f11
 ]
 
 [Tm]
 0 = [
-    "{Tm/7^1}", # Tm atom, s2f13
+    "Tm #n7 #u", # Tm atom, s2f13
 ]
 3 = [
-    "{Tm+3/5^2}", # Tm3+, f12
+    "Tm #c+3 #n5 #u2", # Tm3+, f12
 ]
 
 [Yb]
 0 = [
-    "{Yb/8}", # Yb atom, s2f14
+    "Yb #n8", # Yb atom, s2f14
 ]
 2 = [
-    "{Yb+2/7}", # Yb2+, f14
+    "Yb #c+2 #n7", # Yb2+, f14
 ]
 3 = [
-    "{Yb+3/6^1}", # Yb3+, f13
+    "Yb #c+3 #n6 #u1", # Yb3+, f13
 ]
 
 [Lu]
 0 = [
-    "{Lu/1^1}", # Lu atom, s2d1
+    "Lu #n #u", # Lu atom, s2d1
 ]
 3 = [
-    "{Lu+3}", # Lu3+, d0
+    "Lu #c+3", # Lu3+, d0
 ]
 
 [Hf]
 0 = [
-    "{Hf/1^2}", # Hf atom, s2d2
+    "Hf #n #u2", # Hf atom, s2d2
 ]
 4 = [
-    "{Hf+4}", # Hf4+, d0
+    "Hf #c+4", # Hf4+, d0
 ]
 
 [Ta]
 0 = [
-    "{Ta/1^3}", # Ta atom, s2d3
+    "Ta #n #u3", # Ta atom, s2d3
 ]
 
 [W]
 0 = [
-    "{W/1^4}", # W atom, s2d4
+    "W #n #u4", # W atom, s2d4
 ]
 
 [Re]
 0 = [
-    "{Re/1^5}", # Re atom, s2d5
+    "Re #n #u5", # Re atom, s2d5
 ]
 
 [Os]
 0 = [
-    "{Os/2^4}", # Os atom, s2d6
+    "Os #n2 #u4", # Os atom, s2d6
 ]
 
 [Ir]
 0 = [
-    "{Ir/3^3}", # Ir atom, s2d7
+    "Ir #n3 #u3", # Ir atom, s2d7
 ]
 
 [Pt]
 0 = [
-    "{Pt/4^2}", # Pt atom, s1d9
+    "Pt #n4 #u2", # Pt atom, s1d9
 ]
 2 = [
-    "{Pt+2/4}", # Pt2+, d8 low-spin
+    "Pt #c+2 #n4", # Pt2+, d8 low-spin
 ]
 
 [Au]
 0 = [
-    "{Au/5^1}", # Au atom, s1d10
+    "Au #n5 #u", # Au atom, s1d10
 ]
 1 = [
-    "{Au+/5}", # Au+, d10
+    "Au #c+ #n5", # Au+, d10
 ]
 3 = [
-    "{Au+3/4}",   # Au3+, d8 low-spin
-    "{Au+3/3^2}", # Au3+, d8 high-spin
+    "Au #c+3 #n4",     # Au3+, d8 low-spin
+    "Au #c+3 #n3 #u2", # Au3+, d8 high-spin
 ]
 
 [Hg]
 0 = [
-    "{Hg/6}", # Hg atom, s2d10
+    "Hg #n6", # Hg atom, s2d10
 ]
 1 = [
-    "{Hg+/5v1}", # [Hg2]2+
+    "Hg #c+ #n5 #v", # [Hg2]2+
 ]
 2 = [
-    "{Hg+2/5}", # Hg2+, d10
+    "Hg #c+2 #n5", # Hg2+, d10
 ]
 
 [Tl]
 0 = [
-    "{Tl/1^1}", # Tl atom, s2p1
+    "Tl #n #u", # Tl atom, s2p1
 ]
 1 = [
-    "{Tl+/1}", # Tl+
+    "Tl #c+ #n", # Tl+
 ]
 3 = [
-    "{Tl+3}", # Tl3+
+    "Tl #c+3", # Tl3+
 ]
 
 [Pb]
 0 = [
-    "{Pb/1^2}", # Pb atom, s2p2
+    "Pb #n #u2", # Pb atom, s2p2
 ]
 2 = [
-    "{Pb+2/1}", # Pb2+
+    "Pb #c+2 #n", # Pb2+
 ]
 4 = [
-    "{Pb+4}", # Pb4+
+    "Pb #c+4", # Pb4+
 ]
 
 [Bi]
 0 = [
-    "{Bi/1^3}", # Bi atom, s2p3
+    "Bi #n #u3", # Bi atom, s2p3
 ]
 3 = [
-    "{Bi+3/1}", # Bi3+
+    "Bi #c+3 #n", # Bi3+
 ]
 
 [Po]
 0 = [
-    "{Po/2^2}", # Po atom, s2p4
+    "Po #n2 #u2", # Po atom, s2p4
 ]
 -2 = [
-    "{Po-2/4}", # Po2-
+    "Po #c-2 #n4", # Po2-
 ]
 
 [At]
 0 = [
-    "{At/3v1}", # At2
-    "{At/3^1}", # At atom, s2p5
+    "At #n3 #v", # At2
+    "At #n3 #u", # At atom, s2p5
 ]
 
 [Rn]
 0 = [
-    "{Rn/3m2}", # RnF2
-    "{Rn/2m4}", # RnF4
-    "{Rn/1m6}", # RnF6, RnO3
-    "{Rn/4}",   # Rn atom, s2p6
+    "Rn #n3 #m2", # RnF2
+    "Rn #n2 #m4", # RnF4
+    "Rn #n #m6",  # RnF6, RnO3
+    "Rn #n4",     # Rn atom, s2p6
 ]
 
 [Fr]
 0 = [
-    "{Fr^1}", # Fr atom, s1
+    "Fr #u", # Fr atom, s1
 ]
 1 = [
-    "{Fr+}", # Fr+
+    "Fr #c+", # Fr+
 ]
 
 [Ra]
 0 = [
-    "{Ra/1}", # Ra atom, s2
+    "Ra #n", # Ra atom, s2
 ]
 2 = [
-    "{Ra+2}", # Ra2+
+    "Ra #c+2", # Ra2+
 ]
 
 [Ac]
 0 = [
-    "{Ac/1^1}", # Ac atom, s2d1
+    "Ac #n #u", # Ac atom, s2d1
 ]
 3 = [
-    "{Ac+3}", # Ac3+, d0
+    "Ac #c+3", # Ac3+, d0
 ]
 
 [Th]
 0 = [
-    "{Th/1^2}", # Th atom, s2d2
+    "Th #n #u2", # Th atom, s2d2
 ]
 3 = [
-    "{Th+3^1}", # Th3+, d1 (DOI: 10.1007/1-4020-3598-5_20)
+    "Th #c+3 #u", # Th3+, d1 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{Th+4}", # Th4+, f0
+    "Th #c+4", # Th4+, f0
 ]
 
 [Pa]
 0 = [
-    "{Pa/1^3}", # Pa atom, s2d1f2
+    "Pa #n #u3", # Pa atom, s2d1f2
 ]
 4 = [
-    "{Pa+4^1}", # Pa4+, f1 (DOI: 10.1007/1-4020-3598-5_20)
+    "Pa #c+4 #u", # Pa4+, f1 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 5 = [
-    "{Pa+5}", # Pa5+, f0
+    "Pa #c+5", # Pa5+, f0
 ]
 
 [U]
 0 = [
-    "{U/1^4}", # U atom, s2d2f3
+    "U #n #u4", # U atom, s2d2f3
 ]
 3 = [
-    "{U+3^3}", # U3+, f3 (DOI: 10.1007/1-4020-3598-5_20)
+    "U #c+3 #u3", # U3+, f3 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{U+4^2}", # U4+, f2 (DOI: 10.1007/1-4020-3598-5_20)
+    "U #c+4 #u2", # U4+, f2 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 5 = [
-    "{U+5^1}", # U5+, f1 (DOI: 10.1007/1-4020-3598-5_20)
+    "U #c+5 #u", # U5+, f1 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 6 = [
-    "{U+6}", # U6+, f0
+    "U #c+6", # U6+, f0
 ]
 
 [Np]
 0 = [
-    "{Np/1^5}", # Np atom, s2d1f3
+    "Np #n #u5", # Np atom, s2d1f3
 ]
 3 = [
-    "{Np+3^4}", # Np3+, f4 (DOI: 10.1007/1-4020-3598-5_20)
+    "Np #c+3 #u4", # Np3+, f4 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{Np+4^3}", # Np4+, f3 (DOI: 10.1007/1-4020-3598-5_20)
+    "Np #c+4 #u3", # Np4+, f3 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 5 = [
-    "{Np+5^2}", # Np5+, f2 (DOI: 10.1007/1-4020-3598-5_20)
+    "Np #c+5 #u2", # Np5+, f2 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 6 = [
-    "{Np+6^1}", # Np6+, f1 (DOI: 10.1007/1-4020-3598-5_20)
+    "Np #c+6 #u", # Np6+, f1 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Pu]
 0 = [
-    "{Pu/1^6}", # Pu atom, s2f6
+    "Pu #n #u6", # Pu atom, s2f6
 ]
 3 = [
-    "{Pu+3^5}", # Pu3+, f5 (DOI: 10.1007/1-4020-3598-5_20)
+    "Pu #c+3 #u5", # Pu3+, f5 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{Pu+4^4}", # Pu4+, f4 (DOI: 10.1007/1-4020-3598-5_20)
+    "Pu #c+4 #u4", # Pu4+, f4 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 5 = [
-    "{Pu+5^3}", # Np5+, f3 (DOI: 10.1007/1-4020-3598-5_20)
+    "Pu #c+5 #u3", # Np5+, f3 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 6 = [
-    "{Pu+6^2}", # Pu6+, f2 (DOI: 10.1007/1-4020-3598-5_20)
+    "Pu #c+6 #u2", # Pu6+, f2 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 7 = [
-    "{Pu+7^1}", # Pu7+, f1 (DOI: 10.1007/1-4020-3598-5_20)
+    "Pu #c+7 #u", # Pu7+, f1 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Am]
 0 = [
-    "{Am/1^7}", # Am atom, s2d1f6
+    "Am #n #u7", # Am atom, s2d1f6
 ]
 2 = [
-    "{Am+2^7}", # Am2+, f7 (DOI: 10.1007/1-4020-3598-5_20)
+    "Am #c+2 #u7", # Am2+, f7 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 3 = [
-    "{Am+3^6}", # Am3+, f6 (DOI: 10.1007/1-4020-3598-5_20)
+    "Am #c+3 #u6", # Am3+, f6 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{Am+4^5}", # Am4+, f5 (DOI: 10.1007/1-4020-3598-5_20)
+    "Am #c+4 #u5", # Am4+, f5 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Cm]
 0 = [
-    "{Cm/1^8}", # Cm atom, s2d1f7
+    "Cm #n #u8", # Cm atom, s2d1f7
 ]
 3 = [
-    "{Cm+3^7}", # Cm3+, f7 (DOI: 10.1007/1-4020-3598-5_20)
+    "Cm #c+3 #u7", # Cm3+, f7 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{Cm+4^6}", # Cm4+, f6 (DOI: 10.1007/1-4020-3598-5_20)
+    "Cm #c+4 #u6", # Cm4+, f6 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Bk]
 0 = [
-    "{Bk/3^5}", # Bk atom, s2f9
+    "Bk #n3 #u5", # Bk atom, s2f9
 ]
 3 = [
-    "{Bk+3/1^6}", # Bk3+, f8 (DOI: 10.1007/1-4020-3598-5_20)
+    "Bk #c+3 #n1 #u6", # Bk3+, f8 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{Bk+4^7}", # Bk4+, f7 (DOI: 10.1007/1-4020-3598-5_20)
+    "Bk #c+4 #u7", # Bk4+, f7 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Cf]
 0 = [
-    "{Cf/4^4}", # Cf atom, s2f10
+    "Cf #n4 #u4", # Cf atom, s2f10
 ]
 2 = [
-    "{Cf+2/3^4}", # Cf2+, f10 CHECK
+    "Cf #c+2 #n3 #u4", # Cf2+, f10
 ]
 3 = [
-    "{Cf+3/2^5}", # Cf3+, f9 (DOI: 10.1007/1-4020-3598-5_20)
+    "Cf #c+3 #n2 #u5", # Cf3+, f9 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 4 = [
-    "{Cf+4/1^6}", # Cf4+, f8 (DOI: 10.1007/1-4020-3598-5_20)
+    "Cf #c+4 #n1 #u6", # Cf4+, f8 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Es]
 0 = [
-    "{Es/5^3}", # Es atom, s2f11
+    "Es #n5 #u3", # Es atom, s2f11
 ]
 2 = [
-    "{Es+2/4^3}", # Es2+, f11 (DOI: 10.1007/1-4020-3598-5_20)
+    "Es #c+2 #n4 #u3", # Es2+, f11 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 3 = [
-    "{Es+3/3^4}", # Es3+, f10 (DOI: 10.1007/1-4020-3598-5_20)
+    "Es #c+3 #n3 #u4", # Es3+, f10 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Fm]
 0 = [
-    "{Fm/6^2}", # Fm atom, s2f12
+    "Fm #n6 #u2", # Fm atom, s2f12
 ]
 2 = [
-    "{Fm+2/5^2}", # Fm2+, f12 (DOI: 10.1007/1-4020-3598-5_18)
+    "Fm #c+2 #n5 #u2", # Fm2+, f12 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 3 = [
-    "{Fm+3/4^3}", # Fm3+, f11 (DOI: 10.1007/1-4020-3598-5_18)
+    "Fm #c+3 #n4 #u3", # Fm3+, f11 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Md]
 0 = [
-    "{Md/7^1}", # Md atom, s2f13
+    "Md #n7 #u", # Md atom, s2f13
 ]
 2 = [
-    "{Md+2/6^1}", # Md2+, f13 (DOI: 10.1007/1-4020-3598-5_18)
+    "Md #c+2 #n6 #u", # Md2+, f13 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 3 = [
-    "{Md+3/5^2}", # Md3+, f12 (DOI: 10.1007/1-4020-3598-5_18)
+    "Md #c+3 #n5 #u2", # Md3+, f12 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [No]
 0 = [
-    "{No/8}", # No atom, s2f14
+    "No #n8", # No atom, s2f14
 ]
 2 = [
-    "{No+2/7}", # No2+, f14 (DOI: 10.1007/1-4020-3598-5_18)
+    "No #c+2 #n7", # No2+, f14 (DOI: 10.1007/1-4020-3598-5_20)
 ]
 
 [Lr]
 0 = [
-    "{Lr/1^1}", # Lr atom, s2d1
+    "Lr #n #u", # Lr atom, s2d1
 ]
 3 = [
-    "{Lr+3}", # Lr3+, d0
+    "Lr #c+3", # Lr3+, d0
 ]
 
 [Rf]
 0 = [
-    "{Rf/1^2}", # Rf atom, s2d2
+    "Rf #n #u2", # Rf atom, s2d2
 ]
 
 [Db]
 0 = [
-    "{Db/1^3}", # Db atom, s2d3
+    "Db #n #u3", # Db atom, s2d3
 ]
 
 [Sg]
 0 = [
-    "{Sg/1^4}", # Sg atom, s2d4
+    "Sg #n #u4", # Sg atom, s2d4
 ]
 
 [Bh]
 0 = [
-    "{Bh/1^5}", # Bh atom, s2d5
+    "Bh #n #u5", # Bh atom, s2d5
 ]
 
 [Hs]
 0 = [
-    "{Hs/2^4}", # Hs atom, s2d6
+    "Hs #n2 #u4", # Hs atom, s2d6
 ]

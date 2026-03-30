@@ -10,10 +10,10 @@ atom_typing:
     bond_count: 3
     topology: Cd
     atoms:
-      - "{Cl/3v1}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{Cl/3v1}"
+      - "Cl#n3#v"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"
@@ -25,10 +25,10 @@ counts:
     bond_count: 3
     topology: Cd
     atoms:
-      - "{Cl/3v1}"
-      - "{CH2v2}"
-      - "{CH2v2}"
-      - "{Cl/3v1}"
+      - "Cl#n3#v"
+      - "C#h2#v2"
+      - "C#h2#v2"
+      - "Cl#n3#v"
     bonds:
       - "-"
       - "-"

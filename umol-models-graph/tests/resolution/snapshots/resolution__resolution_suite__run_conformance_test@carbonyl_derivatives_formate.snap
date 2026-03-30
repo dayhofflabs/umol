@@ -10,9 +10,9 @@ atom_typing:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{CHv3}"
-      - "{O/2v2}"
-      - "{O-/3v1}"
+      - "C#h#v3"
+      - "O#n2#v2"
+      - "O#c-#n3#v"
     bonds:
       - "="
       - "-"
@@ -23,9 +23,9 @@ counts:
     bond_count: 2
     topology: Bo
     atoms:
-      - "{CHv3}"
-      - "{O/2v2}"
-      - "{O-/3v1}"
+      - "C#h#v3"
+      - "O#n2#v2"
+      - "O#c-#n3#v"
     bonds:
       - "="
       - "-"

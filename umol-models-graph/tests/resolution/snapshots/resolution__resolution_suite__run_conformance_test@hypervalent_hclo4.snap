@@ -10,12 +10,12 @@ atom_typing:
     bond_count: 5
     topology: "E`F?"
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{Clv7}"
-      - "{O/2v2}"
-      - "{O/2v2}"
-      - "{O/2v2}"
+      - "H#v"
+      - "O#n2#v2"
+      - "Cl#v7"
+      - "O#n2#v2"
+      - "O#n2#v2"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"
@@ -29,12 +29,12 @@ counts:
     bond_count: 5
     topology: "E`F?"
     atoms:
-      - "{Hv1}"
-      - "{O/2v2}"
-      - "{Clv7}"
-      - "{O/2v2}"
-      - "{O/2v2}"
-      - "{O/2v2}"
+      - "H#v"
+      - "O#n2#v2"
+      - "Cl#v7"
+      - "O#n2#v2"
+      - "O#n2#v2"
+      - "O#n2#v2"
     bonds:
       - "-"
       - "-"
