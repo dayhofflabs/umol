@@ -1,11 +1,11 @@
 use thiserror::Error;
 use umol_data::{Element, SpinStateError};
 
+use super::aromaticity::AromaticityError;
+use super::atom_type::AtomError;
+use super::bond::BondError;
+use super::kekule::KekulizationError;
 use crate::diagnostics::Diagnostic;
-use crate::graph_ir::aromaticity::AromaticityError;
-use crate::graph_ir::atom_type::AtomError;
-use crate::graph_ir::bond::BondError;
-use crate::graph_ir::kekule::KekulizationError;
 use crate::table_ir::bond::BondOrder;
 
 #[derive(Debug, Error, Clone, PartialEq)]

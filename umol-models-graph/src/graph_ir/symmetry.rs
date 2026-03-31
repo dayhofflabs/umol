@@ -6,10 +6,10 @@ use std::os::raw::c_int;
 use nauty_Traces_sys::*;
 use umol_data::{Element, SpinMultiplicity};
 
-use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::bond_pattern::BondPattern;
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
+use super::atom_pattern::AtomPattern;
+use super::bond_pattern::BondPattern;
+use super::molecule::AtomIndex;
+use super::molecule_builder::MoleculeBuilder;
 
 /// Vertex color for nauty partitioning.
 /// Atom and Bond variants are in separate cells, so they can never share an orbit.

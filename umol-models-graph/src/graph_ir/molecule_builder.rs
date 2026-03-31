@@ -5,6 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
+use indexmap::IndexMap;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
@@ -13,63 +14,38 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use umol_data::{SpinMultiplicity, SpinState};
 
-use crate::graph_ir::molecule::topology::{
+use super::aromaticity::{AromaticContribution, AromaticSystem};
+use super::atom::Atom;
+use super::atom_pattern::{AtomPattern, HydrogenPattern};
+use super::bond_pattern::BondPattern;
+use super::config::ResolveConfig;
+use super::dative::DativeBond;
+use super::error::ResolutionError;
+use super::molecule::topology::{
     DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
     TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
 };
-use crate::graph_ir::molecule::{
+use super::molecule::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
     NoncovalentBondIndex,
 };
-use indexmap::IndexMap;
-
+use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
+use super::noncovalent::NoncovalentBond;
+use super::symmetry::compute_symmetry;
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::bond::BondLowerConfig;
+use crate::dsl::config::{BondDslConfig, MoleculeDslConfig};
 use crate::dsl::error::LoweringError;
 use crate::dsl::molecule::{
-    parse_molecule_dsl, Atoms, BondSpec, MoleculeAst, MoleculeLowerConfig,
-    CovalentBond as AstCovalentBond,
-    DativeBond as AstDativeBond,
-    AromaticSystem as AstAromaticSystem,
-    MulticenterBond as AstMulticenterBond,
-    NoncovalentBond as AstNoncovalentBond,
+    parse_molecule_dsl, AromaticSystem as AstAromaticSystem, Atoms, BondSpec,
+    CovalentBond as AstCovalentBond, DativeBond as AstDativeBond, MoleculeAst,
+    MulticenterBond as AstMulticenterBond, NoncovalentBond as AstNoncovalentBond,
 };
-use crate::graph_ir::aromaticity::{AromaticContribution, AromaticSystem};
-use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_pattern::{AtomPattern, HydrogenPattern};
-use crate::graph_ir::bond_pattern::BondPattern;
-use crate::graph_ir::config::ResolveConfig;
-use crate::graph_ir::dative::DativeBond;
-use crate::graph_ir::error::ResolutionError;
-use crate::graph_ir::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
-use crate::graph_ir::noncovalent::NoncovalentBond;
-use crate::graph_ir::symmetry::compute_symmetry;
 use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::bond::BondOrder;
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
-fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> {
-    let unpaired_total: u32 = states.iter().map(|s| s.unpaired_electrons() as u32).sum();
-    if unpaired_total > u8::MAX as u32 {
-        return None;
-    }
-    let total_u8 = unpaired_total as u8;
-    let mut compatible = Vec::new();
-    for m in 1..=10 {
-        let Some(mult) = SpinMultiplicity::from_multiplicity(m) else {
-            continue;
-        };
-        let Ok(candidate) = SpinState::try_new(total_u8, mult) else {
-            continue;
-        };
-        if candidate.is_constructible_from(states) {
-            compatible.push(m);
-        }
-    }
-    Some(compatible)
-}
 /// Transient resolution state carried by `MoleculeBuilder` during the resolution
 /// pipeline. Not part of the final `Molecule` or the `MoleculeAst`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -458,7 +434,8 @@ impl MoleculeBuilder {
     /// Add a fully-resolved atom as both pattern and sole candidate.
     pub fn add_resolved_atom(&mut self, atom: Atom) -> AtomIndex {
         let idx = self.add_atom(AtomPattern::from_atom(&atom));
-        self.resolution.atom_candidates
+        self.resolution
+            .atom_candidates
             .insert(idx, SmallVec::from_elem(atom, 1));
         idx
     }
@@ -466,7 +443,9 @@ impl MoleculeBuilder {
     pub fn remove_atom(&mut self, index: AtomIndex) -> Option<AtomPattern> {
         self.resolution.atom_candidates.remove(&index);
         self.resolution.atom_aromatic_hints.remove(&index);
-        self.resolution.atom_normal_implicit_hydrogens.remove(&index);
+        self.resolution
+            .atom_normal_implicit_hydrogens
+            .remove(&index);
         self.graph.remove_node(index)
     }
 
@@ -493,7 +472,8 @@ impl MoleculeBuilder {
     }
 
     pub fn atom_candidates(&self, index: AtomIndex) -> &[Atom] {
-        self.resolution.atom_candidates
+        self.resolution
+            .atom_candidates
             .get(&index)
             .map_or(&[], |v| v.as_slice())
     }
@@ -542,11 +522,15 @@ impl MoleculeBuilder {
     }
 
     pub fn clear_atom_normal_implicit_hydrogens(&mut self, index: AtomIndex) {
-        self.resolution.atom_normal_implicit_hydrogens.remove(&index);
+        self.resolution
+            .atom_normal_implicit_hydrogens
+            .remove(&index);
     }
 
     pub fn atom_has_normal_implicit_hydrogens(&self, index: AtomIndex) -> bool {
-        self.resolution.atom_normal_implicit_hydrogens.contains(&index)
+        self.resolution
+            .atom_normal_implicit_hydrogens
+            .contains(&index)
     }
 
     // Atom properties
@@ -555,7 +539,8 @@ impl MoleculeBuilder {
         index: AtomIndex,
         getter: impl Fn(&Atom) -> T,
     ) -> Option<T> {
-        self.resolution.atom_candidates
+        self.resolution
+            .atom_candidates
             .get(&index)
             .map(|c| c.iter().next().map(getter))
             .flatten()
@@ -567,7 +552,8 @@ impl MoleculeBuilder {
     }
 
     pub fn atom_aromatic_valence(&self, index: AtomIndex) -> u8 {
-        self.resolution.atom_candidates
+        self.resolution
+            .atom_candidates
             .get(&index)
             .and_then(|candidates| {
                 candidates.iter().find_map(|c| match c.aromatic_valence() {
@@ -597,7 +583,8 @@ impl MoleculeBuilder {
     }
 
     pub fn atom_has_aromatic_candidate(&self, index: AtomIndex) -> bool {
-        self.resolution.atom_candidates
+        self.resolution
+            .atom_candidates
             .get(&index)
             .map(|candidates| {
                 candidates
@@ -1097,12 +1084,16 @@ impl MoleculeBuilder {
 
         for old_idx in self.graph.node_indices() {
             let pattern = self.graph.node_weight(old_idx).unwrap();
-            let candidates = self.resolution.atom_candidates.get(&old_idx).ok_or_else(|| {
-                ResolutionError::ValenceNoMatch(format!(
-                    "no valence match for {:?}",
-                    pattern.element()
-                ))
-            })?;
+            let candidates = self
+                .resolution
+                .atom_candidates
+                .get(&old_idx)
+                .ok_or_else(|| {
+                    ResolutionError::ValenceNoMatch(format!(
+                        "no valence match for {:?}",
+                        pattern.element()
+                    ))
+                })?;
             let candidate = match candidates.as_slice() {
                 [] => {
                     return Err(ResolutionError::ValenceNoMatch(format!(
@@ -1129,9 +1120,7 @@ impl MoleculeBuilder {
             // accept any hydrogen count.
             let resolved_pattern = AtomPattern {
                 implicit_hydrogens: match &pattern.implicit_hydrogens {
-                    HydrogenPattern::Normal => {
-                        HydrogenPattern::Is(candidate.implicit_hydrogens())
-                    }
+                    HydrogenPattern::Normal => HydrogenPattern::Is(candidate.implicit_hydrogens()),
                     h => h.clone(),
                 },
                 ..pattern.clone()
@@ -1270,7 +1259,7 @@ impl Default for MoleculeBuilder {
 }
 
 impl FromAst<MoleculeAst> for MoleculeBuilder {
-    fn from_ast(ast: MoleculeAst, cfg: &MoleculeLowerConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: MoleculeAst, cfg: &MoleculeDslConfig) -> Result<Self, LoweringError> {
         let mut builder = Self::new();
         let mut label_to_index: IndexMap<String, AtomIndex> = IndexMap::new();
 
@@ -1299,7 +1288,7 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
         };
 
         let lower_bond_spec =
-            |spec: BondSpec, cfg: &BondLowerConfig| -> Result<BondPattern, LoweringError> {
+            |spec: BondSpec, cfg: &BondDslConfig| -> Result<BondPattern, LoweringError> {
                 match spec {
                     BondSpec::Single => Ok(BondPattern::new(1)),
                     BondSpec::Double => Ok(BondPattern::new(2)),
@@ -1382,26 +1371,29 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
 }
 
 impl ToAst<MoleculeAst> for MoleculeBuilder {
-    fn to_ast(&self) -> MoleculeAst {
+    fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
         let mut label_map: IndexMap<AtomIndex, String> = IndexMap::new();
         let mut atoms = IndexMap::new();
 
         for idx in self.atom_indices() {
             let label = idx.index().to_string();
-            let atom_ast = self.atom(idx).unwrap().to_ast();
+            let atom_ast = self.atom(idx).unwrap().to_ast(&cfg.atom);
             label_map.insert(idx, label.clone());
             atoms.insert(label, atom_ast);
         }
 
         let label = |idx: AtomIndex| -> String {
-            label_map.get(&idx).cloned().unwrap_or_else(|| idx.index().to_string())
+            label_map
+                .get(&idx)
+                .cloned()
+                .unwrap_or_else(|| idx.index().to_string())
         };
 
         let bonds: Vec<AstCovalentBond> = self
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
-                let bond_ast = self.bond(bi).unwrap().to_ast();
+                let bond_ast = self.bond(bi).unwrap().to_ast(&cfg.bond);
                 AstCovalentBond {
                     id: None,
                     a: label(a),
@@ -1468,7 +1460,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
 
 impl fmt::Display for MoleculeBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast().fmt(f)
+        self.to_ast(&MoleculeDslConfig::zeroed()).fmt(f)
     }
 }
 
@@ -1477,7 +1469,7 @@ impl FromStr for MoleculeBuilder {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_molecule_dsl(s).map_err(|e| LoweringError::Molecule(e.to_string()))?;
-        Self::from_ast(ast, &MoleculeLowerConfig::default())
+        Self::from_ast(ast, &MoleculeDslConfig::zeroed())
     }
 }
 
@@ -1491,8 +1483,29 @@ impl<'de> Deserialize<'de> for MoleculeBuilder {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
         let ast = parse_molecule_dsl(&s).map_err(SerdeError::custom)?;
-        Self::from_ast(ast, &MoleculeLowerConfig::default()).map_err(SerdeError::custom)
+        Self::from_ast(ast, &MoleculeDslConfig::zeroed()).map_err(SerdeError::custom)
     }
+}
+
+fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> {
+    let unpaired_total: u32 = states.iter().map(|s| s.unpaired_electrons() as u32).sum();
+    if unpaired_total > u8::MAX as u32 {
+        return None;
+    }
+    let total_u8 = unpaired_total as u8;
+    let mut compatible = Vec::new();
+    for m in 1..=10 {
+        let Some(mult) = SpinMultiplicity::from_multiplicity(m) else {
+            continue;
+        };
+        let Ok(candidate) = SpinState::try_new(total_u8, mult) else {
+            continue;
+        };
+        if candidate.is_constructible_from(states) {
+            compatible.push(m);
+        }
+    }
+    Some(compatible)
 }
 
 #[cfg(test)]

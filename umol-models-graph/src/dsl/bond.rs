@@ -1,6 +1,7 @@
 //! Bond-string DSL: parser, AST, and display
 
-use std::fmt;
+use std::fmt::{self, Display};
+use std::str::FromStr;
 
 use nom::character::complete::multispace0;
 use nom::combinator::all_consuming;
@@ -11,8 +12,9 @@ use serde::de::{Deserializer, Error as DeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
+use super::ast::DslAst;
+use super::config::BondDslConfig;
 use super::error::ParseError;
-use super::ast::LowerAst;
 use super::predicates::{bond_order, bond_predicate, BondPredicate};
 use super::value::ValueAst;
 
@@ -25,11 +27,39 @@ pub struct BondAst {
     pub multiplicity: Option<ValueAst>,
 }
 
-impl LowerAst for BondAst {
-    type Config = BondLowerConfig;
+impl BondAst {
+    pub fn new(order: ValueAst) -> Self {
+        Self {
+            order,
+            charge: None,
+            unpaired_electrons: None,
+            multiplicity: None,
+        }
+    }
+
+    pub fn from_order(order: u8) -> Self {
+        Self {
+            order: ValueAst::Lit(order as i32),
+            charge: None,
+            unpaired_electrons: None,
+            multiplicity: None,
+        }
+    }
 }
 
-impl fmt::Display for BondAst {
+impl DslAst for BondAst {
+    type Config = BondDslConfig;
+}
+
+impl FromStr for BondAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_bond_dsl(s)
+    }
+}
+
+impl Display for BondAst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.order {
             ValueAst::Lit(n) => write!(f, "{}", n)?,
@@ -96,38 +126,6 @@ impl fmt::Display for BondAst {
 
         Ok(())
     }
-}
-
-fn fmt_bond_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
-    match v {
-        ValueAst::Wildcard => write!(f, "*"),
-        ValueAst::Lit(n) => write!(f, "{}", n),
-        ValueAst::LitSet(s) => {
-            write!(f, "{{")?;
-            for (i, n) in s.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", n)?;
-            }
-            write!(f, "}}")
-        }
-        ValueAst::Expr(_) => write!(f, "<expr>"),
-    }
-}
-
-/// Bond lowering configuration
-#[derive(Clone, Debug, Default)]
-pub struct BondLowerConfig {
-    pub charge_mode: ChargeMode,
-}
-
-/// Charge interpretation mode
-#[derive(Clone, Debug, Default)]
-pub enum ChargeMode {
-    Zero,
-    #[default]
-    Provided,
 }
 
 impl Serialize for BondAst {
@@ -197,6 +195,24 @@ fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), P
         }
     }
     Ok(())
+}
+
+fn fmt_bond_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
+    match v {
+        ValueAst::Wildcard => write!(f, "*"),
+        ValueAst::Lit(n) => write!(f, "{}", n),
+        ValueAst::LitSet(s) => {
+            write!(f, "{{")?;
+            for (i, n) in s.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", n)?;
+            }
+            write!(f, "}}")
+        }
+        ValueAst::Expr(_) => write!(f, "<expr>"),
+    }
 }
 
 #[cfg(test)]

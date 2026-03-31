@@ -3,13 +3,13 @@
 use smallvec::SmallVec;
 use umol_data::{Element, SpinState, MAX_UNPAIRED_ELECTRONS};
 
+use super::atom::Atom;
+use super::atom_pattern::{AtomPattern, HydrogenPattern, Pattern};
+use super::config::ValenceStrategy;
+use super::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
+use super::molecule::AtomIndex;
+use super::molecule_builder::MoleculeBuilder;
 use crate::atom::AromaticValence;
-use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_pattern::{AtomPattern, HydrogenPattern, Pattern};
-use crate::graph_ir::config::ValenceStrategy;
-use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
 pub enum ValenceMatcher {
     AtomTyping {
@@ -71,7 +71,10 @@ fn atom_typing_candidates(
 fn infer_normal_implicit_hydrogens(builder: &MoleculeBuilder, atom_index: AtomIndex) -> Option<u8> {
     let atom = builder.atom(atom_index).expect("atom_index must be valid");
     let element = atom.element();
-    let charge = match atom.charge { Pattern::Is(c) => c, Pattern::Any => 0 };
+    let charge = match atom.charge {
+        Pattern::Is(c) => c,
+        Pattern::Any => 0,
+    };
     let explicit_valence = builder.atom_bond_order_sum(atom_index);
 
     if builder.atom_aromatic_hint(atom_index) {
@@ -108,7 +111,10 @@ fn counts_candidates(
 ) -> SmallVec<[Atom; 4]> {
     let atom = builder.atom(atom_index).expect("atom_index must be valid");
     let element = atom.element();
-    let charge = match atom.charge { Pattern::Is(c) => c, Pattern::Any => 0 };
+    let charge = match atom.charge {
+        Pattern::Is(c) => c,
+        Pattern::Any => 0,
+    };
     let valence = builder.atom_bond_order_sum(atom_index);
     let (donated_pairs, accepted_pairs) = builder.atom_dative_bond_order_sums(atom_index);
 

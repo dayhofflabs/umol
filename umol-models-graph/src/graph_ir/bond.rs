@@ -9,12 +9,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use umol_data::{SpinMultiplicity, SpinState, SpinStateError};
 
+use super::ast_utils::{raise_spin_m_ground, raise_spin_u_ground};
+use super::bond_pattern::BondPattern;
+use super::error::{ResolutionError, ValidationError};
 use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::bond::{parse_bond_dsl, BondAst, BondLowerConfig};
+use crate::dsl::bond::{parse_bond_dsl, BondAst};
+use crate::dsl::config::{BondDslConfig, NumericMode};
 use crate::dsl::error::LoweringError;
 use crate::dsl::value::ValueAst;
-use crate::graph_ir::bond_pattern::BondPattern;
-use crate::graph_ir::error::{ResolutionError, ValidationError};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum BondError {
@@ -84,7 +86,7 @@ impl Bond {
 }
 
 impl FromAst<BondAst> for Bond {
-    fn from_ast(ast: BondAst, cfg: &BondLowerConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: BondAst, cfg: &BondDslConfig) -> Result<Self, LoweringError> {
         let pattern = BondPattern::from_ast(ast, cfg)?;
         pattern.to_bond().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
@@ -99,12 +101,27 @@ impl FromAst<BondAst> for Bond {
 }
 
 impl ToAst<BondAst> for Bond {
-    fn to_ast(&self) -> BondAst {
+    fn to_ast(&self, cfg: &BondDslConfig) -> BondAst {
+        let u = self.unpaired_electrons();
+        let m = self.multiplicity();
         BondAst {
             order: ValueAst::Lit(self.order() as i32),
-            charge: Some(ValueAst::Lit(self.charge() as i32)),
-            unpaired_electrons: Some(ValueAst::Lit(self.unpaired_electrons() as i32)),
-            multiplicity: Some(ValueAst::Lit(self.multiplicity().multiplicity() as i32)),
+            charge: match (self.charge(), &cfg.charge_mode) {
+                (0, NumericMode::Zero) => None,
+                (n, _) => Some(ValueAst::Lit(n as i32)),
+            },
+            unpaired_electrons: raise_spin_u_ground(
+                u,
+                m,
+                &cfg.unpaired_electrons_mode,
+                &cfg.multiplicity_mode,
+            ),
+            multiplicity: raise_spin_m_ground(
+                u,
+                m,
+                &cfg.unpaired_electrons_mode,
+                &cfg.multiplicity_mode,
+            ),
         }
     }
 }
@@ -114,14 +131,14 @@ impl FromStr for Bond {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_bond_dsl(s).map_err(|e| BondError::InvalidState(e.to_string()))?;
-        Bond::from_ast(ast, &BondLowerConfig::default())
+        Bond::from_ast(ast, &BondDslConfig::zeroed())
             .map_err(|e| BondError::InvalidState(e.to_string()))
     }
 }
 
 impl Display for Bond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast().fmt(f)
+        self.to_ast(&BondDslConfig::zeroed()).fmt(f)
     }
 }
 
@@ -154,16 +171,16 @@ mod tests {
     #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(1)), },
         Bond::from_parts(1, 0, SpinState::new(2, SpinMultiplicity::Singlet)))]
     fn test_bond_from_ast(#[case] ast: BondAst, #[case] expected: Bond) {
-        assert_eq!(Bond::from_ast(ast, &BondLowerConfig::default()).unwrap(), expected);
+        assert_eq!(Bond::from_ast(ast, &BondDslConfig::zeroed()).unwrap(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(Bond::new(1), BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(0)), multiplicity: Some(ValueAst::Lit(1)) })]
-    #[case::charged_doublet( Bond::from_parts(2, 1, SpinState::new(1, SpinMultiplicity::Doublet)), BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)),
-        unpaired_electrons: Some(ValueAst::Lit(1)), multiplicity: Some(ValueAst::Lit(2)) })]
+    #[case::single(Bond::new(1), BondAst { order: ValueAst::Lit(1), charge: None, unpaired_electrons: None, multiplicity: None })]
+    #[case::charged_doublet(Bond::from_parts(2, 1, SpinState::new(1, SpinMultiplicity::Doublet)), BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)),
+        unpaired_electrons: Some(ValueAst::Lit(1)), multiplicity: None })]
     fn test_bond_to_ast(#[case] bond: Bond, #[case] expected: BondAst) {
-        assert_eq!(bond.to_ast(), expected);
+        assert_eq!(bond.to_ast(&BondDslConfig::zeroed()), expected);
     }
 
     #[rstest]

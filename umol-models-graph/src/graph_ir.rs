@@ -1,6 +1,7 @@
 //! Graph-based molecular intermediate representation.
 
 pub mod aromaticity;
+mod ast_utils;
 pub mod atom;
 pub mod atom_pattern;
 pub mod atom_type;

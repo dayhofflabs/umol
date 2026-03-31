@@ -8,127 +8,24 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
+use super::ast_utils::{
+    lower_spin, raise_pattern_i8, raise_pattern_u8, raise_spin_m_pattern, raise_spin_u_pattern,
+};
+use super::atom::Atom;
+use super::atom_type::AtomError;
+use super::error::ValidationError;
+use super::molecule::AtomIndex;
+use super::molecule_builder::MoleculeBuilder;
 use crate::atom::{AromaticValence, IsotopeMass};
 use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::atom::{
-    parse_atom_dsl, AromaticMode, AtomAst, AtomLowerConfig, ChargeMode, ImplicitHydrogenMode,
-    IsotopeMode,
+use crate::dsl::atom::{parse_atom_dsl, AtomAst};
+use crate::dsl::config::{
+    AromaticValenceMode, AtomDslConfig, ImplicitHydrogenMode, IsotopeMode, NumericMode,
 };
 use crate::dsl::error::LoweringError;
 use crate::dsl::predicates::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExpr};
 use crate::dsl::value::ValueAst;
-use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_type::AtomError;
-use crate::graph_ir::error::ValidationError;
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::table_ir::atom::{Atom as TableAtom, ImplicitHydrogens};
-
-/// Generic pattern for a scalar-valued field: unconstrained or an exact value.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Pattern<T> {
-    Any,
-    Is(T),
-}
-
-impl<T: Copy> Copy for Pattern<T> {}
-
-impl<T: PartialEq + Copy> Pattern<T> {
-    pub fn matches(&self, value: T) -> bool {
-        match self {
-            Self::Any => true,
-            Self::Is(v) => *v == value,
-        }
-    }
-
-    /// Convert to `Option<T>`: `Any` → `None`, `Is(v)` → `Some(v)`.
-    pub fn into_option(self) -> Option<T> {
-        match self {
-            Self::Any => None,
-            Self::Is(v) => Some(v),
-        }
-    }
-}
-
-/// Pattern on a chemical element.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ElementPattern {
-    Any,
-    Is(Element),
-    OneOf(Vec<Element>),
-}
-
-impl ElementPattern {
-    pub fn matches(&self, element: Element) -> bool {
-        match self {
-            Self::Any => true,
-            Self::Is(e) => *e == element,
-            Self::OneOf(set) => set.contains(&element),
-        }
-    }
-}
-
-/// Pattern on isotope mass.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IsotopePattern {
-    Any,
-    Natural,
-    Is(u32),
-    OneOf(Vec<u32>),
-}
-
-impl IsotopePattern {
-    pub fn matches(&self, mass: IsotopeMass) -> bool {
-        match self {
-            Self::Any => true,
-            Self::Natural => mass == IsotopeMass::Natural,
-            Self::Is(n) => mass == IsotopeMass::MassNumber(*n),
-            Self::OneOf(set) => match mass {
-                IsotopeMass::MassNumber(v) => set.contains(&v),
-                _ => false,
-            },
-        }
-    }
-}
-
-/// Pattern on implicit hydrogen count.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum HydrogenPattern {
-    Any,
-    Normal,
-    Is(u8),
-}
-
-// Normal is a deferred constraint — must be resolved before matching
-impl HydrogenPattern {
-    pub fn matches(&self, n: u8) -> bool {
-        match self {
-            Self::Any => true,
-            Self::Normal => false,
-            Self::Is(h) => *h == n,
-        }
-    }
-}
-
-/// Pattern on aromatic valence.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AromaticPattern {
-    Any,
-    NotAromatic,
-    Aromatic,
-    Is(u8),
-}
-
-impl AromaticPattern {
-    pub fn matches(&self, av: AromaticValence) -> bool {
-        match self {
-            Self::Any => true,
-            Self::Aromatic => av.is_aromatic(),
-            Self::NotAromatic => av == AromaticValence::NotAromatic,
-            Self::Is(n) => av == AromaticValence::Valence(*n),
-        }
-    }
-}
 
 /// Atom pattern term.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,7 +40,7 @@ pub struct AtomPattern {
     pub valence: Pattern<u8>,
     pub donated_pairs: Pattern<u8>,
     pub accepted_pairs: Pattern<u8>,
-    pub aromatic_valence: AromaticPattern,
+    pub aromatic_valence: AromaticValencePattern,
     pub multicenter_valence: Pattern<u8>,
 }
 
@@ -160,7 +57,7 @@ impl AtomPattern {
             valence: Pattern::Any,
             donated_pairs: Pattern::Any,
             accepted_pairs: Pattern::Any,
-            aromatic_valence: AromaticPattern::Any,
+            aromatic_valence: AromaticValencePattern::Any,
             multicenter_valence: Pattern::Any,
         }
     }
@@ -171,8 +68,8 @@ impl AtomPattern {
             IsotopeMass::MassNumber(n) => IsotopePattern::Is(n),
         };
         let aromatic = match atom.aromatic_valence() {
-            AromaticValence::NotAromatic => AromaticPattern::NotAromatic,
-            AromaticValence::Valence(n) => AromaticPattern::Is(n),
+            AromaticValence::NotAromatic => AromaticValencePattern::NotAromatic,
+            AromaticValence::Valence(n) => AromaticValencePattern::Is(n),
         };
         Self {
             element: ElementPattern::Is(atom.element()),
@@ -209,7 +106,7 @@ impl AtomPattern {
             valence: Pattern::Any,
             donated_pairs: Pattern::Any,
             accepted_pairs: Pattern::Any,
-            aromatic_valence: AromaticPattern::Any,
+            aromatic_valence: AromaticValencePattern::Any,
             multicenter_valence: Pattern::Any,
         }
     }
@@ -225,11 +122,11 @@ impl AtomPattern {
             atom.implicit_hydrogens.clone()
         };
         let aromatic_valence = if builder.atom_aromatic_hint(atom_index) {
-            AromaticPattern::Aromatic
+            AromaticValencePattern::Aromatic
         } else if builder.atom_explicit_aromatic_hint(atom_index) == Some(false) {
-            AromaticPattern::NotAromatic
+            AromaticValencePattern::NotAromatic
         } else {
-            AromaticPattern::Any
+            AromaticValencePattern::Any
         };
         let multicenter_valence = if builder.atom_has_multicenter_bonds(atom_index) {
             Pattern::Any
@@ -280,9 +177,9 @@ impl AtomPattern {
             HydrogenPattern::Is(h) => *h,
         };
         let aromatic_valence: AromaticValence = match &self.aromatic_valence {
-            AromaticPattern::Any | AromaticPattern::Aromatic => return Ok(()),
-            AromaticPattern::NotAromatic => AromaticValence::NotAromatic,
-            AromaticPattern::Is(n) => AromaticValence::Valence(*n),
+            AromaticValencePattern::Any | AromaticValencePattern::Aromatic => return Ok(()),
+            AromaticValencePattern::NotAromatic => AromaticValence::NotAromatic,
+            AromaticValencePattern::Is(n) => AromaticValence::Valence(*n),
         };
         let lone_pairs = match self.lone_pairs {
             Pattern::Any => 0,
@@ -396,7 +293,7 @@ impl AtomPattern {
     /// `NotAromatic` for aromatic valence. Returns `ValidationError::NonGround`
     /// for fields with non-ground patterns that cannot be defaulted:
     /// `ElementPattern::{Any, OneOf}`, `HydrogenPattern::Normal`,
-    /// `IsotopePattern::OneOf`, `AromaticPattern::Any`.
+    /// `IsotopePattern::OneOf`, `AromaticValencePattern::Any`.
     pub fn to_atom(&self) -> Result<Atom, ValidationError> {
         let element = match &self.element {
             ElementPattern::Is(e) => *e,
@@ -462,13 +359,15 @@ impl AtomPattern {
         };
 
         let aromatic_valence: AromaticValence = match &self.aromatic_valence {
-            AromaticPattern::Any | AromaticPattern::NotAromatic => AromaticValence::NotAromatic,
-            AromaticPattern::Aromatic => {
+            AromaticValencePattern::Any | AromaticValencePattern::NotAromatic => {
+                AromaticValence::NotAromatic
+            }
+            AromaticValencePattern::Aromatic => {
                 return Err(ValidationError::NonGround {
                     field: "aromatic_valence",
                 })
             }
-            AromaticPattern::Is(n) => AromaticValence::Valence(*n),
+            AromaticValencePattern::Is(n) => AromaticValence::Valence(*n),
         };
 
         let multicenter_valence = match self.multicenter_valence {
@@ -514,17 +413,114 @@ impl AtomPattern {
     }
 }
 
-fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
-    match aromatic_valence {
-        AromaticValence::NotAromatic => 0,
-        AromaticValence::Valence(0) => 0,
-        AromaticValence::Valence(1) => 1,
-        AromaticValence::Valence(_) => 0,
+/// Generic pattern for a scalar-valued field: unconstrained or an exact value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Pattern<T> {
+    Any,
+    Is(T),
+}
+
+impl<T: Copy> Copy for Pattern<T> {}
+
+impl<T: PartialEq + Copy> Pattern<T> {
+    pub fn matches(&self, value: T) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Is(v) => *v == value,
+        }
+    }
+
+    /// Convert to `Option<T>`: `Any` → `None`, `Is(v)` → `Some(v)`.
+    pub fn into_option(self) -> Option<T> {
+        match self {
+            Self::Any => None,
+            Self::Is(v) => Some(v),
+        }
+    }
+}
+
+/// Pattern on a chemical element.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ElementPattern {
+    Any,
+    Is(Element),
+    OneOf(Vec<Element>),
+}
+
+impl ElementPattern {
+    pub fn matches(&self, element: Element) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Is(e) => *e == element,
+            Self::OneOf(set) => set.contains(&element),
+        }
+    }
+}
+
+/// Pattern on isotope mass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IsotopePattern {
+    Any,
+    Natural,
+    Is(u32),
+    OneOf(Vec<u32>),
+}
+
+impl IsotopePattern {
+    pub fn matches(&self, mass: IsotopeMass) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Natural => mass == IsotopeMass::Natural,
+            Self::Is(n) => mass == IsotopeMass::MassNumber(*n),
+            Self::OneOf(set) => match mass {
+                IsotopeMass::MassNumber(v) => set.contains(&v),
+                _ => false,
+            },
+        }
+    }
+}
+
+/// Pattern on implicit hydrogen count.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HydrogenPattern {
+    Any,
+    Normal,
+    Is(u8),
+}
+
+// Normal is a deferred constraint — must be resolved before matching
+impl HydrogenPattern {
+    pub fn matches(&self, n: u8) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Normal => false,
+            Self::Is(h) => *h == n,
+        }
+    }
+}
+
+/// Pattern on aromatic valence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AromaticValencePattern {
+    Any,
+    NotAromatic,
+    Aromatic,
+    Is(u8),
+}
+
+impl AromaticValencePattern {
+    pub fn matches(&self, av: AromaticValence) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Aromatic => av.is_aromatic(),
+            Self::NotAromatic => av == AromaticValence::NotAromatic,
+            Self::Is(n) => av == AromaticValence::Valence(*n),
+        }
     }
 }
 
 impl FromAst<AtomAst> for AtomPattern {
-    fn from_ast(ast: AtomAst, cfg: &AtomLowerConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: AtomAst, cfg: &AtomDslConfig) -> Result<Self, LoweringError> {
         let element = match ast.element {
             ElementExpr::Lit(e) => ElementPattern::Is(e),
             ElementExpr::Wildcard => ElementPattern::Any,
@@ -536,7 +532,7 @@ impl FromAst<AtomAst> for AtomPattern {
 
         let isotope_mass = match ast.isotope_mass.or_else(|| match cfg.isotope_mode {
             IsotopeMode::Natural => Some(IsotopeExpr::Natural),
-            IsotopeMode::Provided => None,
+            IsotopeMode::Required => None,
         }) {
             None => IsotopePattern::Any,
             Some(IsotopeExpr::Natural) => IsotopePattern::Natural,
@@ -551,8 +547,8 @@ impl FromAst<AtomAst> for AtomPattern {
         };
 
         let charge = match ast.charge.or_else(|| match cfg.charge_mode {
-            ChargeMode::Zero => Some(ValueAst::Lit(0)),
-            ChargeMode::Provided => None,
+            NumericMode::Zero => Some(ValueAst::Lit(0)),
+            NumericMode::Required => None,
         }) {
             None => Pattern::Any,
             Some(ValueAst::Wildcard) => Pattern::Any,
@@ -568,7 +564,7 @@ impl FromAst<AtomAst> for AtomPattern {
                 .or_else(|| match cfg.implicit_h_mode {
                     ImplicitHydrogenMode::Normal => Some(HydrogenExpr::Normal),
                     ImplicitHydrogenMode::Zero => Some(HydrogenExpr::Value(ValueAst::Lit(0))),
-                    ImplicitHydrogenMode::Provided => None,
+                    ImplicitHydrogenMode::Required => None,
                 }) {
                 None => HydrogenPattern::Any,
                 Some(HydrogenExpr::Normal) => HydrogenPattern::Normal,
@@ -585,122 +581,141 @@ impl FromAst<AtomAst> for AtomPattern {
                 }
             };
 
-        let aromatic_valence = match ast.aromatic_valence.or_else(|| match cfg.aromatic_mode {
-            AromaticMode::None => Some(AromaticExpr::NotAromatic),
-            AromaticMode::Any => Some(AromaticExpr::Unspecified),
-            AromaticMode::Provided => None,
-        }) {
-            None => AromaticPattern::Any,
-            Some(AromaticExpr::Unspecified) => AromaticPattern::Any,
-            Some(AromaticExpr::NotAromatic) => AromaticPattern::NotAromatic,
-            Some(AromaticExpr::Value(ValueAst::Wildcard)) => AromaticPattern::Aromatic,
-            Some(AromaticExpr::Value(ValueAst::Lit(n))) => {
-                AromaticPattern::Is(u8::try_from(n).map_err(|_| LoweringError::NonGround {
-                    field: "aromatic_valence",
-                })?)
-            }
-            Some(AromaticExpr::Value(_)) => {
-                return Err(LoweringError::NonGround {
-                    field: "aromatic_valence",
-                })
-            }
-        };
-
-        let multiplicity = match ast.multiplicity {
-            None => Pattern::Any,
-            Some(ValueAst::Wildcard) => Pattern::Any,
-            Some(ValueAst::Lit(n)) => {
-                let m = u8::try_from(n).map_err(|_| LoweringError::NonGround {
-                    field: "multiplicity",
-                })?;
-                Pattern::Is(
-                    SpinMultiplicity::from_multiplicity(m)
-                        .ok_or(LoweringError::InvalidMultiplicity(m))?,
-                )
-            }
-            Some(_) => {
-                return Err(LoweringError::NonGround {
-                    field: "multiplicity",
-                })
-            }
-        };
-
-        let lower_u8_opt =
-            |v: Option<ValueAst>, field: &'static str| -> Result<Pattern<u8>, LoweringError> {
-                match v {
-                    None => Ok(Pattern::Any),
-                    Some(ValueAst::Wildcard) => Ok(Pattern::Any),
-                    Some(ValueAst::Lit(n)) => u8::try_from(n)
-                        .map(Pattern::Is)
-                        .map_err(|_| LoweringError::NonGround { field }),
-                    Some(_) => Err(LoweringError::NonGround { field }),
+        let aromatic_valence =
+            match ast
+                .aromatic_valence
+                .or_else(|| match cfg.aromatic_valence_mode {
+                    AromaticValenceMode::NotAromatic => Some(AromaticExpr::NotAromatic),
+                    AromaticValenceMode::Aromatic => Some(AromaticExpr::Value(ValueAst::Wildcard)),
+                    AromaticValenceMode::Required => None,
+                }) {
+                None => AromaticValencePattern::Any,
+                Some(AromaticExpr::Unspecified) => AromaticValencePattern::Any,
+                Some(AromaticExpr::NotAromatic) => AromaticValencePattern::NotAromatic,
+                Some(AromaticExpr::Value(ValueAst::Wildcard)) => AromaticValencePattern::Aromatic,
+                Some(AromaticExpr::Value(ValueAst::Lit(n))) => {
+                    AromaticValencePattern::Is(u8::try_from(n).map_err(|_| {
+                        LoweringError::NonGround {
+                            field: "aromatic_valence",
+                        }
+                    })?)
+                }
+                Some(AromaticExpr::Value(_)) => {
+                    return Err(LoweringError::NonGround {
+                        field: "aromatic_valence",
+                    })
                 }
             };
+
+        // Coupled spin resolution: resolve u first (may derive from raw m), then m (may derive from resolved u)
+        let (unpaired_electrons, multiplicity) = lower_spin(
+            ast.unpaired_electrons,
+            ast.multiplicity,
+            &cfg.unpaired_electrons_mode,
+            &cfg.multiplicity_mode,
+        )?;
+
+        let lower_u8 = |v: Option<ValueAst>,
+                        mode: &NumericMode,
+                        field: &'static str|
+         -> Result<Pattern<u8>, LoweringError> {
+            let v = v.or_else(|| match mode {
+                NumericMode::Zero => Some(ValueAst::Lit(0)),
+                NumericMode::Required => None,
+            });
+            match v {
+                None => Ok(Pattern::Any),
+                Some(ValueAst::Wildcard) => Ok(Pattern::Any),
+                Some(ValueAst::Lit(n)) => u8::try_from(n)
+                    .map(Pattern::Is)
+                    .map_err(|_| LoweringError::NonGround { field }),
+                Some(_) => Err(LoweringError::NonGround { field }),
+            }
+        };
 
         Ok(AtomPattern {
             element,
             isotope_mass,
             charge,
             implicit_hydrogens,
-            lone_pairs: lower_u8_opt(ast.lone_pairs, "lone_pairs")?,
-            unpaired_electrons: lower_u8_opt(ast.unpaired_electrons, "unpaired_electrons")?,
+            lone_pairs: lower_u8(ast.lone_pairs, &cfg.lone_pairs_mode, "lone_pairs")?,
+            unpaired_electrons,
             multiplicity,
-            valence: lower_u8_opt(ast.valence, "valence")?,
-            donated_pairs: lower_u8_opt(ast.donated_pairs, "donated_pairs")?,
-            accepted_pairs: lower_u8_opt(ast.accepted_pairs, "accepted_pairs")?,
+            valence: lower_u8(ast.valence, &cfg.valence_mode, "valence")?,
+            donated_pairs: lower_u8(ast.donated_pairs, &cfg.donated_pairs_mode, "donated_pairs")?,
+            accepted_pairs: lower_u8(
+                ast.accepted_pairs,
+                &cfg.accepted_pairs_mode,
+                "accepted_pairs",
+            )?,
             aromatic_valence,
-            multicenter_valence: lower_u8_opt(ast.multicenter_valence, "multicenter_valence")?,
+            multicenter_valence: lower_u8(
+                ast.multicenter_valence,
+                &cfg.multicenter_valence_mode,
+                "multicenter_valence",
+            )?,
         })
     }
 }
 
 impl ToAst<AtomAst> for AtomPattern {
-    fn to_ast(&self) -> AtomAst {
+    fn to_ast(&self, cfg: &AtomDslConfig) -> AtomAst {
         AtomAst {
             element: match &self.element {
                 ElementPattern::Any => ElementExpr::Wildcard,
                 ElementPattern::Is(e) => ElementExpr::Lit(*e),
                 ElementPattern::OneOf(es) => ElementExpr::Set(es.clone()),
             },
-            isotope_mass: match &self.isotope_mass {
-                IsotopePattern::Any => Some(IsotopeExpr::Wildcard),
-                IsotopePattern::Natural => Some(IsotopeExpr::Natural),
-                IsotopePattern::Is(n) => Some(IsotopeExpr::Lit(*n)),
-                IsotopePattern::OneOf(ns) => Some(IsotopeExpr::Set(ns.clone())),
+            isotope_mass: match (&self.isotope_mass, &cfg.isotope_mode) {
+                (IsotopePattern::Natural, IsotopeMode::Natural) => None,
+                (IsotopePattern::Any, IsotopeMode::Required) => None,
+                (IsotopePattern::Any, _) => Some(IsotopeExpr::Wildcard),
+                (IsotopePattern::Natural, IsotopeMode::Required) => Some(IsotopeExpr::Natural),
+                (IsotopePattern::Is(n), _) => Some(IsotopeExpr::Lit(*n)),
+                (IsotopePattern::OneOf(ns), _) => Some(IsotopeExpr::Set(ns.clone())),
             },
-            charge: match self.charge {
-                Pattern::Any => Some(ValueAst::Wildcard),
-                Pattern::Is(n) => Some(ValueAst::Lit(n as i32)),
+            charge: raise_pattern_i8(self.charge, &cfg.charge_mode),
+            implicit_hydrogens: match (&self.implicit_hydrogens, &cfg.implicit_h_mode) {
+                (HydrogenPattern::Is(0), ImplicitHydrogenMode::Zero) => None,
+                (HydrogenPattern::Normal, ImplicitHydrogenMode::Normal) => None,
+                (HydrogenPattern::Any, ImplicitHydrogenMode::Required) => None,
+                (HydrogenPattern::Any, _) => Some(HydrogenExpr::Value(ValueAst::Wildcard)),
+                (HydrogenPattern::Normal, _) => Some(HydrogenExpr::Normal),
+                (HydrogenPattern::Is(n), _) => Some(HydrogenExpr::Value(ValueAst::Lit(*n as i32))),
             },
-            implicit_hydrogens: match &self.implicit_hydrogens {
-                HydrogenPattern::Any => Some(HydrogenExpr::Value(ValueAst::Wildcard)),
-                HydrogenPattern::Normal => Some(HydrogenExpr::Normal),
-                HydrogenPattern::Is(n) => Some(HydrogenExpr::Value(ValueAst::Lit(*n as i32))),
+            lone_pairs: raise_pattern_u8(self.lone_pairs, &cfg.lone_pairs_mode),
+            unpaired_electrons: raise_spin_u_pattern(
+                self.unpaired_electrons,
+                self.multiplicity,
+                &cfg.unpaired_electrons_mode,
+            ),
+            multiplicity: raise_spin_m_pattern(
+                self.unpaired_electrons,
+                self.multiplicity,
+                &cfg.unpaired_electrons_mode,
+                &cfg.multiplicity_mode,
+            ),
+            valence: raise_pattern_u8(self.valence, &cfg.valence_mode),
+            donated_pairs: raise_pattern_u8(self.donated_pairs, &cfg.donated_pairs_mode),
+            accepted_pairs: raise_pattern_u8(self.accepted_pairs, &cfg.accepted_pairs_mode),
+            aromatic_valence: match (&self.aromatic_valence, &cfg.aromatic_valence_mode) {
+                (AromaticValencePattern::Any, AromaticValenceMode::Required) => None,
+                (AromaticValencePattern::NotAromatic, AromaticValenceMode::NotAromatic) => None,
+                (AromaticValencePattern::Aromatic, AromaticValenceMode::Aromatic) => None,
+                (AromaticValencePattern::Any, _) => Some(AromaticExpr::Unspecified),
+                (AromaticValencePattern::NotAromatic, _) => Some(AromaticExpr::NotAromatic),
+                (AromaticValencePattern::Aromatic, _) => {
+                    Some(AromaticExpr::Value(ValueAst::Wildcard))
+                }
+                (AromaticValencePattern::Is(n), _) => {
+                    Some(AromaticExpr::Value(ValueAst::Lit(*n as i32)))
+                }
             },
-            lone_pairs: wildcard_u8(self.lone_pairs),
-            unpaired_electrons: wildcard_u8(self.unpaired_electrons),
-            multiplicity: match self.multiplicity {
-                Pattern::Any => Some(ValueAst::Wildcard),
-                Pattern::Is(m) => Some(ValueAst::Lit(m.multiplicity() as i32)),
-            },
-            valence: wildcard_u8(self.valence),
-            donated_pairs: wildcard_u8(self.donated_pairs),
-            accepted_pairs: wildcard_u8(self.accepted_pairs),
-            aromatic_valence: match &self.aromatic_valence {
-                AromaticPattern::Any => Some(AromaticExpr::Unspecified),
-                AromaticPattern::NotAromatic => Some(AromaticExpr::NotAromatic),
-                AromaticPattern::Aromatic => Some(AromaticExpr::Value(ValueAst::Wildcard)),
-                AromaticPattern::Is(n) => Some(AromaticExpr::Value(ValueAst::Lit(*n as i32))),
-            },
-            multicenter_valence: wildcard_u8(self.multicenter_valence),
+            multicenter_valence: raise_pattern_u8(
+                self.multicenter_valence,
+                &cfg.multicenter_valence_mode,
+            ),
         }
-    }
-}
-
-fn wildcard_u8(pat: Pattern<u8>) -> Option<ValueAst> {
-    match pat {
-        Pattern::Any => Some(ValueAst::Wildcard),
-        Pattern::Is(n) => Some(ValueAst::Lit(n as i32)),
     }
 }
 
@@ -709,13 +724,13 @@ impl FromStr for AtomPattern {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_atom_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Self::from_ast(ast, &AtomLowerConfig::default())
+        Self::from_ast(ast, &AtomDslConfig::open())
     }
 }
 
 impl fmt::Display for AtomPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast().fmt(f)
+        self.to_ast(&AtomDslConfig::open()).fmt(f)
     }
 }
 
@@ -729,16 +744,17 @@ impl<'de> Deserialize<'de> for AtomPattern {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
         let ast = parse_atom_dsl(&s).map_err(SerdeError::custom)?;
-        AtomPattern::from_ast(
-            ast,
-            &AtomLowerConfig {
-                isotope_mode: IsotopeMode::Provided,
-                charge_mode: ChargeMode::Provided,
-                implicit_h_mode: ImplicitHydrogenMode::Provided,
-                aromatic_mode: AromaticMode::Provided,
-            },
-        )
-        .map_err(SerdeError::custom)
+        AtomPattern::from_ast(ast, &AtomDslConfig::open()).map_err(SerdeError::custom)
+    }
+}
+
+// TODO: Combine with identical function in atom.rs
+fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
+    match aromatic_valence {
+        AromaticValence::NotAromatic => 0,
+        AromaticValence::Valence(0) => 0,
+        AromaticValence::Valence(1) => 1,
+        AromaticValence::Valence(_) => 0,
     }
 }
 
@@ -771,14 +787,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::invalid_spin_state(
-        AtomPattern { unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Quartet), ..AtomPattern::new(Element::C) },
-        ValidationError::Atom(AtomError::SpinState(SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::Quartet }))
-    )]
-    #[case::invariant_mismatch(
-        AtomPattern { valence: Pattern::Is(2), ..AtomPattern::new(Element::O) },
-        ValidationError::Atom(AtomError::ElectronInvariantMismatch { element: Element::O, orbital_invariant: 4, electron_invariant: 8 })
-    )]
+    #[case::invalid_spin_state(AtomPattern { unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Quartet), ..AtomPattern::new(Element::C) },
+        ValidationError::Atom(AtomError::SpinState(SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::Quartet })))]
+    #[case::invariant_mismatch(AtomPattern { valence: Pattern::Is(2), ..AtomPattern::new(Element::O) },
+        ValidationError::Atom(AtomError::ElectronInvariantMismatch { element: Element::O, orbital_invariant: 4, electron_invariant: 8 }))]
     fn test_atom_pattern_to_atom_error(
         #[case] pattern: AtomPattern,
         #[case] expected: ValidationError,
@@ -788,56 +800,47 @@ mod tests {
         assert_eq!(result.unwrap_err(), expected);
     }
 
+    /// Base pattern for default (Zero) config: absent numerics → Is(0), isotope → Natural, aromatic → Any.
+    fn zero_c() -> AtomPattern {
+        AtomPattern {
+            isotope_mass: IsotopePattern::Natural,
+            charge: Pattern::Is(0),
+            implicit_hydrogens: HydrogenPattern::Is(0),
+            lone_pairs: Pattern::Is(0),
+            unpaired_electrons: Pattern::Is(0),
+            multiplicity: Pattern::Is(SpinMultiplicity::Singlet),
+            valence: Pattern::Is(0),
+            donated_pairs: Pattern::Is(0),
+            accepted_pairs: Pattern::Is(0),
+            aromatic_valence: AromaticValencePattern::NotAromatic,
+            multicenter_valence: Pattern::Is(0),
+            ..AtomPattern::new(Element::C)
+        }
+    }
+
     #[rustfmt::skip]
     #[rstest]
-    #[case::defaults(
-        AtomAst::from_element(Element::C),
-        AtomLowerConfig::default(),
-        AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }
-    )]
-    #[case::charge_and_hydrogens(
-        AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))), ..AtomAst::from_element(Element::C) },
-        AtomLowerConfig::default(),
-        AtomPattern { isotope_mass: IsotopePattern::Natural, charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) }
-    )]
-    #[case::wildcard_charge(
-        AtomAst { charge: Some(ValueAst::Wildcard), ..AtomAst::from_element(Element::C) },
-        AtomLowerConfig::default(),
-        AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }
-    )]
-    #[case::aromatic_wildcard(
-        AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Wildcard)), ..AtomAst::from_element(Element::C) },
-        AtomLowerConfig::default(),
-        AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticPattern::Aromatic, ..AtomPattern::new(Element::C) }
-    )]
-    #[case::aromatic_unspecified(
-        AtomAst { aromatic_valence: Some(AromaticExpr::Unspecified), ..AtomAst::from_element(Element::C) },
-        AtomLowerConfig::default(),
-        AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }
-    )]
-    #[case::aromatic_not_aromatic(
-        AtomAst { aromatic_valence: Some(AromaticExpr::NotAromatic), ..AtomAst::from_element(Element::C) },
-        AtomLowerConfig::default(),
-        AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticPattern::NotAromatic, ..AtomPattern::new(Element::C) }
-    )]
-    #[case::aromatic_specific(
-        AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(2))), ..AtomAst::from_element(Element::C) },
-        AtomLowerConfig::default(),
-        AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticPattern::Is(2), ..AtomPattern::new(Element::C) }
-    )]
-    #[case::absent_aromatic_mode_any(
-        AtomAst::from_element(Element::C),
-        AtomLowerConfig { aromatic_mode: AromaticMode::Any, ..AtomLowerConfig::default() },
-        AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }
-    )]
-    #[case::absent_aromatic_mode_none(
-        AtomAst::from_element(Element::C),
-        AtomLowerConfig { aromatic_mode: AromaticMode::None, ..AtomLowerConfig::default() },
-        AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticPattern::NotAromatic, ..AtomPattern::new(Element::C) }
-    )]
+    #[case::defaults(AtomAst::from_element(Element::C), AtomDslConfig::zeroed(), zero_c())]
+    #[case::charge_and_hydrogens(AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))), ..AtomAst::from_element(Element::C) },
+        AtomDslConfig::zeroed(), AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..zero_c() })]
+    #[case::wildcard_charge(AtomAst { charge: Some(ValueAst::Wildcard), ..AtomAst::from_element(Element::C) },
+        AtomDslConfig::zeroed(), AtomPattern { charge: Pattern::Any, ..zero_c() })]
+    #[case::aromatic_wildcard(AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Wildcard)), ..AtomAst::from_element(Element::C) },
+        AtomDslConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::Aromatic, ..zero_c() })]
+    #[case::aromatic_unspecified(AtomAst { aromatic_valence: Some(AromaticExpr::Unspecified), ..AtomAst::from_element(Element::C) },
+        AtomDslConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::Any, ..zero_c() })]
+    #[case::aromatic_not_aromatic(AtomAst { aromatic_valence: Some(AromaticExpr::NotAromatic), ..AtomAst::from_element(Element::C) },
+        AtomDslConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..zero_c() })]
+    #[case::aromatic_specific(AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(2))), ..AtomAst::from_element(Element::C) },
+        AtomDslConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::Is(2), ..zero_c() })]
+    #[case::absent_aromatic_mode_required(AtomAst::from_element(Element::C), AtomDslConfig { aromatic_valence_mode: AromaticValenceMode::Required, ..AtomDslConfig::zeroed() },
+        AtomPattern { aromatic_valence: AromaticValencePattern::Any, ..zero_c() })]
+    #[case::absent_aromatic_mode_none(AtomAst::from_element(Element::C), AtomDslConfig { aromatic_valence_mode: AromaticValenceMode::NotAromatic, ..AtomDslConfig::zeroed() },
+        AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..zero_c() })]
+    #[case::open(AtomAst::from_element(Element::C), AtomDslConfig::open(), AtomPattern::new(Element::C))]
     fn test_atom_pattern_from_ast(
         #[case] ast: AtomAst,
-        #[case] cfg: AtomLowerConfig,
+        #[case] cfg: AtomDslConfig,
         #[case] expected: AtomPattern,
     ) {
         assert_eq!(AtomPattern::from_ast(ast, &cfg).unwrap(), expected);
@@ -845,85 +848,56 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::all_any(
-        AtomPattern::new(Element::C),
-        AtomAst {
-            element: ElementExpr::Lit(Element::C),
-            isotope_mass: Some(IsotopeExpr::Wildcard),
-            charge: Some(ValueAst::Wildcard),
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Wildcard)),
-            lone_pairs: Some(ValueAst::Wildcard),
-            unpaired_electrons: Some(ValueAst::Wildcard),
-            multiplicity: Some(ValueAst::Wildcard),
-            valence: Some(ValueAst::Wildcard),
-            donated_pairs: Some(ValueAst::Wildcard),
-            accepted_pairs: Some(ValueAst::Wildcard),
-            aromatic_valence: Some(AromaticExpr::Unspecified),
-            multicenter_valence: Some(ValueAst::Wildcard),
-        }
-    )]
-    #[case::ground(
-        AtomPattern { isotope_mass: IsotopePattern::Natural, charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), aromatic_valence: AromaticPattern::Is(1), ..AtomPattern::new(Element::C) },
-        AtomAst {
-            charge: Some(ValueAst::Lit(1)),
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))),
-            aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(1))),
-            isotope_mass: Some(IsotopeExpr::Natural),
-            .."C".parse::<AtomPattern>().unwrap().to_ast()
-        }
-    )]
-    #[case::aromatic_variants(
-        AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticPattern::Aromatic, ..AtomPattern::new(Element::C) },
-        AtomAst {
-            aromatic_valence: Some(AromaticExpr::Value(ValueAst::Wildcard)),
-            isotope_mass: Some(IsotopeExpr::Natural),
-            .."C".parse::<AtomPattern>().unwrap().to_ast()
-        }
-    )]
-    fn test_atom_pattern_to_ast(#[case] pattern: AtomPattern, #[case] expected: AtomAst) {
-        assert_eq!(pattern.to_ast(), expected);
+    #[case::open(AtomPattern::new(Element::C), AtomDslConfig::open(), AtomAst::from_element(Element::C))]
+    #[case::open_ground(AtomPattern { isotope_mass: IsotopePattern::Natural, charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), aromatic_valence: AromaticValencePattern::Is(1), ..AtomPattern::new(Element::C) },
+        AtomDslConfig::open(), AtomAst { isotope_mass: Some(IsotopeExpr::Natural), charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))),
+            aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(1))), ..AtomAst::from_element(Element::C) })]
+    #[case::aromatic_variants(AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticValencePattern::Aromatic, ..AtomPattern::new(Element::C) },
+        AtomDslConfig::open(), AtomAst { isotope_mass: Some(IsotopeExpr::Natural), aromatic_valence: Some(AromaticExpr::Value(ValueAst::Wildcard)), ..AtomAst::from_element(Element::C) })]
+    #[case::zeroed(zero_c(), AtomDslConfig::zeroed(), AtomAst::from_element(Element::C))]
+    fn test_atom_pattern_to_ast(#[case] pattern: AtomPattern, #[case] cfg: AtomDslConfig, #[case] expected: AtomAst) {
+        assert_eq!(pattern.to_ast(&cfg), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::element("C", AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) })]
-    #[case::hydrogens("C#h4", AtomPattern { isotope_mass: IsotopePattern::Natural, implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) })]
-    #[case::charge_plus("C#c+#h3", AtomPattern { isotope_mass: IsotopePattern::Natural, charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) })]
+    #[case::element("C", AtomPattern::new(Element::C))]
+    #[case::hydrogens("C#h4", AtomPattern { implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) })]
+    #[case::charge_plus("C#c+#h3", AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) })]
     #[case::isotope("C#i13#h4", AtomPattern { isotope_mass: IsotopePattern::Is(13), implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) })]
-    #[case::aromatic_none("C#a!", AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticPattern::NotAromatic, ..AtomPattern::new(Element::C) })]
-    #[case::wildcard("*", AtomPattern { element: ElementPattern::Any, isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) })]
+    #[case::aromatic_none("C#a!", AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..AtomPattern::new(Element::C) })]
+    #[case::wildcard("*", AtomPattern { element: ElementPattern::Any, ..AtomPattern::new(Element::C) })]
     fn test_atom_pattern_from_str(#[case] input: &str, #[case] expected: AtomPattern) {
         assert_eq!(input.parse::<AtomPattern>().unwrap(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::all_any(AtomPattern::new(Element::C), "C#i*#c*#h*#n*#u*#s*#v*#d*#r*#a?#m*")]
-    #[case::isotope_natural(AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }, "C#i=#c*#h*#n*#u*#s*#v*#d*#r*#a?#m*")]
-    #[case::hydrogens(AtomPattern { implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, "C#i*#c*#h4#n*#u*#s*#v*#d*#r*#a?#m*")]
-    #[case::charge_plus(AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) }, "C#i*#c+#h3#n*#u*#s*#v*#d*#r*#a?#m*")]
-    #[case::isotope_mass(AtomPattern { isotope_mass: IsotopePattern::Is(13), implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, "C#i13#c*#h4#n*#u*#s*#v*#d*#r*#a?#m*")]
-    #[case::aromatic_none(AtomPattern { aromatic_valence: AromaticPattern::NotAromatic, ..AtomPattern::new(Element::C) }, "C#i*#c*#h*#n*#u*#s*#v*#d*#r*#a!#m*")]
-    #[case::aromatic(AtomPattern { aromatic_valence: AromaticPattern::Aromatic, ..AtomPattern::new(Element::C) }, "C#i*#c*#h*#n*#u*#s*#v*#d*#r*#a*#m*")]
+    #[case::element(AtomPattern::new(Element::C), "C")]
+    #[case::isotope_natural(AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }, "C#i=")]
+    #[case::hydrogens(AtomPattern { implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, "C#h4")]
+    #[case::charge_plus(AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) }, "C#c+#h3")]
+    #[case::isotope_mass(AtomPattern { isotope_mass: IsotopePattern::Is(13), implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, "C#i13#h4")]
+    #[case::aromatic_none(AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..AtomPattern::new(Element::C) }, "C#a!")]
+    #[case::aromatic(AtomPattern { aromatic_valence: AromaticValencePattern::Aromatic, ..AtomPattern::new(Element::C) }, "C#a*")]
     fn test_atom_pattern_display(#[case] pattern: AtomPattern, #[case] expected: &str) {
         assert_eq!(pattern.to_string(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::all_any(AtomPattern::new(Element::C), r#""C#i*#c*#h*#n*#u*#s*#v*#d*#r*#a?#m*""#)]
-    #[case::isotope_natural(AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }, r#""C#i=#c*#h*#n*#u*#s*#v*#d*#r*#a?#m*""#)]
-    #[case::hydrogens(AtomPattern { implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, r#""C#i*#c*#h4#n*#u*#s*#v*#d*#r*#a?#m*""#)]
-    #[case::charge_plus(AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) }, r#""C#i*#c+#h3#n*#u*#s*#v*#d*#r*#a?#m*""#)]
-    #[case::isotope_mass(AtomPattern { isotope_mass: IsotopePattern::Is(13), implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, r#""C#i13#c*#h4#n*#u*#s*#v*#d*#r*#a?#m*""#)]
-    #[case::aromatic_none(AtomPattern { aromatic_valence: AromaticPattern::NotAromatic, ..AtomPattern::new(Element::C) }, r#""C#i*#c*#h*#n*#u*#s*#v*#d*#r*#a!#m*""#)]
-    #[case::aromatic(AtomPattern { aromatic_valence: AromaticPattern::Aromatic, ..AtomPattern::new(Element::C) }, r#""C#i*#c*#h*#n*#u*#s*#v*#d*#r*#a*#m*""#)]
+    #[case::element(AtomPattern::new(Element::C), r#""C""#)]
+    #[case::isotope_natural(AtomPattern { isotope_mass: IsotopePattern::Natural, ..AtomPattern::new(Element::C) }, r#""C#i=""#)]
+    #[case::hydrogens(AtomPattern { implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, r#""C#h4""#)]
+    #[case::charge_plus(AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) }, r#""C#c+#h3""#)]
+    #[case::isotope_mass(AtomPattern { isotope_mass: IsotopePattern::Is(13), implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, r#""C#i13#h4""#)]
+    #[case::aromatic_none(AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..AtomPattern::new(Element::C) }, r#""C#a!""#)]
+    #[case::aromatic(AtomPattern { aromatic_valence: AromaticValencePattern::Aromatic, ..AtomPattern::new(Element::C) }, r#""C#a*""#)]
     fn test_atom_pattern_serialize(#[case] pattern: AtomPattern, #[case] expected: &str) {
         let json = serde_json::to_string(&pattern).unwrap();
         assert_eq!(json, expected);
     }
 
-    // deserialize uses IsotopeMode::Provided: absent isotope → IsotopePattern::Any
     #[rustfmt::skip]
     #[rstest]
     #[case::all_any(r#""C""#, AtomPattern::new(Element::C))]
@@ -931,9 +905,9 @@ mod tests {
     #[case::hydrogens(r#""C#h4""#, AtomPattern { implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) })]
     #[case::charge_plus(r#""C#c+#h3""#, AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..AtomPattern::new(Element::C) })]
     #[case::isotope_mass(r#""C#i13#h4""#, AtomPattern { isotope_mass: IsotopePattern::Is(13), implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) })]
-    #[case::aromatic_dontcare(r#""C#a?""#, AtomPattern::new(Element::C))]
-    #[case::aromatic_none(r#""C#a!""#, AtomPattern { aromatic_valence: AromaticPattern::NotAromatic, ..AtomPattern::new(Element::C) })]
-    #[case::aromatic(r#""C#a*""#, AtomPattern { aromatic_valence: AromaticPattern::Aromatic, ..AtomPattern::new(Element::C) })]
+    #[case::aromatic_unspecified(r#""C#a?""#, AtomPattern::new(Element::C))]
+    #[case::aromatic_none(r#""C#a!""#, AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..AtomPattern::new(Element::C) })]
+    #[case::aromatic(r#""C#a*""#, AtomPattern { aromatic_valence: AromaticValencePattern::Aromatic, ..AtomPattern::new(Element::C) })]
     fn test_atom_pattern_deserialize(#[case] input: &str, #[case] expected: AtomPattern) {
         let pattern: AtomPattern = serde_json::from_str(input).unwrap();
         assert_eq!(pattern, expected);

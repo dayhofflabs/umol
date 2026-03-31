@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::graph_ir::molecule::AtomIndex;
+use super::molecule::AtomIndex;
 use crate::table_ir::bond::{Bond as TableBond, BondDonation};
 
 /// A dative (coordinate) bond in GraphIR. Carries the donor and acceptor atom

@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
-use crate::graph_ir::molecule::AtomIndex;
+use super::molecule::AtomIndex;
 
 /// Per-atom contribution to a multicenter set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

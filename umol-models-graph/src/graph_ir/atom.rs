@@ -8,9 +8,11 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
+use super::ast_utils::{raise_i8, raise_spin_m_ground, raise_spin_u_ground, raise_u8};
 use crate::atom::{AromaticValence, IsotopeMass};
 use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::atom::{parse_atom_dsl, AtomAst, AtomLowerConfig};
+use crate::dsl::atom::{parse_atom_dsl, AtomAst};
+use crate::dsl::config::{AromaticValenceMode, AtomDslConfig, ImplicitHydrogenMode, IsotopeMode};
 use crate::dsl::error::LoweringError;
 use crate::dsl::predicates::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExpr};
 use crate::dsl::value::ValueAst;
@@ -200,18 +202,8 @@ impl Atom {
     }
 }
 
-fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
-    match aromatic_valence {
-        AromaticValence::NotAromatic => 0,
-        AromaticValence::Valence(0) => 0,
-        AromaticValence::Valence(1) => 1,
-        AromaticValence::Valence(2) => 0,
-        AromaticValence::Valence(_) => 0,
-    }
-}
-
 impl FromAst<AtomAst> for Atom {
-    fn from_ast(ast: AtomAst, cfg: &AtomLowerConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: AtomAst, cfg: &AtomDslConfig) -> Result<Self, LoweringError> {
         let pattern = AtomPattern::from_ast(ast, cfg)?;
         pattern.to_atom().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
@@ -226,28 +218,52 @@ impl FromAst<AtomAst> for Atom {
 }
 
 impl ToAst<AtomAst> for Atom {
-    fn to_ast(&self) -> AtomAst {
+    fn to_ast(&self, cfg: &AtomDslConfig) -> AtomAst {
+        let u = self.unpaired_electrons();
+        let m = self.multiplicity();
         AtomAst {
             element: ElementExpr::Lit(self.element()),
-            isotope_mass: match self.isotope_mass() {
-                IsotopeMass::Natural => None,
-                IsotopeMass::MassNumber(n) => Some(IsotopeExpr::Lit(n)),
+            isotope_mass: match (self.isotope_mass(), &cfg.isotope_mode) {
+                (IsotopeMass::Natural, IsotopeMode::Natural) => None,
+                (IsotopeMass::Natural, IsotopeMode::Required) => Some(IsotopeExpr::Natural),
+                (IsotopeMass::MassNumber(n), _) => Some(IsotopeExpr::Lit(n)),
             },
-            charge: Some(ValueAst::Lit(self.charge() as i32)),
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(
-                self.implicit_hydrogens() as i32,
-            ))),
-            lone_pairs: Some(ValueAst::Lit(self.lone_pairs() as i32)),
-            unpaired_electrons: Some(ValueAst::Lit(self.unpaired_electrons() as i32)),
-            multiplicity: Some(ValueAst::Lit(self.multiplicity().multiplicity() as i32)),
-            valence: Some(ValueAst::Lit(self.valence() as i32)),
-            donated_pairs: Some(ValueAst::Lit(self.donated_pairs() as i32)),
-            accepted_pairs: Some(ValueAst::Lit(self.accepted_pairs() as i32)),
-            aromatic_valence: match self.aromatic_valence() {
-                AromaticValence::NotAromatic => None,
-                AromaticValence::Valence(n) => Some(AromaticExpr::Value(ValueAst::Lit(n as i32))),
+            charge: raise_i8(self.charge(), &cfg.charge_mode),
+            implicit_hydrogens: match (&cfg.implicit_h_mode, self.implicit_hydrogens()) {
+                (ImplicitHydrogenMode::Zero, 0) => None,
+                (_, n) => Some(HydrogenExpr::Value(ValueAst::Lit(n as i32))),
             },
-            multicenter_valence: Some(ValueAst::Lit(self.multicenter_valence() as i32)),
+            lone_pairs: raise_u8(self.lone_pairs(), &cfg.lone_pairs_mode),
+            unpaired_electrons: raise_spin_u_ground(
+                u,
+                m,
+                &cfg.unpaired_electrons_mode,
+                &cfg.multiplicity_mode,
+            ),
+            multiplicity: raise_spin_m_ground(
+                u,
+                m,
+                &cfg.unpaired_electrons_mode,
+                &cfg.multiplicity_mode,
+            ),
+            valence: raise_u8(self.valence(), &cfg.valence_mode),
+            donated_pairs: raise_u8(self.donated_pairs(), &cfg.donated_pairs_mode),
+            accepted_pairs: raise_u8(self.accepted_pairs(), &cfg.accepted_pairs_mode),
+            aromatic_valence: match (self.aromatic_valence(), &cfg.aromatic_valence_mode) {
+                (AromaticValence::NotAromatic, AromaticValenceMode::NotAromatic) => None,
+                // Unspecified → Any → NotAromatic in to_atom(); safe to suppress
+                (AromaticValence::NotAromatic, AromaticValenceMode::Required) => None,
+                (AromaticValence::NotAromatic, AromaticValenceMode::Aromatic) => {
+                    Some(AromaticExpr::NotAromatic)
+                }
+                (AromaticValence::Valence(n), _) => {
+                    Some(AromaticExpr::Value(ValueAst::Lit(n as i32)))
+                }
+            },
+            multicenter_valence: raise_u8(
+                self.multicenter_valence(),
+                &cfg.multicenter_valence_mode,
+            ),
         }
     }
 }
@@ -256,8 +272,9 @@ impl FromStr for Atom {
     type Err = AtomError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // TODO: Fix error handling
         let ast = parse_atom_dsl(s).map_err(|e| AtomError::InvalidTag(e.to_string()))?;
-        Self::from_ast(ast, &AtomLowerConfig::default()).map_err(|e| match e {
+        Self::from_ast(ast, &AtomDslConfig::zeroed()).map_err(|e| match e {
             LoweringError::SpinState(se) => AtomError::SpinState(se),
             other => AtomError::InvalidTag(other.to_string()),
         })
@@ -266,7 +283,7 @@ impl FromStr for Atom {
 
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast().fmt(f)
+        self.to_ast(&AtomDslConfig::zeroed()).fmt(f)
     }
 }
 
@@ -283,6 +300,17 @@ impl<'de> Deserialize<'de> for Atom {
     }
 }
 
+// TODO: Combine with identical function in atom_pattern.rs
+fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
+    match aromatic_valence {
+        AromaticValence::NotAromatic => 0,
+        AromaticValence::Valence(0) => 0,
+        AromaticValence::Valence(1) => 1,
+        AromaticValence::Valence(2) => 0,
+        AromaticValence::Valence(_) => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -295,26 +323,26 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::helium(AtomAst::from_element(Element::He), AtomLowerConfig::default(), "He".parse::<Atom>().unwrap())]
+    #[case::helium(AtomAst::from_element(Element::He), AtomDslConfig::zeroed(), "He".parse::<Atom>().unwrap())]
     #[case::isotope(AtomAst { isotope_mass: Some(IsotopeExpr::Lit(13)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))),
-        ..AtomAst::from_element(Element::C) }, AtomLowerConfig::default(), "C#i13#h4".parse::<Atom>().unwrap())]
+        ..AtomAst::from_element(Element::C) }, AtomDslConfig::zeroed(), "C#i13#h4".parse::<Atom>().unwrap())]
     #[case::charge(AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))),
-        ..AtomAst::from_element(Element::C) }, AtomLowerConfig::default(), "C#c+#h3".parse::<Atom>().unwrap())]
-    fn test_atom_from_ast(#[case] ast: AtomAst, #[case] cfg: AtomLowerConfig, #[case] expected: Atom) {
+        ..AtomAst::from_element(Element::C) }, AtomDslConfig::zeroed(), "C#c+#h3".parse::<Atom>().unwrap())]
+    fn test_atom_from_ast(#[case] ast: AtomAst, #[case] cfg: AtomDslConfig, #[case] expected: Atom) {
         let atom = Atom::from_ast(ast, &cfg).unwrap();
         assert_eq!(atom, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::helium("He".parse::<Atom>().unwrap(), "He".parse::<Atom>().unwrap().to_ast())]
+    #[case::helium("He".parse::<Atom>().unwrap(), "He".parse::<Atom>().unwrap().to_ast(&AtomDslConfig::zeroed()))]
     #[case::isotope("C#i13#h4".parse::<Atom>().unwrap(), AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: Some(IsotopeExpr::Lit(13)),
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))), .."He".parse::<Atom>().unwrap().to_ast() })]
+            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))), .."He".parse::<Atom>().unwrap().to_ast(&AtomDslConfig::zeroed()) })]
     #[case::aromatic("C#h#v2#a1".parse::<Atom>().unwrap(), AtomAst { element: ElementExpr::Lit(Element::C),
             implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), valence: Some(ValueAst::Lit(2)), aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(1))),
-            .."He".parse::<Atom>().unwrap().to_ast() })]
+            .."He".parse::<Atom>().unwrap().to_ast(&AtomDslConfig::zeroed()) })]
     fn test_atom_to_ast(#[case] atom: Atom, #[case] expected: AtomAst) {
-        assert_eq!(atom.to_ast(), expected);
+        assert_eq!(atom.to_ast(&AtomDslConfig::zeroed()), expected);
     }
 
     #[rustfmt::skip]

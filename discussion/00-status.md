@@ -66,3 +66,4 @@
 | 61-spin-state-builder-2026-03-22.md                            | Completed     | 2026-03-22   |
 | 62-rust-clojure-reader-status-2026-03-31.md                    | Informational | 2026-03-31   |
 | 63-rust-edn-reader-2026-03-31.md                               | Active        | 2026-03-31   |
+| 64-spin-state-parse-defaults-2026-03-31.md                     | Active        | 2026-03-31   |

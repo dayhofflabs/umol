@@ -11,9 +11,9 @@ use smallvec::SmallVec;
 use umol_data::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
-use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_pattern::{AtomPattern, ElementPattern};
-use crate::graph_ir::error::ResolutionError;
+use super::atom::Atom;
+use super::atom_pattern::{AtomPattern, ElementPattern};
+use super::error::ResolutionError;
 
 /// Atom type registry for GraphIR.
 ///

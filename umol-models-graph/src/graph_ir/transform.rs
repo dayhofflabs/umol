@@ -7,14 +7,14 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 
-use crate::graph_ir::atom_pattern::Pattern;
-use crate::graph_ir::aromaticity::{AromaticityError, AromaticityModel};
-use crate::graph_ir::config::{AromaticityStrategy, RingEnumerationStrategy};
-use crate::graph_ir::kekule::{kekulize, KekuleConfig, KekulizationError};
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
-use crate::graph_ir::rings::{RingEnumerator, RingFamily};
+use super::aromaticity::{AromaticityError, AromaticityModel};
+use super::atom_pattern::Pattern;
+use super::config::{AromaticityStrategy, RingEnumerationStrategy};
+use super::kekule::{kekulize, KekuleConfig, KekulizationError};
+use super::molecule_builder::MoleculeBuilder;
+use super::rings::{RingEnumerator, RingFamily};
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum TransformError {
     #[error(transparent)]
     Aromaticity(#[from] AromaticityError),

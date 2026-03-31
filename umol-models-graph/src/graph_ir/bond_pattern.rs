@@ -8,13 +8,15 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use umol_data::{SpinMultiplicity, SpinState};
 
+use super::ast_utils::{lower_spin, raise_spin_m_pattern, raise_spin_u_pattern};
+use super::atom_pattern::Pattern;
+use super::bond::{Bond, BondError};
+use super::error::ValidationError;
 use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::bond::{parse_bond_dsl, BondAst, BondLowerConfig, ChargeMode};
+use crate::dsl::bond::{parse_bond_dsl, BondAst};
+use crate::dsl::config::{BondDslConfig, NumericMode};
 use crate::dsl::error::LoweringError;
 use crate::dsl::value::ValueAst;
-use crate::graph_ir::atom_pattern::Pattern;
-use crate::graph_ir::bond::{Bond, BondError};
-use crate::graph_ir::error::ValidationError;
 use crate::table_ir::bond::{Bond as TableBond, BondOrder};
 
 /// Bond pattern: carries order/charge/spin fields as `Pattern<T>` through the
@@ -137,7 +139,7 @@ impl BondPattern {
 }
 
 impl FromAst<BondAst> for BondPattern {
-    fn from_ast(ast: BondAst, cfg: &BondLowerConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: BondAst, cfg: &BondDslConfig) -> Result<Self, LoweringError> {
         let order = match ast.order {
             ValueAst::Lit(n) => {
                 Pattern::Is(u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
@@ -150,8 +152,8 @@ impl FromAst<BondAst> for BondPattern {
         };
 
         let charge = match ast.charge.or_else(|| match cfg.charge_mode {
-            ChargeMode::Zero => Some(ValueAst::Lit(0)),
-            ChargeMode::Provided => None,
+            NumericMode::Zero => Some(ValueAst::Lit(0)),
+            NumericMode::Required => None,
         }) {
             None => Pattern::Any,
             Some(ValueAst::Wildcard) => Pattern::Any,
@@ -161,65 +163,46 @@ impl FromAst<BondAst> for BondPattern {
             Some(_) => return Err(LoweringError::NonGround { field: "charge" }),
         };
 
-        let lower_u8_opt =
-            |v: Option<ValueAst>, field: &'static str| -> Result<Pattern<u8>, LoweringError> {
-                match v {
-                    None => Ok(Pattern::Any),
-                    Some(ValueAst::Wildcard) => Ok(Pattern::Any),
-                    Some(ValueAst::Lit(n)) => u8::try_from(n)
-                        .map(Pattern::Is)
-                        .map_err(|_| LoweringError::NonGround { field }),
-                    Some(_) => Err(LoweringError::NonGround { field }),
-                }
-            };
-
-        let multiplicity = match ast.multiplicity {
-            None => Pattern::Any,
-            Some(ValueAst::Wildcard) => Pattern::Any,
-            Some(ValueAst::Lit(n)) => {
-                let m = u8::try_from(n).map_err(|_| LoweringError::NonGround {
-                    field: "multiplicity",
-                })?;
-                Pattern::Is(
-                    SpinMultiplicity::from_multiplicity(m)
-                        .ok_or(LoweringError::InvalidMultiplicity(m))?,
-                )
-            }
-            Some(_) => {
-                return Err(LoweringError::NonGround {
-                    field: "multiplicity",
-                })
-            }
-        };
+        let (unpaired_electrons, multiplicity) = lower_spin(
+            ast.unpaired_electrons,
+            ast.multiplicity,
+            &cfg.unpaired_electrons_mode,
+            &cfg.multiplicity_mode,
+        )?;
 
         Ok(BondPattern {
             order,
             charge,
-            unpaired_electrons: lower_u8_opt(ast.unpaired_electrons, "unpaired_electrons")?,
+            unpaired_electrons,
             multiplicity,
         })
     }
 }
 
 impl ToAst<BondAst> for BondPattern {
-    fn to_ast(&self) -> BondAst {
+    fn to_ast(&self, cfg: &BondDslConfig) -> BondAst {
         BondAst {
             order: match self.order {
                 Pattern::Any => ValueAst::Wildcard,
                 Pattern::Is(n) => ValueAst::Lit(n as i32),
             },
-            charge: match self.charge {
-                Pattern::Any => None,
-                Pattern::Is(n) => Some(ValueAst::Lit(n as i32)),
+            charge: match (self.charge, &cfg.charge_mode) {
+                (Pattern::Is(0), NumericMode::Zero) => None,
+                (Pattern::Any, NumericMode::Required) => None,
+                (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Wildcard),
+                (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i32)),
             },
-            unpaired_electrons: match self.unpaired_electrons {
-                Pattern::Any => None,
-                Pattern::Is(n) => Some(ValueAst::Lit(n as i32)),
-            },
-            multiplicity: match self.multiplicity {
-                Pattern::Any => None,
-                Pattern::Is(m) => Some(ValueAst::Lit(m.multiplicity() as i32)),
-            },
+            unpaired_electrons: raise_spin_u_pattern(
+                self.unpaired_electrons,
+                self.multiplicity,
+                &cfg.unpaired_electrons_mode,
+            ),
+            multiplicity: raise_spin_m_pattern(
+                self.unpaired_electrons,
+                self.multiplicity,
+                &cfg.unpaired_electrons_mode,
+                &cfg.multiplicity_mode,
+            ),
         }
     }
 }
@@ -229,13 +212,13 @@ impl FromStr for BondPattern {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_bond_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Self::from_ast(ast, &BondLowerConfig::default())
+        Self::from_ast(ast, &BondDslConfig::open())
     }
 }
 
 impl Display for BondPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast().fmt(f)
+        self.to_ast(&BondDslConfig::open()).fmt(f)
     }
 }
 
@@ -322,31 +305,43 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::defaults(BondAst { order: ValueAst::Lit(1), charge: None, unpaired_electrons: None, multiplicity: None },
-        BondPattern::new(1))]
+        BondDslConfig::zeroed(),
+        BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
     #[case::charged(BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), unpaired_electrons: Some(ValueAst::Lit(1)), multiplicity: None },
-        BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) })]
+        BondDslConfig::zeroed(),
+        BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), multiplicity: Pattern::Is(SpinMultiplicity::Doublet), ..BondPattern::new(2) })]
     #[case::wildcard_charge(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Wildcard), unpaired_electrons: None, multiplicity: None },
-        BondPattern::new(1))]
+        BondDslConfig::zeroed(),
+        BondPattern { unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
     #[case::wildcard_order(BondAst { order: ValueAst::Wildcard, charge: None, unpaired_electrons: None, multiplicity: None },
-        BondPattern { order: Pattern::Any, ..BondPattern::new(1) })]
+        BondDslConfig::zeroed(),
+        BondPattern { order: Pattern::Any, charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
     #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(1)) },
+        BondDslConfig::zeroed(),
         BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
-    fn test_bond_pattern_from_ast(#[case] ast: BondAst, #[case] expected: BondPattern) {
-        assert_eq!(BondPattern::from_ast(ast, &BondLowerConfig::default()).unwrap(), expected);
+    #[case::all_open(BondAst { order: ValueAst::Lit(1), charge: None, unpaired_electrons: None, multiplicity: None },
+        BondDslConfig::open(),
+        BondPattern::new(1))]
+    fn test_bond_pattern_from_ast(#[case] ast: BondAst, #[case] cfg: BondDslConfig, #[case] expected: BondPattern) {
+        assert_eq!(BondPattern::from_ast(ast, &cfg).unwrap(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::minimal(BondPattern::new(1),
+    #[case::minimal(BondPattern::new(1), BondDslConfig::open(),
         BondAst { order: ValueAst::Lit(1), charge: None, unpaired_electrons: None, multiplicity: None })]
-    #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) },
-        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), unpaired_electrons: Some(ValueAst::Lit(1)), multiplicity: None })]
-    #[case::wildcard_order(BondPattern { order: Pattern::Any, ..BondPattern::new(1) },
+    #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) }, BondDslConfig::open(),
+        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), unpaired_electrons: Some(ValueAst::Lit(1)), multiplicity: Some(ValueAst::Wildcard) })]
+    #[case::wildcard_order(BondPattern { order: Pattern::Any, ..BondPattern::new(1) }, BondDslConfig::open(),
         BondAst { order: ValueAst::Wildcard, charge: None, unpaired_electrons: None, multiplicity: None })]
-    #[case::full(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(2) },
-        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(3)) })]
-    fn test_bond_pattern_to_ast(#[case] pattern: BondPattern, #[case] expected: BondAst) {
-        assert_eq!(pattern.to_ast(), expected);
+    #[case::high_spin(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(2) }, BondDslConfig::open(),
+        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: None })]
+    #[case::low_spin(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(2) }, BondDslConfig::open(),
+        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(1)) })]
+    #[case::zero_config_suppresses(BondPattern { charge: Pattern::Is(0), ..BondPattern::new(1) }, BondDslConfig::zeroed(),
+        BondAst { order: ValueAst::Lit(1), charge: None, unpaired_electrons: Some(ValueAst::Wildcard), multiplicity: None })]
+    fn test_bond_pattern_to_ast(#[case] pattern: BondPattern, #[case] cfg: BondDslConfig, #[case] expected: BondAst) {
+        assert_eq!(pattern.to_ast(&cfg), expected);
     }
 
     #[rustfmt::skip]
@@ -371,9 +366,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single(BondPattern::new(1), "1")]
-    #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) }, "2#c+#u")]
+    #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) }, "2#c+#u#s*")]
     #[case::wildcard_order(BondPattern { order: Pattern::Any, ..BondPattern::new(1) }, "*")]
-    #[case::triplet(BondPattern { unpaired_electrons: Pattern::Is(2), ..BondPattern::new(2) }, "2#u2")]
+    #[case::triplet(BondPattern { unpaired_electrons: Pattern::Is(2), ..BondPattern::new(2) }, "2#u2#s*")]
     fn test_bond_pattern_display(#[case] pattern: BondPattern, #[case] expected: &str) {
         assert_eq!(pattern.to_string(), expected);
     }
@@ -381,7 +376,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single(BondPattern::new(1), r#""1""#)]
-    #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) }, r#""2#c+#u""#)]
+    #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) }, r#""2#c+#u#s*""#)]
     #[case::wildcard_order(BondPattern { order: Pattern::Any, ..BondPattern::new(1) }, r#""*""#)]
     fn test_bond_pattern_serialize(#[case] pattern: BondPattern, #[case] expected: &str) {
         let json = serde_json::to_string(&pattern).unwrap();
@@ -391,7 +386,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single(r#""1""#, Pattern::Is(1), Pattern::Any, Pattern::Any, Pattern::Any)]
-    #[case::charged(r#""2#c+#u""#, Pattern::Is(2), Pattern::Is(1), Pattern::Is(1), Pattern::Any)]
+    #[case::charged(r#""2#c+#u""#, Pattern::Is(2), Pattern::Is(1), Pattern::Is(1), Pattern::Is(SpinMultiplicity::Doublet))]
     #[case::full(r#""1#c0#u1#s2""#, Pattern::Is(1), Pattern::Is(0), Pattern::Is(1), Pattern::Is(SpinMultiplicity::Doublet))]
     fn test_bond_pattern_deserialize(
         #[case] input: &str,

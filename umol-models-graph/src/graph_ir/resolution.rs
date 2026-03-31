@@ -2,16 +2,16 @@
 
 use std::collections::HashMap;
 
-use crate::graph_ir::aromaticity::AromaticityModel;
-use crate::graph_ir::config::{
+use super::aromaticity::AromaticityModel;
+use super::config::{
     AromaticityHintPolicy, AromaticityStrategy, ResolveConfig, TopologyResolveFlags,
     ValenceMatchPolicy,
 };
-use crate::graph_ir::error::ResolutionError;
-use crate::graph_ir::molecule::{AtomIndex, BondIndex};
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
-use crate::graph_ir::rings::{RingEnumerator, RingFamily};
-use crate::graph_ir::valence::ValenceMatcher;
+use super::error::ResolutionError;
+use super::molecule::{AtomIndex, BondIndex};
+use super::molecule_builder::MoleculeBuilder;
+use super::rings::{RingEnumerator, RingFamily};
+use super::valence::ValenceMatcher;
 
 /// Resolve a molecular structure to a ground `Molecule` using default configuration.
 pub fn resolve_molecule(builder: &mut MoleculeBuilder) -> Result<(), ResolutionError> {
@@ -213,7 +213,7 @@ mod tests {
 
     use super::super::config::ValenceStrategy;
     use super::super::config_data::{AtomTypeRegistry, ValenceTable};
-    use crate::graph_ir::molecule_builder::MoleculeBuilder;
+    use super::super::molecule_builder::MoleculeBuilder;
     use super::*;
     use crate::registry;
     use crate::table_ir::atom::Atom as TableAtom;

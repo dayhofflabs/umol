@@ -11,9 +11,10 @@ use serde::ser::{self, SerializeMap, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
 
-use super::ast::LowerAst;
-use super::atom::{parse_atom_dsl, AtomAst, AtomLowerConfig};
-use super::bond::{parse_bond_dsl, BondAst, BondLowerConfig};
+use super::ast::DslAst;
+use super::atom::{parse_atom_dsl, AtomAst};
+use super::bond::{parse_bond_dsl, BondAst};
+use super::config::{MoleculeDslConfig};
 use super::edn_serde::{edn_to_string, map_edn_error, EdnDeserializer, EdnError};
 use super::error::ParseError;
 
@@ -93,14 +94,8 @@ pub struct MoleculeAst {
     pub spin: Option<SpinState>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct MoleculeLowerConfig {
-    pub atom: AtomLowerConfig,
-    pub bond: BondLowerConfig,
-}
-
-impl LowerAst for MoleculeAst {
-    type Config = MoleculeLowerConfig;
+impl DslAst for MoleculeAst {
+    type Config = MoleculeDslConfig;
 }
 
 // Serde: BondSpec

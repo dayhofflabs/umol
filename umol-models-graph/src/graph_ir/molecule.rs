@@ -10,20 +10,21 @@ use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
 
+use super::aromaticity::AromaticSystem;
+use super::atom::Atom;
+use super::bond::Bond;
+use super::dative::DativeBond;
+use super::multicenter::MulticenterBond;
+use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::dsl::ast::ToAst;
+use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::molecule::{
     AromaticSystem as AstAromaticSystem, Atoms, BondSpec, CovalentBond as AstCovalentBond,
     DativeBond as AstDativeBond, MoleculeAst, MulticenterBond as AstMulticenterBond,
     NoncovalentBond as AstNoncovalentBond,
 };
-use crate::graph_ir::aromaticity::AromaticSystem;
-use crate::graph_ir::atom::Atom;
-use crate::graph_ir::bond::Bond;
-use crate::graph_ir::dative::DativeBond;
-use crate::graph_ir::multicenter::MulticenterBond;
-use crate::graph_ir::noncovalent::NoncovalentBond;
 
 pub mod topology;
 
@@ -581,13 +582,13 @@ impl Molecule {
 }
 
 impl ToAst<MoleculeAst> for Molecule {
-    fn to_ast(&self) -> MoleculeAst {
+    fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
         let mut label_map: IndexMap<AtomIndex, String> = IndexMap::new();
         let mut atoms = IndexMap::new();
 
         for idx in self.atom_indices() {
             let label = idx.index().to_string();
-            let atom_ast = self.atom(idx).unwrap().to_ast();
+            let atom_ast = self.atom(idx).unwrap().to_ast(&cfg.atom);
             label_map.insert(idx, label.clone());
             atoms.insert(label, atom_ast);
         }
@@ -603,7 +604,7 @@ impl ToAst<MoleculeAst> for Molecule {
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
-                let bond_ast = self.bond(bi).unwrap().to_ast();
+                let bond_ast = self.bond(bi).unwrap().to_ast(&cfg.bond);
                 AstCovalentBond {
                     id: None,
                     a: label(a),

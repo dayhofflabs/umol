@@ -7,10 +7,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use serde::{Deserialize, Serialize};
 use umol_data::Element;
 
+use super::config::RingEnumerationStrategy;
+use super::molecule::{AtomIndex, BondIndex, Molecule};
+use super::molecule_builder::MoleculeBuilder;
 use crate::algorithms::{biconnected_components, enumerate_simple_cycles};
-use crate::graph_ir::config::RingEnumerationStrategy;
-use crate::graph_ir::molecule::{AtomIndex, BondIndex, Molecule};
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
 #[derive(Debug, Clone)]
 struct AtomAdjacency {
@@ -931,11 +931,7 @@ mod tests {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondPattern::new(1));
         }
         for i in 6..12 {
-            builder.add_bond_unchecked(
-                atoms[i],
-                atoms[6 + ((i + 1 - 6) % 6)],
-                BondPattern::new(1),
-            );
+            builder.add_bond_unchecked(atoms[i], atoms[6 + ((i + 1 - 6) % 6)], BondPattern::new(1));
         }
         builder
     }
@@ -1036,7 +1032,9 @@ mod tests {
     #[fixture]
     fn ring_molecule(#[default(6)] n: usize) -> Molecule {
         let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..n).map(|_| builder.add_resolved_atom("C#h2#v2".parse::<Atom>().unwrap())).collect();
+        let atoms: Vec<AtomIndex> = (0..n)
+            .map(|_| builder.add_resolved_atom("C#h2#v2".parse::<Atom>().unwrap()))
+            .collect();
         for i in 0..n {
             builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
         }
@@ -1101,11 +1099,8 @@ mod tests {
             })
             .collect();
         for i in 0..6 {
-            let bond_idx = builder.add_bond_unchecked(
-                aromatic[i],
-                aromatic[(i + 1) % 6],
-                BondPattern::new(1),
-            );
+            let bond_idx =
+                builder.add_bond_unchecked(aromatic[i], aromatic[(i + 1) % 6], BondPattern::new(1));
             builder.set_bond_aromatic_hint(bond_idx, true);
         }
         let sat: Vec<AtomIndex> = (0..6)

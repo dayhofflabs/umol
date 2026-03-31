@@ -9,9 +9,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use thiserror::Error;
 
-use crate::graph_ir::aromaticity::AromaticSystem;
-use crate::graph_ir::molecule::{AtomIndex, BondIndex};
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
+use super::aromaticity::AromaticSystem;
+use super::molecule::{AtomIndex, BondIndex};
+use super::molecule_builder::MoleculeBuilder;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum KekulizationError {

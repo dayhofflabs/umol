@@ -2,12 +2,12 @@ use rstest::*;
 use smallvec::SmallVec;
 use umol_data::Element;
 
+use super::super::atom_pattern::AtomPattern;
+use super::super::bond_pattern::BondPattern;
+use super::super::config::ResolveConfig;
+use super::super::molecule::Molecule;
 use super::*;
 use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::bond_pattern::BondPattern;
-use crate::graph_ir::config::ResolveConfig;
-use crate::graph_ir::molecule::Molecule;
 
 #[fixture]
 fn empty_builder() -> MoleculeBuilder {
