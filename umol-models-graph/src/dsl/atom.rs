@@ -248,7 +248,7 @@ mod tests {
     #[case::nh2n1v3("N#h2#n1#v3", AtomAst { implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(2))), lone_pairs: Some(ValueAst::Lit(1)), valence: Some(ValueAst::Lit(3)), ..AtomAst::new(ElementExpr::Lit(Element::N)) })]
     #[case::fe_highspin("Fe#c+2#u4#s5", AtomAst { charge: Some(ValueAst::Lit(2)), unpaired_electrons: Some(ValueAst::Lit(4)), multiplicity: Some(ValueAst::Lit(5)), ..AtomAst::new(ElementExpr::Lit(Element::Fe)) })]
     #[case::h_expr("C#h(?h >= 1)", AtomAst { implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
-    fn test_atom_dsl(#[case] input: &str, #[case] expected: AtomAst) {
+    fn test_parse_atom_dsl(#[case] input: &str, #[case] expected: AtomAst) {
         let result = atom_dsl(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
         let (remaining, ast) = result.unwrap();
@@ -264,7 +264,7 @@ mod tests {
     #[case::dup_charge("C#c+#c-", ParseError::DuplicateAtomPredicate("#c".to_string()))]
     #[case::dup_valence("C#v3#v4", ParseError::DuplicateAtomPredicate("#v".to_string()))]
     #[case::trailing("C#h3 foo", ParseError::TrailingInput("foo".to_string()))]
-    fn test_atom_dsl_invalid(#[case] input: &str, #[case] expected: ParseError) {
+    fn test_parse_atom_dsl_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = atom_dsl(input);
         assert!(
             result.is_err(),

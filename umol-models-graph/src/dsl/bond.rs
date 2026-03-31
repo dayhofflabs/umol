@@ -123,7 +123,7 @@ mod tests {
     #[case::double_charge_mult("2#c-1#s3", BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(-1)), unpaired_electrons:None, multiplicity: Some(ValueAst::Lit(3)) })]
     #[case::double_charge_unpaired_mult("1#c0#u1#s1", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired_electrons:Some(ValueAst::Lit(1)), multiplicity: Some(ValueAst::Lit(1)) })]
     #[case::double_plus_only_unpaired("1 #c+ #u2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(1)), unpaired_electrons:Some(ValueAst::Lit(2)), multiplicity: None })]
-    fn test_bond_dsl(#[case] input: &str, #[case] expected: BondAst) {
+    fn test_parse_bond_dsl(#[case] input: &str, #[case] expected: BondAst) {
         let result = bond_dsl(input);
         assert!(
             result.is_ok(),
@@ -146,7 +146,7 @@ mod tests {
     #[case::dup_charge("1#c+#c-", ParseError::DuplicateBondPredicate("#c".to_string()))]
     #[case::dup_unpaired("1#u2#u3", ParseError::DuplicateBondPredicate("#u".to_string()))]
     #[case::dup_multiplicity("1#s1#s2", ParseError::DuplicateBondPredicate("#s".to_string()))]
-    fn test_parse_invalid(#[case] input: &str, #[case] expected: ParseError) {
+    fn test_parse_bond_dsl_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = bond_dsl(input);
         assert!(
             result.is_err(),
