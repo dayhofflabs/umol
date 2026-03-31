@@ -10,7 +10,7 @@ use insta::{assert_yaml_snapshot, Settings};
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
 use umol_data::SpinMultiplicity;
-use umol_models_graph::atom::ImplicitHydrogens;
+use umol_models_graph::table_ir::ImplicitHydrogens;
 use umol_models_graph::graph_ir::config_data::ValenceTable;
 use umol_models_graph::graph_ir::rings::{RingRelation, RingSet};
 use umol_models_graph::graph_ir::{

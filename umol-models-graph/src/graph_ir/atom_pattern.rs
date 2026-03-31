@@ -96,7 +96,7 @@ impl HydrogenPattern {
     pub fn matches(&self, n: u8) -> bool {
         match self {
             Self::Any => true,
-            Self::Normal => false, // requires context to evaluate
+            Self::Normal => false, // deferred constraint — must be resolved before matching
             Self::Is(h) => *h == n,
         }
     }

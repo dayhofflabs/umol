@@ -340,19 +340,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::closed_shell(BondPattern::new(1), true)]
-    #[case::high_spin(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) }, true)]
-    #[case::from_multiplicity(BondPattern { charge: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(2) }, true)]
-    #[case::negative_electrons(BondPattern { charge: Pattern::Is(1), ..BondPattern::new(0) }, false)]
-    #[case::incompatible_spin_pair(BondPattern { unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(1) }, false)]
-    #[case::electron_parity_mismatch(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) }, false)]
-    #[case::max_unpaired_exceeded(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(10), ..BondPattern::new(1) }, false)]
-    fn test_bond_pattern_can_ground(#[case] pattern: BondPattern, #[case] expected: bool) {
-        assert_eq!(pattern.to_bond().is_ok(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::closed_shell(BondPattern::new(1), 0, 0, SpinMultiplicity::Singlet)]
     #[case::high_spin(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) }, 1, 1, SpinMultiplicity::Doublet)]
     #[case::from_multiplicity(BondPattern { charge: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(2) }, 0, 2, SpinMultiplicity::Triplet)]
@@ -372,6 +359,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::negative_electrons(BondPattern { charge: Pattern::Is(1), ..BondPattern::new(0) })]
+    #[case::incompatible_spin_pair(BondPattern { unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(1) })]
+    #[case::electron_parity_mismatch(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(1) })]
+    #[case::max_unpaired_exceeded(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(10), ..BondPattern::new(1) })]
+    fn test_bond_pattern_to_bond_error(#[case] pattern: BondPattern) {
+        assert!(pattern.to_bond().is_err(), "{:?} should have failed", pattern);
+    }
+
+    #[rstest]
     #[case::aromatic(1, BondOrder::Aromatic, None, None, None)]
     #[case::single(1, BondOrder::Single, None, None, None)]
     #[case::double(2, BondOrder::Double, Some(-1), Some(1), Some(SpinMultiplicity::Doublet))]
@@ -390,8 +386,14 @@ mod tests {
         let pattern = BondPattern::from_table_bond(&bond);
         assert_eq!(pattern.order, Pattern::Is(expected_order));
         assert_eq!(pattern.charge, charge.map_or(Pattern::Any, Pattern::Is));
-        assert_eq!(pattern.unpaired_electrons, unpaired_electrons.map_or(Pattern::Any, Pattern::Is));
-        assert_eq!(pattern.multiplicity, multiplicity.map_or(Pattern::Any, Pattern::Is));
+        assert_eq!(
+            pattern.unpaired_electrons,
+            unpaired_electrons.map_or(Pattern::Any, Pattern::Is)
+        );
+        assert_eq!(
+            pattern.multiplicity,
+            multiplicity.map_or(Pattern::Any, Pattern::Is)
+        );
     }
 
     #[rustfmt::skip]
@@ -413,7 +415,6 @@ mod tests {
         assert_eq!(pattern.multiplicity, expected_multiplicity);
     }
 
-    #[rustfmt::skip]
     #[rstest]
     #[case::single("1", 1, 0, 0, SpinMultiplicity::Singlet)]
     #[case::double_high_spin("2#c+#u1", 2, 1, 1, SpinMultiplicity::Doublet)]
@@ -431,7 +432,6 @@ mod tests {
         assert_eq!(bond.multiplicity(), expected_multiplicity);
     }
 
-    #[rustfmt::skip]
     #[rstest]
     #[case::single("1")]
     #[case::pos_charged_doublet("2#c+#u")]

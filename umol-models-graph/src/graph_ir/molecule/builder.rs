@@ -21,7 +21,7 @@ use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::Atom;
-use crate::graph_ir::atom_pattern::AtomPattern;
+use crate::graph_ir::atom_pattern::{AtomPattern, HydrogenPattern};
 use crate::graph_ir::bond::BondPattern;
 use crate::graph_ir::config::ResolveConfig;
 use crate::graph_ir::dative::DativeBond;
@@ -71,38 +71,6 @@ pub struct MoleculeBuilder {
 }
 
 impl MoleculeBuilder {
-    pub fn from_molecule(molecule: &Molecule) -> Self {
-        let mut builder = Self::with_capacity(molecule.atom_count(), molecule.bond_count());
-
-        let mut atom_map: HashMap<AtomIndex, AtomIndex> = HashMap::new();
-        for atom_idx in molecule.atom_indices() {
-            let atom = molecule.atom(atom_idx).expect("atom index must be valid");
-            let new_idx = builder.add_atom(AtomPattern::from_atom(atom));
-            builder
-                .set_atom_candidates(new_idx, SmallVec::from_elem(atom.clone(), 1))
-                .expect("newly added atom index must be valid");
-            atom_map.insert(atom_idx, new_idx);
-        }
-
-        for bond_idx in molecule.bond_indices() {
-            let bond = molecule.bond(bond_idx).expect("bond index must be valid");
-            let (a, b) = molecule
-                .bond_atom_indices(bond_idx)
-                .expect("bond index must be valid");
-            let new_a = *atom_map.get(&a).expect("source atom must be mapped");
-            let new_b = *atom_map.get(&b).expect("source atom must be mapped");
-            builder.add_bond_unchecked(new_a, new_b, BondPattern::from_bond(bond));
-        }
-
-        builder.dative_bonds = molecule.dative_bonds().cloned().collect();
-        builder.aromatic_systems = molecule.aromatic_systems().cloned().collect();
-        builder.multicenter_bonds = molecule.multicenter_bonds().cloned().collect();
-        builder.noncovalent_bonds = molecule.noncovalent_bonds().cloned().collect();
-        builder.charge = Some(molecule.charge());
-        builder.spin = Some(molecule.spin());
-        builder
-    }
-
     pub fn new() -> Self {
         Self {
             graph: StableGraph::default(),
@@ -133,6 +101,38 @@ impl MoleculeBuilder {
             charge: None,
             spin: None,
         }
+    }
+
+    pub fn from_molecule(molecule: &Molecule) -> Self {
+        let mut builder = Self::with_capacity(molecule.atom_count(), molecule.bond_count());
+
+        let mut atom_map: HashMap<AtomIndex, AtomIndex> = HashMap::new();
+        for atom_idx in molecule.atom_indices() {
+            let atom = molecule.atom(atom_idx).expect("atom index must be valid");
+            let new_idx = builder.add_atom(AtomPattern::from_atom(atom));
+            builder
+                .set_atom_candidates(new_idx, SmallVec::from_elem(atom.clone(), 1))
+                .expect("newly added atom index must be valid");
+            atom_map.insert(atom_idx, new_idx);
+        }
+
+        for bond_idx in molecule.bond_indices() {
+            let bond = molecule.bond(bond_idx).expect("bond index must be valid");
+            let (a, b) = molecule
+                .bond_atom_indices(bond_idx)
+                .expect("bond index must be valid");
+            let new_a = *atom_map.get(&a).expect("source atom must be mapped");
+            let new_b = *atom_map.get(&b).expect("source atom must be mapped");
+            builder.add_bond_unchecked(new_a, new_b, BondPattern::from_bond(bond));
+        }
+
+        builder.dative_bonds = molecule.dative_bonds().cloned().collect();
+        builder.aromatic_systems = molecule.aromatic_systems().cloned().collect();
+        builder.multicenter_bonds = molecule.multicenter_bonds().cloned().collect();
+        builder.noncovalent_bonds = molecule.noncovalent_bonds().cloned().collect();
+        builder.charge = Some(molecule.charge());
+        builder.spin = Some(molecule.spin());
+        builder
     }
 
     pub fn topology_graph(&self, projection: TopologyProjection) -> TopologyGraph {
@@ -179,42 +179,6 @@ impl MoleculeBuilder {
             TopologyNodeRef::MulticenterBond(i) => usize::MAX / 2 + 3_000_000 + i.index(),
         })?;
         Ok(g6)
-    }
-
-    pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
-        let mut atoms: Vec<AtomIndex> = self.atom_indices().collect();
-        atoms.sort_unstable();
-        if atoms.is_empty() {
-            return Vec::new();
-        }
-
-        let atom_to_id: HashMap<AtomIndex, usize> = atoms
-            .iter()
-            .copied()
-            .enumerate()
-            .map(|(i, a)| (a, i))
-            .collect();
-        let adj = self.adjacency_list();
-        let mut adj_int: Vec<Vec<usize>> = vec![Vec::new(); atoms.len()];
-        for &atom in &atoms {
-            let mut neighbors = adj
-                .get(&atom)
-                .map(|ns| {
-                    ns.iter()
-                        .filter_map(|&n| atom_to_id.get(&n).copied())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            neighbors.sort_unstable();
-            neighbors.dedup();
-            let u = atom_to_id[&atom];
-            adj_int[u] = neighbors;
-        }
-
-        biconnected_components(atoms.len(), &adj_int)
-            .into_iter()
-            .map(|component| component.into_iter().map(|i| atoms[i]).collect())
-            .collect()
     }
 
     pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {
@@ -302,6 +266,42 @@ impl MoleculeBuilder {
         }
 
         edges.into_iter()
+    }
+
+    pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
+        let mut atoms: Vec<AtomIndex> = self.atom_indices().collect();
+        atoms.sort_unstable();
+        if atoms.is_empty() {
+            return Vec::new();
+        }
+
+        let atom_to_id: HashMap<AtomIndex, usize> = atoms
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(i, a)| (a, i))
+            .collect();
+        let adj = self.adjacency_list();
+        let mut adj_int: Vec<Vec<usize>> = vec![Vec::new(); atoms.len()];
+        for &atom in &atoms {
+            let mut neighbors = adj
+                .get(&atom)
+                .map(|ns| {
+                    ns.iter()
+                        .filter_map(|&n| atom_to_id.get(&n).copied())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            neighbors.sort_unstable();
+            neighbors.dedup();
+            let u = atom_to_id[&atom];
+            adj_int[u] = neighbors;
+        }
+
+        biconnected_components(atoms.len(), &adj_int)
+            .into_iter()
+            .map(|component| component.into_iter().map(|i| atoms[i]).collect())
+            .collect()
     }
 
     // Atoms
@@ -473,7 +473,11 @@ impl MoleculeBuilder {
     pub fn atom_has_aromatic_candidate(&self, index: AtomIndex) -> bool {
         self.atom_candidates
             .get(&index)
-            .map(|candidates| candidates.iter().any(|c| c.aromatic_valence().is_aromatic()))
+            .map(|candidates| {
+                candidates
+                    .iter()
+                    .any(|c| c.aromatic_valence().is_aromatic())
+            })
             .unwrap_or(false)
     }
 
@@ -980,7 +984,21 @@ impl MoleculeBuilder {
                 }
             };
 
-            if !pattern.matches_atom(candidate) {
+            // Resolve `HydrogenPattern::Normal` before matching: by this point the registry
+            // has selected the candidate, so we substitute Normal with the candidate's
+            // concrete hydrogen count.  Normal is a deferred constraint that cannot be
+            // evaluated without registry context; leaving it unresolved would silently
+            // accept any hydrogen count.
+            let resolved_pattern = AtomPattern {
+                implicit_hydrogens: match &pattern.implicit_hydrogens {
+                    HydrogenPattern::Normal => {
+                        HydrogenPattern::Is(candidate.implicit_hydrogens())
+                    }
+                    h => h.clone(),
+                },
+                ..pattern.clone()
+            };
+            if !resolved_pattern.matches_atom(candidate) {
                 return Err(ResolutionError::ValenceViolation(
                     pattern.element(),
                     format!("atom candidate mismatch for {}", candidate),
@@ -990,7 +1008,10 @@ impl MoleculeBuilder {
             if let Err(error) = candidate.check_invariants() {
                 return Err(ResolutionError::ValenceViolation(
                     pattern.element(),
-                    format!("atom invariant verification failed for {}: {}", candidate, error),
+                    format!(
+                        "atom invariant verification failed for {}: {}",
+                        candidate, error
+                    ),
                 ));
             }
 
@@ -1004,7 +1025,11 @@ impl MoleculeBuilder {
             let bond_builder = self.graph.edge_weight(old_edge).unwrap();
             let new_a = index_map[a.index()].unwrap();
             let new_b = index_map[b.index()].unwrap();
-            graph.add_edge(new_a, new_b, bond_builder.to_bond().map_err(ResolutionError::from)?);
+            graph.add_edge(
+                new_a,
+                new_b,
+                bond_builder.to_bond().map_err(ResolutionError::from)?,
+            );
         }
 
         let atom_charge: i8 = graph.node_weights().map(|a| a.charge()).sum();
@@ -1244,13 +1269,13 @@ mod tests {
         #[case] builder: MoleculeBuilder,
         #[case] expected_sizes: Vec<usize>,
     ) {
-        let mut actual_sizes: Vec<usize> = builder
+        let mut sizes: Vec<usize> = builder
             .biconnected_components()
             .iter()
             .map(|c| c.len())
             .collect();
-        actual_sizes.sort_unstable();
-        assert_eq!(actual_sizes, expected_sizes);
+        sizes.sort_unstable();
+        assert_eq!(sizes, expected_sizes);
     }
 
     #[test]
@@ -1274,7 +1299,10 @@ mod tests {
         let mut builder = MoleculeBuilder::new();
         let atom = builder.add_atom(AtomPattern::new(Element::C));
         builder
-            .set_atom_candidates(atom, SmallVec::from_elem("C#v4".parse::<Atom>().unwrap(), 1))
+            .set_atom_candidates(
+                atom,
+                SmallVec::from_elem("C#v4".parse::<Atom>().unwrap(), 1),
+            )
             .expect("atom should exist");
         assert_eq!(builder.atom_aromatic_valence(atom), 0);
         assert_eq!(builder.atom_aromatic_valence(AtomIndex::new(999)), 0);
