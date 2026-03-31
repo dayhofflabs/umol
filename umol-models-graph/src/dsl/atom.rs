@@ -7,6 +7,8 @@ use nom::combinator::all_consuming;
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
+use serde::de::{Deserializer, Error as DeError};
+use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use umol_data::Element;
 
@@ -19,7 +21,7 @@ use super::predicates::{
 use super::value::ValueAst;
 
 /// Parsed atom-string AST
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AtomAst {
     pub element: ElementExpr,
     pub isotope_mass: Option<IsotopeExpr>,
@@ -278,6 +280,19 @@ pub struct AtomLowerConfig {
     pub charge_mode: ChargeMode,
     pub implicit_h_mode: ImplicitHydrogenMode,
     pub aromatic_mode: AromaticMode,
+}
+
+impl Serialize for AtomAst {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for AtomAst {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        parse_atom_dsl(&s).map_err(DeError::custom)
+    }
 }
 
 /// Parse a complete atom-string

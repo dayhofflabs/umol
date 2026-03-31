@@ -7,6 +7,8 @@ use nom::combinator::all_consuming;
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
+use serde::de::{Deserializer, Error as DeError};
+use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use super::error::ParseError;
@@ -15,7 +17,7 @@ use super::predicates::{bond_order, bond_predicate, BondPredicate};
 use super::value::ValueAst;
 
 /// Parsed bond-string AST
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: Option<ValueAst>,
@@ -126,6 +128,19 @@ pub enum ChargeMode {
     Zero,
     #[default]
     Provided,
+}
+
+impl Serialize for BondAst {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for BondAst {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        parse_bond_dsl(&s).map_err(DeError::custom)
+    }
 }
 
 /// Parse a bond subgrammar string

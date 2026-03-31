@@ -13,13 +13,6 @@
 - No long intros or transitions between sections.
 - Short responses are correct unless depth is explicitly requested.
 
-## Typography - ASCII Only
-- No em dashes (-) - use hyphens (-)
-- No smart/curly quotes - use straight quotes (" ')
-- No ellipsis character - use three dots (...)
-- No Unicode bullets - use hyphens (-) or asterisks (*)
-- No non-breaking spaces
-
 ## Sycophancy - Zero Tolerance
 - Never validate the user before answering.
 - Never say "You're absolutely right!" unless the user made a verifiable correct statement.
@@ -55,6 +48,18 @@
 - Do not add features beyond what was asked.
 - Do not refactor surrounding code when fixing a bug.
 - Do not create new files unless strictly necessary.
+
+## Design
+- Do not consider backward compatibility. This is research code.
+- Avoid stubs, shims, bridges whenever possible. Suggest design improvements instead.
+- Do not create manual implementations, where well-designed and supported external libraries exist.
+
+## Rust Specific
+- Do not use <module>/mod.rs, use <module>.rs instead.
+- Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
+- Name tests test_<struct>_<method>() and test_<struct>_<method>_error(). Do not include test behavior in the test name.
+- No long comments, no self-talk, no references to previous implementations, no comment art.
+- The symbol names should convey the meaning. Comments only clarify additional points.
 
 ## Override Rule
 User instructions always override this file.

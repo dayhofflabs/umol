@@ -88,4 +88,6 @@ pub enum LoweringError {
     Atom(String),
     #[error("unknown atom label: {0}")]
     UnknownLabel(String),
+    #[error("invalid molecule spec: {0}")]
+    Molecule(String),
 }

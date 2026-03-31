@@ -3,6 +3,7 @@
 pub mod ast;
 pub mod atom;
 pub mod bond;
+pub mod edn_serde;
 pub mod error;
 pub mod molecule;
 pub mod predicates;
