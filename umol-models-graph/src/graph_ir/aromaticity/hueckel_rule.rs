@@ -10,7 +10,8 @@ use petgraph::unionfind::UnionFind;
 
 use super::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::config::{ElementScope, RingLimits};
-use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::molecule::AtomIndex;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 
 /// HueckelRule aromaticity model. Parameterized by element scope and ring scope.
@@ -257,7 +258,7 @@ mod tests {
     use umol_data::Element;
 
     use super::*;
-    use crate::graph_ir::bond::BondPattern;
+    use crate::graph_ir::bond_pattern::BondPattern;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 

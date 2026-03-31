@@ -8,7 +8,8 @@ use crate::graph_ir::atom::Atom;
 use crate::graph_ir::atom_pattern::{AtomPattern, HydrogenPattern, Pattern};
 use crate::graph_ir::config::ValenceStrategy;
 use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
-use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::molecule::AtomIndex;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
 pub enum ValenceMatcher {
     AtomTyping {

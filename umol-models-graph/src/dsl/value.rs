@@ -9,13 +9,14 @@ use nom::combinator::{all_consuming, map, opt, recognize, value};
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
+use serde::{Deserialize, Serialize};
 
 use super::error::{EvaluationError, ParseError};
 
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`]
 pub type Bindings = HashMap<String, i32>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ValueAst {
     Wildcard,
     LitSet(Vec<i32>),
@@ -23,7 +24,7 @@ pub enum ValueAst {
     Expr(Expr),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expr {
     Lit(i32),
     Var(String),
@@ -36,7 +37,7 @@ pub enum Expr {
     Or(Vec<Expr>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ArithOp {
     Add,
     Sub,
@@ -45,7 +46,7 @@ pub enum ArithOp {
     Rem,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelOp {
     Le,
     Ge,

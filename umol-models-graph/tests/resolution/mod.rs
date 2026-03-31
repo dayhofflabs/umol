@@ -7,15 +7,17 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use insta::{assert_yaml_snapshot, Settings};
-use rstest::rstest;
+use rstest::*;
 use serde::{Deserialize, Serialize};
 use umol_data::SpinMultiplicity;
 use umol_models_graph::table_ir::ImplicitHydrogens;
 use umol_models_graph::graph_ir::config_data::ValenceTable;
 use umol_models_graph::graph_ir::rings::{RingRelation, RingSet};
+use umol_models_graph::graph_ir::molecule_builder::MoleculeBuilder;
+use umol_models_graph::graph_ir::molecule::topology::{TopologyNodeRef, TopologyProjection};
 use umol_models_graph::graph_ir::{
     resolve_molecule_with, AromaticConstraint, AtomTypeQuery, HydrogenConstraint, Molecule,
-    ResolutionError, ResolveConfig, TopologyNodeRef, TopologyProjection, ValenceStrategy,
+    ResolutionError, ResolveConfig, ValenceStrategy,
 };
 use umol_models_graph::table_ir::{
     Atom as TableAtom, Bond as TableBond, BondDonation, BondOrder, Molecule as TableMolecule,
@@ -436,7 +438,10 @@ fn error_summary(e: &ResolutionError) -> ErrorSummary {
 }
 
 fn resolve_with_config(table_mol: &TableMolecule, config: &ResolveConfig) -> ResolveResult {
-    match resolve_molecule_with(table_mol, config) {
+    let mut builder = MoleculeBuilder::from_table_molecule(table_mol);
+    let result = resolve_molecule_with(&mut builder, config)
+        .and_then(|()| builder.build(config));
+    match result {
         Ok(mol) => ResolveResult {
             success: true,
             summary: Some(summarize(&mol)),

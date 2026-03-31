@@ -12,7 +12,8 @@ use umol_data::{Element, SpinMultiplicity, SpinStateError};
 use crate::atom::AromaticValence;
 use crate::graph_ir::atom_pattern::HydrogenPattern;
 use crate::graph_ir::error::ResolutionError;
-use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::molecule::AtomIndex;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::Atom;
 use crate::table_ir::atom::ImplicitHydrogens;
 

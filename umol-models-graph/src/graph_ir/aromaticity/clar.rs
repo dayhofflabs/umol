@@ -11,7 +11,8 @@ use umol_data::Element;
 
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::algorithms::maximum_independent_set;
-use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::molecule::AtomIndex;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 
 #[derive(Clone, Debug)]
@@ -123,7 +124,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::graph_ir::bond::BondPattern;
+    use crate::graph_ir::bond_pattern::BondPattern;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
     const C1: &str = "C#h#v2#a";

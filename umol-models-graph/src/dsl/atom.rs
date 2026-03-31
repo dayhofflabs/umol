@@ -1,14 +1,17 @@
-//! Atom-string DSL parser
+//! Atom-string DSL: parser, AST, and display
+
+use std::fmt;
 
 use nom::character::complete::multispace0;
 use nom::combinator::all_consuming;
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
+use serde::{Deserialize, Serialize};
 use umol_data::Element;
 
 use super::error::ParseError;
-use super::lowering::LowerAst;
+use super::ast::LowerAst;
 use super::predicates::{
     atom_predicate, element_expr, AromaticExpr, AtomPredicate, ElementExpr, HydrogenExpr,
     IsotopeExpr,
@@ -16,7 +19,7 @@ use super::predicates::{
 use super::value::ValueAst;
 
 /// Parsed atom-string AST
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AtomAst {
     pub element: ElementExpr,
     pub isotope_mass: Option<IsotopeExpr>,
@@ -59,11 +62,186 @@ impl LowerAst for AtomAst {
     type Config = AtomLowerConfig;
 }
 
+impl fmt::Display for AtomAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_element(f, &self.element)?;
+
+        match &self.isotope_mass {
+            None => {}
+            Some(IsotopeExpr::Natural) => write!(f, "#i=")?,
+            Some(IsotopeExpr::Lit(n)) => write!(f, "#i{}", n)?,
+            Some(IsotopeExpr::Wildcard) => write!(f, "#i*")?,
+            Some(IsotopeExpr::Set(ns)) => {
+                write!(f, "#i{{")?;
+                for (i, n) in ns.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ",")?;
+                    }
+                    write!(f, "{}", n)?;
+                }
+                write!(f, "}}")?;
+            }
+            Some(IsotopeExpr::Bind { id, set }) => {
+                write!(f, "#i(?{} :: {{", id)?;
+                for (i, n) in set.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ",")?;
+                    }
+                    write!(f, "{}", n)?;
+                }
+                write!(f, "}})")?;
+            }
+            Some(IsotopeExpr::Ref(id)) => write!(f, "#i(?{})", id)?,
+        }
+
+        match &self.charge {
+            None | Some(ValueAst::Lit(0)) => {}
+            Some(ValueAst::Lit(1)) => write!(f, "#c+")?,
+            Some(ValueAst::Lit(-1)) => write!(f, "#c-")?,
+            Some(ValueAst::Lit(n)) if *n > 0 => write!(f, "#c+{}", n)?,
+            Some(ValueAst::Lit(n)) => write!(f, "#c{}", n)?,
+            Some(ValueAst::Wildcard) => write!(f, "#c*")?,
+            Some(v) => {
+                write!(f, "#c")?;
+                fmt_value(f, v)?;
+            }
+        }
+
+        match &self.implicit_hydrogens {
+            None | Some(HydrogenExpr::Value(ValueAst::Lit(0))) => {}
+            Some(HydrogenExpr::Normal) => write!(f, "#h=")?,
+            Some(HydrogenExpr::Value(ValueAst::Lit(1))) => write!(f, "#h")?,
+            Some(HydrogenExpr::Value(ValueAst::Lit(n))) => write!(f, "#h{}", n)?,
+            Some(HydrogenExpr::Value(ValueAst::Wildcard)) => write!(f, "#h*")?,
+            Some(HydrogenExpr::Value(v)) => {
+                write!(f, "#h")?;
+                fmt_value(f, v)?;
+            }
+        }
+
+        fmt_unsigned_field(f, "#n", &self.lone_pairs)?;
+        fmt_unsigned_field(f, "#u", &self.unpaired_electrons)?;
+        fmt_multiplicity(f, &self.multiplicity, &self.unpaired_electrons)?;
+        fmt_unsigned_field(f, "#v", &self.valence)?;
+        fmt_unsigned_field(f, "#d", &self.donated_pairs)?;
+        fmt_unsigned_field(f, "#r", &self.accepted_pairs)?;
+
+        match &self.aromatic_valence {
+            None => {}
+            Some(AromaticExpr::Unspecified) => write!(f, "#a?")?,
+            Some(AromaticExpr::NotAromatic) => write!(f, "#a!")?,
+            Some(AromaticExpr::Value(ValueAst::Lit(1))) => write!(f, "#a")?,
+            Some(AromaticExpr::Value(ValueAst::Lit(n))) => write!(f, "#a{}", n)?,
+            Some(AromaticExpr::Value(v)) => {
+                write!(f, "#a")?;
+                fmt_value(f, v)?;
+            }
+        }
+
+        fmt_unsigned_field(f, "#m", &self.multicenter_valence)?;
+
+        Ok(())
+    }
+}
+
+fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementExpr) -> fmt::Result {
+    match expr {
+        ElementExpr::Lit(e) => write!(f, "{}", e),
+        ElementExpr::Wildcard => write!(f, "*"),
+        ElementExpr::Set(es) => {
+            write!(f, "{{")?;
+            for (i, e) in es.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", e)?;
+            }
+            write!(f, "}}")
+        }
+        ElementExpr::Bind { id, set } => {
+            write!(f, "(?{} :: {{", id)?;
+            for (i, e) in set.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", e)?;
+            }
+            write!(f, "}})")
+        }
+        ElementExpr::Ref(id) => write!(f, "(?{})", id),
+    }
+}
+
+/// Suppress None and Lit(0); abbreviate Lit(1) to just the prefix.
+fn fmt_unsigned_field(
+    f: &mut fmt::Formatter<'_>,
+    prefix: &str,
+    v: &Option<ValueAst>,
+) -> fmt::Result {
+    match v {
+        None | Some(ValueAst::Lit(0)) => Ok(()),
+        Some(ValueAst::Lit(1)) => write!(f, "{}", prefix),
+        Some(ValueAst::Lit(n)) => write!(f, "{}{}", prefix, n),
+        Some(ValueAst::Wildcard) => write!(f, "{}*", prefix),
+        Some(v) => {
+            write!(f, "{}", prefix)?;
+            fmt_value(f, v)
+        }
+    }
+}
+
+/// Suppress multiplicity when it equals unpaired_electrons + 1 (derivable default).
+fn fmt_multiplicity(
+    f: &mut fmt::Formatter<'_>,
+    multiplicity: &Option<ValueAst>,
+    unpaired: &Option<ValueAst>,
+) -> fmt::Result {
+    let m = match multiplicity {
+        None => return Ok(()),
+        Some(ValueAst::Lit(m)) => *m,
+        Some(ValueAst::Wildcard) => return write!(f, "#s*"),
+        Some(v) => {
+            write!(f, "#s")?;
+            return fmt_value(f, v);
+        }
+    };
+    let u: i32 = match unpaired {
+        Some(ValueAst::Lit(u)) => *u as i32,
+        None => 0,
+        _ => -1, // non-literal: can't determine derivability, always print
+    };
+    if m as i32 == u + 1 {
+        Ok(()) // derivable from unpaired, suppress
+    } else if m == 1 {
+        write!(f, "#s")
+    } else {
+        write!(f, "#s{}", m)
+    }
+}
+
+fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
+    match v {
+        ValueAst::Wildcard => write!(f, "*"),
+        ValueAst::Lit(n) => write!(f, "{}", n),
+        ValueAst::LitSet(s) => {
+            write!(f, "{{")?;
+            for (i, n) in s.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", n)?;
+            }
+            write!(f, "}}")
+        }
+        ValueAst::Expr(_) => write!(f, "<expr>"),
+    }
+}
+
 /// Isotope interpretation mode
 #[derive(Clone, Debug, Default)]
 pub enum IsotopeMode {
     #[default]
-    Normal,
+    Natural,
     Provided,
 }
 
@@ -238,8 +416,9 @@ mod tests {
     #[case::valence("C#v4", AtomAst { valence: Some(ValueAst::Lit(4)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::donated_pairs("N#d1", AtomAst { donated_pairs: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementExpr::Lit(Element::N)) })]
     #[case::accepted_pairs("B#r1", AtomAst { accepted_pairs: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementExpr::Lit(Element::B)) })]
-    #[case::arom_nonmember("C#a!", AtomAst { aromatic_valence: Some(AromaticExpr::None), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
-    #[case::arom_wild("C#a*", AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Wildcard)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
+    #[case::arom_nonmember("C#a!", AtomAst { aromatic_valence: Some(AromaticExpr::NotAromatic), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
+    #[case::arom_dontcare("C#a?", AtomAst { aromatic_valence: Some(AromaticExpr::Unspecified), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
+    #[case::arom_aromatic("C#a*", AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Wildcard)), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::arom_zero("C#a0", AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(0))), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::arom_one("C#a1", AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(1))), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]
     #[case::arom_omit("C#a", AtomAst { aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(1))), ..AtomAst::new(ElementExpr::Lit(Element::C)) })]

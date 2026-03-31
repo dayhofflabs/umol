@@ -1,18 +1,21 @@
-//! Bond-string DSL parser
+//! Bond-string DSL: parser, AST, and display
+
+use std::fmt;
 
 use nom::character::complete::multispace0;
 use nom::combinator::all_consuming;
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
+use serde::{Deserialize, Serialize};
 
 use super::error::ParseError;
-use super::lowering::LowerAst;
+use super::ast::LowerAst;
 use super::predicates::{bond_order, bond_predicate, BondPredicate};
 use super::value::ValueAst;
 
 /// Parsed bond-string AST
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: Option<ValueAst>,
@@ -22,6 +25,93 @@ pub struct BondAst {
 
 impl LowerAst for BondAst {
     type Config = BondLowerConfig;
+}
+
+impl fmt::Display for BondAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.order {
+            ValueAst::Lit(n) => write!(f, "{}", n)?,
+            ValueAst::Wildcard => write!(f, "*")?,
+            v => {
+                write!(f, "{{")?;
+                if let ValueAst::LitSet(s) = v {
+                    for (i, n) in s.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ",")?;
+                        }
+                        write!(f, "{}", n)?;
+                    }
+                }
+                write!(f, "}}")?;
+            }
+        }
+
+        match &self.charge {
+            None | Some(ValueAst::Lit(0)) => {}
+            Some(ValueAst::Lit(1)) => write!(f, "#c+")?,
+            Some(ValueAst::Lit(-1)) => write!(f, "#c-")?,
+            Some(ValueAst::Lit(n)) if *n > 0 => write!(f, "#c+{}", n)?,
+            Some(ValueAst::Lit(n)) => write!(f, "#c{}", n)?,
+            Some(ValueAst::Wildcard) => write!(f, "#c*")?,
+            Some(v) => {
+                write!(f, "#c")?;
+                fmt_bond_value(f, v)?;
+            }
+        }
+
+        match &self.unpaired_electrons {
+            None | Some(ValueAst::Lit(0)) => {}
+            Some(ValueAst::Lit(1)) => write!(f, "#u")?,
+            Some(ValueAst::Lit(n)) => write!(f, "#u{}", n)?,
+            Some(ValueAst::Wildcard) => write!(f, "#u*")?,
+            Some(v) => {
+                write!(f, "#u")?;
+                fmt_bond_value(f, v)?;
+            }
+        }
+
+        let m = match &self.multiplicity {
+            None => return Ok(()),
+            Some(ValueAst::Lit(m)) => *m,
+            Some(ValueAst::Wildcard) => return write!(f, "#s*"),
+            Some(v) => {
+                write!(f, "#s")?;
+                return fmt_bond_value(f, v);
+            }
+        };
+        let u: i32 = match &self.unpaired_electrons {
+            Some(ValueAst::Lit(u)) => *u as i32,
+            None => 0,
+            _ => -1,
+        };
+        if m as i32 != u + 1 {
+            if m == 1 {
+                write!(f, "#s")?;
+            } else {
+                write!(f, "#s{}", m)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn fmt_bond_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
+    match v {
+        ValueAst::Wildcard => write!(f, "*"),
+        ValueAst::Lit(n) => write!(f, "{}", n),
+        ValueAst::LitSet(s) => {
+            write!(f, "{{")?;
+            for (i, n) in s.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", n)?;
+            }
+            write!(f, "}}")
+        }
+        ValueAst::Expr(_) => write!(f, "<expr>"),
+    }
 }
 
 /// Bond lowering configuration

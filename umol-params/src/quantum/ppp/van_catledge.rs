@@ -105,7 +105,7 @@ impl VanCatledgeParams {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
+    use rstest::*;
 
     use super::*;
 

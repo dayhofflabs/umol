@@ -17,7 +17,7 @@ use std::sync::LazyLock;
 
 use insta::{assert_yaml_snapshot, Settings};
 use regex::Regex;
-use rstest::rstest;
+use rstest::*;
 use serde::Serialize;
 use umol_models_graph::io::smiles::config::SmilesIoConfig;
 use umol_models_graph::io::smiles::error::ParseError;

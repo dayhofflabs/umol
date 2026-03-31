@@ -4,11 +4,13 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
+use serde::{Deserialize, Serialize};
 use umol_data::Element;
 
 use crate::algorithms::{biconnected_components, enumerate_simple_cycles};
 use crate::graph_ir::config::RingEnumerationStrategy;
-use crate::graph_ir::molecule::{AtomIndex, BondIndex, Molecule, MoleculeBuilder};
+use crate::graph_ir::molecule::{AtomIndex, BondIndex, Molecule};
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
 #[derive(Debug, Clone)]
 struct AtomAdjacency {
@@ -99,7 +101,7 @@ impl AtomAdjacency {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RingIndex(pub u32);
 
 impl RingIndex {
@@ -108,7 +110,7 @@ impl RingIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ring {
     atoms: Vec<AtomIndex>,
     bonds: Vec<BondIndex>,
@@ -827,7 +829,7 @@ mod tests {
     use super::*;
     use crate::graph_ir::atom::Atom;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondPattern;
+    use crate::graph_ir::bond_pattern::BondPattern;
     use crate::graph_ir::config::{ResolveConfig, RingEnumerationStrategy};
 
     fn enumerate(builder: &MoleculeBuilder, max_ring_size: usize) -> RingSet {

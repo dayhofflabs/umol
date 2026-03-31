@@ -1,7 +1,9 @@
 //! Shared atomic value types used across IR layers.
 
+use serde::{Deserialize, Serialize};
+
 /// Isotope mass ground term.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IsotopeMass {
     Natural,
     MassNumber(u32),
@@ -17,7 +19,7 @@ impl IsotopeMass {
 }
 
 /// Aromatic valence ground term.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AromaticValence {
     NotAromatic,
     Valence(u8),

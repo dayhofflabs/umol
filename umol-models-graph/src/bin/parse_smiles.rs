@@ -1,4 +1,5 @@
 use clap::Parser;
+use umol_models_graph::graph_ir::molecule_builder::MoleculeBuilder;
 use umol_models_graph::graph_ir::resolve_molecule;
 use umol_models_graph::io::smiles::parse_smiles;
 
@@ -37,16 +38,18 @@ fn main() {
         );
     }
 
-    match resolve_molecule(&table_mol) {
-        Ok(mol) => {
+    let mut builder = MoleculeBuilder::from_table_molecule(&table_mol);
+    let result = resolve_molecule(&mut builder);
+    match result {
+        Ok(()) => {
             println!("\nresolved atoms:");
-            for ai in mol.atom_indices() {
-                let atom = mol.atom(ai).unwrap();
+            for ai in builder.atom_indices() {
+                let atom = builder.atom(ai).unwrap();
                 println!("  [{}] {}", ai.index(), atom);
             }
         }
         Err(e) => {
-            println!("\nresolution error: {}", e);
+            println!("resolution error: {}", e);
         }
     }
 }

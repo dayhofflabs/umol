@@ -2,14 +2,26 @@
 
 use std::collections::{HashMap, HashSet};
 
+use serde::{Deserialize, Serialize};
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
 use umol_data::SpinState;
 
+use indexmap::IndexMap;
+
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
+use crate::dsl::ast::ToAst;
+use crate::dsl::molecule::{
+    Atoms, BondSpec, MoleculeAst,
+    CovalentBond as AstCovalentBond,
+    DativeBond as AstDativeBond,
+    AromaticSystem as AstAromaticSystem,
+    MulticenterBond as AstMulticenterBond,
+    NoncovalentBond as AstNoncovalentBond,
+};
 use crate::graph_ir::aromaticity::AromaticSystem;
 use crate::graph_ir::atom::Atom;
 use crate::graph_ir::bond::Bond;
@@ -17,16 +29,17 @@ use crate::graph_ir::dative::DativeBond;
 use crate::graph_ir::multicenter::MulticenterBond;
 use crate::graph_ir::noncovalent::NoncovalentBond;
 
-pub mod builder;
 pub mod topology;
 
-pub use builder::*;
-pub use topology::*;
+use topology::{
+    DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge, TopologyGraph,
+    TopologyNodeRef, TopologyProjection,
+};
 
 pub type AtomIndex = NodeIndex<u32>;
 pub type BondIndex = EdgeIndex<u32>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct DativeBondIndex(pub u32);
 
 impl DativeBondIndex {
@@ -35,7 +48,7 @@ impl DativeBondIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct AromaticSystemIndex(pub u32);
 
 impl AromaticSystemIndex {
@@ -44,7 +57,7 @@ impl AromaticSystemIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct MulticenterBondIndex(pub u32);
 
 impl MulticenterBondIndex {
@@ -53,7 +66,7 @@ impl MulticenterBondIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct NoncovalentBondIndex(pub u32);
 
 impl NoncovalentBondIndex {
@@ -63,7 +76,7 @@ impl NoncovalentBondIndex {
 }
 
 /// Resolved molecule in GraphIR. All atoms and bonds are fully validated.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Molecule {
     graph: StableGraph<Atom, Bond, Undirected, u32>,
     dative_bonds: Vec<DativeBond>,
@@ -75,6 +88,26 @@ pub struct Molecule {
 }
 
 impl Molecule {
+    pub(crate) fn from_parts(
+        graph: StableGraph<Atom, Bond, Undirected, u32>,
+        dative_bonds: Vec<DativeBond>,
+        aromatic_systems: Vec<AromaticSystem>,
+        multicenter_bonds: Vec<MulticenterBond>,
+        noncovalent_bonds: Vec<NoncovalentBond>,
+        charge: i8,
+        spin: SpinState,
+    ) -> Self {
+        Self {
+            graph,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            charge,
+            spin,
+        }
+    }
+
     // Atoms
     pub fn atom_count(&self) -> usize {
         self.graph.node_count()
@@ -551,6 +584,91 @@ impl Molecule {
     }
 }
 
+impl ToAst<MoleculeAst> for Molecule {
+    fn to_ast(&self) -> MoleculeAst {
+        let mut label_map: IndexMap<AtomIndex, String> = IndexMap::new();
+        let mut atoms = IndexMap::new();
+
+        for idx in self.atom_indices() {
+            let label = idx.index().to_string();
+            let atom_ast = self.atom(idx).unwrap().to_ast();
+            label_map.insert(idx, label.clone());
+            atoms.insert(label, atom_ast);
+        }
+
+        let label = |idx: AtomIndex| -> String {
+            label_map.get(&idx).cloned().unwrap_or_else(|| idx.index().to_string())
+        };
+
+        let bonds: Vec<AstCovalentBond> = self
+            .bond_indices()
+            .map(|bi| {
+                let (a, b) = self.bond_atom_indices(bi).unwrap();
+                let bond_ast = self.bond(bi).unwrap().to_ast();
+                AstCovalentBond {
+                    id: None,
+                    a: label(a),
+                    b: label(b),
+                    bond: BondSpec::Literal(bond_ast),
+                }
+            })
+            .collect();
+
+        let dative_bonds: Vec<AstDativeBond> = self
+            .dative_bonds()
+            .map(|db| AstDativeBond {
+                id: None,
+                donor: label(db.donor()),
+                acceptor: label(db.acceptor()),
+                bond: match db.order() {
+                    1 => BondSpec::Single,
+                    2 => BondSpec::Double,
+                    3 => BondSpec::Triple,
+                    4 => BondSpec::Quadruple,
+                    _ => BondSpec::Single,
+                },
+            })
+            .collect();
+
+        let aromatic_systems: Vec<AstAromaticSystem> = self
+            .aromatic_systems()
+            .map(|sys| AstAromaticSystem {
+                id: None,
+                atoms: sys.atoms().map(&label).collect(),
+            })
+            .collect();
+
+        let multicenter_bonds: Vec<AstMulticenterBond> = self
+            .multicenter_bonds()
+            .map(|mc| AstMulticenterBond {
+                id: None,
+                atoms: mc.all_atoms().into_iter().map(&label).collect(),
+            })
+            .collect();
+
+        let noncovalent_bonds: Vec<AstNoncovalentBond> = self
+            .noncovalent_bonds()
+            .map(|nc| AstNoncovalentBond {
+                id: None,
+                a: label(nc.a()),
+                b: label(nc.b()),
+                bond: BondSpec::Single,
+            })
+            .collect();
+
+        MoleculeAst {
+            atoms: Atoms::Named(atoms),
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            charge: Some(self.charge() as i64),
+            spin: Some(self.spin()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -561,7 +679,8 @@ mod tests {
     use super::*;
     use crate::graph_ir::atom::Atom;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondPattern;
+    use crate::graph_ir::bond_pattern::BondPattern;
+    use crate::graph_ir::molecule_builder::MoleculeBuilder;
     use crate::graph_ir::config::ResolveConfig;
     use crate::graph_ir::molecule::Molecule;
 

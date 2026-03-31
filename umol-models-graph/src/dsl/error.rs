@@ -86,4 +86,6 @@ pub enum LoweringError {
     SpinState(#[from] SpinStateError),
     #[error("invalid atom spec: {0}")]
     Atom(String),
+    #[error("unknown atom label: {0}")]
+    UnknownLabel(String),
 }

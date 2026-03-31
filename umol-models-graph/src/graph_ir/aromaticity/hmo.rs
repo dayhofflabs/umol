@@ -12,7 +12,8 @@ use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::graph_ir::config::ElementScope;
-use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::molecule::AtomIndex;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingSet};
 
 #[derive(Clone, Debug)]
@@ -302,7 +303,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::graph_ir::bond::BondPattern;
+    use crate::graph_ir::bond_pattern::BondPattern;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 

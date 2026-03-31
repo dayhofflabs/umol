@@ -1,21 +1,23 @@
-//! Molecule map DSL parser
+//! Molecule map DSL: parser and AST
 
 use std::collections::HashSet;
 use std::str::FromStr;
 
 use clojure_reader::edn::{self, Edn};
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
 
-use super::atom::{parse_atom_dsl, AtomAst};
-use super::bond::{parse_bond_dsl, BondAst};
+use super::ast::LowerAst;
+use super::atom::{parse_atom_dsl, AtomAst, AtomLowerConfig};
+use super::bond::{parse_bond_dsl, BondAst, BondLowerConfig};
 use super::error::ParseError;
 
 mod utils;
 use utils::{extract_label, extract_list, extract_map, extract_tagged_str, map_get};
 
 /// `:atoms` — either a named map or an indexed vector
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Atoms {
     Named(IndexMap<String, AtomAst>),
     Indexed(Vec<AtomAst>),
@@ -28,7 +30,7 @@ impl Default for Atoms {
 }
 
 /// `:bond` value on a bond entry: parsed bond-string or keyword shorthand
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BondSpec {
     Literal(BondAst),
     Single,
@@ -37,7 +39,7 @@ pub enum BondSpec {
     Quadruple,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CovalentBond {
     pub id: Option<String>,
     pub a: String,
@@ -45,7 +47,7 @@ pub struct CovalentBond {
     pub bond: BondSpec,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DativeBond {
     pub id: Option<String>,
     pub donor: String,
@@ -53,19 +55,19 @@ pub struct DativeBond {
     pub bond: BondSpec,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AromaticSystem {
     pub id: Option<String>,
     pub atoms: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MulticenterBond {
     pub id: Option<String>,
     pub atoms: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoncovalentBond {
     pub id: Option<String>,
     pub a: String,
@@ -74,7 +76,7 @@ pub struct NoncovalentBond {
 }
 
 /// Parsed molecule map AST
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct MoleculeAst {
     pub atoms: Atoms,
     pub bonds: Vec<CovalentBond>,
@@ -84,6 +86,16 @@ pub struct MoleculeAst {
     pub noncovalent_bonds: Vec<NoncovalentBond>,
     pub charge: Option<i64>,
     pub spin: Option<SpinState>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MoleculeLowerConfig {
+    pub atom: AtomLowerConfig,
+    pub bond: BondLowerConfig,
+}
+
+impl LowerAst for MoleculeAst {
+    type Config = MoleculeLowerConfig;
 }
 
 /// Parse a molecule AST from a EDN string

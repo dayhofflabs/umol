@@ -6,29 +6,46 @@ use std::vec::IntoIter;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use umol_data::{SpinMultiplicity, SpinState};
 
-use super::topology::{
+use crate::graph_ir::molecule::topology::{
     DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
     TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
 };
-use super::{
+use crate::graph_ir::molecule::{
     AromaticSystemIndex, AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex,
     NoncovalentBondIndex,
 };
+use indexmap::IndexMap;
+
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
-use crate::graph_ir::aromaticity::AromaticSystem;
+use crate::dsl::ast::{FromAst, ToAst};
+use crate::dsl::bond::BondLowerConfig;
+use crate::dsl::error::LoweringError;
+use crate::dsl::molecule::{
+    Atoms, BondSpec, MoleculeAst, MoleculeLowerConfig,
+    CovalentBond as AstCovalentBond,
+    DativeBond as AstDativeBond,
+    AromaticSystem as AstAromaticSystem,
+    MulticenterBond as AstMulticenterBond,
+    NoncovalentBond as AstNoncovalentBond,
+};
+use crate::graph_ir::aromaticity::{AromaticContribution, AromaticSystem};
 use crate::graph_ir::atom::Atom;
 use crate::graph_ir::atom_pattern::{AtomPattern, HydrogenPattern};
-use crate::graph_ir::bond::BondPattern;
+use crate::graph_ir::bond_pattern::BondPattern;
 use crate::graph_ir::config::ResolveConfig;
 use crate::graph_ir::dative::DativeBond;
 use crate::graph_ir::error::ResolutionError;
-use crate::graph_ir::multicenter::MulticenterBond;
+use crate::graph_ir::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
 use crate::graph_ir::noncovalent::NoncovalentBond;
 use crate::graph_ir::symmetry::compute_symmetry;
+use crate::table_ir::atom::ImplicitHydrogens;
+use crate::table_ir::bond::BondOrder;
+use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> {
     let unpaired_total: u32 = states.iter().map(|s| s.unpaired_electrons() as u32).sum();
@@ -50,6 +67,16 @@ fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> 
     }
     Some(compatible)
 }
+/// Transient resolution state carried by `MoleculeBuilder` during the resolution
+/// pipeline. Not part of the final `Molecule` or the `MoleculeAst`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResolutionContext {
+    pub atom_candidates: HashMap<AtomIndex, SmallVec<[Atom; 4]>>,
+    pub atom_aromatic_hints: HashMap<AtomIndex, bool>,
+    pub bond_aromatic_hints: HashMap<BondIndex, bool>,
+    pub atom_normal_implicit_hydrogens: HashSet<AtomIndex>,
+}
+
 /// Builder for constructing a `Molecule`. Carries `AtomPattern` nodes during
 /// resolution phases; `build()` finalizes each atom and produces a `Molecule`.
 ///
@@ -58,10 +85,7 @@ fn compatible_molecular_multiplicities(states: &[SpinState]) -> Option<Vec<u8>> 
 #[derive(Debug, Clone)]
 pub struct MoleculeBuilder {
     graph: StableGraph<AtomPattern, BondPattern, Undirected, u32>,
-    atom_candidates: HashMap<AtomIndex, SmallVec<[Atom; 4]>>,
-    atom_aromatic_hints: HashMap<AtomIndex, bool>,
-    bond_aromatic_hints: HashMap<BondIndex, bool>,
-    atom_normal_implicit_hydrogens: HashSet<AtomIndex>,
+    resolution: ResolutionContext,
     dative_bonds: Vec<DativeBond>,
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
@@ -74,10 +98,7 @@ impl MoleculeBuilder {
     pub fn new() -> Self {
         Self {
             graph: StableGraph::default(),
-            atom_candidates: HashMap::new(),
-            atom_aromatic_hints: HashMap::new(),
-            bond_aromatic_hints: HashMap::new(),
-            atom_normal_implicit_hydrogens: HashSet::new(),
+            resolution: ResolutionContext::default(),
             dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
@@ -90,10 +111,12 @@ impl MoleculeBuilder {
     pub fn with_capacity(atom_capacity: usize, bond_capacity: usize) -> Self {
         Self {
             graph: StableGraph::with_capacity(atom_capacity, bond_capacity),
-            atom_candidates: HashMap::with_capacity(atom_capacity),
-            atom_aromatic_hints: HashMap::with_capacity(atom_capacity),
-            bond_aromatic_hints: HashMap::with_capacity(bond_capacity),
-            atom_normal_implicit_hydrogens: HashSet::with_capacity(atom_capacity),
+            resolution: ResolutionContext {
+                atom_candidates: HashMap::with_capacity(atom_capacity),
+                atom_aromatic_hints: HashMap::with_capacity(atom_capacity),
+                bond_aromatic_hints: HashMap::with_capacity(bond_capacity),
+                atom_normal_implicit_hydrogens: HashSet::with_capacity(atom_capacity),
+            },
             dative_bonds: Vec::new(),
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
@@ -132,6 +155,77 @@ impl MoleculeBuilder {
         builder.noncovalent_bonds = molecule.noncovalent_bonds().cloned().collect();
         builder.charge = Some(molecule.charge());
         builder.spin = Some(molecule.spin());
+        builder
+    }
+
+    /// Build a `MoleculeBuilder` from a `TableMolecule` without running any topology checks.
+    ///
+    /// Topology validation (self-loops, parallel edges, connectivity) is a separate pass
+    /// that operates on the returned builder; see `resolve_topology_with` in `resolution.rs`.
+    pub fn from_table_molecule(molecule: &TableMolecule) -> Self {
+        let n = molecule.atom_count();
+        let m = molecule.bond_count();
+        let mut builder = Self::with_capacity(n, m);
+        let mut node_indices: Vec<AtomIndex> = Vec::with_capacity(n);
+
+        for atom in &molecule.atoms {
+            let idx = builder.add_atom(AtomPattern::from_table_atom(atom));
+            if let Some(aromatic) = atom.aromatic {
+                builder
+                    .set_atom_aromatic_hint(idx, aromatic)
+                    .expect("newly added atom index must be valid");
+            }
+            if atom.implicit_hydrogens == Some(ImplicitHydrogens::Normal) {
+                builder
+                    .set_atom_normal_implicit_hydrogens(idx)
+                    .expect("newly added atom index must be valid");
+            }
+            node_indices.push(idx);
+        }
+
+        for bond in &molecule.bonds {
+            let a = node_indices[bond.atoms.first() as usize];
+            let b = node_indices[bond.atoms.second() as usize];
+            if bond.noncovalent.is_some() {
+                builder.add_noncovalent_bond(NoncovalentBond::from_table_bond(bond, &node_indices));
+            } else if matches!(
+                bond.donation,
+                Some(BondDonation::Donating | BondDonation::Accepting)
+            ) {
+                builder.add_dative_bond(DativeBond::from_table_bond(bond, &node_indices));
+            } else {
+                let bond_idx = builder.add_bond_unchecked(a, b, BondPattern::from_table_bond(bond));
+                if bond.order == BondOrder::Aromatic {
+                    builder.set_bond_aromatic_hint(bond_idx, true);
+                }
+            }
+        }
+
+        for mc in &molecule.multicenter_bonds {
+            let sets: Vec<MulticenterSet> = mc
+                .contributions()
+                .iter()
+                .map(|contrib| {
+                    let contributions: Vec<MulticenterContribution> = contrib
+                        .atoms()
+                        .iter()
+                        .map(|&idx| {
+                            assert!(
+                                (idx as usize) < node_indices.len(),
+                                "multicenter bond references atom index {} which is out of range \
+                                 (molecule has {} atoms)",
+                                idx,
+                                node_indices.len()
+                            );
+                            MulticenterContribution::topology_only(node_indices[idx as usize])
+                        })
+                        .collect();
+                    MulticenterSet::topology_only(contributions.iter().map(|c| c.atom()))
+                })
+                .collect();
+            builder.add_multicenter_bond(MulticenterBond::new(sets));
+        }
+
         builder
     }
 
@@ -309,6 +403,35 @@ impl MoleculeBuilder {
         self.graph.node_count()
     }
 
+    /// Number of connected components in the covalent bond graph.
+    pub fn component_count(&self) -> usize {
+        let mut visited: HashSet<AtomIndex> = HashSet::new();
+        let mut count = 0;
+        for start in self.graph.node_indices() {
+            if visited.contains(&start) {
+                continue;
+            }
+            count += 1;
+            let mut stack = vec![start];
+            while let Some(node) = stack.pop() {
+                if !visited.insert(node) {
+                    continue;
+                }
+                for edge in self.graph.edges(node) {
+                    let neighbor = if edge.source() == node {
+                        edge.target()
+                    } else {
+                        edge.source()
+                    };
+                    if !visited.contains(&neighbor) {
+                        stack.push(neighbor);
+                    }
+                }
+            }
+        }
+        count
+    }
+
     pub fn atom_indices(&self) -> impl Iterator<Item = AtomIndex> + '_ {
         self.graph.node_indices()
     }
@@ -332,15 +455,15 @@ impl MoleculeBuilder {
     /// Add a fully-resolved atom as both pattern and sole candidate.
     pub fn add_resolved_atom(&mut self, atom: Atom) -> AtomIndex {
         let idx = self.add_atom(AtomPattern::from_atom(&atom));
-        self.atom_candidates
+        self.resolution.atom_candidates
             .insert(idx, SmallVec::from_elem(atom, 1));
         idx
     }
 
     pub fn remove_atom(&mut self, index: AtomIndex) -> Option<AtomPattern> {
-        self.atom_candidates.remove(&index);
-        self.atom_aromatic_hints.remove(&index);
-        self.atom_normal_implicit_hydrogens.remove(&index);
+        self.resolution.atom_candidates.remove(&index);
+        self.resolution.atom_aromatic_hints.remove(&index);
+        self.resolution.atom_normal_implicit_hydrogens.remove(&index);
         self.graph.remove_node(index)
     }
 
@@ -362,25 +485,25 @@ impl MoleculeBuilder {
         if !self.graph.contains_node(index) {
             return None;
         }
-        self.atom_candidates.insert(index, candidates);
+        self.resolution.atom_candidates.insert(index, candidates);
         Some(())
     }
 
     pub fn atom_candidates(&self, index: AtomIndex) -> &[Atom] {
-        self.atom_candidates
+        self.resolution.atom_candidates
             .get(&index)
             .map_or(&[], |v| v.as_slice())
     }
 
     pub fn atom_candidates_mut(&mut self, index: AtomIndex) -> Option<&mut SmallVec<[Atom; 4]>> {
-        self.atom_candidates.get_mut(&index)
+        self.resolution.atom_candidates.get_mut(&index)
     }
 
     pub fn add_atom_candidate(&mut self, index: AtomIndex, candidate: Atom) -> Option<()> {
         if !self.graph.contains_node(index) {
             return None;
         }
-        let entry = self.atom_candidates.entry(index).or_default();
+        let entry = self.resolution.atom_candidates.entry(index).or_default();
         if !entry.contains(&candidate) {
             entry.push(candidate);
         }
@@ -391,36 +514,36 @@ impl MoleculeBuilder {
         if !self.graph.contains_node(index) {
             return None;
         }
-        self.atom_aromatic_hints.insert(index, hint);
+        self.resolution.atom_aromatic_hints.insert(index, hint);
         Some(())
     }
 
     pub fn atom_explicit_aromatic_hint(&self, index: AtomIndex) -> Option<bool> {
-        self.atom_aromatic_hints.get(&index).copied()
+        self.resolution.atom_aromatic_hints.get(&index).copied()
     }
 
     pub fn set_bond_aromatic_hint(&mut self, index: BondIndex, hint: bool) {
-        self.bond_aromatic_hints.insert(index, hint);
+        self.resolution.bond_aromatic_hints.insert(index, hint);
     }
 
     pub fn bond_aromatic_hint(&self, index: BondIndex) -> Option<bool> {
-        self.bond_aromatic_hints.get(&index).copied()
+        self.resolution.bond_aromatic_hints.get(&index).copied()
     }
 
     pub fn set_atom_normal_implicit_hydrogens(&mut self, index: AtomIndex) -> Option<()> {
         if !self.graph.contains_node(index) {
             return None;
         }
-        self.atom_normal_implicit_hydrogens.insert(index);
+        self.resolution.atom_normal_implicit_hydrogens.insert(index);
         Some(())
     }
 
     pub fn clear_atom_normal_implicit_hydrogens(&mut self, index: AtomIndex) {
-        self.atom_normal_implicit_hydrogens.remove(&index);
+        self.resolution.atom_normal_implicit_hydrogens.remove(&index);
     }
 
     pub fn atom_has_normal_implicit_hydrogens(&self, index: AtomIndex) -> bool {
-        self.atom_normal_implicit_hydrogens.contains(&index)
+        self.resolution.atom_normal_implicit_hydrogens.contains(&index)
     }
 
     // Atom properties
@@ -429,7 +552,7 @@ impl MoleculeBuilder {
         index: AtomIndex,
         getter: impl Fn(&Atom) -> T,
     ) -> Option<T> {
-        self.atom_candidates
+        self.resolution.atom_candidates
             .get(&index)
             .map(|c| c.iter().next().map(getter))
             .flatten()
@@ -441,7 +564,7 @@ impl MoleculeBuilder {
     }
 
     pub fn atom_aromatic_valence(&self, index: AtomIndex) -> u8 {
-        self.atom_candidates
+        self.resolution.atom_candidates
             .get(&index)
             .and_then(|candidates| {
                 candidates.iter().find_map(|c| match c.aromatic_valence() {
@@ -461,7 +584,7 @@ impl MoleculeBuilder {
         }
         self.graph
             .edges(index)
-            .any(|e| self.bond_aromatic_hints.get(&e.id()) == Some(&true))
+            .any(|e| self.resolution.bond_aromatic_hints.get(&e.id()) == Some(&true))
     }
 
     /// Atoms that have at least one candidate with a non-None aromatic valence.
@@ -471,7 +594,7 @@ impl MoleculeBuilder {
     }
 
     pub fn atom_has_aromatic_candidate(&self, index: AtomIndex) -> bool {
-        self.atom_candidates
+        self.resolution.atom_candidates
             .get(&index)
             .map(|candidates| {
                 candidates
@@ -750,6 +873,14 @@ impl MoleculeBuilder {
         self.spin = None;
     }
 
+    pub fn resolution_context(&self) -> &ResolutionContext {
+        &self.resolution
+    }
+
+    pub fn set_resolution_context(&mut self, ctx: ResolutionContext) {
+        self.resolution = ctx;
+    }
+
     // Atom-atom relationships
     pub fn adjacency_list(&self) -> HashMap<AtomIndex, Vec<AtomIndex>> {
         let mut adj = HashMap::with_capacity(self.graph.node_count());
@@ -959,7 +1090,7 @@ impl MoleculeBuilder {
 
         for old_idx in self.graph.node_indices() {
             let pattern = self.graph.node_weight(old_idx).unwrap();
-            let candidates = self.atom_candidates.get(&old_idx).ok_or_else(|| {
+            let candidates = self.resolution.atom_candidates.get(&old_idx).ok_or_else(|| {
                 ResolutionError::ValenceNoMatch(format!(
                     "no valence match for {:?}",
                     pattern.element()
@@ -1113,21 +1244,218 @@ impl MoleculeBuilder {
             }
         };
 
-        Ok(Molecule {
+        Ok(Molecule::from_parts(
             graph,
-            aromatic_systems: self.aromatic_systems,
-            multicenter_bonds: self.multicenter_bonds,
-            dative_bonds: self.dative_bonds,
-            noncovalent_bonds: self.noncovalent_bonds,
+            self.dative_bonds,
+            self.aromatic_systems,
+            self.multicenter_bonds,
+            self.noncovalent_bonds,
             charge,
             spin,
-        })
+        ))
     }
 }
 
 impl Default for MoleculeBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl FromAst<MoleculeAst> for MoleculeBuilder {
+    fn from_ast(ast: MoleculeAst, cfg: &MoleculeLowerConfig) -> Result<Self, LoweringError> {
+        let mut builder = Self::new();
+        let mut label_to_index: IndexMap<String, AtomIndex> = IndexMap::new();
+
+        match ast.atoms {
+            Atoms::Named(map) => {
+                for (label, atom_ast) in map {
+                    let pattern = AtomPattern::from_ast(atom_ast, &cfg.atom)?;
+                    let idx = builder.add_atom(pattern);
+                    label_to_index.insert(label, idx);
+                }
+            }
+            Atoms::Indexed(vec) => {
+                for (i, atom_ast) in vec.into_iter().enumerate() {
+                    let pattern = AtomPattern::from_ast(atom_ast, &cfg.atom)?;
+                    let idx = builder.add_atom(pattern);
+                    label_to_index.insert(i.to_string(), idx);
+                }
+            }
+        }
+
+        let resolve = |label: &str| -> Result<AtomIndex, LoweringError> {
+            label_to_index
+                .get(label)
+                .copied()
+                .ok_or_else(|| LoweringError::UnknownLabel(label.to_string()))
+        };
+
+        let lower_bond_spec =
+            |spec: BondSpec, cfg: &BondLowerConfig| -> Result<BondPattern, LoweringError> {
+                match spec {
+                    BondSpec::Single => Ok(BondPattern::new(1)),
+                    BondSpec::Double => Ok(BondPattern::new(2)),
+                    BondSpec::Triple => Ok(BondPattern::new(3)),
+                    BondSpec::Quadruple => Ok(BondPattern::new(4)),
+                    BondSpec::Literal(ast) => BondPattern::from_ast(ast, cfg),
+                }
+            };
+
+        for bond in ast.bonds {
+            let a = resolve(&bond.a)?;
+            let b = resolve(&bond.b)?;
+            let pattern = lower_bond_spec(bond.bond, &cfg.bond)?;
+            builder.add_bond_unchecked(a, b, pattern);
+        }
+
+        for db in ast.dative_bonds {
+            let donor = resolve(&db.donor)?;
+            let acceptor = resolve(&db.acceptor)?;
+            let order = match db.bond {
+                BondSpec::Single => 1,
+                BondSpec::Double => 2,
+                BondSpec::Triple => 3,
+                BondSpec::Quadruple => 4,
+                BondSpec::Literal(ast) => {
+                    let pat = BondPattern::from_ast(ast, &cfg.bond)?;
+                    pat.order()
+                }
+            };
+            builder.add_dative_bond(DativeBond::new(donor, acceptor, order));
+        }
+
+        for sys in ast.aromatic_systems {
+            let atoms: Vec<AtomIndex> = sys
+                .atoms
+                .iter()
+                .map(|label| resolve(label))
+                .collect::<Result<_, _>>()?;
+            let contributions: Vec<AromaticContribution> = atoms
+                .into_iter()
+                .map(|a| AromaticContribution::new(a, 0))
+                .collect();
+            builder.add_aromatic_system(AromaticSystem::new(contributions));
+        }
+
+        for mc in ast.multicenter_bonds {
+            let atoms: Vec<AtomIndex> = mc
+                .atoms
+                .iter()
+                .map(|label| resolve(label))
+                .collect::<Result<_, _>>()?;
+            let set = MulticenterSet::topology_only(atoms);
+            builder.add_multicenter_bond(MulticenterBond::new(std::iter::once(set)));
+        }
+
+        for nc in ast.noncovalent_bonds {
+            let a = resolve(&nc.a)?;
+            let b = resolve(&nc.b)?;
+            builder.add_noncovalent_bond(NoncovalentBond::new(
+                a,
+                b,
+                crate::bond::BondNoncovalent::Hydrogen,
+            ));
+        }
+
+        if let Some(charge) = ast.charge {
+            let c = i8::try_from(charge).map_err(|_| LoweringError::OutOfRange {
+                field: "charge",
+                value: charge,
+            })?;
+            builder.set_charge(c);
+        }
+
+        if let Some(spin) = ast.spin {
+            builder.set_spin(spin);
+        }
+
+        Ok(builder)
+    }
+}
+
+impl ToAst<MoleculeAst> for MoleculeBuilder {
+    fn to_ast(&self) -> MoleculeAst {
+        let mut label_map: IndexMap<AtomIndex, String> = IndexMap::new();
+        let mut atoms = IndexMap::new();
+
+        for idx in self.atom_indices() {
+            let label = idx.index().to_string();
+            let atom_ast = self.atom(idx).unwrap().to_ast();
+            label_map.insert(idx, label.clone());
+            atoms.insert(label, atom_ast);
+        }
+
+        let label = |idx: AtomIndex| -> String {
+            label_map.get(&idx).cloned().unwrap_or_else(|| idx.index().to_string())
+        };
+
+        let bonds: Vec<AstCovalentBond> = self
+            .bond_indices()
+            .map(|bi| {
+                let (a, b) = self.bond_atom_indices(bi).unwrap();
+                let bond_ast = self.bond(bi).unwrap().to_ast();
+                AstCovalentBond {
+                    id: None,
+                    a: label(a),
+                    b: label(b),
+                    bond: BondSpec::Literal(bond_ast),
+                }
+            })
+            .collect();
+
+        let dative_bonds: Vec<AstDativeBond> = self
+            .dative_bonds()
+            .map(|db| AstDativeBond {
+                id: None,
+                donor: label(db.donor()),
+                acceptor: label(db.acceptor()),
+                bond: match db.order() {
+                    1 => BondSpec::Single,
+                    2 => BondSpec::Double,
+                    3 => BondSpec::Triple,
+                    4 => BondSpec::Quadruple,
+                    _ => BondSpec::Single,
+                },
+            })
+            .collect();
+
+        let aromatic_systems: Vec<AstAromaticSystem> = self
+            .aromatic_systems()
+            .map(|sys| AstAromaticSystem {
+                id: None,
+                atoms: sys.atoms().map(&label).collect(),
+            })
+            .collect();
+
+        let multicenter_bonds: Vec<AstMulticenterBond> = self
+            .multicenter_bonds()
+            .map(|mc| AstMulticenterBond {
+                id: None,
+                atoms: mc.all_atoms().into_iter().map(&label).collect(),
+            })
+            .collect();
+
+        let noncovalent_bonds: Vec<AstNoncovalentBond> = self
+            .noncovalent_bonds()
+            .map(|nc| AstNoncovalentBond {
+                id: None,
+                a: label(nc.a()),
+                b: label(nc.b()),
+                bond: BondSpec::Single,
+            })
+            .collect();
+
+        MoleculeAst {
+            atoms: Atoms::Named(atoms),
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            charge: self.charge().map(|c| c as i64),
+            spin: self.spin(),
+        }
     }
 }
 
@@ -1140,7 +1468,7 @@ mod tests {
     use super::*;
     use crate::graph_ir::atom::Atom;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondPattern;
+    use crate::graph_ir::bond_pattern::BondPattern;
     use crate::graph_ir::config::ResolveConfig;
     use crate::graph_ir::molecule::Molecule;
 

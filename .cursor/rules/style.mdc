@@ -1,9 +1,0 @@
----
-alwaysApply: true
----
-## Give concise and factual answers
-- Do not provide broad background unless explicitly asked
-
-## Avoid summaries of work done
-- Assume that the user is following along with the code changes and the work flow
-- Do not discuss the benefits of a proposed solution without being asked

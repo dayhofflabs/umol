@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use insta::{assert_yaml_snapshot, Settings};
-use rstest::rstest;
+use rstest::*;
 use serde::Serialize;
 use umol_models_graph::io::ctfile::config::CtfileIoConfig;
 use umol_models_graph::io::ctfile::error::ParseError;

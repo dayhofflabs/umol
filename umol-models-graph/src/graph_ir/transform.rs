@@ -11,7 +11,7 @@ use crate::graph_ir::atom_pattern::Pattern;
 use crate::graph_ir::aromaticity::{AromaticityError, AromaticityModel};
 use crate::graph_ir::config::{AromaticityStrategy, RingEnumerationStrategy};
 use crate::graph_ir::kekule::{kekulize, KekuleConfig, KekulizationError};
-use crate::graph_ir::molecule::MoleculeBuilder;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
 #[derive(Debug, Error)]

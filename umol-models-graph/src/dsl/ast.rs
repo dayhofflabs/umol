@@ -1,8 +1,8 @@
-//! AST lowering into IR targets
+//! AST lowering and raising traits.
 
 use super::error::LoweringError;
 
-/// Lowering trait for DSL AST types, config shared by all targets
+/// Lowering trait for DSL AST types; carries the config type shared by all lowering targets.
 pub trait LowerAst {
     type Config: Default;
 
@@ -35,7 +35,15 @@ pub trait LowerAst {
     }
 }
 
-/// AST lowering targets
+/// AST lowering targets.
 pub trait FromAst<A: LowerAst>: Sized {
     fn from_ast(ast: A, cfg: &A::Config) -> Result<Self, LoweringError>;
+}
+
+/// Raise a ground or pattern type to its AST representation, for formatting.
+///
+/// Unlike [`FromAst`], raising is infallible and requires no configuration —
+/// every value maps unambiguously to an AST node.
+pub trait ToAst<A> {
+    fn to_ast(&self) -> A;
 }

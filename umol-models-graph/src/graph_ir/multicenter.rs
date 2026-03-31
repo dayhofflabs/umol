@@ -8,12 +8,13 @@
 //! Electron counts are `Option<u8>`: `None` when not yet resolved (topology-only),
 //! `Some(n)` after the valence phase populates them.
 
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use crate::graph_ir::molecule::AtomIndex;
 
 /// Per-atom contribution to a multicenter set.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MulticenterContribution {
     atom: AtomIndex,
     electrons: Option<u8>,
@@ -46,7 +47,7 @@ impl MulticenterContribution {
 }
 
 /// A set of atoms participating in a multicenter bond, with a system-level charge.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MulticenterSet {
     contributions: SmallVec<[MulticenterContribution; 8]>,
     charge: i8,
@@ -122,7 +123,7 @@ impl MulticenterSet {
 
 /// A multi-center bond consisting of one or more multicenter sets.
 /// TODO: Needs builder struct
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MulticenterBond {
     sets: SmallVec<[MulticenterSet; 4]>,
 }

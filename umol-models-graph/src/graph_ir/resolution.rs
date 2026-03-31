@@ -1,145 +1,84 @@
-//! Resolution of TableIR molecules to GraphIR molecules.
+//! Resolution of molecular structure.
 
 use std::collections::HashMap;
 
 use crate::graph_ir::aromaticity::AromaticityModel;
-use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::bond::BondPattern;
 use crate::graph_ir::config::{
     AromaticityHintPolicy, AromaticityStrategy, ResolveConfig, TopologyResolveFlags,
     ValenceMatchPolicy,
 };
-use crate::graph_ir::dative::DativeBond;
 use crate::graph_ir::error::ResolutionError;
-use crate::graph_ir::molecule::{AtomIndex, Molecule, MoleculeBuilder};
-use crate::graph_ir::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
-use crate::graph_ir::noncovalent::NoncovalentBond;
+use crate::graph_ir::molecule::{AtomIndex, BondIndex};
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 use crate::graph_ir::valence::ValenceMatcher;
-use crate::table_ir::atom::ImplicitHydrogens;
-use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
-/// Resolve a TableIR molecule to a GraphIR molecule using default configuration.
-pub fn resolve_molecule(molecule: &TableMolecule) -> Result<Molecule, ResolutionError> {
-    resolve_molecule_with(molecule, &ResolveConfig::default())
+/// Resolve a molecular structure to a ground `Molecule` using default configuration.
+pub fn resolve_molecule(builder: &mut MoleculeBuilder) -> Result<(), ResolutionError> {
+    resolve_molecule_with(builder, &ResolveConfig::default())
 }
 
-/// Resolve a TableIR molecule to a GraphIR molecule with the given configuration.
+/// Run all resolution phases on a `MoleculeBuilder` in place.
 ///
-/// Populates a `MoleculeBuilder` from the TableIR data, runs the resolution
-/// phases in order, then builds the final `Molecule`.
+/// Modifies the builder by populating atom candidates and aromatic systems.
+/// Call `builder.build(config)` afterwards to ground to a `Molecule`.
 ///
-/// 1. **Topology** — build graph from TableIR, validate indices, self-loops,
-///    parallel edges, connectivity.
+/// Phases:
+/// 1. **Topology** — validate self-loops, parallel edges, connectivity
 /// 2. **Valence** — match atoms against valid valence states
 /// 3. **Aromaticity** — select from valence candidates by ring membership
 /// 4. **Stereochemistry** — validate chiral centers and bond stereo
 pub fn resolve_molecule_with(
-    molecule: &TableMolecule,
+    builder: &mut MoleculeBuilder,
     config: &ResolveConfig,
-) -> Result<Molecule, ResolutionError> {
-    let mut builder = resolve_topology_with(molecule, config)?;
-    resolve_valence_with(&mut builder, config)?;
-    resolve_aromaticity_with(&mut builder, config)?;
-    resolve_stereo_with(&mut builder, config)?;
-    builder.build(config)
+) -> Result<(), ResolutionError> {
+    resolve_topology_with(builder, config)?;
+    resolve_valence_with(builder, config)?;
+    resolve_aromaticity_with(builder, config)?;
+    resolve_stereo_with(builder, config)?;
+    Ok(())
 }
 
 fn resolve_topology_with(
-    molecule: &TableMolecule,
+    builder: &mut MoleculeBuilder,
     config: &ResolveConfig,
-) -> Result<MoleculeBuilder, ResolutionError> {
+) -> Result<(), ResolutionError> {
     if !config
         .topology
         .flags
         .contains(TopologyResolveFlags::DISCONNECTED_MOLECULES)
-        && molecule.component_count() > 1
+        && builder.component_count() > 1
     {
         return Err(ResolutionError::TopologyDisconnected);
     }
 
-    for (i, bond) in molecule.bonds.iter().enumerate() {
-        if bond.atoms.first() == bond.atoms.second() {
-            return Err(ResolutionError::TopologySelfLoop(i as u32));
+    for bond_index in builder.bond_indices() {
+        let (a, b) = builder
+            .bond_atom_indices(bond_index)
+            .expect("bond_index from bond_indices must be valid");
+        if a == b {
+            return Err(ResolutionError::TopologySelfLoop(bond_index.index() as u32));
         }
     }
 
-    let mut atom_bonds: HashMap<(u32, u32), Vec<u32>> = HashMap::new();
-    for (i, bond) in molecule.bonds.iter().enumerate() {
-        let key = (bond.atoms.first(), bond.atoms.second());
-        atom_bonds.entry(key).or_default().push(i as u32);
+    let mut bond_pairs: HashMap<(AtomIndex, AtomIndex), Vec<BondIndex>> = HashMap::new();
+    for bond_index in builder.bond_indices() {
+        let (a, b) = builder
+            .bond_atom_indices(bond_index)
+            .expect("bond_index from bond_indices must be valid");
+        let key = if a <= b { (a, b) } else { (b, a) };
+        bond_pairs.entry(key).or_default().push(bond_index);
     }
-    for (_pair, indices) in atom_bonds {
+    for (_pair, indices) in &bond_pairs {
         if indices.len() >= 2 {
             return Err(ResolutionError::TopologyParallelEdges(
-                indices[0], indices[1],
+                indices[0].index() as u32,
+                indices[1].index() as u32,
             ));
         }
     }
 
-    let n = molecule.atom_count();
-    let m = molecule.bond_count();
-    let mut builder = MoleculeBuilder::with_capacity(n, m);
-    let mut node_indices: Vec<AtomIndex> = Vec::with_capacity(n);
-    for atom in &molecule.atoms {
-        let idx = builder.add_atom(AtomPattern::from_table_atom(atom));
-        if let Some(aromatic) = atom.aromatic {
-            builder
-                .set_atom_aromatic_hint(idx, aromatic)
-                .expect("newly added atom index must be valid");
-        }
-        if atom.implicit_hydrogens == Some(ImplicitHydrogens::Normal) {
-            builder
-                .set_atom_normal_implicit_hydrogens(idx)
-                .expect("newly added atom index must be valid");
-        }
-        node_indices.push(idx);
-    }
-    for bond in &molecule.bonds {
-        let a = node_indices[bond.atoms.first() as usize];
-        let b = node_indices[bond.atoms.second() as usize];
-        if bond.noncovalent.is_some() {
-            builder.add_noncovalent_bond(NoncovalentBond::from_table_bond(bond, &node_indices));
-        } else if matches!(
-            bond.donation,
-            Some(BondDonation::Donating | BondDonation::Accepting)
-        ) {
-            builder.add_dative_bond(DativeBond::from_table_bond(bond, &node_indices));
-        } else {
-            let bond_idx = builder.add_bond_unchecked(a, b, BondPattern::from_table_bond(bond));
-        if bond.order == crate::table_ir::bond::BondOrder::Aromatic {
-            builder.set_bond_aromatic_hint(bond_idx, true);
-        }
-        }
-    }
-
-    for mc in &molecule.multicenter_bonds {
-        let sets: Vec<MulticenterSet> = mc
-            .contributions()
-            .iter()
-            .map(|contrib| {
-                let contributions: Vec<MulticenterContribution> = contrib
-                    .atoms()
-                    .iter()
-                    .map(|&idx| {
-                        if (idx as usize) >= n {
-                            Err(ResolutionError::AtomIndexOutOfRange(idx as u32))
-                        } else {
-                            Ok(MulticenterContribution::topology_only(
-                                node_indices[idx as usize],
-                            ))
-                        }
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok::<MulticenterSet, ResolutionError>(MulticenterSet::topology_only(
-                    contributions.iter().map(|c| c.atom()),
-                ))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        builder.add_multicenter_bond(MulticenterBond::new(sets));
-    }
-
-    Ok(builder)
+    Ok(())
 }
 
 fn resolve_valence_with(
@@ -266,6 +205,7 @@ fn resolve_stereo_with(
     Ok(())
 }
 
+// TODO: Remove TableMolecule from the tests, just work on builder directly
 #[cfg(test)]
 mod tests {
     use rstest::*;
@@ -273,6 +213,7 @@ mod tests {
 
     use super::super::config::ValenceStrategy;
     use super::super::config_data::{AtomTypeRegistry, ValenceTable};
+    use crate::graph_ir::molecule_builder::MoleculeBuilder;
     use super::*;
     use crate::registry;
     use crate::table_ir::atom::Atom as TableAtom;
@@ -357,9 +298,9 @@ mod tests {
 
     #[rstest]
     fn resolve_molecule(h2_molecule: TableMolecule, config_with_h_registry: ResolveConfig) {
-        let resolved = resolve_molecule_with(&h2_molecule, &config_with_h_registry);
-        assert!(resolved.is_ok());
-        let mol = resolved.unwrap();
+        let mut builder = MoleculeBuilder::from_table_molecule(&h2_molecule);
+        resolve_molecule_with(&mut builder, &config_with_h_registry).unwrap();
+        let mol = builder.build(&config_with_h_registry).unwrap();
         assert_eq!(mol.atom_count(), 2);
         assert_eq!(
             mol.atom(mol.atom_indices().next().unwrap())
@@ -374,9 +315,9 @@ mod tests {
         h2_molecule: TableMolecule,
         config_with_counts_strategy: ResolveConfig,
     ) {
-        let resolved = resolve_molecule_with(&h2_molecule, &config_with_counts_strategy);
-        assert!(resolved.is_ok());
-        let mol = resolved.unwrap();
+        let mut builder = MoleculeBuilder::from_table_molecule(&h2_molecule);
+        resolve_molecule_with(&mut builder, &config_with_counts_strategy).unwrap();
+        let mol = builder.build(&config_with_counts_strategy).unwrap();
         assert_eq!(mol.atom_count(), 2);
         assert_eq!(
             mol.atom(mol.atom_indices().next().unwrap())
@@ -393,8 +334,9 @@ mod tests {
         c_molecule: TableMolecule,
         config_with_empty_registry: ResolveConfig,
     ) {
-        let resolved = resolve_molecule_with(&c_molecule, &config_with_empty_registry);
-        assert!(matches!(resolved, Err(ResolutionError::ValenceNoMatch(_))));
+        let mut builder = MoleculeBuilder::from_table_molecule(&c_molecule);
+        let result = resolve_molecule_with(&mut builder, &config_with_empty_registry);
+        assert!(matches!(result, Err(ResolutionError::ValenceNoMatch(_))));
     }
 
     #[rstest]
@@ -402,10 +344,8 @@ mod tests {
         ch3_molecule: TableMolecule,
         config_with_ch_registry: ResolveConfig,
     ) {
-        let resolved = resolve_molecule_with(&ch3_molecule, &config_with_ch_registry);
-        assert!(matches!(
-            resolved,
-            Err(ResolutionError::ValenceAmbiguous(_))
-        ));
+        let mut builder = MoleculeBuilder::from_table_molecule(&ch3_molecule);
+        let result = resolve_molecule_with(&mut builder, &config_with_ch_registry);
+        assert!(matches!(result, Err(ResolutionError::ValenceAmbiguous(_))));
     }
 }

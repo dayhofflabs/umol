@@ -12,11 +12,13 @@ pub mod hueckel_rule;
 pub use clar::*;
 pub use hmo::*;
 pub use hueckel_rule::*;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use umol_data::SpinState;
 
 use crate::graph_ir::config::AromaticityStrategy;
-use crate::graph_ir::molecule::{AtomIndex, MoleculeBuilder};
+use crate::graph_ir::molecule::AtomIndex;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingSet};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -36,7 +38,7 @@ pub enum AromaticityError {
 }
 
 /// Per-atom contribution to an aromatic system.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct AromaticContribution {
     atom: AtomIndex,
     aromatic_valence: u8,
@@ -63,7 +65,7 @@ impl AromaticContribution {
 /// Charge is delocalized charge, not assignable to any individual atom.
 /// Each atom can participate in at most one aromatic system, appears only once
 /// in the contributions list.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
     charge: i8,

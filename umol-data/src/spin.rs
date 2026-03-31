@@ -10,7 +10,8 @@ use strum::{Display, EnumString};
 use thiserror::Error;
 
 /// Spin multiplicity descriptor (2S+1)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Display, EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Display, EnumString,
+         Serialize, Deserialize)]
 #[strum(serialize_all = "snake_case", ascii_case_insensitive)]
 pub enum SpinMultiplicity {
     Singlet = 0,

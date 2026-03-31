@@ -11,7 +11,7 @@ use petgraph::prelude::*;
 use petgraph::visit::EdgeRef;
 use thiserror::Error;
 
-use super::builder::MoleculeBuilder;
+use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use super::{
     AtomIndex, BondIndex, DativeBondIndex, Molecule, MulticenterBondIndex, NoncovalentBondIndex,
 };
@@ -522,9 +522,9 @@ mod tests {
     use super::*;
     use crate::bond::BondNoncovalent;
     use crate::graph_ir::atom_pattern::AtomPattern;
-    use crate::graph_ir::bond::BondPattern;
+    use crate::graph_ir::bond_pattern::BondPattern;
     use crate::graph_ir::dative::DativeBond;
-    use crate::graph_ir::molecule::MoleculeBuilder;
+    use crate::graph_ir::molecule_builder::MoleculeBuilder;
     use crate::graph_ir::multicenter::{MulticenterBond, MulticenterSet};
     use crate::graph_ir::noncovalent::NoncovalentBond;
 
