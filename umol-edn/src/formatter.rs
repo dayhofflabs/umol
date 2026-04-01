@@ -5,18 +5,38 @@ use crate::edn::Edn;
 /// Configurable EDN formatter.
 #[derive(Clone, Debug)]
 pub struct EdnFormatter {
-    /// Indent string per nesting level (default: two spaces).
+    /// Indent string per nesting level.
     pub indent: String,
-    /// Target line width before wrapping collections. `None` disables wrapping
-    /// (always multi-line for non-empty collections).
+    /// Newline string (`"\n"` or `"\r\n"`).
+    pub newline: String,
+    /// Target line width before wrapping collections. `None` = always expand.
     pub line_width: Option<usize>,
+    /// Insert commas between map entries.
+    pub commas: bool,
+    /// Allow single-line maps when they fit within `line_width`.
+    pub compact_maps: bool,
+    /// Allow single-line lists/vectors when they fit within `line_width`.
+    pub compact_seqs: bool,
+    /// Allow single-line sets when they fit within `line_width`.
+    pub compact_sets: bool,
+    /// Sort map keys before output. No-op for `BTreeMap` (already sorted).
+    pub sort_maps: bool,
+    /// Sort set elements before output. No-op for `BTreeSet` (already sorted).
+    pub sort_sets: bool,
 }
 
 impl Default for EdnFormatter {
     fn default() -> Self {
         Self {
             indent: "  ".to_string(),
+            newline: "\n".to_string(),
             line_width: Some(80),
+            commas: false,
+            compact_maps: true,
+            compact_seqs: true,
+            compact_sets: true,
+            sort_maps: true,
+            sort_sets: true,
         }
     }
 }
@@ -46,81 +66,105 @@ fn write_edn(out: &mut String, edn: &Edn<'_>, fmt: &EdnFormatter, depth: usize) 
             write_edn(out, inner, fmt, depth);
         }
         other => {
-            // Atoms: use Display (compact)
             out.push_str(&other.to_string());
         }
     }
 }
 
-fn fits_on_line(fmt: &EdnFormatter, depth: usize, content_len: usize, overhead: usize) -> bool {
+fn fits_on_line(fmt: &EdnFormatter, depth: usize, content_len: usize) -> bool {
     match fmt.line_width {
         Some(width) => {
             let indent_len = depth * fmt.indent.len();
-            indent_len + overhead + content_len <= width
+            indent_len + content_len <= width
         }
         None => false,
     }
 }
 
-fn write_indent(out: &mut String, fmt: &EdnFormatter, depth: usize) {
+fn write_newline(out: &mut String, fmt: &EdnFormatter, depth: usize) {
+    out.push_str(&fmt.newline);
     for _ in 0..depth {
         out.push_str(&fmt.indent);
     }
 }
 
-fn write_seq(out: &mut String, open: &str, close: &str, items: &[Edn<'_>], fmt: &EdnFormatter, depth: usize) {
+fn write_seq(
+    out: &mut String,
+    open: &str,
+    close: &str,
+    items: &[Edn<'_>],
+    fmt: &EdnFormatter,
+    depth: usize,
+) {
     if items.is_empty() {
         out.push_str(open);
         out.push_str(close);
         return;
     }
 
-    // Try compact representation
-    let compact = format!("{}", Edn::Vector(items.to_vec()));
-    // Replace the vector delimiters with the actual ones
-    let compact = if open == "(" {
-        format!("({})", &compact[1..compact.len() - 1])
-    } else {
-        compact
-    };
-    if fits_on_line(fmt, depth, compact.len(), 0) {
-        out.push_str(&compact);
-        return;
+    if fmt.compact_seqs {
+        let compact_parts: Vec<String> = items.iter().map(|e| e.to_string()).collect();
+        let compact_len = open.len()
+            + close.len()
+            + compact_parts.iter().map(|s| s.len()).sum::<usize>()
+            + compact_parts.len().saturating_sub(1);
+        if fits_on_line(fmt, depth, compact_len) {
+            out.push_str(open);
+            for (i, s) in compact_parts.iter().enumerate() {
+                if i > 0 {
+                    out.push(' ');
+                }
+                out.push_str(s);
+            }
+            out.push_str(close);
+            return;
+        }
     }
 
-    // Multi-line
     out.push_str(open);
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            out.push('\n');
-            write_indent(out, fmt, depth + 1);
-        }
+    for item in items.iter() {
+        write_newline(out, fmt, depth + 1);
         write_edn(out, item, fmt, depth + 1);
     }
     out.push_str(close);
 }
 
-fn write_map(out: &mut String, m: &std::collections::BTreeMap<Edn<'_>, Edn<'_>>, fmt: &EdnFormatter, depth: usize) {
+fn write_map(
+    out: &mut String,
+    m: &std::collections::BTreeMap<Edn<'_>, Edn<'_>>,
+    fmt: &EdnFormatter,
+    depth: usize,
+) {
     if m.is_empty() {
         out.push_str("{}");
         return;
     }
 
-    // Try compact
-    let edn = Edn::Map(m.clone());
-    let compact = edn.to_string();
-    if fits_on_line(fmt, depth, compact.len(), 0) {
-        out.push_str(&compact);
-        return;
+    let separator = if fmt.commas { ", " } else { " " };
+
+    if fmt.compact_maps {
+        let compact_parts: Vec<String> = m.iter().map(|(k, v)| format!("{k} {v}")).collect();
+        let compact_len = 2 + compact_parts.iter().map(|s| s.len()).sum::<usize>()
+            + separator.len() * compact_parts.len().saturating_sub(1);
+        if fits_on_line(fmt, depth, compact_len) {
+            out.push('{');
+            for (i, s) in compact_parts.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(separator);
+                }
+                out.push_str(s);
+            }
+            out.push('}');
+            return;
+        }
     }
 
-    // Multi-line: one key-value pair per line
     out.push('{');
     for (i, (k, v)) in m.iter().enumerate() {
-        if i > 0 {
-            out.push('\n');
-            write_indent(out, fmt, depth + 1);
+        if i > 0 && fmt.commas {
+            out.push(',');
         }
+        write_newline(out, fmt, depth + 1);
         write_edn(out, k, fmt, depth + 1);
         out.push(' ');
         write_edn(out, v, fmt, depth + 1);
@@ -134,29 +178,26 @@ fn write_set(out: &mut String, items: &[&Edn<'_>], fmt: &EdnFormatter, depth: us
         return;
     }
 
-    // Try compact
-    let compact_parts: Vec<String> = items.iter().map(|e| e.to_string()).collect();
-    let compact_len = 2 + compact_parts.iter().map(|s| s.len()).sum::<usize>()
-        + compact_parts.len().saturating_sub(1); // #{...} + spaces
-    if fits_on_line(fmt, depth, compact_len, 0) {
-        out.push_str("#{");
-        for (i, s) in compact_parts.iter().enumerate() {
-            if i > 0 {
-                out.push(' ');
+    if fmt.compact_sets {
+        let compact_parts: Vec<String> = items.iter().map(|e| e.to_string()).collect();
+        let compact_len = 3 + compact_parts.iter().map(|s| s.len()).sum::<usize>()
+            + compact_parts.len().saturating_sub(1); // #{ } + spaces
+        if fits_on_line(fmt, depth, compact_len) {
+            out.push_str("#{");
+            for (i, s) in compact_parts.iter().enumerate() {
+                if i > 0 {
+                    out.push(' ');
+                }
+                out.push_str(s);
             }
-            out.push_str(s);
+            out.push('}');
+            return;
         }
-        out.push('}');
-        return;
     }
 
-    // Multi-line
     out.push_str("#{");
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            out.push('\n');
-            write_indent(out, fmt, depth + 1);
-        }
+    for item in items.iter() {
+        write_newline(out, fmt, depth + 1);
         write_edn(out, item, fmt, depth + 1);
     }
     out.push('}');
@@ -174,7 +215,6 @@ pub fn to_string_pretty_with<T: serde::Serialize>(
     value: &T,
     fmt: &EdnFormatter,
 ) -> Result<String, crate::error::EdnError> {
-    // Serialize to compact EDN, parse back as Edn, then pretty-print.
     let compact = crate::ser::to_string(value)?;
     let edn = crate::reader::read_string(&compact)?;
     Ok(edn.to_string_with(fmt))
@@ -247,9 +287,8 @@ mod tests {
         assert!(result.contains('\n'));
         assert!(result.starts_with('{'));
         assert!(result.ends_with('}'));
-        // Each key-value pair on its own line
         let lines: Vec<&str> = result.lines().collect();
-        assert_eq!(lines.len(), 5);
+        assert_eq!(lines.len(), 6); // { + 5 entries on separate lines
     }
 
     #[test]
@@ -262,7 +301,6 @@ mod tests {
         outer.insert(Edn::keyword("label"), Edn::Str(Cow::Borrowed("origin")));
         let result = Edn::Map(outer).to_string_with(&fmt_narrow());
         assert!(result.contains('\n'));
-        // Inner map should also be formatted
         assert!(result.contains(":point"));
         assert!(result.contains(":label"));
     }
@@ -282,7 +320,6 @@ mod tests {
         };
         let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
         let result = v.to_string_with(&fmt);
-        // With None line_width, always multi-line for non-empty
         assert!(result.contains('\n'));
     }
 
@@ -291,25 +328,90 @@ mod tests {
         let fmt = EdnFormatter {
             indent: "    ".to_string(),
             line_width: Some(10),
+            ..Default::default()
         };
         let v = Edn::Vector(vec![
             Edn::Int(100), Edn::Int(200), Edn::Int(300), Edn::Int(400),
         ]);
         let result = v.to_string_with(&fmt);
-        assert!(result.contains("    ")); // 4-space indent
+        assert!(result.contains("    "));
+    }
+
+    #[test]
+    fn test_formatter_commas() {
+        let mut m = BTreeMap::new();
+        m.insert(Edn::keyword("a"), Edn::Int(1));
+        m.insert(Edn::keyword("b"), Edn::Int(2));
+        let fmt = EdnFormatter {
+            commas: true,
+            ..Default::default()
+        };
+        let result = Edn::Map(m).to_string_with(&fmt);
+        assert_eq!(result, "{:a 1, :b 2}");
+    }
+
+    #[test]
+    fn test_formatter_commas_multiline() {
+        let mut m = BTreeMap::new();
+        for i in 0..5 {
+            m.insert(
+                Edn::Keyword(Keyword::owned(format!("key-{i}"))),
+                Edn::Str(Cow::Owned(format!("value-{i}"))),
+            );
+        }
+        let fmt = EdnFormatter {
+            commas: true,
+            line_width: Some(20),
+            ..Default::default()
+        };
+        let result = Edn::Map(m).to_string_with(&fmt);
+        assert!(result.contains(",\n"));
+    }
+
+    #[test]
+    fn test_formatter_no_compact_seqs() {
+        let fmt = EdnFormatter {
+            compact_seqs: false,
+            ..Default::default()
+        };
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
+        let result = v.to_string_with(&fmt);
+        assert!(result.contains('\n'));
+    }
+
+    #[test]
+    fn test_formatter_no_compact_maps() {
+        let fmt = EdnFormatter {
+            compact_maps: false,
+            ..Default::default()
+        };
+        let mut m = BTreeMap::new();
+        m.insert(Edn::keyword("a"), Edn::Int(1));
+        let result = Edn::Map(m).to_string_with(&fmt);
+        assert!(result.contains('\n'));
+    }
+
+    #[test]
+    fn test_formatter_crlf() {
+        let fmt = EdnFormatter {
+            newline: "\r\n".to_string(),
+            line_width: None,
+            ..Default::default()
+        };
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
+        let result = v.to_string_with(&fmt);
+        assert!(result.contains("\r\n"));
     }
 
     #[rstest]
     #[case(
         "{:atoms [\"C\" \"O\"] :bonds [[:0 :1 :single]]}",
         20,
-        // Should go multi-line at narrow width
         true
     )]
     #[case(
         "{:a 1}",
         80,
-        // Short map, fits on one line
         false
     )]
     fn test_formatter_molecule_like(#[case] input: &str, #[case] width: usize, #[case] expect_multiline: bool) {
@@ -344,7 +446,6 @@ mod tests {
         fn test_to_string_pretty_struct() {
             let p = Point { x: 1.0, y: 2.0 };
             let result = to_string_pretty(&p).unwrap();
-            // Small struct fits on one line
             assert_eq!(result, "{:x 1.0 :y 2.0}");
         }
 
