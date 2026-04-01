@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -178,8 +178,8 @@ pub enum Edn<'a> {
     Symbol(Symbol<'a>),
     List(Vec<Edn<'a>>),
     Vector(Vec<Edn<'a>>),
-    Map(BTreeMap<Edn<'a>, Edn<'a>>),
-    Set(BTreeSet<Edn<'a>>),
+    Map(HashMap<Edn<'a>, Edn<'a>>),
+    Set(HashSet<Edn<'a>>),
     Tagged(String, Box<Edn<'a>>),
 }
 
@@ -318,14 +318,14 @@ impl<'a> Edn<'a> {
         }
     }
 
-    pub fn as_map(&self) -> Option<&BTreeMap<Edn<'a>, Edn<'a>>> {
+    pub fn as_map(&self) -> Option<&HashMap<Edn<'a>, Edn<'a>>> {
         match self {
             Edn::Map(m) => Some(m),
             _ => None,
         }
     }
 
-    pub fn as_set(&self) -> Option<&BTreeSet<Edn<'a>>> {
+    pub fn as_set(&self) -> Option<&HashSet<Edn<'a>>> {
         match self {
             Edn::Set(s) => Some(s),
             _ => None,
@@ -438,8 +438,20 @@ impl Ord for Edn<'_> {
             (Edn::Symbol(a), Edn::Symbol(b)) => a.cmp(b),
             (Edn::List(a), Edn::List(b)) => a.cmp(b),
             (Edn::Vector(a), Edn::Vector(b)) => a.cmp(b),
-            (Edn::Map(a), Edn::Map(b)) => a.cmp(b),
-            (Edn::Set(a), Edn::Set(b)) => a.cmp(b),
+            (Edn::Map(a), Edn::Map(b)) => {
+                let mut a_sorted: Vec<_> = a.iter().collect();
+                let mut b_sorted: Vec<_> = b.iter().collect();
+                a_sorted.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
+                b_sorted.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
+                a_sorted.cmp(&b_sorted)
+            }
+            (Edn::Set(a), Edn::Set(b)) => {
+                let mut a_sorted: Vec<_> = a.iter().collect();
+                let mut b_sorted: Vec<_> = b.iter().collect();
+                a_sorted.sort();
+                b_sorted.sort();
+                a_sorted.cmp(&b_sorted)
+            }
             (Edn::Tagged(ta, va), Edn::Tagged(tb, vb)) => ta.cmp(tb).then_with(|| va.cmp(vb)),
             _ => unreachable!(),
         }

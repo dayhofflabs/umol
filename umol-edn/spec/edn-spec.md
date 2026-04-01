@@ -4,9 +4,8 @@ This document attempts to clarify the
 [EDN specification](https://github.com/edn-format/edn) for the purposes of the
 umol-edn implementation, in particular resolves the points, on which original
 specification has some ambiguity. umol-edn supports two dialects: **Edn**
-(strict) and **Clojure** (default). The Edn dialect tracks the spec text with
-one extension (leading `+` on numbers). The Clojure dialect adds features
-present in Clojure's reader.
+(strict) and **Clojure** (default). The Edn dialect tracks the spec text.
+The Clojure dialect adds features present in Clojure's reader.
 
 ## 1. Whitespace and commas
 
@@ -51,9 +50,6 @@ feature this is an error. With `bignum`, parsed as `BigInt`.
 
 Leading zeros (`007`) are parsed as decimal, not octal. The parser does not
 reject leading zeros.
-
-**Extension:** Leading `+` is accepted in both dialects. The EDN spec only
-mentions `-` as a sign prefix. umol-edn accepts `+` for symmetry.
 
 **Ambiguity resolution (D2b):** Without `bignum`, integer overflow is always an
 error. With `bignum`, overflow promotes to `BigInt`.
@@ -252,7 +248,6 @@ Summary of decisions on underspecified areas of the EDN spec (D15):
 | `#_` nesting (`#_ #_ a b`)              | Each `#_` discards next form                                 | 3       |
 | Whitespace definition                   | Space, tab, newline, CR, comma. Not form feed                | 1       |
 | `#_` + tagged literal                   | Discards entire tagged form                                  | 3       |
-| Leading `+` on numbers                  | Accepted (umol-edn extension)                                | 5       |
 | Leading zeros (`007`)                   | Parsed as decimal                                            | 5       |
 | `-0` / `-0.0`                           | Valid                                                        | 5, 6    |
 | `/` as symbol                           | Valid                                                        | 10      |

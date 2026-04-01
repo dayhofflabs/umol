@@ -19,9 +19,9 @@ pub struct EdnFormatter {
     pub compact_seqs: bool,
     /// Allow single-line sets when they fit within `line_width`.
     pub compact_sets: bool,
-    /// Sort map keys before output. No-op for `BTreeMap` (already sorted).
+    /// Sort map keys before output.
     pub sort_maps: bool,
-    /// Sort set elements before output. No-op for `BTreeSet` (already sorted).
+    /// Sort set elements before output.
     pub sort_sets: bool,
 }
 
@@ -57,7 +57,10 @@ fn write_edn(out: &mut String, edn: &Edn<'_>, fmt: &EdnFormatter, depth: usize) 
         Edn::Vector(items) => write_seq(out, "[", "]", items, fmt, depth),
         Edn::Map(m) => write_map(out, m, fmt, depth),
         Edn::Set(s) => {
-            let items: Vec<&Edn<'_>> = s.iter().collect();
+            let mut items: Vec<&Edn<'_>> = s.iter().collect();
+            if fmt.sort_sets {
+                items.sort();
+            }
             write_set(out, &items, fmt, depth);
         }
         Edn::Tagged(tag, inner) => {
@@ -163,7 +166,7 @@ fn seq_compact_len(items: &[Edn<'_>], overhead: usize, limit: usize) -> Option<u
 }
 
 fn map_compact_len(
-    m: &std::collections::BTreeMap<Edn<'_>, Edn<'_>>,
+    m: &std::collections::HashMap<Edn<'_>, Edn<'_>>,
     limit: usize,
 ) -> Option<usize> {
     if m.is_empty() {
@@ -252,7 +255,7 @@ fn write_seq(
 
 fn write_map(
     out: &mut String,
-    m: &std::collections::BTreeMap<Edn<'_>, Edn<'_>>,
+    m: &std::collections::HashMap<Edn<'_>, Edn<'_>>,
     fmt: &EdnFormatter,
     depth: usize,
 ) {
@@ -261,12 +264,16 @@ fn write_map(
         return;
     }
 
+    let mut entries: Vec<_> = m.iter().collect();
+    if fmt.sort_maps {
+        entries.sort_by(|a, b| a.0.cmp(b.0));
+    }
+
     let separator = if fmt.commas { ", " } else { " " };
     let limit = fmt.line_width.unwrap_or(0);
 
-    // For compact with commas, add extra separator overhead to the length check.
     let comma_extra = if fmt.commas {
-        m.len().saturating_sub(1) // each ", " is 1 char longer than " "
+        m.len().saturating_sub(1)
     } else {
         0
     };
@@ -278,7 +285,7 @@ fn write_map(
         )
     {
         out.push('{');
-        for (i, (k, v)) in m.iter().enumerate() {
+        for (i, (k, v)) in entries.iter().enumerate() {
             if i > 0 {
                 out.push_str(separator);
             }
@@ -291,7 +298,7 @@ fn write_map(
     }
 
     out.push('{');
-    for (i, (k, v)) in m.iter().enumerate() {
+    for (i, (k, v)) in entries.iter().enumerate() {
         if i > 0 && fmt.commas {
             out.push(',');
         }
@@ -350,7 +357,7 @@ pub fn to_string_pretty_with<T: serde::Serialize>(
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::collections::BTreeMap;
+    use std::collections::HashMap;
 
     use rstest::rstest;
 
@@ -395,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_formatter_short_map_compact() {
-        let mut m = BTreeMap::new();
+        let mut m = HashMap::new();
         m.insert(Edn::keyword("a"), Edn::Int(1));
         let result = Edn::Map(m).to_string_with(&fmt_default());
         assert_eq!(result, "{:a 1}");
@@ -403,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_formatter_long_map_multiline() {
-        let mut m = BTreeMap::new();
+        let mut m = HashMap::new();
         for i in 0..5 {
             m.insert(
                 Edn::Keyword(Keyword::owned(format!("key-{i}"))),
@@ -420,10 +427,10 @@ mod tests {
 
     #[test]
     fn test_formatter_nested_map() {
-        let mut inner = BTreeMap::new();
+        let mut inner = HashMap::new();
         inner.insert(Edn::keyword("x"), Edn::Int(1));
         inner.insert(Edn::keyword("y"), Edn::Int(2));
-        let mut outer = BTreeMap::new();
+        let mut outer = HashMap::new();
         outer.insert(Edn::keyword("point"), Edn::Map(inner));
         outer.insert(Edn::keyword("label"), Edn::Str(Cow::Borrowed("origin")));
         let result = Edn::Map(outer).to_string_with(&fmt_narrow());
@@ -436,7 +443,7 @@ mod tests {
     fn test_formatter_empty_collections() {
         assert_eq!(Edn::Vector(vec![]).to_string_with(&fmt_default()), "[]");
         assert_eq!(Edn::List(vec![]).to_string_with(&fmt_default()), "()");
-        assert_eq!(Edn::Map(BTreeMap::new()).to_string_with(&fmt_default()), "{}");
+        assert_eq!(Edn::Map(HashMap::new()).to_string_with(&fmt_default()), "{}");
     }
 
     #[test]
@@ -466,7 +473,7 @@ mod tests {
 
     #[test]
     fn test_formatter_commas() {
-        let mut m = BTreeMap::new();
+        let mut m = HashMap::new();
         m.insert(Edn::keyword("a"), Edn::Int(1));
         m.insert(Edn::keyword("b"), Edn::Int(2));
         let fmt = EdnFormatter {
@@ -479,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_formatter_commas_multiline() {
-        let mut m = BTreeMap::new();
+        let mut m = HashMap::new();
         for i in 0..5 {
             m.insert(
                 Edn::Keyword(Keyword::owned(format!("key-{i}"))),
@@ -512,7 +519,7 @@ mod tests {
             compact_maps: false,
             ..Default::default()
         };
-        let mut m = BTreeMap::new();
+        let mut m = HashMap::new();
         m.insert(Edn::keyword("a"), Edn::Int(1));
         let result = Edn::Map(m).to_string_with(&fmt);
         assert!(result.contains('\n'));

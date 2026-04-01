@@ -566,7 +566,7 @@ fn resolve_atoms_aliases<'e>(
 ) -> Result<Edn<'e>, ParseError> {
     match atoms {
         Edn::Map(m) => {
-            let mut resolved = std::collections::BTreeMap::new();
+            let mut resolved = std::collections::HashMap::new();
             for (k, v) in m {
                 let v = resolve_one_atom(v, aliases)?;
                 if let Edn::Keyword(ref kw) = k {

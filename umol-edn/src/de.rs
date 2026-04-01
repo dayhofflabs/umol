@@ -1,6 +1,6 @@
 //! Serde `Deserializer` for `Edn` values.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
@@ -113,7 +113,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Map(m) => visitor.visit_map(EdnMap::new(m)),
-            Edn::Nil => visitor.visit_map(EdnMap::new(BTreeMap::new())),
+            Edn::Nil => visitor.visit_map(EdnMap::new(HashMap::new())),
             other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
         }
     }
@@ -126,7 +126,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     ) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Map(m) => visitor.visit_map(EdnStructMap::new(m)),
-            Edn::Nil => visitor.visit_map(EdnStructMap::new(BTreeMap::new())),
+            Edn::Nil => visitor.visit_map(EdnStructMap::new(HashMap::new())),
             other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
         }
     }
@@ -307,12 +307,12 @@ impl<'de> SeqAccess<'de> for EdnSeq<'de> {
 // --- MapAccess ---
 
 struct EdnMap<'de> {
-    iter: std::collections::btree_map::IntoIter<Edn<'de>, Edn<'de>>,
+    iter: std::collections::hash_map::IntoIter<Edn<'de>, Edn<'de>>,
     pending_value: Option<Edn<'de>>,
 }
 
 impl<'de> EdnMap<'de> {
-    fn new(map: BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+    fn new(map: HashMap<Edn<'de>, Edn<'de>>) -> Self {
         Self {
             iter: map.into_iter(),
             pending_value: None,
@@ -351,12 +351,12 @@ impl<'de> MapAccess<'de> for EdnMap<'de> {
 // --- StructMap (filters to string-like keys) ---
 
 struct EdnStructMap<'de> {
-    iter: std::collections::btree_map::IntoIter<Edn<'de>, Edn<'de>>,
+    iter: std::collections::hash_map::IntoIter<Edn<'de>, Edn<'de>>,
     pending_value: Option<Edn<'de>>,
 }
 
 impl<'de> EdnStructMap<'de> {
-    fn new(map: BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+    fn new(map: HashMap<Edn<'de>, Edn<'de>>) -> Self {
         Self {
             iter: map.into_iter(),
             pending_value: None,

@@ -534,10 +534,11 @@ mod tests {
 
     #[test]
     fn test_serialize_map() {
-        use std::collections::BTreeMap;
-        let mut m = BTreeMap::new();
+        use std::collections::HashMap;
+        let mut m = HashMap::new();
         m.insert("a", 1);
         m.insert("b", 2);
-        assert_eq!(to_string(&m).unwrap(), r#"{"a" 1 "b" 2}"#);
+        let s = to_string(&m).unwrap();
+        assert!(s == r#"{"a" 1 "b" 2}"# || s == r#"{"b" 2 "a" 1}"#);
     }
 }

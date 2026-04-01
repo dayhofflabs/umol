@@ -4,7 +4,7 @@
 //! Each section number maps to a spec section.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 
 use rstest::rstest;
 use umol_edn::config::{Dialect, DuplicateKeyPolicy, ParseConfig};
@@ -92,7 +92,7 @@ fn test_conformance_discard_tagged_literal() {
 #[test]
 fn test_conformance_discard_in_map() {
     let result = read_string_with("{:a #_ :skip 1}", &clojure_config()).unwrap();
-    let mut expected = BTreeMap::new();
+    let mut expected = HashMap::new();
     expected.insert(Edn::keyword("a"), Edn::Int(1));
     assert_eq!(result, Edn::Map(expected));
 }
@@ -462,7 +462,7 @@ fn test_conformance_nested_collections() {
 
 #[test]
 fn test_conformance_map_basic() {
-    let mut expected = BTreeMap::new();
+    let mut expected = HashMap::new();
     expected.insert(Edn::keyword("a"), Edn::Int(1));
     expected.insert(Edn::keyword("b"), Edn::Int(2));
     assert_eq!(read_string("{:a 1 :b 2}").unwrap(), Edn::Map(expected));
@@ -485,7 +485,7 @@ fn test_conformance_map_duplicate_key_last_wins() {
         ..Default::default()
     };
     let result = read_string_with("{:a 1 :a 2}", &config).unwrap();
-    let mut expected = BTreeMap::new();
+    let mut expected = HashMap::new();
     expected.insert(Edn::keyword("a"), Edn::Int(2));
     assert_eq!(result, Edn::Map(expected));
 }
@@ -494,7 +494,7 @@ fn test_conformance_map_duplicate_key_last_wins() {
 fn test_conformance_map_complex_keys() {
     // Maps accept arbitrary EDN values as keys.
     let result = read_string("{[1 2] :pair \"key\" :str}").unwrap();
-    let mut expected = BTreeMap::new();
+    let mut expected = HashMap::new();
     expected.insert(
         Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]),
         Edn::keyword("pair"),
@@ -507,13 +507,12 @@ fn test_conformance_map_complex_keys() {
 }
 
 #[test]
-fn test_conformance_map_deterministic_order() {
-    // BTreeMap: iteration order is sorted, not insertion order.
+fn test_conformance_map_contains_all_entries() {
     let result = read_string("{:z 1 :a 2}").unwrap();
     if let Edn::Map(m) = result {
-        let keys: Vec<_> = m.keys().collect();
-        assert_eq!(keys[0], &Edn::keyword("a"));
-        assert_eq!(keys[1], &Edn::keyword("z"));
+        assert_eq!(m.len(), 2);
+        assert_eq!(m.get(&Edn::keyword("z")), Some(&Edn::Int(1)));
+        assert_eq!(m.get(&Edn::keyword("a")), Some(&Edn::Int(2)));
     } else {
         panic!("expected Map");
     }
@@ -524,7 +523,7 @@ fn test_conformance_map_deterministic_order() {
 #[test]
 fn test_conformance_set_basic() {
     let result = read_string("#{1 2 3}").unwrap();
-    let expected: BTreeSet<Edn<'_>> = [Edn::Int(1), Edn::Int(2), Edn::Int(3)]
+    let expected: HashSet<Edn<'_>> = [Edn::Int(1), Edn::Int(2), Edn::Int(3)]
         .into_iter()
         .collect();
     assert_eq!(result, Edn::Set(expected));
@@ -532,15 +531,17 @@ fn test_conformance_set_basic() {
 
 #[test]
 fn test_conformance_set_empty() {
-    assert_eq!(read_string("#{}").unwrap(), Edn::Set(BTreeSet::new()));
+    assert_eq!(read_string("#{}").unwrap(), Edn::Set(HashSet::new()));
 }
 
 #[test]
-fn test_conformance_set_deterministic_order() {
+fn test_conformance_set_contains_all_elements() {
     let result = read_string("#{3 1 2}").unwrap();
     if let Edn::Set(s) = result {
-        let items: Vec<_> = s.iter().collect();
-        assert_eq!(items, vec![&Edn::Int(1), &Edn::Int(2), &Edn::Int(3)]);
+        assert_eq!(s.len(), 3);
+        assert!(s.contains(&Edn::Int(1)));
+        assert!(s.contains(&Edn::Int(2)));
+        assert!(s.contains(&Edn::Int(3)));
     } else {
         panic!("expected Set");
     }
@@ -551,7 +552,7 @@ fn test_conformance_set_deterministic_order() {
 #[test]
 fn test_conformance_tagged_basic() {
     let result = read_string("#myapp/Person {:name \"Alice\"}").unwrap();
-    let mut inner = BTreeMap::new();
+    let mut inner = HashMap::new();
     inner.insert(
         Edn::keyword("name"),
         Edn::Str(Cow::Owned("Alice".to_string())),

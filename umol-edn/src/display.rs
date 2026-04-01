@@ -104,7 +104,7 @@ fn format_seq(f: &mut fmt::Formatter<'_>, open: &str, close: &str, items: &[Edn<
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::{HashMap, HashSet};
 
     use rstest::rstest;
 
@@ -201,36 +201,37 @@ mod tests {
 
     #[test]
     fn test_display_map() {
-        let mut m = BTreeMap::new();
+        let mut m = HashMap::new();
         m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
         assert_eq!(Edn::Map(m).to_string(), "{:a 1}");
     }
 
     #[test]
     fn test_display_map_multi() {
-        let mut m = BTreeMap::new();
+        let mut m = HashMap::new();
         m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
         m.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
         let s = Edn::Map(m).to_string();
-        assert_eq!(s, "{:a 1 :b 2}");
+        assert!(s == "{:a 1 :b 2}" || s == "{:b 2 :a 1}");
     }
 
     #[test]
     fn test_display_map_empty() {
-        assert_eq!(Edn::Map(BTreeMap::new()).to_string(), "{}");
+        assert_eq!(Edn::Map(HashMap::new()).to_string(), "{}");
     }
 
     #[test]
     fn test_display_set() {
-        let mut s = BTreeSet::new();
+        let mut s = HashSet::new();
         s.insert(Edn::Int(1));
         s.insert(Edn::Int(2));
-        assert_eq!(Edn::Set(s).to_string(), "#{1 2}");
+        let result = Edn::Set(s).to_string();
+        assert!(result == "#{1 2}" || result == "#{2 1}");
     }
 
     #[test]
     fn test_display_set_empty() {
-        assert_eq!(Edn::Set(BTreeSet::new()).to_string(), "#{}");
+        assert_eq!(Edn::Set(HashSet::new()).to_string(), "#{}");
     }
 
     #[test]
