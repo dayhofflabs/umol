@@ -51,9 +51,13 @@ use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 /// pipeline. Not part of the final `Molecule` or the `MoleculeAst`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ResolutionContext {
+    #[serde(default)]
     pub atom_candidates: HashMap<AtomIndex, SmallVec<[Atom; 4]>>,
+    #[serde(default)]
     pub atom_aromatic_hints: HashMap<AtomIndex, bool>,
+    #[serde(default)]
     pub bond_aromatic_hints: HashMap<BondIndex, bool>,
+    #[serde(default)]
     pub atom_normal_implicit_hydrogens: HashSet<AtomIndex>,
 }
 

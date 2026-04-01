@@ -1,0 +1,3 @@
+{:input {:atoms ["Te #c+" H H H]
+         :bonds [[:0 :1 :single] [:0 :2 :single] [:0 :3 :single]]}
+ :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}

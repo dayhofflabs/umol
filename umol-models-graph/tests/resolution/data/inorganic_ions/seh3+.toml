@@ -1,3 +1,0 @@
-atoms = "?{Se+1} ?{H} ?{H} ?{H}"
-bonds = "0-1 0-2 0-3"
-implicit_h = "zero"

@@ -1,3 +1,0 @@
-atoms = "?{O-a!} ?{O+0a!} ?{H}"
-bonds = "0-1 1-2"
-implicit_h = "zero"

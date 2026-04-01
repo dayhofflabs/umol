@@ -1,5 +1,0 @@
-atoms = "?{As} ?{H} ?{H}"
-bonds = "0-1 0-2"
-implicit_h = "zero"
-charge = "zero"
-aromatic = "none"

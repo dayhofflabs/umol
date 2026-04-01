@@ -1,0 +1,3 @@
+{:input {:atoms ["Fe #c+2 #u4"]
+         :bonds []}
+ :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}

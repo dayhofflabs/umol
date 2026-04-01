@@ -1,0 +1,3 @@
+{:input {:atoms [Mn]
+         :bonds []}
+ :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}

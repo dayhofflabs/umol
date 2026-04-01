@@ -1,0 +1,3 @@
+{:input {:atoms ["Mn #c+3 #u4 #s5"]
+         :bonds []}
+ :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}

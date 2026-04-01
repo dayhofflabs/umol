@@ -1,0 +1,3 @@
+{:input {:atoms [Ne]
+         :bonds []}
+ :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}

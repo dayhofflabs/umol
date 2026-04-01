@@ -1,31 +1,5 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
-expression: results
+expression: edn_to_string(&results).unwrap()
 ---
-category: functional_groups
-atom_typing:
-  success: true
-  summary:
-    atom_count: 3
-    bond_count: 2
-    topology: Bg
-    atoms:
-      - "C#h3#v"
-      - "N#h#n#v2"
-      - "N#h2#n#v"
-    bonds:
-      - "-"
-      - "-"
-counts:
-  success: true
-  summary:
-    atom_count: 3
-    bond_count: 2
-    topology: Bg
-    atoms:
-      - "C#h3#v"
-      - "N#h#n#v2"
-      - "N#h2#n#v"
-    bonds:
-      - "-"
-      - "-"
+{:atom-typing {:success true :output {:atoms {"0" "C#h3#v" "1" "N#h#n#v2" "2" "N#h2#n#v"} :bonds [["0" "1" "1"] ["1" "2" "1"]] :charge 0 :spin "#u0 #s1"}} :counts {:success true :output {:atoms {"0" "C#h3#v" "1" "N#h#n#v2" "2" "N#h2#n#v"} :bonds [["0" "1" "1"] ["1" "2" "1"]] :charge 0 :spin "#u0 #s1"}}}

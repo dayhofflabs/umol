@@ -1,23 +1,5 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
-expression: results
+expression: edn_to_string(&results).unwrap()
 ---
-category: atomic_ions
-atom_typing:
-  success: true
-  summary:
-    atom_count: 1
-    bond_count: 0
-    topology: "@"
-    atoms:
-      - "Bk#c+3#n#u6"
-    bonds: []
-counts:
-  success: true
-  summary:
-    atom_count: 1
-    bond_count: 0
-    topology: "@"
-    atoms:
-      - "Bk#c+3#n4"
-    bonds: []
+{:atom-typing {:success true :output {:atoms {"0" "Bk#c+3#n#u6"} :bonds [] :charge 3 :spin "#u6 #s7"}} :counts {:success true :output {:atoms {"0" "Bk#c+3#n4"} :bonds [] :charge 3 :spin "#u0 #s1"}}}

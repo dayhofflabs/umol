@@ -1,31 +1,5 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
-expression: results
+expression: edn_to_string(&results).unwrap()
 ---
-category: inorganic_small
-atom_typing:
-  success: true
-  summary:
-    atom_count: 3
-    bond_count: 2
-    topology: Bo
-    atoms:
-      - "Sb#n#u#v2"
-      - "H#v"
-      - "H#v"
-    bonds:
-      - "-"
-      - "-"
-counts:
-  success: true
-  summary:
-    atom_count: 3
-    bond_count: 2
-    topology: Bo
-    atoms:
-      - "Sb#n#u#v2"
-      - "H#v"
-      - "H#v"
-    bonds:
-      - "-"
-      - "-"
+{:atom-typing {:success true :output {:atoms {"0" "Sb#n#u#v2" "1" "H#v" "2" "H#v"} :bonds [["0" "1" "1"] ["0" "2" "1"]] :charge 0 :spin "#u1 #s2"}} :counts {:success true :output {:atoms {"0" "Sb#n#u#v2" "1" "H#v" "2" "H#v"} :bonds [["0" "1" "1"] ["0" "2" "1"]] :charge 0 :spin "#u1 #s2"}}}

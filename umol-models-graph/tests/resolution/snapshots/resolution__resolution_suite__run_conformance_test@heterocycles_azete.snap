@@ -1,37 +1,5 @@
 ---
 source: umol-models-graph/tests/resolution/mod.rs
-expression: results
+expression: edn_to_string(&results).unwrap()
 ---
-category: heterocycles
-atom_typing:
-  success: true
-  summary:
-    atom_count: 4
-    bond_count: 4
-    topology: Cr
-    atoms:
-      - "C#h#v3"
-      - "N#n#v3"
-      - "C#h#v3"
-      - "C#h#v3"
-    bonds:
-      - "="
-      - "-"
-      - "-"
-      - "="
-counts:
-  success: true
-  summary:
-    atom_count: 4
-    bond_count: 4
-    topology: Cr
-    atoms:
-      - "C#h#v3"
-      - "N#n#v3"
-      - "C#h#v3"
-      - "C#h#v3"
-    bonds:
-      - "="
-      - "-"
-      - "-"
-      - "="
+{:atom-typing {:success true :output {:atoms {"0" "C#h#v3" "1" "N#n#v3" "2" "C#h#v3" "3" "C#h#v3"} :bonds [["0" "1" "2"] ["1" "2" "1"] ["2" "3" "2"] ["3" "0" "1"]] :charge 0 :spin "#u0 #s1"}} :counts {:success true :output {:atoms {"0" "C#h#v3" "1" "N#n#v3" "2" "C#h#v3" "3" "C#h#v3"} :bonds [["0" "1" "2"] ["1" "2" "1"] ["2" "3" "2"] ["3" "0" "1"]] :charge 0 :spin "#u0 #s1"}}}

@@ -1,5 +1,0 @@
-atoms = "?{B-} ?{N+}"
-bonds = "0=1x3"
-implicit_h = "zero"
-charge = "zero"
-aromatic = "none"

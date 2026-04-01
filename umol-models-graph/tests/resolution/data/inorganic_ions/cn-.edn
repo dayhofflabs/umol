@@ -1,0 +1,5 @@
+{:input {:atoms ["C #c- #a!" "N #c0 #a!"]
+         :bonds [[:0 :1 :triple]]}
+ :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}
+ :context {:atom_candidates {}
+           :atom_aromatic_hints {0 false 1 false}}}

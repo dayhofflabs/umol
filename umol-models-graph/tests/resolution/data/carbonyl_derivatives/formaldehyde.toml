@@ -1,5 +1,0 @@
-atoms = "?{C} ?{O}"
-bonds = "0=1"
-implicit_h = "normal"
-charge = "zero"
-aromatic = "none"

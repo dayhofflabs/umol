@@ -1,14 +1,35 @@
 //! DSL configuration: mode enums and config structs for lowering/raising.
 
+use serde::{Deserialize, Serialize};
+
+/// Isotope interpretation mode
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IsotopeMode {
+    Natural,  // absent → Natural
+    Required, // absent → Any
+}
+
 /// Numeric field interpretation mode.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum NumericMode {
     Zero,     // absent → Lit(0), field optional
     Required, // absent → Any/wildcard, field required for grounding
 }
 
+/// Implicit hydrogen interpretation mode
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImplicitHydrogenMode {
+    Zero,     // absent → Lit(0)
+    Normal,   // absent → Normal (deferred constraint)
+    Required, // absent → Any
+}
+
 /// Unpaired electrons interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum UnpairedElectronsMode {
     Zero,     // absent → Lit(0)
     Required, // absent → Any
@@ -16,29 +37,16 @@ pub enum UnpairedElectronsMode {
 }
 
 /// Multiplicity interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum MultiplicityMode {
     Derived,  // absent → derive from unpaired electrons (u+1); absent + u absent → Any
     Required, // absent → Any
 }
 
-/// Isotope interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum IsotopeMode {
-    Natural,  // absent → Natural
-    Required, // absent → Any
-}
-
-/// Implicit hydrogen interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ImplicitHydrogenMode {
-    Zero,     // absent → Lit(0)
-    Normal,   // absent → Normal (deferred constraint)
-    Required, // absent → Any
-}
-
 /// Aromatic interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum AromaticValenceMode {
     NotAromatic, // absent → AromaticExpr::NotAromatic (#a!)
     Aromatic,    // absent → AromaticExpr::Value(Wildcard) (#a*)
@@ -46,7 +54,8 @@ pub enum AromaticValenceMode {
 }
 
 /// Atom DSL configuration for lowering and raising.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct AtomDslConfig {
     pub isotope_mode: IsotopeMode,
     pub charge_mode: NumericMode,
@@ -97,8 +106,43 @@ impl AtomDslConfig {
     }
 }
 
+/// Partial atom DSL config: all fields optional, for merging onto a base config.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct AtomDslConfigOverrides {
+    pub isotope_mode: Option<IsotopeMode>,
+    pub charge_mode: Option<NumericMode>,
+    pub implicit_h_mode: Option<ImplicitHydrogenMode>,
+    pub lone_pairs_mode: Option<NumericMode>,
+    pub unpaired_electrons_mode: Option<UnpairedElectronsMode>,
+    pub multiplicity_mode: Option<MultiplicityMode>,
+    pub valence_mode: Option<NumericMode>,
+    pub donated_pairs_mode: Option<NumericMode>,
+    pub accepted_pairs_mode: Option<NumericMode>,
+    pub aromatic_valence_mode: Option<AromaticValenceMode>,
+    pub multicenter_valence_mode: Option<NumericMode>,
+}
+
+impl AtomDslConfig {
+    pub fn with_overrides(mut self, ov: AtomDslConfigOverrides) -> Self {
+        if let Some(v) = ov.isotope_mode { self.isotope_mode = v; }
+        if let Some(v) = ov.charge_mode { self.charge_mode = v; }
+        if let Some(v) = ov.implicit_h_mode { self.implicit_h_mode = v; }
+        if let Some(v) = ov.lone_pairs_mode { self.lone_pairs_mode = v; }
+        if let Some(v) = ov.unpaired_electrons_mode { self.unpaired_electrons_mode = v; }
+        if let Some(v) = ov.multiplicity_mode { self.multiplicity_mode = v; }
+        if let Some(v) = ov.valence_mode { self.valence_mode = v; }
+        if let Some(v) = ov.donated_pairs_mode { self.donated_pairs_mode = v; }
+        if let Some(v) = ov.accepted_pairs_mode { self.accepted_pairs_mode = v; }
+        if let Some(v) = ov.aromatic_valence_mode { self.aromatic_valence_mode = v; }
+        if let Some(v) = ov.multicenter_valence_mode { self.multicenter_valence_mode = v; }
+        self
+    }
+}
+
 /// Bond DSL configuration for lowering and raising.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct BondDslConfig {
     pub charge_mode: NumericMode,
     pub unpaired_electrons_mode: UnpairedElectronsMode,
@@ -123,8 +167,44 @@ impl BondDslConfig {
     }
 }
 
+/// Partial bond DSL config: all fields optional, for merging onto a base config.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct BondDslConfigOverrides {
+    pub charge_mode: Option<NumericMode>,
+    pub unpaired_electrons_mode: Option<UnpairedElectronsMode>,
+    pub multiplicity_mode: Option<MultiplicityMode>,
+}
+
+impl BondDslConfig {
+    pub fn with_overrides(mut self, ov: BondDslConfigOverrides) -> Self {
+        if let Some(v) = ov.charge_mode { self.charge_mode = v; }
+        if let Some(v) = ov.unpaired_electrons_mode { self.unpaired_electrons_mode = v; }
+        if let Some(v) = ov.multiplicity_mode { self.multiplicity_mode = v; }
+        self
+    }
+}
+
+/// Partial molecule DSL config: all fields optional, for merging onto a base config.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct MoleculeDslConfigOverrides {
+    pub atom: AtomDslConfigOverrides,
+    pub bond: BondDslConfigOverrides,
+}
+
+impl MoleculeDslConfig {
+    pub fn with_overrides(self, ov: MoleculeDslConfigOverrides) -> Self {
+        Self {
+            atom: self.atom.with_overrides(ov.atom),
+            bond: self.bond.with_overrides(ov.bond),
+        }
+    }
+}
+
 /// Molecule DSL configuration (combines atom + bond configs).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct MoleculeDslConfig {
     pub atom: AtomDslConfig,
     pub bond: BondDslConfig,
@@ -143,5 +223,43 @@ impl MoleculeDslConfig {
             atom: AtomDslConfig::open(),
             bond: BondDslConfig::open(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::*;
+
+    use super::*;
+    use crate::dsl::edn_serde::{edn_from_str, edn_to_string};
+
+    #[rstest]
+    #[case::zeroed(MoleculeDslConfig::zeroed(),
+        concat!("{:atom {:isotope-mode :natural :charge-mode :zero :implicit-h-mode :zero :lone-pairs-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived :valence-mode :zero :donated-pairs-mode :zero ",
+                ":accepted-pairs-mode :zero :aromatic-valence-mode :not-aromatic :multicenter-valence-mode :zero} :bond {:charge-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived}}"))]
+    #[case::open(MoleculeDslConfig::open(),
+        concat!("{:atom {:isotope-mode :required :charge-mode :required :implicit-h-mode :required :lone-pairs-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived :valence-mode :required :donated-pairs-mode :required ",
+                ":accepted-pairs-mode :required :aromatic-valence-mode :required :multicenter-valence-mode :required} :bond {:charge-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived}}"))]
+    fn test_molecule_dsl_config_to_edn(#[case] cfg: MoleculeDslConfig, #[case] expected: &str) {
+        assert_eq!(edn_to_string(&cfg).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::zeroed(concat!("{:atom {:isotope-mode :natural :charge-mode :zero :implicit-h-mode :zero :lone-pairs-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived :valence-mode :zero :donated-pairs-mode :zero ",
+                           ":accepted-pairs-mode :zero :aromatic-valence-mode :not-aromatic :multicenter-valence-mode :zero} :bond {:charge-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived}}"),
+        NumericMode::Zero, ImplicitHydrogenMode::Zero, AromaticValenceMode::NotAromatic)]
+    #[case::open(concat!("{:atom {:isotope-mode :required :charge-mode :required :implicit-h-mode :required :lone-pairs-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived :valence-mode :required ",
+                         ":donated-pairs-mode :required :accepted-pairs-mode :required :aromatic-valence-mode :required :multicenter-valence-mode :required} :bond {:charge-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived}}"),
+        NumericMode::Required, ImplicitHydrogenMode::Required, AromaticValenceMode::Required)]
+    fn test_molecule_dsl_config_from_edn(
+        #[case] edn: &str,
+        #[case] expected_charge: NumericMode,
+        #[case] expected_h: ImplicitHydrogenMode,
+        #[case] expected_aromatic: AromaticValenceMode,
+    ) {
+        let cfg: MoleculeDslConfig = edn_from_str(edn).unwrap();
+        assert_eq!(cfg.atom.charge_mode, expected_charge);
+        assert_eq!(cfg.atom.implicit_h_mode, expected_h);
+        assert_eq!(cfg.atom.aromatic_valence_mode, expected_aromatic);
     }
 }

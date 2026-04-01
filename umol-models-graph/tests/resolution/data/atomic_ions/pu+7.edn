@@ -1,0 +1,3 @@
+{:input {:atoms ["Pu #c+7"]
+         :bonds []}
+ :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}
