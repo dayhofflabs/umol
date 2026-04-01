@@ -3,11 +3,13 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
+use memchr::memchr2;
+
 use winnow::ascii::digit1;
 use winnow::combinator::opt;
 use winnow::error::ErrMode;
 use winnow::stream::{Location, Stream};
-use winnow::token::{any, one_of, take_while};
+use winnow::token::{any, one_of, take, take_while};
 use winnow::{LocatingSlice, Parser};
 
 use crate::config::{Dialect, DuplicateKeyPolicy, ParseConfig};
@@ -233,8 +235,26 @@ where
 fn edn_string<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '"'.parse_next(input)?;
-        let mut result = String::new();
 
+        // Fast path: scan for closing quote with no escapes.
+        let s = rest(input);
+        let bytes = s.as_bytes();
+        if let Some(end) = memchr2(b'"', b'\\', bytes) {
+            if bytes[end] == b'"' {
+                let borrowed: &'a str = take(end).parse_next(input)?;
+                let _ = '"'.parse_next(input)?;
+                return Ok(Edn::Str(Cow::Borrowed(borrowed)));
+            }
+        }
+
+        // Slow path: has escapes (or unterminated).
+        // Copy text before the first backslash (found by the fast path scan above).
+        let pre_escape = memchr::memchr(b'\\', bytes).unwrap_or(0);
+        let mut result = String::new();
+        if pre_escape > 0 {
+            let span: &str = take(pre_escape).parse_next(input)?;
+            result.push_str(span);
+        }
         loop {
             let offset = input.current_token_start();
             let s = rest(input);
@@ -295,6 +315,14 @@ fn edn_string<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
                             result.push(ch);
                         }
                         _ => return Err(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset })),
+                    }
+                    // After escape, batch copy until next " or \.
+                    let s = rest(input);
+                    let sb = s.as_bytes();
+                    let span_end = memchr2(b'"', b'\\', sb).unwrap_or(sb.len());
+                    if span_end > 0 {
+                        let span: &str = take(span_end).parse_next(input)?;
+                        result.push_str(span);
                     }
                 }
                 _ => {

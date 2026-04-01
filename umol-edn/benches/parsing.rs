@@ -110,11 +110,67 @@ fn bench_roundtrip(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_display(c: &mut Criterion) {
+    let edn_small = read_string(MOLECULE_SMALL).unwrap();
+    let edn_large = read_string(MOLECULE_LARGE).unwrap();
+    let fmt = EdnFormatter::default();
+
+    let mut group = c.benchmark_group("display");
+    group.bench_function("to_string_small", |b| {
+        b.iter(|| black_box(&edn_small).to_string())
+    });
+    group.bench_function("to_string_large", |b| {
+        b.iter(|| black_box(&edn_large).to_string())
+    });
+    group.bench_function("formatter_small", |b| {
+        b.iter(|| black_box(&edn_small).to_string_with(&fmt))
+    });
+    group.bench_function("formatter_large", |b| {
+        b.iter(|| black_box(&edn_large).to_string_with(&fmt))
+    });
+    group.finish();
+}
+
+fn bench_isolation(c: &mut Criterion) {
+    // Isolate specific cost centers.
+    let mut group = c.benchmark_group("isolation");
+
+    // Map with 2 entries vs vector with 4 elements (similar value count).
+    group.bench_function("map_2_entries", |b| {
+        b.iter(|| read_string(black_box("{:a 1 :b 2}")))
+    });
+    group.bench_function("vec_4_elements", |b| {
+        b.iter(|| read_string(black_box("[:a 1 :b 2]")))
+    });
+
+    // Nested vectors only (no maps) -- same structural depth as molecule_small.
+    group.bench_function("nested_vecs", |b| {
+        b.iter(|| read_string(black_box("[[:a :b] [[:0 :1 :single]]]")))
+    });
+
+    // Just keywords in a flat vector.
+    group.bench_function("flat_10_keywords", |b| {
+        b.iter(|| read_string(black_box("[:a :b :c :d :e :f :g :h :i :j]")))
+    });
+
+    // String parsing: no escapes vs escapes.
+    group.bench_function("string_no_escape", |b| {
+        b.iter(|| read_string(black_box(r#""abcdefghijklmnop""#)))
+    });
+    group.bench_function("string_with_escapes", |b| {
+        b.iter(|| read_string(black_box(r#""abc\ndef\tghi\u0041""#)))
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parse_atoms,
     bench_parse_collections,
     bench_read_all,
     bench_roundtrip,
+    bench_display,
+    bench_isolation,
 );
 criterion_main!(benches);

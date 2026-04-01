@@ -12,6 +12,8 @@ description = "EDN (Extensible Data Notation) parser, formatter, and serde integ
 bench = false
 
 [dependencies]
+itoa = "1.0"
+memchr = "2.7"
 winnow = "1.0"
 
 serde = { version = "1.0", features = ["derive"], optional = true }
@@ -27,7 +29,7 @@ chrono = ["dep:chrono"]
 uuid = ["dep:uuid"]
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 pretty_assertions = "1.4.1"
 rstest = "0.26.1"
 

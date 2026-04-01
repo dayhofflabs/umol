@@ -41,6 +41,7 @@ impl Default for EdnFormatter {
     }
 }
 
+// TODO: Check if this should be moved to edn.rs
 impl<'a> Edn<'a> {
     /// Format this value using the given formatter.
     pub fn to_string_with(&self, fmt: &EdnFormatter) -> String {
@@ -71,13 +72,139 @@ fn write_edn(out: &mut String, edn: &Edn<'_>, fmt: &EdnFormatter, depth: usize) 
     }
 }
 
-fn fits_on_line(fmt: &EdnFormatter, depth: usize, content_len: usize) -> bool {
-    match fmt.line_width {
-        Some(width) => {
-            let indent_len = depth * fmt.indent.len();
-            indent_len + content_len <= width
+/// Compute the compact (single-line) display length of an EDN value.
+/// Returns `None` if it exceeds `limit` (early exit to avoid full traversal).
+fn compact_len(edn: &Edn<'_>, limit: usize) -> Option<usize> {
+    match edn {
+        Edn::Nil => Some(3),
+        Edn::Bool(true) => Some(4),
+        Edn::Bool(false) => Some(5),
+        Edn::Int(n) => Some(itoa_len(*n)),
+        Edn::Float(v) => Some(format_float_len(*v)),
+        Edn::Char(c) => Some(display_char_len(*c)),
+        Edn::Str(s) => Some(display_string_len(s)),
+        Edn::Keyword(k) => Some(1 + k.as_str().len()), // :name
+        Edn::Symbol(s) => Some(s.as_str().len()),
+        Edn::List(items) => seq_compact_len(items, 2, limit), // ()
+        Edn::Vector(items) => seq_compact_len(items, 2, limit), // []
+        Edn::Map(m) => map_compact_len(m, limit),
+        Edn::Set(s) => {
+            let items: Vec<&Edn<'_>> = s.iter().collect();
+            set_compact_len(&items, limit)
         }
-        None => false,
+        Edn::Tagged(tag, inner) => {
+            let prefix = 1 + tag.len() + 1; // # + tag + space
+            compact_len(inner, limit.checked_sub(prefix)?).map(|n| prefix + n)
+        }
+    }
+}
+
+fn itoa_len(n: i64) -> usize {
+    let mut buf = itoa::Buffer::new();
+    buf.format(n).len()
+}
+
+fn format_float_len(v: f64) -> usize {
+    if v.is_nan() {
+        return 5; // ##NaN
+    }
+    if v == f64::INFINITY {
+        return 5; // ##Inf
+    }
+    if v == f64::NEG_INFINITY {
+        return 6; // ##-Inf
+    }
+    let s = format!("{v}");
+    if s.contains('.') || s.contains('e') || s.contains('E') {
+        s.len()
+    } else {
+        s.len() + 2 // append .0
+    }
+}
+
+fn display_char_len(c: char) -> usize {
+    match c {
+        '\n' => 8,  // \newline
+        '\r' => 7,  // \return
+        ' ' => 6,   // \space
+        '\t' => 4,  // \tab
+        '\u{000C}' => 9,  // \formfeed
+        '\u{0008}' => 10, // \backspace
+        _ => 1 + c.len_utf8(), // \ + char
+    }
+}
+
+fn display_string_len(s: &str) -> usize {
+    let mut len = 2; // opening and closing quotes
+    for c in s.chars() {
+        len += match c {
+            '"' | '\\' | '\n' | '\r' | '\t' | '\u{0008}' | '\u{000C}' => 2,
+            _ => c.len_utf8(),
+        };
+    }
+    len
+}
+
+fn seq_compact_len(items: &[Edn<'_>], overhead: usize, limit: usize) -> Option<usize> {
+    if items.is_empty() {
+        return Some(overhead);
+    }
+    let mut total = overhead; // delimiters
+    for (i, item) in items.iter().enumerate() {
+        if i > 0 {
+            total += 1; // space
+        }
+        total += compact_len(item, limit.checked_sub(total)?)?;
+        if total > limit {
+            return None;
+        }
+    }
+    Some(total)
+}
+
+fn map_compact_len(
+    m: &std::collections::BTreeMap<Edn<'_>, Edn<'_>>,
+    limit: usize,
+) -> Option<usize> {
+    if m.is_empty() {
+        return Some(2);
+    }
+    let mut total = 2usize; // { }
+    for (i, (k, v)) in m.iter().enumerate() {
+        if i > 0 {
+            total += 1; // space between pairs
+        }
+        total += compact_len(k, limit.checked_sub(total)?)?;
+        total += 1; // space between key and value
+        total += compact_len(v, limit.checked_sub(total)?)?;
+        if total > limit {
+            return None;
+        }
+    }
+    Some(total)
+}
+
+fn set_compact_len(items: &[&Edn<'_>], limit: usize) -> Option<usize> {
+    if items.is_empty() {
+        return Some(3); // #{}
+    }
+    let mut total = 3usize; // #{ }
+    for (i, item) in items.iter().enumerate() {
+        if i > 0 {
+            total += 1; // space
+        }
+        total += compact_len(item, limit.checked_sub(total)?)?;
+        if total > limit {
+            return None;
+        }
+    }
+    Some(total)
+}
+
+fn fits_compact(fmt: &EdnFormatter, depth: usize, edn_len: Option<usize>) -> bool {
+    match (fmt.line_width, edn_len) {
+        (Some(width), Some(len)) => depth * fmt.indent.len() + len <= width,
+        _ => false,
     }
 }
 
@@ -102,23 +229,17 @@ fn write_seq(
         return;
     }
 
-    if fmt.compact_seqs {
-        let compact_parts: Vec<String> = items.iter().map(|e| e.to_string()).collect();
-        let compact_len = open.len()
-            + close.len()
-            + compact_parts.iter().map(|s| s.len()).sum::<usize>()
-            + compact_parts.len().saturating_sub(1);
-        if fits_on_line(fmt, depth, compact_len) {
-            out.push_str(open);
-            for (i, s) in compact_parts.iter().enumerate() {
-                if i > 0 {
-                    out.push(' ');
-                }
-                out.push_str(s);
+    let limit = fmt.line_width.unwrap_or(0);
+    if fmt.compact_seqs && fits_compact(fmt, depth, seq_compact_len(items, 2, limit)) {
+        out.push_str(open);
+        for (i, item) in items.iter().enumerate() {
+            if i > 0 {
+                out.push(' ');
             }
-            out.push_str(close);
-            return;
+            out.push_str(&item.to_string());
         }
+        out.push_str(close);
+        return;
     }
 
     out.push_str(open);
@@ -141,22 +262,32 @@ fn write_map(
     }
 
     let separator = if fmt.commas { ", " } else { " " };
+    let limit = fmt.line_width.unwrap_or(0);
 
-    if fmt.compact_maps {
-        let compact_parts: Vec<String> = m.iter().map(|(k, v)| format!("{k} {v}")).collect();
-        let compact_len = 2 + compact_parts.iter().map(|s| s.len()).sum::<usize>()
-            + separator.len() * compact_parts.len().saturating_sub(1);
-        if fits_on_line(fmt, depth, compact_len) {
-            out.push('{');
-            for (i, s) in compact_parts.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(separator);
-                }
-                out.push_str(s);
+    // For compact with commas, add extra separator overhead to the length check.
+    let comma_extra = if fmt.commas {
+        m.len().saturating_sub(1) // each ", " is 1 char longer than " "
+    } else {
+        0
+    };
+    if fmt.compact_maps
+        && fits_compact(
+            fmt,
+            depth,
+            map_compact_len(m, limit).map(|n| n + comma_extra),
+        )
+    {
+        out.push('{');
+        for (i, (k, v)) in m.iter().enumerate() {
+            if i > 0 {
+                out.push_str(separator);
             }
-            out.push('}');
-            return;
+            out.push_str(&k.to_string());
+            out.push(' ');
+            out.push_str(&v.to_string());
         }
+        out.push('}');
+        return;
     }
 
     out.push('{');
@@ -178,21 +309,17 @@ fn write_set(out: &mut String, items: &[&Edn<'_>], fmt: &EdnFormatter, depth: us
         return;
     }
 
-    if fmt.compact_sets {
-        let compact_parts: Vec<String> = items.iter().map(|e| e.to_string()).collect();
-        let compact_len = 3 + compact_parts.iter().map(|s| s.len()).sum::<usize>()
-            + compact_parts.len().saturating_sub(1); // #{ } + spaces
-        if fits_on_line(fmt, depth, compact_len) {
-            out.push_str("#{");
-            for (i, s) in compact_parts.iter().enumerate() {
-                if i > 0 {
-                    out.push(' ');
-                }
-                out.push_str(s);
+    let limit = fmt.line_width.unwrap_or(0);
+    if fmt.compact_sets && fits_compact(fmt, depth, set_compact_len(items, limit)) {
+        out.push_str("#{");
+        for (i, item) in items.iter().enumerate() {
+            if i > 0 {
+                out.push(' ');
             }
-            out.push('}');
-            return;
+            out.push_str(&item.to_string());
         }
+        out.push('}');
+        return;
     }
 
     out.push_str("#{");
