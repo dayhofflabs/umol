@@ -1,0 +1,32 @@
+[package]
+name = "umol-edn"
+version = "0.1.0"
+authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rappoport/umol"
+keywords = ["edn", "parser", "data-format", "clojure"]
+description = "EDN (Extensible Data Notation) parser, formatter, and serde integration."
+
+[lib]
+bench = false
+
+[dependencies]
+winnow = "0.7"
+
+serde = { version = "1.0", features = ["derive"], optional = true }
+num-bigint = { version = "0.4", optional = true }
+bigdecimal = { version = "0.4", optional = true }
+chrono = { version = "0.4", optional = true }
+uuid = { version = "1.0", optional = true }
+
+[features]
+serde = ["dep:serde"]
+bignum = ["dep:num-bigint", "dep:bigdecimal"]
+chrono = ["dep:chrono"]
+uuid = ["dep:uuid"]
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+rstest = "0.26.1"
+
