@@ -4,8 +4,8 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use regex::Regex;
-use umol::error::DataError;
-use umol::{Error, Result};
+
+use crate::error::DataError;
 
 /// Atomic occupation of s, p, d, f orbitals.
 /// Instances should typically be constructed via Configuration methods.
@@ -83,17 +83,17 @@ impl Display for Occupation {
 }
 
 impl TryFrom<&str> for Occupation {
-    type Error = Error;
+    type Error = DataError;
 
-    fn try_from(s: &str) -> Result<Self> {
+    fn try_from(s: &str) -> Result<Self, DataError> {
         if s.is_empty() {
-            return Err(DataError::InvalidOccupation(s.to_string()).into());
+            return Err(DataError::InvalidOccupation(s.to_string()));
         }
 
         // Check if occupation string is valid
         let valid_occ_pattern = Regex::new(r"^([spdf](\d+))+$").unwrap();
         if !valid_occ_pattern.is_match(s) {
-            return Err(DataError::InvalidOccupation(s.to_string()).into());
+            return Err(DataError::InvalidOccupation(s.to_string()));
         }
 
         // Occupation regex: s<num>p<num>d<num>f<num>, in any order
@@ -101,7 +101,7 @@ impl TryFrom<&str> for Occupation {
 
         // Validate the string only contains valid orbital fragments
         if !occ_block_pattern.is_match(s) {
-            return Err(DataError::InvalidOccupation(s.to_string()).into());
+            return Err(DataError::InvalidOccupation(s.to_string()));
         }
 
         // Initialize occupation values
@@ -134,9 +134,9 @@ impl TryFrom<&str> for Occupation {
 }
 
 impl FromStr for Occupation {
-    type Err = Error;
+    type Err = DataError;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> Result<Self, DataError> {
         Self::try_from(s)
     }
 }

@@ -52,16 +52,6 @@ pub enum ParseError {
     InvalidSpinState(#[from] SpinStateError),
 }
 
-#[derive(Clone, Debug, PartialEq, Error)]
-pub enum EvaluationError {
-    #[error("Unbound variable: {0}")]
-    UnboundVariable(String),
-    #[error("Division by zero")]
-    DivisionByZero,
-    #[error("Type mismatch")]
-    TypeMismatch,
-}
-
 impl<I> NomParseError<I> for ParseError {
     fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
         ParseError::NomError(kind)
@@ -70,6 +60,16 @@ impl<I> NomParseError<I> for ParseError {
     fn append(_input: I, _kind: NomErrorKind, other: Self) -> Self {
         other
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum EvaluationError {
+    #[error("Unbound variable: {0}")]
+    UnboundVariable(String),
+    #[error("Division by zero")]
+    DivisionByZero,
+    #[error("Type mismatch")]
+    TypeMismatch,
 }
 
 #[derive(Clone, Debug, PartialEq, Error)]

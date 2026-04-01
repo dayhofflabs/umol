@@ -4,8 +4,8 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use umol::error::DataError;
-use umol::{Error, Result};
+
+use crate::error::DataError;
 
 use crate::half_life::HalfLife;
 use crate::isotope_data::{ISOTOPE_DATA, LIGHT_ISOTOPE_MAP};
@@ -80,17 +80,17 @@ impl NamedIsotope {
 }
 
 impl TryFrom<&str> for NamedIsotope {
-    type Error = Error;
+    type Error = DataError;
 
-    fn try_from(s: &str) -> Result<Self> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()).into())
+    fn try_from(s: &str) -> Result<Self, DataError> {
+        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()))
     }
 }
 
 impl FromStr for NamedIsotope {
-    type Err = Error;
+    type Err = DataError;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> Result<Self, DataError> {
         Self::try_from(s)
     }
 }
@@ -224,17 +224,17 @@ impl Isotope {
 }
 
 impl TryFrom<&str> for Isotope {
-    type Error = Error;
+    type Error = DataError;
 
-    fn try_from(s: &str) -> Result<Self> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()).into())
+    fn try_from(s: &str) -> Result<Self, DataError> {
+        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()))
     }
 }
 
 impl FromStr for Isotope {
-    type Err = Error;
+    type Err = DataError;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> Result<Self, DataError> {
         Self::try_from(s)
     }
 }

@@ -10,7 +10,6 @@ use umol_data::{Element, SpinMultiplicity, SpinState};
 
 use super::ast_utils::{lower_spin, raise_i8_pattern, raise_spin_pattern, raise_u8_pattern};
 use super::atom::Atom;
-use super::atom_type::AtomError;
 use super::error::ValidationError;
 use super::molecule::AtomIndex;
 use super::molecule_builder::MoleculeBuilder;
@@ -161,7 +160,7 @@ impl AtomPattern {
     /// Validate ground fields; non-ground (`Any`, `Normal`, `Aromatic`) fields are skipped.
     ///
     /// The electron invariant is only checked when all relevant fields are ground.
-    pub fn check_invariants(&self) -> Result<(), AtomError> {
+    pub fn check_invariants(&self) -> Result<(), ValidationError> {
         let element = match &self.element {
             ElementPattern::Is(e) => *e,
             _ => return Ok(()),
@@ -189,11 +188,9 @@ impl AtomPattern {
         };
         let multiplicity = match self.multiplicity {
             Pattern::Any => {
-                let m = unpaired_electrons.checked_add(1).ok_or_else(|| {
-                    AtomError::InvalidMultiplicity((unpaired_electrons as u16 + 1).to_string())
-                })?;
+                let m = unpaired_electrons + 1;
                 SpinMultiplicity::from_multiplicity(m)
-                    .ok_or_else(|| AtomError::InvalidMultiplicity(m.to_string()))?
+                    .ok_or(ValidationError::InvalidMultiplicity(m))?
             }
             Pattern::Is(m) => m,
         };
@@ -218,7 +215,7 @@ impl AtomPattern {
 
         let (min_charge, max_charge) = element.charge_bounds();
         if charge < min_charge || charge > max_charge {
-            return Err(AtomError::ChargeOutOfBounds {
+            return Err(ValidationError::ChargeOutOfBounds {
                 element,
                 charge,
                 min_charge,
@@ -228,7 +225,7 @@ impl AtomPattern {
 
         let max_valence = element.max_valence();
         if valence > max_valence {
-            return Err(AtomError::OutOfRange {
+            return Err(ValidationError::OutOfRange {
                 field: "valence",
                 value: valence as i64,
                 min: 0,
@@ -238,7 +235,7 @@ impl AtomPattern {
 
         let max_unpaired_electrons = element.max_unpaired_electrons();
         if spin.unpaired_electrons() > max_unpaired_electrons {
-            return Err(AtomError::OutOfRange {
+            return Err(ValidationError::OutOfRange {
                 field: "unpaired_electrons",
                 value: spin.unpaired_electrons() as i64,
                 min: 0,
@@ -248,7 +245,7 @@ impl AtomPattern {
 
         let max_implicit_hydrogens = element.max_implicit_hydrogens();
         if implicit_hydrogens > max_implicit_hydrogens {
-            return Err(AtomError::OutOfRange {
+            return Err(ValidationError::OutOfRange {
                 field: "implicit_hydrogens",
                 value: implicit_hydrogens as i64,
                 min: 0,
@@ -275,7 +272,7 @@ impl AtomPattern {
             + (2 * accepted_pairs as i16);
 
         if total_e_inv_o != total_e_inv_e {
-            return Err(AtomError::ElectronInvariantMismatch {
+            return Err(ValidationError::ElectronInvariantMismatch {
                 element,
                 orbital_invariant: total_e_inv_o,
                 electron_invariant: total_e_inv_e,
@@ -387,9 +384,9 @@ impl AtomPattern {
             aromatic_valence,
             multicenter_valence,
         )
-        .map_err(ValidationError::Atom)?;
+?;
 
-        atom.check_invariants().map_err(ValidationError::Atom)?;
+        atom.check_invariants()?;
 
         Ok(atom)
     }
@@ -757,10 +754,9 @@ fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::{Element, SpinMultiplicity, SpinStateError};
+    use umol_data::{Element, SpinMultiplicity};
 
     use super::*;
-    use crate::graph_ir::atom_type::AtomError;
     use crate::graph_ir::error::ValidationError;
 
     #[rstest]
@@ -783,9 +779,9 @@ mod tests {
 
     #[rstest]
     #[case::invalid_spin_state(AtomPattern { unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Quartet), ..AtomPattern::new(Element::C) },
-        ValidationError::Atom(AtomError::SpinState(SpinStateError::Incompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::Quartet })))]
+        ValidationError::SpinIncompatible { unpaired_electrons: 2, multiplicity: SpinMultiplicity::Quartet })]
     #[case::invariant_mismatch(AtomPattern { valence: Pattern::Is(2), ..AtomPattern::new(Element::O) },
-        ValidationError::Atom(AtomError::ElectronInvariantMismatch { element: Element::O, orbital_invariant: 4, electron_invariant: 8 }))]
+        ValidationError::ElectronInvariantMismatch { element: Element::O, orbital_invariant: 4, electron_invariant: 8 })]
     fn test_atom_pattern_to_atom_error(
         #[case] pattern: AtomPattern,
         #[case] expected: ValidationError,

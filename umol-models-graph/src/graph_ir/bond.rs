@@ -6,37 +6,16 @@ use std::str::FromStr;
 use serde::de::{Deserializer, Error as SerdeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use umol_data::{SpinMultiplicity, SpinState, SpinStateError};
 
 use super::ast_utils::raise_spin_ground;
 use super::bond_pattern::BondPattern;
-use super::error::{ResolutionError, ValidationError};
+use super::error::ValidationError;
 use crate::dsl::ast::{FromAst, ToAst};
 use crate::dsl::bond::{parse_bond_dsl, BondAst};
 use crate::dsl::config::{BondDslConfig, NumericMode};
 use crate::dsl::error::LoweringError;
 use crate::dsl::value::ValueAst;
-
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum BondError {
-    #[error("invalid bond order value: {0}")]
-    InvalidOrder(String),
-    #[error("invalid charge value: {0}")]
-    InvalidCharge(String),
-    #[error("invalid multiplicity value: {0}")]
-    InvalidMultiplicity(String),
-    #[error(transparent)]
-    SpinState(#[from] SpinStateError),
-    #[error("invalid bond state: {0}")]
-    InvalidState(String),
-}
-
-impl From<BondError> for ResolutionError {
-    fn from(value: BondError) -> Self {
-        ResolutionError::InvalidBond(value.to_string())
-    }
-}
 
 /// Resolved shared (covalent) bond in GraphIR. Order is the localized (σ-skeleton)
 /// bond order. Dative and non-covalent bonds are stored separately.
@@ -91,10 +70,16 @@ impl FromAst<BondAst> for Bond {
         pattern.to_bond().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
             ValidationError::InvalidMultiplicity(n) => LoweringError::InvalidMultiplicity(n),
-            ValidationError::Bond(be) => match be {
-                BondError::SpinState(se) => LoweringError::SpinState(se),
-                other => LoweringError::Atom(other.to_string()),
-            },
+            ValidationError::SpinUnderdetermined => {
+                LoweringError::SpinState(SpinStateError::Underdetermined)
+            }
+            ValidationError::SpinIncompatible {
+                unpaired_electrons,
+                multiplicity,
+            } => LoweringError::SpinState(SpinStateError::Incompatible {
+                unpaired_electrons,
+                multiplicity,
+            }),
             other => LoweringError::Atom(other.to_string()),
         })
     }
@@ -121,12 +106,11 @@ impl ToAst<BondAst> for Bond {
 }
 
 impl FromStr for Bond {
-    type Err = BondError;
+    type Err = LoweringError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let ast = parse_bond_dsl(s).map_err(|e| BondError::InvalidState(e.to_string()))?;
+        let ast = parse_bond_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
         Bond::from_ast(ast, &BondDslConfig::zeroed())
-            .map_err(|e| BondError::InvalidState(e.to_string()))
     }
 }
 

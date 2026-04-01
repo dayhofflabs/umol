@@ -6,7 +6,7 @@ use std::str::FromStr;
 use serde::de::{Deserializer, Error as SerdeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
-use umol_data::{Element, SpinMultiplicity, SpinState};
+use umol_data::{Element, SpinMultiplicity, SpinState, SpinStateError};
 
 use super::ast_utils::{raise_i8_ground, raise_spin_ground, raise_u8_ground};
 use crate::atom::{AromaticValence, IsotopeMass};
@@ -17,7 +17,6 @@ use crate::dsl::error::LoweringError;
 use crate::dsl::predicates::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExpr};
 use crate::dsl::value::ValueAst;
 use crate::graph_ir::atom_pattern::AtomPattern;
-use crate::graph_ir::atom_type::AtomError;
 use crate::graph_ir::error::ValidationError;
 
 /// Atom in GraphIR (ground term)
@@ -53,7 +52,7 @@ impl Atom {
         accepted_pairs: u8,
         aromatic_valence: AromaticValence,
         multicenter_valence: u8,
-    ) -> Result<Self, AtomError> {
+    ) -> Result<Self, ValidationError> {
         let spin = SpinState::try_new(unpaired_electrons, multiplicity)?;
         Ok(Self {
             element,
@@ -130,10 +129,10 @@ impl Atom {
 
     /// Validate the electron invariant and field bounds of this atom.
     /// TODO: Integrate into constraint resolution framework.
-    pub fn check_invariants(&self) -> Result<(), AtomError> {
+    pub fn check_invariants(&self) -> Result<(), ValidationError> {
         let (min_charge, max_charge) = self.element.charge_bounds();
         if self.charge < min_charge || self.charge > max_charge {
-            return Err(AtomError::ChargeOutOfBounds {
+            return Err(ValidationError::ChargeOutOfBounds {
                 element: self.element,
                 charge: self.charge,
                 min_charge,
@@ -143,7 +142,7 @@ impl Atom {
 
         let max_valence = self.element.max_valence();
         if self.valence > max_valence {
-            return Err(AtomError::OutOfRange {
+            return Err(ValidationError::OutOfRange {
                 field: "valence",
                 value: self.valence as i64,
                 min: 0,
@@ -154,7 +153,7 @@ impl Atom {
         let unpaired_electrons = self.spin.unpaired_electrons();
         let max_unpaired_electrons = self.element.max_unpaired_electrons();
         if unpaired_electrons > max_unpaired_electrons {
-            return Err(AtomError::OutOfRange {
+            return Err(ValidationError::OutOfRange {
                 field: "unpaired_electrons",
                 value: unpaired_electrons as i64,
                 min: 0,
@@ -164,7 +163,7 @@ impl Atom {
 
         let max_implicit_hydrogens = self.element.max_implicit_hydrogens();
         if self.implicit_hydrogens > max_implicit_hydrogens {
-            return Err(AtomError::OutOfRange {
+            return Err(ValidationError::OutOfRange {
                 field: "implicit_hydrogens",
                 value: self.implicit_hydrogens as i64,
                 min: 0,
@@ -191,7 +190,7 @@ impl Atom {
             + (2 * self.accepted_pairs as i16);
 
         if total_e_inv_o != total_e_inv_e {
-            return Err(AtomError::ElectronInvariantMismatch {
+            return Err(ValidationError::ElectronInvariantMismatch {
                 element: self.element,
                 orbital_invariant: total_e_inv_o,
                 electron_invariant: total_e_inv_e,
@@ -208,10 +207,16 @@ impl FromAst<AtomAst> for Atom {
         pattern.to_atom().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
             ValidationError::InvalidMultiplicity(n) => LoweringError::InvalidMultiplicity(n),
-            ValidationError::Atom(ae) => match ae {
-                AtomError::SpinState(se) => LoweringError::SpinState(se),
-                other => LoweringError::Atom(other.to_string()),
-            },
+            ValidationError::SpinUnderdetermined => {
+                LoweringError::SpinState(SpinStateError::Underdetermined)
+            }
+            ValidationError::SpinIncompatible {
+                unpaired_electrons,
+                multiplicity,
+            } => LoweringError::SpinState(SpinStateError::Incompatible {
+                unpaired_electrons,
+                multiplicity,
+            }),
             other => LoweringError::Atom(other.to_string()),
         })
     }
@@ -263,15 +268,11 @@ impl ToAst<AtomAst> for Atom {
 }
 
 impl FromStr for Atom {
-    type Err = AtomError;
+    type Err = LoweringError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // TODO: Fix error handling
-        let ast = parse_atom_dsl(s).map_err(|e| AtomError::InvalidTag(e.to_string()))?;
-        Self::from_ast(ast, &AtomDslConfig::zeroed()).map_err(|e| match e {
-            LoweringError::SpinState(se) => AtomError::SpinState(se),
-            other => AtomError::InvalidTag(other.to_string()),
-        })
+        let ast = parse_atom_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
+        Self::from_ast(ast, &AtomDslConfig::zeroed())
     }
 }
 
@@ -371,15 +372,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::unknown_element("X", AtomError::InvalidTag("Invalid atom element: X".to_string()))]
-    #[case::wildcard("*", AtomError::InvalidTag("non-ground value for field 'element'".to_string()))]
-    #[case::unknown_predicate("C#x1", AtomError::InvalidTag("Unknown atom predicate: #x".to_string()))]
-    #[case::duplicate_charge("C#c+#c-", AtomError::InvalidTag("Duplicate #c atom predicate".to_string()))]
-    #[case::duplicate_h("C#h3#h2", AtomError::InvalidTag("Duplicate #h atom predicate".to_string()))]
-    #[case::non_ground_payload("C#h*", AtomError::InvalidTag("invalid atom spec: electron invariant mismatch for C: inv_o=0, inv_e=4".to_string()))]
-    #[case::malformed_number("C#vabc", AtomError::InvalidTag("Trailing input: \"abc\"".to_string()))]
-    #[case::trailing_input("C foo", AtomError::InvalidTag("Trailing input: \"foo\"".to_string()))]
-    fn test_atom_from_str_invalid(#[case] input: &str, #[case] expected: AtomError) {
+    #[case::unknown_element("X", LoweringError::Atom("Invalid atom element: X".to_string()))]
+    #[case::wildcard("*", LoweringError::NonGround { field: "element" })]
+    #[case::unknown_predicate("C#x1", LoweringError::Atom("Unknown atom predicate: #x".to_string()))]
+    #[case::duplicate_charge("C#c+#c-", LoweringError::Atom("Duplicate #c atom predicate".to_string()))]
+    #[case::duplicate_h("C#h3#h2", LoweringError::Atom("Duplicate #h atom predicate".to_string()))]
+    #[case::non_ground_payload("C#h*", LoweringError::Atom("electron invariant mismatch for C: inv_o=0, inv_e=4".to_string()))]
+    #[case::malformed_number("C#vabc", LoweringError::Atom("Trailing input: \"abc\"".to_string()))]
+    #[case::trailing_input("C foo", LoweringError::Atom("Trailing input: \"foo\"".to_string()))]
+    fn test_atom_from_str_invalid(#[case] input: &str, #[case] expected: LoweringError) {
         let result = Atom::from_str(input);
         assert!(
             result.is_err(),

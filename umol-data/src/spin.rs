@@ -58,7 +58,7 @@ impl SpinMultiplicity {
 
 /// Shorthand macro for spin-state literals parsed via `SpinState::from_str`.
 ///
-/// Syntax: `#u<u> #s<s>` (e.g. `#u2 #s3`).
+/// Syntax: `#u<u> #m<m>` (e.g. `#u2 #m3`).
 #[macro_export]
 macro_rules! spin {
     ($s:expr) => {{
@@ -96,10 +96,10 @@ pub enum SpinStateError {
 
 /// Validated (unpaired_electrons, multiplicity) pair.
 ///
-/// Invariant: `m <= n+1` and `m` has the same parity as `n+1`, where
-/// `m = multiplicity.multiplicity()` and `n = unpaired_electrons`.
+/// Invariant: `m <= u + 1` and `m` has the same parity as `u+1`, where
+/// `m = multiplicity.multiplicity()` and `u = unpaired_electrons`.
 ///
-/// String format (canonical): `"#u<u> #s<s>"`, e.g. `"#u2 #s3"`.
+/// String format (canonical): `"#u<u> #m<m>"`, e.g. `"#u2 #m3"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SpinState {
     unpaired_electrons: u8,
@@ -109,11 +109,11 @@ pub struct SpinState {
 impl SpinState {
     /// Check whether `(unpaired_electrons, multiplicity)` is physically valid.
     ///
-    /// Valid multiplicities for `n` unpaired electrons are `n%2+1, n%2+3, ..., n+1`.
+    /// Valid multiplicities for `u` unpaired electrons are `u%2+1, u%2+3, ..., u+1`.
     pub fn are_compatible(unpaired_electrons: u8, multiplicity: SpinMultiplicity) -> bool {
+        let u = unpaired_electrons;
         let m = multiplicity.multiplicity();
-        let n = unpaired_electrons;
-        m <= n + 1 && m % 2 == (n + 1) % 2
+        m <= u + 1 && m % 2 == (u + 1) % 2
     }
 
     /// Create a spin state, panicking on invalid input.

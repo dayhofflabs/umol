@@ -91,3 +91,9 @@ Submit these regardless. But don't block umol's timeline on upstream acceptance.
 - EDN is the right format for umol's direction (Datalog, rule systems, extensible
   molecular representations). Owning the implementation removes a fragile dependency
   and enables the features that make EDN worth using.
+
+## Additional  concerns
+
+- Which structures should hold map data? Should they be deterministic (even if maps)
+  are not required?
+- Configurable formatting.

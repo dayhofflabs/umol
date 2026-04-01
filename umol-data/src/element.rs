@@ -4,8 +4,8 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use umol::error::DataError;
-use umol::{Error, Result};
+
+use crate::error::DataError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[rustfmt::skip]
@@ -817,26 +817,26 @@ impl Element {
 }
 
 impl TryFrom<&str> for Element {
-    type Error = Error;
+    type Error = DataError;
 
-    fn try_from(s: &str) -> Result<Self> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidElement(s.to_string()).into())
+    fn try_from(s: &str) -> Result<Self, DataError> {
+        Self::from_symbol(s).ok_or_else(|| DataError::InvalidElement(s.to_string()))
     }
 }
 
 impl TryFrom<u8> for Element {
-    type Error = Error;
+    type Error = DataError;
 
-    fn try_from(number: u8) -> Result<Self> {
+    fn try_from(number: u8) -> Result<Self, DataError> {
         Self::from_atomic_number(number)
-            .ok_or_else(|| DataError::InvalidElement(number.to_string()).into())
+            .ok_or_else(|| DataError::InvalidElement(number.to_string()))
     }
 }
 
 impl FromStr for Element {
-    type Err = Error;
+    type Err = DataError;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> Result<Self, DataError> {
         Self::try_from(s)
     }
 }

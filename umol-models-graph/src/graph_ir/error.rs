@@ -1,12 +1,100 @@
+//! Error types for graph_ir module.
+
 use thiserror::Error;
-use umol_data::{Element, SpinStateError};
+use umol_data::{Element, SpinMultiplicity, SpinStateError};
 
 use super::aromaticity::AromaticityError;
-use super::atom_type::AtomError;
-use super::bond::BondError;
 use super::kekule::KekulizationError;
+use super::molecule::topology::TopologyExportError;
+use super::transform::TransformError;
 use crate::diagnostics::Diagnostic;
 use crate::table_ir::bond::BondOrder;
+
+// ---------------------------------------------------------------------------
+// Tier 1: sub-concern enums (flat, no #[from])
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum ValidationError {
+    #[error("non-ground value for field '{field}'")]
+    NonGround { field: &'static str },
+    #[error("invalid spin multiplicity: {0}")]
+    InvalidMultiplicity(u8),
+
+    // Atom invariant violations (from AtomError)
+    #[error("field '{field}' out of range: {value} not in [{min}, {max}]")]
+    OutOfRange {
+        field: &'static str,
+        value: i64,
+        min: i64,
+        max: i64,
+    },
+    #[error("charge {charge} out of bounds for {element}: expected [{min_charge}, {max_charge}]")]
+    ChargeOutOfBounds {
+        element: Element,
+        charge: i8,
+        min_charge: i8,
+        max_charge: i8,
+    },
+    #[error(
+        "electron invariant mismatch for {element}: inv_o={orbital_invariant}, inv_e={electron_invariant}"
+    )]
+    ElectronInvariantMismatch {
+        element: Element,
+        orbital_invariant: i16,
+        electron_invariant: i16,
+    },
+
+    // Spin state validation
+    #[error("spin state is underdetermined")]
+    SpinUnderdetermined,
+    #[error("{unpaired_electrons} unpaired electrons, {multiplicity} multiplicity incompatible")]
+    SpinIncompatible {
+        unpaired_electrons: u8,
+        multiplicity: SpinMultiplicity,
+    },
+}
+
+impl From<SpinStateError> for ValidationError {
+    fn from(value: SpinStateError) -> Self {
+        match value {
+            SpinStateError::Underdetermined => ValidationError::SpinUnderdetermined,
+            SpinStateError::Incompatible {
+                unpaired_electrons,
+                multiplicity,
+            } => ValidationError::SpinIncompatible {
+                unpaired_electrons,
+                multiplicity,
+            },
+            SpinStateError::UnpairedElectronsOutOfRange { unpaired_electrons } => {
+                ValidationError::OutOfRange {
+                    field: "unpaired_electrons",
+                    value: unpaired_electrons as i64,
+                    min: 0,
+                    max: 254,
+                }
+            }
+            SpinStateError::MultiplicityOutOfRange { multiplicity } => {
+                ValidationError::OutOfRange {
+                    field: "multiplicity",
+                    value: multiplicity as i64,
+                    min: 1,
+                    max: 255,
+                }
+            }
+            // Parse-related variants — shouldn't reach validation, but map them sensibly
+            SpinStateError::UnexpectedToken { token } => ValidationError::InvalidMultiplicity(
+                u8::try_from(token as u32).unwrap_or(0),
+            ),
+            SpinStateError::InvalidTag { .. } => {
+                ValidationError::NonGround { field: "spin" }
+            }
+            SpinStateError::DuplicateTag { .. } => {
+                ValidationError::NonGround { field: "spin" }
+            }
+        }
+    }
+}
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ResolutionError {
@@ -38,15 +126,8 @@ pub enum ResolutionError {
     #[error("Valence ambiguous for {0}")]
     ValenceAmbiguous(String),
 
-    #[error(transparent)]
-    SpinState(#[from] SpinStateError),
-
     #[error("Aromaticity inconsistent: {0}")]
     AromaticityInconsistent(String),
-    #[error(transparent)]
-    Aromaticity(#[from] AromaticityError),
-    #[error(transparent)]
-    Kekulization(#[from] KekulizationError),
 
     #[error("Molecular charge mismatch: explicit {explicit}, from atoms {atom_sum}")]
     MolecularChargeMismatch { explicit: i8, atom_sum: i8 },
@@ -68,31 +149,24 @@ pub enum ResolutionError {
     },
 }
 
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum ValidationError {
-    #[error("non-ground value for field '{field}'")]
-    NonGround { field: &'static str },
-    #[error("invalid spin multiplicity: {0}")]
-    InvalidMultiplicity(u8),
-    #[error(transparent)]
-    Atom(#[from] AtomError),
-    #[error(transparent)]
-    Bond(#[from] BondError),
-}
+// ---------------------------------------------------------------------------
+// Tier 2: module dispatch enum
+// ---------------------------------------------------------------------------
 
-impl From<ValidationError> for ResolutionError {
-    fn from(value: ValidationError) -> Self {
-        match value {
-            ValidationError::NonGround { field } => {
-                ResolutionError::InvalidBond(format!("non-ground field: {field}"))
-            }
-            ValidationError::InvalidMultiplicity(n) => {
-                ResolutionError::InvalidBond(format!("invalid multiplicity: {n}"))
-            }
-            ValidationError::Atom(ae) => ResolutionError::InvalidAtom(ae.to_string()),
-            ValidationError::Bond(be) => ResolutionError::InvalidBond(be.to_string()),
-        }
-    }
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum GraphIrError {
+    #[error(transparent)]
+    Validation(#[from] ValidationError),
+    #[error(transparent)]
+    Resolution(#[from] ResolutionError),
+    #[error(transparent)]
+    Aromaticity(#[from] AromaticityError),
+    #[error(transparent)]
+    Kekulization(#[from] KekulizationError),
+    #[error(transparent)]
+    Transform(#[from] TransformError),
+    #[error(transparent)]
+    TopologyExport(#[from] TopologyExportError),
 }
 
 impl From<ResolutionError> for Diagnostic {

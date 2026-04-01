@@ -20,7 +20,7 @@ use super::atom_pattern::{AtomPattern, HydrogenPattern};
 use super::bond_pattern::BondPattern;
 use super::config::ResolveConfig;
 use super::dative::DativeBond;
-use super::error::ResolutionError;
+use super::error::{GraphIrError, ResolutionError};
 use super::molecule::topology::{
     DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge,
     TopologyExportError, TopologyGraph, TopologyNodeRef, TopologyProjection,
@@ -1094,7 +1094,11 @@ impl MoleculeBuilder {
     ///
     /// Requires all atoms to have exactly one valence candidate
     /// remaining (i.e., resolution phases must have been run).
-    pub fn build(self, _config: &ResolveConfig) -> Result<Molecule, ResolutionError> {
+    pub fn build(self, config: &ResolveConfig) -> Result<Molecule, GraphIrError> {
+        self.build_inner(config).map_err(GraphIrError::from)
+    }
+
+    fn build_inner(self, _config: &ResolveConfig) -> Result<Molecule, ResolutionError> {
         let mut graph =
             StableGraph::with_capacity(self.graph.node_count(), self.graph.edge_count());
 
@@ -1174,7 +1178,9 @@ impl MoleculeBuilder {
             graph.add_edge(
                 new_a,
                 new_b,
-                bond_builder.to_bond().map_err(ResolutionError::from)?,
+                bond_builder
+                    .to_bond()
+                    .map_err(|e| ResolutionError::InvalidBond(e.to_string()))?,
             );
         }
 

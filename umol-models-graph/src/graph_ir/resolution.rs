@@ -7,14 +7,14 @@ use super::config::{
     AromaticityHintPolicy, AromaticityStrategy, ResolveConfig, TopologyResolveFlags,
     ValenceMatchPolicy,
 };
-use super::error::ResolutionError;
+use super::error::{GraphIrError, ResolutionError};
 use super::molecule::{AtomIndex, BondIndex};
 use super::molecule_builder::MoleculeBuilder;
 use super::rings::{RingEnumerator, RingFamily};
 use super::valence::ValenceMatcher;
 
 /// Resolve a molecular structure to a ground `Molecule` using default configuration.
-pub fn resolve_molecule(builder: &mut MoleculeBuilder) -> Result<(), ResolutionError> {
+pub fn resolve_molecule(builder: &mut MoleculeBuilder) -> Result<(), GraphIrError> {
     resolve_molecule_with(builder, &ResolveConfig::default())
 }
 
@@ -31,7 +31,7 @@ pub fn resolve_molecule(builder: &mut MoleculeBuilder) -> Result<(), ResolutionE
 pub fn resolve_molecule_with(
     builder: &mut MoleculeBuilder,
     config: &ResolveConfig,
-) -> Result<(), ResolutionError> {
+) -> Result<(), GraphIrError> {
     resolve_topology_with(builder, config)?;
     resolve_valence_with(builder, config)?;
     resolve_aromaticity_with(builder, config)?;
@@ -148,7 +148,10 @@ fn resolve_aromaticity_with(
     };
     let enumerator = RingEnumerator::new(ring_family, &config.aromaticity.enumeration_strategy);
     let rings = enumerator.enumerate_builder(builder);
-    for system in model.aromatic_systems(builder, &rings)? {
+    for system in model
+        .aromatic_systems(builder, &rings)
+        .map_err(|e| ResolutionError::AromaticityInconsistent(e.to_string()))?
+    {
         builder.add_aromatic_system(system);
     }
 
@@ -336,7 +339,10 @@ mod tests {
     ) {
         let mut builder = MoleculeBuilder::from_table_molecule(&c_molecule);
         let result = resolve_molecule_with(&mut builder, &config_with_empty_registry);
-        assert!(matches!(result, Err(ResolutionError::ValenceNoMatch(_))));
+        assert!(matches!(
+            result,
+            Err(GraphIrError::Resolution(ResolutionError::ValenceNoMatch(_)))
+        ));
     }
 
     #[rstest]
@@ -346,6 +352,9 @@ mod tests {
     ) {
         let mut builder = MoleculeBuilder::from_table_molecule(&ch3_molecule);
         let result = resolve_molecule_with(&mut builder, &config_with_ch_registry);
-        assert!(matches!(result, Err(ResolutionError::ValenceAmbiguous(_))));
+        assert!(matches!(
+            result,
+            Err(GraphIrError::Resolution(ResolutionError::ValenceAmbiguous(_)))
+        ));
     }
 }

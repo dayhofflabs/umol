@@ -10,7 +10,7 @@ use umol_data::{SpinMultiplicity, SpinState};
 
 use super::ast_utils::{lower_spin, raise_spin_pattern};
 use super::atom_pattern::Pattern;
-use super::bond::{Bond, BondError};
+use super::bond::Bond;
 use super::error::ValidationError;
 use crate::dsl::ast::{FromAst, ToAst};
 use crate::dsl::bond::{parse_bond_dsl, BondAst};
@@ -102,29 +102,35 @@ impl BondPattern {
 
         let electrons: i16 = 2 * order as i16 - charge as i16;
         if electrons < 0 {
-            return Err(ValidationError::Bond(BondError::InvalidState(format!(
-                "bond electron count is negative: order={order}, charge={charge}"
-            ))));
+            return Err(ValidationError::OutOfRange {
+                field: "bond_electrons",
+                value: electrons as i64,
+                min: 0,
+                max: i64::MAX,
+            });
         }
 
         let unpaired = self.unpaired_electrons.into_option();
         let mult = self.multiplicity.into_option();
         let spin = match (unpaired, mult) {
-            (Some(u), Some(m)) => SpinState::try_new(u, m).map_err(BondError::SpinState)?,
-            (Some(u), None) => SpinState::max_multiplicity(u).ok_or_else(|| {
-                BondError::InvalidState(format!("unpaired electrons {u} out of range"))
-            })?,
-            (None, Some(m)) => {
-                SpinState::try_new(m.multiplicity() - 1, m).map_err(BondError::SpinState)?
-            }
+            (Some(u), Some(m)) => SpinState::try_new(u, m)?,
+            (Some(u), None) => SpinState::max_multiplicity(u).ok_or(
+                ValidationError::OutOfRange {
+                    field: "unpaired_electrons",
+                    value: u as i64,
+                    min: 0,
+                    max: 254,
+                },
+            )?,
+            (None, Some(m)) => SpinState::try_new(m.multiplicity() - 1, m)?,
             (None, None) => SpinState::closed_shell(),
         };
 
         if !spin.is_compatible_with(electrons as u8) {
-            return Err(ValidationError::Bond(BondError::InvalidState(format!(
-                "bond spin is not compatible with electron count: order={order}, charge={charge}, \
-                 unpaired_electrons={unpaired:?}, multiplicity={mult:?}"
-            ))));
+            return Err(ValidationError::SpinIncompatible {
+                unpaired_electrons: spin.unpaired_electrons(),
+                multiplicity: spin.multiplicity(),
+            });
         }
 
         Ok(Bond::from_parts(order, charge, spin))

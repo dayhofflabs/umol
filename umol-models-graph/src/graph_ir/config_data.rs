@@ -13,7 +13,7 @@ use xxhash_rust::const_xxh3::xxh3_64;
 
 use super::atom::Atom;
 use super::atom_pattern::{AtomPattern, ElementPattern};
-use super::error::ResolutionError;
+use super::error::{GraphIrError, ResolutionError};
 
 /// Atom type registry for GraphIR.
 ///
@@ -71,7 +71,7 @@ impl AtomTypeRegistry {
         self.content_hash = xxh3_64(buf.as_bytes());
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, GraphIrError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
         let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<Atom>> = BTreeMap::new();
@@ -104,7 +104,8 @@ impl AtomTypeRegistry {
                             atom,
                             atom.element(),
                             element
-                        )));
+                        ))
+                        .into());
                     }
                     if atom.charge() != charge {
                         return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
@@ -112,7 +113,8 @@ impl AtomTypeRegistry {
                             atom,
                             atom.charge(),
                             charge
-                        )));
+                        ))
+                        .into());
                     }
                 }
                 atom_types
@@ -133,7 +135,7 @@ impl AtomTypeRegistry {
         Ok(reg)
     }
 
-    pub fn from_toml_file(path: &Path) -> Result<Self, ResolutionError> {
+    pub fn from_toml_file(path: &Path) -> Result<Self, GraphIrError> {
         let input = fs::read_to_string(path)
             .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
         Self::from_toml_str(&input)
@@ -273,7 +275,7 @@ impl ValenceTable {
         &DEFAULT_VALENCE_TABLE
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, GraphIrError> {
         let parsed: BTreeMap<String, ValenceEntryToml> = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
         let mut entries = BTreeMap::new();
@@ -387,7 +389,7 @@ impl NormalValenceTable {
         &DEFAULT_NORMAL_VALENCE_TABLE
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, GraphIrError> {
         let parsed: BTreeMap<String, u8> = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
         let mut neutral = BTreeMap::new();
