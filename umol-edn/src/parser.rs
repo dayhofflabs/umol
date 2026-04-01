@@ -5,13 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use winnow::ascii::digit1;
 use winnow::combinator::opt;
-use winnow::error::{ContextError, ErrMode};
+use winnow::error::ErrMode;
 use winnow::stream::{Location, Stream};
 use winnow::token::{any, one_of, take_while};
-use winnow::{LocatingSlice, ModalResult, Parser};
+use winnow::{LocatingSlice, Parser};
 
 use crate::edn::{Edn, Keyword, Symbol};
-use crate::error::EdnError;
+use crate::error::{unwrap_err, EdnError};
 
 /// Parser configuration.
 #[derive(Clone, Debug)]
@@ -37,7 +37,8 @@ pub enum DuplicateKeyPolicy {
 }
 
 type Input<'a> = LocatingSlice<&'a str>;
-type E = ErrMode<ContextError>;
+type E = ErrMode<EdnError>;
+type PResult<T> = Result<T, E>;
 
 /// Get the remaining input as a `&str`.
 fn rest<'a>(input: &Input<'a>) -> &'a str {
@@ -50,10 +51,10 @@ pub fn parse_value<'a>(
     config: &ParseConfig,
 ) -> Result<(Edn<'a>, &'a str), EdnError> {
     let mut located = LocatingSlice::new(input);
-    ws_and_comments(&mut located).map_err(|_| EdnError::UnexpectedEof { offset: 0 })?;
+    ws_and_comments(&mut located).map_err(unwrap_err)?;
     let val = edn_value(config)
         .parse_next(&mut located)
-        .map_err(|e| to_edn_error(e))?;
+        .map_err(unwrap_err)?;
     let remainder = rest(&located);
     Ok((val, remainder))
 }
@@ -90,24 +91,10 @@ pub fn parse_all<'a>(
         }
         let val = edn_value(config)
             .parse_next(&mut located)
-            .map_err(|e| to_edn_error(e))?;
+            .map_err(unwrap_err)?;
         values.push(val);
     }
     Ok(values)
-}
-
-fn to_edn_error(e: E) -> EdnError {
-    match e {
-        ErrMode::Backtrack(ctx) | ErrMode::Cut(ctx) => {
-            let msg = format!("{ctx}");
-            if msg.is_empty() {
-                EdnError::Custom("parse error".to_string())
-            } else {
-                EdnError::Custom(msg)
-            }
-        }
-        ErrMode::Incomplete(_) => EdnError::UnexpectedEof { offset: 0 },
-    }
 }
 
 // --- Whitespace and comments ---
@@ -116,7 +103,7 @@ fn is_ws(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | ',')
 }
 
-fn ws_and_comments<'a>(input: &mut Input<'a>) -> ModalResult<()> {
+fn ws_and_comments<'a>(input: &mut Input<'a>) -> PResult<()> {
     loop {
         let before = input.current_token_start();
         take_while(0.., is_ws).parse_next(input)?;
@@ -147,13 +134,14 @@ fn edn_value<'a, 'b>(
 where
     'a: 'b,
 {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         ws_and_comments(input).ok();
         let s = rest(input);
+        let offset = input.current_token_start();
         let c = s
             .chars()
             .next()
-            .ok_or(ErrMode::Backtrack(ContextError::new()))?;
+            .ok_or(ErrMode::Backtrack(EdnError::UnexpectedEof { offset }))?;
         match c {
             '(' => edn_list(config).parse_next(input),
             '[' => edn_vector(config).parse_next(input),
@@ -182,13 +170,13 @@ fn is_symbol_char(c: char) -> bool {
     is_symbol_start(c) || matches!(c, '0'..='9' | '+' | '-' | '#' | ':' | '\'')
 }
 
-fn raw_symbol<'a>(input: &mut Input<'a>) -> ModalResult<&'a str> {
+fn raw_symbol<'a>(input: &mut Input<'a>) -> PResult<&'a str> {
     (one_of(is_symbol_start), take_while(0.., is_symbol_char))
         .take()
         .parse_next(input)
 }
 
-fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> ModalResult<Edn<'a>> {
+fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
     let s = raw_symbol(input)?;
     match s {
         "nil" => Ok(Edn::Nil),
@@ -200,7 +188,7 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> ModalResult<Edn<'a>> {
 
 // --- Keywords ---
 
-fn edn_keyword<'a>(input: &mut Input<'a>) -> ModalResult<Edn<'a>> {
+fn edn_keyword<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
     let _ = ':'.parse_next(input)?;
     let s = raw_symbol(input)?;
     Ok(Edn::Keyword(Keyword::new(s)))
@@ -208,7 +196,8 @@ fn edn_keyword<'a>(input: &mut Input<'a>) -> ModalResult<Edn<'a>> {
 
 // --- Numbers ---
 
-fn edn_number<'a>(input: &mut Input<'a>) -> ModalResult<Edn<'a>> {
+fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
+    let start = input.current_token_start();
     let num_str: &str = (
         opt(one_of(['+', '-'])),
         digit1,
@@ -222,18 +211,21 @@ fn edn_number<'a>(input: &mut Input<'a>) -> ModalResult<Edn<'a>> {
     let s = rest(input);
     if s.starts_with('N') || s.starts_with('M') {
         let _ = any.parse_next(input)?;
-        return Err(ErrMode::Cut(ContextError::new()));
+        return Err(ErrMode::Cut(EdnError::UnsupportedFeature {
+            offset: start,
+            feature: "bignum",
+        }));
     }
 
     if num_str.contains('.') || num_str.contains('e') || num_str.contains('E') {
         let f: f64 = num_str
             .parse()
-            .map_err(|_| ErrMode::Cut(ContextError::new()))?;
+            .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
         Ok(Edn::Float(f))
     } else {
         let n: i64 = num_str
             .parse()
-            .map_err(|_| ErrMode::Cut(ContextError::new()))?;
+            .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
         Ok(Edn::Int(n))
     }
 }
@@ -244,7 +236,7 @@ fn edn_number_or_symbol<'a, 'b>(
 where
     'a: 'b,
 {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let checkpoint = input.checkpoint();
         if let Ok(val) = edn_number(input) {
             return Ok(val);
@@ -257,28 +249,30 @@ where
 // --- Strings ---
 
 fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '"'.parse_next(input)?;
         let mut result = String::new();
 
         loop {
+            let offset = input.current_token_start();
             let s = rest(input);
             let c = s
                 .chars()
                 .next()
-                .ok_or(ErrMode::Cut(ContextError::new()))?;
+                .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset }))?;
             match c {
                 '"' => {
                     let _ = any.parse_next(input)?;
                     return Ok(Edn::Str(Cow::Owned(result)));
                 }
                 '\\' => {
+                    let esc_offset = input.current_token_start();
                     let _ = any.parse_next(input)?;
                     let s2 = rest(input);
                     let esc = s2
                         .chars()
                         .next()
-                        .ok_or(ErrMode::Cut(ContextError::new()))?;
+                        .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: esc_offset }))?;
                     let _ = any.parse_next(input)?;
                     match esc {
                         't' => result.push('\t'),
@@ -291,11 +285,12 @@ fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
                         'u' => {
                             let hex: &str =
                                 take_while(4..=4, |c: char| c.is_ascii_hexdigit())
-                                    .parse_next(input)?;
+                                    .parse_next(input)
+                                    .map_err(|_: E| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
                             let cp = u32::from_str_radix(hex, 16)
-                                .map_err(|_| ErrMode::Cut(ContextError::new()))?;
+                                .map_err(|_| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
                             let ch = char::from_u32(cp)
-                                .ok_or_else(|| ErrMode::Cut(ContextError::new()))?;
+                                .ok_or_else(|| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
                             result.push(ch);
                         }
                         '0'..='7' if !strict => {
@@ -311,13 +306,13 @@ fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
                                 }
                             }
                             if val > 0o377 {
-                                return Err(ErrMode::Cut(ContextError::new()));
+                                return Err(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }));
                             }
                             let ch = char::from_u32(val)
-                                .ok_or_else(|| ErrMode::Cut(ContextError::new()))?;
+                                .ok_or_else(|| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
                             result.push(ch);
                         }
-                        _ => return Err(ErrMode::Cut(ContextError::new())),
+                        _ => return Err(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset })),
                     }
                 }
                 _ => {
@@ -332,7 +327,7 @@ fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
 // --- Characters ---
 
 fn edn_char<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '\\'.parse_next(input)?;
         let s = rest(input);
 
@@ -370,14 +365,16 @@ fn edn_char<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
         }
 
         // Unicode escape \uNNNN
+        let char_offset = input.current_token_start();
         if s.starts_with('u') {
             let _ = 'u'.parse_next(input)?;
             let hex: &str = take_while(4..=4, |c: char| c.is_ascii_hexdigit())
-                .parse_next(input)?;
+                .parse_next(input)
+                .map_err(|_: E| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
             let cp = u32::from_str_radix(hex, 16)
-                .map_err(|_| ErrMode::Cut(ContextError::new()))?;
+                .map_err(|_| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
             let ch =
-                char::from_u32(cp).ok_or_else(|| ErrMode::Cut(ContextError::new()))?;
+                char::from_u32(cp).ok_or_else(|| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
             return Ok(Edn::Char(ch));
         }
 
@@ -385,14 +382,14 @@ fn edn_char<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
         let c = s
             .chars()
             .next()
-            .ok_or(ErrMode::Cut(ContextError::new()))?;
+            .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: char_offset }))?;
         if c.is_whitespace() {
-            return Err(ErrMode::Cut(ContextError::new()));
+            return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
         }
         let _ = any.parse_next(input)?;
         if let Some(next) = rest(input).chars().next() {
             if is_symbol_char(next) && !is_ws(next) {
-                return Err(ErrMode::Cut(ContextError::new()));
+                return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
             }
         }
         Ok(Edn::Char(c))
@@ -407,16 +404,15 @@ fn edn_list<'a, 'b>(
 where
     'a: 'b,
 {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '('.parse_next(input)?;
         let mut items = Vec::new();
         loop {
             ws_and_comments(input).ok();
-            let s = rest(input);
-            if s.is_empty() {
-                return Err(ErrMode::Cut(ContextError::new()));
+            if rest(input).is_empty() {
+                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
-            if s.starts_with(')') {
+            if rest(input).starts_with(')') {
                 let _ = ')'.parse_next(input)?;
                 return Ok(Edn::List(items));
             }
@@ -431,16 +427,15 @@ fn edn_vector<'a, 'b>(
 where
     'a: 'b,
 {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '['.parse_next(input)?;
         let mut items = Vec::new();
         loop {
             ws_and_comments(input).ok();
-            let s = rest(input);
-            if s.is_empty() {
-                return Err(ErrMode::Cut(ContextError::new()));
+            if rest(input).is_empty() {
+                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
-            if s.starts_with(']') {
+            if rest(input).starts_with(']') {
                 let _ = ']'.parse_next(input)?;
                 return Ok(Edn::Vector(items));
             }
@@ -455,24 +450,24 @@ fn edn_map<'a, 'b>(
 where
     'a: 'b,
 {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '{'.parse_next(input)?;
         let mut map = BTreeMap::new();
         loop {
             ws_and_comments(input).ok();
-            let s = rest(input);
-            if s.is_empty() {
-                return Err(ErrMode::Cut(ContextError::new()));
+            if rest(input).is_empty() {
+                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
-            if s.starts_with('}') {
+            if rest(input).starts_with('}') {
                 let _ = '}'.parse_next(input)?;
                 return Ok(Edn::Map(map));
             }
+            let key_offset = input.current_token_start();
             let key = edn_value(config).parse_next(input)?;
             ws_and_comments(input).ok();
             let val = edn_value(config).parse_next(input)?;
             if config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
-                return Err(ErrMode::Cut(ContextError::new()));
+                return Err(ErrMode::Cut(EdnError::DuplicateKey { offset: key_offset }));
             }
             map.insert(key, val);
         }
@@ -485,16 +480,15 @@ fn edn_set<'a, 'b>(
 where
     'a: 'b,
 {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '{'.parse_next(input)?;
         let mut set = BTreeSet::new();
         loop {
             ws_and_comments(input).ok();
-            let s = rest(input);
-            if s.is_empty() {
-                return Err(ErrMode::Cut(ContextError::new()));
+            if rest(input).is_empty() {
+                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
-            if s.starts_with('}') {
+            if rest(input).starts_with('}') {
                 let _ = '}'.parse_next(input)?;
                 return Ok(Edn::Set(set));
             }
@@ -511,13 +505,14 @@ fn edn_dispatch<'a, 'b>(
 where
     'a: 'b,
 {
-    move |input: &mut Input<'a>| -> ModalResult<Edn<'a>> {
+    move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
+        let _dispatch_offset = input.current_token_start();
         let _ = '#'.parse_next(input)?;
         let s = rest(input);
         let c = s
             .chars()
             .next()
-            .ok_or(ErrMode::Cut(ContextError::new()))?;
+            .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }))?;
         match c {
             '{' => edn_set(config).parse_next(input),
             '_' => {
@@ -539,7 +534,9 @@ where
                     let _ = "Inf".parse_next(input)?;
                     Ok(Edn::Float(f64::INFINITY))
                 } else {
-                    Err(ErrMode::Cut(ContextError::new()))
+                    let offset = input.current_token_start();
+                    let found = s2.chars().next().unwrap_or('\0');
+                    Err(ErrMode::Cut(EdnError::UnexpectedToken { offset, found }))
                 }
             }
             _ => {
@@ -549,5 +546,498 @@ where
                 Ok(Edn::Tagged(tag.to_string(), Box::new(val)))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::rstest;
+    use std::borrow::Cow;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use crate::edn::{Edn, Keyword};
+    use crate::error::EdnError;
+    use crate::reader::{read_all, read_string, read_string_with, Reader};
+    use super::{DuplicateKeyPolicy, ParseConfig};
+
+    // --- Primitives ---
+
+    #[rstest]
+    #[case("nil", Edn::Nil)]
+    #[case("true", Edn::Bool(true))]
+    #[case("false", Edn::Bool(false))]
+    fn test_read_string_literals(#[case] input: &str, #[case] expected: Edn<'_>) {
+        assert_eq!(read_string(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("0", 0)]
+    #[case("12", 12)]
+    #[case("-1", -1)]
+    #[case("+5", 5)]
+    #[case("9223372036854775807", i64::MAX)]
+    #[case("-9223372036854775808", i64::MIN)]
+    fn test_read_string_int(#[case] input: &str, #[case] expected: i64) {
+        assert_eq!(read_string(input).unwrap(), Edn::Int(expected));
+    }
+
+    #[rstest]
+    #[case("1.0", 1.0)]
+    #[case("-3.14", -3.14)]
+    #[case("1e10", 1e10)]
+    #[case("1.5e-3", 1.5e-3)]
+    #[case("1E10", 1e10)]
+    fn test_read_string_float(#[case] input: &str, #[case] expected: f64) {
+        assert_eq!(read_string(input).unwrap(), Edn::Float(expected));
+    }
+
+    #[rstest]
+    #[case("##NaN")]
+    fn test_read_string_nan(#[case] input: &str) {
+        match read_string(input).unwrap() {
+            Edn::Float(f) => assert!(f.is_nan()),
+            other => panic!("expected Float(NaN), got {other:?}"),
+        }
+    }
+
+    #[rstest]
+    #[case("##Inf", f64::INFINITY)]
+    #[case("##-Inf", f64::NEG_INFINITY)]
+    fn test_read_string_special_float(#[case] input: &str, #[case] expected: f64) {
+        assert_eq!(read_string(input).unwrap(), Edn::Float(expected));
+    }
+
+    // --- Strings ---
+
+    #[rstest]
+    #[case(r#""""#, "")]
+    #[case(r#""hello""#, "hello")]
+    #[case(r#""hello world""#, "hello world")]
+    #[case(r#""line\nbreak""#, "line\nbreak")]
+    #[case(r#""tab\there""#, "tab\there")]
+    #[case(r#""quote\"here""#, "quote\"here")]
+    #[case(r#""back\\slash""#, "back\\slash")]
+    #[case(r#""cr\rhere""#, "cr\rhere")]
+    fn test_read_string_str(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(
+            read_string(input).unwrap(),
+            Edn::Str(Cow::Owned(expected.to_string()))
+        );
+    }
+
+    #[rstest]
+    #[case(r#""\u0041""#, "A")]
+    #[case(r#""\u03BB""#, "\u{03BB}")]
+    fn test_read_string_unicode_escape(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(
+            read_string(input).unwrap(),
+            Edn::Str(Cow::Owned(expected.to_string()))
+        );
+    }
+
+    // --- Characters ---
+
+    #[rstest]
+    #[case("\\a", 'a')]
+    #[case("\\Z", 'Z')]
+    #[case("\\newline", '\n')]
+    #[case("\\return", '\r')]
+    #[case("\\space", ' ')]
+    #[case("\\tab", '\t')]
+    #[case("\\u0041", 'A')]
+    fn test_read_string_char(#[case] input: &str, #[case] expected: char) {
+        assert_eq!(read_string(input).unwrap(), Edn::Char(expected));
+    }
+
+    // --- Keywords ---
+
+    #[rstest]
+    #[case(":foo", "foo")]
+    #[case(":ns/name", "ns/name")]
+    #[case(":a.b/c", "a.b/c")]
+    fn test_read_string_keyword(#[case] input: &str, #[case] expected_name: &str) {
+        let val = read_string(input).unwrap();
+        match &val {
+            Edn::Keyword(k) => assert_eq!(k.as_str(), expected_name),
+            other => panic!("expected Keyword, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_keyword_namespace() {
+        let k = Keyword::new("ns/name");
+        assert_eq!(k.namespace(), Some("ns"));
+        assert_eq!(k.name(), "name");
+
+        let k2 = Keyword::new("bare");
+        assert_eq!(k2.namespace(), None);
+        assert_eq!(k2.name(), "bare");
+    }
+
+    // --- Symbols ---
+
+    #[rstest]
+    #[case("foo", "foo")]
+    #[case("ns/name", "ns/name")]
+    #[case("my.ns/sym", "my.ns/sym")]
+    fn test_read_string_symbol(#[case] input: &str, #[case] expected_name: &str) {
+        let val = read_string(input).unwrap();
+        match &val {
+            Edn::Symbol(s) => assert_eq!(s.as_str(), expected_name),
+            other => panic!("expected Symbol, got {other:?}"),
+        }
+    }
+
+    // --- Collections ---
+
+    #[rstest]
+    #[case("()", Edn::List(vec![]))]
+    #[case("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
+    #[case("(nil true)", Edn::List(vec![Edn::Nil, Edn::Bool(true)]))]
+    fn test_read_string_list(#[case] input: &str, #[case] expected: Edn<'_>) {
+        assert_eq!(read_string(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("[]", Edn::Vector(vec![]))]
+    #[case("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
+    fn test_read_string_vector(#[case] input: &str, #[case] expected: Edn<'_>) {
+        assert_eq!(read_string(input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_read_string_map() {
+        let val = read_string("{:a 1 :b 2}").unwrap();
+        let mut expected = BTreeMap::new();
+        expected.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
+        expected.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
+        assert_eq!(val, Edn::Map(expected));
+    }
+
+    #[test]
+    fn test_read_string_empty_map() {
+        assert_eq!(read_string("{}").unwrap(), Edn::Map(BTreeMap::new()));
+    }
+
+    #[test]
+    fn test_read_string_set() {
+        let val = read_string("#{1 2 3}").unwrap();
+        let mut expected = BTreeSet::new();
+        expected.insert(Edn::Int(1));
+        expected.insert(Edn::Int(2));
+        expected.insert(Edn::Int(3));
+        assert_eq!(val, Edn::Set(expected));
+    }
+
+    #[test]
+    fn test_read_string_empty_set() {
+        assert_eq!(read_string("#{}").unwrap(), Edn::Set(BTreeSet::new()));
+    }
+
+    // --- Nested ---
+
+    #[test]
+    fn test_read_string_nested() {
+        let val = read_string("{:items [1 (2 3)] :flag true}").unwrap();
+        let mut expected = BTreeMap::new();
+        expected.insert(
+            Edn::Keyword(Keyword::new("items")),
+            Edn::Vector(vec![
+                Edn::Int(1),
+                Edn::List(vec![Edn::Int(2), Edn::Int(3)]),
+            ]),
+        );
+        expected.insert(Edn::Keyword(Keyword::new("flag")), Edn::Bool(true));
+        assert_eq!(val, Edn::Map(expected));
+    }
+
+    // --- Tagged literals ---
+
+    #[test]
+    fn test_read_string_tagged() {
+        let val = read_string("#myapp/Person {:name \"Alice\"}").unwrap();
+        match val {
+            Edn::Tagged(tag, inner) => {
+                assert_eq!(tag, "myapp/Person");
+                assert!(inner.is_map());
+            }
+            other => panic!("expected Tagged, got {other:?}"),
+        }
+    }
+
+    // --- Comments ---
+
+    #[rstest]
+    #[case("; comment\n12", Edn::Int(12))]
+    #[case("12 ; trailing", Edn::Int(12))]
+    fn test_read_string_comment(#[case] input: &str, #[case] expected: Edn<'_>) {
+        assert_eq!(read_string(input).unwrap(), expected);
+    }
+
+    // --- Discard ---
+
+    #[rstest]
+    #[case("#_ foo 12", Edn::Int(12))]
+    #[case("[1 #_ 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(3)]))]
+    fn test_read_string_discard(#[case] input: &str, #[case] expected: Edn<'_>) {
+        assert_eq!(read_string(input).unwrap(), expected);
+    }
+
+    // --- Whitespace variants ---
+
+    #[rstest]
+    #[case("  12  ", Edn::Int(12))]
+    #[case("\t12\n", Edn::Int(12))]
+    #[case(",12,", Edn::Int(12))]
+    #[case("[1,,2,,3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
+    fn test_read_string_whitespace(#[case] input: &str, #[case] expected: Edn<'_>) {
+        assert_eq!(read_string(input).unwrap(), expected);
+    }
+
+    // --- Error cases ---
+
+    #[rstest]
+    #[case("", EdnError::UnexpectedEof { offset: 0 })]
+    #[case("   ", EdnError::UnexpectedEof { offset: 3 })]
+    fn test_read_string_error_empty(#[case] input: &str, #[case] expected: EdnError) {
+        assert_eq!(read_string(input).unwrap_err(), expected);
+    }
+
+    #[test]
+    fn test_read_string_error_trailing() {
+        assert_eq!(
+            read_string("12 43").unwrap_err(),
+            EdnError::TrailingContent { offset: 3 },
+        );
+    }
+
+    #[test]
+    fn test_read_string_error_duplicate_key() {
+        assert_eq!(
+            read_string("{:a 1 :a 2}").unwrap_err(),
+            EdnError::DuplicateKey { offset: 6 },
+        );
+    }
+
+    #[rstest]
+    #[case(r#""\q""#, EdnError::InvalidEscape { offset: 1 })]
+    #[case(r#""\u000G""#, EdnError::InvalidEscape { offset: 1 })]
+    fn test_read_string_error_invalid_escape(#[case] input: &str, #[case] expected: EdnError) {
+        assert_eq!(read_string(input).unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case(r"\abc", EdnError::InvalidCharLiteral { offset: 1 })]
+    fn test_read_string_error_invalid_char_literal(#[case] input: &str, #[case] expected: EdnError) {
+        assert_eq!(read_string(input).unwrap_err(), expected);
+    }
+
+    #[test]
+    fn test_read_string_error_unexpected_token() {
+        let err = read_string("##xyz").unwrap_err();
+        assert!(
+            matches!(err, EdnError::UnexpectedToken { offset: 2, found: 'x' }),
+            "expected UnexpectedToken, got {err:?}"
+        );
+    }
+
+    #[rstest]
+    #[case("12N", EdnError::UnsupportedFeature { offset: 0, feature: "bignum" })]
+    #[case("12M", EdnError::UnsupportedFeature { offset: 0, feature: "bignum" })]
+    fn test_read_string_error_unsupported_feature(#[case] input: &str, #[case] expected: EdnError) {
+        assert_eq!(read_string(input).unwrap_err(), expected);
+    }
+
+    #[test]
+    fn test_read_string_error_unclosed_string() {
+        let err = read_string(r#""hello"#).unwrap_err();
+        assert!(
+            matches!(err, EdnError::UnexpectedEof { .. }),
+            "expected UnexpectedEof, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_read_string_error_unclosed_vector() {
+        let err = read_string("[1 2").unwrap_err();
+        assert!(
+            matches!(err, EdnError::UnexpectedEof { .. }),
+            "expected UnexpectedEof, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_read_string_duplicate_key_last_wins() {
+        let config = ParseConfig {
+            duplicate_keys: DuplicateKeyPolicy::LastWins,
+            ..Default::default()
+        };
+        let val = read_string_with("{:a 1 :a 2}", &config).unwrap();
+        let mut expected = BTreeMap::new();
+        expected.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(2));
+        assert_eq!(val, Edn::Map(expected));
+    }
+
+    // --- Integer overflow ---
+
+    #[test]
+    fn test_read_string_error_integer_overflow() {
+        let err = read_string("99999999999999999999").unwrap_err();
+        assert!(
+            matches!(err, EdnError::InvalidNumber { offset: 0 }),
+            "expected InvalidNumber, got {err:?}"
+        );
+    }
+
+    // --- read_all ---
+
+    #[test]
+    fn test_read_all() {
+        let values = read_all("1 2 3").unwrap();
+        assert_eq!(values, vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]);
+    }
+
+    #[test]
+    fn test_read_all_empty() {
+        let values = read_all("").unwrap();
+        assert!(values.is_empty());
+    }
+
+    #[test]
+    fn test_read_all_mixed() {
+        let values = read_all(":a [1 2] nil").unwrap();
+        assert_eq!(values.len(), 3);
+        assert!(values[0].is_keyword());
+        assert!(values[1].is_vector());
+        assert!(values[2].is_nil());
+    }
+
+    // --- Reader iterator ---
+
+    #[test]
+    fn test_reader_iterator() {
+        let reader = Reader::new("1 :foo [3]");
+        let values: Result<Vec<_>, _> = reader.collect();
+        let values = values.unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0], Edn::Int(1));
+        assert!(values[1].is_keyword());
+        assert!(values[2].is_vector());
+    }
+
+    #[test]
+    fn test_reader_empty() {
+        let reader = Reader::new("");
+        let values: Vec<_> = reader.collect();
+        assert!(values.is_empty());
+    }
+
+    // --- Round-trip ---
+
+    #[rstest]
+    #[case("nil")]
+    #[case("true")]
+    #[case("false")]
+    #[case("12")]
+    #[case("-1")]
+    #[case("1.5")]
+    #[case(":keyword")]
+    #[case(":ns/name")]
+    #[case("symbol")]
+    #[case("()")]
+    #[case("(1 2 3)")]
+    #[case("[]")]
+    #[case("[1 2 3]")]
+    #[case("{}")]
+    #[case("\\a")]
+    #[case("\\newline")]
+    #[case("\\space")]
+    fn test_roundtrip(#[case] input: &str) {
+        let val = read_string(input).unwrap();
+        let formatted = val.to_string();
+        let reparsed = read_string(&formatted).unwrap();
+        assert_eq!(val, reparsed);
+    }
+
+    #[test]
+    fn test_roundtrip_string() {
+        let val = read_string(r#""hello\nworld""#).unwrap();
+        let formatted = val.to_string();
+        let reparsed = read_string(&formatted).unwrap();
+        assert_eq!(val, reparsed);
+    }
+
+    #[test]
+    fn test_roundtrip_map() {
+        let val = read_string("{:a 1, :b 2}").unwrap();
+        let formatted = val.to_string();
+        let reparsed = read_string(&formatted).unwrap();
+        assert_eq!(val, reparsed);
+    }
+
+    #[test]
+    fn test_roundtrip_set() {
+        let val = read_string("#{1 2 3}").unwrap();
+        let formatted = val.to_string();
+        let reparsed = read_string(&formatted).unwrap();
+        assert_eq!(val, reparsed);
+    }
+
+    #[test]
+    fn test_roundtrip_special_floats() {
+        for input in &["##Inf", "##-Inf"] {
+            let val = read_string(input).unwrap();
+            let formatted = val.to_string();
+            let reparsed = read_string(&formatted).unwrap();
+            assert_eq!(val, reparsed);
+        }
+    }
+
+    // --- Edn accessors ---
+
+    #[test]
+    fn test_edn_get() {
+        let val = read_string("{:name \"Alice\" :age 30}").unwrap();
+        assert_eq!(val.get("name").unwrap().as_str(), Some("Alice"));
+        assert_eq!(val.get("age").unwrap().as_i64(), Some(30));
+        assert!(val.get("missing").is_none());
+    }
+
+    #[test]
+    fn test_edn_numeric_narrowing() {
+        let val = Edn::Int(12);
+        assert_eq!(val.as_u8(), Some(12));
+        assert_eq!(val.as_u16(), Some(12));
+        assert_eq!(val.as_u32(), Some(12));
+        assert_eq!(val.as_i32(), Some(12));
+
+        let val_neg = Edn::Int(-1);
+        assert_eq!(val_neg.as_u8(), None);
+        assert_eq!(val_neg.as_i8(), Some(-1));
+    }
+
+    #[test]
+    fn test_edn_iter() {
+        let val = read_string("[1 2 3]").unwrap();
+        let items: Vec<_> = val.iter().collect();
+        assert_eq!(items.len(), 3);
+    }
+
+    // --- Clojure-compatible escapes (non-strict mode) ---
+
+    #[test]
+    fn test_read_string_backspace_formfeed() {
+        let val = read_string(r#""\b\f""#).unwrap();
+        assert_eq!(
+            val,
+            Edn::Str(Cow::Owned("\u{0008}\u{000C}".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_read_string_char_formfeed_backspace() {
+        assert_eq!(read_string("\\formfeed").unwrap(), Edn::Char('\u{000C}'));
+        assert_eq!(read_string("\\backspace").unwrap(), Edn::Char('\u{0008}'));
     }
 }

@@ -100,3 +100,152 @@ fn format_seq(f: &mut fmt::Formatter<'_>, open: &str, close: &str, items: &[Edn<
     }
     write!(f, "{close}")
 }
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use rstest::rstest;
+
+    use crate::edn::{Edn, Keyword, Symbol};
+
+    #[rstest]
+    #[case(Edn::Nil, "nil")]
+    #[case(Edn::Bool(true), "true")]
+    #[case(Edn::Bool(false), "false")]
+    #[case(Edn::Int(12), "12")]
+    #[case(Edn::Int(-1), "-1")]
+    #[case(Edn::Int(0), "0")]
+    fn test_display_primitives(#[case] edn: Edn<'_>, #[case] expected: &str) {
+        assert_eq!(edn.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case(3.14, "3.14")]
+    #[case(1.0, "1.0")]
+    #[case(12.0, "12.0")]
+    #[case(-0.5, "-0.5")]
+    fn test_display_float(#[case] v: f64, #[case] expected: &str) {
+        assert_eq!(Edn::Float(v).to_string(), expected);
+    }
+
+    #[rstest]
+    #[case(f64::NAN, "##NaN")]
+    #[case(f64::INFINITY, "##Inf")]
+    #[case(f64::NEG_INFINITY, "##-Inf")]
+    fn test_display_special_float(#[case] v: f64, #[case] expected: &str) {
+        assert_eq!(Edn::Float(v).to_string(), expected);
+    }
+
+    #[rstest]
+    #[case('a', "\\a")]
+    #[case('Z', "\\Z")]
+    #[case('\n', "\\newline")]
+    #[case('\r', "\\return")]
+    #[case(' ', "\\space")]
+    #[case('\t', "\\tab")]
+    #[case('\u{000C}', "\\formfeed")]
+    #[case('\u{0008}', "\\backspace")]
+    fn test_display_char(#[case] c: char, #[case] expected: &str) {
+        assert_eq!(Edn::Char(c).to_string(), expected);
+    }
+
+    #[rstest]
+    #[case("hello", r#""hello""#)]
+    #[case("with \"quotes\"", r#""with \"quotes\"""#)]
+    #[case("line\nbreak", r#""line\nbreak""#)]
+    #[case("tab\there", r#""tab\there""#)]
+    #[case("back\\slash", r#""back\\slash""#)]
+    #[case("\u{0008}", r#""\b""#)]
+    #[case("\u{000C}", r#""\f""#)]
+    fn test_display_string(#[case] s: &str, #[case] expected: &str) {
+        assert_eq!(Edn::Str(Cow::Borrowed(s)).to_string(), expected);
+    }
+
+    #[rstest]
+    #[case(Keyword::new("foo"), ":foo")]
+    #[case(Keyword::namespaced("ns", "bar"), ":ns/bar")]
+    fn test_display_keyword(#[case] k: Keyword<'_>, #[case] expected: &str) {
+        assert_eq!(Edn::Keyword(k).to_string(), expected);
+    }
+
+    #[rstest]
+    #[case(Symbol::new("foo"), "foo")]
+    #[case(Symbol::namespaced("ns", "bar"), "ns/bar")]
+    fn test_display_symbol(#[case] s: Symbol<'_>, #[case] expected: &str) {
+        assert_eq!(Edn::Symbol(s).to_string(), expected);
+    }
+
+    #[test]
+    fn test_display_list() {
+        let v = Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]);
+        assert_eq!(v.to_string(), "(1 2 3)");
+    }
+
+    #[test]
+    fn test_display_list_empty() {
+        assert_eq!(Edn::List(vec![]).to_string(), "()");
+    }
+
+    #[test]
+    fn test_display_vector() {
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]);
+        assert_eq!(v.to_string(), "[1 2 3]");
+    }
+
+    #[test]
+    fn test_display_vector_empty() {
+        assert_eq!(Edn::Vector(vec![]).to_string(), "[]");
+    }
+
+    #[test]
+    fn test_display_map() {
+        let mut m = BTreeMap::new();
+        m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
+        assert_eq!(Edn::Map(m).to_string(), "{:a 1}");
+    }
+
+    #[test]
+    fn test_display_map_multi() {
+        let mut m = BTreeMap::new();
+        m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
+        m.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
+        let s = Edn::Map(m).to_string();
+        assert_eq!(s, "{:a 1, :b 2}");
+    }
+
+    #[test]
+    fn test_display_map_empty() {
+        assert_eq!(Edn::Map(BTreeMap::new()).to_string(), "{}");
+    }
+
+    #[test]
+    fn test_display_set() {
+        let mut s = BTreeSet::new();
+        s.insert(Edn::Int(1));
+        s.insert(Edn::Int(2));
+        assert_eq!(Edn::Set(s).to_string(), "#{1 2}");
+    }
+
+    #[test]
+    fn test_display_set_empty() {
+        assert_eq!(Edn::Set(BTreeSet::new()).to_string(), "#{}");
+    }
+
+    #[test]
+    fn test_display_tagged() {
+        let tagged = Edn::Tagged(
+            "inst".to_string(),
+            Box::new(Edn::Str(Cow::Borrowed("2023-01-01"))),
+        );
+        assert_eq!(tagged.to_string(), r#"#inst "2023-01-01""#);
+    }
+
+    #[test]
+    fn test_display_nested() {
+        let inner = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
+        let outer = Edn::List(vec![Edn::Keyword(Keyword::new("data")), inner]);
+        assert_eq!(outer.to_string(), "(:data [1 2])");
+    }
+}

@@ -1,0 +1,559 @@
+//! Serde `Deserializer` for `Edn` values.
+
+use std::collections::BTreeMap;
+
+use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
+
+use crate::edn::Edn;
+use crate::error::EdnError;
+use crate::reader::read_string;
+
+/// Deserialize a Rust value from an EDN string.
+pub fn from_str<'a, T: serde::Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
+    let val = read_string(s)?;
+    T::deserialize(EdnDeserializer(val)).map_err(Into::into)
+}
+
+/// Deserializer wrapping an `Edn` value.
+pub struct EdnDeserializer<'de>(pub Edn<'de>);
+
+impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
+    type Error = EdnError;
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Nil => visitor.visit_unit(),
+            Edn::Bool(b) => visitor.visit_bool(b),
+            Edn::Int(i) => visitor.visit_i64(i),
+            Edn::Float(f) => visitor.visit_f64(f),
+            Edn::Char(c) => visitor.visit_char(c),
+            Edn::Str(s) => match s {
+                std::borrow::Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
+                std::borrow::Cow::Owned(o) => visitor.visit_string(o),
+            },
+            Edn::Keyword(k) => visitor.visit_string(k.as_str().to_string()),
+            Edn::Symbol(s) => visitor.visit_string(s.as_str().to_string()),
+            Edn::List(v) | Edn::Vector(v) => visitor.visit_seq(EdnSeq::new(v)),
+            Edn::Map(m) => visitor.visit_map(EdnMap::new(m)),
+            Edn::Set(s) => {
+                let v: Vec<Edn<'de>> = s.into_iter().collect();
+                visitor.visit_seq(EdnSeq::new(v))
+            }
+            Edn::Tagged(_tag, inner) => EdnDeserializer(*inner).deserialize_any(visitor),
+        }
+    }
+
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match &self.0 {
+            Edn::Nil => visitor.visit_none(),
+            _ => visitor.visit_some(self),
+        }
+    }
+
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        visitor.visit_newtype_struct(self)
+    }
+
+    fn deserialize_enum<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        match &self.0 {
+            Edn::Keyword(k) => visitor.visit_enum(
+                de::value::StrDeserializer::<Self::Error>::new(k.as_str()),
+            ),
+            Edn::Symbol(s) => visitor.visit_enum(
+                de::value::StrDeserializer::<Self::Error>::new(s.as_str()),
+            ),
+            Edn::Str(s) => visitor
+                .visit_enum(de::value::StrDeserializer::<Self::Error>::new(s)),
+            _ => self.deserialize_any(visitor),
+        }
+    }
+
+    fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Map(m) => visitor.visit_map(EdnMap::new(m)),
+            Edn::Nil => visitor.visit_map(EdnMap::new(BTreeMap::new())),
+            other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Map(m) => visitor.visit_map(EdnStructMap::new(m)),
+            Edn::Nil => visitor.visit_map(EdnStructMap::new(BTreeMap::new())),
+            other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_unit_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        self.deserialize_unit(visitor)
+    }
+
+    fn deserialize_tuple<V: Visitor<'de>>(
+        self,
+        _len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        self.deserialize_seq(visitor)
+    }
+
+    fn deserialize_tuple_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        _len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        self.deserialize_seq(visitor)
+    }
+
+    fn deserialize_i8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Int(i) => {
+                let v = i8::try_from(i)
+                    .map_err(|_| EdnError::Custom(format!("{i} out of range for i8")))?;
+                visitor.visit_i8(v)
+            }
+            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_i16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Int(i) => {
+                let v = i16::try_from(i)
+                    .map_err(|_| EdnError::Custom(format!("{i} out of range for i16")))?;
+                visitor.visit_i16(v)
+            }
+            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_i32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Int(i) => {
+                let v = i32::try_from(i)
+                    .map_err(|_| EdnError::Custom(format!("{i} out of range for i32")))?;
+                visitor.visit_i32(v)
+            }
+            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_u8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Int(i) => {
+                let v = u8::try_from(i)
+                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u8")))?;
+                visitor.visit_u8(v)
+            }
+            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_u16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Int(i) => {
+                let v = u16::try_from(i)
+                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u16")))?;
+                visitor.visit_u16(v)
+            }
+            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_u32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Int(i) => {
+                let v = u32::try_from(i)
+                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u32")))?;
+                visitor.visit_u32(v)
+            }
+            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_u64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Int(i) => {
+                let v = u64::try_from(i)
+                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u64")))?;
+                visitor.visit_u64(v)
+            }
+            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Float(f) => visitor.visit_f32(f as f32),
+            Edn::Int(i) => visitor.visit_f32(i as f32),
+            other => Err(EdnError::Custom(format!("expected number, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_f64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self.0 {
+            Edn::Float(f) => visitor.visit_f64(f),
+            Edn::Int(i) => visitor.visit_f64(i as f64),
+            other => Err(EdnError::Custom(format!("expected number, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_string<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        self.deserialize_str(visitor)
+    }
+
+    fn deserialize_identifier<V: Visitor<'de>>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        self.deserialize_str(visitor)
+    }
+
+    fn deserialize_bytes<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value, Self::Error> {
+        Err(EdnError::Custom("bytes not supported".to_string()))
+    }
+
+    fn deserialize_byte_buf<V: Visitor<'de>>(
+        self,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        self.deserialize_bytes(visitor)
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i64 char str unit ignored_any seq
+    }
+}
+
+// --- SeqAccess ---
+
+struct EdnSeq<'de> {
+    iter: std::vec::IntoIter<Edn<'de>>,
+}
+
+impl<'de> EdnSeq<'de> {
+    fn new(v: Vec<Edn<'de>>) -> Self {
+        Self {
+            iter: v.into_iter(),
+        }
+    }
+}
+
+impl<'de> SeqAccess<'de> for EdnSeq<'de> {
+    type Error = EdnError;
+
+    fn next_element_seed<T: DeserializeSeed<'de>>(
+        &mut self,
+        seed: T,
+    ) -> Result<Option<T::Value>, Self::Error> {
+        match self.iter.next() {
+            Some(edn) => seed.deserialize(EdnDeserializer(edn)).map(Some),
+            None => Ok(None),
+        }
+    }
+}
+
+// --- MapAccess ---
+
+struct EdnMap<'de> {
+    iter: std::collections::btree_map::IntoIter<Edn<'de>, Edn<'de>>,
+    pending_value: Option<Edn<'de>>,
+}
+
+impl<'de> EdnMap<'de> {
+    fn new(map: BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+        Self {
+            iter: map.into_iter(),
+            pending_value: None,
+        }
+    }
+}
+
+impl<'de> MapAccess<'de> for EdnMap<'de> {
+    type Error = EdnError;
+
+    fn next_key_seed<K: DeserializeSeed<'de>>(
+        &mut self,
+        seed: K,
+    ) -> Result<Option<K::Value>, Self::Error> {
+        match self.iter.next() {
+            Some((k, v)) => {
+                self.pending_value = Some(v);
+                seed.deserialize(EdnDeserializer(k)).map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn next_value_seed<V: DeserializeSeed<'de>>(
+        &mut self,
+        seed: V,
+    ) -> Result<V::Value, Self::Error> {
+        let v = self
+            .pending_value
+            .take()
+            .expect("next_value_seed called without preceding next_key_seed");
+        seed.deserialize(EdnDeserializer(v))
+    }
+}
+
+// --- StructMap (filters to string-like keys) ---
+
+struct EdnStructMap<'de> {
+    iter: std::collections::btree_map::IntoIter<Edn<'de>, Edn<'de>>,
+    pending_value: Option<Edn<'de>>,
+}
+
+impl<'de> EdnStructMap<'de> {
+    fn new(map: BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+        Self {
+            iter: map.into_iter(),
+            pending_value: None,
+        }
+    }
+}
+
+impl<'de> de::MapAccess<'de> for EdnStructMap<'de> {
+    type Error = EdnError;
+
+    fn next_key_seed<K: DeserializeSeed<'de>>(
+        &mut self,
+        seed: K,
+    ) -> Result<Option<K::Value>, Self::Error> {
+        loop {
+            match self.iter.next() {
+                Some((k, v)) => match &k {
+                    Edn::Keyword(_) | Edn::Symbol(_) | Edn::Str(_) => {
+                        self.pending_value = Some(v);
+                        return seed.deserialize(EdnDeserializer(k)).map(Some);
+                    }
+                    _ => continue,
+                },
+                None => return Ok(None),
+            }
+        }
+    }
+
+    fn next_value_seed<V: DeserializeSeed<'de>>(
+        &mut self,
+        seed: V,
+    ) -> Result<V::Value, Self::Error> {
+        let v = self
+            .pending_value
+            .take()
+            .expect("EdnStructMap::next_value_seed called without preceding next_key_seed");
+        seed.deserialize(EdnDeserializer(v))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use rstest::rstest;
+    use serde::Deserialize;
+
+    use crate::{from_str, read_string};
+    use super::*;
+
+    #[rstest]
+    #[case("12", 12i64)]
+    #[case("-1", -1i64)]
+    #[case("0", 0i64)]
+    fn test_deserialize_i64(#[case] input: &str, #[case] expected: i64) {
+        assert_eq!(from_str::<i64>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("12", 12u32)]
+    #[case("0", 0u32)]
+    fn test_deserialize_u32(#[case] input: &str, #[case] expected: u32) {
+        assert_eq!(from_str::<u32>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("256")]
+    #[case("-1")]
+    fn test_deserialize_u8_error(#[case] input: &str) {
+        assert!(from_str::<u8>(input).is_err());
+    }
+
+    #[rstest]
+    #[case("3.14", 3.14f64)]
+    #[case("12", 12.0f64)]
+    #[case("-0.5", -0.5f64)]
+    fn test_deserialize_f64(#[case] input: &str, #[case] expected: f64) {
+        assert!((from_str::<f64>(input).unwrap() - expected).abs() < 1e-10);
+    }
+
+    #[rstest]
+    #[case("true", true)]
+    #[case("false", false)]
+    fn test_deserialize_bool(#[case] input: &str, #[case] expected: bool) {
+        assert_eq!(from_str::<bool>(input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_deserialize_char() {
+        assert_eq!(from_str::<char>(r"\a").unwrap(), 'a');
+    }
+
+    #[rstest]
+    #[case(r#""hello""#, "hello")]
+    #[case(r#""with \"quotes\"""#, "with \"quotes\"")]
+    #[case(r#""line\nbreak""#, "line\nbreak")]
+    fn test_deserialize_string(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(from_str::<String>(input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_deserialize_keyword_as_string() {
+        assert_eq!(from_str::<String>(":foo").unwrap(), "foo");
+    }
+
+    #[rstest]
+    #[case("12", Some(12i64))]
+    #[case("nil", None)]
+    fn test_deserialize_option(#[case] input: &str, #[case] expected: Option<i64>) {
+        assert_eq!(from_str::<Option<i64>>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("[1 2 3]", vec![1, 2, 3])]
+    #[case("(1 2 3)", vec![1, 2, 3])]
+    #[case("[]", vec![])]
+    fn test_deserialize_vec(#[case] input: &str, #[case] expected: Vec<i64>) {
+        assert_eq!(from_str::<Vec<i64>>(input).unwrap(), expected);
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct Point {
+        x: f64,
+        y: f64,
+    }
+
+    #[test]
+    fn test_deserialize_struct() {
+        let input = "{:x 1.0 :y 2.0}";
+        assert_eq!(from_str::<Point>(input).unwrap(), Point { x: 1.0, y: 2.0 });
+    }
+
+    #[test]
+    fn test_deserialize_struct_from_nil() {
+        assert!(from_str::<Point>("nil").is_err());
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct OptionalFields {
+        name: String,
+        age: Option<i64>,
+    }
+
+    #[test]
+    fn test_deserialize_struct_optional_field() {
+        let input = r#"{:name "Alice" :age 30}"#;
+        assert_eq!(
+            from_str::<OptionalFields>(input).unwrap(),
+            OptionalFields { name: "Alice".into(), age: Some(30) },
+        );
+    }
+
+    #[test]
+    fn test_deserialize_hashmap() {
+        let input = r#"{"a" 1 "b" 2}"#;
+        let m: HashMap<String, i64> = from_str(input).unwrap();
+        assert_eq!(m.len(), 2);
+        assert_eq!(m["a"], 1);
+        assert_eq!(m["b"], 2);
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    #[serde(rename_all = "lowercase")]
+    enum Color {
+        Red,
+        Green,
+        Blue,
+    }
+
+    #[rstest]
+    #[case(":red", Color::Red)]
+    #[case(":green", Color::Green)]
+    #[case(":blue", Color::Blue)]
+    fn test_deserialize_enum(#[case] input: &str, #[case] expected: Color) {
+        assert_eq!(from_str::<Color>(input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_deserialize_tuple() {
+        let input = "[1 2 3]";
+        assert_eq!(from_str::<(i64, i64, i64)>(input).unwrap(), (1, 2, 3));
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct Nested {
+        point: Point,
+        label: String,
+    }
+
+    #[test]
+    fn test_deserialize_nested() {
+        let input = r#"{:point {:x 3.0 :y 4.0} :label "origin"}"#;
+        assert_eq!(
+            from_str::<Nested>(input).unwrap(),
+            Nested {
+                point: Point { x: 3.0, y: 4.0 },
+                label: "origin".into(),
+            },
+        );
+    }
+
+    #[test]
+    fn test_deserialize_tagged_unwraps() {
+        let val = read_string("#inst [1 2 3]").unwrap();
+        let v: Vec<i64> = Vec::deserialize(EdnDeserializer(val)).unwrap();
+        assert_eq!(v, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_deserialize_unit() {
+        assert_eq!(from_str::<()>("nil").unwrap(), ());
+    }
+
+    #[test]
+    fn test_deserialize_newtype_struct() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Wrapper(i64);
+        assert_eq!(from_str::<Wrapper>("12").unwrap(), Wrapper(12));
+    }
+
+    #[test]
+    fn test_deserialize_struct_ignores_non_string_keys() {
+        let val = read_string("{:x 1.0 12 99 :y 2.0}").unwrap();
+        let p: Point = Point::deserialize(EdnDeserializer(val)).unwrap();
+        assert_eq!(p, Point { x: 1.0, y: 2.0 });
+    }
+
+    #[test]
+    fn test_deserialize_f32() {
+        assert!((from_str::<f32>("3.14").unwrap() - 3.14f32).abs() < 1e-5);
+        assert!((from_str::<f32>("12").unwrap() - 12.0f32).abs() < 1e-5);
+    }
+}

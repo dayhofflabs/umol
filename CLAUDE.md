@@ -54,6 +54,10 @@
 - Avoid stubs, shims, bridges whenever possible. Suggest design improvements instead.
 - Do not create manual implementations, where well-designed and supported external libraries exist.
 
+## Clichés
+
+- Avoid software development clichés like using number 42 for all integer examples, seeds, and tests.
+
 ## Rust Specific
 - Do not use <module>/mod.rs, use <module>.rs instead.
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
