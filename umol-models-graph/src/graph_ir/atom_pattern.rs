@@ -8,9 +8,7 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use umol_data::{Element, SpinMultiplicity, SpinState};
 
-use super::ast_utils::{
-    lower_spin, raise_pattern_i8, raise_pattern_u8, raise_spin_m_pattern, raise_spin_u_pattern,
-};
+use super::ast_utils::{lower_spin, raise_i8_pattern, raise_spin_pattern, raise_u8_pattern};
 use super::atom::Atom;
 use super::atom_type::AtomError;
 use super::error::ValidationError;
@@ -660,6 +658,12 @@ impl FromAst<AtomAst> for AtomPattern {
 
 impl ToAst<AtomAst> for AtomPattern {
     fn to_ast(&self, cfg: &AtomDslConfig) -> AtomAst {
+        let (spin_u, spin_m) = raise_spin_pattern(
+            self.unpaired_electrons,
+            self.multiplicity,
+            &cfg.unpaired_electrons_mode,
+            &cfg.multiplicity_mode,
+        );
         AtomAst {
             element: match &self.element {
                 ElementPattern::Any => ElementExpr::Wildcard,
@@ -674,7 +678,7 @@ impl ToAst<AtomAst> for AtomPattern {
                 (IsotopePattern::Is(n), _) => Some(IsotopeExpr::Lit(*n)),
                 (IsotopePattern::OneOf(ns), _) => Some(IsotopeExpr::Set(ns.clone())),
             },
-            charge: raise_pattern_i8(self.charge, &cfg.charge_mode),
+            charge: raise_i8_pattern(self.charge, &cfg.charge_mode),
             implicit_hydrogens: match (&self.implicit_hydrogens, &cfg.implicit_h_mode) {
                 (HydrogenPattern::Is(0), ImplicitHydrogenMode::Zero) => None,
                 (HydrogenPattern::Normal, ImplicitHydrogenMode::Normal) => None,
@@ -683,21 +687,12 @@ impl ToAst<AtomAst> for AtomPattern {
                 (HydrogenPattern::Normal, _) => Some(HydrogenExpr::Normal),
                 (HydrogenPattern::Is(n), _) => Some(HydrogenExpr::Value(ValueAst::Lit(*n as i32))),
             },
-            lone_pairs: raise_pattern_u8(self.lone_pairs, &cfg.lone_pairs_mode),
-            unpaired_electrons: raise_spin_u_pattern(
-                self.unpaired_electrons,
-                self.multiplicity,
-                &cfg.unpaired_electrons_mode,
-            ),
-            multiplicity: raise_spin_m_pattern(
-                self.unpaired_electrons,
-                self.multiplicity,
-                &cfg.unpaired_electrons_mode,
-                &cfg.multiplicity_mode,
-            ),
-            valence: raise_pattern_u8(self.valence, &cfg.valence_mode),
-            donated_pairs: raise_pattern_u8(self.donated_pairs, &cfg.donated_pairs_mode),
-            accepted_pairs: raise_pattern_u8(self.accepted_pairs, &cfg.accepted_pairs_mode),
+            lone_pairs: raise_u8_pattern(self.lone_pairs, &cfg.lone_pairs_mode),
+            unpaired_electrons: spin_u,
+            multiplicity: spin_m,
+            valence: raise_u8_pattern(self.valence, &cfg.valence_mode),
+            donated_pairs: raise_u8_pattern(self.donated_pairs, &cfg.donated_pairs_mode),
+            accepted_pairs: raise_u8_pattern(self.accepted_pairs, &cfg.accepted_pairs_mode),
             aromatic_valence: match (&self.aromatic_valence, &cfg.aromatic_valence_mode) {
                 (AromaticValencePattern::Any, AromaticValenceMode::Required) => None,
                 (AromaticValencePattern::NotAromatic, AromaticValenceMode::NotAromatic) => None,
@@ -711,7 +706,7 @@ impl ToAst<AtomAst> for AtomPattern {
                     Some(AromaticExpr::Value(ValueAst::Lit(*n as i32)))
                 }
             },
-            multicenter_valence: raise_pattern_u8(
+            multicenter_valence: raise_u8_pattern(
                 self.multicenter_valence,
                 &cfg.multicenter_valence_mode,
             ),

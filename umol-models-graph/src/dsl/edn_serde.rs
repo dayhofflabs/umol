@@ -143,6 +143,17 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         }
     }
 
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.0 {
+            Edn::Map(map) => visitor.visit_map(EdnMap::new(map)),
+            Edn::Nil => visitor.visit_map(EdnMap::new(BTreeMap::new())),
+            other => Err(EdnError::msg(format!("expected map, got {other:?}"))),
+        }
+    }
+
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
@@ -152,7 +163,11 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        self.deserialize_map(visitor)
+        match self.0 {
+            Edn::Map(map) => visitor.visit_map(EdnStructMap::new(map)),
+            Edn::Nil => visitor.visit_map(EdnStructMap::new(BTreeMap::new())),
+            other => Err(EdnError::msg(format!("expected map, got {other:?}"))),
+        }
     }
 
     fn deserialize_unit_struct<V>(
@@ -312,7 +327,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     }
 
     serde::forward_to_deserialize_any! {
-        bool i64 f32 f64 char str unit map ignored_any seq
+        bool i64 f32 f64 char str unit ignored_any seq
     }
 }
 
@@ -367,6 +382,50 @@ impl<'de> MapAccess<'de> for EdnMap<'de> {
     where
         K: DeserializeSeed<'de>,
     {
+        match self.iter.next() {
+            Some((k, v)) => {
+                self.pending_value = Some(v);
+                seed.deserialize(EdnDeserializer(k)).map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        let v = self
+            .pending_value
+            .take()
+            .expect("next_value_seed called without preceding next_key_seed");
+        seed.deserialize(EdnDeserializer(v))
+    }
+}
+
+/// Map access that only yields string-like keys (keywords, symbols, strings).
+/// Used for struct deserialization where field names must be strings.
+struct EdnStructMap<'de> {
+    iter: std::collections::btree_map::IntoIter<Edn<'de>, Edn<'de>>,
+    pending_value: Option<Edn<'de>>,
+}
+
+impl<'de> EdnStructMap<'de> {
+    fn new(map: BTreeMap<Edn<'de>, Edn<'de>>) -> Self {
+        Self {
+            iter: map.into_iter(),
+            pending_value: None,
+        }
+    }
+}
+
+impl<'de> MapAccess<'de> for EdnStructMap<'de> {
+    type Error = EdnError;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
+    where
+        K: DeserializeSeed<'de>,
+    {
         loop {
             match self.iter.next() {
                 Some((k, v)) => match &k {
@@ -374,7 +433,7 @@ impl<'de> MapAccess<'de> for EdnMap<'de> {
                         self.pending_value = Some(v);
                         return seed.deserialize(EdnDeserializer(k)).map(Some);
                     }
-                    _ => continue, // skip non-string keys
+                    _ => continue,
                 },
                 None => return Ok(None),
             }

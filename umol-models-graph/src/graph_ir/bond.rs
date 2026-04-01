@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use umol_data::{SpinMultiplicity, SpinState, SpinStateError};
 
-use super::ast_utils::{raise_spin_m_ground, raise_spin_u_ground};
+use super::ast_utils::raise_spin_ground;
 use super::bond_pattern::BondPattern;
 use super::error::{ResolutionError, ValidationError};
 use crate::dsl::ast::{FromAst, ToAst};
@@ -102,26 +102,20 @@ impl FromAst<BondAst> for Bond {
 
 impl ToAst<BondAst> for Bond {
     fn to_ast(&self, cfg: &BondDslConfig) -> BondAst {
-        let u = self.unpaired_electrons();
-        let m = self.multiplicity();
+        let (spin_u, spin_m) = raise_spin_ground(
+            self.unpaired_electrons(),
+            self.multiplicity(),
+            &cfg.unpaired_electrons_mode,
+            &cfg.multiplicity_mode,
+        );
         BondAst {
             order: ValueAst::Lit(self.order() as i32),
             charge: match (self.charge(), &cfg.charge_mode) {
                 (0, NumericMode::Zero) => None,
                 (n, _) => Some(ValueAst::Lit(n as i32)),
             },
-            unpaired_electrons: raise_spin_u_ground(
-                u,
-                m,
-                &cfg.unpaired_electrons_mode,
-                &cfg.multiplicity_mode,
-            ),
-            multiplicity: raise_spin_m_ground(
-                u,
-                m,
-                &cfg.unpaired_electrons_mode,
-                &cfg.multiplicity_mode,
-            ),
+            unpaired_electrons: spin_u,
+            multiplicity: spin_m,
         }
     }
 }

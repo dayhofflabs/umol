@@ -36,7 +36,8 @@ use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::dsl::ast::{FromAst, ToAst};
 use crate::dsl::config::{BondDslConfig, MoleculeDslConfig};
-use crate::dsl::error::LoweringError;
+use crate::dsl::edn_serde::{edn_from_str, edn_to_string};
+use crate::dsl::error::{LoweringError, ParseError};
 use crate::dsl::molecule::{
     parse_molecule_dsl, AromaticSystem as AstAromaticSystem, Atoms, BondSpec,
     CovalentBond as AstCovalentBond, DativeBond as AstDativeBond, MoleculeAst,
@@ -54,6 +55,20 @@ pub struct ResolutionContext {
     pub atom_aromatic_hints: HashMap<AtomIndex, bool>,
     pub bond_aromatic_hints: HashMap<BondIndex, bool>,
     pub atom_normal_implicit_hydrogens: HashSet<AtomIndex>,
+}
+
+impl fmt::Display for ResolutionContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        edn_to_string(self).map_err(|_| fmt::Error)?.fmt(f)
+    }
+}
+
+impl FromStr for ResolutionContext {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        edn_from_str(s)
+    }
 }
 
 /// Builder for constructing a `Molecule`. Carries `AtomPattern` nodes during

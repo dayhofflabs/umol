@@ -1,11 +1,14 @@
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
+
 use rstest::*;
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 use umol_data::Element;
 
 use super::super::atom_pattern::AtomPattern;
 use super::super::bond_pattern::BondPattern;
 use super::super::config::ResolveConfig;
-use super::super::molecule::Molecule;
+use super::super::molecule::{AtomIndex, BondIndex, Molecule};
 use super::*;
 use crate::graph_ir::atom::Atom;
 
@@ -63,8 +66,8 @@ fn naphthalene_builder() -> MoleculeBuilder {
 }
 
 #[rustfmt::skip]
-    #[fixture]
-    fn cubane_builder() -> MoleculeBuilder {
+#[fixture]
+fn cubane_builder() -> MoleculeBuilder {
         let mut builder = MoleculeBuilder::new();
         let atoms: Vec<AtomIndex> = (0..8)
             .map(|_| builder.add_atom(AtomPattern::new(Element::C)))
@@ -143,32 +146,58 @@ fn test_biconnected_components(
     assert_eq!(sizes, expected_sizes);
 }
 
-#[test]
-fn test_atom_aromatic_valence_finds_aromatic_candidate_not_just_first() {
+#[rstest]
+#[case::non_aromatic(vec!["C#v4"], 0)]
+#[case::aromatic_second(vec!["C#v4", "C#h#v2#a"], 1)]
+#[case::missing(vec![], 0)]
+fn test_molecule_builder_atom_aromatic_valence(
+    #[case] candidates: Vec<&str>,
+    #[case] expected: u8,
+) {
     let mut builder = MoleculeBuilder::new();
     let atom = builder.add_atom(AtomPattern::new(Element::C));
-    builder
-        .set_atom_candidates(
-            atom,
-            SmallVec::from_vec(vec![
-                "C#v4".parse::<Atom>().unwrap(),
-                "C#h#v2#a".parse::<Atom>().unwrap(),
-            ]),
-        )
-        .expect("atom should exist");
-    assert_eq!(builder.atom_aromatic_valence(atom), 1);
+    if !candidates.is_empty() {
+        builder
+            .set_atom_candidates(
+                atom,
+                candidates
+                    .into_iter()
+                    .map(|s| s.parse::<Atom>().unwrap())
+                    .collect(),
+            )
+            .expect("atom should exist");
+    }
+    assert_eq!(builder.atom_aromatic_valence(atom), expected);
 }
 
-#[test]
-fn test_atom_aromatic_valence_zero_for_non_aromatic_or_missing() {
-    let mut builder = MoleculeBuilder::new();
-    let atom = builder.add_atom(AtomPattern::new(Element::C));
-    builder
-        .set_atom_candidates(
-            atom,
-            SmallVec::from_elem("C#v4".parse::<Atom>().unwrap(), 1),
-        )
-        .expect("atom should exist");
-    assert_eq!(builder.atom_aromatic_valence(atom), 0);
-    assert_eq!(builder.atom_aromatic_valence(AtomIndex::new(999)), 0);
+#[rstest]
+#[case::empty(ResolutionContext::default(), "{:atom_candidates {} :atom_aromatic_hints {} :bond_aromatic_hints {} :atom_normal_implicit_hydrogens []}")]
+#[case::nonaromatic(ResolutionContext { atom_candidates: HashMap::from([(AtomIndex::new(0), smallvec!["C#h4".parse::<Atom>().unwrap()])]),
+    atom_aromatic_hints: HashMap::from([(AtomIndex::new(0), false)]), bond_aromatic_hints: HashMap::new(), atom_normal_implicit_hydrogens: HashSet::from([AtomIndex::new(0)]) },
+    "{:atom_candidates {0 [\"C#h4\"]} :atom_aromatic_hints {0 false} :bond_aromatic_hints {} :atom_normal_implicit_hydrogens [0]}")]
+fn test_resolution_context_display(#[case] ctx: ResolutionContext, #[case] expected: &str) {
+    assert_eq!(ctx.to_string(), expected);
+}
+
+#[rstest]
+#[case::nonaromatic("{:atom_candidates {0 [\"C#h4\"]} :atom_aromatic_hints {0 false} :bond_aromatic_hints {} :atom_normal_implicit_hydrogens [0]}",
+    ResolutionContext { atom_candidates: HashMap::from([(AtomIndex::new(0), smallvec!["C#h4".parse::<Atom>().unwrap()])]), atom_aromatic_hints: HashMap::from([(AtomIndex::new(0), false)]),
+    bond_aromatic_hints: HashMap::new(), atom_normal_implicit_hydrogens: HashSet::from([AtomIndex::new(0)]) })]
+#[case::aromatic("{:atom_candidates {0 [\"C#h#v2#a\"] 1 [\"C#h#v2#a\"] 2 [\"C#h#v2#a\"] 3 [\"C#h#v2#a\"] 4 [\"C#h#v2#a\"] 5 [\"C#h#v2#a\"]} :atom_aromatic_hints {0 true 1 true 2 true 3 true 4 true 5 true}
+                   :bond_aromatic_hints {0 true 1 true 2 true 3 true 4 true 5 true} :atom_normal_implicit_hydrogens [0 1 2 3 4 5]}",
+    ResolutionContext { atom_candidates: HashMap::from([ (AtomIndex::new(0), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]), (AtomIndex::new(1), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]),
+                                                         (AtomIndex::new(2), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]), (AtomIndex::new(3), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]),
+                                                         (AtomIndex::new(4), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]), (AtomIndex::new(5), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()])]),
+                       atom_aromatic_hints: HashMap::from([ (AtomIndex::new(0), true), (AtomIndex::new(1), true), (AtomIndex::new(2), true), (AtomIndex::new(3), true), (AtomIndex::new(4), true), (AtomIndex::new(5), true) ]),
+                       bond_aromatic_hints: HashMap::from([ (BondIndex::new(0), true), (BondIndex::new(1), true), (BondIndex::new(2), true), (BondIndex::new(3), true), (BondIndex::new(4), true), (BondIndex::new(5), true) ]),
+                       atom_normal_implicit_hydrogens: HashSet::from([ AtomIndex::new(0), AtomIndex::new(1), AtomIndex::new(2), AtomIndex::new(3), AtomIndex::new(4), AtomIndex::new(5) ]) })]
+fn test_resolution_context_from_str(#[case] edn: &str, #[case] expected: ResolutionContext) {
+    let ctx = ResolutionContext::from_str(edn).unwrap();
+    assert_eq!(ctx.atom_candidates, expected.atom_candidates);
+    assert_eq!(ctx.atom_aromatic_hints, expected.atom_aromatic_hints);
+    assert_eq!(ctx.bond_aromatic_hints, expected.bond_aromatic_hints);
+    assert_eq!(
+        ctx.atom_normal_implicit_hydrogens,
+        expected.atom_normal_implicit_hydrogens
+    );
 }
