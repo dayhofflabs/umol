@@ -2,8 +2,8 @@
 members = [
     "umol",
     "umol-data",
+    "umol-edn",
     "umol-fuzz",
-    "umol-macros",
     "umol-geometric",
     "umol-graph",
     "umol-params",
