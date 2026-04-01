@@ -13,6 +13,7 @@ gir = "gir"
 mis = "mis"
 edn = "edn"
 EDN = "EDN"
+ser = "ser"
 UNCATALOGUED = "UNCATALOGUED"
 # Element symbols
 H = "H"
