@@ -4,14 +4,47 @@ use std::collections::BTreeMap;
 
 use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
+use crate::config::ParseConfig;
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::reader::read_string;
+use crate::reader::{read_string, Reader};
 
 /// Deserialize a Rust value from an EDN string.
 pub fn from_str<'a, T: serde::Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
     let val = read_string(s)?;
     T::deserialize(EdnDeserializer(val)).map_err(Into::into)
+}
+
+/// Streaming deserializer over multiple EDN values in a string.
+pub struct StreamDeserializer<'a, T> {
+    reader: Reader<'a>,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<'a, T> StreamDeserializer<'a, T> {
+    pub fn new(input: &'a str) -> Self {
+        Self {
+            reader: Reader::new(input),
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn with_config(input: &'a str, config: ParseConfig) -> Self {
+        Self {
+            reader: Reader::with_config(input, config),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, T: serde::Deserialize<'a>> Iterator for StreamDeserializer<'a, T> {
+    type Item = Result<T, EdnError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.reader.next().map(|result| {
+            result.and_then(|edn| T::deserialize(EdnDeserializer(edn)).map_err(Into::into))
+        })
+    }
 }
 
 /// Deserializer wrapping an `Edn` value.
@@ -555,5 +588,52 @@ mod tests {
     fn test_deserialize_f32() {
         assert!((from_str::<f32>("3.14").unwrap() - 3.14f32).abs() < 1e-5);
         assert!((from_str::<f32>("12").unwrap() - 12.0f32).abs() < 1e-5);
+    }
+
+    #[rstest]
+    #[case("1 2 3", vec![1, 2, 3])]
+    #[case("  1  2  3  ", vec![1, 2, 3])]
+    #[case("", vec![])]
+    #[case("7", vec![7])]
+    fn test_stream_deserializer_i64(#[case] input: &str, #[case] expected: Vec<i64>) {
+        let results: Result<Vec<i64>, _> = StreamDeserializer::new(input).collect();
+        assert_eq!(results.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_stream_deserializer_mixed_types() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Record {
+            name: String,
+            value: i64,
+        }
+        let input = r#"{:name "a" :value 1} {:name "b" :value 2}"#;
+        let results: Vec<Record> = StreamDeserializer::new(input)
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(results, vec![
+            Record { name: "a".into(), value: 1 },
+            Record { name: "b".into(), value: 2 },
+        ]);
+    }
+
+    #[test]
+    fn test_stream_deserializer_error_propagation() {
+        let input = "1 2 [invalid";
+        let results: Vec<Result<i64, _>> = StreamDeserializer::new(input).collect();
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].as_ref().unwrap(), &1);
+        assert_eq!(results[1].as_ref().unwrap(), &2);
+        assert!(results[2].is_err());
+    }
+
+    #[test]
+    fn test_stream_deserializer_stops_after_error() {
+        let input = "1 [invalid 3";
+        let results: Vec<Result<i64, _>> = StreamDeserializer::new(input).collect();
+        // Reader sets remaining to "" on error, so only 2 items
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].as_ref().unwrap(), &1);
+        assert!(results[1].is_err());
     }
 }
