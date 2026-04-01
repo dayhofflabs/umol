@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::DataError;
+use crate::error::IsotopeError;
 
 use crate::half_life::HalfLife;
 use crate::isotope_data::{ISOTOPE_DATA, LIGHT_ISOTOPE_MAP};
@@ -80,17 +80,19 @@ impl NamedIsotope {
 }
 
 impl TryFrom<&str> for NamedIsotope {
-    type Error = DataError;
+    type Error = IsotopeError;
 
-    fn try_from(s: &str) -> Result<Self, DataError> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()))
+    fn try_from(s: &str) -> Result<Self, IsotopeError> {
+        Self::from_symbol(s).ok_or_else(|| IsotopeError::InvalidSymbol {
+            symbol: s.to_string(),
+        })
     }
 }
 
 impl FromStr for NamedIsotope {
-    type Err = DataError;
+    type Err = IsotopeError;
 
-    fn from_str(s: &str) -> Result<Self, DataError> {
+    fn from_str(s: &str) -> Result<Self, IsotopeError> {
         Self::try_from(s)
     }
 }
@@ -167,7 +169,9 @@ impl Isotope {
             return None;
         }
 
-        let mass_number = atoi::atoi::<u32>(mass_number_bytes)?;
+        let mass_number = std::str::from_utf8(mass_number_bytes)
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())?;
         if mass_number == 0 {
             return None;
         }
@@ -224,17 +228,19 @@ impl Isotope {
 }
 
 impl TryFrom<&str> for Isotope {
-    type Error = DataError;
+    type Error = IsotopeError;
 
-    fn try_from(s: &str) -> Result<Self, DataError> {
-        Self::from_symbol(s).ok_or_else(|| DataError::InvalidIsotope(s.to_string()))
+    fn try_from(s: &str) -> Result<Self, IsotopeError> {
+        Self::from_symbol(s).ok_or_else(|| IsotopeError::InvalidSymbol {
+            symbol: s.to_string(),
+        })
     }
 }
 
 impl FromStr for Isotope {
-    type Err = DataError;
+    type Err = IsotopeError;
 
-    fn from_str(s: &str) -> Result<Self, DataError> {
+    fn from_str(s: &str) -> Result<Self, IsotopeError> {
         Self::try_from(s)
     }
 }

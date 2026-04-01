@@ -7,7 +7,7 @@ use serde::de::{Deserializer, Error as SerdeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
-use thiserror::Error;
+use crate::error::SpinStateError;
 
 /// Spin multiplicity descriptor (2S+1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Display, EnumString,
@@ -64,34 +64,6 @@ macro_rules! spin {
     ($s:expr) => {{
         $crate::SpinState::from_str($s).expect("invalid spin state")
     }};
-}
-
-/// Error for invalid spin-state values and parsing.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum SpinStateError {
-    #[error("unexpected token '{token}'")]
-    UnexpectedToken { token: char },
-
-    #[error("invalid tag '{tag}'")]
-    InvalidTag { tag: String },
-
-    #[error("duplicate tag '{tag}'")]
-    DuplicateTag { tag: String },
-
-    #[error("unpaired electrons {unpaired_electrons} out of range")]
-    UnpairedElectronsOutOfRange { unpaired_electrons: u8 },
-
-    #[error("multiplicity {multiplicity} out of range")]
-    MultiplicityOutOfRange { multiplicity: u8 },
-
-    #[error("spin state is underdetermined")]
-    Underdetermined,
-
-    #[error("{unpaired_electrons} unpaired electrons, {multiplicity} multiplicity incompatible")]
-    Incompatible {
-        unpaired_electrons: u8,
-        multiplicity: SpinMultiplicity,
-    },
 }
 
 /// Validated (unpaired_electrons, multiplicity) pair.

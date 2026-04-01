@@ -10,9 +10,27 @@ use super::transform::TransformError;
 use crate::diagnostics::Diagnostic;
 use crate::table_ir::bond::BondOrder;
 
-// ---------------------------------------------------------------------------
-// Tier 1: sub-concern enums (flat, no #[from])
-// ---------------------------------------------------------------------------
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum GraphIrError {
+    #[error(transparent)]
+    Validation(#[from] ValidationError),
+    #[error(transparent)]
+    Resolution(#[from] ResolutionError),
+    #[error(transparent)]
+    Aromaticity(#[from] AromaticityError),
+    #[error(transparent)]
+    Kekulization(#[from] KekulizationError),
+    #[error(transparent)]
+    Transform(#[from] TransformError),
+    #[error(transparent)]
+    TopologyExport(#[from] TopologyExportError),
+}
+
+impl From<ResolutionError> for Diagnostic {
+    fn from(_error: ResolutionError) -> Self {
+        todo!()
+    }
+}
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ValidationError {
@@ -20,8 +38,6 @@ pub enum ValidationError {
     NonGround { field: &'static str },
     #[error("invalid spin multiplicity: {0}")]
     InvalidMultiplicity(u8),
-
-    // Atom invariant violations (from AtomError)
     #[error("field '{field}' out of range: {value} not in [{min}, {max}]")]
     OutOfRange {
         field: &'static str,
@@ -44,8 +60,6 @@ pub enum ValidationError {
         orbital_invariant: i16,
         electron_invariant: i16,
     },
-
-    // Spin state validation
     #[error("spin state is underdetermined")]
     SpinUnderdetermined,
     #[error("{unpaired_electrons} unpaired electrons, {multiplicity} multiplicity incompatible")]
@@ -83,15 +97,12 @@ impl From<SpinStateError> for ValidationError {
                 }
             }
             // Parse-related variants — shouldn't reach validation, but map them sensibly
-            SpinStateError::UnexpectedToken { token } => ValidationError::InvalidMultiplicity(
-                u8::try_from(token as u32).unwrap_or(0),
-            ),
-            SpinStateError::InvalidTag { .. } => {
-                ValidationError::NonGround { field: "spin" }
+            // TODO: Rethink
+            SpinStateError::UnexpectedToken { token } => {
+                ValidationError::InvalidMultiplicity(u8::try_from(token as u32).unwrap_or(0))
             }
-            SpinStateError::DuplicateTag { .. } => {
-                ValidationError::NonGround { field: "spin" }
-            }
+            SpinStateError::InvalidTag { .. } => ValidationError::NonGround { field: "spin" },
+            SpinStateError::DuplicateTag { .. } => ValidationError::NonGround { field: "spin" },
         }
     }
 }
@@ -110,7 +121,6 @@ pub enum ResolutionError {
     InvalidAtomTypeRegistry(String),
     #[error("Invalid valence table: {0}")]
     InvalidValenceTable(String),
-
     #[error("Molecule has more than one connected component")]
     TopologyDisconnected,
     #[error("Self-loop on bond {0}")]
@@ -125,10 +135,8 @@ pub enum ResolutionError {
     ValenceNoMatch(String),
     #[error("Valence ambiguous for {0}")]
     ValenceAmbiguous(String),
-
     #[error("Aromaticity inconsistent: {0}")]
     AromaticityInconsistent(String),
-
     #[error("Molecular charge mismatch: explicit {explicit}, from atoms {atom_sum}")]
     MolecularChargeMismatch { explicit: i8, atom_sum: i8 },
     #[error(
@@ -147,30 +155,4 @@ pub enum ResolutionError {
         atom_unpaired_sum: u16,
         compatible_multiplicities: Vec<u8>,
     },
-}
-
-// ---------------------------------------------------------------------------
-// Tier 2: module dispatch enum
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum GraphIrError {
-    #[error(transparent)]
-    Validation(#[from] ValidationError),
-    #[error(transparent)]
-    Resolution(#[from] ResolutionError),
-    #[error(transparent)]
-    Aromaticity(#[from] AromaticityError),
-    #[error(transparent)]
-    Kekulization(#[from] KekulizationError),
-    #[error(transparent)]
-    Transform(#[from] TransformError),
-    #[error(transparent)]
-    TopologyExport(#[from] TopologyExportError),
-}
-
-impl From<ResolutionError> for Diagnostic {
-    fn from(_error: ResolutionError) -> Self {
-        todo!()
-    }
 }

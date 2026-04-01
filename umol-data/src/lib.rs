@@ -11,6 +11,7 @@ pub mod spin;
 
 pub use configuration::*;
 pub use element::*;
+pub use error::*;
 pub use isotope::*;
 pub use occupation::*;
 pub use spin::*;
