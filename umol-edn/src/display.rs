@@ -22,7 +22,7 @@ impl fmt::Display for Edn<'_> {
                 write!(f, "{{")?;
                 for (i, (k, v)) in m.iter().enumerate() {
                     if i > 0 {
-                        write!(f, ", ")?;
+                        write!(f, " ")?;
                     }
                     write!(f, "{k} {v}")?;
                 }
@@ -212,7 +212,7 @@ mod tests {
         m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
         m.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
         let s = Edn::Map(m).to_string();
-        assert_eq!(s, "{:a 1, :b 2}");
+        assert_eq!(s, "{:a 1 :b 2}");
     }
 
     #[test]

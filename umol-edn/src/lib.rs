@@ -4,6 +4,7 @@ pub mod config;
 mod display;
 pub mod edn;
 pub mod error;
+pub mod formatter;
 pub mod parser;
 pub mod reader;
 
@@ -17,6 +18,9 @@ pub use config::{Dialect, DuplicateKeyPolicy, ParseConfig};
 pub use de::{from_str, EdnDeserializer, StreamDeserializer};
 pub use edn::{Edn, Keyword, Symbol};
 pub use error::EdnError;
+pub use formatter::EdnFormatter;
+#[cfg(feature = "serde")]
+pub use formatter::{to_string_pretty, to_string_pretty_with};
 pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
 #[cfg(feature = "serde")]
 pub use ser::to_string;

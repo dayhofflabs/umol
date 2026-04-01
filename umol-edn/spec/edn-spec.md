@@ -1,11 +1,12 @@
 # umol-edn Specification
 
 This document attempts to clarify the
-[EDN specification](https://github.com/edn-format/edn) for the purposes of this
-implementation where the original contains some ambiguity. umol-edn supports two
-dialects: **Edn** (strict) and **Clojure** (default). The Edn dialect tracks the
-spec text with one extension (leading `+` on numbers). The Clojure dialect adds
-features present in Clojure's reader.
+[EDN specification](https://github.com/edn-format/edn) for the purposes of the
+umol-edn implementation, in particular resolves the points, on which original
+specification has some ambiguity. umol-edn supports two dialects: **Edn**
+(strict) and **Clojure** (default). The Edn dialect tracks the spec text with
+one extension (leading `+` on numbers). The Clojure dialect adds features
+present in Clojure's reader.
 
 ## 1. Whitespace and commas
 
