@@ -10,31 +10,9 @@ use winnow::stream::{Location, Stream};
 use winnow::token::{any, one_of, take_while};
 use winnow::{LocatingSlice, Parser};
 
+use crate::config::{Dialect, DuplicateKeyPolicy, ParseConfig};
 use crate::edn::{Edn, Keyword, Symbol};
 use crate::error::{unwrap_err, EdnError};
-
-/// Parser configuration.
-#[derive(Clone, Debug)]
-pub struct ParseConfig {
-    pub strict: bool,
-    pub duplicate_keys: DuplicateKeyPolicy,
-}
-
-impl Default for ParseConfig {
-    fn default() -> Self {
-        ParseConfig {
-            strict: false,
-            duplicate_keys: DuplicateKeyPolicy::Error,
-        }
-    }
-}
-
-/// Behavior on duplicate map keys.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DuplicateKeyPolicy {
-    Error,
-    LastWins,
-}
 
 type Input<'a> = LocatingSlice<&'a str>;
 type E = ErrMode<EdnError>;
@@ -115,7 +93,7 @@ fn ws_and_comments<'a>(input: &mut Input<'a>) -> PResult<()> {
             let _ = "#_".parse_next(input)?;
             ws_and_comments(input).ok();
             let discard_config = ParseConfig {
-                strict: false,
+                dialect: Dialect::Clojure,
                 duplicate_keys: DuplicateKeyPolicy::LastWins,
             };
             let _ = edn_value(&discard_config).parse_next(input)?;
@@ -148,8 +126,8 @@ where
             '{' => edn_map(config).parse_next(input),
             '#' => edn_dispatch(config).parse_next(input),
             ':' => edn_keyword(input),
-            '"' => edn_string(config.strict).parse_next(input),
-            '\\' => edn_char(config.strict).parse_next(input),
+            '"' => edn_string(config.dialect).parse_next(input),
+            '\\' => edn_char(config.dialect).parse_next(input),
             '+' | '-' => edn_number_or_symbol(config).parse_next(input),
             c if c.is_ascii_digit() => edn_number(input),
             _ => edn_symbol_or_literal(input),
@@ -248,7 +226,7 @@ where
 
 // --- Strings ---
 
-fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
+fn edn_string<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '"'.parse_next(input)?;
         let mut result = String::new();
@@ -280,8 +258,8 @@ fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
                         'n' => result.push('\n'),
                         '\\' => result.push('\\'),
                         '"' => result.push('"'),
-                        'b' if !strict => result.push('\u{0008}'),
-                        'f' if !strict => result.push('\u{000C}'),
+                        'b' if dialect == Dialect::Clojure => result.push('\u{0008}'),
+                        'f' if dialect == Dialect::Clojure => result.push('\u{000C}'),
                         'u' => {
                             let hex: &str =
                                 take_while(4..=4, |c: char| c.is_ascii_hexdigit())
@@ -293,7 +271,7 @@ fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
                                 .ok_or_else(|| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
                             result.push(ch);
                         }
-                        '0'..='7' if !strict => {
+                        '0'..='7' if dialect == Dialect::Clojure => {
                             let mut val = (esc as u32) - ('0' as u32);
                             for _ in 0..2 {
                                 let s3 = rest(input);
@@ -326,12 +304,12 @@ fn edn_string<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
 
 // --- Characters ---
 
-fn edn_char<'a>(strict: bool) -> impl Parser<Input<'a>, Edn<'a>, E> {
+fn edn_char<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '\\'.parse_next(input)?;
         let s = rest(input);
 
-        let named: &[(&str, char)] = if strict {
+        let named: &[(&str, char)] = if dialect == Dialect::Edn {
             &[
                 ("newline", '\n'),
                 ("return", '\r'),
@@ -559,7 +537,7 @@ mod tests {
     use crate::edn::{Edn, Keyword};
     use crate::error::EdnError;
     use crate::reader::{read_all, read_string, read_string_with, Reader};
-    use super::{DuplicateKeyPolicy, ParseConfig};
+    use crate::config::{DuplicateKeyPolicy, ParseConfig};
 
     // --- Primitives ---
 

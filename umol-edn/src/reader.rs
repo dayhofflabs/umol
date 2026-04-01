@@ -2,7 +2,8 @@
 
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::parser::{parse_all, parse_value, parse_value_strict, ParseConfig};
+use crate::config::ParseConfig;
+use crate::parser::{parse_all, parse_value, parse_value_strict};
 
 /// Parse a single EDN value from a string, rejecting trailing content.
 pub fn read_string<'a>(input: &'a str) -> Result<Edn<'a>, EdnError> {
