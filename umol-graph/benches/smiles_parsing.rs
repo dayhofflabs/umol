@@ -3,7 +3,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use umol_models_graph::io::smiles::{parse_extended_smiles_bytes, parse_smiles_bytes};
+use umol_graph::io::smiles::{parse_extended_smiles_bytes, parse_smiles_bytes};
 
 // Chain-only corpus, bare atoms (organic-only mix omitting bare H)
 fn chain_inputs() -> Vec<(&'static str, &'static [u8])> {

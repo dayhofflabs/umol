@@ -1,7 +1,7 @@
 use std::{env, fs, process};
 
-use umol_models_graph::io::ctfile::config::CtfileIoConfig;
-use umol_models_graph::io::ctfile::{
+use umol_graph::io::ctfile::config::CtfileIoConfig;
+use umol_graph::io::ctfile::{
     parse_extended_mol_bytes, parse_extended_mol_bytes_with, parse_mol_bytes, parse_mol_bytes_with,
 };
 

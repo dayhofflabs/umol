@@ -9,15 +9,15 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use serde::{Deserialize, Serialize};
-use umol_models_graph::dsl::ast::{FromAst, ToAst};
-use umol_models_graph::dsl::config::{
+use umol_graph::dsl::ast::{FromAst, ToAst};
+use umol_graph::dsl::config::{
     ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
 };
-use umol_models_graph::dsl::edn_serde::{edn_from_str, edn_to_string};
-use umol_models_graph::dsl::molecule::MoleculeAst;
-use umol_models_graph::graph_ir::config_data::ValenceTable;
-use umol_models_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
-use umol_models_graph::graph_ir::{resolve_molecule_with, ResolveConfig, ValenceStrategy};
+use umol_graph::dsl::edn_serde::{edn_from_str, edn_to_string};
+use umol_graph::dsl::molecule::MoleculeAst;
+use umol_graph::graph_ir::config_data::ValenceTable;
+use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
+use umol_graph::graph_ir::{resolve_molecule_with, ResolveConfig, ValenceStrategy};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]

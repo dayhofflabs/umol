@@ -19,12 +19,12 @@ use insta::{assert_yaml_snapshot, Settings};
 use regex::Regex;
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::smiles::config::SmilesIoConfig;
-use umol_models_graph::io::smiles::error::ParseError;
-use umol_models_graph::io::smiles::{
+use umol_graph::io::smiles::config::SmilesIoConfig;
+use umol_graph::io::smiles::error::ParseError;
+use umol_graph::io::smiles::{
     parse_extended_smiles_bytes_with, parse_smiles, parse_smiles_bytes_with,
 };
-use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
+use umol_graph::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]

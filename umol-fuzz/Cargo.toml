@@ -10,8 +10,8 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
-[dependencies.umol-models-graph]
-path = "../umol-models-graph"
+[dependencies.umol-graph]
+path = "../umol-graph"
 
 [[bin]]
 name = "opensmiles_fuzzing"

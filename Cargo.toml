@@ -4,8 +4,8 @@ members = [
     "umol-data",
     "umol-fuzz",
     "umol-macros",
-    "umol-models-geometric",
-    "umol-models-graph",
+    "umol-geometric",
+    "umol-graph",
     "umol-params",
 ]
 exclude = ["fuzz"]

@@ -13,10 +13,10 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_models_graph::io::ctfile::config::CtfileIoConfig;
-use umol_models_graph::io::ctfile::error::ParseError;
-use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
-use umol_models_graph::table_ir::{ExtendedMolecule, Molecule};
+use umol_graph::io::ctfile::config::CtfileIoConfig;
+use umol_graph::io::ctfile::error::ParseError;
+use umol_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
+use umol_graph::table_ir::{ExtendedMolecule, Molecule};
 
 /// Category based on which parsers succeed
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

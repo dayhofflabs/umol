@@ -18,8 +18,8 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
-use umol_models_graph::io::ctfile::config::CtfileIoConfig;
-use umol_models_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
+use umol_graph::io::ctfile::config::CtfileIoConfig;
+use umol_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
 
 /// Results from running all 4 parsers on a file
 #[derive(Debug, Clone, Copy)]

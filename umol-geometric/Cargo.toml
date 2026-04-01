@@ -1,5 +1,5 @@
 [package]
-name = "umol-models-geometric"
+name = "umol-geometric"
 version = "0.1.0"
 authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 license = "MIT OR Apache-2.0"

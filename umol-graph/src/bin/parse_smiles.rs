@@ -1,7 +1,7 @@
 use clap::Parser;
-use umol_models_graph::graph_ir::molecule_builder::MoleculeBuilder;
-use umol_models_graph::graph_ir::resolve_molecule;
-use umol_models_graph::io::smiles::parse_smiles;
+use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;
+use umol_graph::graph_ir::resolve_molecule;
+use umol_graph::io::smiles::parse_smiles;
 
 #[derive(Parser)]
 #[command(name = "parse-smiles")]

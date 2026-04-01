@@ -14,9 +14,9 @@ mod topology_graph_behavior {
     use petgraph::prelude::Undirected;
     use petgraph::stable_graph::StableGraph;
     use umol_data::Element;
-    use umol_models_graph::graph_ir::atom_pattern::AtomPattern;
-    use umol_models_graph::graph_ir::bond_pattern::BondPattern;
-    use umol_models_graph::graph_ir::molecule_builder::MoleculeBuilder;
+    use umol_graph::graph_ir::atom_pattern::AtomPattern;
+    use umol_graph::graph_ir::bond_pattern::BondPattern;
+    use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;
 
     #[test]
     fn stable_graph_allows_self_loop() {

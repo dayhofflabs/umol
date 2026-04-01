@@ -28,8 +28,8 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use regex::Regex;
-use umol_models_graph::io::smiles::config::SmilesIoConfig;
-use umol_models_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles_bytes_with};
+use umol_graph::io::smiles::config::SmilesIoConfig;
+use umol_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles_bytes_with};
 
 #[derive(Parser)]
 #[command(name = "classify_smiles_strings")]

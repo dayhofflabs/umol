@@ -3,9 +3,9 @@
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_models_graph::io::smiles::config::SmilesIoConfig;
-use umol_models_graph::io::smiles::parser::parse_smiles_bytes_with;
-use umol_models_graph::io::smiles::{parse_smiles_bytes, ParseError};
+use umol_graph::io::smiles::config::SmilesIoConfig;
+use umol_graph::io::smiles::parser::parse_smiles_bytes_with;
+use umol_graph::io::smiles::{parse_smiles_bytes, ParseError};
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".

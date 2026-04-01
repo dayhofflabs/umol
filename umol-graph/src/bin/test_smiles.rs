@@ -3,8 +3,8 @@ use std::io::{self, BufRead, BufReader};
 use std::process;
 
 use clap::{Parser, ValueEnum};
-use umol_models_graph::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use umol_models_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles_bytes_with};
+use umol_graph::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
+use umol_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles_bytes_with};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ParserType {

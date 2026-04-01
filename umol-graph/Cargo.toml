@@ -1,5 +1,5 @@
 [package]
-name = "umol-models-graph"
+name = "umol-graph"
 version = "0.1.0"
 authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 edition = "2021"
