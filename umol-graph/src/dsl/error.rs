@@ -3,6 +3,7 @@
 use nom::error::{ErrorKind as NomErrorKind, ParseError as NomParseError};
 use thiserror::Error;
 use umol_data::SpinStateError;
+use umol_edn::EdnError;
 
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ParseError {
@@ -50,6 +51,15 @@ pub enum ParseError {
     UnknownAlias(String),
     #[error("Invalid spin state: {0}")]
     InvalidSpinState(#[from] SpinStateError),
+}
+
+impl From<EdnError> for ParseError {
+    fn from(e: EdnError) -> Self {
+        match &e {
+            EdnError::UnexpectedEof { .. } => ParseError::Incomplete,
+            _ => ParseError::EdnParse(e.to_string()),
+        }
+    }
 }
 
 impl<I> NomParseError<I> for ParseError {

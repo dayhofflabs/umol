@@ -4,18 +4,17 @@ use std::collections::HashSet;
 use std::fmt;
 use std::str::FromStr;
 
-use clojure_reader::edn::{self, Edn};
 use indexmap::IndexMap;
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{self, SerializeMap, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
+use umol_edn::{Edn, EdnDeserializer};
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
 use super::bond::{parse_bond_dsl, BondAst};
-use super::config::{MoleculeDslConfig};
-use super::edn_serde::{edn_to_string, map_edn_error, EdnDeserializer, EdnError};
+use super::config::MoleculeDslConfig;
 use super::error::ParseError;
 
 /// `:atoms` - either a named map or an indexed vector
@@ -395,7 +394,7 @@ impl<'de> Visitor<'de> for MoleculeAstVisitor {
 /// Pre-validate atom strings at the EDN level so parse errors get proper types.
 fn validate_edn_atom_strings(top: &Edn<'_>) -> Result<(), ParseError> {
     let Edn::Map(map) = top else { return Ok(()) };
-    let Some(atoms) = map.get(&Edn::Key("atoms")) else {
+    let Some(atoms) = map.get(&Edn::keyword("atoms")) else {
         return Ok(());
     };
     let values: Box<dyn Iterator<Item = &Edn<'_>>> = match atoms {
@@ -479,13 +478,7 @@ fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
 /// keyword references (`:alias`) in the atoms section are replaced with their
 /// atom string definitions from the `:aliases` vector.
 pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
-    let (top, rest) = edn::read(input).map_err(map_edn_error)?;
-    let rest = rest.trim();
-    if !rest.is_empty() {
-        return Err(ParseError::EdnParse(format!(
-            "unexpected trailing content: {rest}"
-        )));
-    }
+    let top = umol_edn::read_string(input)?;
 
     // Pre-check: must be a map
     if !matches!(&top, Edn::Map(_)) {
@@ -498,10 +491,10 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
 
     // Pre-check: required keys
     if let Edn::Map(ref m) = top {
-        if !m.contains_key(&Edn::Key("atoms")) {
+        if !m.contains_key(&Edn::keyword("atoms")) {
             return Err(ParseError::MissingKey(":atoms".to_string()));
         }
-        if !m.contains_key(&Edn::Key("bonds")) {
+        if !m.contains_key(&Edn::keyword("bonds")) {
             return Err(ParseError::MissingKey(":bonds".to_string()));
         }
     }
@@ -509,8 +502,7 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
     // Pre-validate atom strings so parse errors surface with proper types
     validate_edn_atom_strings(&top)?;
 
-    let ast = MoleculeAst::deserialize(EdnDeserializer(top))
-        .map_err(EdnError::into_parse_error)?;
+    let ast = MoleculeAst::deserialize(EdnDeserializer(top)).map_err(ParseError::from)?;
 
     validate(&ast)?;
     Ok(ast)
@@ -523,14 +515,14 @@ fn resolve_edn_aliases(top: Edn<'_>) -> Result<Edn<'_>, ParseError> {
         return Ok(top);
     };
 
-    let aliases_key = Edn::Key("aliases");
+    let aliases_key = Edn::keyword("aliases");
     let alias_map = if let Some(aliases_edn) = map.remove(&aliases_key) {
         parse_edn_aliases(&aliases_edn)?
     } else {
         IndexMap::new()
     };
 
-    let atoms_key = Edn::Key("atoms");
+    let atoms_key = Edn::keyword("atoms");
     if let Some(atoms) = map.remove(&atoms_key) {
         let resolved = resolve_atoms_aliases(atoms, &alias_map)?;
         map.insert(atoms_key, resolved);
@@ -539,7 +531,7 @@ fn resolve_edn_aliases(top: Edn<'_>) -> Result<Edn<'_>, ParseError> {
     Ok(Edn::Map(map))
 }
 
-fn parse_edn_aliases<'e>(edn: &Edn<'e>) -> Result<IndexMap<&'e str, Edn<'e>>, ParseError> {
+fn parse_edn_aliases<'e>(edn: &Edn<'e>) -> Result<IndexMap<String, Edn<'e>>, ParseError> {
     let Edn::Vector(v) = edn else {
         return Err(ParseError::WrongFieldType {
             field: "aliases".to_string(),
@@ -554,31 +546,32 @@ fn parse_edn_aliases<'e>(edn: &Edn<'e>) -> Result<IndexMap<&'e str, Edn<'e>>, Pa
     }
     let mut aliases = IndexMap::new();
     for pair in v.chunks(2) {
-        let Edn::Key(name) = &pair[0] else {
+        let Edn::Keyword(k) = &pair[0] else {
             return Err(ParseError::EdnParse(
                 "expected keyword as alias name".to_string(),
             ));
         };
-        if aliases.contains_key(name) {
-            return Err(ParseError::DuplicateId((*name).to_string()));
+        let name = k.as_str().to_string();
+        if aliases.contains_key(&name) {
+            return Err(ParseError::DuplicateId(name));
         }
-        aliases.insert(*name, pair[1].clone());
+        aliases.insert(name, pair[1].clone());
     }
     Ok(aliases)
 }
 
 fn resolve_atoms_aliases<'e>(
     atoms: Edn<'e>,
-    aliases: &IndexMap<&'e str, Edn<'e>>,
+    aliases: &IndexMap<String, Edn<'e>>,
 ) -> Result<Edn<'e>, ParseError> {
     match atoms {
         Edn::Map(m) => {
             let mut resolved = std::collections::BTreeMap::new();
             for (k, v) in m {
                 let v = resolve_one_atom(v, aliases)?;
-                if let Edn::Key(name) = &k {
-                    if aliases.contains_key(name) {
-                        return Err(ParseError::DuplicateId((*name).to_string()));
+                if let Edn::Keyword(ref kw) = k {
+                    if aliases.contains_key(kw.as_str()) {
+                        return Err(ParseError::DuplicateId(kw.as_str().to_string()));
                     }
                 }
                 resolved.insert(k, v);
@@ -598,13 +591,13 @@ fn resolve_atoms_aliases<'e>(
 
 fn resolve_one_atom<'e>(
     edn: Edn<'e>,
-    aliases: &IndexMap<&'e str, Edn<'e>>,
+    aliases: &IndexMap<String, Edn<'e>>,
 ) -> Result<Edn<'e>, ParseError> {
     match &edn {
-        Edn::Key(name) => aliases
-            .get(name)
+        Edn::Keyword(k) => aliases
+            .get(k.as_str())
             .cloned()
-            .ok_or_else(|| ParseError::UnknownAlias((*name).to_string())),
+            .ok_or_else(|| ParseError::UnknownAlias(k.as_str().to_string())),
         _ => Ok(edn),
     }
 }
@@ -619,7 +612,7 @@ impl FromStr for MoleculeAst {
 
 impl fmt::Display for MoleculeAst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = edn_to_string(self).map_err(|_| fmt::Error)?;
+        let s = umol_edn::to_string(self).map_err(|_| fmt::Error)?;
         f.write_str(&s)
     }
 }
@@ -754,7 +747,8 @@ mod tests {
     })]
     fn test_molecule_ast_json_roundtrip(#[case] ast: MoleculeAst) {
         let json = serde_json::to_string(&ast).expect("serialize to JSON");
-        let back: MoleculeAst = serde_json::from_str(&json).expect(&format!("deserialize from JSON: {json}"));
+        let back: MoleculeAst =
+            serde_json::from_str(&json).expect(&format!("deserialize from JSON: {json}"));
         assert_eq!(ast, back);
     }
 
@@ -768,7 +762,7 @@ mod tests {
         ParseError::DuplicateId("b1".to_string()))]
     #[case::bad_atom_string(r##"{:atoms {:X "#h3"} :bonds []}"##, ParseError::InvalidElement("#h3".to_string()))]
     #[case::unknown_alias(r#"{:atoms {:C :ch} :bonds []}"#, ParseError::UnknownAlias("ch".to_string()))]
-    #[case::trailing_content(r#"{:atoms {:C "C"} :bonds []} :extra :junk"#, ParseError::EdnParse("unexpected trailing content: :extra :junk".to_string()))]
+    #[case::trailing_content(r#"{:atoms {:C "C"} :bonds []} :extra :junk"#, ParseError::EdnParse("trailing content at byte 28".to_string()))]
     #[case::duplicate_atom_bond_id(r#"{:atoms {:b1 "C" :O "O"} :bonds [{:id :b1 :a :b1 :b :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
     #[case::duplicate_bond_dative_id(r#"{:atoms {:C "C" :O "O"} :bonds [{:id :b1 :a :C :b :O :bond :single}] :dative [{:id :b1 :donor :C :acceptor :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
     #[case::duplicate_id_alias(r#"{:aliases [:C "N"] :atoms {:C "C"} :bonds []}"#, ParseError::DuplicateId("C".to_string()))]

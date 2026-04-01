@@ -36,7 +36,7 @@ use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::dsl::ast::{FromAst, ToAst};
 use crate::dsl::config::{BondDslConfig, MoleculeDslConfig};
-use crate::dsl::edn_serde::{edn_from_str, edn_to_string};
+use umol_edn::{from_str as edn_from_str, to_string as edn_to_string};
 use crate::dsl::error::{LoweringError, ParseError};
 use crate::dsl::molecule::{
     parse_molecule_dsl, AromaticSystem as AstAromaticSystem, Atoms, BondSpec,
@@ -71,7 +71,7 @@ impl FromStr for ResolutionContext {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        edn_from_str(s)
+        Ok(edn_from_str(s)?)
     }
 }
 

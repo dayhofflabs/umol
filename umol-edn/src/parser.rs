@@ -29,7 +29,7 @@ pub fn parse_value<'a>(
     config: &ParseConfig,
 ) -> Result<(Edn<'a>, &'a str), EdnError> {
     let mut located = LocatingSlice::new(input);
-    ws_and_comments(&mut located).map_err(unwrap_err)?;
+    ws_and_comments(&mut located, config).map_err(unwrap_err)?;
     let val = edn_value(config)
         .parse_next(&mut located)
         .map_err(unwrap_err)?;
@@ -44,7 +44,7 @@ pub fn parse_value_strict<'a>(
 ) -> Result<Edn<'a>, EdnError> {
     let (val, remaining) = parse_value(input, config)?;
     let mut loc = LocatingSlice::new(remaining);
-    ws_and_comments(&mut loc).ok();
+    ws_and_comments(&mut loc, config).ok();
     let after = rest(&loc);
     if !after.is_empty() {
         let trailing_offset = input.len() - after.len();
@@ -63,7 +63,7 @@ pub fn parse_all<'a>(
     let mut located = LocatingSlice::new(input);
     let mut values = Vec::new();
     loop {
-        ws_and_comments(&mut located).ok();
+        ws_and_comments(&mut located, config).ok();
         if rest(&located).is_empty() {
             break;
         }
@@ -81,7 +81,7 @@ fn is_ws(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | ',')
 }
 
-fn ws_and_comments<'a>(input: &mut Input<'a>) -> PResult<()> {
+fn ws_and_comments<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<()> {
     loop {
         let before = input.current_token_start();
         take_while(0.., is_ws).parse_next(input)?;
@@ -89,14 +89,10 @@ fn ws_and_comments<'a>(input: &mut Input<'a>) -> PResult<()> {
         if s.starts_with(';') {
             take_while(0.., |c: char| c != '\n').parse_next(input)?;
             opt('\n').parse_next(input)?;
-        } else if s.starts_with("#_") {
+        } else if s.starts_with("#_") && config.dialect == Dialect::Clojure {
             let _ = "#_".parse_next(input)?;
-            ws_and_comments(input).ok();
-            let discard_config = ParseConfig {
-                dialect: Dialect::Clojure,
-                duplicate_keys: DuplicateKeyPolicy::LastWins,
-            };
-            let _ = edn_value(&discard_config).parse_next(input)?;
+            ws_and_comments(input, config).ok();
+            let _ = edn_value(config).parse_next(input)?;
         } else if input.current_token_start() == before {
             break;
         }
@@ -113,7 +109,7 @@ where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
-        ws_and_comments(input).ok();
+        ws_and_comments(input, config).ok();
         let s = rest(input);
         let offset = input.current_token_start();
         let c = s
@@ -125,7 +121,7 @@ where
             '[' => edn_vector(config).parse_next(input),
             '{' => edn_map(config).parse_next(input),
             '#' => edn_dispatch(config).parse_next(input),
-            ':' => edn_keyword(input),
+            ':' => edn_keyword(input, config.dialect),
             '"' => edn_string(config.dialect).parse_next(input),
             '\\' => edn_char(config.dialect).parse_next(input),
             '+' | '-' => edn_number_or_symbol(config).parse_next(input),
@@ -166,9 +162,17 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
 
 // --- Keywords ---
 
-fn edn_keyword<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
+fn edn_keyword<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
     let _ = ':'.parse_next(input)?;
-    let s = raw_symbol(input)?;
+    let s = match dialect {
+        Dialect::Clojure => {
+            // Clojure allows digit-starting keywords (e.g. :0, :1).
+            (one_of(|c: char| is_symbol_start(c) || c.is_ascii_digit()), take_while(0.., is_symbol_char))
+                .take()
+                .parse_next(input)?
+        }
+        Dialect::Edn => raw_symbol(input)?,
+    };
     Ok(Edn::Keyword(Keyword::new(s)))
 }
 
@@ -386,7 +390,7 @@ where
         let _ = '('.parse_next(input)?;
         let mut items = Vec::new();
         loop {
-            ws_and_comments(input).ok();
+            ws_and_comments(input, config).ok();
             if rest(input).is_empty() {
                 return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
@@ -409,7 +413,7 @@ where
         let _ = '['.parse_next(input)?;
         let mut items = Vec::new();
         loop {
-            ws_and_comments(input).ok();
+            ws_and_comments(input, config).ok();
             if rest(input).is_empty() {
                 return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
@@ -432,7 +436,7 @@ where
         let _ = '{'.parse_next(input)?;
         let mut map = BTreeMap::new();
         loop {
-            ws_and_comments(input).ok();
+            ws_and_comments(input, config).ok();
             if rest(input).is_empty() {
                 return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
@@ -442,7 +446,7 @@ where
             }
             let key_offset = input.current_token_start();
             let key = edn_value(config).parse_next(input)?;
-            ws_and_comments(input).ok();
+            ws_and_comments(input, config).ok();
             let val = edn_value(config).parse_next(input)?;
             if config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
                 return Err(ErrMode::Cut(EdnError::DuplicateKey { offset: key_offset }));
@@ -462,7 +466,7 @@ where
         let _ = '{'.parse_next(input)?;
         let mut set = BTreeSet::new();
         loop {
-            ws_and_comments(input).ok();
+            ws_and_comments(input, config).ok();
             if rest(input).is_empty() {
                 return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
             }
@@ -493,13 +497,13 @@ where
             .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }))?;
         match c {
             '{' => edn_set(config).parse_next(input),
-            '_' => {
+            '_' if config.dialect == Dialect::Clojure => {
                 let _ = '_'.parse_next(input)?;
-                ws_and_comments(input).ok();
+                ws_and_comments(input, config).ok();
                 let _ = edn_value(config).parse_next(input)?;
                 edn_value(config).parse_next(input)
             }
-            '#' => {
+            '#' if config.dialect == Dialect::Clojure => {
                 let _ = '#'.parse_next(input)?;
                 let s2 = rest(input);
                 if s2.starts_with("NaN") {
@@ -519,7 +523,7 @@ where
             }
             _ => {
                 let tag = raw_symbol(input)?;
-                ws_and_comments(input).ok();
+                ws_and_comments(input, config).ok();
                 let val = edn_value(config).parse_next(input)?;
                 Ok(Edn::Tagged(tag.to_string(), Box::new(val)))
             }
@@ -1017,5 +1021,59 @@ mod tests {
     fn test_read_string_char_formfeed_backspace() {
         assert_eq!(read_string("\\formfeed").unwrap(), Edn::Char('\u{000C}'));
         assert_eq!(read_string("\\backspace").unwrap(), Edn::Char('\u{0008}'));
+    }
+
+    // --- Edn strict dialect ---
+
+    fn edn_strict() -> ParseConfig {
+        ParseConfig {
+            dialect: crate::config::Dialect::Edn,
+            ..Default::default()
+        }
+    }
+
+    #[rstest]
+    #[case("##NaN")]
+    #[case("##Inf")]
+    #[case("##-Inf")]
+    fn test_edn_strict_rejects_special_floats(#[case] input: &str) {
+        assert!(read_string_with(input, &edn_strict()).is_err());
+    }
+
+    #[test]
+    fn test_edn_strict_no_discard() {
+        // In Edn mode, #_ is not discard — it's a tagged literal with tag "_".
+        // So "#_ foo 12" parses as Tagged("_", Symbol("foo")), with trailing "12".
+        assert!(read_string_with("#_ foo 12", &edn_strict()).is_err());
+        // Inside a vector, #_ parses as a tagged value.
+        let val = read_string_with("[1 #_ 2 3]", &edn_strict()).unwrap();
+        assert_eq!(
+            val,
+            Edn::Vector(vec![
+                Edn::Int(1),
+                Edn::Tagged("_".to_string(), Box::new(Edn::Int(2))),
+                Edn::Int(3),
+            ])
+        );
+    }
+
+    #[rstest]
+    #[case(":0")]
+    #[case(":1")]
+    #[case(":123")]
+    fn test_edn_strict_rejects_digit_keywords(#[case] input: &str) {
+        assert!(read_string_with(input, &edn_strict()).is_err());
+    }
+
+    #[rstest]
+    #[case(":0", "0")]
+    #[case(":1", "1")]
+    #[case(":123abc", "123abc")]
+    fn test_clojure_allows_digit_keywords(#[case] input: &str, #[case] expected: &str) {
+        let val = read_string(input).unwrap();
+        match &val {
+            Edn::Keyword(k) => assert_eq!(k.as_str(), expected),
+            other => panic!("expected Keyword, got {other:?}"),
+        }
     }
 }

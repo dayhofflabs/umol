@@ -13,7 +13,7 @@ use umol_graph::dsl::ast::{FromAst, ToAst};
 use umol_graph::dsl::config::{
     ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
 };
-use umol_graph::dsl::edn_serde::{edn_from_str, edn_to_string};
+use umol_edn::{from_str as edn_from_str, to_string as edn_to_string};
 use umol_graph::dsl::molecule::MoleculeAst;
 use umol_graph::graph_ir::config_data::ValenceTable;
 use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
