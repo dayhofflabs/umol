@@ -1,13 +1,20 @@
 //! Public read API: read_string, read_all, Reader iterator.
 
+use std::sync::OnceLock;
+
 use crate::edn::Edn;
 use crate::error::EdnError;
 use crate::config::ParseConfig;
 use crate::parser::{parse_all, parse_value, parse_value_strict};
 
+pub(crate) fn default_config() -> &'static ParseConfig {
+    static CONFIG: OnceLock<ParseConfig> = OnceLock::new();
+    CONFIG.get_or_init(ParseConfig::default)
+}
+
 /// Parse a single EDN value from a string, rejecting trailing content.
 pub fn read_string<'a>(input: &'a str) -> Result<Edn<'a>, EdnError> {
-    parse_value_strict(input, &ParseConfig::default())
+    parse_value_strict(input, default_config())
 }
 
 /// Parse a single EDN value with custom config, rejecting trailing content.
@@ -17,7 +24,7 @@ pub fn read_string_with<'a>(input: &'a str, config: &ParseConfig) -> Result<Edn<
 
 /// Parse all EDN values from a string.
 pub fn read_all<'a>(input: &'a str) -> Result<Vec<Edn<'a>>, EdnError> {
-    parse_all(input, &ParseConfig::default())
+    parse_all(input, default_config())
 }
 
 /// Parse all EDN values with custom config.

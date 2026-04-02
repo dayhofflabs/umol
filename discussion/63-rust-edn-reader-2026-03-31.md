@@ -918,13 +918,152 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 | EDN `read_string` → `Edn` value tree | 504 ns |
 | EDN `Edn` → struct (`from_value`) | 416 ns |
 
+- Measureents as of 2026-04-02
+
+   Compiling umol-edn-macros v0.1.0 (/Users/dr/Dropbox/Source/rust/umol/umol-edn-macros)
+   Compiling umol-edn v0.1.0 (/Users/dr/Dropbox/Source/rust/umol/umol-edn)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 4.09s
+     Running benches/parsing.rs (/Users/dr/.cargo-target/release/deps/parsing-7e37e17e031509d2)
+Gnuplot not found, using plotters backend
+parse_atoms/nil         time:   [35.349 ns 36.523 ns 37.533 ns]
+                        change: [−12.102% −8.7053% −5.0658%] (p = 0.00 < 0.05)
+                        Performance has improved.
+parse_atoms/int         time:   [42.011 ns 43.187 ns 44.206 ns]
+                        change: [−18.254% −15.627% −13.029%] (p = 0.00 < 0.05)
+                        Performance has improved.
+parse_atoms/float       time:   [61.630 ns 62.999 ns 64.212 ns]
+                        change: [−14.557% −12.411% −10.267%] (p = 0.00 < 0.05)
+                        Performance has improved.
+parse_atoms/string_short
+                        time:   [40.614 ns 41.655 ns 42.795 ns]
+                        change: [−17.379% −14.341% −11.130%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 16 outliers among 100 measurements (16.00%)
+  16 (16.00%) high mild
+parse_atoms/string_escaped
+                        time:   [114.03 ns 114.43 ns 114.81 ns]
+                        change: [−9.2659% −8.4940% −7.7283%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+parse_atoms/keyword     time:   [44.941 ns 46.114 ns 47.320 ns]
+                        change: [−12.686% −9.2803% −5.6757%] (p = 0.00 < 0.05)
+                        Performance has improved.
+parse_atoms/symbol      time:   [48.352 ns 49.527 ns 50.831 ns]
+                        change: [−13.745% −9.6968% −5.7133%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 16 outliers among 100 measurements (16.00%)
+  16 (16.00%) high mild
+
+parse_collections/molecule_small
+                        time:   [582.27 ns 583.81 ns 585.46 ns]
+                        change: [+23.794% +24.437% +25.093%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+parse_collections/molecule_large
+                        time:   [7.7085 µs 7.7176 µs 7.7289 µs]
+                        change: [+17.483% +18.125% +18.594%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 7 outliers among 100 measurements (7.00%)
+  6 (6.00%) high mild
+  1 (1.00%) high severe
+parse_collections/keyword_map_200
+                        time:   [28.811 µs 28.840 µs 28.871 µs]
+                        change: [+19.441% +19.703% +19.919%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 8 outliers among 100 measurements (8.00%)
+  4 (4.00%) high mild
+  4 (4.00%) high severe
+parse_collections/nested_50
+                        time:   [2.8237 µs 2.8257 µs 2.8279 µs]
+                        change: [+6.4146% +7.8682% +8.9974%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 11 outliers among 100 measurements (11.00%)
+  8 (8.00%) high mild
+  3 (3.00%) high severe
+parse_collections/nested_200
+                        time:   [14.253 µs 14.330 µs 14.399 µs]
+                        change: [+4.4004% +5.1730% +5.8634%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+
+read_all/100_values     time:   [3.3509 µs 3.3554 µs 3.3605 µs]
+                        change: [+0.7119% +0.9592% +1.2179%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 8 outliers among 100 measurements (8.00%)
+  7 (7.00%) high mild
+  1 (1.00%) high severe
+read_all/1000_values    time:   [31.076 µs 31.106 µs 31.138 µs]
+                        change: [+1.8330% +1.9447% +2.0536%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+roundtrip/molecule_large
+                        time:   [18.760 µs 18.777 µs 18.795 µs]
+                        change: [+14.928% +15.193% +15.443%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 5 outliers among 100 measurements (5.00%)
+  3 (3.00%) high mild
+  2 (2.00%) high severe
+
+display/to_string_small time:   [325.53 ns 326.02 ns 326.65 ns]
+                        change: [−1.0748% −0.2893% +0.5268%] (p = 0.49 > 0.05)
+                        No change in performance detected.
+Found 18 outliers among 100 measurements (18.00%)
+  1 (1.00%) high mild
+  17 (17.00%) high severe
+display/to_string_large time:   [2.8364 µs 2.8418 µs 2.8486 µs]
+                        change: [+2.2220% +2.8643% +3.6806%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 16 outliers among 100 measurements (16.00%)
+  16 (16.00%) high severe
+display/formatter_small time:   [503.22 ns 507.10 ns 511.30 ns]
+                        change: [−1.2803% −0.3829% +0.5092%] (p = 0.40 > 0.05)
+                        No change in performance detected.
+Found 16 outliers among 100 measurements (16.00%)
+  16 (16.00%) high severe
+display/formatter_large time:   [5.4612 µs 5.4820 µs 5.5082 µs]
+                        change: [+8.6951% +11.182% +13.965%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 16 outliers among 100 measurements (16.00%)
+  16 (16.00%) high mild
+
+serde/edn_parse_to_edn  time:   [582.31 ns 584.09 ns 586.05 ns]
+                        change: [+16.757% +19.532% +21.928%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+serde/edn_from_str_struct
+                        time:   [313.10 ns 315.90 ns 319.13 ns]
+                        change: [+12.113% +14.113% +15.732%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high severe
+serde/edn_to_struct     time:   [403.70 ns 408.74 ns 413.22 ns]
+                        change: [−3.1384% −1.2921% +0.5790%] (p = 0.18 > 0.05)
+                        No change in performance detected.
+serde/json_from_str_struct
+                        time:   [249.36 ns 250.23 ns 251.18 ns]
+                        change: [−9.6875% −8.2234% −6.7490%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+serde/json_parse_to_value
+                        time:   [367.25 ns 367.92 ns 368.74 ns]
+                        change: [−1.2407% −0.3963% +0.4454%] (p = 0.38 > 0.05)
+                        No change in performance detected.
+serde/json_value_to_struct
+                        time:   [316.13 ns 318.73 ns 321.82 ns]
+                        change: [−10.950% −9.4505% −7.8664%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+
 ### Not yet implemented
 
-- `edn!()` macro (proc macro for compile-time Edn construction)
-- `::` keyword rejection
-- Leading-zero rejection (007 currently accepted)
-- Symbol slash validation (foo/1 accepted, spec unclear)
-- Tag dispatch registry
 - Fuzz target
 - llvm-cov integration
 - Property-based roundtrip testing
+

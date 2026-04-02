@@ -21,10 +21,7 @@ use crate::streaming::EdnStreamDeserializer;
 /// Uses a streaming deserializer that parses directly into the target type
 /// without building an intermediate `Edn` value tree.
 pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
-    let mut de = EdnStreamDeserializer::new(s);
-    let val = T::deserialize(&mut de)?;
-    de.expect_eof()?;
-    Ok(val)
+    from_str_with(s, crate::reader::default_config())
 }
 
 /// Deserialize a Rust value from an EDN string using a custom config.

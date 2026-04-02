@@ -52,7 +52,7 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     // --- Low-level ---
 
-    #[inline(always)]
+    #[inline]
     fn peek(&self) -> Option<u8> {
         self.input.as_bytes().get(self.pos).copied()
     }
@@ -113,6 +113,7 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     // --- Token parsing ---
 
+    #[inline]
     fn parse_keyword_name(&mut self) -> Result<Cow<'de, str>, EdnError> {
         debug_assert_eq!(self.input.as_bytes()[self.pos], b':');
         let start = self.pos;
@@ -153,6 +154,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
+    #[inline]
     fn parse_symbol_str(&mut self) -> Result<&'de str, EdnError> {
         let start = self.pos;
         let bytes = self.input.as_bytes();
@@ -176,6 +178,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     /// Validate symbol slash rules (mirrors parser::validate_symbol).
+    #[inline]
     fn validate_symbol_str(&self, s: &str, offset: usize) -> Result<(), EdnError> {
         if s == "/" {
             return Ok(());

@@ -106,7 +106,9 @@ fn ws_and_comments<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<(
             Some(b'#') if config.dialect == Dialect::Clojure && rest(input).starts_with("#_") => {
                 let _ = "#_".parse_next(input)?;
                 ws_and_comments(input, config).ok();
-                let _ = edn_value(config).parse_next(input)?;
+                // Ignore errors: the value is discarded, so tag validation
+                // failures (e.g. invalid #inst date) are irrelevant.
+                let _ = edn_value(config).parse_next(input);
             }
             _ => break,
         }
@@ -124,21 +126,27 @@ where
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         ws_and_comments(input, config).ok();
-        let offset = input.current_token_start();
-        let b = peek_byte(input)
-            .ok_or(ErrMode::Backtrack(EdnError::UnexpectedEof { offset }))?;
-        match b {
-            b'(' => edn_list(config).parse_next(input),
-            b'[' => edn_vector(config).parse_next(input),
-            b'{' => edn_map(config).parse_next(input),
-            b'#' => edn_dispatch(config).parse_next(input),
-            b':' => edn_keyword(input, config),
-            b'"' => edn_string(config.dialect).parse_next(input),
-            b'\\' => edn_char(config.dialect).parse_next(input),
-            b'+' | b'-' => edn_number_or_symbol(config).parse_next(input),
-            b'0'..=b'9' => edn_number(input, config.dialect),
-            _ => edn_symbol_or_literal(input, config.dialect),
-        }
+        edn_value_dispatch(input, config)
+    }
+}
+
+/// Dispatch to the correct value parser. Caller must skip whitespace first.
+#[inline(always)]
+fn edn_value_dispatch<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<Edn<'a>> {
+    let offset = input.current_token_start();
+    let b = peek_byte(input)
+        .ok_or(ErrMode::Backtrack(EdnError::UnexpectedEof { offset }))?;
+    match b {
+        b'(' => edn_list(config).parse_next(input),
+        b'[' => edn_vector(config).parse_next(input),
+        b'{' => edn_map(config).parse_next(input),
+        b'#' => edn_dispatch(config).parse_next(input),
+        b':' => edn_keyword(input, config),
+        b'"' => edn_string(config.dialect).parse_next(input),
+        b'\\' => edn_char(config.dialect).parse_next(input),
+        b'+' | b'-' => edn_number_or_symbol(config.dialect).parse_next(input),
+        b'0'..=b'9' => edn_number(input, config.dialect),
+        _ => edn_symbol_or_literal(input, config.dialect),
     }
 }
 
@@ -155,12 +163,15 @@ pub(crate) fn is_symbol_char(c: char) -> bool {
     is_symbol_start(c) || matches!(c, '0'..='9' | '#' | ':' | '\'')
 }
 
+#[inline]
 fn raw_symbol<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<&'a str> {
-    let start = input.current_token_start();
     let s: &str = (one_of(is_symbol_start), take_while(0.., is_symbol_char))
         .take()
         .parse_next(input)?;
-    validate_symbol(s, start, dialect)?;
+    if dialect == Dialect::Edn || s.as_bytes().contains(&b'/') {
+        let start = input.current_token_start() - s.len();
+        validate_symbol(s, start, dialect)?;
+    }
     Ok(s)
 }
 
@@ -174,6 +185,7 @@ fn raw_symbol<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<&'a str> {
 /// Edn dialect additionally enforces (per spec):
 /// - `/` can appear at most once.
 /// - The name part after `/` must start with a valid symbol-start char.
+#[inline]
 fn validate_symbol(s: &str, offset: usize, dialect: Dialect) -> PResult<()> {
     if s == "/" {
         return Ok(());
@@ -200,6 +212,7 @@ fn validate_symbol(s: &str, offset: usize, dialect: Dialect) -> PResult<()> {
     Ok(())
 }
 
+#[inline]
 fn edn_symbol_or_literal<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
     let s = raw_symbol(input, dialect)?;
     match s {
@@ -212,31 +225,30 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult
 
 // --- Keywords ---
 
+#[inline]
 fn edn_keyword<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<Edn<'a>> {
-    let start = input.current_token_start();
     let _ = ':'.parse_next(input)?;
 
     // :: auto-resolve (Clojure only)
-    if config.dialect == Dialect::Clojure && peek_byte(input) == Some(b':') {
-        let _ = ':'.parse_next(input)?;
-        return parse_auto_resolve_keyword(input, config, start);
+    if config.dialect == Dialect::Clojure {
+        if peek_byte(input) == Some(b':') {
+            let start = input.current_token_start() - 1;
+            let _ = ':'.parse_next(input)?;
+            return parse_auto_resolve_keyword(input, config, start);
+        }
+        // Clojure allows digit-starting keywords (e.g. :0, :1).
+        // :/ and :/foo are not legal keywords per the EDN spec.
+        let s: &str = (one_of(|c: char| (is_symbol_start(c) || c.is_ascii_digit()) && c != '/'), take_while(0.., is_symbol_char))
+            .take()
+            .parse_next(input)?;
+        return Ok(Edn::Keyword(Keyword::new(s)));
     }
 
-    let s = match config.dialect {
-        Dialect::Clojure => {
-            // Clojure allows digit-starting keywords (e.g. :0, :1).
-            // :/ and :/foo are not legal keywords per the EDN spec.
-            (one_of(|c: char| (is_symbol_start(c) || c.is_ascii_digit()) && c != '/'), take_while(0.., is_symbol_char))
-                .take()
-                .parse_next(input)?
-        }
-        Dialect::Edn => {
-            (one_of(|c: char| is_symbol_start(c) && c != '/'), take_while(0.., is_symbol_char))
-                .take()
-                .parse_next(input)?
-        }
-    };
-    validate_symbol(s, start, config.dialect)?;
+    let start = input.current_token_start() - 1;
+    let s: &str = (one_of(|c: char| is_symbol_start(c) && c != '/'), take_while(0.., is_symbol_char))
+        .take()
+        .parse_next(input)?;
+    validate_symbol(s, start, Dialect::Edn)?;
     Ok(Edn::Keyword(Keyword::new(s)))
 }
 
@@ -275,6 +287,7 @@ fn parse_auto_resolve_keyword<'a>(
 
 // --- Numbers ---
 
+#[inline]
 fn edn_number<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
     let start = input.current_token_start();
     let num_str: &str = (
@@ -316,19 +329,16 @@ fn edn_number<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
     }
 }
 
-fn edn_number_or_symbol<'a, 'b>(
-    config: &'b ParseConfig,
-) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
-where
-    'a: 'b,
-{
+fn edn_number_or_symbol<'a>(
+    dialect: Dialect,
+) -> impl Parser<Input<'a>, Edn<'a>, E> {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         // Peek at second byte: if digit, it's a number like +5 or -3.
         let second = input.as_ref().as_bytes().get(1).copied();
         if matches!(second, Some(b'0'..=b'9')) {
-            edn_number(input, config.dialect)
+            edn_number(input, dialect)
         } else {
-            edn_symbol_or_literal(input, config.dialect)
+            edn_symbol_or_literal(input, dialect)
         }
     }
 }
@@ -545,7 +555,7 @@ where
                     let _ = ')'.parse_next(input)?;
                     return Ok(Edn::List(items));
                 }
-                _ => items.push(edn_value(config).parse_next(input)?),
+                _ => items.push(edn_value_dispatch(input, config)?),
             }
         }
     }
@@ -568,7 +578,7 @@ where
                     let _ = ']'.parse_next(input)?;
                     return Ok(Edn::Vector(items));
                 }
-                _ => items.push(edn_value(config).parse_next(input)?),
+                _ => items.push(edn_value_dispatch(input, config)?),
             }
         }
     }
@@ -593,9 +603,9 @@ where
                 }
                 _ => {
                     let key_offset = input.current_token_start();
-                    let key = edn_value(config).parse_next(input)?;
+                    let key = edn_value_dispatch(input, config)?;
                     ws_and_comments(input, config).ok();
-                    let val = edn_value(config).parse_next(input)?;
+                    let val = edn_value_dispatch(input, config)?;
                     if config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
                         return Err(ErrMode::Cut(EdnError::DuplicateKey { offset: key_offset }));
                     }
@@ -623,7 +633,7 @@ where
                     let _ = '}'.parse_next(input)?;
                     return Ok(Edn::Set(set));
                 }
-                _ => { set.insert(edn_value(config).parse_next(input)?); }
+                _ => { set.insert(edn_value_dispatch(input, config)?); }
             }
         }
     }
@@ -1221,4 +1231,5 @@ mod tests {
             other => panic!("expected Keyword, got {other:?}"),
         }
     }
+
 }
