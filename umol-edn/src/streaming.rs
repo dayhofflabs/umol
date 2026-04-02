@@ -86,8 +86,7 @@ impl<'de> EdnStreamDeserializer<'de> {
                         self.pos += 1;
                     }
                 }
-                b'#' if self.dialect == Dialect::Clojure
-                    && bytes.get(self.pos + 1) == Some(&b'_') =>
+                b'#' if bytes.get(self.pos + 1) == Some(&b'_') =>
                 {
                     self.pos += 2;
                     self.skip_ws()?;
@@ -348,7 +347,7 @@ impl<'de> EdnStreamDeserializer<'de> {
                 self.pos += 1;
                 match self.peek() {
                     Some(b'{') => { self.pos += 1; self.skip_delimited(b'}') }
-                    Some(b'_') if self.dialect == Dialect::Clojure => {
+                    Some(b'_') => {
                         self.pos += 1;
                         self.skip_ws()?;
                         self.skip_value()?;
@@ -463,6 +462,12 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
                                 found: sym.chars().next().unwrap_or('\0'),
                             }),
                         }
+                    }
+                    Some(b'_') => {
+                        self.pos += 2; // skip #_
+                        self.skip_ws()?;
+                        self.skip_value()?;
+                        return self.deserialize_any(visitor);
                     }
                     _ => {
                         // Tagged literal: #tag value — unwrap tag, deserialize value.
