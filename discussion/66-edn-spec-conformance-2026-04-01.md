@@ -669,7 +669,7 @@ discard in both E and C.
 - **Tests (E):** `test_s20_discard`, `test_s20_discard_streaming`.
 - **Tests (C):** `test_s20_discard`, `test_s20_discard_nested`, etc.
 
-**Status:** Done. Spec doc needs updating (section 3 dialect note).
+**Status:** Done. Spec doc updated (section 3 dialect note).
 
 ---
 
