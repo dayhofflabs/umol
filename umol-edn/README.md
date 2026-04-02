@@ -21,6 +21,25 @@ umol-edn supports two dialects:
 
 ## Usage
 
+### `edn!` macro
+
+With the `macros` feature, construct `Edn` values using EDN syntax directly:
+
+```rust
+use umol_edn::edn;
+
+let val = edn!({:name "Alice" :age 30});
+assert_eq!(val.get("name").unwrap().as_str(), Some("Alice"));
+
+let v = edn!([1 2 3 :keyword ns/sym #my/tag "value"]);
+```
+
+Without the `macros` feature, `edn!` accepts a string literal instead:
+
+```rust
+let val = edn!(r#"{:name "Alice" :age 30}"#);
+```
+
 ### Value-based parsing
 
 Parse EDN into an `Edn` value tree, then inspect or traverse it:
@@ -71,6 +90,7 @@ let edn = to_string_pretty(&vec![1, 2, 3]).unwrap(); // formatted with newlines
 | `serde` | Serde `Serialize`/`Deserialize` support, streaming parser |
 | `chrono` | `#inst` tag reader producing `chrono::DateTime<Utc>` |
 | `uuid`  | `#uuid` tag reader producing `uuid::Uuid` |
+| `macros` | Proc-macro `edn!` with bare EDN syntax |
 
 ## License
 

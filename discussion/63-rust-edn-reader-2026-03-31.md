@@ -885,13 +885,13 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 - [x] Remove fully qualified names from the code — done (one `std::str::from_utf8` in streaming.rs).
 - [ ] stable or unstable sorting of maps and sets?
 - [x] use sorting in map / set tests — maps/sets use HashMap/HashSet; tests check membership, not ordering.
-- [ ] how should the tag dispatch work?
+- [x] how should the tag dispatch work?
 - [x] clarify in spec that EDN uses UTF-8.
 - [x] review public API — re-exports cover all common types in lib.rs.
 - [x] prelude — not needed; flat re-exports suffice. TODO removed.
 - [ ] edn!() macro
-- [ ] Tag stripping only works through deserialize_any, not typed methods like deserialize_seq
-- [ ] ##NaN/##Inf only handled in deserialize_any, not deserialize_f64
+- [x] Tag stripping only works through deserialize_any, not typed methods like deserialize_seq
+- [x] ##NaN/##Inf only handled in deserialize_any, not deserialize_f64
 
 ## Implementation status (2026-04-01)
 

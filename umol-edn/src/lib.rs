@@ -27,3 +27,15 @@ pub use formatter::{to_string_pretty, to_string_pretty_with};
 pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
 #[cfg(feature = "serde")]
 pub use ser::to_string;
+
+#[cfg(not(feature = "macros"))]
+/// Construct an `Edn<'static>` value from an EDN string literal.
+#[macro_export]
+macro_rules! edn {
+    ($s:literal) => {
+        $crate::read_string($s).expect("invalid EDN in edn! macro")
+    };
+}
+
+#[cfg(feature = "macros")]
+pub use umol_edn_macros::edn;

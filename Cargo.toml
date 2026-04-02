@@ -3,6 +3,7 @@ members = [
     "umol",
     "umol-data",
     "umol-edn",
+    "umol-edn-macros",
     "umol-fuzz",
     "umol-geometric",
     "umol-graph",
