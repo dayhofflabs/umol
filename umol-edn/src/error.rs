@@ -17,6 +17,9 @@ pub enum EdnError {
     InvalidCharLiteral { offset: usize },
     InvalidSymbol { offset: usize },
     DuplicateKey { offset: usize },
+    InvalidTag { offset: usize, tag: String },
+    InvalidInst { reason: String },
+    InvalidUuid { reason: String },
     TrailingContent { offset: usize },
     UnsupportedFeature { offset: usize, feature: &'static str },
     Custom(String),
@@ -45,6 +48,15 @@ impl fmt::Display for EdnError {
             }
             EdnError::DuplicateKey { offset } => {
                 write!(f, "duplicate map key at byte {offset}")
+            }
+            EdnError::InvalidTag { offset, tag } => {
+                write!(f, "invalid tag '{tag}' at byte {offset}")
+            }
+            EdnError::InvalidInst { reason } => {
+                write!(f, "invalid #inst: {reason}")
+            }
+            EdnError::InvalidUuid { reason } => {
+                write!(f, "invalid #uuid: {reason}")
             }
             EdnError::TrailingContent { offset } => {
                 write!(f, "trailing content at byte {offset}")

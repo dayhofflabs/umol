@@ -243,7 +243,7 @@ either dialect:
 
 ## Ambiguity resolutions
 
-Summary of decisions on underspecified areas of the EDN spec (D15):
+Summary of decisions on underspecified areas of the EDN spec:
 
 | Topic                                   | Decision                                                     | Section |
 | --------------------------------------- | ------------------------------------------------------------ | ------- |

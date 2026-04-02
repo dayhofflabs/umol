@@ -603,7 +603,7 @@ where
             .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }))?;
         match b {
             b'{' => edn_set(config).parse_next(input),
-            b'_' if config.dialect == Dialect::Clojure => {
+            b'_' => {
                 let _ = '_'.parse_next(input)?;
                 ws_and_comments(input, config).ok();
                 let _ = edn_value(config).parse_next(input)?;
@@ -623,10 +623,26 @@ where
                 }
             }
             _ => {
+                let offset = input.current_token_start();
                 let tag = raw_symbol(input, config.dialect)?;
+
+                // Edn dialect: reject bare (unqualified) tags unless registered.
+                if config.dialect == Dialect::Edn && !tag.contains('/') {
+                    if config.tag_readers.get(tag).is_none() {
+                        return Err(ErrMode::Cut(EdnError::InvalidTag {
+                            offset,
+                            tag: tag.to_string(),
+                        }));
+                    }
+                }
+
                 ws_and_comments(input, config).ok();
                 let val = edn_value(config).parse_next(input)?;
-                Ok(Edn::Tagged(tag.to_string(), Box::new(val)))
+
+                match config.tag_readers.get(tag) {
+                    Some(reader) => reader(val).map_err(ErrMode::Cut),
+                    None => Ok(Edn::Tagged(tag.to_string(), Box::new(val))),
+                }
             }
         }
     }
@@ -1140,20 +1156,10 @@ mod tests {
     }
 
     #[test]
-    fn test_edn_strict_no_discard() {
-        // In Edn mode, #_ is not discard — it's a tagged literal with tag "_".
-        // So "#_ foo 12" parses as Tagged("_", Symbol("foo")), with trailing "12".
-        assert!(read_string_with("#_ foo 12", &edn_strict()).is_err());
-        // Inside a vector, #_ parses as a tagged value.
+    fn test_edn_discard() {
+        // #_ is discard in both dialects (spec S20).
         let val = read_string_with("[1 #_ 2 3]", &edn_strict()).unwrap();
-        assert_eq!(
-            val,
-            Edn::Vector(vec![
-                Edn::Int(1),
-                Edn::Tagged("_".to_string(), Box::new(Edn::Int(2))),
-                Edn::Int(3),
-            ])
-        );
+        assert_eq!(val, Edn::Vector(vec![Edn::Int(1), Edn::Int(3)]));
     }
 
     #[rstest]

@@ -414,14 +414,26 @@ interior-only per S9c), not just digits.
 > handler, or create a well-known generic representation that contains both the
 > tag and the tagged element, as it sees fit.
 
-- **umol-edn E/C:** Creates `Tagged(tag, value)`. Valid per spec.
+- **umol-edn E/C:** If a `TagFn` is registered for the tag, it is called with
+  the parsed value. Otherwise, creates `Tagged(tag, value)`. Valid per spec.
+- **Tag reader registry:** `TagReaders` type in `config.rs`. Prepopulated with
+  `#inst` (chrono) and `#uuid` (uuid) when features enabled. Custom readers via
+  `TagReaders::insert()`.
 
 ### S17c. Reserved tags
 
 > Tag symbols without a prefix are reserved by edn for built-ins. User tags
 > must contain a prefix component.
 
-- **umol-edn E/C:** No enforcement. TODO decide.
+- **Clojure:** No enforcement. Both `clj` and edamame ignore this rule.
+- **umol-edn E:** Rejects bare (unqualified) tags unless registered in
+  `TagReaders`. Built-in `inst`/`uuid` are pre-registered. Error: `InvalidTag`.
+- **umol-edn C:** Accepts all tags (matches Clojure behavior).
+- **Tests:** `test_s17c_bare_tag_rejected_edn`, `test_s17c_bare_tag_accepted_clojure`,
+  `test_s17c_qualified_tag_accepted_both`, `test_s17c_inst_accepted_edn`,
+  `test_s17c_uuid_accepted_edn`.
+
+**Status:** Done.
 
 ---
 
@@ -430,8 +442,16 @@ interior-only per S9c), not just digits.
 > `#inst "rfc-3339-format"` — an instant in time.
 > `#uuid "f81d4fae-..."` — a UUID.
 
-- **umol-edn:** Feature-gated (`chrono`, `uuid`). Without features, stored as `Tagged`.
-- **Tests:** TODO — test with features enabled.
+- **umol-edn:** Feature-gated (`chrono`, `uuid`). When enabled, `TagReaders`
+  pre-registers validation handlers. `read_inst` validates RFC 3339, `read_uuid`
+  validates UUID format. Invalid values produce `InvalidInst`/`InvalidUuid`
+  errors. Without features, stored as `Tagged` (no validation).
+- **Conversion helpers:** `inst_to_edn()`, `uuid_to_edn()` in `tags.rs`.
+- **Tests:** `test_s17c_inst_accepted_edn`, `test_s17c_uuid_accepted_edn`,
+  `test_s17c_inst_invalid_rejected`, `test_s17c_uuid_invalid_rejected`,
+  `test_s17c_inst_non_string_rejected`.
+
+**Status:** Done.
 
 ---
 
@@ -455,15 +475,17 @@ interior-only per S9c), not just digits.
 > element. A reader should not call user-supplied tag handlers during the
 > processing of the element to be discarded.
 
-- **umol-edn C:** Supported. **umol-edn E:** `#_` parsed as tag with symbol `_`.
-- **Tests:** `test_conformance_discard_nested`, `test_conformance_discard_in_map`, `test_conformance_discard_at_eof_error`, `test_conformance_discard_only_content_error`.
+- **umol-edn E/C:** Supported in both dialects.
+- **Tests:** `test_conformance_discard_nested`, `test_conformance_discard_in_map`,
+  `test_conformance_discard_at_eof_error`, `test_conformance_discard_only_content_error`,
+  `test_s20_discard_both_dialects`.
 
 > The discard sequence is not an element. It is an error to have a discard
 > sequence without a following element.
 
 - **Tests:** `test_conformance_discard_at_eof_error`.
 
-**Status:** Done for Clojure dialect. Note: discard is Clojure-only in current implementation. The spec includes it, so Edn dialect should also support it. TODO.
+**Status:** Done.
 
 ---
 
@@ -542,17 +564,15 @@ Where Clojure's reader diverges from the spec text, and what umol-edn does:
 | S11c | -0 equals 0 | Done — tested |
 | S13–S16 | Collections | Done — tested |
 | S17a | Tag without element errors | Done — tested |
-| S17b | Unknown tag handling | Done (creates Tagged variant) |
+| S17b | Unknown tag handling | Done — TagReaders dispatch + Tagged fallback |
+| S17c | Reserved tags | Done — E rejects bare unless registered; C accepts all |
+| S18 | #inst and #uuid | Done — feature-gated validation handlers |
 | S19 | Comments | Done — tested |
 | S7 | String escape strict mode | Done — fixed + tested |
 | S8 | Character literal strict mode | Done — tested |
-| S20 | Discard | Done for C dialect |
+| S20 | Discard | Done — both dialects |
 | S21 | Equality | Done |
 
 ## Summary of open items
 
-| ID | Issue | Action needed |
-|---|---|---|
-| S17c | Reserved tag enforcement (unqualified tags) | Decide policy |
-| S18 | #inst and #uuid with feature flags | Test with features enabled |
-| S20 | Discard should work in Edn dialect too | The spec includes #_, so E should support it |
+No open items. All spec statements have been audited and implemented.

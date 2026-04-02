@@ -7,6 +7,7 @@ pub mod error;
 pub mod formatter;
 pub mod parser;
 pub mod reader;
+pub mod tags;
 
 #[cfg(feature = "serde")]
 pub mod de;
@@ -15,7 +16,7 @@ pub mod ser;
 #[cfg(feature = "serde")]
 pub(crate) mod streaming;
 
-pub use config::{Dialect, DuplicateKeyPolicy, ParseConfig};
+pub use config::{Dialect, DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 #[cfg(feature = "serde")]
 pub use de::{from_str, from_value, EdnDeserializer, StreamDeserializer};
 pub use edn::{Edn, EdnMap, EdnSet, Keyword, Symbol};

@@ -4,9 +4,11 @@
 use std::borrow::Cow;
 use std::str::from_utf8;
 
-use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::{
+    self, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
+};
 
-use crate::config::Dialect;
+use crate::config::{Dialect, ParseConfig, TagReaders};
 use crate::error::EdnError;
 use crate::parser::{is_symbol_char, is_symbol_start};
 
@@ -18,16 +20,22 @@ pub struct EdnStreamDeserializer<'de> {
     scratch: Vec<u8>,
     depth: u16,
     dialect: Dialect,
+    tag_readers: TagReaders,
 }
 
 impl<'de> EdnStreamDeserializer<'de> {
     pub fn new(input: &'de str) -> Self {
+        Self::with_config(input, &ParseConfig::default())
+    }
+
+    pub fn with_config(input: &'de str, config: &ParseConfig) -> Self {
         Self {
             input,
             pos: 0,
             scratch: Vec::new(),
             depth: MAX_DEPTH,
-            dialect: Dialect::Clojure,
+            dialect: config.dialect,
+            tag_readers: config.tag_readers.clone(),
         }
     }
 
@@ -459,7 +467,18 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
                     _ => {
                         // Tagged literal: #tag value — unwrap tag, deserialize value.
                         self.pos += 1; // skip #
-                        let _tag = self.parse_symbol_str()?;
+                        let offset = self.pos;
+                        let tag = self.parse_symbol_str()?;
+                        // Edn dialect: reject bare tags unless registered.
+                        if self.dialect == Dialect::Edn
+                            && !tag.contains('/')
+                            && self.tag_readers.get(tag).is_none()
+                        {
+                            return Err(EdnError::InvalidTag {
+                                offset,
+                                tag: tag.to_string(),
+                            });
+                        }
                         self.skip_ws()?;
                         self.deserialize_any(visitor)
                     }
@@ -754,6 +773,17 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
                     }
                 }
             }
+            Some(b'#') => {
+                let bytes = self.input.as_bytes();
+                // Don't match #{, ##, #_ — only tagged literals.
+                if matches!(bytes.get(self.pos + 1), Some(b'{') | Some(b'#') | Some(b'_')) {
+                    return self.deserialize_any(visitor);
+                }
+                self.pos += 1; // skip #
+                let tag = self.parse_symbol_str()?;
+                self.skip_ws()?;
+                visitor.visit_enum(StreamingTaggedEnumAccess { de: self, tag })
+            }
             _ => self.deserialize_any(visitor),
         }
     }
@@ -943,6 +973,60 @@ impl<'de> MapAccess<'de> for EmptyMapAccessor {
         _seed: V,
     ) -> Result<V::Value, Self::Error> {
         Err(EdnError::Custom("empty map has no values".to_string()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tagged enum access (for #Variant value round-tripping)
+// ---------------------------------------------------------------------------
+
+struct StreamingTaggedEnumAccess<'a, 'de> {
+    de: &'a mut EdnStreamDeserializer<'de>,
+    tag: &'de str,
+}
+
+impl<'a, 'de> EnumAccess<'de> for StreamingTaggedEnumAccess<'a, 'de> {
+    type Error = EdnError;
+    type Variant = &'a mut EdnStreamDeserializer<'de>;
+
+    fn variant_seed<V: DeserializeSeed<'de>>(
+        self,
+        seed: V,
+    ) -> Result<(V::Value, Self::Variant), Self::Error> {
+        let variant =
+            seed.deserialize(de::value::BorrowedStrDeserializer::new(self.tag))?;
+        Ok((variant, self.de))
+    }
+}
+
+impl<'a, 'de> VariantAccess<'de> for &'a mut EdnStreamDeserializer<'de> {
+    type Error = EdnError;
+
+    fn unit_variant(self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn newtype_variant_seed<T: DeserializeSeed<'de>>(
+        self,
+        seed: T,
+    ) -> Result<T::Value, Self::Error> {
+        seed.deserialize(self)
+    }
+
+    fn tuple_variant<V: Visitor<'de>>(
+        self,
+        _len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        serde::Deserializer::deserialize_seq(self, visitor)
+    }
+
+    fn struct_variant<V: Visitor<'de>>(
+        self,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        serde::Deserializer::deserialize_map(self, visitor)
     }
 }
 

@@ -5,7 +5,10 @@ use std::collections::hash_map::IntoIter as HashMapIntoIter;
 use std::marker::PhantomData;
 use std::vec::IntoIter as VecIntoIter;
 
-use serde::de::{self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::{
+    self, Deserialize, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
+};
+use serde::Deserializer;
 
 use crate::config::ParseConfig;
 use crate::edn::{Edn, EdnMap};
@@ -111,15 +114,20 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        match &self.0 {
+        match self.0 {
             Edn::Keyword(k) => {
                 visitor.visit_enum(de::value::StrDeserializer::<Self::Error>::new(k.as_str()))
             }
             Edn::Symbol(s) => {
                 visitor.visit_enum(de::value::StrDeserializer::<Self::Error>::new(s.as_str()))
             }
-            Edn::Str(s) => visitor.visit_enum(de::value::StrDeserializer::<Self::Error>::new(s)),
-            _ => self.deserialize_any(visitor),
+            Edn::Str(ref s) => {
+                visitor.visit_enum(de::value::StrDeserializer::<Self::Error>::new(s))
+            }
+            Edn::Tagged(tag, inner) => {
+                visitor.visit_enum(EdnTaggedEnumAccess { tag, inner: *inner })
+            }
+            other => EdnDeserializer(other).deserialize_any(visitor),
         }
     }
 
@@ -404,12 +412,65 @@ impl<'de> de::MapAccess<'de> for EdnStructMapAccess<'de> {
     }
 }
 
+// -- Tagged enum access (for #Variant value round-tripping) ------------------
+
+struct EdnTaggedEnumAccess<'de> {
+    tag: String,
+    inner: Edn<'de>,
+}
+
+impl<'de> EnumAccess<'de> for EdnTaggedEnumAccess<'de> {
+    type Error = EdnError;
+    type Variant = EdnTaggedVariantAccess<'de>;
+
+    fn variant_seed<V: DeserializeSeed<'de>>(
+        self,
+        seed: V,
+    ) -> Result<(V::Value, Self::Variant), Self::Error> {
+        let variant = seed.deserialize(de::value::StrDeserializer::<EdnError>::new(&self.tag))?;
+        Ok((variant, EdnTaggedVariantAccess(self.inner)))
+    }
+}
+
+struct EdnTaggedVariantAccess<'de>(Edn<'de>);
+
+impl<'de> VariantAccess<'de> for EdnTaggedVariantAccess<'de> {
+    type Error = EdnError;
+
+    fn unit_variant(self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn newtype_variant_seed<T: DeserializeSeed<'de>>(
+        self,
+        seed: T,
+    ) -> Result<T::Value, Self::Error> {
+        seed.deserialize(EdnDeserializer(self.0))
+    }
+
+    fn tuple_variant<V: Visitor<'de>>(
+        self,
+        _len: usize,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        EdnDeserializer(self.0).deserialize_seq(visitor)
+    }
+
+    fn struct_variant<V: Visitor<'de>>(
+        self,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        EdnDeserializer(self.0).deserialize_map(visitor)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use rstest::rstest;
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
 
     use super::*;
     use crate::{from_str, read_string};
@@ -570,7 +631,8 @@ mod tests {
 
     #[test]
     fn test_deserialize_tagged_unwraps() {
-        let val = read_string("#inst [1 2 3]").unwrap();
+        // Unknown tags produce Tagged(...) which is stripped during deserialization.
+        let val = read_string("#my/custom [1 2 3]").unwrap();
         let v: Vec<i64> = Vec::deserialize(EdnDeserializer(val)).unwrap();
         assert_eq!(v, vec![1, 2, 3]);
     }
@@ -655,4 +717,25 @@ mod tests {
         assert_eq!(results[0].as_ref().unwrap(), &1);
         assert!(results[1].is_err());
     }
+
+    // -- Enum round-tripping via tags ------------------------------------------
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    enum Shape {
+        Circle(f64),
+        Rect(f64, f64),
+        Named { width: f64, height: f64 },
+    }
+
+    #[rstest]
+    #[case(Shape::Circle(3.14), "#Circle 3.14")]
+    #[case(Shape::Rect(1.0, 2.0), "#Rect [1.0 2.0]")]
+    #[case(Shape::Named { width: 5.0, height: 10.0 }, "#Named {:width 5.0 :height 10.0}")]
+    fn test_enum_tagged_roundtrip(#[case] value: Shape, #[case] expected_edn: &str) {
+        let serialized = crate::to_string(&value).unwrap();
+        assert_eq!(serialized, expected_edn);
+        let deserialized: Shape = from_str(&serialized).unwrap();
+        assert_eq!(deserialized, value);
+    }
+
 }

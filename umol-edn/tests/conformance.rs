@@ -99,9 +99,9 @@ fn test_conformance_discard_in_map() {
 
 #[test]
 fn test_conformance_discard_edn_dialect() {
-    // In Edn mode, #_ parses as tagged literal with tag "_".
-    let result = read_string_with("#_ 1", &edn_config()).unwrap();
-    assert_eq!(result, Edn::Tagged("_".into(), Box::new(Edn::Int(1))));
+    // #_ is discard in both dialects (spec S20).
+    let result = read_string_with("[1 #_ 2 3]", &edn_config()).unwrap();
+    assert_eq!(result, Edn::Vector(vec![Edn::Int(1), Edn::Int(3)]));
 }
 
 // -- Section 4: Nil and booleans -------------------------------------------
@@ -587,10 +587,13 @@ fn test_conformance_tagged_basic() {
 
 #[test]
 fn test_conformance_tagged_unqualified() {
-    let result = read_string("#inst \"2024-01-01\"").unwrap();
+    let result = read_string("#inst \"2024-01-01T00:00:00Z\"").unwrap();
     assert_eq!(
         result,
-        Edn::Tagged("inst".into(), Box::new(Edn::Str(Cow::Owned("2024-01-01".to_string()))))
+        Edn::Tagged(
+            "inst".into(),
+            Box::new(Edn::Str(Cow::Borrowed("2024-01-01T00:00:00Z")))
+        )
     );
 }
 
