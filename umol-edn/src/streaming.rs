@@ -170,6 +170,55 @@ impl<'de> EdnStreamDeserializer<'de> {
         Ok(())
     }
 
+    /// Skip a `#tag` prefix if present. Validates bare-tag restrictions in Edn dialect.
+    /// Recurses for nested tags like `#a #b value`.
+    fn skip_tag_if_present(&mut self) -> Result<(), EdnError> {
+        let bytes = self.input.as_bytes();
+        if self.pos < bytes.len() && bytes[self.pos] == b'#' {
+            match bytes.get(self.pos + 1) {
+                Some(b'{') | Some(b'_') | Some(b'#') => return Ok(()),
+                _ => {}
+            }
+            self.pos += 1;
+            let offset = self.pos;
+            let tag = self.parse_symbol_str()?;
+            if self.dialect == Dialect::Edn
+                && !tag.contains('/')
+                && self.tag_readers.get(tag).is_none()
+            {
+                return Err(EdnError::InvalidTag {
+                    offset,
+                    tag: tag.to_string(),
+                });
+            }
+            self.skip_ws()?;
+            self.skip_tag_if_present()?;
+        }
+        Ok(())
+    }
+
+    /// Try to parse `##NaN`, `##Inf`, `##-Inf` (Clojure dialect only).
+    fn try_parse_special_float(&mut self) -> Result<Option<f64>, EdnError> {
+        if self.dialect == Dialect::Clojure {
+            let bytes = self.input.as_bytes();
+            if self.pos + 1 < bytes.len() && bytes[self.pos] == b'#' && bytes[self.pos + 1] == b'#'
+            {
+                self.pos += 2;
+                let sym = self.parse_symbol_str()?;
+                return match sym {
+                    "NaN" => Ok(Some(f64::NAN)),
+                    "Inf" => Ok(Some(f64::INFINITY)),
+                    "-Inf" => Ok(Some(f64::NEG_INFINITY)),
+                    _ => Err(EdnError::UnexpectedToken {
+                        offset: self.pos - sym.len(),
+                        found: sym.chars().next().unwrap_or('\0'),
+                    }),
+                };
+            }
+        }
+        Ok(None)
+    }
+
     fn parse_number_i64(&mut self) -> Result<i64, EdnError> {
         let s = self.scan_number_str()?;
         s.parse::<i64>()
@@ -520,6 +569,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_bool<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let s = self.parse_symbol_str()?;
         match s {
             "true" => visitor.visit_bool(true),
@@ -530,6 +580,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_i8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let n = self.parse_number_i64()?;
         let v = i8::try_from(n).map_err(|_| EdnError::Custom(format!("{n} out of range for i8")))?;
         visitor.visit_i8(v)
@@ -537,6 +588,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_i16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let n = self.parse_number_i64()?;
         let v = i16::try_from(n).map_err(|_| EdnError::Custom(format!("{n} out of range for i16")))?;
         visitor.visit_i16(v)
@@ -544,6 +596,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_i32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let n = self.parse_number_i64()?;
         let v = i32::try_from(n).map_err(|_| EdnError::Custom(format!("{n} out of range for i32")))?;
         visitor.visit_i32(v)
@@ -551,11 +604,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_i64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         visitor.visit_i64(self.parse_number_i64()?)
     }
 
     fn deserialize_u8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let n = self.parse_number_i64()?;
         let v = u8::try_from(n).map_err(|_| EdnError::Custom(format!("{n} out of range for u8")))?;
         visitor.visit_u8(v)
@@ -563,6 +618,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_u16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let n = self.parse_number_i64()?;
         let v = u16::try_from(n).map_err(|_| EdnError::Custom(format!("{n} out of range for u16")))?;
         visitor.visit_u16(v)
@@ -570,6 +626,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_u32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let n = self.parse_number_i64()?;
         let v = u32::try_from(n).map_err(|_| EdnError::Custom(format!("{n} out of range for u32")))?;
         visitor.visit_u32(v)
@@ -577,6 +634,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_u64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let n = self.parse_number_i64()?;
         let v = u64::try_from(n).map_err(|_| EdnError::Custom(format!("{n} out of range for u64")))?;
         visitor.visit_u64(v)
@@ -584,16 +642,25 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
+        if let Some(v) = self.try_parse_special_float()? {
+            return visitor.visit_f32(v as f32);
+        }
         visitor.visit_f32(self.parse_number_f64()? as f32)
     }
 
     fn deserialize_f64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
+        if let Some(v) = self.try_parse_special_float()? {
+            return visitor.visit_f64(v);
+        }
         visitor.visit_f64(self.parse_number_f64()?)
     }
 
     fn deserialize_char<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         if self.peek() == Some(b'\\') {
             self.pos += 1;
             visitor.visit_char(self.parse_char_literal()?)
@@ -605,6 +672,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_str<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         match self.peek() {
             Some(b'"') => self.parse_string_visitor(visitor),
             Some(b':') => {
@@ -632,6 +700,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         // Check for nil: 'n' followed by 'i', 'l', then non-symbol-char.
         let bytes = self.input.as_bytes();
         if self.pos + 3 <= bytes.len()
@@ -649,6 +718,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let s = self.parse_symbol_str()?;
         if s == "nil" {
             visitor.visit_unit()
@@ -675,6 +745,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         let b = self.peek().ok_or(EdnError::UnexpectedEof { offset: self.pos })?;
         let closing = match b {
             b'[' => b']',
@@ -717,6 +788,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 
     fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
+        self.skip_tag_if_present()?;
         match self.peek() {
             Some(b'{') => {
                 self.enter_scope()?;

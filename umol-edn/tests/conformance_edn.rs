@@ -599,8 +599,10 @@ fn test_s17_qualified_tag() {
     assert_eq!(result, Edn::Tagged("myapp/Person".into(), Box::new(Edn::Map(inner))));
 }
 
-// NOTE: streaming tag stripping only works through deserialize_any, not typed
-// methods (deserialize_seq, etc.). #my/tag [1 2 3] → Vec<i64> does not work.
+#[test]
+fn test_s17_qualified_tag_streaming() {
+    assert_eq!(stream::<Vec<i64>>("#my/tag [1 2 3]").unwrap(), vec![1, 2, 3]);
+}
 
 #[rstest]
 #[case("#foo 1")]

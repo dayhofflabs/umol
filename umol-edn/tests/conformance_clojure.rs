@@ -258,8 +258,18 @@ fn test_s12_special_floats() {
     }
 }
 
-// NOTE: ##NaN/##Inf only handled in deserialize_any, not deserialize_f64.
-// Streaming f64 deserialization of special floats does not work.
+#[test]
+fn test_s12_special_floats_streaming() {
+    let nan: f64 = stream("##NaN").unwrap();
+    assert!(nan.is_nan());
+    let inf: f64 = stream("##Inf").unwrap();
+    assert!(inf == f64::INFINITY);
+    let neg_inf: f64 = stream("##-Inf").unwrap();
+    assert!(neg_inf == f64::NEG_INFINITY);
+}
+
+// NOTE: streaming tag stripping only works through deserialize_any, not typed
+// methods (deserialize_seq, etc.). #my/tag [1 2 3] → Vec<i64> does not work.
 
 #[rstest]
 #[case("1.0", 1.0f64)]
@@ -315,8 +325,10 @@ fn test_s17c_bare_tag_accepted() {
     assert_eq!(val, Edn::Tagged("foo".into(), Box::new(Edn::Int(1))));
 }
 
-// NOTE: streaming tag stripping only works through deserialize_any, not typed
-// methods (deserialize_seq, etc.). #my/tag [1 2 3] → Vec<i64> does not work.
+#[test]
+fn test_s17_tag_streaming() {
+    assert_eq!(stream::<Vec<i64>>("#my/tag [1 2 3]").unwrap(), vec![1, 2, 3]);
+}
 
 // ============================================================================
 // S19: Comments
