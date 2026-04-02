@@ -7,7 +7,7 @@ use memchr::memchr2;
 use winnow::ascii::digit1;
 use winnow::combinator::opt;
 use winnow::error::ErrMode;
-use winnow::stream::{Location, Stream};
+use winnow::stream::Location;
 use winnow::token::{any, one_of, take, take_while};
 use winnow::{LocatingSlice, Parser};
 
@@ -22,6 +22,17 @@ type PResult<T> = Result<T, E>;
 /// Get the remaining input as a `&str`.
 fn rest<'a>(input: &Input<'a>) -> &'a str {
     *input.as_ref()
+}
+
+/// Peek at the next byte without consuming.
+#[inline(always)]
+fn peek_byte(input: &Input) -> Option<u8> {
+    input.as_ref().as_bytes().first().copied()
+}
+
+#[inline(always)]
+fn is_ws_byte(b: u8) -> bool {
+    matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b',')
 }
 
 /// Parse a single EDN value from the input, returning the value and remaining input.
@@ -65,7 +76,7 @@ pub fn parse_all<'a>(
     let mut values = Vec::new();
     loop {
         ws_and_comments(&mut located, config).ok();
-        if rest(&located).is_empty() {
+        if peek_byte(&located).is_none() {
             break;
         }
         let val = edn_value(config)
@@ -84,18 +95,18 @@ fn is_ws(c: char) -> bool {
 
 fn ws_and_comments<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<()> {
     loop {
-        let before = input.current_token_start();
         take_while(0.., is_ws).parse_next(input)?;
-        let s = rest(input);
-        if s.starts_with(';') {
-            take_while(0.., |c: char| c != '\n').parse_next(input)?;
-            opt('\n').parse_next(input)?;
-        } else if s.starts_with("#_") && config.dialect == Dialect::Clojure {
-            let _ = "#_".parse_next(input)?;
-            ws_and_comments(input, config).ok();
-            let _ = edn_value(config).parse_next(input)?;
-        } else if input.current_token_start() == before {
-            break;
+        match peek_byte(input) {
+            Some(b';') => {
+                take_while(0.., |c: char| c != '\n').parse_next(input)?;
+                opt('\n').parse_next(input)?;
+            }
+            Some(b'#') if config.dialect == Dialect::Clojure && rest(input).starts_with("#_") => {
+                let _ = "#_".parse_next(input)?;
+                ws_and_comments(input, config).ok();
+                let _ = edn_value(config).parse_next(input)?;
+            }
+            _ => break,
         }
     }
     Ok(())
@@ -111,22 +122,19 @@ where
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         ws_and_comments(input, config).ok();
-        let s = rest(input);
         let offset = input.current_token_start();
-        let c = s
-            .chars()
-            .next()
+        let b = peek_byte(input)
             .ok_or(ErrMode::Backtrack(EdnError::UnexpectedEof { offset }))?;
-        match c {
-            '(' => edn_list(config).parse_next(input),
-            '[' => edn_vector(config).parse_next(input),
-            '{' => edn_map(config).parse_next(input),
-            '#' => edn_dispatch(config).parse_next(input),
-            ':' => edn_keyword(input, config.dialect),
-            '"' => edn_string(config.dialect).parse_next(input),
-            '\\' => edn_char(config.dialect).parse_next(input),
-            '+' | '-' => edn_number_or_symbol(config).parse_next(input),
-            c if c.is_ascii_digit() => edn_number(input),
+        match b {
+            b'(' => edn_list(config).parse_next(input),
+            b'[' => edn_vector(config).parse_next(input),
+            b'{' => edn_map(config).parse_next(input),
+            b'#' => edn_dispatch(config).parse_next(input),
+            b':' => edn_keyword(input, config.dialect),
+            b'"' => edn_string(config.dialect).parse_next(input),
+            b'\\' => edn_char(config.dialect).parse_next(input),
+            b'+' | b'-' => edn_number_or_symbol(config).parse_next(input),
+            b'0'..=b'9' => edn_number(input),
             _ => edn_symbol_or_literal(input),
         }
     }
@@ -191,8 +199,7 @@ fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
         .parse_next(input)?;
 
     // Check for N/M suffix (bignum)
-    let s = rest(input);
-    if s.starts_with('N') || s.starts_with('M') {
+    if matches!(peek_byte(input), Some(b'N') | Some(b'M')) {
         let _ = any.parse_next(input)?;
         return Err(ErrMode::Cut(EdnError::UnsupportedFeature {
             offset: start,
@@ -200,7 +207,7 @@ fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
         }));
     }
 
-    if num_str.contains('.') || num_str.contains('e') || num_str.contains('E') {
+    if memchr::memchr3(b'.', b'e', b'E', num_str.as_bytes()).is_some() {
         let f: f64 = num_str
             .parse()
             .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
@@ -220,12 +227,13 @@ where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
-        let checkpoint = input.checkpoint();
-        if let Ok(val) = edn_number(input) {
-            return Ok(val);
+        // Peek at second byte: if digit, it's a number like +5 or -3.
+        let second = input.as_ref().as_bytes().get(1).copied();
+        if matches!(second, Some(b'0'..=b'9')) {
+            edn_number(input)
+        } else {
+            edn_symbol_or_literal(input)
         }
-        input.reset(&checkpoint);
-        edn_symbol_or_literal(input)
     }
 }
 
@@ -338,8 +346,42 @@ fn edn_string<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
 fn edn_char<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '\\'.parse_next(input)?;
+        let char_offset = input.current_token_start();
         let s = rest(input);
+        let bytes = s.as_bytes();
 
+        // Fast path: single character followed by non-symbol-char or EOF.
+        if let Some(&first) = bytes.first() {
+            let second = bytes.get(1).copied();
+            let single_char = second.is_none()
+                || !is_symbol_char(second.unwrap() as char)
+                || is_ws_byte(second.unwrap());
+            if single_char && first != b'u' {
+                let c = s.chars().next().unwrap();
+                if c.is_whitespace() {
+                    return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
+                }
+                let _ = any.parse_next(input)?;
+                return Ok(Edn::Char(c));
+            }
+        } else {
+            return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: char_offset }));
+        }
+
+        // Unicode escape \uNNNN
+        if bytes[0] == b'u' {
+            let _ = 'u'.parse_next(input)?;
+            let hex: &str = take_while(4..=4, |c: char| c.is_ascii_hexdigit())
+                .parse_next(input)
+                .map_err(|_: E| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
+            let cp = u32::from_str_radix(hex, 16)
+                .map_err(|_| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
+            let ch =
+                char::from_u32(cp).ok_or_else(|| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
+            return Ok(Edn::Char(ch));
+        }
+
+        // Named characters (multi-byte sequences like "newline", "return", etc.)
         let named: &[(&str, char)] = if dialect == Dialect::Edn {
             &[
                 ("newline", '\n'),
@@ -362,10 +404,9 @@ fn edn_char<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
             if s.starts_with(name) {
                 let after = &s[name.len()..];
                 let terminates = after.is_empty()
-                    || after
-                        .chars()
-                        .next()
-                        .map_or(true, |c| !is_symbol_char(c) || is_ws(c));
+                    || after.as_bytes().first().map_or(true, |&b| {
+                        !is_symbol_char(b as char) || is_ws_byte(b)
+                    });
                 if terminates {
                     let _ = winnow::token::literal(name).parse_next(input)?;
                     return Ok(Edn::Char(ch));
@@ -373,31 +414,15 @@ fn edn_char<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
             }
         }
 
-        // Unicode escape \uNNNN
-        let char_offset = input.current_token_start();
-        if s.starts_with('u') {
-            let _ = 'u'.parse_next(input)?;
-            let hex: &str = take_while(4..=4, |c: char| c.is_ascii_hexdigit())
-                .parse_next(input)
-                .map_err(|_: E| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
-            let cp = u32::from_str_radix(hex, 16)
-                .map_err(|_| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
-            let ch =
-                char::from_u32(cp).ok_or_else(|| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
-            return Ok(Edn::Char(ch));
-        }
-
-        // Single character
-        let c = s
-            .chars()
-            .next()
-            .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: char_offset }))?;
+        // Multi-byte but not a recognized named char — error.
+        // (Single chars were handled by the fast path above.)
+        let c = s.chars().next().unwrap();
         if c.is_whitespace() {
             return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
         }
         let _ = any.parse_next(input)?;
-        if let Some(next) = rest(input).chars().next() {
-            if is_symbol_char(next) && !is_ws(next) {
+        if let Some(&next) = rest(input).as_bytes().first() {
+            if is_symbol_char(next as char) && !is_ws_byte(next) {
                 return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
             }
         }
@@ -418,14 +443,14 @@ where
         let mut items = Vec::new();
         loop {
             ws_and_comments(input, config).ok();
-            if rest(input).is_empty() {
-                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
+            match peek_byte(input) {
+                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                Some(b')') => {
+                    let _ = ')'.parse_next(input)?;
+                    return Ok(Edn::List(items));
+                }
+                _ => items.push(edn_value(config).parse_next(input)?),
             }
-            if rest(input).starts_with(')') {
-                let _ = ')'.parse_next(input)?;
-                return Ok(Edn::List(items));
-            }
-            items.push(edn_value(config).parse_next(input)?);
         }
     }
 }
@@ -441,14 +466,14 @@ where
         let mut items = Vec::new();
         loop {
             ws_and_comments(input, config).ok();
-            if rest(input).is_empty() {
-                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
+            match peek_byte(input) {
+                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                Some(b']') => {
+                    let _ = ']'.parse_next(input)?;
+                    return Ok(Edn::Vector(items));
+                }
+                _ => items.push(edn_value(config).parse_next(input)?),
             }
-            if rest(input).starts_with(']') {
-                let _ = ']'.parse_next(input)?;
-                return Ok(Edn::Vector(items));
-            }
-            items.push(edn_value(config).parse_next(input)?);
         }
     }
 }
@@ -464,21 +489,23 @@ where
         let mut map = EdnMap::new();
         loop {
             ws_and_comments(input, config).ok();
-            if rest(input).is_empty() {
-                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
+            match peek_byte(input) {
+                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                Some(b'}') => {
+                    let _ = '}'.parse_next(input)?;
+                    return Ok(Edn::Map(map));
+                }
+                _ => {
+                    let key_offset = input.current_token_start();
+                    let key = edn_value(config).parse_next(input)?;
+                    ws_and_comments(input, config).ok();
+                    let val = edn_value(config).parse_next(input)?;
+                    if config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
+                        return Err(ErrMode::Cut(EdnError::DuplicateKey { offset: key_offset }));
+                    }
+                    map.insert(key, val);
+                }
             }
-            if rest(input).starts_with('}') {
-                let _ = '}'.parse_next(input)?;
-                return Ok(Edn::Map(map));
-            }
-            let key_offset = input.current_token_start();
-            let key = edn_value(config).parse_next(input)?;
-            ws_and_comments(input, config).ok();
-            let val = edn_value(config).parse_next(input)?;
-            if config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
-                return Err(ErrMode::Cut(EdnError::DuplicateKey { offset: key_offset }));
-            }
-            map.insert(key, val);
         }
     }
 }
@@ -494,14 +521,14 @@ where
         let mut set = EdnSet::new();
         loop {
             ws_and_comments(input, config).ok();
-            if rest(input).is_empty() {
-                return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }));
+            match peek_byte(input) {
+                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                Some(b'}') => {
+                    let _ = '}'.parse_next(input)?;
+                    return Ok(Edn::Set(set));
+                }
+                _ => { set.insert(edn_value(config).parse_next(input)?); }
             }
-            if rest(input).starts_with('}') {
-                let _ = '}'.parse_next(input)?;
-                return Ok(Edn::Set(set));
-            }
-            set.insert(edn_value(config).parse_next(input)?);
         }
     }
 }
@@ -515,37 +542,28 @@ where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
-        let _dispatch_offset = input.current_token_start();
         let _ = '#'.parse_next(input)?;
-        let s = rest(input);
-        let c = s
-            .chars()
-            .next()
+        let b = peek_byte(input)
             .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }))?;
-        match c {
-            '{' => edn_set(config).parse_next(input),
-            '_' if config.dialect == Dialect::Clojure => {
+        match b {
+            b'{' => edn_set(config).parse_next(input),
+            b'_' if config.dialect == Dialect::Clojure => {
                 let _ = '_'.parse_next(input)?;
                 ws_and_comments(input, config).ok();
                 let _ = edn_value(config).parse_next(input)?;
                 edn_value(config).parse_next(input)
             }
-            '#' if config.dialect == Dialect::Clojure => {
+            b'#' if config.dialect == Dialect::Clojure => {
                 let _ = '#'.parse_next(input)?;
-                let s2 = rest(input);
-                if s2.starts_with("NaN") {
-                    let _ = "NaN".parse_next(input)?;
-                    Ok(Edn::Float(f64::NAN))
-                } else if s2.starts_with("-Inf") {
-                    let _ = "-Inf".parse_next(input)?;
-                    Ok(Edn::Float(f64::NEG_INFINITY))
-                } else if s2.starts_with("Inf") {
-                    let _ = "Inf".parse_next(input)?;
-                    Ok(Edn::Float(f64::INFINITY))
-                } else {
-                    let offset = input.current_token_start();
-                    let found = s2.chars().next().unwrap_or('\0');
-                    Err(ErrMode::Cut(EdnError::UnexpectedToken { offset, found }))
+                match peek_byte(input) {
+                    Some(b'N') => { let _ = "NaN".parse_next(input)?; Ok(Edn::Float(f64::NAN)) }
+                    Some(b'-') => { let _ = "-Inf".parse_next(input)?; Ok(Edn::Float(f64::NEG_INFINITY)) }
+                    Some(b'I') => { let _ = "Inf".parse_next(input)?; Ok(Edn::Float(f64::INFINITY)) }
+                    _ => {
+                        let offset = input.current_token_start();
+                        let found = rest(input).chars().next().unwrap_or('\0');
+                        Err(ErrMode::Cut(EdnError::UnexpectedToken { offset, found }))
+                    }
                 }
             }
             _ => {
