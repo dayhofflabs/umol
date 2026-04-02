@@ -8,7 +8,7 @@ use serde::de::{
     self, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
 
-use crate::config::{Dialect, ParseConfig, TagReaders};
+use crate::config::{AutoResolve, Dialect, ParseConfig, TagReaders};
 use crate::error::EdnError;
 use crate::parser::{is_symbol_char, is_symbol_start};
 
@@ -21,6 +21,7 @@ pub struct EdnStreamDeserializer<'de> {
     depth: u16,
     dialect: Dialect,
     tag_readers: TagReaders,
+    auto_resolve: Option<AutoResolve>,
 }
 
 impl<'de> EdnStreamDeserializer<'de> {
@@ -36,6 +37,7 @@ impl<'de> EdnStreamDeserializer<'de> {
             depth: MAX_DEPTH,
             dialect: config.dialect,
             tag_readers: config.tag_readers.clone(),
+            auto_resolve: config.auto_resolve.clone(),
         }
     }
 
@@ -111,14 +113,44 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     // --- Token parsing ---
 
-    fn parse_keyword_name(&mut self) -> Result<&'de str, EdnError> {
+    fn parse_keyword_name(&mut self) -> Result<Cow<'de, str>, EdnError> {
         debug_assert_eq!(self.input.as_bytes()[self.pos], b':');
+        let start = self.pos;
         self.pos += 1;
+
+        // :: auto-resolve (Clojure only)
+        if self.dialect == Dialect::Clojure && self.input.as_bytes().get(self.pos) == Some(&b':') {
+            self.pos += 1;
+            return self.resolve_auto_keyword(start);
+        }
+
         // :/ and :/foo are not legal keywords per the EDN spec.
         if self.input.as_bytes().get(self.pos) == Some(&b'/') {
             return Err(EdnError::UnexpectedToken { offset: self.pos, found: '/' });
         }
-        self.parse_symbol_str()
+        self.parse_symbol_str().map(Cow::Borrowed)
+    }
+
+    fn resolve_auto_keyword(&mut self, start: usize) -> Result<Cow<'de, str>, EdnError> {
+        if self.auto_resolve.is_none() {
+            return Err(EdnError::MissingAutoResolve { offset: start });
+        }
+        let raw = self.parse_symbol_str()?;
+        let ar = self.auto_resolve.as_ref().unwrap();
+        if let Some(slash_pos) = raw.find('/') {
+            let alias = &raw[..slash_pos];
+            let name = &raw[slash_pos + 1..];
+            if name.is_empty() {
+                return Err(EdnError::InvalidSymbol { offset: start });
+            }
+            let ns = ar.aliases.get(alias).ok_or_else(|| EdnError::UnknownAlias {
+                offset: start,
+                alias: alias.to_string(),
+            })?;
+            Ok(Cow::Owned(format!("{ns}/{name}")))
+        } else {
+            Ok(Cow::Owned(format!("{}/{raw}", ar.current_ns)))
+        }
     }
 
     fn parse_symbol_str(&mut self) -> Result<&'de str, EdnError> {
@@ -466,6 +498,13 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 }
 
+fn visit_cow_str<'de, V: Visitor<'de>>(visitor: V, s: Cow<'de, str>) -> Result<V::Value, EdnError> {
+    match s {
+        Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
+        Cow::Owned(o) => visitor.visit_string(o),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Deserializer trait
 // ---------------------------------------------------------------------------
@@ -480,7 +519,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
             b'"' => self.parse_string_visitor(visitor),
             b':' => {
                 let name = self.parse_keyword_name()?;
-                visitor.visit_borrowed_str(name)
+                visit_cow_str(visitor, name)
             }
             b'(' | b'[' => self.deserialize_seq(visitor),
             b'{' => self.deserialize_map(visitor),
@@ -677,7 +716,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
             Some(b'"') => self.parse_string_visitor(visitor),
             Some(b':') => {
                 let name = self.parse_keyword_name()?;
-                visitor.visit_borrowed_str(name)
+                visit_cow_str(visitor, name)
             }
             _ => {
                 let s = self.parse_symbol_str()?;
@@ -837,7 +876,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
         match self.peek() {
             Some(b':') => {
                 let name = self.parse_keyword_name()?;
-                visitor.visit_enum(de::value::BorrowedStrDeserializer::new(name))
+                match name {
+                    Cow::Borrowed(b) => visitor.visit_enum(de::value::BorrowedStrDeserializer::new(b)),
+                    Cow::Owned(o) => visitor.visit_enum(de::value::StrDeserializer::<EdnError>::new(&o)),
+                }
             }
             Some(b'"') => {
                 let s = self.parse_string()?;
@@ -873,7 +915,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
         match self.peek() {
             Some(b':') => {
                 let name = self.parse_keyword_name()?;
-                visitor.visit_borrowed_str(name)
+                visit_cow_str(visitor, name)
             }
             Some(b'"') => self.parse_string_visitor(visitor),
             _ => {

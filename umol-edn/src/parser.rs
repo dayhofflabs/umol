@@ -132,7 +132,7 @@ where
             b'[' => edn_vector(config).parse_next(input),
             b'{' => edn_map(config).parse_next(input),
             b'#' => edn_dispatch(config).parse_next(input),
-            b':' => edn_keyword(input, config.dialect),
+            b':' => edn_keyword(input, config),
             b'"' => edn_string(config.dialect).parse_next(input),
             b'\\' => edn_char(config.dialect).parse_next(input),
             b'+' | b'-' => edn_number_or_symbol(config).parse_next(input),
@@ -212,10 +212,17 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult
 
 // --- Keywords ---
 
-fn edn_keyword<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
+fn edn_keyword<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<Edn<'a>> {
     let start = input.current_token_start();
     let _ = ':'.parse_next(input)?;
-    let s = match dialect {
+
+    // :: auto-resolve (Clojure only)
+    if config.dialect == Dialect::Clojure && peek_byte(input) == Some(b':') {
+        let _ = ':'.parse_next(input)?;
+        return parse_auto_resolve_keyword(input, config, start);
+    }
+
+    let s = match config.dialect {
         Dialect::Clojure => {
             // Clojure allows digit-starting keywords (e.g. :0, :1).
             // :/ and :/foo are not legal keywords per the EDN spec.
@@ -229,8 +236,41 @@ fn edn_keyword<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> 
                 .parse_next(input)?
         }
     };
-    validate_symbol(s, start, dialect)?;
+    validate_symbol(s, start, config.dialect)?;
     Ok(Edn::Keyword(Keyword::new(s)))
+}
+
+fn parse_auto_resolve_keyword<'a>(
+    input: &mut Input<'a>,
+    config: &ParseConfig,
+    start: usize,
+) -> PResult<Edn<'a>> {
+    let ar = config.auto_resolve.as_ref().ok_or_else(|| {
+        ErrMode::Cut(EdnError::MissingAutoResolve { offset: start })
+    })?;
+
+    let raw = (
+        one_of(|c: char| (is_symbol_start(c) || c.is_ascii_digit()) && c != '/'),
+        take_while(0.., is_symbol_char),
+    )
+        .take()
+        .parse_next(input)?;
+
+    if let Some(slash_pos) = raw.find('/') {
+        // ::alias/name
+        let alias = &raw[..slash_pos];
+        let name = &raw[slash_pos + 1..];
+        if name.is_empty() {
+            return Err(ErrMode::Cut(EdnError::InvalidSymbol { offset: start }));
+        }
+        let ns = ar.aliases.get(alias).ok_or_else(|| {
+            ErrMode::Cut(EdnError::UnknownAlias { offset: start, alias: alias.to_string() })
+        })?;
+        Ok(Edn::Keyword(Keyword::owned(format!("{ns}/{name}"))))
+    } else {
+        // ::name → :current-ns/name
+        Ok(Edn::Keyword(Keyword::owned(format!("{}/{raw}", ar.current_ns))))
+    }
 }
 
 // --- Numbers ---

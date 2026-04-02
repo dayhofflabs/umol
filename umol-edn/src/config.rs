@@ -68,12 +68,23 @@ impl Default for TagReaders {
     }
 }
 
+/// Namespace resolution for `::keyword` and `::alias/name` syntax (Clojure only).
+///
+/// In Clojure, `::foo` resolves to `:current-ns/foo` and `::str/foo` resolves
+/// to `:fully.qualified.ns/foo` where `str` is looked up in `aliases`.
+#[derive(Clone, Debug, Default)]
+pub struct AutoResolve {
+    pub current_ns: String,
+    pub aliases: HashMap<String, String>,
+}
+
 /// Parser configuration.
 #[derive(Clone, Debug)]
 pub struct ParseConfig {
     pub dialect: Dialect,
     pub duplicate_keys: DuplicateKeyPolicy,
     pub tag_readers: TagReaders,
+    pub auto_resolve: Option<AutoResolve>,
 }
 
 impl Default for ParseConfig {
@@ -82,6 +93,7 @@ impl Default for ParseConfig {
             dialect: Dialect::default(),
             duplicate_keys: DuplicateKeyPolicy::default(),
             tag_readers: TagReaders::default(),
+            auto_resolve: None,
         }
     }
 }

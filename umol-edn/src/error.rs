@@ -21,6 +21,8 @@ pub enum EdnError {
     InvalidInst { reason: String },
     InvalidUuid { reason: String },
     TrailingContent { offset: usize },
+    UnknownAlias { offset: usize, alias: String },
+    MissingAutoResolve { offset: usize },
     UnsupportedFeature { offset: usize, feature: &'static str },
     Custom(String),
 }
@@ -60,6 +62,12 @@ impl fmt::Display for EdnError {
             }
             EdnError::TrailingContent { offset } => {
                 write!(f, "trailing content at byte {offset}")
+            }
+            EdnError::UnknownAlias { offset, alias } => {
+                write!(f, "unknown namespace alias '{alias}' at byte {offset}")
+            }
+            EdnError::MissingAutoResolve { offset } => {
+                write!(f, ":: keyword requires auto_resolve config at byte {offset}")
             }
             EdnError::UnsupportedFeature { offset, feature } => {
                 write!(f, "unsupported feature '{feature}' at byte {offset}")

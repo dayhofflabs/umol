@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use rstest::rstest;
 use serde::Deserialize;
-use umol_edn::config::{Dialect, ParseConfig};
+use umol_edn::config::{AutoResolve, Dialect, ParseConfig};
 use umol_edn::edn::{Edn, Symbol};
 use umol_edn::error::EdnError;
 use umol_edn::{from_str_with, read_all_with, read_string_with, EdnMap};
@@ -200,6 +200,89 @@ fn test_s10_post_slash_lenient() {
 #[case(":ns/name", "ns/name")]
 fn test_s10_keywords_streaming(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(stream::<String>(input).unwrap(), expected);
+}
+
+// ============================================================================
+// S10g: :: auto-resolve keywords
+// ============================================================================
+
+fn ar_cfg() -> ParseConfig {
+    let mut aliases = HashMap::new();
+    aliases.insert("str".to_string(), "clojure.string".to_string());
+    aliases.insert("set".to_string(), "clojure.set".to_string());
+    ParseConfig {
+        dialect: Dialect::Clojure,
+        auto_resolve: Some(AutoResolve {
+            current_ns: "my.app".to_string(),
+            aliases,
+        }),
+        ..Default::default()
+    }
+}
+
+fn parse_ar(input: &str) -> Result<Edn<'_>, EdnError> {
+    read_string_with(input, &ar_cfg())
+}
+
+fn stream_ar<'a, T: serde::Deserialize<'a>>(input: &'a str) -> Result<T, EdnError> {
+    from_str_with(input, &ar_cfg())
+}
+
+#[rstest]
+#[case("::foo", "my.app/foo")]
+#[case("::bar", "my.app/bar")]
+#[case("::str/join", "clojure.string/join")]
+#[case("::set/union", "clojure.set/union")]
+fn test_s10g_auto_resolve(#[case] input: &str, #[case] expected: &str) {
+    assert_eq!(parse_ar(input).unwrap(), Edn::keyword(expected));
+}
+
+#[rstest]
+#[case("::foo", "my.app/foo")]
+#[case("::str/join", "clojure.string/join")]
+fn test_s10g_auto_resolve_streaming(#[case] input: &str, #[case] expected: &str) {
+    assert_eq!(stream_ar::<String>(input).unwrap(), expected);
+}
+
+#[test]
+fn test_s10g_unknown_alias() {
+    let err = parse_ar("::bogus/name").unwrap_err();
+    assert!(matches!(err, EdnError::UnknownAlias { alias, .. } if alias == "bogus"));
+}
+
+#[test]
+fn test_s10g_unknown_alias_streaming() {
+    let err = stream_ar::<String>("::bogus/name").unwrap_err();
+    assert!(matches!(err, EdnError::UnknownAlias { alias, .. } if alias == "bogus"));
+}
+
+#[test]
+fn test_s10g_missing_config() {
+    // :: without auto_resolve config → error
+    let err = parse("::foo").unwrap_err();
+    assert!(matches!(err, EdnError::MissingAutoResolve { .. }));
+}
+
+#[test]
+fn test_s10g_missing_config_streaming() {
+    let err = stream::<String>("::foo").unwrap_err();
+    assert!(matches!(err, EdnError::MissingAutoResolve { .. }));
+}
+
+#[test]
+fn test_s10g_in_map() {
+    let result = parse_ar("{::foo 1 ::str/join 2}").unwrap();
+    let mut expected = EdnMap::new();
+    expected.insert(Edn::keyword("my.app/foo"), Edn::Int(1));
+    expected.insert(Edn::keyword("clojure.string/join"), Edn::Int(2));
+    assert_eq!(result, Edn::Map(expected));
+}
+
+#[test]
+fn test_s10g_in_map_streaming() {
+    let m: HashMap<String, i64> = stream_ar("{::foo 1 ::str/join 2}").unwrap();
+    assert_eq!(m["my.app/foo"], 1);
+    assert_eq!(m["clojure.string/join"], 2);
 }
 
 // ============================================================================
