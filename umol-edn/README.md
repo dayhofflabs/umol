@@ -1,10 +1,10 @@
 # umol-edn
 
-Rust parser, formatter, and serde integration for
-[EDN (Extensible Data Notation)](https://github.com/edn-format/edn).
+Hello, Possums! `dame-edna` provides a Rust parser, formatter, and 
+erde integration for [EDN (Extensible Data Notation)](https://github.com/edn-format/edn).
 
-Inspired by [edamame](https://github.com/borkdude/edamame) (Clojure),
-[go-edn](https://github.com/go-edn/edn) (Go), and
+It draws inspiration from [edamame](https://github.com/borkdude/edamame)
+(Clojure), [go-edn](https://github.com/go-edn/edn) (Go), and
 [serde_json](https://github.com/serde-rs/json) (Rust).
 
 ## Dialects
