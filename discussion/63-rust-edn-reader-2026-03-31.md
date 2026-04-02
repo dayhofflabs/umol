@@ -890,6 +890,8 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 - [x] review public API — re-exports cover all common types in lib.rs.
 - [x] prelude — not needed; flat re-exports suffice. TODO removed.
 - [ ] edn!() macro
+- [ ] Tag stripping only works through deserialize_any, not typed methods like deserialize_seq
+- [ ] ##NaN/##Inf only handled in deserialize_any, not deserialize_f64
 
 ## Implementation status (2026-04-01)
 

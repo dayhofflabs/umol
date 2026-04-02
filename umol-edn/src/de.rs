@@ -27,6 +27,14 @@ pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
     Ok(val)
 }
 
+/// Deserialize a Rust value from an EDN string using a custom config.
+pub fn from_str_with<'a, T: Deserialize<'a>>(s: &'a str, config: &ParseConfig) -> Result<T, EdnError> {
+    let mut de = EdnStreamDeserializer::with_config(s, config);
+    let val = T::deserialize(&mut de)?;
+    de.expect_eof()?;
+    Ok(val)
+}
+
 /// Deserialize a Rust value from a pre-parsed `Edn` value.
 pub fn from_value<'a, T: Deserialize<'a>>(val: Edn<'a>) -> Result<T, EdnError> {
     T::deserialize(EdnDeserializer(val)).map_err(Into::into)
