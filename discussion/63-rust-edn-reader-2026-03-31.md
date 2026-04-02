@@ -886,7 +886,8 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 - stable or unstable sorting of maps and sets?
 - use sorting in map / set tests, do not compare to specific ordering (or multiple orderings).
 - how should the tag dispatch work?
-- from_str requires serde, which does not seem egronomically great.
+- clarify that EDN uses UTF8.
+
 
 ### Spec definitions to verify
 

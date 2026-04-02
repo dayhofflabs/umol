@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::{HashMap, HashSet};
 
 /// A keyword value (`:name` or `:ns/name`).
 #[derive(Clone, Debug, Eq)]
@@ -153,15 +153,15 @@ impl fmt::Display for Symbol<'_> {
 
 /// An unordered map of EDN values.
 #[derive(Clone, Debug)]
-pub struct EdnMap<'a>(FxHashMap<Edn<'a>, Edn<'a>>);
+pub struct EdnMap<'a>(HashMap<Edn<'a>, Edn<'a>>);
 
 impl<'a> EdnMap<'a> {
     pub fn new() -> Self {
-        Self(FxHashMap::default())
+        Self(HashMap::new())
     }
 
     pub fn with_capacity(cap: usize) -> Self {
-        Self(FxHashMap::with_capacity_and_hasher(cap, Default::default()))
+        Self(HashMap::with_capacity(cap))
     }
 
     pub fn insert(&mut self, key: Edn<'a>, value: Edn<'a>) -> Option<Edn<'a>> {
@@ -281,11 +281,11 @@ impl Hash for EdnMap<'_> {
 
 /// An unordered set of EDN values.
 #[derive(Clone, Debug)]
-pub struct EdnSet<'a>(FxHashSet<Edn<'a>>);
+pub struct EdnSet<'a>(HashSet<Edn<'a>>);
 
 impl<'a> EdnSet<'a> {
     pub fn new() -> Self {
-        Self(FxHashSet::default())
+        Self(HashSet::new())
     }
 
     pub fn insert(&mut self, value: Edn<'a>) -> bool {
