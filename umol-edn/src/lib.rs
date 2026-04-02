@@ -12,6 +12,8 @@ pub mod reader;
 pub mod de;
 #[cfg(feature = "serde")]
 pub mod ser;
+#[cfg(feature = "serde")]
+pub(crate) mod streaming;
 
 pub use config::{Dialect, DuplicateKeyPolicy, ParseConfig};
 #[cfg(feature = "serde")]

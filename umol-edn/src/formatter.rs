@@ -1,6 +1,9 @@
 //! Configurable EDN formatter (pretty-printing).
 
 use crate::edn::{Edn, EdnMap};
+use crate::error::EdnError;
+use crate::reader::read_string;
+use crate::ser::to_string;
 
 /// Configurable EDN formatter.
 #[derive(Clone, Debug)]
@@ -339,7 +342,7 @@ fn write_set(out: &mut String, items: &[&Edn<'_>], fmt: &EdnFormatter, depth: us
 
 /// Serialize a serde value to a pretty-printed EDN string.
 #[cfg(feature = "serde")]
-pub fn to_string_pretty<T: serde::Serialize>(value: &T) -> Result<String, crate::error::EdnError> {
+pub fn to_string_pretty<T: serde::Serialize>(value: &T) -> Result<String, EdnError> {
     to_string_pretty_with(value, &EdnFormatter::default())
 }
 
@@ -348,9 +351,9 @@ pub fn to_string_pretty<T: serde::Serialize>(value: &T) -> Result<String, crate:
 pub fn to_string_pretty_with<T: serde::Serialize>(
     value: &T,
     fmt: &EdnFormatter,
-) -> Result<String, crate::error::EdnError> {
-    let compact = crate::ser::to_string(value)?;
-    let edn = crate::reader::read_string(&compact)?;
+) -> Result<String, EdnError> {
+    let compact = to_string(value)?;
+    let edn = read_string(&compact)?;
     Ok(edn.to_string_with(fmt))
 }
 
@@ -549,7 +552,7 @@ mod tests {
         false
     )]
     fn test_formatter_molecule_like(#[case] input: &str, #[case] width: usize, #[case] expect_multiline: bool) {
-        let edn = crate::read_string(input).unwrap();
+        let edn = read_string(input).unwrap();
         let fmt = EdnFormatter {
             line_width: Some(width),
             ..Default::default()

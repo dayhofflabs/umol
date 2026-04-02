@@ -658,7 +658,7 @@ After basic parsing works:
 `clojure_reader::edn::read`.
 - **Fuzz**: libfuzzer target in `umol-fuzz`, arbitrary bytes, assert no panics.
 - **Conformance suite**: hand-written EDN edge cases (nested collections, all
-escape sequences, `#_` discard in every position, tagged literals, numeric
+escape sequences, `#`_ discard in every position, tagged literals, numeric
 edge cases, comments in every position, empty collections, `nil` in every
 position).
 
@@ -886,25 +886,26 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 - stable or unstable sorting of maps and sets?
 - use sorting in map / set tests, do not compare to specific ordering (or multiple orderings).
 - how should the tag dispatch work?
-- clarify that EDN uses UTF8.
+- clarify in spec that EDN uses UTF8.
+- review public API
 - prelude
 - edn!() macro
 
 ### Spec definitions to verify
 
-- [] The delimiters { } ( ) [ ] need not be separated from adjacent elements by whitespace.
-- [] Tokens beginning with # are reserved. -> should error out
-- [] # is not a delimiter. -> What does that actually mean? #a# is not allowed?
-- [] Backslash cannot be followed by whitespace.
-- [] Symbols begin with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric. Additionally, : # are allowed as constituent characters in symbols other than as the first character. -> generate enough examples
-- [] / has special meaning in symbols. It can be used once only in the middle of a symbol to separate the prefix (often a namespace) from the name, e.g. my-namespace/foo. / by itself is a legal symbol, but otherwise neither the prefix nor the name part can be empty when the symbol contains /. -> #foo/ , #/foo are illegal, #foo/bar and #/ are legal.
-- [] If a symbol has a prefix and /, the following name component should follow the first-character restrictions for symbols as a whole. This is to avoid ambiguity in reading contexts where prefixes might be presumed as implicitly included namespaces and elided thereafter. -> #foo/1 is not allowed? #foo/_a is ok? 
-- [] Per the symbol rules above, :/ and :/anything are not legal keywords. A keyword cannot begin with ::
-- [] If the target platform supports some notion of interning, it is a further semantic of keywords that all instances of the same keyword yield the identical object. -> equality test?
-- [] +num is allowed by the spec: "Integers consist of the digits 0 - 9, optionally prefixed by - to indicate a negative number, or (redundantly) by +. " -> fix the spec, add to suite
-- [] No integer other than 0 may begin with 0 -> 01 is invalid, 0 is valid.
-- [] -0 is a valid integer not distinct from 0.
-- []  Integers -> generate examples
+- [ ] The delimiters { } ( ) [ ] need not be separated from adjacent elements by whitespace.
+- [ ] Tokens beginning with # are reserved. -> should error out
+- [ ] '#' is not a delimiter. -> What does that actually mean? #a# is not allowed?
+- [ ] Backslash cannot be followed by whitespace.
+- [ ] Symbols begin with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric. Additionally, : # are allowed as constituent characters in symbols other than as the first character. -> generate enough examples
+- [ ] / has special meaning in symbols. It can be used once only in the middle of a symbol to separate the prefix (often a namespace) from the name, e.g. my-namespace/foo. / by itself is a legal symbol, but otherwise neither the prefix nor the name part can be empty when the symbol contains /. -> #foo/ , #/foo are illegal, #foo/bar and #/ are legal.
+- [ ] If a symbol has a prefix and /, the following name component should follow the first-character restrictions for symbols as a whole. This is to avoid ambiguity in reading contexts where prefixes might be presumed as implicitly included namespaces and elided thereafter. -> #foo/1 is not allowed? #foo/_a is ok? 
+- [ ] Per the symbol rules above, :/ and :/anything are not legal keywords. A keyword cannot begin with ::
+- [ ] If the target platform supports some notion of interning, it is a further semantic of keywords that all instances of the same keyword yield the identical object. -> equality test?
+- [ ] +num is allowed by the spec: "Integers consist of the digits 0 - 9, optionally prefixed by - to indicate a negative number, or (redundantly) by +. " -> fix the spec, add to suite
+- [ ] No integer other than 0 may begin with 0 -> 01 is invalid, 0 is valid.
+- [ ] -0 is a valid integer not distinct from 0.
+- [ ]  Integers -> generate examples
 
 ```
 integer
@@ -954,28 +955,27 @@ ex
   E-
 ```
 
-- [] In addition, a floating-point number may have the suffix M to indicate that exact precision is desired.
-- [] A list is a sequence of values. Lists are represented by zero or more elements enclosed in parentheses (). Note that lists can be heterogeneous. -> Check (a b 1) list. -> Check list with ,
-- [] A vector is a sequence of values that supports random access. Vectors are represented by zero or more elements enclosed in square brackets []. Note that vectors can be heterogeneous. -> Check [a b 1] -> Check commas
-- [] A map is a collection of associations between keys and values. Maps are represented by zero or more key and value pairs enclosed in curly braces {}. Each key should appear at most once. No semantics should be associated with the order in which the pairs appear. -> Check heterogeneous maps. -> Check maps with different orderings, should give equal objects
-- [] Note that keys and values can be elements of any type. The use of commas above is optional, as they are parsed as whitespace. -> Check keys of different types -> Check commas between pairs, inside of pairs
-- [] A set is a collection of unique values. Sets are represented by zero or more elements enclosed in curly braces preceded by # #{}. No semantics should be associated with the order in which the elements appear. Note that sets can be heterogeneous. -> check heterogeneous sets. #{a b [1 2 3]} -> check different orderings give equal objects
-- [] The semantics of a tag, and the type and interpretation of the tagged element are defined by the steward of the tag. #myapp/Person {:first "Fred" :last "Mertz"}.
-- [] If a reader encounters a tag for which no handler is registered, the implementation can either report an error, call a designated 'unknown element' handler, or create a well-known generic representation that contains both the tag and the tagged element, as it sees fit. -> check error strategies. -> How can this system be implemented??
-- [] Tag symbols without a prefix are reserved by **edn** for built-ins defined using the tag system. User tags ***must*** contain a prefix component, which must be owned by the user (e.g. trademark or domain) or known unique in the communication context. -> #tag "" is invalid. 
-- [] A tag *may* specify more than one format for the tagged element, e.g. both a string and a vector representation.
-- [] Tags themselves are not elements. It is an error to have a tag without a corresponding tagged element. -> "#tag" is invalid
-- [] a `;` character is encountered outside of a string, that character and all subsequent characters to the next newline should be ignored. -> test
-- [] `#` followed immediately by `_` is the discard sequence, indicating that the next element (whether separated from `#_` by whitespace or not) should be read and discarded. Note that the next element must still be a readable element. A reader should not call user-supplied tag handlers during the processing of the element to be discarded.
-  `[a b #_foo 42] => [a b 42]`
-- [] The discard sequence is not an element. It is an error to have a discard sequence without a following element.  -> This is EDN, not Clojure-dialect
-  ```
-- [] Sets and maps have requirements that their elements and keys respectively be unique, which requires a mechanism for determining when 2 values are not unique (i.e. are equal).
-- [] nil, booleans, strings, characters, and symbols are equal to values of the same type with the same **edn** representation.
-- [] integers and floating point numbers should be considered equal to values only of the same magnitude, *type, and precision*. Comingling numeric types and precision in map/set key/elements, or constituents therein, is not advised.
-- [] sequences (lists and vectors) are equal to other sequences whose count of elements is the same, and for which each corresponding pair of elements (by ordinal) is equal.
-- [] sets are equal if they have the same count of elements and, for every element in one set, an equal element is in the other.
-- [] maps are equal if they have the same number of entries, and for every key/value entry in one map an equal key is present and mapped to an equal value in the other.
-- [] tagged elements must define their own equality semantics. #uuid elements are equal if their canonic representations are equal. #inst elements are equal if their representation strings designate the same timestamp per ++[RFC-3339](http://www.ietf.org/rfc/rfc3339.txt)++.
-- [] Exercise all format options.
+- [ ] In addition, a floating-point number may have the suffix M to indicate that exact precision is desired.
+- [ ] A list is a sequence of values. Lists are represented by zero or more elements enclosed in parentheses (). Note that lists can be heterogeneous. -> Check (a b 1) list. -> Check list with ,
+- [ ] A vector is a sequence of values that supports random access. Vectors are represented by zero or more elements enclosed in square brackets []. Note that vectors can be heterogeneous. -> Check [a b 1] -> Check commas
+- [ ] A map is a collection of associations between keys and values. Maps are represented by zero or more key and value pairs enclosed in curly braces {}. Each key should appear at most once. No semantics should be associated with the order in which the pairs appear. -> Check heterogeneous maps. -> Check maps with different orderings, should give equal objects
+- [ ] Note that keys and values can be elements of any type. The use of commas above is optional, as they are parsed as whitespace. -> Check keys of different types -> Check commas between pairs, inside of pairs
+- [ ] A set is a collection of unique values. Sets are represented by zero or more elements enclosed in curly braces preceded by # #{}. No semantics should be associated with the order in which the elements appear. Note that sets can be heterogeneous. -> check heterogeneous sets. #{a b [1 2 3]} -> check different orderings give equal objects
+- [ ] The semantics of a tag, and the type and interpretation of the tagged element are defined by the steward of the tag. #myapp/Person {:first "Fred" :last "Mertz"}.
+- [ ] If a reader encounters a tag for which no handler is registered, the implementation can either report an error, call a designated 'unknown element' handler, or create a well-known generic representation that contains both the tag and the tagged element, as it sees fit. -> check error strategies. -> How can this system be implemented??
+- [ ] Tag symbols without a prefix are reserved by **edn** for built-ins defined using the tag system. User tags ***must*** contain a prefix component, which must be owned by the user (e.g. trademark or domain) or known unique in the communication context. -> #tag "" is invalid. 
+- [ ] A tag *may* specify more than one format for the tagged element, e.g. both a string and a vector representation.
+- [ ] Tags themselves are not elements. It is an error to have a tag without a corresponding tagged element. -> "#tag" is invalid
+- [ ] a `;` character is encountered outside of a string, that character and all subsequent characters to the next newline should be ignored. -> test
+- [ ] `#` followed immediately by `_` is the discard sequence, indicating that the next element (whether separated from `#_` by whitespace or not) should be read and discarded. Note that the next element must still be a readable element. A reader should not call user-supplied tag handlers during the processing of the element to be discarded.
+`[a b #_foo 42] => [a b 42]`
+- [ ] The discard sequence is not an element. It is an error to have a discard sequence without a following element.  -> This is EDN, not Clojure-dialect
+- [ ] Sets and maps have requirements that their elements and keys respectively be unique, which requires a mechanism for determining when 2 values are not unique (i.e. are equal).
+- [ ] nil, booleans, strings, characters, and symbols are equal to values of the same type with the same **edn** representation.
+- [ ] integers and floating point numbers should be considered equal to values only of the same magnitude, *type, and precision*. Comingling numeric types and precision in map/set key/elements, or constituents therein, is not advised.
+- [ ] sequences (lists and vectors) are equal to other sequences whose count of elements is the same, and for which each corresponding pair of elements (by ordinal) is equal.
+- [ ] sets are equal if they have the same count of elements and, for every element in one set, an equal element is in the other.
+- [ ] maps are equal if they have the same number of entries, and for every key/value entry in one map an equal key is present and mapped to an equal value in the other.
+- [ ] tagged elements must define their own equality semantics. #uuid elements are equal if their canonic representations are equal. #inst elements are equal if their representation strings designate the same timestamp per ++[RFC-3339](http://www.ietf.org/rfc/rfc3339.txt)++.
+- [ ] Exercise all format options.
 

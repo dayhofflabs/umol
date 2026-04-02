@@ -1,20 +1,27 @@
 //! Serde `Deserializer` for `Edn` values.
 
+use std::borrow::Cow;
+use std::collections::hash_map::IntoIter as HashMapIntoIter;
+use std::marker::PhantomData;
+use std::vec::IntoIter as VecIntoIter;
+
 use serde::de::{self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
 use crate::config::ParseConfig;
 use crate::edn::{Edn, EdnMap};
 use crate::error::EdnError;
-use crate::reader::{read_string, Reader};
-use std::marker::PhantomData;
-use std::borrow::Cow;
-use std::collections::hash_map::IntoIter as HashMapIntoIter;
-use std::vec::IntoIter as VecIntoIter;
+use crate::reader::Reader;
+use crate::streaming::EdnStreamDeserializer;
 
 /// Deserialize a Rust value from an EDN string.
+///
+/// Uses a streaming deserializer that parses directly into the target type
+/// without building an intermediate `Edn` value tree.
 pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
-    let val = read_string(s)?;
-    T::deserialize(EdnDeserializer(val)).map_err(Into::into)
+    let mut de = EdnStreamDeserializer::new(s);
+    let val = T::deserialize(&mut de)?;
+    de.expect_eof()?;
+    Ok(val)
 }
 
 /// Deserialize a Rust value from a pre-parsed `Edn` value.

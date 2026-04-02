@@ -20,6 +20,7 @@ type E = ErrMode<EdnError>;
 type PResult<T> = Result<T, E>;
 
 /// Get the remaining input as a `&str`.
+#[inline(always)]
 fn rest<'a>(input: &Input<'a>) -> &'a str {
     *input.as_ref()
 }
@@ -30,6 +31,7 @@ fn peek_byte(input: &Input) -> Option<u8> {
     input.as_ref().as_bytes().first().copied()
 }
 
+/// Check if a byte is whitespace.
 #[inline(always)]
 fn is_ws_byte(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b',')
@@ -142,14 +144,14 @@ where
 
 // --- Nil, booleans, symbols ---
 
-fn is_symbol_start(c: char) -> bool {
+pub(crate) fn is_symbol_start(c: char) -> bool {
     matches!(
         c,
         'a'..='z' | 'A'..='Z' | '.' | '*' | '!' | '_' | '?' | '$' | '%' | '&' | '=' | '<' | '>' | '/'
     )
 }
 
-fn is_symbol_char(c: char) -> bool {
+pub(crate) fn is_symbol_char(c: char) -> bool {
     is_symbol_start(c) || matches!(c, '0'..='9' | '+' | '-' | '#' | ':' | '\'')
 }
 
@@ -584,7 +586,7 @@ mod tests {
     use crate::edn::{Edn, EdnMap, EdnSet, Keyword};
     use crate::error::EdnError;
     use crate::reader::{read_all, read_string, read_string_with, Reader};
-    use crate::config::{DuplicateKeyPolicy, ParseConfig};
+    use crate::config::{DuplicateKeyPolicy, ParseConfig, Dialect};
 
     // --- Primitives ---
 
@@ -1070,7 +1072,7 @@ mod tests {
 
     fn edn_strict() -> ParseConfig {
         ParseConfig {
-            dialect: crate::config::Dialect::Edn,
+            dialect: Dialect::Edn,
             ..Default::default()
         }
     }
