@@ -67,37 +67,33 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
+    #[inline]
     fn skip_ws(&mut self) -> Result<(), EdnError> {
         let bytes = self.input.as_bytes();
-        loop {
-            while self.pos < bytes.len() {
-                match bytes[self.pos] {
-                    b' ' | b'\t' | b'\n' | b'\r' | b',' => self.pos += 1,
-                    _ => break,
-                }
-            }
-            if self.pos >= bytes.len() {
-                break;
-            }
+        while self.pos < bytes.len() {
             match bytes[self.pos] {
+                b' ' | b'\t' | b'\n' | b'\r' | b',' => self.pos += 1,
                 b';' => {
+                    self.pos += 1;
                     while self.pos < bytes.len() && bytes[self.pos] != b'\n' {
                         self.pos += 1;
                     }
-                    if self.pos < bytes.len() {
-                        self.pos += 1;
-                    }
                 }
-                b'#' if bytes.get(self.pos + 1) == Some(&b'_') =>
-                {
-                    self.pos += 2;
-                    self.skip_ws()?;
-                    self.skip_value()?;
+                b'#' if bytes.get(self.pos + 1) == Some(&b'_') => {
+                    return self.skip_ws_discard();
                 }
                 _ => break,
             }
         }
         Ok(())
+    }
+
+    #[cold]
+    fn skip_ws_discard(&mut self) -> Result<(), EdnError> {
+        self.pos += 2;
+        self.skip_ws()?;
+        self.skip_value()?;
+        self.skip_ws()
     }
 
     fn enter_scope(&mut self) -> Result<(), EdnError> {
@@ -173,7 +169,9 @@ impl<'de> EdnStreamDeserializer<'de> {
             self.pos += 1;
         }
         let s = &self.input[start..self.pos];
-        self.validate_symbol_str(s, start)?;
+        if self.dialect == Dialect::Edn || memchr::memchr(b'/', s.as_bytes()).is_some() {
+            self.validate_symbol_str(s, start)?;
+        }
         Ok(s)
     }
 
@@ -207,6 +205,7 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     /// Skip a `#tag` prefix if present. Validates bare-tag restrictions in Edn dialect.
     /// Recurses for nested tags like `#a #b value`.
+    #[inline]
     fn skip_tag_if_present(&mut self) -> Result<(), EdnError> {
         let bytes = self.input.as_bytes();
         if self.pos < bytes.len() && bytes[self.pos] == b'#' {

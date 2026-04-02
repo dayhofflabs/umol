@@ -34,25 +34,30 @@ pub type TagFn = fn(Edn) -> Result<Edn, EdnError>;
 /// value is wrapped as `Edn::Tagged(tag, value)`.
 #[derive(Clone, Debug)]
 pub struct TagReaders {
-    readers: HashMap<String, TagFn>,
+    readers: Vec<(Box<str>, TagFn)>,
 }
 
 impl TagReaders {
     /// Create a registry with no readers.
     pub fn empty() -> Self {
         Self {
-            readers: HashMap::new(),
+            readers: Vec::new(),
         }
     }
 
     /// Register a tag reader. The tag should not include `#`.
     pub fn insert(&mut self, tag: impl Into<String>, f: TagFn) {
-        self.readers.insert(tag.into(), f);
+        let tag: String = tag.into();
+        if let Some(entry) = self.readers.iter_mut().find(|(k, _)| &**k == &*tag) {
+            entry.1 = f;
+        } else {
+            self.readers.push((tag.into_boxed_str(), f));
+        }
     }
 
     /// Look up a reader for the given tag.
     pub fn get(&self, tag: &str) -> Option<&TagFn> {
-        self.readers.get(tag)
+        self.readers.iter().find(|(k, _)| &**k == tag).map(|(_, f)| f)
     }
 }
 
