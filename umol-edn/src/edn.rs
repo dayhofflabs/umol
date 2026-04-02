@@ -1,4 +1,4 @@
-//! Core EDN value type, Keyword, and Symbol newtypes.
+//! Core EDN value type, Keyword, Symbol, EdnMap, EdnSet newtypes.
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -147,6 +147,243 @@ impl fmt::Display for Symbol<'_> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// EdnMap / EdnSet newtypes
+// ---------------------------------------------------------------------------
+
+/// An unordered map of EDN values.
+#[derive(Clone, Debug)]
+pub struct EdnMap<'a>(FxHashMap<Edn<'a>, Edn<'a>>);
+
+impl<'a> EdnMap<'a> {
+    pub fn new() -> Self {
+        Self(FxHashMap::default())
+    }
+
+    pub fn with_capacity(cap: usize) -> Self {
+        Self(FxHashMap::with_capacity_and_hasher(cap, Default::default()))
+    }
+
+    pub fn insert(&mut self, key: Edn<'a>, value: Edn<'a>) -> Option<Edn<'a>> {
+        self.0.insert(key, value)
+    }
+
+    pub fn remove(&mut self, key: &Edn<'a>) -> Option<Edn<'a>> {
+        self.0.remove(key)
+    }
+
+    pub fn get(&self, key: &Edn<'a>) -> Option<&Edn<'a>> {
+        self.0.get(key)
+    }
+
+    pub fn contains_key(&self, key: &Edn<'a>) -> bool {
+        self.0.contains_key(key)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&Edn<'a>, &Edn<'a>)> {
+        self.0.iter()
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &Edn<'a>> {
+        self.0.keys()
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &Edn<'a>> {
+        self.0.values()
+    }
+
+    pub fn into_owned(self) -> EdnMap<'static> {
+        EdnMap(
+            self.0
+                .into_iter()
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .collect(),
+        )
+    }
+}
+
+impl Default for EdnMap<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> IntoIterator for EdnMap<'a> {
+    type Item = (Edn<'a>, Edn<'a>);
+    type IntoIter = std::collections::hash_map::IntoIter<Edn<'a>, Edn<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, 'b> IntoIterator for &'b EdnMap<'a> {
+    type Item = (&'b Edn<'a>, &'b Edn<'a>);
+    type IntoIter = std::collections::hash_map::Iter<'b, Edn<'a>, Edn<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a> FromIterator<(Edn<'a>, Edn<'a>)> for EdnMap<'a> {
+    fn from_iter<T: IntoIterator<Item = (Edn<'a>, Edn<'a>)>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl PartialEq for EdnMap<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for EdnMap<'_> {}
+
+impl PartialOrd for EdnMap<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for EdnMap<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut a: Vec<_> = self.0.iter().collect();
+        let mut b: Vec<_> = other.0.iter().collect();
+        a.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
+        b.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
+        a.cmp(&b)
+    }
+}
+
+impl Hash for EdnMap<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_usize(self.0.len());
+        // Order-independent hash: XOR individual pair hashes.
+        let mut combined = 0u64;
+        for (k, v) in &self.0 {
+            let mut pair_hasher = std::hash::DefaultHasher::new();
+            k.hash(&mut pair_hasher);
+            v.hash(&mut pair_hasher);
+            combined ^= pair_hasher.finish();
+        }
+        combined.hash(state);
+    }
+}
+
+/// An unordered set of EDN values.
+#[derive(Clone, Debug)]
+pub struct EdnSet<'a>(FxHashSet<Edn<'a>>);
+
+impl<'a> EdnSet<'a> {
+    pub fn new() -> Self {
+        Self(FxHashSet::default())
+    }
+
+    pub fn insert(&mut self, value: Edn<'a>) -> bool {
+        self.0.insert(value)
+    }
+
+    pub fn contains(&self, value: &Edn<'a>) -> bool {
+        self.0.contains(value)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Edn<'a>> {
+        self.0.iter()
+    }
+
+    pub fn into_owned(self) -> EdnSet<'static> {
+        EdnSet(self.0.into_iter().map(Edn::into_owned).collect())
+    }
+}
+
+impl Default for EdnSet<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> IntoIterator for EdnSet<'a> {
+    type Item = Edn<'a>;
+    type IntoIter = std::collections::hash_set::IntoIter<Edn<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, 'b> IntoIterator for &'b EdnSet<'a> {
+    type Item = &'b Edn<'a>;
+    type IntoIter = std::collections::hash_set::Iter<'b, Edn<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a> FromIterator<Edn<'a>> for EdnSet<'a> {
+    fn from_iter<T: IntoIterator<Item = Edn<'a>>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl PartialEq for EdnSet<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for EdnSet<'_> {}
+
+impl PartialOrd for EdnSet<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for EdnSet<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut a: Vec<_> = self.0.iter().collect();
+        let mut b: Vec<_> = other.0.iter().collect();
+        a.sort();
+        b.sort();
+        a.cmp(&b)
+    }
+}
+
+impl Hash for EdnSet<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_usize(self.0.len());
+        let mut combined = 0u64;
+        for v in &self.0 {
+            let mut item_hasher = std::hash::DefaultHasher::new();
+            v.hash(&mut item_hasher);
+            combined ^= item_hasher.finish();
+        }
+        combined.hash(state);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Edn enum
+// ---------------------------------------------------------------------------
+
 /// Discriminant ordering for Edn variants (used in Ord impl).
 fn variant_ord(v: &Edn<'_>) -> u8 {
     match v {
@@ -179,8 +416,8 @@ pub enum Edn<'a> {
     Symbol(Symbol<'a>),
     List(Vec<Edn<'a>>),
     Vector(Vec<Edn<'a>>),
-    Map(FxHashMap<Edn<'a>, Edn<'a>>),
-    Set(FxHashSet<Edn<'a>>),
+    Map(EdnMap<'a>),
+    Set(EdnSet<'a>),
     Tagged(String, Box<Edn<'a>>),
 }
 
@@ -319,14 +556,14 @@ impl<'a> Edn<'a> {
         }
     }
 
-    pub fn as_map(&self) -> Option<&FxHashMap<Edn<'a>, Edn<'a>>> {
+    pub fn as_map(&self) -> Option<&EdnMap<'a>> {
         match self {
             Edn::Map(m) => Some(m),
             _ => None,
         }
     }
 
-    pub fn as_set(&self) -> Option<&FxHashSet<Edn<'a>>> {
+    pub fn as_set(&self) -> Option<&EdnSet<'a>> {
         match self {
             Edn::Set(s) => Some(s),
             _ => None,
@@ -396,12 +633,8 @@ impl<'a> Edn<'a> {
             Edn::Symbol(s) => Edn::Symbol(s.into_owned()),
             Edn::List(v) => Edn::List(v.into_iter().map(Edn::into_owned).collect()),
             Edn::Vector(v) => Edn::Vector(v.into_iter().map(Edn::into_owned).collect()),
-            Edn::Map(m) => Edn::Map(
-                m.into_iter()
-                    .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                    .collect(),
-            ),
-            Edn::Set(s) => Edn::Set(s.into_iter().map(Edn::into_owned).collect()),
+            Edn::Map(m) => Edn::Map(m.into_owned()),
+            Edn::Set(s) => Edn::Set(s.into_owned()),
             Edn::Tagged(tag, inner) => Edn::Tagged(tag, Box::new(inner.into_owned())),
         }
     }
@@ -439,20 +672,8 @@ impl Ord for Edn<'_> {
             (Edn::Symbol(a), Edn::Symbol(b)) => a.cmp(b),
             (Edn::List(a), Edn::List(b)) => a.cmp(b),
             (Edn::Vector(a), Edn::Vector(b)) => a.cmp(b),
-            (Edn::Map(a), Edn::Map(b)) => {
-                let mut a_sorted: Vec<_> = a.iter().collect();
-                let mut b_sorted: Vec<_> = b.iter().collect();
-                a_sorted.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
-                b_sorted.sort_by(|x, y| x.0.cmp(y.0).then_with(|| x.1.cmp(y.1)));
-                a_sorted.cmp(&b_sorted)
-            }
-            (Edn::Set(a), Edn::Set(b)) => {
-                let mut a_sorted: Vec<_> = a.iter().collect();
-                let mut b_sorted: Vec<_> = b.iter().collect();
-                a_sorted.sort();
-                b_sorted.sort();
-                a_sorted.cmp(&b_sorted)
-            }
+            (Edn::Map(a), Edn::Map(b)) => a.cmp(b),
+            (Edn::Set(a), Edn::Set(b)) => a.cmp(b),
             (Edn::Tagged(ta, va), Edn::Tagged(tb, vb)) => ta.cmp(tb).then_with(|| va.cmp(vb)),
             _ => unreachable!(),
         }
@@ -473,19 +694,8 @@ impl Hash for Edn<'_> {
             Edn::Symbol(s) => s.hash(state),
             Edn::List(v) => v.hash(state),
             Edn::Vector(v) => v.hash(state),
-            Edn::Map(m) => {
-                state.write_usize(m.len());
-                for (k, v) in m {
-                    k.hash(state);
-                    v.hash(state);
-                }
-            }
-            Edn::Set(s) => {
-                state.write_usize(s.len());
-                for v in s {
-                    v.hash(state);
-                }
-            }
+            Edn::Map(m) => m.hash(state),
+            Edn::Set(s) => s.hash(state),
             Edn::Tagged(tag, inner) => {
                 tag.hash(state);
                 inner.hash(state);

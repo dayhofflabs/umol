@@ -886,8 +886,7 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 - stable or unstable sorting of maps and sets?
 - use sorting in map / set tests, do not compare to specific ordering (or multiple orderings).
 - how should the tag dispatch work?
-- remove public re-export of FxHashMap
-- Edn objects leak internal set/map representation
+- from_str requires serde, which does not seem egronomically great.
 
 ### Spec definitions to verify
 

@@ -1,15 +1,14 @@
 //! Serde `Deserializer` for `Edn` values.
 
-use rustc_hash::FxHashMap;
-use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, Deserialize, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
 use crate::config::ParseConfig;
-use crate::edn::Edn;
+use crate::edn::{Edn, EdnMap};
 use crate::error::EdnError;
 use crate::reader::{read_string, Reader};
 
 /// Deserialize a Rust value from an EDN string.
-pub fn from_str<'a, T: serde::Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
+pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
     let val = read_string(s)?;
     T::deserialize(EdnDeserializer(val)).map_err(Into::into)
 }
@@ -36,7 +35,7 @@ impl<'a, T> StreamDeserializer<'a, T> {
     }
 }
 
-impl<'a, T: serde::Deserialize<'a>> Iterator for StreamDeserializer<'a, T> {
+impl<'a, T: Deserialize<'a>> Iterator for StreamDeserializer<'a, T> {
     type Item = Result<T, EdnError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -66,7 +65,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
             Edn::Keyword(k) => visitor.visit_string(k.as_str().to_string()),
             Edn::Symbol(s) => visitor.visit_string(s.as_str().to_string()),
             Edn::List(v) | Edn::Vector(v) => visitor.visit_seq(EdnSeq::new(v)),
-            Edn::Map(m) => visitor.visit_map(EdnMap::new(m)),
+            Edn::Map(m) => visitor.visit_map(EdnMapAccess::new(m)),
             Edn::Set(s) => {
                 let v: Vec<Edn<'de>> = s.into_iter().collect();
                 visitor.visit_seq(EdnSeq::new(v))
@@ -97,22 +96,21 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         match &self.0 {
-            Edn::Keyword(k) => visitor.visit_enum(
-                de::value::StrDeserializer::<Self::Error>::new(k.as_str()),
-            ),
-            Edn::Symbol(s) => visitor.visit_enum(
-                de::value::StrDeserializer::<Self::Error>::new(s.as_str()),
-            ),
-            Edn::Str(s) => visitor
-                .visit_enum(de::value::StrDeserializer::<Self::Error>::new(s)),
+            Edn::Keyword(k) => {
+                visitor.visit_enum(de::value::StrDeserializer::<Self::Error>::new(k.as_str()))
+            }
+            Edn::Symbol(s) => {
+                visitor.visit_enum(de::value::StrDeserializer::<Self::Error>::new(s.as_str()))
+            }
+            Edn::Str(s) => visitor.visit_enum(de::value::StrDeserializer::<Self::Error>::new(s)),
             _ => self.deserialize_any(visitor),
         }
     }
 
     fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
-            Edn::Map(m) => visitor.visit_map(EdnMap::new(m)),
-            Edn::Nil => visitor.visit_map(EdnMap::new(FxHashMap::default())),
+            Edn::Map(m) => visitor.visit_map(EdnMapAccess::new(m)),
+            Edn::Nil => visitor.visit_map(EdnMapAccess::new(EdnMap::new())),
             other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
         }
     }
@@ -124,8 +122,8 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         match self.0 {
-            Edn::Map(m) => visitor.visit_map(EdnStructMap::new(m)),
-            Edn::Nil => visitor.visit_map(EdnStructMap::new(FxHashMap::default())),
+            Edn::Map(m) => visitor.visit_map(EdnStructMapAccess::new(m)),
+            Edn::Nil => visitor.visit_map(EdnStructMapAccess::new(EdnMap::new())),
             other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
         }
     }
@@ -252,10 +250,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         self.deserialize_str(visitor)
     }
 
-    fn deserialize_identifier<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
+    fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.deserialize_str(visitor)
     }
 
@@ -263,10 +258,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         Err(EdnError::Custom("bytes not supported".to_string()))
     }
 
-    fn deserialize_byte_buf<V: Visitor<'de>>(
-        self,
-        visitor: V,
-    ) -> Result<V::Value, Self::Error> {
+    fn deserialize_byte_buf<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.deserialize_bytes(visitor)
     }
 
@@ -305,13 +297,13 @@ impl<'de> SeqAccess<'de> for EdnSeq<'de> {
 
 // --- MapAccess ---
 
-struct EdnMap<'de> {
+struct EdnMapAccess<'de> {
     iter: std::collections::hash_map::IntoIter<Edn<'de>, Edn<'de>>,
     pending_value: Option<Edn<'de>>,
 }
 
-impl<'de> EdnMap<'de> {
-    fn new(map: FxHashMap<Edn<'de>, Edn<'de>>) -> Self {
+impl<'de> EdnMapAccess<'de> {
+    fn new(map: EdnMap<'de>) -> Self {
         Self {
             iter: map.into_iter(),
             pending_value: None,
@@ -319,7 +311,7 @@ impl<'de> EdnMap<'de> {
     }
 }
 
-impl<'de> MapAccess<'de> for EdnMap<'de> {
+impl<'de> MapAccess<'de> for EdnMapAccess<'de> {
     type Error = EdnError;
 
     fn next_key_seed<K: DeserializeSeed<'de>>(
@@ -349,13 +341,13 @@ impl<'de> MapAccess<'de> for EdnMap<'de> {
 
 // --- StructMap (filters to string-like keys) ---
 
-struct EdnStructMap<'de> {
+struct EdnStructMapAccess<'de> {
     iter: std::collections::hash_map::IntoIter<Edn<'de>, Edn<'de>>,
     pending_value: Option<Edn<'de>>,
 }
 
-impl<'de> EdnStructMap<'de> {
-    fn new(map: FxHashMap<Edn<'de>, Edn<'de>>) -> Self {
+impl<'de> EdnStructMapAccess<'de> {
+    fn new(map: EdnMap<'de>) -> Self {
         Self {
             iter: map.into_iter(),
             pending_value: None,
@@ -363,7 +355,7 @@ impl<'de> EdnStructMap<'de> {
     }
 }
 
-impl<'de> de::MapAccess<'de> for EdnStructMap<'de> {
+impl<'de> de::MapAccess<'de> for EdnStructMapAccess<'de> {
     type Error = EdnError;
 
     fn next_key_seed<K: DeserializeSeed<'de>>(
@@ -391,7 +383,7 @@ impl<'de> de::MapAccess<'de> for EdnStructMap<'de> {
         let v = self
             .pending_value
             .take()
-            .expect("EdnStructMap::next_value_seed called without preceding next_key_seed");
+            .expect("EdnStructMapAccess::next_value_seed called without preceding next_key_seed");
         seed.deserialize(EdnDeserializer(v))
     }
 }
@@ -403,8 +395,8 @@ mod tests {
     use rstest::rstest;
     use serde::Deserialize;
 
-    use crate::{from_str, read_string};
     use super::*;
+    use crate::{from_str, read_string};
 
     #[rstest]
     #[case("12", 12i64)]
@@ -504,7 +496,10 @@ mod tests {
         let input = r#"{:name "Alice" :age 30}"#;
         assert_eq!(
             from_str::<OptionalFields>(input).unwrap(),
-            OptionalFields { name: "Alice".into(), age: Some(30) },
+            OptionalFields {
+                name: "Alice".into(),
+                age: Some(30)
+            },
         );
     }
 
@@ -610,10 +605,19 @@ mod tests {
         let results: Vec<Record> = StreamDeserializer::new(input)
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(results, vec![
-            Record { name: "a".into(), value: 1 },
-            Record { name: "b".into(), value: 2 },
-        ]);
+        assert_eq!(
+            results,
+            vec![
+                Record {
+                    name: "a".into(),
+                    value: 1
+                },
+                Record {
+                    name: "b".into(),
+                    value: 2
+                },
+            ]
+        );
     }
 
     #[test]

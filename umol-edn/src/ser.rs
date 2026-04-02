@@ -1,6 +1,10 @@
 //! Serde `Serializer` that writes compact EDN.
 
-use serde::{ser, Serialize};
+use serde::ser::{
+    SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
+    SerializeTupleStruct, SerializeTupleVariant,
+};
+use serde::{Serialize, Serializer};
 
 use crate::error::EdnError;
 
@@ -41,7 +45,7 @@ fn write_escaped_str(out: &mut String, s: &str) {
     out.push('"');
 }
 
-impl<'a> ser::Serializer for &'a mut EdnSerializer {
+impl<'a> Serializer for &'a mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
     type SerializeSeq = Self;
@@ -230,7 +234,7 @@ impl<'a> ser::Serializer for &'a mut EdnSerializer {
 
 // --- Compound trait impls ---
 
-impl ser::SerializeSeq for &mut EdnSerializer {
+impl SerializeSeq for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 
@@ -247,7 +251,7 @@ impl ser::SerializeSeq for &mut EdnSerializer {
     }
 }
 
-impl ser::SerializeTuple for &mut EdnSerializer {
+impl SerializeTuple for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 
@@ -264,7 +268,7 @@ impl ser::SerializeTuple for &mut EdnSerializer {
     }
 }
 
-impl ser::SerializeTupleStruct for &mut EdnSerializer {
+impl SerializeTupleStruct for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 
@@ -281,7 +285,7 @@ impl ser::SerializeTupleStruct for &mut EdnSerializer {
     }
 }
 
-impl ser::SerializeTupleVariant for &mut EdnSerializer {
+impl SerializeTupleVariant for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 
@@ -298,7 +302,7 @@ impl ser::SerializeTupleVariant for &mut EdnSerializer {
     }
 }
 
-impl ser::SerializeMap for &mut EdnSerializer {
+impl SerializeMap for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 
@@ -320,7 +324,7 @@ impl ser::SerializeMap for &mut EdnSerializer {
     }
 }
 
-impl ser::SerializeStruct for &mut EdnSerializer {
+impl SerializeStruct for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 
@@ -344,7 +348,7 @@ impl ser::SerializeStruct for &mut EdnSerializer {
     }
 }
 
-impl ser::SerializeStructVariant for &mut EdnSerializer {
+impl SerializeStructVariant for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 

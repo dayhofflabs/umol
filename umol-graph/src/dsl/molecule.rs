@@ -9,7 +9,7 @@ use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{self, SerializeMap, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
-use umol_edn::{Edn, EdnDeserializer, FxHashMap};
+use umol_edn::{Edn, EdnDeserializer, EdnMap};
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
@@ -566,7 +566,7 @@ fn resolve_atoms_aliases<'e>(
 ) -> Result<Edn<'e>, ParseError> {
     match atoms {
         Edn::Map(m) => {
-            let mut resolved = FxHashMap::default();
+            let mut resolved = EdnMap::new();
             for (k, v) in m {
                 let v = resolve_one_atom(v, aliases)?;
                 if let Edn::Keyword(ref kw) = k {

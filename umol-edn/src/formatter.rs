@@ -1,6 +1,6 @@
 //! Configurable EDN formatter (pretty-printing).
 
-use crate::edn::Edn;
+use crate::edn::{Edn, EdnMap};
 
 /// Configurable EDN formatter.
 #[derive(Clone, Debug)]
@@ -166,7 +166,7 @@ fn seq_compact_len(items: &[Edn<'_>], overhead: usize, limit: usize) -> Option<u
 }
 
 fn map_compact_len(
-    m: &rustc_hash::FxHashMap<Edn<'_>, Edn<'_>>,
+    m: &EdnMap<'_>,
     limit: usize,
 ) -> Option<usize> {
     if m.is_empty() {
@@ -255,7 +255,7 @@ fn write_seq(
 
 fn write_map(
     out: &mut String,
-    m: &rustc_hash::FxHashMap<Edn<'_>, Edn<'_>>,
+    m: &EdnMap<'_>,
     fmt: &EdnFormatter,
     depth: usize,
 ) {
@@ -357,7 +357,7 @@ pub fn to_string_pretty_with<T: serde::Serialize>(
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use rustc_hash::FxHashMap;
+    use crate::edn::EdnMap;
 
     use rstest::rstest;
 
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_formatter_short_map_compact() {
-        let mut m = FxHashMap::default();
+        let mut m = EdnMap::new();
         m.insert(Edn::keyword("a"), Edn::Int(1));
         let result = Edn::Map(m).to_string_with(&fmt_default());
         assert_eq!(result, "{:a 1}");
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_formatter_long_map_multiline() {
-        let mut m = FxHashMap::default();
+        let mut m = EdnMap::new();
         for i in 0..5 {
             m.insert(
                 Edn::Keyword(Keyword::owned(format!("key-{i}"))),
@@ -427,10 +427,10 @@ mod tests {
 
     #[test]
     fn test_formatter_nested_map() {
-        let mut inner = FxHashMap::default();
+        let mut inner = EdnMap::new();
         inner.insert(Edn::keyword("x"), Edn::Int(1));
         inner.insert(Edn::keyword("y"), Edn::Int(2));
-        let mut outer = FxHashMap::default();
+        let mut outer = EdnMap::new();
         outer.insert(Edn::keyword("point"), Edn::Map(inner));
         outer.insert(Edn::keyword("label"), Edn::Str(Cow::Borrowed("origin")));
         let result = Edn::Map(outer).to_string_with(&fmt_narrow());
@@ -443,7 +443,7 @@ mod tests {
     fn test_formatter_empty_collections() {
         assert_eq!(Edn::Vector(vec![]).to_string_with(&fmt_default()), "[]");
         assert_eq!(Edn::List(vec![]).to_string_with(&fmt_default()), "()");
-        assert_eq!(Edn::Map(FxHashMap::default()).to_string_with(&fmt_default()), "{}");
+        assert_eq!(Edn::Map(EdnMap::new()).to_string_with(&fmt_default()), "{}");
     }
 
     #[test]
@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn test_formatter_commas() {
-        let mut m = FxHashMap::default();
+        let mut m = EdnMap::new();
         m.insert(Edn::keyword("a"), Edn::Int(1));
         m.insert(Edn::keyword("b"), Edn::Int(2));
         let fmt = EdnFormatter {
@@ -486,7 +486,7 @@ mod tests {
 
     #[test]
     fn test_formatter_commas_multiline() {
-        let mut m = FxHashMap::default();
+        let mut m = EdnMap::new();
         for i in 0..5 {
             m.insert(
                 Edn::Keyword(Keyword::owned(format!("key-{i}"))),
@@ -519,7 +519,7 @@ mod tests {
             compact_maps: false,
             ..Default::default()
         };
-        let mut m = FxHashMap::default();
+        let mut m = EdnMap::new();
         m.insert(Edn::keyword("a"), Edn::Int(1));
         let result = Edn::Map(m).to_string_with(&fmt);
         assert!(result.contains('\n'));
