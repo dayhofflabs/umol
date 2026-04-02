@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use umol_edn::{read_all, read_string, EdnFormatter};
+use serde::Deserialize;
+use umol_edn::{from_str, read_all, read_string, EdnFormatter};
 
 const MOLECULE_SMALL: &str = r#"{:atoms [C O] :bonds [[:0 :1 :single]]}"#;
 
@@ -186,6 +187,58 @@ fn bench_isolation(c: &mut Criterion) {
     group.finish();
 }
 
+#[derive(Deserialize)]
+struct MoleculeProxy {
+    atoms: Vec<String>,
+    bonds: Vec<(String, String, String)>,
+}
+
+const MOLECULE_SMALL_JSON: &str = r#"{"atoms":["C","O"],"bonds":[["0","1","single"]]}"#;
+
+fn bench_serde(c: &mut Criterion) {
+    let mut group = c.benchmark_group("serde");
+
+    // EDN: parse to Edn (the intermediate representation).
+    group.bench_function("edn_parse_to_edn", |b| {
+        b.iter(|| read_string(black_box(MOLECULE_SMALL)).unwrap())
+    });
+
+    // EDN: full two-step path (parse → Edn → struct).
+    group.bench_function("edn_from_str_struct", |b| {
+        b.iter(|| from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL)).unwrap())
+    });
+
+    // EDN: deserialize from pre-parsed Edn (just the Edn→struct cost).
+    let edn = read_string(MOLECULE_SMALL).unwrap();
+    group.bench_function("edn_to_struct", |b| {
+        b.iter(|| {
+            let val = black_box(&edn).clone();
+            umol_edn::from_value::<MoleculeProxy>(val).unwrap()
+        })
+    });
+
+    // JSON reference: streaming deserializer (no intermediate Value).
+    group.bench_function("json_from_str_struct", |b| {
+        b.iter(|| serde_json::from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL_JSON)).unwrap())
+    });
+
+    // JSON reference: parse to Value (intermediate representation).
+    group.bench_function("json_parse_to_value", |b| {
+        b.iter(|| serde_json::from_str::<serde_json::Value>(black_box(MOLECULE_SMALL_JSON)).unwrap())
+    });
+
+    // JSON reference: Value → struct (two-step, like our current EDN path).
+    let json_val: serde_json::Value = serde_json::from_str(MOLECULE_SMALL_JSON).unwrap();
+    group.bench_function("json_value_to_struct", |b| {
+        b.iter(|| {
+            let val = black_box(&json_val).clone();
+            serde_json::from_value::<MoleculeProxy>(val).unwrap()
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parse_atoms,
@@ -194,5 +247,6 @@ criterion_group!(
     bench_roundtrip,
     bench_display,
     bench_isolation,
+    bench_serde,
 );
 criterion_main!(benches);

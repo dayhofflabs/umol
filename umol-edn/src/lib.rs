@@ -15,7 +15,7 @@ pub mod ser;
 
 pub use config::{Dialect, DuplicateKeyPolicy, ParseConfig};
 #[cfg(feature = "serde")]
-pub use de::{from_str, EdnDeserializer, StreamDeserializer};
+pub use de::{from_str, from_value, EdnDeserializer, StreamDeserializer};
 pub use edn::{Edn, EdnMap, EdnSet, Keyword, Symbol};
 pub use error::EdnError;
 pub use formatter::EdnFormatter;

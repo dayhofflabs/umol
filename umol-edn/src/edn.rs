@@ -2,10 +2,11 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-
+use std::collections::hash_map::{IntoIter as HashMapIntoIter, Iter as HashMapIter};
+use std::collections::hash_set::{IntoIter as HashSetIntoIter, Iter as HashSetIter};
 use std::collections::{HashMap, HashSet};
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{fmt, iter};
 
 /// A keyword value (`:name` or `:ns/name`).
 #[derive(Clone, Debug, Eq)]
@@ -218,7 +219,7 @@ impl Default for EdnMap<'_> {
 
 impl<'a> IntoIterator for EdnMap<'a> {
     type Item = (Edn<'a>, Edn<'a>);
-    type IntoIter = std::collections::hash_map::IntoIter<Edn<'a>, Edn<'a>>;
+    type IntoIter = HashMapIntoIter<Edn<'a>, Edn<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -227,7 +228,7 @@ impl<'a> IntoIterator for EdnMap<'a> {
 
 impl<'a, 'b> IntoIterator for &'b EdnMap<'a> {
     type Item = (&'b Edn<'a>, &'b Edn<'a>);
-    type IntoIter = std::collections::hash_map::Iter<'b, Edn<'a>, Edn<'a>>;
+    type IntoIter = HashMapIter<'b, Edn<'a>, Edn<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -270,7 +271,7 @@ impl Hash for EdnMap<'_> {
         // Order-independent hash: XOR individual pair hashes.
         let mut combined = 0u64;
         for (k, v) in &self.0 {
-            let mut pair_hasher = std::hash::DefaultHasher::new();
+            let mut pair_hasher = DefaultHasher::new();
             k.hash(&mut pair_hasher);
             v.hash(&mut pair_hasher);
             combined ^= pair_hasher.finish();
@@ -321,7 +322,7 @@ impl Default for EdnSet<'_> {
 
 impl<'a> IntoIterator for EdnSet<'a> {
     type Item = Edn<'a>;
-    type IntoIter = std::collections::hash_set::IntoIter<Edn<'a>>;
+    type IntoIter = HashSetIntoIter<Edn<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -330,7 +331,7 @@ impl<'a> IntoIterator for EdnSet<'a> {
 
 impl<'a, 'b> IntoIterator for &'b EdnSet<'a> {
     type Item = &'b Edn<'a>;
-    type IntoIter = std::collections::hash_set::Iter<'b, Edn<'a>>;
+    type IntoIter = HashSetIter<'b, Edn<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -372,7 +373,7 @@ impl Hash for EdnSet<'_> {
         state.write_usize(self.0.len());
         let mut combined = 0u64;
         for v in &self.0 {
-            let mut item_hasher = std::hash::DefaultHasher::new();
+            let mut item_hasher = DefaultHasher::new();
             v.hash(&mut item_hasher);
             combined ^= item_hasher.finish();
         }
@@ -615,7 +616,7 @@ impl<'a> Edn<'a> {
         match self {
             Edn::Vector(v) | Edn::List(v) => Box::new(v.iter()),
             Edn::Set(s) => Box::new(s.iter()),
-            _ => Box::new(std::iter::empty()),
+            _ => Box::new(iter::empty()),
         }
     }
 

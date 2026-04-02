@@ -6,6 +6,10 @@ use crate::config::ParseConfig;
 use crate::edn::{Edn, EdnMap};
 use crate::error::EdnError;
 use crate::reader::{read_string, Reader};
+use std::marker::PhantomData;
+use std::borrow::Cow;
+use std::collections::hash_map::IntoIter as HashMapIntoIter;
+use std::vec::IntoIter as VecIntoIter;
 
 /// Deserialize a Rust value from an EDN string.
 pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
@@ -13,24 +17,29 @@ pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
     T::deserialize(EdnDeserializer(val)).map_err(Into::into)
 }
 
+/// Deserialize a Rust value from a pre-parsed `Edn` value.
+pub fn from_value<'a, T: Deserialize<'a>>(val: Edn<'a>) -> Result<T, EdnError> {
+    T::deserialize(EdnDeserializer(val)).map_err(Into::into)
+}
+
 /// Streaming deserializer over multiple EDN values in a string.
 pub struct StreamDeserializer<'a, T> {
     reader: Reader<'a>,
-    _marker: std::marker::PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 
 impl<'a, T> StreamDeserializer<'a, T> {
     pub fn new(input: &'a str) -> Self {
         Self {
             reader: Reader::new(input),
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
 
     pub fn with_config(input: &'a str, config: ParseConfig) -> Self {
         Self {
             reader: Reader::with_config(input, config),
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
 }
@@ -59,8 +68,8 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
             Edn::Float(f) => visitor.visit_f64(f),
             Edn::Char(c) => visitor.visit_char(c),
             Edn::Str(s) => match s {
-                std::borrow::Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
-                std::borrow::Cow::Owned(o) => visitor.visit_string(o),
+                Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
+                Cow::Owned(o) => visitor.visit_string(o),
             },
             Edn::Keyword(k) => visitor.visit_string(k.as_str().to_string()),
             Edn::Symbol(s) => visitor.visit_string(s.as_str().to_string()),
@@ -270,7 +279,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
 // --- SeqAccess ---
 
 struct EdnSeq<'de> {
-    iter: std::vec::IntoIter<Edn<'de>>,
+    iter: VecIntoIter<Edn<'de>>,
 }
 
 impl<'de> EdnSeq<'de> {
@@ -298,7 +307,7 @@ impl<'de> SeqAccess<'de> for EdnSeq<'de> {
 // --- MapAccess ---
 
 struct EdnMapAccess<'de> {
-    iter: std::collections::hash_map::IntoIter<Edn<'de>, Edn<'de>>,
+    iter: HashMapIntoIter<Edn<'de>, Edn<'de>>,
     pending_value: Option<Edn<'de>>,
 }
 
@@ -342,7 +351,7 @@ impl<'de> MapAccess<'de> for EdnMapAccess<'de> {
 // --- StructMap (filters to string-like keys) ---
 
 struct EdnStructMapAccess<'de> {
-    iter: std::collections::hash_map::IntoIter<Edn<'de>, Edn<'de>>,
+    iter: HashMapIntoIter<Edn<'de>, Edn<'de>>,
     pending_value: Option<Edn<'de>>,
 }
 

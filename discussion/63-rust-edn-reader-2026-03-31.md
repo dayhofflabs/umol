@@ -887,7 +887,8 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 - use sorting in map / set tests, do not compare to specific ordering (or multiple orderings).
 - how should the tag dispatch work?
 - clarify that EDN uses UTF8.
-
+- prelude
+- edn!() macro
 
 ### Spec definitions to verify
 
