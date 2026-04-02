@@ -17,6 +17,7 @@ pub use config::{Dialect, DuplicateKeyPolicy, ParseConfig};
 #[cfg(feature = "serde")]
 pub use de::{from_str, EdnDeserializer, StreamDeserializer};
 pub use edn::{Edn, Keyword, Symbol};
+pub use rustc_hash::{FxHashMap, FxHashSet};
 pub use error::EdnError;
 pub use formatter::EdnFormatter;
 #[cfg(feature = "serde")]

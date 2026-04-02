@@ -104,7 +104,7 @@ fn format_seq(f: &mut fmt::Formatter<'_>, open: &str, close: &str, items: &[Edn<
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::collections::{HashMap, HashSet};
+    use rustc_hash::{FxHashMap, FxHashSet};
 
     use rstest::rstest;
 
@@ -201,14 +201,14 @@ mod tests {
 
     #[test]
     fn test_display_map() {
-        let mut m = HashMap::new();
+        let mut m = FxHashMap::default();
         m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
         assert_eq!(Edn::Map(m).to_string(), "{:a 1}");
     }
 
     #[test]
     fn test_display_map_multi() {
-        let mut m = HashMap::new();
+        let mut m = FxHashMap::default();
         m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
         m.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
         let s = Edn::Map(m).to_string();
@@ -217,12 +217,12 @@ mod tests {
 
     #[test]
     fn test_display_map_empty() {
-        assert_eq!(Edn::Map(HashMap::new()).to_string(), "{}");
+        assert_eq!(Edn::Map(FxHashMap::default()).to_string(), "{}");
     }
 
     #[test]
     fn test_display_set() {
-        let mut s = HashSet::new();
+        let mut s = FxHashSet::default();
         s.insert(Edn::Int(1));
         s.insert(Edn::Int(2));
         let result = Edn::Set(s).to_string();
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_display_set_empty() {
-        assert_eq!(Edn::Set(HashSet::new()).to_string(), "#{}");
+        assert_eq!(Edn::Set(FxHashSet::default()).to_string(), "#{}");
     }
 
     #[test]

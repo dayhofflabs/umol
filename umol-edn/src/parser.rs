@@ -1,9 +1,9 @@
 //! Winnow-based EDN parser.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
 
 use memchr::memchr2;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use winnow::ascii::digit1;
 use winnow::combinator::opt;
@@ -462,7 +462,7 @@ where
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '{'.parse_next(input)?;
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         loop {
             ws_and_comments(input, config).ok();
             if rest(input).is_empty() {
@@ -492,7 +492,7 @@ where
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '{'.parse_next(input)?;
-        let mut set = HashSet::new();
+        let mut set = FxHashSet::default();
         loop {
             ws_and_comments(input, config).ok();
             if rest(input).is_empty() {
@@ -564,7 +564,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::rstest;
     use std::borrow::Cow;
-    use std::collections::{HashMap, HashSet};
+    use rustc_hash::{FxHashMap, FxHashSet};
 
     use crate::edn::{Edn, Keyword};
     use crate::error::EdnError;
@@ -719,7 +719,7 @@ mod tests {
     #[test]
     fn test_read_string_map() {
         let val = read_string("{:a 1 :b 2}").unwrap();
-        let mut expected = HashMap::new();
+        let mut expected = FxHashMap::default();
         expected.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
         expected.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
         assert_eq!(val, Edn::Map(expected));
@@ -727,13 +727,13 @@ mod tests {
 
     #[test]
     fn test_read_string_empty_map() {
-        assert_eq!(read_string("{}").unwrap(), Edn::Map(HashMap::new()));
+        assert_eq!(read_string("{}").unwrap(), Edn::Map(FxHashMap::default()));
     }
 
     #[test]
     fn test_read_string_set() {
         let val = read_string("#{1 2 3}").unwrap();
-        let mut expected = HashSet::new();
+        let mut expected = FxHashSet::default();
         expected.insert(Edn::Int(1));
         expected.insert(Edn::Int(2));
         expected.insert(Edn::Int(3));
@@ -742,7 +742,7 @@ mod tests {
 
     #[test]
     fn test_read_string_empty_set() {
-        assert_eq!(read_string("#{}").unwrap(), Edn::Set(HashSet::new()));
+        assert_eq!(read_string("#{}").unwrap(), Edn::Set(FxHashSet::default()));
     }
 
     // --- Nested ---
@@ -750,7 +750,7 @@ mod tests {
     #[test]
     fn test_read_string_nested() {
         let val = read_string("{:items [1 (2 3)] :flag true}").unwrap();
-        let mut expected = HashMap::new();
+        let mut expected = FxHashMap::default();
         expected.insert(
             Edn::Keyword(Keyword::new("items")),
             Edn::Vector(vec![
@@ -884,7 +884,7 @@ mod tests {
             ..Default::default()
         };
         let val = read_string_with("{:a 1 :a 2}", &config).unwrap();
-        let mut expected = HashMap::new();
+        let mut expected = FxHashMap::default();
         expected.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(2));
         assert_eq!(val, Edn::Map(expected));
     }

@@ -1,7 +1,6 @@
 //! Serde `Deserializer` for `Edn` values.
 
-use std::collections::HashMap;
-
+use rustc_hash::FxHashMap;
 use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
 use crate::config::ParseConfig;
@@ -113,7 +112,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Map(m) => visitor.visit_map(EdnMap::new(m)),
-            Edn::Nil => visitor.visit_map(EdnMap::new(HashMap::new())),
+            Edn::Nil => visitor.visit_map(EdnMap::new(FxHashMap::default())),
             other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
         }
     }
@@ -126,7 +125,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     ) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Map(m) => visitor.visit_map(EdnStructMap::new(m)),
-            Edn::Nil => visitor.visit_map(EdnStructMap::new(HashMap::new())),
+            Edn::Nil => visitor.visit_map(EdnStructMap::new(FxHashMap::default())),
             other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
         }
     }
@@ -312,7 +311,7 @@ struct EdnMap<'de> {
 }
 
 impl<'de> EdnMap<'de> {
-    fn new(map: HashMap<Edn<'de>, Edn<'de>>) -> Self {
+    fn new(map: FxHashMap<Edn<'de>, Edn<'de>>) -> Self {
         Self {
             iter: map.into_iter(),
             pending_value: None,
@@ -356,7 +355,7 @@ struct EdnStructMap<'de> {
 }
 
 impl<'de> EdnStructMap<'de> {
-    fn new(map: HashMap<Edn<'de>, Edn<'de>>) -> Self {
+    fn new(map: FxHashMap<Edn<'de>, Edn<'de>>) -> Self {
         Self {
             iter: map.into_iter(),
             pending_value: None,

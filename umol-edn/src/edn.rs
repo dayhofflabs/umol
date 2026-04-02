@@ -2,9 +2,10 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// A keyword value (`:name` or `:ns/name`).
 #[derive(Clone, Debug, Eq)]
@@ -178,8 +179,8 @@ pub enum Edn<'a> {
     Symbol(Symbol<'a>),
     List(Vec<Edn<'a>>),
     Vector(Vec<Edn<'a>>),
-    Map(HashMap<Edn<'a>, Edn<'a>>),
-    Set(HashSet<Edn<'a>>),
+    Map(FxHashMap<Edn<'a>, Edn<'a>>),
+    Set(FxHashSet<Edn<'a>>),
     Tagged(String, Box<Edn<'a>>),
 }
 
@@ -318,14 +319,14 @@ impl<'a> Edn<'a> {
         }
     }
 
-    pub fn as_map(&self) -> Option<&HashMap<Edn<'a>, Edn<'a>>> {
+    pub fn as_map(&self) -> Option<&FxHashMap<Edn<'a>, Edn<'a>>> {
         match self {
             Edn::Map(m) => Some(m),
             _ => None,
         }
     }
 
-    pub fn as_set(&self) -> Option<&HashSet<Edn<'a>>> {
+    pub fn as_set(&self) -> Option<&FxHashSet<Edn<'a>>> {
         match self {
             Edn::Set(s) => Some(s),
             _ => None,

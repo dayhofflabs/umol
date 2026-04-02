@@ -161,6 +161,28 @@ fn bench_isolation(c: &mut Criterion) {
         b.iter(|| read_string(black_box(r#""abc\ndef\tghi\u0041""#)))
     });
 
+    // Decompose molecule_small cost centers.
+    // Just the map shell with keyword values (no nested collections).
+    group.bench_function("map_2_kw_values", |b| {
+        b.iter(|| read_string(black_box("{:atoms :x :bonds :y}")))
+    });
+    // Vector of 2 symbols (the :atoms value shape).
+    group.bench_function("vec_2_symbols", |b| {
+        b.iter(|| read_string(black_box("[C O]")))
+    });
+    // Single nested vector (the :bonds value shape).
+    group.bench_function("vec_1_nested_3kw", |b| {
+        b.iter(|| read_string(black_box("[[:0 :1 :single]]")))
+    });
+    // Empty map (just HashMap::new overhead).
+    group.bench_function("map_empty", |b| {
+        b.iter(|| read_string(black_box("{}")))
+    });
+    // Empty vector.
+    group.bench_function("vec_empty", |b| {
+        b.iter(|| read_string(black_box("[]")))
+    });
+
     group.finish();
 }
 
