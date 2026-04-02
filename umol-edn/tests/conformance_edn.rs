@@ -765,6 +765,35 @@ fn test_s20_discard_streaming() {
 }
 
 #[test]
+fn test_s20_discard_nested() {
+    assert_eq!(
+        parse("[#_ #_ 1 2 3]").unwrap(),
+        Edn::Vector(vec![Edn::Int(3)])
+    );
+}
+
+#[test]
+fn test_s20_discard_nested_streaming() {
+    assert_eq!(stream::<Vec<i64>>("[#_ #_ 1 2 3]").unwrap(), vec![3]);
+}
+
+#[test]
+fn test_s20_discard_tagged_literal() {
+    assert_eq!(
+        parse("[#_ #my/tag \"2024\" 1]").unwrap(),
+        Edn::Vector(vec![Edn::Int(1)])
+    );
+}
+
+#[test]
+fn test_s20_discard_in_map() {
+    let result = parse("{:a #_ :skip 1}").unwrap();
+    let mut expected = EdnMap::new();
+    expected.insert(Edn::keyword("a"), Edn::Int(1));
+    assert_eq!(result, Edn::Map(expected));
+}
+
+#[test]
 fn test_s20_discard_at_eof_error() {
     assert!(parse("#_").is_err());
 }

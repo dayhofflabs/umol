@@ -264,14 +264,21 @@ interior-only per S9c), not just digits.
 
 - **Tests:** `test_s10_keyword_special_start_chars`.
 
-### S10g. :: is not a legal keyword prefix
+### S10g. :: auto-resolve keywords
 
-- **Clojure:** `::foo` auto-resolves to `:user/foo` (Clojure extension).
-- **umol-edn E:** Rejects.
-- **umol-edn C:** Rejects (auto-resolve not implemented).
-- **Tests:** `test_s10b_double_colon_rejected`.
+- **Clojure:** `::foo` auto-resolves to `:current-ns/foo`. `::alias/name` resolves
+  the alias via the namespace alias map.
+- **umol-edn E:** Rejects `::` (not part of EDN spec).
+- **umol-edn C:** Supported when `auto_resolve` config is provided. `::foo` →
+  `:current_ns/foo`, `::alias/name` → `:resolved_ns/name`. Without config,
+  `MissingAutoResolve` error. Unknown alias → `UnknownAlias` error.
+- **Config:** `ParseConfig::auto_resolve: Option<AutoResolve>` with `current_ns: String`
+  and `aliases: HashMap<String, String>`.
+- **Tests:** `test_s10g_auto_resolve` (parser), `test_s10g_auto_resolve_streaming`,
+  `test_s10g_unknown_alias`, `test_s10g_missing_config`, `test_s10g_in_map`,
+  `test_s10b_double_colon_rejected` (Edn).
 
-**Status:** Done for Edn dialect. Clojure dialect could add auto-resolve later if needed.
+**Status:** Done.
 
 ---
 
@@ -522,6 +529,150 @@ interior-only per S9c), not just digits.
 
 ---
 
+---
+
+## Ambiguity resolutions
+
+These are decisions on underspecified areas of the EDN spec, documented in
+`umol-edn/spec/edn-spec.md` section "Ambiguity resolutions".
+
+### D1. Integer overflow
+
+> Error without `bignum`; promote with `bignum`.
+
+- **umol-edn E/C:** `i64::MAX + 1` produces `InvalidNumber`. No `bignum` feature yet.
+- **Tests (E):** `test_s11_overflow`.
+- **Tests (C):** `test_s11_overflow`.
+
+**Status:** Done.
+
+---
+
+### D2. String escapes beyond the listed five
+
+> `\uNNNN` in both dialects; `\b`, `\f`, octal in Clojure only.
+
+- **umol-edn E:** Rejects `\b`, `\f`, `\uNNNN`, octal.
+- **umol-edn C:** Accepts all.
+- **Note:** The spec doc claims `\uNNNN` is accepted in both dialects, but the
+  code currently rejects `\uNNNN` in Edn mode. This is a known spec-code discrepancy
+  (see also S7).
+- **Tests (E):** `test_s7_string_clojure_escapes_rejected` (rejects `\b \f \u \octal`).
+- **Tests (C):** `test_s7_string_backspace_formfeed`, `test_s7_string_unicode_escape`,
+  `test_s7_string_octal`.
+
+**Status:** Tests cover current behavior. Spec doc discrepancy on `\uNNNN` to be resolved.
+
+---
+
+### D3. \formfeed, \backspace character literals
+
+> Clojure only.
+
+- **Tests (E):** `test_s8_clojure_named_rejected`.
+- **Tests (C):** `test_s8_formfeed_backspace`.
+
+**Status:** Done.
+
+---
+
+### D4. Duplicate map keys
+
+> Configurable; error by default.
+
+- **umol-edn E/C:** `DuplicateKeyPolicy::Error` (default) or `LastWins`.
+- **Tests (E):** `test_s15_map_duplicate_key_error`, `test_s15_map_duplicate_key_last_wins`.
+- **Tests (C):** `test_s15_map_duplicate_key_error`, `test_s15_map_duplicate_key_last_wins`.
+
+**Status:** Done.
+
+---
+
+### D5. #_ nesting
+
+> Each `#_` discards next form. `#_ #_ a b` discards both.
+
+- **umol-edn E/C:** Supported in both dialects.
+- **Tests (E):** `test_s20_discard_nested`, `test_s20_discard_nested_streaming`.
+- **Tests (C):** `test_s20_discard_nested`, `test_s20_discard_streaming`.
+
+**Status:** Done.
+
+---
+
+### D6. Whitespace definition
+
+> Space, tab, newline, CR, comma. Not form feed.
+
+- **Tests (E):** `test_s2_formfeed_not_whitespace`.
+- **Tests (C):** `test_s2_formfeed_not_whitespace`.
+
+**Status:** Done.
+
+---
+
+### D7. #_ + tagged literal
+
+> Discards entire tagged form (e.g., `#_ #inst "2024"` discards the whole
+> `#inst` form).
+
+- **Tests (E):** `test_s20_discard_tagged_literal`.
+- **Tests (C):** `test_s20_discard_tagged_literal`.
+
+**Status:** Done.
+
+---
+
+### D8. Leading zeros
+
+> Parsed as decimal, not octal.
+
+Already covered: S11b. E: rejects, C: accepts (parsed as decimal).
+
+**Status:** Done.
+
+---
+
+### D9. -0 / -0.0
+
+> Valid.
+
+- `-0` → `Edn::Int(0)`. `-0.0` → `Edn::Float(-0.0)` (sign-negative).
+- **Tests (E):** `test_s11_negative_zero`, `test_s12_negative_zero_float`.
+- **Tests (C):** `test_s11_negative_zero`, `test_s12_negative_zero_float`.
+
+**Status:** Done.
+
+---
+
+### D10. / as symbol
+
+> Valid.
+
+Already covered: S9d. `/` alone is a legal symbol.
+
+- **Tests (E):** `test_s9_slash_alone`.
+- **Tests (C):** `test_s9_slash_alone`.
+
+**Status:** Done.
+
+---
+
+### D11. #_ in Edn dialect
+
+> Spec doc says: "In Edn mode, `#_` is parsed as a tagged literal with tag `_`."
+
+**Note:** The code was updated (2026-04-01) to support `#_` as discard in both
+dialects. The spec doc is outdated on this point. Current behavior: `#_` is
+discard in both E and C.
+
+- **Tests (E):** `test_s20_discard`, `test_s20_discard_streaming`.
+- **Tests (C):** `test_s20_discard`, `test_s20_discard_nested`, etc.
+
+**Status:** Done. Spec doc needs updating (section 3 dialect note).
+
+---
+
 ## Clojure vs spec divergences
 
 Where Clojure's reader diverges from the spec text, and what umol-edn does:
@@ -531,7 +682,7 @@ Where Clojure's reader diverges from the spec text, and what umol-edn does:
 | `/` once only in symbols | Accepts `a/b/c` | E: rejects, C: accepts |
 | `:/` not legal keyword | Accepts `:/` | Rejects (follows spec) |
 | No leading zeros | Accepts `007` | E: rejects, C: accepts |
-| `::` not legal keyword | Auto-resolves `::foo` to `:ns/foo` | Rejects (no auto-resolve) |
+| `::` not legal keyword | Auto-resolves `::foo` to `:ns/foo` | E: rejects, C: auto-resolves (with config) |
 | `:0`, `:0foo` digit-start kw | Accepts | E: rejects, C: accepts |
 | `:0/foo` digit-start namespace | Accepts | E: rejects, C: accepts |
 | `:foo/#bar`, `:foo/:bar` | Accepts | E: rejects, C: accepts |
@@ -558,7 +709,7 @@ Where Clojure's reader diverges from the spec text, and what umol-edn does:
 | S10d | Keyword after : follows symbol-start rules | Done — tested |
 | S10e | Post-slash symbol-start rules for keywords | Done — fixed + tested |
 | S10f | Special start chars valid after : | Done — tested |
-| S10g | :: keyword rejection | Done — tested |
+| S10g | :: auto-resolve keywords | Done — E rejects, C auto-resolves with config |
 | S11a | Optional + sign | Done — tested |
 | S11b | Leading zeros | Done — fixed + tested |
 | S11c | -0 equals 0 | Done — tested |
@@ -573,6 +724,20 @@ Where Clojure's reader diverges from the spec text, and what umol-edn does:
 | S20 | Discard | Done — both dialects |
 | S21 | Equality | Done |
 
+| D1 | Integer overflow | Done — both dialects |
+| D2 | String escapes (\uNNNN discrepancy) | Spec doc discrepancy — \uNNNN rejected in E, spec says both |
+| D3 | \formfeed, \backspace chars | Done |
+| D4 | Duplicate map keys | Done — both dialects |
+| D5 | #_ nesting | Done — both dialects |
+| D6 | Whitespace: not form feed | Done — both dialects |
+| D7 | #_ + tagged literal discard | Done — both dialects |
+| D8 | Leading zeros | Done (see S11b) |
+| D9 | -0 / -0.0 | Done — both dialects |
+| D10 | / as symbol | Done — both dialects |
+| D11 | #_ in Edn dialect | Done — spec doc updated |
+
 ## Summary of open items
 
-No open items. All spec statements have been audited and implemented.
+| Item | What's needed |
+|------|---------------|
+| D2 | Resolve `\uNNNN` spec-code discrepancy (spec says both dialects, code rejects in Edn) |

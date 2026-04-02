@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use rstest::rstest;
 use serde::Deserialize;
-use umol_edn::config::{AutoResolve, Dialect, ParseConfig};
+use umol_edn::config::{AutoResolve, Dialect, DuplicateKeyPolicy, ParseConfig};
 use umol_edn::edn::{Edn, Symbol};
 use umol_edn::error::EdnError;
 use umol_edn::{from_str_with, read_all_with, read_string_with, EdnMap};
@@ -38,6 +38,11 @@ fn stream<'a, T: Deserialize<'a>>(input: &'a str) -> Result<T, EdnError> {
 #[case(",1,", 1)]
 fn test_s2_whitespace_streaming(#[case] input: &str, #[case] expected: i64) {
     assert_eq!(stream::<i64>(input).unwrap(), expected);
+}
+
+#[test]
+fn test_s2_formfeed_not_whitespace() {
+    assert!(parse("\x0C1").is_err());
 }
 
 // ============================================================================
@@ -151,6 +156,11 @@ fn test_s8_formfeed_backspace() {
 #[case("ns/name", "ns/name")]
 fn test_s9_symbols(#[case] input: &str, #[case] name: &str) {
     assert_eq!(parse(input).unwrap(), Edn::Symbol(Symbol::new(name)));
+}
+
+#[test]
+fn test_s9_slash_alone() {
+    assert_eq!(parse("/").unwrap(), Edn::Symbol(Symbol::new("/")));
 }
 
 #[test]
@@ -310,6 +320,16 @@ fn test_s11_integers_streaming(#[case] input: &str, #[case] expected: i64) {
     assert_eq!(stream::<i64>(input).unwrap(), expected);
 }
 
+#[test]
+fn test_s11_negative_zero() {
+    assert_eq!(parse("-0").unwrap(), Edn::Int(0));
+}
+
+#[test]
+fn test_s11_overflow() {
+    assert!(parse("9223372036854775808").is_err());
+}
+
 // ============================================================================
 // S12: Floats — Clojure supports ##NaN, ##Inf, ##-Inf
 // ============================================================================
@@ -362,6 +382,17 @@ fn test_s12_floats_streaming(#[case] input: &str, #[case] expected: f64) {
     assert!((val - expected).abs() < 1e-10);
 }
 
+#[test]
+fn test_s12_negative_zero_float() {
+    match parse("-0.0").unwrap() {
+        Edn::Float(v) => {
+            assert!(v == 0.0);
+            assert!(v.is_sign_negative());
+        }
+        other => panic!("expected Float, got {other:?}"),
+    }
+}
+
 // ============================================================================
 // S13-S16: Collections
 // ============================================================================
@@ -388,6 +419,24 @@ fn test_s15_struct_streaming() {
     }
     let p: Point = stream("{:x 1 :y 2}").unwrap();
     assert_eq!(p, Point { x: 1, y: 2 });
+}
+
+#[test]
+fn test_s15_map_duplicate_key_error() {
+    assert!(parse("{:a 1 :a 2}").is_err());
+}
+
+#[test]
+fn test_s15_map_duplicate_key_last_wins() {
+    let config = ParseConfig {
+        dialect: Dialect::Clojure,
+        duplicate_keys: DuplicateKeyPolicy::LastWins,
+        ..Default::default()
+    };
+    let result = read_string_with("{:a 1 :a 2}", &config).unwrap();
+    let mut expected = EdnMap::new();
+    expected.insert(Edn::keyword("a"), Edn::Int(2));
+    assert_eq!(result, Edn::Map(expected));
 }
 
 // ============================================================================

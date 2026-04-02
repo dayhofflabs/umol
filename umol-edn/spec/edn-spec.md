@@ -34,8 +34,7 @@ syntactically valid. `#_ #_ a b` discards both `a` and `b`. `#_` applied to a
 tagged literal discards the entire tagged form (e.g., `#_ #inst "2024"` discards
 the whole `#inst` form).
 
-**Dialect:** Clojure only. In Edn mode, `#_` is parsed as a tagged literal with
-tag `_`.
+**Dialect:** Both. `#_` is supported as discard in both Edn and Clojure modes.
 
 ## 4. Nil, booleans
 
@@ -132,6 +131,15 @@ permitted punctuation). In Clojure mode, the name may also start with a digit
 
 Keywords may be namespace-qualified: `:ns/name`. The `/` separates the namespace
 from the name. A bare `:` with no following name is an error.
+
+### Auto-resolve keywords (Clojure only)
+
+`::foo` resolves to `:current-ns/foo` and `::alias/name` resolves to
+`:resolved-ns/name`. Requires `auto_resolve` config with `current_ns` and
+`aliases` map. Without config, `::` is an error (`MissingAutoResolve`). An
+unknown alias produces `UnknownAlias`.
+
+**Dialect:** Clojure only. In Edn mode, `::` is always an error.
 
 ## 10. Symbols
 
@@ -236,7 +244,8 @@ either dialect:
 | Symbols                                 | yes   | yes     | 10      |
 | Lists, vectors, maps, sets              | yes   | yes     | 11–14   |
 | Tagged literals                         | yes   | yes     | 15      |
-| `#_` discard                            | no    | yes     | 3       |
+| `:: ` auto-resolve keywords             | no    | yes     | 9       |
+| `#_` discard                            | yes   | yes     | 3       |
 | `;` line comments                       | yes   | yes     | 2       |
 | `,` as whitespace                       | yes   | yes     | 1       |
 | Bignum suffixes (`N`, `M`)              | error | error   | 5, 6    |
@@ -257,7 +266,7 @@ Summary of decisions on underspecified areas of the EDN spec:
 | Leading zeros (`007`)                   | Parsed as decimal                                            | 5       |
 | `-0` / `-0.0`                           | Valid                                                        | 5, 6    |
 | `/` as symbol                           | Valid                                                        | 10      |
-| `#_` in Edn dialect                     | Parsed as tagged literal with tag `_`                        | 3       |
+| `#_` in Edn dialect                     | Supported as discard (same as Clojure)                       | 3       |
 
 ## Round-tripping
 
