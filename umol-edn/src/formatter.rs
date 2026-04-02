@@ -1,6 +1,7 @@
 //! Configurable EDN formatter (pretty-printing).
 
-use crate::edn::{Edn, EdnMap};
+use crate::collections::EdnMap;
+use crate::edn::Edn;
 #[cfg(feature = "serde")]
 use crate::{error::EdnError, reader::read_string, ser::to_string};
 
@@ -349,10 +350,10 @@ pub fn to_string_pretty_with<T: serde::Serialize>(
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use crate::edn::EdnMap;
 
     use rstest::rstest;
 
+    use crate::collections::EdnMap;
     use crate::edn::{Edn, Keyword};
     use super::*;
 
@@ -378,14 +379,14 @@ mod tests {
 
     #[test]
     fn test_formatter_short_vector_compact() {
-        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]);
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into());
         assert_eq!(v.to_string_with(&fmt_default()), "[1 2 3]");
     }
 
     #[test]
     fn test_formatter_long_vector_multiline() {
         let items: Vec<Edn<'_>> = (0..20).map(|i| Edn::Str(Cow::Owned(format!("item-{i}")))).collect();
-        let v = Edn::Vector(items);
+        let v = Edn::Vector(items.into());
         let result = v.to_string_with(&fmt_narrow());
         assert!(result.contains('\n'));
         assert!(result.starts_with('['));
@@ -433,8 +434,8 @@ mod tests {
 
     #[test]
     fn test_formatter_empty_collections() {
-        assert_eq!(Edn::Vector(vec![]).to_string_with(&fmt_default()), "[]");
-        assert_eq!(Edn::List(vec![]).to_string_with(&fmt_default()), "()");
+        assert_eq!(Edn::Vector(vec![].into()).to_string_with(&fmt_default()), "[]");
+        assert_eq!(Edn::List(vec![].into()).to_string_with(&fmt_default()), "()");
         assert_eq!(Edn::Map(EdnMap::new()).to_string_with(&fmt_default()), "{}");
     }
 
@@ -444,7 +445,7 @@ mod tests {
             line_width: None,
             ..Default::default()
         };
-        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into());
         let result = v.to_string_with(&fmt);
         assert!(result.contains('\n'));
     }
@@ -458,7 +459,7 @@ mod tests {
         };
         let v = Edn::Vector(vec![
             Edn::Int(100), Edn::Int(200), Edn::Int(300), Edn::Int(400),
-        ]);
+        ].into());
         let result = v.to_string_with(&fmt);
         assert!(result.contains("    "));
     }
@@ -500,7 +501,7 @@ mod tests {
             compact_seqs: false,
             ..Default::default()
         };
-        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into());
         let result = v.to_string_with(&fmt);
         assert!(result.contains('\n'));
     }
@@ -524,7 +525,7 @@ mod tests {
             line_width: None,
             ..Default::default()
         };
-        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into());
         let result = v.to_string_with(&fmt);
         assert!(result.contains("\r\n"));
     }

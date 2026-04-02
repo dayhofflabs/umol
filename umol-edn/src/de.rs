@@ -3,15 +3,15 @@
 use std::borrow::Cow;
 use std::collections::hash_map::IntoIter as HashMapIntoIter;
 use std::marker::PhantomData;
-use std::vec::IntoIter as VecIntoIter;
 
 use serde::de::{
     self, Deserialize, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
 use serde::Deserializer;
 
+use crate::collections::{EdnMap, EdnSeq, EdnSeqIntoIter};
 use crate::config::ParseConfig;
-use crate::edn::{Edn, EdnMap};
+use crate::edn::Edn;
 use crate::error::EdnError;
 use crate::reader::Reader;
 use crate::streaming::EdnStreamDeserializer;
@@ -88,11 +88,11 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
             },
             Edn::Keyword(k) => visitor.visit_string(k.as_str().to_string()),
             Edn::Symbol(s) => visitor.visit_string(s.as_str().to_string()),
-            Edn::List(v) | Edn::Vector(v) => visitor.visit_seq(EdnSeq::new(v)),
+            Edn::List(v) | Edn::Vector(v) => visitor.visit_seq(EdnSeqAccess::new(v)),
             Edn::Map(m) => visitor.visit_map(EdnMapAccess::new(m)),
             Edn::Set(s) => {
-                let v: Vec<Edn<'de>> = s.into_iter().collect();
-                visitor.visit_seq(EdnSeq::new(v))
+                let v: EdnSeq<'de> = s.into_iter().collect();
+                visitor.visit_seq(EdnSeqAccess::new(v))
             }
             Edn::Tagged(_tag, inner) => EdnDeserializer(*inner).deserialize_any(visitor),
         }
@@ -298,19 +298,19 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
 
 // --- SeqAccess ---
 
-struct EdnSeq<'de> {
-    iter: VecIntoIter<Edn<'de>>,
+struct EdnSeqAccess<'de> {
+    iter: EdnSeqIntoIter<'de>,
 }
 
-impl<'de> EdnSeq<'de> {
-    fn new(v: Vec<Edn<'de>>) -> Self {
+impl<'de> EdnSeqAccess<'de> {
+    fn new(v: EdnSeq<'de>) -> Self {
         Self {
             iter: v.into_iter(),
         }
     }
 }
 
-impl<'de> SeqAccess<'de> for EdnSeq<'de> {
+impl<'de> SeqAccess<'de> for EdnSeqAccess<'de> {
     type Error = EdnError;
 
     fn next_element_seed<T: DeserializeSeed<'de>>(

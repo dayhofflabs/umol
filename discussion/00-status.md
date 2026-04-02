@@ -69,3 +69,4 @@
 | [64-spin-state-parse-defaults-2026-03-31.md](64-spin-state-parse-defaults-2026-03-31.md)                                         | Completed     | 2026-03-31   |
 | [65-umol-error-handling-2026-03-31.md](65-umol-error-handling-2026-03-31.md)                                                     | Completed     | 2026-03-31   |
 | [66-edn-spec-conformance-2026-04-01.md](66-edn-spec-conformance-2026-04-01.md)                                                   | Active        | 2026-04-01   |
+| [67-atomref-serialization-roundtrip-2026-04-02.md](67-atomref-serialization-roundtrip-2026-04-02.md)                             | Active        | 2026-04-02   |

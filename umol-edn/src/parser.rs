@@ -12,7 +12,8 @@ use winnow::token::{any, one_of, take, take_while};
 use winnow::{LocatingSlice, Parser};
 
 use crate::config::{DuplicateKeyPolicy, ParseConfig};
-use crate::edn::{Edn, EdnMap, EdnSet, Keyword, Symbol};
+use crate::collections::{EdnMap, EdnSeq, EdnSet};
+use crate::edn::{Edn, Keyword, Symbol};
 use crate::error::{unwrap_err, EdnError};
 
 type Input<'a> = LocatingSlice<&'a str>;
@@ -141,7 +142,7 @@ fn edn_value_dispatch<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResul
         b'[' => edn_vector(config).parse_next(input),
         b'{' => edn_map(config).parse_next(input),
         b'#' => edn_dispatch(config).parse_next(input),
-        b':' => edn_keyword(input, config),
+        b':' => edn_keyword(input),
         b'"' => edn_string().parse_next(input),
         b'\\' => edn_char().parse_next(input),
         b'+' | b'-' => edn_number_or_symbol().parse_next(input),
@@ -169,12 +170,12 @@ fn raw_symbol<'a>(input: &mut Input<'a>) -> PResult<&'a str> {
         .take()
         .parse_next(input)?;
     let start = input.current_token_start() - s.len();
-    validate_symbol(s, start)?;
+    validate_symbol(s, start).map_err(ErrMode::Cut)?;
     Ok(s)
 }
 
 #[inline]
-fn validate_symbol(s: &str, offset: usize) -> PResult<()> {
+pub(crate) fn validate_symbol(s: &str, offset: usize) -> Result<(), EdnError> {
     if s == "/" {
         return Ok(());
     }
@@ -182,14 +183,14 @@ fn validate_symbol(s: &str, offset: usize) -> PResult<()> {
         let prefix = &s[..slash_pos];
         let name = &s[slash_pos + 1..];
         if prefix.is_empty() || name.is_empty() {
-            return Err(ErrMode::Cut(EdnError::InvalidSymbol { offset }));
+            return Err(EdnError::InvalidSymbol { offset });
         }
         let first_name_char = name.chars().next().unwrap();
         if first_name_char.is_ascii_digit()
             || name.contains('/')
             || !is_symbol_start(first_name_char)
         {
-            return Err(ErrMode::Cut(EdnError::InvalidSymbol { offset }));
+            return Err(EdnError::InvalidSymbol { offset });
         }
     }
     Ok(())
@@ -209,7 +210,7 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
 // --- Keywords ---
 
 #[inline]
-fn edn_keyword<'a>(input: &mut Input<'a>, _config: &ParseConfig) -> PResult<Edn<'a>> {
+fn edn_keyword<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
     let _ = ':'.parse_next(input)?;
     let start = input.current_token_start() - 1;
     let s: &str = (
@@ -218,7 +219,7 @@ fn edn_keyword<'a>(input: &mut Input<'a>, _config: &ParseConfig) -> PResult<Edn<
     )
         .take()
         .parse_next(input)?;
-    validate_symbol(s, start)?;
+    validate_symbol(s, start).map_err(ErrMode::Cut)?;
     Ok(Edn::Keyword(Keyword::new(s)))
 }
 
@@ -326,6 +327,16 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
                         'n' => result.push('\n'),
                         '\\' => result.push('\\'),
                         '"' => result.push('"'),
+                        'u' => {
+                            let hex: &str = take_while(4..=4, |c: char| c.is_ascii_hexdigit())
+                                .parse_next(input)
+                                .map_err(|_: E| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
+                            let cp = u32::from_str_radix(hex, 16)
+                                .map_err(|_| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
+                            let ch = char::from_u32(cp)
+                                .ok_or_else(|| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
+                            result.push(ch);
+                        }
                         _ => return Err(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset })),
                     }
                     // After escape, batch copy until next " or \.
@@ -434,7 +445,7 @@ where
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '('.parse_next(input)?;
-        let mut items = Vec::new();
+        let mut items = EdnSeq::new();
         loop {
             ws_and_comments(input, config).ok();
             match peek_byte(input) {
@@ -457,7 +468,7 @@ where
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '['.parse_next(input)?;
-        let mut items = Vec::new();
+        let mut items = EdnSeq::new();
         loop {
             ws_and_comments(input, config).ok();
             match peek_byte(input) {
@@ -576,7 +587,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::rstest;
     use std::borrow::Cow;
-    use crate::edn::{Edn, EdnMap, EdnSet, Keyword};
+    use crate::collections::{EdnMap, EdnSet};
+    use crate::edn::{Edn, Keyword};
     use crate::error::EdnError;
     use crate::reader::{read_all, read_string, read_string_with, Reader};
     use crate::config::{DuplicateKeyPolicy, ParseConfig};
@@ -638,8 +650,13 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_read_string_unicode_escape() {
+        assert_eq!(read_string(r#""\u0041""#).unwrap(), Edn::Str(Cow::Borrowed("A")));
+        assert_eq!(read_string(r#""\u00e9""#).unwrap(), Edn::Str(Cow::Owned("é".to_string())));
+    }
+
     #[rstest]
-    #[case(r#""\u0041""#)]
     #[case(r#""\b""#)]
     #[case(r#""\f""#)]
     fn test_read_string_error_invalid_string_escape(#[case] input: &str) {
@@ -702,16 +719,16 @@ mod tests {
     // --- Collections ---
 
     #[rstest]
-    #[case("()", Edn::List(vec![]))]
-    #[case("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
-    #[case("(nil true)", Edn::List(vec![Edn::Nil, Edn::Bool(true)]))]
+    #[case("()", Edn::List(vec![].into()))]
+    #[case("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+    #[case("(nil true)", Edn::List(vec![Edn::Nil, Edn::Bool(true)].into()))]
     fn test_read_string_list(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("[]", Edn::Vector(vec![]))]
-    #[case("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
+    #[case("[]", Edn::Vector(vec![].into()))]
+    #[case("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
     fn test_read_string_vector(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
@@ -755,8 +772,8 @@ mod tests {
             Edn::Keyword(Keyword::new("items")),
             Edn::Vector(vec![
                 Edn::Int(1),
-                Edn::List(vec![Edn::Int(2), Edn::Int(3)]),
-            ]),
+                Edn::List(vec![Edn::Int(2), Edn::Int(3)].into()),
+            ].into()),
         );
         expected.insert(Edn::Keyword(Keyword::new("flag")), Edn::Bool(true));
         assert_eq!(val, Edn::Map(expected));
@@ -789,7 +806,7 @@ mod tests {
 
     #[rstest]
     #[case("#_ foo 12", Edn::Int(12))]
-    #[case("[1 #_ 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(3)]))]
+    #[case("[1 #_ 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into()))]
     fn test_read_string_discard(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
@@ -800,7 +817,7 @@ mod tests {
     #[case("  12  ", Edn::Int(12))]
     #[case("\t12\n", Edn::Int(12))]
     #[case(",12,", Edn::Int(12))]
-    #[case("[1,,2,,3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
+    #[case("[1,,2,,3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
     fn test_read_string_whitespace(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }

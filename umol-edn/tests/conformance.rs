@@ -57,7 +57,7 @@ fn test_s2_formfeed_not_whitespace() {
 fn test_s2_comma_in_collections() {
     assert_eq!(
         parse("[1, 2, 3]").unwrap(),
-        Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)])
+        Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into())
     );
 }
 
@@ -74,7 +74,7 @@ fn test_s2_comma_in_collections_streaming() {
 fn test_s3_delimiters_no_whitespace() {
     assert_eq!(
         parse("[1[2]]").unwrap(),
-        Edn::Vector(vec![Edn::Int(1), Edn::Vector(vec![Edn::Int(2)])])
+        Edn::Vector(vec![Edn::Int(1), Edn::Vector(vec![Edn::Int(2)].into())].into())
     );
     assert_eq!(read_all_with("[1]2", &cfg()).unwrap().len(), 2);
 }
@@ -88,7 +88,7 @@ fn test_s4_hash_is_not_delimiter() {
     assert_eq!(parse("foo#bar").unwrap(), Edn::Symbol(Symbol::new("foo#bar")));
     assert_eq!(
         parse("[a#b]").unwrap(),
-        Edn::Vector(vec![Edn::Symbol(Symbol::new("a#b"))])
+        Edn::Vector(vec![Edn::Symbol(Symbol::new("a#b"))].into())
     );
 }
 
@@ -159,10 +159,17 @@ fn test_s7_string_escapes_streaming(#[case] input: &str, #[case] expected: &str)
 #[rstest]
 #[case(r#""\b""#)]
 #[case(r#""\f""#)]
-#[case(r#""\u0041""#)]
 #[case(r#""\101""#)]
 fn test_s7_string_clojure_escapes_rejected(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
+}
+
+#[rstest]
+#[case(r#""\u0041""#, "A")]
+#[case(r#""\u00e9""#, "é")]
+fn test_s7_string_unicode_escape(#[case] input: &str, #[case] expected: &str) {
+    assert_eq!(parse(input).unwrap(), Edn::Str(Cow::Owned(expected.to_string())));
+    assert_eq!(stream::<String>(input).unwrap(), expected);
 }
 
 #[rstest]
@@ -224,7 +231,7 @@ fn test_s8_multichar_error() {
 fn test_s8_termination() {
     assert_eq!(
         parse(r"[\a 1]").unwrap(),
-        Edn::Vector(vec![Edn::Char('a'), Edn::Int(1)])
+        Edn::Vector(vec![Edn::Char('a'), Edn::Int(1)].into())
     );
 }
 
@@ -493,10 +500,10 @@ fn test_s12_bigdec_suffix_error(#[case] input: &str) {
 // ============================================================================
 
 #[rstest]
-#[case("()", Edn::List(vec![]))]
-#[case("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
-#[case("[]", Edn::Vector(vec![]))]
-#[case("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]))]
+#[case("()", Edn::List(vec![].into()))]
+#[case("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+#[case("[]", Edn::Vector(vec![].into()))]
+#[case("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
 fn test_s13_s14_seqs(#[case] input: &str, #[case] expected: Edn<'_>) {
     assert_eq!(parse(input).unwrap(), expected);
 }
@@ -511,9 +518,9 @@ fn test_s13_s14_nested() {
     assert_eq!(
         parse("[[1 2] (3 4)]").unwrap(),
         Edn::Vector(vec![
-            Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]),
-            Edn::List(vec![Edn::Int(3), Edn::Int(4)]),
-        ])
+            Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into()),
+            Edn::List(vec![Edn::Int(3), Edn::Int(4)].into()),
+        ].into())
     );
 }
 
@@ -559,7 +566,7 @@ fn test_s15_map_duplicate_key_last_wins() {
 fn test_s15_map_complex_keys() {
     let result = parse("{[1 2] :pair \"key\" :str}").unwrap();
     let mut expected = EdnMap::new();
-    expected.insert(Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]), Edn::keyword("pair"));
+    expected.insert(Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into()), Edn::keyword("pair"));
     expected.insert(Edn::Str(Cow::Owned("key".to_string())), Edn::keyword("str"));
     assert_eq!(result, Edn::Map(expected));
 }
@@ -736,7 +743,7 @@ fn test_s19_comments_streaming() {
 fn test_s19_comment_inside_vector() {
     assert_eq!(
         parse("[1 ; comment\n 2]").unwrap(),
-        Edn::Vector(vec![Edn::Int(1), Edn::Int(2)])
+        Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into())
     );
 }
 
@@ -748,7 +755,7 @@ fn test_s19_comment_inside_vector() {
 fn test_s20_discard() {
     assert_eq!(
         parse("[1 #_ 2 3]").unwrap(),
-        Edn::Vector(vec![Edn::Int(1), Edn::Int(3)])
+        Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into())
     );
 }
 
@@ -761,7 +768,7 @@ fn test_s20_discard_streaming() {
 fn test_s20_discard_nested() {
     assert_eq!(
         parse("[#_ #_ 1 2 3]").unwrap(),
-        Edn::Vector(vec![Edn::Int(3)])
+        Edn::Vector(vec![Edn::Int(3)].into())
     );
 }
 
@@ -774,7 +781,7 @@ fn test_s20_discard_nested_streaming() {
 fn test_s20_discard_tagged_literal() {
     assert_eq!(
         parse("[#_ #my/tag \"2024\" 1]").unwrap(),
-        Edn::Vector(vec![Edn::Int(1)])
+        Edn::Vector(vec![Edn::Int(1)].into())
     );
 }
 

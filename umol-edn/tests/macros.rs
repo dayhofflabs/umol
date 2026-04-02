@@ -81,7 +81,7 @@ fn test_slash_symbol() {
 fn test_vector() {
     assert_eq!(
         edn!([1 2 3]),
-        Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)])
+        Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into())
     );
 }
 
@@ -89,7 +89,7 @@ fn test_vector() {
 fn test_list() {
     assert_eq!(
         edn!((1 2 3)),
-        Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)])
+        Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into())
     );
 }
 
@@ -135,13 +135,13 @@ fn test_special_floats() {
 fn test_discard() {
     assert_eq!(
         edn!([1 #_ 2 3]),
-        Edn::Vector(vec![Edn::Int(1), Edn::Int(3)])
+        Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into())
     );
 }
 
 #[test]
 fn test_empty_collections() {
-    assert_eq!(edn!([]), Edn::Vector(vec![]));
-    assert_eq!(edn!(()), Edn::List(vec![]));
+    assert_eq!(edn!([]), Edn::Vector(vec![].into()));
+    assert_eq!(edn!(()), Edn::List(vec![].into()));
     assert_eq!(edn!({}), Edn::Map(EdnMap::new()));
 }

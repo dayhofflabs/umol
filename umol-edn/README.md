@@ -7,18 +7,9 @@ Inspired by [edamame](https://github.com/borkdude/edamame) (Clojure),
 [go-edn](https://github.com/go-edn/edn) (Go), and
 [serde_json](https://github.com/serde-rs/json) (Rust).
 
-## Dialects
-
-umol-edn supports two dialects:
-
-- **Edn** — strict interpretation of the
-  [EDN spec](https://github.com/edn-format/edn). See
-  [`spec/edn-spec.md`](spec/edn-spec.md) for the full specification including
-  ambiguity resolutions.
-- **Clojure** (default) — extends Edn with features present in Clojure's reader:
-  `\b`/`\f` in strings, `\formfeed`/`\backspace` characters, `##NaN`/`##Inf`,
-  octal string escapes, digit-start keywords, `#_` discard, `::` auto-resolve
-  keywords, and lenient symbol rules.
+Implements the [EDN spec](https://github.com/edn-format/edn) strictly. See
+[`spec/edn-spec.md`](spec/edn-spec.md) for the full specification including
+ambiguity resolutions.
 
 ## Usage
 
@@ -46,15 +37,10 @@ let val = edn!(r#"{:name "Alice" :age 30}"#);
 Parse EDN into an `Edn` value tree, then inspect or traverse it:
 
 ```rust
-use umol_edn::{read_string, read_string_with, Edn, ParseConfig, Dialect};
+use umol_edn::{read_string, Edn};
 
-// Parse with default config (Clojure dialect)
 let val = read_string("{:name \"Alice\" :age 30}").unwrap();
 assert_eq!(val.get("name").unwrap().as_str(), Some("Alice"));
-
-// Parse with strict Edn dialect
-let config = ParseConfig { dialect: Dialect::Edn, ..Default::default() };
-let val = read_string_with("[1 2 3]", &config).unwrap();
 ```
 
 ### Streaming serde deserialization

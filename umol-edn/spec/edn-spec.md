@@ -1,11 +1,9 @@
 # umol-edn Specification
 
-This document attempts to clarify the
+This document clarifies the
 [EDN specification](https://github.com/edn-format/edn) for the purposes of the
-umol-edn implementation, in particular resolves the points, on which original
-specification has some ambiguity. umol-edn supports two dialects: **Edn**
-(strict) and **Clojure** (default). The Edn dialect tracks the spec text.
-The Clojure dialect adds features present in Clojure's reader.
+umol-edn implementation, resolving points where the original specification is
+ambiguous.
 
 ## 0. Encoding
 
@@ -34,8 +32,6 @@ syntactically valid. `#_ #_ a b` discards both `a` and `b`. `#_` applied to a
 tagged literal discards the entire tagged form (e.g., `#_ #inst "2024"` discards
 the whole `#inst` form).
 
-**Dialect:** Both. `#_` is supported as discard in both Edn and Clojure modes.
-
 ## 4. Nil, booleans
 
 - `nil` — the nil value
@@ -53,11 +49,10 @@ feature).
 The `N` suffix (`42N`) requests arbitrary-precision. Without the `bignum`
 feature this is an error. With `bignum`, parsed as `BigInt`.
 
-Leading zeros (`007`) are parsed as decimal, not octal. The parser does not
-reject leading zeros.
+No integer other than 0 may begin with 0. Leading zeros (`007`) are rejected.
 
-**Ambiguity resolution (D2b):** Without `bignum`, integer overflow is always an
-error. With `bignum`, overflow promotes to `BigInt`.
+**Ambiguity resolution:** Without `bignum`, integer overflow is always an error.
+With `bignum`, overflow promotes to `BigInt`.
 
 ## 6. Floating-point numbers
 
@@ -70,50 +65,38 @@ The `M` suffix (`3.14M`) requests arbitrary-precision decimal. Without the
 
 `-0.0` is valid and distinct from `0.0` at the bit level.
 
-### Special float literals
-
-`##NaN`, `##Inf`, `##-Inf` produce `f64` NaN, positive infinity, and negative
-infinity respectively.
-
-**Dialect:** Clojure only. In Edn mode, `##` is an error.
-
 ## 7. Strings
 
 Delimited by `"`. Supports escape sequences:
 
-| Escape      | Character                         | Dialect      |
-| ----------- | --------------------------------- | ------------ |
-| `\\`        | backslash                         | both         |
-| `\"`        | double quote                      | both         |
-| `\n`        | newline (0x0A)                    | both         |
-| `\r`        | carriage return (0x0D)            | both         |
-| `\t`        | tab (0x09)                        | both         |
-| `\b`        | backspace (0x08)                  | Clojure only |
-| `\f`        | form feed (0x0C)                  | Clojure only |
-| `\uNNNN`    | unicode code point (4 hex digits) | both         |
-| `\0`–`\377` | octal byte value                  | Clojure only |
+| Escape   | Character                         |
+| -------- | --------------------------------- |
+| `\\`     | backslash                         |
+| `\"`     | double quote                      |
+| `\n`     | newline (0x0A)                    |
+| `\r`     | carriage return (0x0D)            |
+| `\t`     | tab (0x09)                        |
+| `\uNNNN` | unicode code point (4 hex digits) |
 
 Unterminated strings are an error. Unknown escape sequences are an error.
 
-**Ambiguity resolution (D11):** The EDN spec lists "standard C/Java escape
-characters `\t, \r, \n, \\ and \"`" — exactly five. `\uNNNN` is not explicitly
-listed but is universally expected. umol-edn accepts `\uNNNN` in both dialects
-because rejecting it would break real-world EDN files.
+**Ambiguity resolution:** The EDN spec lists "standard C/Java escape characters
+`\t, \r, \n, \\ and \"`" — exactly five. `\uNNNN` is not explicitly listed but
+is universally expected. umol-edn accepts `\uNNNN` because rejecting it would
+break real-world EDN files.
 
 ## 8. Characters
 
 Preceded by `\`. Forms:
 
-| Form                | Example                | Dialect      |
-| ------------------- | ---------------------- | ------------ |
-| Single character    | `\a`, `\Z`, `\!`       | both         |
-| Named: `\newline`   | newline (0x0A)         | both         |
-| Named: `\return`    | carriage return (0x0D) | both         |
-| Named: `\space`     | space (0x20)           | both         |
-| Named: `\tab`       | tab (0x09)             | both         |
-| Named: `\formfeed`  | form feed (0x0C)       | Clojure only |
-| Named: `\backspace` | backspace (0x08)       | Clojure only |
-| Unicode: `\uNNNN`   | 4 hex digits           | both         |
+| Form              | Example                |
+| ----------------- | ---------------------- |
+| Single character  | `\a`, `\Z`, `\!`       |
+| Named: `\newline` | newline (0x0A)         |
+| Named: `\return`  | carriage return (0x0D) |
+| Named: `\space`   | space (0x20)           |
+| Named: `\tab`     | tab (0x09)             |
+| Unicode: `\uNNNN` | 4 hex digits           |
 
 A character literal must be followed by a non-symbol character, whitespace, or
 end of input. `\abc` is an error (multi-character sequence that isn't a named
@@ -125,33 +108,29 @@ character).
 
 Grammar: `:` followed by a symbol name.
 
-In Edn mode, the name follows symbol rules (must start with a letter or
-permitted punctuation). In Clojure mode, the name may also start with a digit
-(`:0`, `:1`, `:123abc`).
+The name follows symbol rules: must start with a letter or permitted
+punctuation. Digit-starting keywords (`:0`, `:1`) are not valid.
 
 Keywords may be namespace-qualified: `:ns/name`. The `/` separates the namespace
 from the name. A bare `:` with no following name is an error.
-
-### Auto-resolve keywords (Clojure only)
-
-`::foo` resolves to `:current-ns/foo` and `::alias/name` resolves to
-`:resolved-ns/name`. Requires `auto_resolve` config with `current_ns` and
-`aliases` map. Without config, `::` is an error (`MissingAutoResolve`). An
-unknown alias produces `UnknownAlias`.
-
-**Dialect:** Clojure only. In Edn mode, `::` is always an error.
 
 ## 10. Symbols
 
 Grammar: starts with a letter or one of `. * ! _ ? $ % & = < > /`, followed by
 any of those characters plus digits, `+`, `-`, `#`, `:`, `'`.
 
+If `-`, `+` or `.` are the first character, the second character (if any) must
+be non-numeric.
+
 Reserved symbols: `nil`, `true`, `false` are parsed as their respective
 literals, not as symbols.
 
 `/` alone is a valid symbol (the division symbol in Clojure).
 
-Symbols may be namespace-qualified: `ns/name`.
+Symbols may be namespace-qualified: `ns/name`. `/` can be used once only in the
+middle of a symbol. Neither the prefix nor the name part can be empty when `/`
+is present. The name after `/` must follow first-character restrictions for
+symbols.
 
 ## 11. Lists
 
@@ -194,9 +173,10 @@ Duplicate elements in a set are not currently detected at parse time. Sets use
 
 Grammar: `#` followed by a symbol (the tag), then a value.
 
-The tag symbol must follow symbol rules. Tags are typically namespace-qualified
-for user-defined types (`#myapp/Person {...}`). Unqualified tags are reserved
-for built-in use.
+The tag symbol must follow symbol rules. Unqualified tags are reserved for
+built-in use; user-defined tags must be namespace-qualified
+(`#myapp/Person {...}`). Unqualified tags that are not registered in
+`TagReaders` are rejected.
 
 Built-in tag support (feature-gated):
 
@@ -208,65 +188,21 @@ Built-in tag support (feature-gated):
 Without the corresponding feature, tagged values parse as
 `Tagged(tag_string, Box<Edn>)` and are available for application-level dispatch.
 
-## 16. Clojure extensions not supported
-
-These Clojure reader features are not part of EDN and are not supported in
-either dialect:
-
-| Feature                                   | Reason                                              |
-| ----------------------------------------- | --------------------------------------------------- |
-| `#'var`                                   | Clojure-specific                                    |
-| `@deref`                                  | Clojure-specific                                    |
-| `#()` anonymous functions                 | Clojure-specific                                    |
-| `'quote`, `` `syntax-quote ``, `~unquote` | Clojure-specific                                    |
-| `#?` reader conditionals                  | Clojure-specific                                    |
-| `#=` read-eval                            | Arbitrary expression execution                      |
-| `#:ns{...}` namespaced maps               | Clojure extension, not in EDN spec                  |
-| Rationals (`3/4`)                         | Not in spec; behind `bignum` feature as future work |
-
-## Dialect feature matrix
-
-| Feature                                 | Edn   | Clojure | Section |
-| --------------------------------------- | ----- | ------- | ------- |
-| `nil`, `true`, `false`                  | yes   | yes     | 4       |
-| Integers with `+`/`-` sign              | yes   | yes     | 5       |
-| Floats                                  | yes   | yes     | 6       |
-| `##NaN`, `##Inf`, `##-Inf`              | no    | yes     | 6       |
-| Strings                                 | yes   | yes     | 7       |
-| `\t`, `\r`, `\n`, `\\`, `\"` in strings | yes   | yes     | 7       |
-| `\uNNNN` in strings                     | yes   | yes     | 7       |
-| `\b`, `\f` in strings                   | no    | yes     | 7       |
-| Octal escapes in strings                | no    | yes     | 7       |
-| Characters (single, named, `\uNNNN`)    | yes   | yes     | 8       |
-| `\formfeed`, `\backspace` characters    | no    | yes     | 8       |
-| Keywords (`:foo`, `:ns/name`)           | yes   | yes     | 9       |
-| Digit-starting keywords (`:0`, `:1`)    | no    | yes     | 9       |
-| Symbols                                 | yes   | yes     | 10      |
-| Lists, vectors, maps, sets              | yes   | yes     | 11–14   |
-| Tagged literals                         | yes   | yes     | 15      |
-| `:: ` auto-resolve keywords             | no    | yes     | 9       |
-| `#_` discard                            | yes   | yes     | 3       |
-| `;` line comments                       | yes   | yes     | 2       |
-| `,` as whitespace                       | yes   | yes     | 1       |
-| Bignum suffixes (`N`, `M`)              | error | error   | 5, 6    |
-
-## Ambiguity resolutions
+## 16. Ambiguity resolutions
 
 Summary of decisions on underspecified areas of the EDN spec:
 
-| Topic                                   | Decision                                                     | Section |
-| --------------------------------------- | ------------------------------------------------------------ | ------- |
-| Integer overflow                        | Error without `bignum`; promote with `bignum`                | 5       |
-| String escapes beyond the listed five   | `\uNNNN` in both dialects; `\b`, `\f`, octal in Clojure only | 7       |
-| `\formfeed`, `\backspace` char literals | Clojure only                                                 | 8       |
-| Duplicate map keys                      | Configurable; error by default                               | 13      |
-| `#_` nesting (`#_ #_ a b`)              | Each `#_` discards next form                                 | 3       |
-| Whitespace definition                   | Space, tab, newline, CR, comma. Not form feed                | 1       |
-| `#_` + tagged literal                   | Discards entire tagged form                                  | 3       |
-| Leading zeros (`007`)                   | Parsed as decimal                                            | 5       |
-| `-0` / `-0.0`                           | Valid                                                        | 5, 6    |
-| `/` as symbol                           | Valid                                                        | 10      |
-| `#_` in Edn dialect                     | Supported as discard (same as Clojure)                       | 3       |
+| Topic                                 | Decision                                      | Section |
+| ------------------------------------- | --------------------------------------------- | ------- |
+| Integer overflow                      | Error without `bignum`; promote with `bignum` | 5       |
+| String escapes beyond the listed five | `\uNNNN` accepted                             | 7       |
+| Duplicate map keys                    | Configurable; error by default                | 13      |
+| `#_` nesting (`#_ #_ a b`)            | Each `#_` discards next form                  | 3       |
+| Whitespace definition                 | Space, tab, newline, CR, comma. Not form feed | 1       |
+| `#_` + tagged literal                 | Discards entire tagged form                   | 3       |
+| Leading zeros (`007`)                 | Rejected                                      | 5       |
+| `-0` / `-0.0`                         | Valid                                         | 5, 6    |
+| `/` as symbol                         | Valid                                         | 10      |
 
 ## Round-tripping
 

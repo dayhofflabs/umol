@@ -95,7 +95,7 @@ fn parse_group(g: &proc_macro2::Group) -> Result<TokenStream2, String> {
             while !rest.is_empty() {
                 elems.push(parse_value(&mut rest)?);
             }
-            Ok(quote! { umol_edn::Edn::Vector(vec![#(#elems),*]) })
+            Ok(quote! { umol_edn::Edn::Vector(vec![#(#elems),*].into()) })
         }
         Delimiter::Parenthesis => {
             // List: (1 2 3)
@@ -103,7 +103,7 @@ fn parse_group(g: &proc_macro2::Group) -> Result<TokenStream2, String> {
             while !rest.is_empty() {
                 elems.push(parse_value(&mut rest)?);
             }
-            Ok(quote! { umol_edn::Edn::List(vec![#(#elems),*]) })
+            Ok(quote! { umol_edn::Edn::List(vec![#(#elems),*].into()) })
         }
         Delimiter::Brace => {
             // Map: {:a 1 :b 2}

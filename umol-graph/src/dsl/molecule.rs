@@ -662,7 +662,7 @@ fn resolve_atoms_aliases<'e>(
                 .into_iter()
                 .map(|e| resolve_one_atom(e, aliases))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Edn::Vector(resolved))
+            Ok(Edn::Vector(resolved.into()))
         }
         other => Ok(other),
     }

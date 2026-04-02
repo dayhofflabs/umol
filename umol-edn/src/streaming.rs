@@ -10,7 +10,7 @@ use serde::de::{
 
 use crate::config::{ParseConfig, TagReaders};
 use crate::error::EdnError;
-use crate::parser::{is_symbol_char, is_symbol_start};
+use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
 
 const MAX_DEPTH: u16 = 128;
 
@@ -136,34 +136,8 @@ impl<'de> EdnStreamDeserializer<'de> {
             self.pos += 1;
         }
         let s = &self.input[start..self.pos];
-        self.validate_symbol_str(s, start)?;
+        validate_symbol(s, start)?;
         Ok(s)
-    }
-
-    /// Validate symbol slash rules (mirrors parser::validate_symbol).
-    #[inline]
-    fn validate_symbol_str(&self, s: &str, offset: usize) -> Result<(), EdnError> {
-        if s == "/" {
-            return Ok(());
-        }
-        if let Some(slash_pos) = s.find('/') {
-            let prefix = &s[..slash_pos];
-            let name = &s[slash_pos + 1..];
-            if prefix.is_empty() || name.is_empty() {
-                return Err(EdnError::InvalidSymbol { offset });
-            }
-            let first_name_char = name.chars().next().unwrap();
-            if first_name_char.is_ascii_digit() {
-                return Err(EdnError::InvalidSymbol { offset });
-            }
-            if name.contains('/') {
-                return Err(EdnError::InvalidSymbol { offset });
-            }
-            if !is_symbol_start(first_name_char) {
-                return Err(EdnError::InvalidSymbol { offset });
-            }
-        }
-        Ok(())
     }
 
     /// Skip a `#tag` prefix if present. Rejects bare (unqualified) tags unless registered.

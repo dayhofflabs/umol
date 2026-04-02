@@ -1,5 +1,6 @@
 //! EDN (Extensible Data Notation) parser, formatter, and serde integration.
 
+pub mod collections;
 pub mod config;
 mod display;
 pub mod edn;
@@ -19,7 +20,8 @@ pub(crate) mod streaming;
 pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 #[cfg(feature = "serde")]
 pub use de::{from_str, from_str_with, from_value, EdnDeserializer, StreamDeserializer};
-pub use edn::{Edn, EdnMap, EdnSet, Keyword, Symbol};
+pub use collections::{EdnMap, EdnSeq, EdnSet};
+pub use edn::{Edn, Keyword, Symbol};
 pub use error::EdnError;
 pub use formatter::EdnFormatter;
 #[cfg(feature = "serde")]

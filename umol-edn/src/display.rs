@@ -96,7 +96,8 @@ mod tests {
     use std::borrow::Cow;
     use rstest::rstest;
 
-    use crate::edn::{Edn, EdnMap, EdnSet, Keyword, Symbol};
+    use crate::collections::{EdnMap, EdnSet};
+    use crate::edn::{Edn, Keyword, Symbol};
 
     #[rstest]
     #[case(Edn::Nil, "nil")]
@@ -169,24 +170,24 @@ mod tests {
 
     #[test]
     fn test_display_list() {
-        let v = Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]);
+        let v = Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into());
         assert_eq!(v.to_string(), "(1 2 3)");
     }
 
     #[test]
     fn test_display_list_empty() {
-        assert_eq!(Edn::List(vec![]).to_string(), "()");
+        assert_eq!(Edn::List(vec![].into()).to_string(), "()");
     }
 
     #[test]
     fn test_display_vector() {
-        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)]);
+        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into());
         assert_eq!(v.to_string(), "[1 2 3]");
     }
 
     #[test]
     fn test_display_vector_empty() {
-        assert_eq!(Edn::Vector(vec![]).to_string(), "[]");
+        assert_eq!(Edn::Vector(vec![].into()).to_string(), "[]");
     }
 
     #[test]
@@ -235,8 +236,8 @@ mod tests {
 
     #[test]
     fn test_display_nested() {
-        let inner = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)]);
-        let outer = Edn::List(vec![Edn::Keyword(Keyword::new("data")), inner]);
+        let inner = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into());
+        let outer = Edn::List(vec![Edn::Keyword(Keyword::new("data")), inner].into());
         assert_eq!(outer.to_string(), "(:data [1 2])");
     }
 }
