@@ -2,4 +2,4 @@
 source: umol-graph/tests/resolution/mod.rs
 expression: edn_to_string(&results).unwrap()
 ---
-{:atom-typing {:success true :output {:atoms {"0" "P#v5" "1" "Cl#n3#v" "2" "Cl#n3#v" "3" "Cl#n3#v" "4" "Cl#n3#v" "5" "Cl#n3#v"} :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]] :charge 0 :spin "#u0 #s1"}} :counts {:success true :output {:atoms {"0" "P#v5" "1" "Cl#n3#v" "2" "Cl#n3#v" "3" "Cl#n3#v" "4" "Cl#n3#v" "5" "Cl#n3#v"} :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]] :charge 0 :spin "#u0 #s1"}}}
+{:atom-typing {:success true :output {:atoms ["P#v5" "Cl#n3#v" "Cl#n3#v" "Cl#n3#v" "Cl#n3#v" "Cl#n3#v"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]] :charge 0 :spin "#u0 #s1"}} :counts {:success true :output {:atoms ["P#v5" "Cl#n3#v" "Cl#n3#v" "Cl#n3#v" "Cl#n3#v" "Cl#n3#v"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"] [0 5 "1"]] :charge 0 :spin "#u0 #s1"}}}

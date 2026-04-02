@@ -1398,13 +1398,13 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
 impl ToAst<MoleculeAst> for MoleculeBuilder {
     fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
         let mut label_map: IndexMap<AtomIndex, String> = IndexMap::new();
-        let mut atoms = IndexMap::new();
+        let mut atom_vec = Vec::new();
 
         for idx in self.atom_indices() {
             let label = idx.index().to_string();
             let atom_ast = self.atom(idx).unwrap().to_ast(&cfg.atom);
-            label_map.insert(idx, label.clone());
-            atoms.insert(label, atom_ast);
+            label_map.insert(idx, label);
+            atom_vec.push(atom_ast);
         }
 
         let label = |idx: AtomIndex| -> AtomRef {
@@ -1473,7 +1473,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             .collect();
 
         MoleculeAst {
-            atoms: Atoms::Named(atoms),
+            atoms: Atoms::Indexed(atom_vec),
             bonds,
             dative_bonds,
             aromatic_systems,
