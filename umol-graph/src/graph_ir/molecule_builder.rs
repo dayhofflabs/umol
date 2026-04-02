@@ -39,7 +39,7 @@ use crate::dsl::config::{BondDslConfig, MoleculeDslConfig};
 use umol_edn::{from_str as edn_from_str, to_string as edn_to_string};
 use crate::dsl::error::{LoweringError, ParseError};
 use crate::dsl::molecule::{
-    parse_molecule_dsl, AromaticSystem as AstAromaticSystem, Atoms, BondSpec,
+    parse_molecule_dsl, AromaticSystem as AstAromaticSystem, AtomRef, Atoms, BondSpec,
     CovalentBond as AstCovalentBond, DativeBond as AstDativeBond, MoleculeAst,
     MulticenterBond as AstMulticenterBond, NoncovalentBond as AstNoncovalentBond,
 };
@@ -1407,11 +1407,13 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             atoms.insert(label, atom_ast);
         }
 
-        let label = |idx: AtomIndex| -> String {
-            label_map
-                .get(&idx)
-                .cloned()
-                .unwrap_or_else(|| idx.index().to_string())
+        let label = |idx: AtomIndex| -> AtomRef {
+            AtomRef(
+                label_map
+                    .get(&idx)
+                    .cloned()
+                    .unwrap_or_else(|| idx.index().to_string()),
+            )
         };
 
         let bonds: Vec<AstCovalentBond> = self

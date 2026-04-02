@@ -1,19 +1,20 @@
 # umol-edn
 
-Hello, Possums! `dame-edna` provides a Rust parser, formatter, and 
-erde integration for [EDN (Extensible Data Notation)](https://github.com/edn-format/edn).
+Rust parser, formatter, and serde integration for
+[EDN (Extensible Data Notation)](https://github.com/edn-format/edn).
 
-It draws inspiration from [edamame](https://github.com/borkdude/edamame)
-(Clojure), [go-edn](https://github.com/go-edn/edn) (Go), and
+Inspired by [edamame](https://github.com/borkdude/edamame) (Clojure),
+[go-edn](https://github.com/go-edn/edn) (Go), and
 [serde_json](https://github.com/serde-rs/json) (Rust).
 
 ## Dialects
 
 umol-edn supports two dialects:
 
-- **Edn** — strict interpretation of the [EDN spec](https://github.com/edn-format/edn).
-  See [`spec/edn-spec.md`](spec/edn-spec.md) for the full specification
-  including ambiguity resolutions.
+- **Edn** — strict interpretation of the
+  [EDN spec](https://github.com/edn-format/edn). See
+  [`spec/edn-spec.md`](spec/edn-spec.md) for the full specification including
+  ambiguity resolutions.
 - **Clojure** (default) — extends Edn with features present in Clojure's reader:
   `\b`/`\f` in strings, `\formfeed`/`\backspace` characters, `##NaN`/`##Inf`,
   octal string escapes, digit-start keywords, `#_` discard, `::` auto-resolve
@@ -85,12 +86,12 @@ let edn = to_string_pretty(&vec![1, 2, 3]).unwrap(); // formatted with newlines
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| `serde` | Serde `Serialize`/`Deserialize` support, streaming parser |
-| `chrono` | `#inst` tag reader producing `chrono::DateTime<Utc>` |
-| `uuid`  | `#uuid` tag reader producing `uuid::Uuid` |
-| `macros` | Proc-macro `edn!` with bare EDN syntax |
+| Feature  | Description                                               |
+| -------- | --------------------------------------------------------- |
+| `serde`  | Serde `Serialize`/`Deserialize` support, streaming parser |
+| `chrono` | `#inst` tag reader producing `chrono::DateTime<Utc>`      |
+| `uuid`   | `#uuid` tag reader producing `uuid::Uuid`                 |
+| `macros` | Proc-macro `edn!` with bare EDN syntax                    |
 
 ## License
 

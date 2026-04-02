@@ -1,6 +1,5 @@
-//! EDN dialect conformance tests — parser and streaming paths.
+//! EDN conformance tests — parser and streaming paths.
 //!
-//! Every test uses `Dialect::Edn` (strict spec compliance).
 //! Statement IDs (S2, S7, etc.) reference discussion/66-edn-spec-conformance-2026-04-01.md.
 
 use std::borrow::Cow;
@@ -8,16 +7,13 @@ use std::collections::HashMap;
 
 use rstest::rstest;
 use serde::Deserialize;
-use umol_edn::config::{Dialect, DuplicateKeyPolicy, ParseConfig, TagReaders};
+use umol_edn::config::{DuplicateKeyPolicy, ParseConfig, TagReaders};
 use umol_edn::edn::{Edn, Symbol};
 use umol_edn::error::EdnError;
 use umol_edn::{from_str_with, read_all_with, read_string_with, EdnMap, EdnSet};
 
 fn cfg() -> ParseConfig {
-    ParseConfig {
-        dialect: Dialect::Edn,
-        ..Default::default()
-    }
+    ParseConfig::default()
 }
 
 fn parse(input: &str) -> Result<Edn<'_>, EdnError> {
@@ -550,7 +546,6 @@ fn test_s15_map_duplicate_key_error() {
 #[test]
 fn test_s15_map_duplicate_key_last_wins() {
     let config = ParseConfig {
-        dialect: Dialect::Edn,
         duplicate_keys: DuplicateKeyPolicy::LastWins,
         ..Default::default()
     };
@@ -698,7 +693,6 @@ fn test_s17_custom_reader_dispatch() {
     let mut readers = TagReaders::default();
     readers.insert("double", double_reader);
     let config = ParseConfig {
-        dialect: Dialect::Edn,
         tag_readers: readers,
         ..Default::default()
     };
@@ -715,7 +709,6 @@ fn test_s17_custom_reader_error_propagation() {
     let mut readers = TagReaders::default();
     readers.insert("strict", strict_reader);
     let config = ParseConfig {
-        dialect: Dialect::Edn,
         tag_readers: readers,
         ..Default::default()
     };

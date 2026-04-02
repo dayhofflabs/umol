@@ -1,5 +1,5 @@
 {:input {:atoms [C C C C N]
-         :bonds [[:0 :1 :single] [:1 :2 :single] [:2 :3 :single] [:3 :4 :double] [:4 :0 :single]]}
+         :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :double] [4 0 :single]]}
  :config-overrides {:atom {:implicit-h-mode :normal :charge-mode :zero :aromatic-valence-mode :not-aromatic}}
  :context {:atom_candidates {}
            :atom_aromatic_hints {0 false 1 false 2 false 3 false 4 false}

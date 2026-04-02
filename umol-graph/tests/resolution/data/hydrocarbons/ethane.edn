@@ -1,5 +1,5 @@
 {:input {:atoms [C C]
-         :bonds [[:0 :1 :single]]}
+         :bonds [[0 1 :single]]}
  :config-overrides {:atom {:charge-mode :zero
                            :implicit-h-mode :normal
                            :aromatic-valence-mode :not-aromatic}}

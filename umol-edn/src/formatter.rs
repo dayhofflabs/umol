@@ -1,9 +1,8 @@
 //! Configurable EDN formatter (pretty-printing).
 
 use crate::edn::{Edn, EdnMap};
-use crate::error::EdnError;
-use crate::reader::read_string;
-use crate::ser::to_string;
+#[cfg(feature = "serde")]
+use crate::{error::EdnError, reader::read_string, ser::to_string};
 
 /// Configurable EDN formatter.
 #[derive(Clone, Debug)]
@@ -111,15 +110,6 @@ fn itoa_len(n: i64) -> usize {
 }
 
 fn format_float_len(v: f64) -> usize {
-    if v.is_nan() {
-        return 5; // ##NaN
-    }
-    if v == f64::INFINITY {
-        return 5; // ##Inf
-    }
-    if v == f64::NEG_INFINITY {
-        return 6; // ##-Inf
-    }
     let s = format!("{v}");
     if s.contains('.') || s.contains('e') || s.contains('E') {
         s.len()
@@ -134,8 +124,7 @@ fn display_char_len(c: char) -> usize {
         '\r' => 7,  // \return
         ' ' => 6,   // \space
         '\t' => 4,  // \tab
-        '\u{000C}' => 9,  // \formfeed
-        '\u{0008}' => 10, // \backspace
+        c if (c as u32) < 0x20 || c == '\u{7F}' => 6, // \uNNNN
         _ => 1 + c.len_utf8(), // \ + char
     }
 }
@@ -542,7 +531,7 @@ mod tests {
 
     #[rstest]
     #[case(
-        "{:atoms [\"C\" \"O\"] :bonds [[:0 :1 :single]]}",
+        "{:atoms [\"C\" \"O\"] :bonds [[0 1 :single]]}",
         20,
         true
     )]

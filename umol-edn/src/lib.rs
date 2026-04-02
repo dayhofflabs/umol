@@ -16,7 +16,7 @@ pub mod ser;
 #[cfg(feature = "serde")]
 pub(crate) mod streaming;
 
-pub use config::{AutoResolve, Dialect, DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
+pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 #[cfg(feature = "serde")]
 pub use de::{from_str, from_str_with, from_value, EdnDeserializer, StreamDeserializer};
 pub use edn::{Edn, EdnMap, EdnSet, Keyword, Symbol};

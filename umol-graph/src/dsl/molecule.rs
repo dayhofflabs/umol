@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 use std::fmt;
+use std::ops::Deref;
 use std::str::FromStr;
 
 use indexmap::IndexMap;
@@ -16,6 +17,84 @@ use super::atom::{parse_atom_dsl, AtomAst};
 use super::bond::{parse_bond_dsl, BondAst};
 use super::config::MoleculeDslConfig;
 use super::error::ParseError;
+
+/// Atom reference in bond endpoints: deserializes from integer, string, or keyword.
+/// Serializes as integer when the value is a valid `usize`, otherwise as string.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AtomRef(pub String);
+
+impl Deref for AtomRef {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for AtomRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for AtomRef {
+    fn from(s: String) -> Self {
+        AtomRef(s)
+    }
+}
+
+impl From<&str> for AtomRef {
+    fn from(s: &str) -> Self {
+        AtomRef(s.to_string())
+    }
+}
+
+impl PartialEq<&str> for AtomRef {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl Serialize for AtomRef {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if let Ok(n) = self.0.parse::<usize>() {
+            serializer.serialize_u64(n as u64)
+        } else {
+            serializer.serialize_str(&self.0)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AtomRef {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(AtomRefVisitor)
+    }
+}
+
+struct AtomRefVisitor;
+
+impl<'de> Visitor<'de> for AtomRefVisitor {
+    type Value = AtomRef;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("an atom reference (integer, string, or keyword)")
+    }
+
+    fn visit_i64<E: de::Error>(self, v: i64) -> Result<AtomRef, E> {
+        Ok(AtomRef(v.to_string()))
+    }
+
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<AtomRef, E> {
+        Ok(AtomRef(v.to_string()))
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<AtomRef, E> {
+        Ok(AtomRef(v.to_string()))
+    }
+
+    fn visit_string<E: de::Error>(self, v: String) -> Result<AtomRef, E> {
+        Ok(AtomRef(v))
+    }
+}
 
 /// `:atoms` - either a named map or an indexed vector
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -43,8 +122,8 @@ pub enum BondSpec {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CovalentBond {
     pub id: Option<String>,
-    pub a: String,
-    pub b: String,
+    pub a: AtomRef,
+    pub b: AtomRef,
     pub bond: BondSpec,
 }
 
@@ -52,8 +131,8 @@ pub struct CovalentBond {
 pub struct DativeBond {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    pub donor: String,
-    pub acceptor: String,
+    pub donor: AtomRef,
+    pub acceptor: AtomRef,
     pub bond: BondSpec,
 }
 
@@ -61,22 +140,22 @@ pub struct DativeBond {
 pub struct AromaticSystem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    pub atoms: Vec<String>,
+    pub atoms: Vec<AtomRef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MulticenterBond {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    pub atoms: Vec<String>,
+    pub atoms: Vec<AtomRef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoncovalentBond {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    pub a: String,
-    pub b: String,
+    pub a: AtomRef,
+    pub b: AtomRef,
     pub bond: BondSpec,
 }
 
@@ -224,10 +303,10 @@ impl<'de> Visitor<'de> for CovalentBondVisitor {
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<CovalentBond, A::Error> {
-        let a: String = seq
+        let a: AtomRef = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(0, &"3-element vector"))?;
-        let b: String = seq
+        let b: AtomRef = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(1, &"3-element vector"))?;
         let bond: BondSpec = seq
@@ -249,8 +328,8 @@ impl<'de> Visitor<'de> for CovalentBondVisitor {
         while let Some(key) = map.next_key::<String>()? {
             match key.as_str() {
                 "id" => id = Some(map.next_value::<String>()?),
-                "a" => a = Some(map.next_value::<String>()?),
-                "b" => b = Some(map.next_value::<String>()?),
+                "a" => a = Some(map.next_value::<AtomRef>()?),
+                "b" => b = Some(map.next_value::<AtomRef>()?),
                 "bond" => bond = Some(map.next_value::<BondSpec>()?),
                 _ => {
                     let _ = map.next_value::<de::IgnoredAny>()?;
@@ -634,20 +713,20 @@ mod tests {
     #[case::atom_dsl(r#"{:atoms {:C "C #h4"} :bonds []}"#, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(),
         AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None, implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))), charge: None, lone_pairs: None, unpaired_electrons: None,
         multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None, })])), ..Default::default() })]
-    #[case::bond(r#"{:atoms ["N" "N"] :bonds [[:0 :1 :triple]]}"#, MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![CovalentBond { id: None, a: "0".to_string(), b: "1".to_string(), bond: BondSpec::Triple }], ..Default::default() })]
+    #[case::bond(r#"{:atoms ["N" "N"] :bonds [[0 1 :triple]]}"#, MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
+        bonds: vec![CovalentBond { id: None, a: "0".into(), b: "1".into(), bond: BondSpec::Triple }], ..Default::default() })]
     #[case::bond_atom_ids(r#"{:atoms {:C "C" :O "O"} :bonds [[:C :O :single]]}"#,
         MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(), AtomAst::from_element(e!(C))), ("O".to_string(), AtomAst::from_element(e!(O)))])),
-        bonds: vec![CovalentBond { id: None, a: "C".to_string(), b: "O".to_string(), bond: BondSpec::Single }], ..Default::default() })]
-    #[case::bond_id(r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a :0 :b :1 :bond :single}]}"#,
+        bonds: vec![CovalentBond { id: None, a: "C".into(), b: "O".into(), bond: BondSpec::Single }], ..Default::default() })]
+    #[case::bond_id(r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a 0 :b 1 :bond :single}]}"#,
         MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))]),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "0".to_string(), b: "1".to_string(), bond: BondSpec::Single }], ..Default::default() })]
+        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "0".into(), b: "1".into(), bond: BondSpec::Single }], ..Default::default() })]
     #[case::bond_id_atom_ids(r#"{:atoms {:C "C" :O "O"} :bonds [{:id :b1 :a :C :b :O :bond :single}]}"#,
         MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(), AtomAst::from_element(e!(C))), ("O".to_string(), AtomAst::from_element(e!(O)))])),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".to_string(), b: "O".to_string(), bond: BondSpec::Single }], ..Default::default() })]
+        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".into(), b: "O".into(), bond: BondSpec::Single }], ..Default::default() })]
     #[case::bond_dsl(r#"{:atoms {:C "C" :O "O"} :bonds [{:id :b1 :a :C :b :O :bond "2"}]}"#,
         MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(), AtomAst::from_element(e!(C))), ("O".to_string(), AtomAst::from_element(e!(O)))])),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".to_string(), b: "O".to_string(), bond: BondSpec::Literal(BondAst { order: ValueAst::Lit(2), charge: None,
+        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".into(), b: "O".into(), bond: BondSpec::Literal(BondAst { order: ValueAst::Lit(2), charge: None,
         unpaired_electrons: None, multiplicity: None }) }], ..Default::default() })]
     #[case::charge(r#"{:atoms {:F "F#c-"} :bonds [] :charge -1}"#, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("F".to_string(), 
         AtomAst { element: ElementExpr::Lit(Element::F), isotope_mass: None, implicit_hydrogens: None, charge: Some(ValueAst::Lit(-1)), lone_pairs: None, unpaired_electrons: None,
@@ -663,9 +742,9 @@ mod tests {
         MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
         implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
         multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }]), ..Default::default() })]
-    #[case::alias_reused(r#"{:atoms [:n :n] :bonds [[:0 :1 :single]] :aliases [:n "N"]}"#,
+    #[case::alias_reused(r#"{:atoms [:n :n] :bonds [[0 1 :single]] :aliases [:n "N"]}"#,
         MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![CovalentBond { id: None, a: "0".to_string(), b: "1".to_string(), bond: BondSpec::Single }], ..Default::default() })]
+        bonds: vec![CovalentBond { id: None, a: "0".into(), b: "1".into(), bond: BondSpec::Single }], ..Default::default() })]
     fn test_parse_molecule_dsl(#[case] input: &str, #[case] expected: MoleculeAst) {
         let result = parse_molecule_dsl(input);
         assert!(
@@ -689,8 +768,8 @@ mod tests {
             result.dative_bonds,
             vec![DativeBond {
                 id: Some("d1".to_string()),
-                donor: "N".to_string(),
-                acceptor: "B".to_string(),
+                donor: "N".into(),
+                acceptor: "B".into(),
                 bond: BondSpec::Single,
             }]
         );
@@ -707,10 +786,8 @@ mod tests {
         .unwrap();
         assert_eq!(result.aromatic_systems.len(), 1);
         assert_eq!(result.aromatic_systems[0].id, Some("ar1".to_string()));
-        assert_eq!(
-            result.aromatic_systems[0].atoms,
-            vec!["C1", "C2", "C3", "C4", "C5", "C6"]
-        );
+        let refs: Vec<AtomRef> = vec!["C1".into(), "C2".into(), "C3".into(), "C4".into(), "C5".into(), "C6".into()];
+        assert_eq!(result.aromatic_systems[0].atoms, refs);
     }
 
     #[rstest]
@@ -720,12 +797,12 @@ mod tests {
             ("C".to_string(), AtomAst::from_element(e!(C))),
             ("O".to_string(), AtomAst::from_element(e!(O))),
         ])),
-        bonds: vec![CovalentBond { id: None, a: "C".to_string(), b: "O".to_string(), bond: BondSpec::Single }],
+        bonds: vec![CovalentBond { id: None, a: "C".into(), b: "O".into(), bond: BondSpec::Single }],
         ..Default::default()
     })]
     #[case::indexed_atoms(MoleculeAst {
         atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![CovalentBond { id: None, a: "0".to_string(), b: "1".to_string(), bond: BondSpec::Triple }],
+        bonds: vec![CovalentBond { id: None, a: "0".into(), b: "1".into(), bond: BondSpec::Triple }],
         ..Default::default()
     })]
     #[case::bond_with_id(MoleculeAst {
@@ -733,7 +810,7 @@ mod tests {
             ("C".to_string(), AtomAst::from_element(e!(C))),
             ("O".to_string(), AtomAst::from_element(e!(O))),
         ])),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".to_string(), b: "O".to_string(), bond: BondSpec::Double }],
+        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".into(), b: "O".into(), bond: BondSpec::Double }],
         ..Default::default()
     })]
     #[case::dative(MoleculeAst {
@@ -742,7 +819,7 @@ mod tests {
             ("N".to_string(), AtomAst::from_element(e!(N))),
         ])),
         bonds: vec![],
-        dative_bonds: vec![DativeBond { id: Some("d1".to_string()), donor: "N".to_string(), acceptor: "B".to_string(), bond: BondSpec::Single }],
+        dative_bonds: vec![DativeBond { id: Some("d1".to_string()), donor: "N".into(), acceptor: "B".into(), bond: BondSpec::Single }],
         ..Default::default()
     })]
     fn test_molecule_ast_json_roundtrip(#[case] ast: MoleculeAst) {

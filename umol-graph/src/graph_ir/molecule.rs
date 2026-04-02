@@ -21,9 +21,9 @@ use crate::atom::AromaticValence;
 use crate::dsl::ast::ToAst;
 use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::molecule::{
-    AromaticSystem as AstAromaticSystem, Atoms, BondSpec, CovalentBond as AstCovalentBond,
-    DativeBond as AstDativeBond, MoleculeAst, MulticenterBond as AstMulticenterBond,
-    NoncovalentBond as AstNoncovalentBond,
+    AromaticSystem as AstAromaticSystem, AtomRef, Atoms, BondSpec,
+    CovalentBond as AstCovalentBond, DativeBond as AstDativeBond, MoleculeAst,
+    MulticenterBond as AstMulticenterBond, NoncovalentBond as AstNoncovalentBond,
 };
 
 pub mod topology;
@@ -593,11 +593,13 @@ impl ToAst<MoleculeAst> for Molecule {
             atoms.insert(label, atom_ast);
         }
 
-        let label = |idx: AtomIndex| -> String {
-            label_map
-                .get(&idx)
-                .cloned()
-                .unwrap_or_else(|| idx.index().to_string())
+        let label = |idx: AtomIndex| -> AtomRef {
+            AtomRef(
+                label_map
+                    .get(&idx)
+                    .cloned()
+                    .unwrap_or_else(|| idx.index().to_string()),
+            )
         };
 
         let bonds: Vec<AstCovalentBond> = self

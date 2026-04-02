@@ -1,5 +1,5 @@
 ---
-source: umol-models-graph/tests/resolution/mod.rs
+source: umol-graph/tests/resolution/mod.rs
 expression: edn_to_string(&results).unwrap()
 ---
-{:atom-typing {:success true :output {:atoms {"0" "Te#c-#n3#v" "1" "H#v"} :bonds [["0" "1" "1"]] :charge -1 :spin "#u0 #s1"}} :counts {:success true :output {:atoms {"0" "Te#c-#n3#v" "1" "H#v"} :bonds [["0" "1" "1"]] :charge -1 :spin "#u0 #s1"}}}
+{:atom-typing {:success true :output {:atoms {"0" "Te#c-#n3#v" "1" "H#v"} :bonds [[0 1 "1"]] :charge -1 :spin "#u0 #s1"}} :counts {:success true :output {:atoms {"0" "Te#c-#n3#v" "1" "H#v"} :bonds [[0 1 "1"]] :charge -1 :spin "#u0 #s1"}}}

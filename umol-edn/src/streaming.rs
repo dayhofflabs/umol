@@ -8,7 +8,7 @@ use serde::de::{
     self, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
 
-use crate::config::{AutoResolve, Dialect, ParseConfig, TagReaders};
+use crate::config::{ParseConfig, TagReaders};
 use crate::error::EdnError;
 use crate::parser::{is_symbol_char, is_symbol_start};
 
@@ -19,9 +19,7 @@ pub struct EdnStreamDeserializer<'de> {
     pos: usize,
     scratch: Vec<u8>,
     depth: u16,
-    dialect: Dialect,
     tag_readers: TagReaders,
-    auto_resolve: Option<AutoResolve>,
 }
 
 impl<'de> EdnStreamDeserializer<'de> {
@@ -35,9 +33,7 @@ impl<'de> EdnStreamDeserializer<'de> {
             pos: 0,
             scratch: Vec::new(),
             depth: MAX_DEPTH,
-            dialect: config.dialect,
             tag_readers: config.tag_readers.clone(),
-            auto_resolve: config.auto_resolve.clone(),
         }
     }
 
@@ -112,42 +108,13 @@ impl<'de> EdnStreamDeserializer<'de> {
     #[inline]
     fn parse_keyword_name(&mut self) -> Result<Cow<'de, str>, EdnError> {
         debug_assert_eq!(self.input.as_bytes()[self.pos], b':');
-        let start = self.pos;
         self.pos += 1;
-
-        // :: auto-resolve (Clojure only)
-        if self.dialect == Dialect::Clojure && self.input.as_bytes().get(self.pos) == Some(&b':') {
-            self.pos += 1;
-            return self.resolve_auto_keyword(start);
-        }
 
         // :/ and :/foo are not legal keywords per the EDN spec.
         if self.input.as_bytes().get(self.pos) == Some(&b'/') {
             return Err(EdnError::UnexpectedToken { offset: self.pos, found: '/' });
         }
         self.parse_symbol_str().map(Cow::Borrowed)
-    }
-
-    fn resolve_auto_keyword(&mut self, start: usize) -> Result<Cow<'de, str>, EdnError> {
-        if self.auto_resolve.is_none() {
-            return Err(EdnError::MissingAutoResolve { offset: start });
-        }
-        let raw = self.parse_symbol_str()?;
-        let ar = self.auto_resolve.as_ref().unwrap();
-        if let Some(slash_pos) = raw.find('/') {
-            let alias = &raw[..slash_pos];
-            let name = &raw[slash_pos + 1..];
-            if name.is_empty() {
-                return Err(EdnError::InvalidSymbol { offset: start });
-            }
-            let ns = ar.aliases.get(alias).ok_or_else(|| EdnError::UnknownAlias {
-                offset: start,
-                alias: alias.to_string(),
-            })?;
-            Ok(Cow::Owned(format!("{ns}/{name}")))
-        } else {
-            Ok(Cow::Owned(format!("{}/{raw}", ar.current_ns)))
-        }
     }
 
     #[inline]
@@ -169,9 +136,7 @@ impl<'de> EdnStreamDeserializer<'de> {
             self.pos += 1;
         }
         let s = &self.input[start..self.pos];
-        if self.dialect == Dialect::Edn || memchr::memchr(b'/', s.as_bytes()).is_some() {
-            self.validate_symbol_str(s, start)?;
-        }
+        self.validate_symbol_str(s, start)?;
         Ok(s)
     }
 
@@ -191,35 +156,30 @@ impl<'de> EdnStreamDeserializer<'de> {
             if first_name_char.is_ascii_digit() {
                 return Err(EdnError::InvalidSymbol { offset });
             }
-            if self.dialect == Dialect::Edn {
-                if name.contains('/') {
-                    return Err(EdnError::InvalidSymbol { offset });
-                }
-                if !is_symbol_start(first_name_char) {
-                    return Err(EdnError::InvalidSymbol { offset });
-                }
+            if name.contains('/') {
+                return Err(EdnError::InvalidSymbol { offset });
+            }
+            if !is_symbol_start(first_name_char) {
+                return Err(EdnError::InvalidSymbol { offset });
             }
         }
         Ok(())
     }
 
-    /// Skip a `#tag` prefix if present. Validates bare-tag restrictions in Edn dialect.
+    /// Skip a `#tag` prefix if present. Rejects bare (unqualified) tags unless registered.
     /// Recurses for nested tags like `#a #b value`.
     #[inline]
     fn skip_tag_if_present(&mut self) -> Result<(), EdnError> {
         let bytes = self.input.as_bytes();
         if self.pos < bytes.len() && bytes[self.pos] == b'#' {
             match bytes.get(self.pos + 1) {
-                Some(b'{') | Some(b'_') | Some(b'#') => return Ok(()),
+                Some(b'{') | Some(b'_') => return Ok(()),
                 _ => {}
             }
             self.pos += 1;
             let offset = self.pos;
             let tag = self.parse_symbol_str()?;
-            if self.dialect == Dialect::Edn
-                && !tag.contains('/')
-                && self.tag_readers.get(tag).is_none()
-            {
+            if !tag.contains('/') && self.tag_readers.get(tag).is_none() {
                 return Err(EdnError::InvalidTag {
                     offset,
                     tag: tag.to_string(),
@@ -229,28 +189,6 @@ impl<'de> EdnStreamDeserializer<'de> {
             self.skip_tag_if_present()?;
         }
         Ok(())
-    }
-
-    /// Try to parse `##NaN`, `##Inf`, `##-Inf` (Clojure dialect only).
-    fn try_parse_special_float(&mut self) -> Result<Option<f64>, EdnError> {
-        if self.dialect == Dialect::Clojure {
-            let bytes = self.input.as_bytes();
-            if self.pos + 1 < bytes.len() && bytes[self.pos] == b'#' && bytes[self.pos + 1] == b'#'
-            {
-                self.pos += 2;
-                let sym = self.parse_symbol_str()?;
-                return match sym {
-                    "NaN" => Ok(Some(f64::NAN)),
-                    "Inf" => Ok(Some(f64::INFINITY)),
-                    "-Inf" => Ok(Some(f64::NEG_INFINITY)),
-                    _ => Err(EdnError::UnexpectedToken {
-                        offset: self.pos - sym.len(),
-                        found: sym.chars().next().unwrap_or('\0'),
-                    }),
-                };
-            }
-        }
-        Ok(None)
     }
 
     fn parse_number_i64(&mut self) -> Result<i64, EdnError> {
@@ -370,8 +308,6 @@ impl<'de> EdnStreamDeserializer<'de> {
                         b'n' => self.scratch.push(b'\n'),
                         b'\\' => self.scratch.push(b'\\'),
                         b'"' => self.scratch.push(b'"'),
-                        b'b' if self.dialect == Dialect::Clojure => self.scratch.push(0x08),
-                        b'f' if self.dialect == Dialect::Clojure => self.scratch.push(0x0C),
                         b'u' => {
                             if self.pos + 4 > bytes.len() {
                                 return Err(EdnError::InvalidEscape { offset: esc_offset });
@@ -435,10 +371,6 @@ impl<'de> EdnStreamDeserializer<'de> {
                         self.skip_ws()?;
                         self.skip_value()?;
                         self.skip_value()
-                    }
-                    Some(b'#') if self.dialect == Dialect::Clojure => {
-                        self.pos += 1;
-                        self.skip_atom()
                     }
                     _ => {
                         self.skip_atom()?;
@@ -540,19 +472,6 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
                         self.leave_scope();
                         result
                     }
-                    Some(b'#') if self.dialect == Dialect::Clojure => {
-                        self.pos += 2; // skip ##
-                        let sym = self.parse_symbol_str()?;
-                        match sym {
-                            "NaN" => visitor.visit_f64(f64::NAN),
-                            "Inf" => visitor.visit_f64(f64::INFINITY),
-                            "-Inf" => visitor.visit_f64(f64::NEG_INFINITY),
-                            _ => Err(EdnError::UnexpectedToken {
-                                offset: self.pos - sym.len(),
-                                found: sym.chars().next().unwrap_or('\0'),
-                            }),
-                        }
-                    }
                     Some(b'_') => {
                         self.pos += 2; // skip #_
                         self.skip_ws()?;
@@ -564,11 +483,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
                         self.pos += 1; // skip #
                         let offset = self.pos;
                         let tag = self.parse_symbol_str()?;
-                        // Edn dialect: reject bare tags unless registered.
-                        if self.dialect == Dialect::Edn
-                            && !tag.contains('/')
-                            && self.tag_readers.get(tag).is_none()
-                        {
+                        if !tag.contains('/') && self.tag_readers.get(tag).is_none() {
                             return Err(EdnError::InvalidTag {
                                 offset,
                                 tag: tag.to_string(),
@@ -684,18 +599,12 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
     fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
         self.skip_tag_if_present()?;
-        if let Some(v) = self.try_parse_special_float()? {
-            return visitor.visit_f32(v as f32);
-        }
         visitor.visit_f32(self.parse_number_f64()? as f32)
     }
 
     fn deserialize_f64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         self.skip_ws()?;
         self.skip_tag_if_present()?;
-        if let Some(v) = self.try_parse_special_float()? {
-            return visitor.visit_f64(v);
-        }
         visitor.visit_f64(self.parse_number_f64()?)
     }
 
@@ -896,8 +805,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
             }
             Some(b'#') => {
                 let bytes = self.input.as_bytes();
-                // Don't match #{, ##, #_ — only tagged literals.
-                if matches!(bytes.get(self.pos + 1), Some(b'{') | Some(b'#') | Some(b'_')) {
+                // Don't match #{, #_ — only tagged literals.
+                if matches!(bytes.get(self.pos + 1), Some(b'{') | Some(b'_')) {
                     return self.deserialize_any(visitor);
                 }
                 self.pos += 1; // skip #
@@ -977,14 +886,9 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
 
         // Named characters
-        let named: &[(&str, char)] = if self.dialect == Dialect::Edn {
-            &[("newline", '\n'), ("return", '\r'), ("space", ' '), ("tab", '\t')]
-        } else {
-            &[
-                ("newline", '\n'), ("return", '\r'), ("space", ' '), ("tab", '\t'),
-                ("formfeed", '\u{000C}'), ("backspace", '\u{0008}'),
-            ]
-        };
+        let named: &[(&str, char)] = &[
+            ("newline", '\n'), ("return", '\r'), ("space", ' '), ("tab", '\t'),
+        ];
         let remaining = &self.input[self.pos..];
         for &(name, ch) in named {
             if remaining.starts_with(name) {
@@ -1207,8 +1111,8 @@ mod tests {
 
     #[test]
     fn test_streaming_tuple() {
-        let t: (String, String, String) = streaming_from_str("[:0 :1 :single]").unwrap();
-        assert_eq!(t, ("0".to_string(), "1".to_string(), "single".to_string()));
+        let t: (String, String, String) = streaming_from_str("[:a :b :single]").unwrap();
+        assert_eq!(t, ("a".to_string(), "b".to_string(), "single".to_string()));
     }
 
     #[test]
@@ -1228,7 +1132,7 @@ mod tests {
     #[test]
     fn test_streaming_struct() {
         let m: MoleculeProxy =
-            streaming_from_str(r#"{:atoms [C O] :bonds [[:0 :1 :single]]}"#).unwrap();
+            streaming_from_str(r#"{:atoms [C O] :bonds [["0" "1" :single]]}"#).unwrap();
         assert_eq!(
             m,
             MoleculeProxy {

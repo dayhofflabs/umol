@@ -44,20 +44,13 @@ impl fmt::Display for Edn<'_> {
 }
 
 fn format_float(f: &mut fmt::Formatter<'_>, v: f64) -> fmt::Result {
-    if v.is_nan() {
-        write!(f, "##NaN")
-    } else if v == f64::INFINITY {
-        write!(f, "##Inf")
-    } else if v == f64::NEG_INFINITY {
-        write!(f, "##-Inf")
+    // EDN has no syntax for NaN/Inf — these values cannot be serialized.
+    assert!(!v.is_nan() && v.is_finite(), "EDN cannot represent NaN or Infinity");
+    let s = format!("{v}");
+    if s.contains('.') || s.contains('e') || s.contains('E') {
+        write!(f, "{s}")
     } else {
-        let s = format!("{v}");
-        // Ensure there's always a decimal point
-        if s.contains('.') || s.contains('e') || s.contains('E') {
-            write!(f, "{s}")
-        } else {
-            write!(f, "{s}.0")
-        }
+        write!(f, "{s}.0")
     }
 }
 
@@ -67,8 +60,7 @@ fn format_char(f: &mut fmt::Formatter<'_>, c: char) -> fmt::Result {
         '\r' => write!(f, "\\return"),
         ' ' => write!(f, "\\space"),
         '\t' => write!(f, "\\tab"),
-        '\u{000C}' => write!(f, "\\formfeed"),
-        '\u{0008}' => write!(f, "\\backspace"),
+        c if (c as u32) < 0x20 || c == '\u{7F}' => write!(f, "\\u{:04X}", c as u32),
         _ => write!(f, "\\{c}"),
     }
 }
@@ -82,9 +74,7 @@ fn format_string(f: &mut fmt::Formatter<'_>, s: &str) -> fmt::Result {
             '\n' => write!(f, "\\n")?,
             '\r' => write!(f, "\\r")?,
             '\t' => write!(f, "\\t")?,
-            '\u{0008}' => write!(f, "\\b")?,
-            '\u{000C}' => write!(f, "\\f")?,
-            _ => write!(f, "{c}")?,
+                _ => write!(f, "{c}")?,
         }
     }
     write!(f, "\"")
@@ -128,12 +118,16 @@ mod tests {
         assert_eq!(Edn::Float(v).to_string(), expected);
     }
 
-    #[rstest]
-    #[case(f64::NAN, "##NaN")]
-    #[case(f64::INFINITY, "##Inf")]
-    #[case(f64::NEG_INFINITY, "##-Inf")]
-    fn test_display_special_float(#[case] v: f64, #[case] expected: &str) {
-        assert_eq!(Edn::Float(v).to_string(), expected);
+    #[test]
+    #[should_panic(expected = "EDN cannot represent NaN or Infinity")]
+    fn test_display_nan_panics() {
+        let _ = Edn::Float(f64::NAN).to_string();
+    }
+
+    #[test]
+    #[should_panic(expected = "EDN cannot represent NaN or Infinity")]
+    fn test_display_inf_panics() {
+        let _ = Edn::Float(f64::INFINITY).to_string();
     }
 
     #[rstest]
@@ -143,8 +137,8 @@ mod tests {
     #[case('\r', "\\return")]
     #[case(' ', "\\space")]
     #[case('\t', "\\tab")]
-    #[case('\u{000C}', "\\formfeed")]
-    #[case('\u{0008}', "\\backspace")]
+    #[case('\u{000C}', "\\u000C")]
+    #[case('\u{0008}', "\\u0008")]
     fn test_display_char(#[case] c: char, #[case] expected: &str) {
         assert_eq!(Edn::Char(c).to_string(), expected);
     }
@@ -155,8 +149,6 @@ mod tests {
     #[case("line\nbreak", r#""line\nbreak""#)]
     #[case("tab\there", r#""tab\there""#)]
     #[case("back\\slash", r#""back\\slash""#)]
-    #[case("\u{0008}", r#""\b""#)]
-    #[case("\u{000C}", r#""\f""#)]
     fn test_display_string(#[case] s: &str, #[case] expected: &str) {
         assert_eq!(Edn::Str(Cow::Borrowed(s)).to_string(), expected);
     }

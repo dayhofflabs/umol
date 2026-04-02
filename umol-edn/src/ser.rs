@@ -37,8 +37,6 @@ fn write_escaped_str(out: &mut String, s: &str) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            '\u{0008}' => out.push_str("\\b"),
-            '\u{000C}' => out.push_str("\\f"),
             _ => out.push(c),
         }
     }
@@ -93,18 +91,13 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         self.serialize_f64(f64::from(v))
     }
     fn serialize_f64(self, v: f64) -> Result<(), Self::Error> {
-        if v.is_nan() {
-            self.output += "##NaN";
-        } else if v == f64::INFINITY {
-            self.output += "##Inf";
-        } else if v == f64::NEG_INFINITY {
-            self.output += "##-Inf";
-        } else {
-            let s = v.to_string();
-            self.output += &s;
-            if !s.contains('.') && !s.contains('e') && !s.contains('E') {
-                self.output += ".0";
-            }
+        if v.is_nan() || v.is_infinite() {
+            return Err(EdnError::Custom("EDN cannot represent NaN or Infinity".to_string()));
+        }
+        let s = v.to_string();
+        self.output += &s;
+        if !s.contains('.') && !s.contains('e') && !s.contains('E') {
+            self.output += ".0";
         }
         Ok(())
     }
@@ -405,11 +398,16 @@ mod tests {
     #[case(3.14f64, "3.14")]
     #[case(1.0f64, "1.0")]
     #[case(12.0f64, "12.0")]
-    #[case(f64::NAN, "##NaN")]
-    #[case(f64::INFINITY, "##Inf")]
-    #[case(f64::NEG_INFINITY, "##-Inf")]
     fn test_serialize_f64(#[case] input: f64, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(f64::NAN)]
+    #[case(f64::INFINITY)]
+    #[case(f64::NEG_INFINITY)]
+    fn test_serialize_f64_error(#[case] input: f64) {
+        assert!(to_string(&input).is_err());
     }
 
     #[rstest]
