@@ -5,12 +5,12 @@ use std::collections::hash_map::{IntoIter as HashMapIntoIter, Iter as HashMapIte
 use std::collections::hash_set::{IntoIter as HashSetIntoIter, Iter as HashSetIter};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
+use std::slice::Iter as SliceIter;
+use std::vec::IntoIter as VecIntoIter;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::edn::Edn;
-
-type SeqImpl<T> = Vec<T>;
 
 // ---------------------------------------------------------------------------
 // EdnMap
@@ -255,9 +255,9 @@ impl Hash for EdnSet<'_> {
 
 /// An ordered sequence of EDN values (backing both lists and vectors).
 #[derive(Clone, Debug)]
-pub struct EdnSeq<'a>(SeqImpl<Edn<'a>>);
+pub struct EdnSeq<'a>(Vec<Edn<'a>>);
 
-pub(crate) type EdnSeqIntoIter<'a> = std::vec::IntoIter<Edn<'a>>;
+pub(crate) type EdnSeqIntoIter<'a> = VecIntoIter<Edn<'a>>;
 
 impl<'a> EdnSeq<'a> {
     pub fn new() -> Self {
@@ -317,7 +317,7 @@ impl<'a> IntoIterator for EdnSeq<'a> {
 
 impl<'a, 'b> IntoIterator for &'b EdnSeq<'a> {
     type Item = &'b Edn<'a>;
-    type IntoIter = std::slice::Iter<'b, Edn<'a>>;
+    type IntoIter = SliceIter<'b, Edn<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
