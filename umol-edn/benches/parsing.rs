@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
+
+use criterion::{criterion_group, criterion_main, Criterion};
 use serde::Deserialize;
 use umol_edn::{from_str, read_all, read_string, EdnFormatter};
 
@@ -132,83 +134,30 @@ fn bench_display(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_isolation(c: &mut Criterion) {
-    // Isolate specific cost centers.
-    let mut group = c.benchmark_group("isolation");
-
-    // Map with 2 entries vs vector with 4 elements (similar value count).
-    group.bench_function("map_2_entries", |b| {
-        b.iter(|| read_string(black_box("{:a 1 :b 2}")))
-    });
-    group.bench_function("vec_4_elements", |b| {
-        b.iter(|| read_string(black_box("[:a 1 :b 2]")))
-    });
-
-    // Nested vectors only (no maps) -- same structural depth as molecule_small.
-    group.bench_function("nested_vecs", |b| {
-        b.iter(|| read_string(black_box("[[:a :b] [[:0 :1 :single]]]")))
-    });
-
-    // Just keywords in a flat vector.
-    group.bench_function("flat_10_keywords", |b| {
-        b.iter(|| read_string(black_box("[:a :b :c :d :e :f :g :h :i :j]")))
-    });
-
-    // String parsing: no escapes vs escapes.
-    group.bench_function("string_no_escape", |b| {
-        b.iter(|| read_string(black_box(r#""abcdefghijklmnop""#)))
-    });
-    group.bench_function("string_with_escapes", |b| {
-        b.iter(|| read_string(black_box(r#""abc\ndef\tghi\u0041""#)))
-    });
-
-    // Decompose molecule_small cost centers.
-    // Just the map shell with keyword values (no nested collections).
-    group.bench_function("map_2_kw_values", |b| {
-        b.iter(|| read_string(black_box("{:atoms :x :bonds :y}")))
-    });
-    // Vector of 2 symbols (the :atoms value shape).
-    group.bench_function("vec_2_symbols", |b| {
-        b.iter(|| read_string(black_box("[C O]")))
-    });
-    // Single nested vector (the :bonds value shape).
-    group.bench_function("vec_1_nested_3kw", |b| {
-        b.iter(|| read_string(black_box("[[:0 :1 :single]]")))
-    });
-    // Empty map (just HashMap::new overhead).
-    group.bench_function("map_empty", |b| {
-        b.iter(|| read_string(black_box("{}")))
-    });
-    // Empty vector.
-    group.bench_function("vec_empty", |b| {
-        b.iter(|| read_string(black_box("[]")))
-    });
-
-    group.finish();
-}
-
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct MoleculeProxy {
     atoms: Vec<String>,
     bonds: Vec<(String, String, String)>,
 }
 
+// TODO: Remove JSON reference benchmarks (and serde_json dependency) once EDN parsing stabilizes
 const MOLECULE_SMALL_JSON: &str = r#"{"atoms":["C","O"],"bonds":[["0","1","single"]]}"#;
 
 fn bench_serde(c: &mut Criterion) {
     let mut group = c.benchmark_group("serde");
 
-    // EDN: parse to Edn (the intermediate representation).
+    // EDN: parse to Edn value tree.
     group.bench_function("edn_parse_to_edn", |b| {
         b.iter(|| read_string(black_box(MOLECULE_SMALL)).unwrap())
     });
 
-    // EDN: full two-step path (parse → Edn → struct).
+    // EDN: streaming from_str (bypasses Edn tree).
     group.bench_function("edn_from_str_struct", |b| {
         b.iter(|| from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL)).unwrap())
     });
 
-    // EDN: deserialize from pre-parsed Edn (just the Edn→struct cost).
+    // EDN: from pre-parsed Edn (Edn→struct cost only).
     let edn = read_string(MOLECULE_SMALL).unwrap();
     group.bench_function("edn_to_struct", |b| {
         b.iter(|| {
@@ -217,17 +166,19 @@ fn bench_serde(c: &mut Criterion) {
         })
     });
 
-    // JSON reference: streaming deserializer (no intermediate Value).
+    // JSON reference: streaming from_str.
     group.bench_function("json_from_str_struct", |b| {
         b.iter(|| serde_json::from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL_JSON)).unwrap())
     });
 
-    // JSON reference: parse to Value (intermediate representation).
+    // JSON reference: parse to Value.
     group.bench_function("json_parse_to_value", |b| {
-        b.iter(|| serde_json::from_str::<serde_json::Value>(black_box(MOLECULE_SMALL_JSON)).unwrap())
+        b.iter(|| {
+            serde_json::from_str::<serde_json::Value>(black_box(MOLECULE_SMALL_JSON)).unwrap()
+        })
     });
 
-    // JSON reference: Value → struct (two-step, like our current EDN path).
+    // JSON reference: Value→struct (two-step).
     let json_val: serde_json::Value = serde_json::from_str(MOLECULE_SMALL_JSON).unwrap();
     group.bench_function("json_value_to_struct", |b| {
         b.iter(|| {
@@ -246,7 +197,6 @@ criterion_group!(
     bench_read_all,
     bench_roundtrip,
     bench_display,
-    bench_isolation,
     bench_serde,
 );
 criterion_main!(benches);

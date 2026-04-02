@@ -26,5 +26,3 @@ pub use formatter::{to_string_pretty, to_string_pretty_with};
 pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
 #[cfg(feature = "serde")]
 pub use ser::to_string;
-
-// TODO: Consider adding a prelude module

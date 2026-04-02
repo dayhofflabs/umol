@@ -7,6 +7,12 @@ specification has some ambiguity. umol-edn supports two dialects: **Edn**
 (strict) and **Clojure** (default). The Edn dialect tracks the spec text.
 The Clojure dialect adds features present in Clojure's reader.
 
+## 0. Encoding
+
+EDN input is UTF-8. In Rust this is enforced by the `&str` type — all public
+parsing entry points accept `&str`, which is guaranteed valid UTF-8 by the
+language. There is no encoding detection or BOM handling.
+
 ## 1. Whitespace and commas
 
 Whitespace characters: space (0x20), tab (0x09), newline (0x0A), carriage return

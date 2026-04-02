@@ -393,6 +393,13 @@ fn test_conformance_digit_keywords_edn_rejected(#[case] input: &str) {
     assert!(read_string_with(input, &edn_config()).is_err());
 }
 
+#[rstest]
+#[case(":/")]
+#[case(":/foo")]
+fn test_conformance_keyword_invalid_slash(#[case] input: &str) {
+    assert!(read_string(input).is_err());
+}
+
 // -- Section 10: Symbols ---------------------------------------------------
 
 #[rstest]
@@ -432,6 +439,21 @@ fn test_conformance_symbol_with_all_char_types() {
     assert_eq!(
         result,
         Edn::Symbol(Symbol::new("foo+bar-baz#qux:quux'end"))
+    );
+}
+
+#[test]
+fn test_conformance_hash_is_not_delimiter() {
+    // '#' is not a delimiter: it does not break tokens the way { } [ ] ( ) do.
+    // foo#bar is a single symbol, not foo + #bar.
+    assert_eq!(
+        read_string("foo#bar").unwrap(),
+        Edn::Symbol(Symbol::new("foo#bar"))
+    );
+    // Adjacent to a real delimiter, # stays part of the symbol.
+    assert_eq!(
+        read_string("[a#b]").unwrap(),
+        Edn::Vector(vec![Edn::Symbol(Symbol::new("a#b"))])
     );
 }
 
@@ -570,6 +592,30 @@ fn test_conformance_tagged_unqualified() {
         result,
         Edn::Tagged("inst".into(), Box::new(Edn::Str(Cow::Owned("2024-01-01".to_string()))))
     );
+}
+
+// -- Section 16: Discard error cases --------------------------------------
+
+#[test]
+fn test_conformance_discard_at_eof_error() {
+    assert!(read_string_with("#_", &clojure_config()).is_err());
+}
+
+#[test]
+fn test_conformance_discard_only_content_error() {
+    assert!(read_string_with("#_ 1", &clojure_config()).is_err());
+}
+
+// -- Section 17: Tag error cases ------------------------------------------
+
+#[test]
+fn test_conformance_tag_without_value_error() {
+    assert!(read_string("#tag").is_err());
+}
+
+#[test]
+fn test_conformance_tag_at_eof_error() {
+    assert!(read_string("#myapp/Person").is_err());
 }
 
 // -- Round-trip ------------------------------------------------------------

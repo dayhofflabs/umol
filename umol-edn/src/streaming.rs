@@ -2,6 +2,7 @@
 //! without building an intermediate `Edn` value tree.
 
 use std::borrow::Cow;
+use std::str::from_utf8;
 
 use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
@@ -106,6 +107,10 @@ impl<'de> EdnStreamDeserializer<'de> {
     fn parse_keyword_name(&mut self) -> Result<&'de str, EdnError> {
         debug_assert_eq!(self.input.as_bytes()[self.pos], b':');
         self.pos += 1;
+        // :/ and :/foo are not legal keywords per the EDN spec.
+        if self.input.as_bytes().get(self.pos) == Some(&b'/') {
+            return Err(EdnError::UnexpectedToken { offset: self.pos, found: '/' });
+        }
         self.parse_symbol_str()
     }
 
@@ -126,7 +131,36 @@ impl<'de> EdnStreamDeserializer<'de> {
         while self.pos < bytes.len() && is_symbol_char(bytes[self.pos] as char) {
             self.pos += 1;
         }
-        Ok(&self.input[start..self.pos])
+        let s = &self.input[start..self.pos];
+        self.validate_symbol_str(s, start)?;
+        Ok(s)
+    }
+
+    /// Validate symbol slash rules (mirrors parser::validate_symbol).
+    fn validate_symbol_str(&self, s: &str, offset: usize) -> Result<(), EdnError> {
+        if s == "/" {
+            return Ok(());
+        }
+        if let Some(slash_pos) = s.find('/') {
+            let prefix = &s[..slash_pos];
+            let name = &s[slash_pos + 1..];
+            if prefix.is_empty() || name.is_empty() {
+                return Err(EdnError::InvalidSymbol { offset });
+            }
+            let first_name_char = name.chars().next().unwrap();
+            if first_name_char.is_ascii_digit() {
+                return Err(EdnError::InvalidSymbol { offset });
+            }
+            if self.dialect == Dialect::Edn {
+                if name.contains('/') {
+                    return Err(EdnError::InvalidSymbol { offset });
+                }
+                if !is_symbol_start(first_name_char) {
+                    return Err(EdnError::InvalidSymbol { offset });
+                }
+            }
+        }
+        Ok(())
     }
 
     fn parse_number_i64(&mut self) -> Result<i64, EdnError> {
@@ -232,7 +266,7 @@ impl<'de> EdnStreamDeserializer<'de> {
             match bytes[self.pos] {
                 b'"' => {
                     self.pos += 1;
-                    let s = std::str::from_utf8(&self.scratch)
+                    let s = from_utf8(&self.scratch)
                         .map_err(|_| EdnError::Custom("invalid UTF-8".to_string()))?;
                     return Ok(Cow::Owned(s.to_string()));
                 }

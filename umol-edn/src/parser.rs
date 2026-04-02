@@ -136,8 +136,8 @@ where
             b'"' => edn_string(config.dialect).parse_next(input),
             b'\\' => edn_char(config.dialect).parse_next(input),
             b'+' | b'-' => edn_number_or_symbol(config).parse_next(input),
-            b'0'..=b'9' => edn_number(input),
-            _ => edn_symbol_or_literal(input),
+            b'0'..=b'9' => edn_number(input, config.dialect),
+            _ => edn_symbol_or_literal(input, config.dialect),
         }
     }
 }
@@ -147,22 +147,61 @@ where
 pub(crate) fn is_symbol_start(c: char) -> bool {
     matches!(
         c,
-        'a'..='z' | 'A'..='Z' | '.' | '*' | '!' | '_' | '?' | '$' | '%' | '&' | '=' | '<' | '>' | '/'
+        'a'..='z' | 'A'..='Z' | '.' | '*' | '+' | '!' | '-' | '_' | '?' | '$' | '%' | '&' | '=' | '<' | '>' | '/'
     )
 }
 
 pub(crate) fn is_symbol_char(c: char) -> bool {
-    is_symbol_start(c) || matches!(c, '0'..='9' | '+' | '-' | '#' | ':' | '\'')
+    is_symbol_start(c) || matches!(c, '0'..='9' | '#' | ':' | '\'')
 }
 
-fn raw_symbol<'a>(input: &mut Input<'a>) -> PResult<&'a str> {
-    (one_of(is_symbol_start), take_while(0.., is_symbol_char))
+fn raw_symbol<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<&'a str> {
+    let start = input.current_token_start();
+    let s: &str = (one_of(is_symbol_start), take_while(0.., is_symbol_char))
         .take()
-        .parse_next(input)
+        .parse_next(input)?;
+    validate_symbol(s, start, dialect)?;
+    Ok(s)
 }
 
-fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
-    let s = raw_symbol(input)?;
+/// Validate symbol slash rules.
+///
+/// Both dialects enforce:
+/// - `/` alone is valid.
+/// - Prefix and name must be non-empty when `/` is present.
+/// - The name part after `/` must not start with a digit.
+///
+/// Edn dialect additionally enforces (per spec):
+/// - `/` can appear at most once.
+/// - The name part after `/` must start with a valid symbol-start char.
+fn validate_symbol(s: &str, offset: usize, dialect: Dialect) -> PResult<()> {
+    if s == "/" {
+        return Ok(());
+    }
+    if let Some(slash_pos) = s.find('/') {
+        let prefix = &s[..slash_pos];
+        let name = &s[slash_pos + 1..];
+        if prefix.is_empty() || name.is_empty() {
+            return Err(ErrMode::Cut(EdnError::InvalidSymbol { offset }));
+        }
+        let first_name_char = name.chars().next().unwrap();
+        if first_name_char.is_ascii_digit() {
+            return Err(ErrMode::Cut(EdnError::InvalidSymbol { offset }));
+        }
+        if dialect == Dialect::Edn {
+            if name.contains('/') {
+                return Err(ErrMode::Cut(EdnError::InvalidSymbol { offset }));
+            }
+            if !is_symbol_start(first_name_char) {
+                return Err(ErrMode::Cut(EdnError::InvalidSymbol { offset }));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn edn_symbol_or_literal<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
+    let s = raw_symbol(input, dialect)?;
     match s {
         "nil" => Ok(Edn::Nil),
         "true" => Ok(Edn::Bool(true)),
@@ -174,22 +213,29 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
 // --- Keywords ---
 
 fn edn_keyword<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
+    let start = input.current_token_start();
     let _ = ':'.parse_next(input)?;
     let s = match dialect {
         Dialect::Clojure => {
             // Clojure allows digit-starting keywords (e.g. :0, :1).
-            (one_of(|c: char| is_symbol_start(c) || c.is_ascii_digit()), take_while(0.., is_symbol_char))
+            // :/ and :/foo are not legal keywords per the EDN spec.
+            (one_of(|c: char| (is_symbol_start(c) || c.is_ascii_digit()) && c != '/'), take_while(0.., is_symbol_char))
                 .take()
                 .parse_next(input)?
         }
-        Dialect::Edn => raw_symbol(input)?,
+        Dialect::Edn => {
+            (one_of(|c: char| is_symbol_start(c) && c != '/'), take_while(0.., is_symbol_char))
+                .take()
+                .parse_next(input)?
+        }
     };
+    validate_symbol(s, start, dialect)?;
     Ok(Edn::Keyword(Keyword::new(s)))
 }
 
 // --- Numbers ---
 
-fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
+fn edn_number<'a>(input: &mut Input<'a>, dialect: Dialect) -> PResult<Edn<'a>> {
     let start = input.current_token_start();
     let num_str: &str = (
         opt(one_of(['+', '-'])),
@@ -209,6 +255,14 @@ fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
         }));
     }
 
+    // Edn dialect: reject leading zeros (007 is invalid, 0 is fine).
+    if dialect == Dialect::Edn {
+        let digits = num_str.trim_start_matches(['+', '-']);
+        if digits.len() > 1 && digits.starts_with('0') && !digits.starts_with("0.") {
+            return Err(ErrMode::Cut(EdnError::InvalidNumber { offset: start }));
+        }
+    }
+
     if memchr::memchr3(b'.', b'e', b'E', num_str.as_bytes()).is_some() {
         let f: f64 = num_str
             .parse()
@@ -223,7 +277,7 @@ fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
 }
 
 fn edn_number_or_symbol<'a, 'b>(
-    _config: &'b ParseConfig,
+    config: &'b ParseConfig,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
@@ -232,9 +286,9 @@ where
         // Peek at second byte: if digit, it's a number like +5 or -3.
         let second = input.as_ref().as_bytes().get(1).copied();
         if matches!(second, Some(b'0'..=b'9')) {
-            edn_number(input)
+            edn_number(input, config.dialect)
         } else {
-            edn_symbol_or_literal(input)
+            edn_symbol_or_literal(input, config.dialect)
         }
     }
 }
@@ -293,7 +347,7 @@ fn edn_string<'a>(dialect: Dialect) -> impl Parser<Input<'a>, Edn<'a>, E> {
                         '"' => result.push('"'),
                         'b' if dialect == Dialect::Clojure => result.push('\u{0008}'),
                         'f' if dialect == Dialect::Clojure => result.push('\u{000C}'),
-                        'u' => {
+                        'u' if dialect == Dialect::Clojure => {
                             let hex: &str =
                                 take_while(4..=4, |c: char| c.is_ascii_hexdigit())
                                     .parse_next(input)
@@ -569,7 +623,7 @@ where
                 }
             }
             _ => {
-                let tag = raw_symbol(input)?;
+                let tag = raw_symbol(input, config.dialect)?;
                 ws_and_comments(input, config).ok();
                 let val = edn_value(config).parse_next(input)?;
                 Ok(Edn::Tagged(tag.to_string(), Box::new(val)))

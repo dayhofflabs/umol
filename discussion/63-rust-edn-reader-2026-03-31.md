@@ -874,108 +874,55 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 
 ### Additional quality checks
 
-- llvm-cov
-- clippy
-- fuzz
-- property testing -- generator for Edn objects -> test roundtripping
+- [ ] llvm-cov
+- [ ] clippy
+- [ ] fuzz
+- [ ] property testing — generator for Edn objects -> test roundtripping
 
 ### Misc
 
-- Remove incorrect comment:   // HashMap: iteration order is sorted, not insertion order.
-- Remove fully qualified names from the code -> import types and traits
-- stable or unstable sorting of maps and sets?
-- use sorting in map / set tests, do not compare to specific ordering (or multiple orderings).
-- how should the tag dispatch work?
-- clarify in spec that EDN uses UTF8.
-- review public API
-- prelude
-- edn!() macro
+- [x] Remove incorrect comment about HashMap iteration order — already gone.
+- [x] Remove fully qualified names from the code — done (one `std::str::from_utf8` in streaming.rs).
+- [ ] stable or unstable sorting of maps and sets?
+- [x] use sorting in map / set tests — maps/sets use HashMap/HashSet; tests check membership, not ordering.
+- [ ] how should the tag dispatch work?
+- [x] clarify in spec that EDN uses UTF-8.
+- [x] review public API — re-exports cover all common types in lib.rs.
+- [x] prelude — not needed; flat re-exports suffice. TODO removed.
+- [ ] edn!() macro
 
-### Spec definitions to verify
+## Implementation status (2026-04-01)
 
-- [ ] The delimiters { } ( ) [ ] need not be separated from adjacent elements by whitespace.
-- [ ] Tokens beginning with # are reserved. -> should error out
-- [ ] '#' is not a delimiter. -> What does that actually mean? #a# is not allowed?
-- [ ] Backslash cannot be followed by whitespace.
-- [ ] Symbols begin with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric. Additionally, : # are allowed as constituent characters in symbols other than as the first character. -> generate enough examples
-- [ ] / has special meaning in symbols. It can be used once only in the middle of a symbol to separate the prefix (often a namespace) from the name, e.g. my-namespace/foo. / by itself is a legal symbol, but otherwise neither the prefix nor the name part can be empty when the symbol contains /. -> #foo/ , #/foo are illegal, #foo/bar and #/ are legal.
-- [ ] If a symbol has a prefix and /, the following name component should follow the first-character restrictions for symbols as a whole. This is to avoid ambiguity in reading contexts where prefixes might be presumed as implicitly included namespaces and elided thereafter. -> #foo/1 is not allowed? #foo/_a is ok? 
-- [ ] Per the symbol rules above, :/ and :/anything are not legal keywords. A keyword cannot begin with ::
-- [ ] If the target platform supports some notion of interning, it is a further semantic of keywords that all instances of the same keyword yield the identical object. -> equality test?
-- [ ] +num is allowed by the spec: "Integers consist of the digits 0 - 9, optionally prefixed by - to indicate a negative number, or (redundantly) by +. " -> fix the spec, add to suite
-- [ ] No integer other than 0 may begin with 0 -> 01 is invalid, 0 is valid.
-- [ ] -0 is a valid integer not distinct from 0.
-- [ ]  Integers -> generate examples
+### Completed
 
-```
-integer
-  int
-  int N
-digit
-  0-9
-int
-  digit
-  1-9 digits
-  + digit
-  + 1-9 digits
-  - digit
-  - 1-9 digits
-```
+| Component | Lines | Notes |
+|---|---|---|
+| `Edn` enum | ~400 | `Clone + PartialEq + Eq + Hash + Display`. All value types. |
+| Parser (winnow) | ~580 | Full grammar, byte-level optimizations (peek_byte, is_ws_byte). |
+| Writer / Display | ~200 | `Display for Edn` + `EdnFormatter` (indent, sort_keys, sort_sets, line_width). |
+| Error type | ~80 | Structured variants with byte offsets. `Clone + PartialEq + Eq`. |
+| Serde deserializer (value) | ~350 | `EdnDeserializer` from pre-parsed `Edn`. All 10 issues from discussion/62 fixed. |
+| Serde deserializer (streaming) | ~600 | `EdnStreamDeserializer` — parses directly into Rust types, no intermediate Edn tree. |
+| Serde serializer | ~250 | Proper escaping, keyword variants, tagged literals. |
+| Conformance suite | 167 tests | Covers most spec items. See checklist above for remaining gaps. |
+| Benchmarks | ~180 | Atoms, collections, read_all, roundtrip, display, serde vs JSON comparison. |
 
-- [] Floats -> generate examples
+### Performance
 
-```
-floating-point-number
-  int M
-  int frac
-  int exp
-  int frac exp
-digit
-  0-9
-int
-  digit
-  1-9 digits
-  + digit
-  + 1-9 digits
-  - digit
-  - 1-9 digits
-frac
-  . digits
-exp
-  ex digits
-digits
-  digit
-  digit digits
-ex
-  e
-  e+
-  e-
-  E
-  E+
-  E-
-```
+| Path | Time (molecule_small) |
+|---|---|
+| EDN `from_str::<T>()` (streaming) | 281 ns |
+| JSON `from_str::<T>()` (serde_json reference) | 271 ns |
+| EDN `read_string` → `Edn` value tree | 504 ns |
+| EDN `Edn` → struct (`from_value`) | 416 ns |
 
-- [ ] In addition, a floating-point number may have the suffix M to indicate that exact precision is desired.
-- [ ] A list is a sequence of values. Lists are represented by zero or more elements enclosed in parentheses (). Note that lists can be heterogeneous. -> Check (a b 1) list. -> Check list with ,
-- [ ] A vector is a sequence of values that supports random access. Vectors are represented by zero or more elements enclosed in square brackets []. Note that vectors can be heterogeneous. -> Check [a b 1] -> Check commas
-- [ ] A map is a collection of associations between keys and values. Maps are represented by zero or more key and value pairs enclosed in curly braces {}. Each key should appear at most once. No semantics should be associated with the order in which the pairs appear. -> Check heterogeneous maps. -> Check maps with different orderings, should give equal objects
-- [ ] Note that keys and values can be elements of any type. The use of commas above is optional, as they are parsed as whitespace. -> Check keys of different types -> Check commas between pairs, inside of pairs
-- [ ] A set is a collection of unique values. Sets are represented by zero or more elements enclosed in curly braces preceded by # #{}. No semantics should be associated with the order in which the elements appear. Note that sets can be heterogeneous. -> check heterogeneous sets. #{a b [1 2 3]} -> check different orderings give equal objects
-- [ ] The semantics of a tag, and the type and interpretation of the tagged element are defined by the steward of the tag. #myapp/Person {:first "Fred" :last "Mertz"}.
-- [ ] If a reader encounters a tag for which no handler is registered, the implementation can either report an error, call a designated 'unknown element' handler, or create a well-known generic representation that contains both the tag and the tagged element, as it sees fit. -> check error strategies. -> How can this system be implemented??
-- [ ] Tag symbols without a prefix are reserved by **edn** for built-ins defined using the tag system. User tags ***must*** contain a prefix component, which must be owned by the user (e.g. trademark or domain) or known unique in the communication context. -> #tag "" is invalid. 
-- [ ] A tag *may* specify more than one format for the tagged element, e.g. both a string and a vector representation.
-- [ ] Tags themselves are not elements. It is an error to have a tag without a corresponding tagged element. -> "#tag" is invalid
-- [ ] a `;` character is encountered outside of a string, that character and all subsequent characters to the next newline should be ignored. -> test
-- [ ] `#` followed immediately by `_` is the discard sequence, indicating that the next element (whether separated from `#_` by whitespace or not) should be read and discarded. Note that the next element must still be a readable element. A reader should not call user-supplied tag handlers during the processing of the element to be discarded.
-`[a b #_foo 42] => [a b 42]`
-- [ ] The discard sequence is not an element. It is an error to have a discard sequence without a following element.  -> This is EDN, not Clojure-dialect
-- [ ] Sets and maps have requirements that their elements and keys respectively be unique, which requires a mechanism for determining when 2 values are not unique (i.e. are equal).
-- [ ] nil, booleans, strings, characters, and symbols are equal to values of the same type with the same **edn** representation.
-- [ ] integers and floating point numbers should be considered equal to values only of the same magnitude, *type, and precision*. Comingling numeric types and precision in map/set key/elements, or constituents therein, is not advised.
-- [ ] sequences (lists and vectors) are equal to other sequences whose count of elements is the same, and for which each corresponding pair of elements (by ordinal) is equal.
-- [ ] sets are equal if they have the same count of elements and, for every element in one set, an equal element is in the other.
-- [ ] maps are equal if they have the same number of entries, and for every key/value entry in one map an equal key is present and mapped to an equal value in the other.
-- [ ] tagged elements must define their own equality semantics. #uuid elements are equal if their canonic representations are equal. #inst elements are equal if their representation strings designate the same timestamp per ++[RFC-3339](http://www.ietf.org/rfc/rfc3339.txt)++.
-- [ ] Exercise all format options.
+### Not yet implemented
 
+- `edn!()` macro (proc macro for compile-time Edn construction)
+- `::` keyword rejection
+- Leading-zero rejection (007 currently accepted)
+- Symbol slash validation (foo/1 accepted, spec unclear)
+- Tag dispatch registry
+- Fuzz target
+- llvm-cov integration
+- Property-based roundtrip testing

@@ -15,6 +15,7 @@ pub enum EdnError {
     InvalidNumber { offset: usize },
     InvalidEscape { offset: usize },
     InvalidCharLiteral { offset: usize },
+    InvalidSymbol { offset: usize },
     DuplicateKey { offset: usize },
     TrailingContent { offset: usize },
     UnsupportedFeature { offset: usize, feature: &'static str },
@@ -38,6 +39,9 @@ impl fmt::Display for EdnError {
             }
             EdnError::InvalidCharLiteral { offset } => {
                 write!(f, "invalid character literal at byte {offset}")
+            }
+            EdnError::InvalidSymbol { offset } => {
+                write!(f, "invalid symbol at byte {offset}")
             }
             EdnError::DuplicateKey { offset } => {
                 write!(f, "duplicate map key at byte {offset}")
