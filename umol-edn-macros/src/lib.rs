@@ -257,29 +257,7 @@ fn parse_hash(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String> {
             }})
         }
         Some(TokenTree::Punct(p)) if p.as_char() == '#' => {
-            // ##NaN, ##Inf, ##-Inf
-            *tokens = &tokens[1..];
-            match tokens.first() {
-                Some(TokenTree::Ident(id)) if id.to_string() == "NaN" => {
-                    *tokens = &tokens[1..];
-                    Ok(quote! { umol_edn::Edn::Float(f64::NAN) })
-                }
-                Some(TokenTree::Ident(id)) if id.to_string() == "Inf" => {
-                    *tokens = &tokens[1..];
-                    Ok(quote! { umol_edn::Edn::Float(f64::INFINITY) })
-                }
-                Some(TokenTree::Punct(p)) if p.as_char() == '-' => {
-                    *tokens = &tokens[1..];
-                    match tokens.first() {
-                        Some(TokenTree::Ident(id)) if id.to_string() == "Inf" => {
-                            *tokens = &tokens[1..];
-                            Ok(quote! { umol_edn::Edn::Float(f64::NEG_INFINITY) })
-                        }
-                        _ => Err("expected Inf after ##-".into()),
-                    }
-                }
-                _ => Err("expected NaN, Inf, or -Inf after ##".into()),
-            }
+            Err("## special floats (NaN, Inf, -Inf) are not supported in EDN".into())
         }
         Some(TokenTree::Ident(id)) if id.to_string() == "_" => {
             // #_ discard — already handled in skip_discards, but can appear mid-value
@@ -309,8 +287,6 @@ fn parse_char_literal(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String>
                 "return" => Ok(quote! { umol_edn::Edn::Char('\r') }),
                 "space" => Ok(quote! { umol_edn::Edn::Char(' ') }),
                 "tab" => Ok(quote! { umol_edn::Edn::Char('\t') }),
-                "formfeed" => Ok(quote! { umol_edn::Edn::Char('\u{000C}') }),
-                "backspace" => Ok(quote! { umol_edn::Edn::Char('\u{0008}') }),
                 s if s.len() == 1 => {
                     let ch = s.chars().next().unwrap();
                     Ok(quote! { umol_edn::Edn::Char(#ch) })

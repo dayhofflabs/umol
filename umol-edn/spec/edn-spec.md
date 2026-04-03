@@ -158,8 +158,8 @@ An odd number of elements (key without value) is an error.
 reader allows them (last wins). umol-edn defaults to error because silent
 overwrites mask data bugs.
 
-**Ordering:** Maps use `BTreeMap` internally. Iteration order is deterministic
-(sorted by key) regardless of insertion order.
+**Ordering:** Maps use hash-based storage (`FxHashMap`). Iteration order is not
+guaranteed. Display output sorts keys for deterministic formatting.
 
 ## 14. Sets
 
@@ -167,7 +167,8 @@ Introduced by `#{`, closed by `}`. Unordered collection of unique values. `#{}`
 is an empty set.
 
 Duplicate elements in a set are not currently detected at parse time. Sets use
-`BTreeSet` internally for deterministic iteration order.
+hash-based storage (`FxHashSet`). Iteration order is not guaranteed. Display
+output sorts elements for deterministic formatting.
 
 ## 15. Tagged literals
 
@@ -175,18 +176,21 @@ Grammar: `#` followed by a symbol (the tag), then a value.
 
 The tag symbol must follow symbol rules. Unqualified tags are reserved for
 built-in use; user-defined tags must be namespace-qualified
-(`#myapp/Person {...}`). Unqualified tags that are not registered in
-`TagReaders` are rejected.
+(`#myapp/Person {...}`). Unqualified tags that are neither built-in nor
+registered in `TagReaders` are rejected.
 
-Built-in tag support (feature-gated):
+Built-in tags:
 
 | Tag     | Feature  | Rust type               |
 | ------- | -------- | ----------------------- |
 | `#inst` | `chrono` | `chrono::DateTime<Utc>` |
 | `#uuid` | `uuid`   | `uuid::Uuid`            |
 
-Without the corresponding feature, tagged values parse as
-`Tagged(tag_string, Box<Edn>)` and are available for application-level dispatch.
+With the corresponding feature, the tag reader validates the payload at parse
+time (e.g. rejects `#inst "not-a-date"`) and returns
+`Tagged(tag_string, Box<Edn>)`. Conversion to the native Rust type happens
+during serde deserialization. Without the feature, built-in tags still parse as
+`Tagged(tag_string, Box<Edn>)` but without validation.
 
 ## 16. Ambiguity resolutions
 

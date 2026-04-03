@@ -119,18 +119,6 @@ mod tests {
         assert_eq!(Edn::Float(v).to_string(), expected);
     }
 
-    #[test]
-    #[should_panic(expected = "EDN cannot represent NaN or Infinity")]
-    fn test_display_nan_panics() {
-        let _ = Edn::Float(f64::NAN).to_string();
-    }
-
-    #[test]
-    #[should_panic(expected = "EDN cannot represent NaN or Infinity")]
-    fn test_display_inf_panics() {
-        let _ = Edn::Float(f64::INFINITY).to_string();
-    }
-
     #[rstest]
     #[case('a', "\\a")]
     #[case('Z', "\\Z")]

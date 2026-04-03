@@ -624,6 +624,19 @@ fn test_s17_tag_without_value_error() {
     assert!(parse("#myapp/Person").is_err());
 }
 
+#[rstest]
+#[case("#inst \"2024-01-01T00:00:00Z\"", "inst", Edn::Str(Cow::Borrowed("2024-01-01T00:00:00Z")))]
+#[case("#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"", "uuid", Edn::Str(Cow::Borrowed("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")))]
+fn test_s17_builtin_tags_parse_without_features(
+    #[case] input: &str,
+    #[case] tag: &str,
+    #[case] inner: Edn<'_>,
+) {
+    // Built-in tags must parse as Tagged(...) even without chrono/uuid features.
+    let result = parse(input).unwrap();
+    assert_eq!(result, Edn::Tagged(tag.into(), Box::new(inner)));
+}
+
 #[cfg(feature = "chrono")]
 #[test]
 fn test_s18_inst_accepted() {

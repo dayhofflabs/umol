@@ -126,12 +126,6 @@ fn test_tagged() {
 }
 
 #[test]
-fn test_special_floats() {
-    assert!(matches!(edn!(##NaN), Edn::Float(v) if v.is_nan()));
-    assert_eq!(edn!(##Inf), Edn::Float(f64::INFINITY));
-}
-
-#[test]
 fn test_discard() {
     assert_eq!(
         edn!([1 #_ 2 3]),

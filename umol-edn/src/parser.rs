@@ -562,8 +562,14 @@ where
                 let offset = input.current_token_start();
                 let tag = raw_symbol(input)?;
 
-                // Reject bare (unqualified) tags unless registered.
-                if !tag.contains('/') && config.tag_readers.get(tag).is_none() {
+                // Built-in tags pass through as Tagged(...) even without features.
+                const BUILTIN_TAGS: &[&str] = &["inst", "uuid"];
+
+                // Reject bare (unqualified) tags unless registered or built-in.
+                if !tag.contains('/')
+                    && config.tag_readers.get(tag).is_none()
+                    && !BUILTIN_TAGS.contains(&tag)
+                {
                     return Err(ErrMode::Cut(EdnError::InvalidTag {
                         offset,
                         tag: tag.to_string(),

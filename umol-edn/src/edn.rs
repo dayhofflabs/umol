@@ -476,3 +476,41 @@ impl Hash for Edn<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+
+    fn hash_of(v: &Edn<'_>) -> u64 {
+        let mut h = DefaultHasher::new();
+        v.hash(&mut h);
+        h.finish()
+    }
+
+    #[test]
+    fn test_edn_float_nan_payloads_distinguished() {
+        // total_cmp follows IEEE 754 total ordering: distinct NaN payloads are not equal.
+        // Hash uses to_bits, so Eq and Hash remain consistent.
+        let nan1 = Edn::Float(f64::from_bits(0x7FF8_0000_0000_0001));
+        let nan2 = Edn::Float(f64::from_bits(0x7FF8_0000_0000_0002));
+        assert_ne!(nan1, nan2);
+        assert_ne!(hash_of(&nan1), hash_of(&nan2));
+    }
+
+    #[test]
+    fn test_edn_float_canonical_nan_eq_hash() {
+        let nan1 = Edn::Float(f64::NAN);
+        let nan2 = Edn::Float(f64::NAN);
+        assert_eq!(nan1, nan2);
+        assert_eq!(hash_of(&nan1), hash_of(&nan2));
+    }
+
+    #[test]
+    fn test_edn_float_positive_negative_zero() {
+        let pos = Edn::Float(0.0);
+        let neg = Edn::Float(-0.0);
+        assert_ne!(pos, neg);
+        assert_ne!(hash_of(&pos), hash_of(&neg));
+    }
+}
