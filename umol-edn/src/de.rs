@@ -452,7 +452,7 @@ impl<'de> de::MapAccess<'de> for EdnStructMapAccess<'de> {
 // -- Tagged enum access (for #Variant value round-tripping) ------------------
 
 struct EdnTaggedEnumAccess<'de> {
-    tag: String,
+    tag: Cow<'de, str>,
     inner: Edn<'de>,
 }
 

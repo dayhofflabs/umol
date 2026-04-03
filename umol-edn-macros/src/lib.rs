@@ -271,7 +271,7 @@ fn parse_hash(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String> {
             let tag_name = id.to_string();
             let tag = maybe_slashed_name(&tag_name, tokens);
             let val = parse_value(tokens)?;
-            Ok(quote! { umol_edn::Edn::Tagged(#tag.to_string(), Box::new(#val)) })
+            Ok(quote! { umol_edn::Edn::Tagged(std::borrow::Cow::Owned(#tag.to_string()), Box::new(#val)) })
         }
         _ => Err("unexpected token after #".into()),
     }

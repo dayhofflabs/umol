@@ -38,13 +38,16 @@ impl<'a> EdnMap<'a> {
     }
 
     pub fn get<'k>(&self, key: &Edn<'k>) -> Option<&Edn<'a>> {
-        // Edn's Hash/Eq are content-based and lifetime-independent.
-        // Widen the key reference to 'a so FxHashMap::get accepts it.
+        // SAFETY: Edn's Hash and Eq implementations are purely content-based and
+        // never inspect the lifetime parameter 'a. The Cow<'a, str> fields inside
+        // Edn compare/hash by string content regardless of whether they borrow or
+        // own. This cast is sound as long as Hash/Eq remain lifetime-independent.
         let key: &Edn<'a> = unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) };
         self.0.get(key)
     }
 
     pub fn contains_key<'k>(&self, key: &Edn<'k>) -> bool {
+        // SAFETY: same invariant as `get` — Hash/Eq are lifetime-independent.
         let key: &Edn<'a> = unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) };
         self.0.contains_key(key)
     }
@@ -111,7 +114,8 @@ impl<'a> FromIterator<(Edn<'a>, Edn<'a>)> for EdnMap<'a> {
 
 impl PartialEq for EdnMap<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
+        self.0.len() == other.0.len()
+            && self.0.iter().all(|(k, v)| other.0.get(k) == Some(v))
     }
 }
 
@@ -220,7 +224,8 @@ impl<'a> FromIterator<Edn<'a>> for EdnSet<'a> {
 
 impl PartialEq for EdnSet<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
+        self.0.len() == other.0.len()
+            && self.0.iter().all(|v| other.0.contains(v))
     }
 }
 

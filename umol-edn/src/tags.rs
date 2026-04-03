@@ -25,7 +25,7 @@ pub(crate) fn read_inst(val: Edn) -> Result<Edn, EdnError> {
             DateTime::parse_from_rfc3339(s).map_err(|e| EdnError::InvalidInst {
                 reason: format!("\"{s}\": {e}"),
             })?;
-            Ok(Edn::Tagged("inst".into(), Box::new(val)))
+            Ok(Edn::Tagged(Cow::Borrowed("inst"), Box::new(val)))
         }
         _ => Err(EdnError::InvalidInst {
             reason: "expected string after #inst".into(),
@@ -40,7 +40,7 @@ where
     Tz::Offset: Display,
 {
     Edn::Tagged(
-        "inst".into(),
+        Cow::Borrowed("inst"),
         Box::new(Edn::Str(Cow::Owned(dt.to_rfc3339()))),
     )
 }
@@ -55,7 +55,7 @@ pub(crate) fn read_uuid(val: Edn) -> Result<Edn, EdnError> {
             Uuid::parse_str(s).map_err(|e| EdnError::InvalidUuid {
                 reason: format!("\"{s}\": {e}"),
             })?;
-            Ok(Edn::Tagged("uuid".into(), Box::new(val)))
+            Ok(Edn::Tagged(Cow::Borrowed("uuid"), Box::new(val)))
         }
         _ => Err(EdnError::InvalidUuid {
             reason: "expected string after #uuid".into(),
@@ -67,7 +67,7 @@ pub(crate) fn read_uuid(val: Edn) -> Result<Edn, EdnError> {
 #[cfg(feature = "uuid")]
 pub fn uuid_to_edn(id: &uuid::Uuid) -> Edn<'static> {
     Edn::Tagged(
-        "uuid".into(),
+        Cow::Borrowed("uuid"),
         Box::new(Edn::Str(Cow::Owned(id.to_string()))),
     )
 }

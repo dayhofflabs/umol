@@ -13,6 +13,7 @@ bench = false
 
 [dependencies]
 itoa = "1.0"
+ryu = "1.0"
 memchr = "2.7"
 rustc-hash = "2.1"
 winnow = "1.0"

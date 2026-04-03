@@ -3,6 +3,7 @@
 use std::fmt;
 
 use crate::edn::Edn;
+use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
 
 impl fmt::Display for Edn<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -42,21 +43,35 @@ impl fmt::Display for Edn<'_> {
                 }
                 write!(f, "}}")
             }
-            Edn::Tagged(tag, inner) => write!(f, "#{tag} {inner}"),
+            Edn::Tagged(tag, inner) => {
+                if !is_valid_tag(tag) {
+                    return Err(fmt::Error);
+                }
+                write!(f, "#{tag} {inner}")
+            }
         }
     }
+}
+
+fn is_valid_tag(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => return false,
+        Some(c) if !is_symbol_start(c) => return false,
+        _ => {}
+    }
+    if !chars.all(is_symbol_char) {
+        return false;
+    }
+    validate_symbol(s, 0).is_ok()
 }
 
 fn format_float(f: &mut fmt::Formatter<'_>, v: f64) -> fmt::Result {
     if v.is_nan() || !v.is_finite() {
         return Err(fmt::Error);
     }
-    let s = format!("{v}");
-    if s.contains('.') || s.contains('e') || s.contains('E') {
-        write!(f, "{s}")
-    } else {
-        write!(f, "{s}.0")
-    }
+    let mut buf = ryu::Buffer::new();
+    f.write_str(buf.format_finite(v))
 }
 
 fn format_char(f: &mut fmt::Formatter<'_>, c: char) -> fmt::Result {
@@ -221,7 +236,7 @@ mod tests {
     #[test]
     fn test_display_tagged() {
         let tagged = Edn::Tagged(
-            "inst".to_string(),
+            Cow::Borrowed("inst"),
             Box::new(Edn::Str(Cow::Borrowed("2023-01-01"))),
         );
         assert_eq!(tagged.to_string(), r#"#inst "2023-01-01""#);
@@ -232,5 +247,17 @@ mod tests {
         let inner = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into());
         let outer = Edn::List(vec![Edn::Keyword(Keyword::new("data")), inner].into());
         assert_eq!(outer.to_string(), "(:data [1 2])");
+    }
+
+    #[rstest]
+    #[case("my tag")]
+    #[case("")]
+    #[case("123")]
+    #[case("/bad")]
+    fn test_display_tagged_invalid(#[case] tag: &str) {
+        use std::fmt::Write;
+        let tagged = Edn::Tagged(Cow::Borrowed(tag), Box::new(Edn::Nil));
+        let mut buf = String::new();
+        assert!(write!(buf, "{tagged}").is_err());
     }
 }

@@ -259,7 +259,7 @@ pub enum Edn<'a> {
     Vector(EdnSeq<'a>),
     Map(EdnMap<'a>),
     Set(EdnSet<'a>),
-    Tagged(String, Box<Edn<'a>>),
+    Tagged(Cow<'a, str>, Box<Edn<'a>>),
 }
 
 impl Default for Edn<'_> {
@@ -512,7 +512,9 @@ impl<'a> Edn<'a> {
             Edn::Vector(v) => Edn::Vector(v.into_owned()),
             Edn::Map(m) => Edn::Map(m.into_owned()),
             Edn::Set(s) => Edn::Set(s.into_owned()),
-            Edn::Tagged(tag, inner) => Edn::Tagged(tag, Box::new(inner.into_owned())),
+            Edn::Tagged(tag, inner) => {
+                Edn::Tagged(Cow::Owned(tag.into_owned()), Box::new(inner.into_owned()))
+            }
         }
     }
 }
@@ -520,7 +522,32 @@ impl<'a> Edn<'a> {
 // Manual PartialEq: use f64::total_cmp for Float
 impl PartialEq for Edn<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
+        if variant_ord(self) != variant_ord(other) {
+            return false;
+        }
+        match (self, other) {
+            (Edn::Nil, Edn::Nil) => true,
+            (Edn::Bool(a), Edn::Bool(b)) => a == b,
+            (Edn::Int(a), Edn::Int(b)) => a == b,
+            #[cfg(feature = "bignum")]
+            (Edn::BigInt(a), Edn::BigInt(b)) => a == b,
+            (Edn::Float(a), Edn::Float(b)) => a.to_bits() == b.to_bits(),
+            #[cfg(feature = "bignum")]
+            (Edn::BigDecimal(a), Edn::BigDecimal(b)) => a == b,
+            (Edn::Char(a), Edn::Char(b)) => a == b,
+            (Edn::Str(a), Edn::Str(b)) => a == b,
+            (Edn::Keyword(a), Edn::Keyword(b)) => a == b,
+            (Edn::Symbol(a), Edn::Symbol(b)) => a == b,
+            (Edn::List(a), Edn::List(b)) => a == b,
+            (Edn::Vector(a), Edn::Vector(b)) => a == b,
+            (Edn::Map(a), Edn::Map(b)) => a == b,
+            (Edn::Set(a), Edn::Set(b)) => a == b,
+            (Edn::Tagged(ta, va), Edn::Tagged(tb, vb)) => ta == tb && va == vb,
+            _ => {
+                debug_assert!(false, "variant_ord should prevent cross-variant pairing");
+                false
+            }
+        }
     }
 }
 

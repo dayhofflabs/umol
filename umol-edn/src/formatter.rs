@@ -115,12 +115,8 @@ fn itoa_len(n: i64) -> usize {
 }
 
 fn format_float_len(v: f64) -> usize {
-    let s = format!("{v}");
-    if s.contains('.') || s.contains('e') || s.contains('E') {
-        s.len()
-    } else {
-        s.len() + 2 // append .0
-    }
+    let mut buf = ryu::Buffer::new();
+    buf.format_finite(v).len()
 }
 
 fn display_char_len(c: char) -> usize {

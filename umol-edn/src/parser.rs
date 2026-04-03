@@ -655,7 +655,7 @@ where
 
                 match ctx.config.tag_readers.get(tag) {
                     Some(reader) => reader(val).map_err(ErrMode::Cut),
-                    None => Ok(Edn::Tagged(tag.to_string(), Box::new(val))),
+                    None => Ok(Edn::Tagged(Cow::Borrowed(tag), Box::new(val))),
                 }
             }
         }
