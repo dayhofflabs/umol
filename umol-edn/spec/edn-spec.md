@@ -163,6 +163,13 @@ overwrites mask data bugs.
 **Ordering:** Maps use hash-based storage (`FxHashMap`). Iteration order is not
 guaranteed. Display output sorts keys for deterministic formatting.
 
+**Non-string keys in struct deserialization:** EDN maps allow arbitrary keys, but
+Rust structs have string field names. When deserializing a map into a struct,
+non-string keys (integers, booleans, vectors, etc.) are stringified via their
+Display representation and passed to serde as field names. Serde then applies its
+standard unknown-field handling: ignored by default, rejected with
+`#[serde(deny_unknown_fields)]`.
+
 ## 14. Sets
 
 Introduced by `#{`, closed by `}`. Unordered collection of unique values. `#{}`
@@ -215,6 +222,7 @@ Summary of decisions on underspecified areas of the EDN spec:
 | Leading zeros (`007`)                 | Rejected                                      | 5       |
 | `-0` / `-0.0`                         | Valid                                         | 5, 6    |
 | `/` as symbol                         | Valid                                         | 10      |
+| Non-string map keys in structs        | Stringified; serde handles as unknown fields  | 13      |
 
 ## Round-tripping
 
