@@ -1,6 +1,6 @@
 # umol-edn Code Review (Adversarial)
 
-Date: 2026-03-26
+Date: 2026-04-02
 
 ## Scope
 
@@ -450,3 +450,45 @@ This section intentionally ignores prior findings and reports only current-code 
 - `umol-edn/src/streaming.rs` (`skip_string`, `skip_tag_if_present`, map access path)
 - `umol-edn/src/edn.rs` (`cmp` fallback)
 - `umol-edn/README.md` (feature table entry for `bignum`)
+
+## Claude Code Review (Third Pass)
+
+Date: 2026-04-02
+
+Adversarial review focused on correctness, performance, unnecessary complexity, and technical debt.
+
+### Resolved
+
+| # | Issue | Severity | Fix |
+|---|-------|----------|-----|
+| 1.1 | `Display` panics on NaN/Infinity floats | High | Returns `Err(fmt::Error)` instead of `assert!()`. `display.rs:51-53` |
+| 1.3 | No recursion depth limit in winnow parser | High | `ParseCtx` with `Cell<u16>` depth counter, `MAX_DEPTH=128`. `enter_scope`/`leave_scope` in all four collection parsers. `ws_and_comments` returns `()` (zero overhead on atom parsing). `parser.rs:26-54` |
+| 1.7 | Serde char serialization is lossy | High | `serialize_char` now handles `\newline`, `\return`, `\space`, `\tab`, `\uNNNN`. `ser.rs:105-119` |
+| 1.6 | Streaming parser accepts leading-zero integers | Medium | `scan_number_str` rejects `007` etc. for non-decimal integers. `streaming.rs:191-196` |
+| 2.3 | Serializer allocates temporary strings for integers/floats | Low | `serialize_i64`/`serialize_u64` use `itoa::Buffer`; `serialize_f64` uses `write!` directly. `ser.rs:72-96` |
+| 2.4 | `EdnSeq::From<Vec>` round-trips through iterator for no reason | Low | `Self(v)` instead of `Self(v.into_iter().collect())`. `collections.rs:306` |
+
+### Remaining: worth fixing
+
+| # | Issue | Severity | Effort | Detail |
+|---|-------|----------|--------|--------|
+| 1.4 | Tagged `Display` can produce unparseable EDN | Medium | Small | `Edn::Tagged("my tag", ...)` renders as `#my tag nil`. No validation on tag name. Fix: validate tag name in `Display`, or change `Tagged` to use `Symbol` instead of `String`. `display.rs:45` |
+| 2.1 | `EdnMap`/`EdnSet` equality allocates and sorts every call | Medium | Small | `PartialEq` delegates to `Ord`, which allocates two `Vec`s and sorts. Every `==` on a map or set pays `O(n log n)` + alloc. Fix: implement `PartialEq` directly via hash-map lookup (each key in `self` exists with equal value in `other`, and lengths match). `collections.rs:112-136` |
+| 2.2 | `format_float` allocates via `format!()` | Low | Small | `let s = format!("{v}")` heap-allocates on every float display. Fix: use `ryu` crate for stack-based float formatting. `display.rs:54` |
+| 4.2 | `Tagged` uses `String` not `Cow<'a, str>` | Low | Medium | Every other string-carrying `Edn` variant uses `Cow<'a, str>`. `Tagged` always allocates the tag name, even when parsing from borrowed input. Touches `Edn` enum, parser, display, serde. `edn.rs:262` |
+| 4.3 | Unsafe lifetime coercion in `EdnMap::get`/`contains_key` missing SAFETY comment | Low | Trivial | The `unsafe` block widens `&Edn<'k>` to `&Edn<'a>` via pointer cast. Sound because `Hash`/`Eq` are content-based and lifetime-independent, but this invariant is undocumented. Adding any lifetime-dependent logic to `Hash` or `Eq` would silently make it UB. `collections.rs:40-44` |
+
+### Remaining: not worth fixing
+
+| # | Issue | Severity | Rationale for skipping |
+|---|-------|----------|------------------------|
+| 1.2 | Float `+0.0` and `-0.0` are unequal | Low | Intentional `total_cmp` semantics. Documented in tests (`edn.rs:625-629`). `Eq`/`Hash` agree. Changing would break the total-ordering property needed for map keys. |
+| 1.5 | No duplicate detection in parsed sets | Low | Matches Clojure behavior (silent dedup). Maps have `DuplicateKeyPolicy`; adding an equivalent for sets is possible but low priority. |
+| 2.5 | `compact_len` allocates for `BigInt`/`BigDecimal` length | Low | Feature-gated, rare path. `to_string()` called speculatively to measure length, then discarded. Only matters if bignum values appear in pretty-printed output. `formatter.rs:90,93` |
+| 2.6 | XOR hashing for maps/sets | Low | Vulnerable to cancellation (`hash(a) ^ hash(a) = 0`), but sets enforce uniqueness so cancellation cannot occur. Weak mixing is a theoretical concern, not a practical one for typical EDN data. `collections.rs:142-148` |
+| 3.1 | Two independent parser implementations (winnow + hand-rolled streaming) | Medium | 2308 lines of parser code with only 3 shared functions. Bug fixes must be applied twice. However, the two parsers serve fundamentally different purposes (value tree vs direct serde deserialization) and share little structure. Unifying them would require an abstraction layer that may not pay for itself. |
+| 3.2 | `Keyword` and `Symbol` are structurally identical | Low | ~140 lines of verbatim duplication. A generic type or macro would reduce lines but add indirection. The types are conceptually distinct in EDN and benefit from separate `Display` impls. |
+| 3.3 | `EdnFormatter` fields are all `pub` | Low | No invariants to protect. Public fields are simpler than a builder for a configuration struct in research code. |
+| 3.4 | `TagReaders` uses linear search | Low | `Vec<(Box<str>, TagFn)>` with `iter().find()`. O(n) per lookup. Only 2 built-in tags; becomes a concern only with many custom readers. |
+| 4.1 | `Edn::iter()` silently returns empty for non-collections | Low | Convenience method. Returning `Option<Iterator>` would force `unwrap` at every call site. Current behavior is consistent with Clojure's `seq` on non-sequentials returning nil. `edn.rs:487-493` |
+| 4.4 | No `FromStr` impl for `Edn` | Low | Minor ergonomic gap. `read_string()` is the canonical entry point and takes a `&str`. Adding `FromStr` is trivial but adds a second way to do the same thing. |
