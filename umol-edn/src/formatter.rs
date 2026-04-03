@@ -86,7 +86,11 @@ fn compact_len(edn: &Edn<'_>, limit: usize) -> Option<usize> {
         Edn::Bool(true) => Some(4),
         Edn::Bool(false) => Some(5),
         Edn::Int(n) => Some(itoa_len(*n)),
+        #[cfg(feature = "bignum")]
+        Edn::BigInt(n) => Some(n.to_string().len() + 1),
         Edn::Float(v) => Some(format_float_len(*v)),
+        #[cfg(feature = "bignum")]
+        Edn::BigDecimal(d) => Some(d.to_string().len() + 1),
         Edn::Char(c) => Some(display_char_len(*c)),
         Edn::Str(s) => Some(display_string_len(s)),
         Edn::Keyword(k) => Some(1 + k.as_str().len()), // :name

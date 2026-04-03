@@ -80,7 +80,19 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
             Edn::Nil => visitor.visit_unit(),
             Edn::Bool(b) => visitor.visit_bool(b),
             Edn::Int(i) => visitor.visit_i64(i),
+            #[cfg(feature = "bignum")]
+            Edn::BigInt(n) => {
+                let mut s = n.to_string();
+                s.push('N');
+                visitor.visit_string(s)
+            }
             Edn::Float(f) => visitor.visit_f64(f),
+            #[cfg(feature = "bignum")]
+            Edn::BigDecimal(d) => {
+                let mut s = d.to_string();
+                s.push('M');
+                visitor.visit_string(s)
+            }
             Edn::Char(c) => visitor.visit_char(c),
             Edn::Str(s) => match s {
                 Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
@@ -443,7 +455,12 @@ impl<'de> VariantAccess<'de> for EdnTaggedVariantAccess<'de> {
     type Error = EdnError;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
-        Ok(())
+        match self.0 {
+            Edn::Nil => Ok(()),
+            other => Err(EdnError::Custom(
+                format!("unit variant expects nil payload, got {other:?}"),
+            )),
+        }
     }
 
     fn newtype_variant_seed<T: DeserializeSeed<'de>>(
@@ -741,6 +758,26 @@ mod tests {
         assert_eq!(serialized, expected_edn);
         let deserialized: Shape = from_str(&serialized).unwrap();
         assert_eq!(deserialized, value);
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    enum UnitEnum {
+        Red,
+    }
+
+    #[test]
+    fn test_deserialize_tagged_unit_variant() {
+        let val: UnitEnum = from_str("#Red nil").unwrap();
+        assert_eq!(val, UnitEnum::Red);
+    }
+
+    #[rstest]
+    #[case("#Red 1")]
+    #[case("#Red {:a 1}")]
+    #[case("#Red [1 2]")]
+    #[case("#Red \"hello\"")]
+    fn test_deserialize_tagged_unit_variant_error(#[case] input: &str) {
+        assert!(from_str::<UnitEnum>(input).is_err());
     }
 
 }

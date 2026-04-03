@@ -421,11 +421,13 @@ fn test_s11_negative_zero() {
     assert_eq!(parse("-0").unwrap(), Edn::Int(0));
 }
 
+#[cfg(not(feature = "bignum"))]
 #[test]
 fn test_s11_overflow() {
     assert!(parse("9223372036854775808").is_err());
 }
 
+#[cfg(not(feature = "bignum"))]
 #[rstest]
 #[case("42N")]
 #[case("0N")]
@@ -489,10 +491,77 @@ fn test_s12_special_floats_rejected_streaming(#[case] input: &str) {
     assert!(stream::<f64>(input).is_err());
 }
 
+#[cfg(not(feature = "bignum"))]
 #[rstest]
 #[case("3.14M")]
 fn test_s12_bigdec_suffix_error(#[case] input: &str) {
     assert!(parse(input).is_err());
+}
+
+// ============================================================================
+// S11/S12 bignum: BigInt and BigDecimal (feature-gated)
+// ============================================================================
+
+#[cfg(feature = "bignum")]
+#[rstest]
+#[case("42N", umol_edn::BigInt::from(42))]
+#[case("0N", umol_edn::BigInt::from(0))]
+#[case("-1N", umol_edn::BigInt::from(-1))]
+#[case("+7N", umol_edn::BigInt::from(7))]
+fn test_s11_bigint_parse(#[case] input: &str, #[case] expected: umol_edn::BigInt) {
+    assert_eq!(parse(input).unwrap(), Edn::BigInt(expected));
+}
+
+#[cfg(feature = "bignum")]
+#[test]
+fn test_s11_bigint_parse_large() {
+    use std::str::FromStr;
+    let input = "99999999999999999999999999999N";
+    let expected = umol_edn::BigInt::from_str("99999999999999999999999999999").unwrap();
+    assert_eq!(parse(input).unwrap(), Edn::BigInt(expected));
+}
+
+#[cfg(feature = "bignum")]
+#[rstest]
+#[case("3.14M")]
+#[case("0.0M")]
+#[case("-1.5M")]
+#[case("42M")]
+fn test_s12_bigdecimal_parse(#[case] input: &str) {
+    assert!(matches!(parse(input).unwrap(), Edn::BigDecimal(_)));
+}
+
+#[cfg(feature = "bignum")]
+#[test]
+fn test_s11_bigint_overflow_promotes() {
+    let input = "9223372036854775808"; // i64::MAX + 1
+    assert!(matches!(parse(input).unwrap(), Edn::BigInt(_)));
+}
+
+#[cfg(feature = "bignum")]
+#[test]
+fn test_s11_bigint_negative_overflow_promotes() {
+    let input = "-9223372036854775809"; // i64::MIN - 1
+    assert!(matches!(parse(input).unwrap(), Edn::BigInt(_)));
+}
+
+#[cfg(feature = "bignum")]
+#[test]
+fn test_s11_bigint_n_suffix_on_float_rejected() {
+    assert!(parse("3.14N").is_err());
+}
+
+#[cfg(feature = "bignum")]
+#[rstest]
+#[case("42N")]
+#[case("3.14M")]
+#[case("99999999999999999999N")]
+#[case("-0.001M")]
+fn test_s11_s12_bignum_roundtrip(#[case] input: &str) {
+    let parsed = parse(input).unwrap();
+    let rendered = parsed.to_string();
+    let reparsed = parse(&rendered).unwrap();
+    assert_eq!(parsed, reparsed);
 }
 
 // ============================================================================
@@ -896,3 +965,4 @@ fn test_error_deep_nesting() {
     let input = "[".repeat(depth) + &"]".repeat(depth);
     assert!(parse(&input).is_ok());
 }
+

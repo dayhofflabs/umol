@@ -7,6 +7,11 @@ use std::{fmt, iter};
 
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
 
+#[cfg(feature = "bignum")]
+use bigdecimal::BigDecimal;
+#[cfg(feature = "bignum")]
+use num_bigint::BigInt;
+
 /// A keyword value (`:name` or `:ns/name`).
 #[derive(Clone, Debug, Eq)]
 pub struct Keyword<'a>(Cow<'a, str>);
@@ -148,25 +153,82 @@ impl fmt::Display for Symbol<'_> {
 }
 
 // ---------------------------------------------------------------------------
+// EdnBigDecimal (newtype adding Eq, since bigdecimal::BigDecimal omits it)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "bignum")]
+#[derive(Clone, Debug, Hash)]
+pub struct EdnBigDecimal(BigDecimal);
+
+#[cfg(feature = "bignum")]
+impl EdnBigDecimal {
+    pub fn new(bd: BigDecimal) -> Self {
+        Self(bd)
+    }
+
+    pub fn into_inner(self) -> BigDecimal {
+        self.0
+    }
+
+    pub fn as_inner(&self) -> &BigDecimal {
+        &self.0
+    }
+}
+
+#[cfg(feature = "bignum")]
+impl PartialEq for EdnBigDecimal {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+#[cfg(feature = "bignum")]
+impl Eq for EdnBigDecimal {}
+
+#[cfg(feature = "bignum")]
+impl PartialOrd for EdnBigDecimal {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[cfg(feature = "bignum")]
+impl Ord for EdnBigDecimal {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+#[cfg(feature = "bignum")]
+impl fmt::Display for EdnBigDecimal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Edn enum
 // ---------------------------------------------------------------------------
 
-/// Discriminant ordering for Edn variants (used in Ord impl).
 fn variant_ord(v: &Edn<'_>) -> u8 {
     match v {
         Edn::Nil => 0,
         Edn::Bool(_) => 1,
         Edn::Int(_) => 2,
-        Edn::Float(_) => 3,
-        Edn::Char(_) => 4,
-        Edn::Str(_) => 5,
-        Edn::Keyword(_) => 6,
-        Edn::Symbol(_) => 7,
-        Edn::List(_) => 8,
-        Edn::Vector(_) => 9,
-        Edn::Map(_) => 10,
-        Edn::Set(_) => 11,
-        Edn::Tagged(_, _) => 12,
+        #[cfg(feature = "bignum")]
+        Edn::BigInt(_) => 3,
+        Edn::Float(_) => 4,
+        #[cfg(feature = "bignum")]
+        Edn::BigDecimal(_) => 5,
+        Edn::Char(_) => 6,
+        Edn::Str(_) => 7,
+        Edn::Keyword(_) => 8,
+        Edn::Symbol(_) => 9,
+        Edn::List(_) => 10,
+        Edn::Vector(_) => 11,
+        Edn::Map(_) => 12,
+        Edn::Set(_) => 13,
+        Edn::Tagged(_, _) => 14,
     }
 }
 
@@ -176,7 +238,11 @@ pub enum Edn<'a> {
     Nil,
     Bool(bool),
     Int(i64),
+    #[cfg(feature = "bignum")]
+    BigInt(BigInt),
     Float(f64),
+    #[cfg(feature = "bignum")]
+    BigDecimal(EdnBigDecimal),
     Char(char),
     Str(Cow<'a, str>),
     Keyword(Keyword<'a>),
@@ -225,6 +291,16 @@ impl<'a> Edn<'a> {
 
     pub fn is_float(&self) -> bool {
         matches!(self, Edn::Float(_))
+    }
+
+    #[cfg(feature = "bignum")]
+    pub fn is_bigint(&self) -> bool {
+        matches!(self, Edn::BigInt(_))
+    }
+
+    #[cfg(feature = "bignum")]
+    pub fn is_bigdecimal(&self) -> bool {
+        matches!(self, Edn::BigDecimal(_))
     }
 
     pub fn is_char(&self) -> bool {
@@ -283,6 +359,22 @@ impl<'a> Edn<'a> {
         match self {
             Edn::Float(f) => Some(*f),
             Edn::Int(n) => Some(*n as f64),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "bignum")]
+    pub fn as_bigint(&self) -> Option<&BigInt> {
+        match self {
+            Edn::BigInt(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "bignum")]
+    pub fn as_bigdecimal(&self) -> Option<&BigDecimal> {
+        match self {
+            Edn::BigDecimal(d) => Some(d.as_inner()),
             _ => None,
         }
     }
@@ -401,6 +493,10 @@ impl<'a> Edn<'a> {
             Edn::Int(n) => Edn::Int(n),
             Edn::Float(f) => Edn::Float(f),
             Edn::Char(c) => Edn::Char(c),
+            #[cfg(feature = "bignum")]
+            Edn::BigInt(n) => Edn::BigInt(n),
+            #[cfg(feature = "bignum")]
+            Edn::BigDecimal(d) => Edn::BigDecimal(d),
             Edn::Str(s) => Edn::Str(Cow::Owned(s.into_owned())),
             Edn::Keyword(k) => Edn::Keyword(k.into_owned()),
             Edn::Symbol(s) => Edn::Symbol(s.into_owned()),
@@ -438,7 +534,11 @@ impl Ord for Edn<'_> {
             (Edn::Nil, Edn::Nil) => Ordering::Equal,
             (Edn::Bool(a), Edn::Bool(b)) => a.cmp(b),
             (Edn::Int(a), Edn::Int(b)) => a.cmp(b),
+            #[cfg(feature = "bignum")]
+            (Edn::BigInt(a), Edn::BigInt(b)) => a.cmp(b),
             (Edn::Float(a), Edn::Float(b)) => a.total_cmp(b),
+            #[cfg(feature = "bignum")]
+            (Edn::BigDecimal(a), Edn::BigDecimal(b)) => a.cmp(b),
             (Edn::Char(a), Edn::Char(b)) => a.cmp(b),
             (Edn::Str(a), Edn::Str(b)) => a.cmp(b),
             (Edn::Keyword(a), Edn::Keyword(b)) => a.cmp(b),
@@ -460,7 +560,11 @@ impl Hash for Edn<'_> {
             Edn::Nil => {}
             Edn::Bool(b) => b.hash(state),
             Edn::Int(n) => n.hash(state),
+            #[cfg(feature = "bignum")]
+            Edn::BigInt(n) => n.hash(state),
             Edn::Float(f) => f.to_bits().hash(state),
+            #[cfg(feature = "bignum")]
+            Edn::BigDecimal(d) => d.hash(state),
             Edn::Char(c) => c.hash(state),
             Edn::Str(s) => s.hash(state),
             Edn::Keyword(k) => k.hash(state),

@@ -22,6 +22,12 @@ pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 pub use de::{from_str, from_str_with, from_value, EdnDeserializer, StreamDeserializer};
 pub use collections::{EdnMap, EdnSeq, EdnSet};
 pub use edn::{Edn, Keyword, Symbol};
+#[cfg(feature = "bignum")]
+pub use edn::EdnBigDecimal;
+#[cfg(feature = "bignum")]
+pub use num_bigint::BigInt;
+#[cfg(feature = "bignum")]
+pub use bigdecimal::BigDecimal;
 pub use error::EdnError;
 pub use formatter::EdnFormatter;
 #[cfg(feature = "serde")]

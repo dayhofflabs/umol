@@ -43,16 +43,15 @@ These are case-sensitive. `Nil`, `TRUE`, etc. are symbols, not literals.
 
 Grammar: `[+-]? digit+`
 
-Parsed as signed 64-bit integer (`i64`). Overflow is an error (without `bignum`
-feature).
+Parsed as signed 64-bit integer (`i64`). Overflow is an error without the
+`bignum` feature; with `bignum`, overflow silently promotes to
+`Edn::BigInt(num_bigint::BigInt)`.
 
 The `N` suffix (`42N`) requests arbitrary-precision. Without the `bignum`
-feature this is an error. With `bignum`, parsed as `BigInt`.
+feature this is an error. With `bignum`, parsed as `Edn::BigInt`. The `N`
+suffix is only valid on integers; `3.14N` is rejected.
 
 No integer other than 0 may begin with 0. Leading zeros (`007`) are rejected.
-
-**Ambiguity resolution:** Without `bignum`, integer overflow is always an error.
-With `bignum`, overflow promotes to `BigInt`.
 
 ## 6. Floating-point numbers
 
@@ -61,7 +60,10 @@ Grammar: `[+-]? digit+ ('.' digit+)? ([eE] [+-]? digit+)?`
 A number containing `.` or `e`/`E` is a float. Parsed as `f64`.
 
 The `M` suffix (`3.14M`) requests arbitrary-precision decimal. Without the
-`bignum` feature this is an error.
+`bignum` feature this is an error. With `bignum`, parsed as
+`Edn::BigDecimal(EdnBigDecimal)`, a newtype over `bigdecimal::BigDecimal`
+that adds `Eq`. The `M` suffix is valid on both floats and integers (`42M`
+produces a `BigDecimal` with integer value).
 
 `-0.0` is valid and distinct from `0.0` at the bit level.
 
@@ -191,6 +193,12 @@ time (e.g. rejects `#inst "not-a-date"`) and returns
 `Tagged(tag_string, Box<Edn>)`. Conversion to the native Rust type happens
 during serde deserialization. Without the feature, built-in tags still parse as
 `Tagged(tag_string, Box<Edn>)` but without validation.
+
+**Serde enum mapping:** Rust enums serialize/deserialize using tagged literals
+for data-carrying variants (`#Circle 3.14`, `#Rect [1.0 2.0]`,
+`#Named {:width 5.0 :height 10.0}`). Unit variants use keyword syntax
+(`:red`). A tagged literal `#Tag value` deserialized as a unit variant requires
+the payload to be `nil`; non-nil payloads are rejected.
 
 ## 16. Ambiguity resolutions
 

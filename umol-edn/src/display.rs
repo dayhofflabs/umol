@@ -11,7 +11,11 @@ impl fmt::Display for Edn<'_> {
             Edn::Bool(true) => write!(f, "true"),
             Edn::Bool(false) => write!(f, "false"),
             Edn::Int(n) => write!(f, "{n}"),
+            #[cfg(feature = "bignum")]
+            Edn::BigInt(n) => write!(f, "{n}N"),
             Edn::Float(v) => format_float(f, *v),
+            #[cfg(feature = "bignum")]
+            Edn::BigDecimal(d) => write!(f, "{d}M"),
             Edn::Char(c) => format_char(f, *c),
             Edn::Str(s) => format_string(f, s),
             Edn::Keyword(k) => write!(f, "{k}"),

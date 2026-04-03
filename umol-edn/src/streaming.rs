@@ -211,8 +211,9 @@ impl<'de> EdnStreamDeserializer<'de> {
                 self.pos += 1;
             }
         }
-        // reject bignum suffix
+        // bignum suffix — reject without feature, leave for caller with feature
         if self.pos < bytes.len() && matches!(bytes[self.pos], b'N' | b'M') {
+            #[cfg(not(feature = "bignum"))]
             return Err(EdnError::UnsupportedFeature {
                 offset: start,
                 feature: "bignum",
@@ -226,16 +227,38 @@ impl<'de> EdnStreamDeserializer<'de> {
         visitor: V,
     ) -> Result<V::Value, EdnError> {
         let s = self.scan_number_str()?;
+        let offset = self.pos - s.len();
+
+        // Check for bignum suffix
+        #[cfg(feature = "bignum")]
+        {
+            let bytes = self.input.as_bytes();
+            if self.pos < bytes.len() && matches!(bytes[self.pos], b'N' | b'M') {
+                let suffix = bytes[self.pos];
+                self.pos += 1;
+                let mut suffixed = s.to_string();
+                suffixed.push(suffix as char);
+                return visitor.visit_string(suffixed);
+            }
+        }
+
         if memchr::memchr3(b'.', b'e', b'E', s.as_bytes()).is_some() {
             let f: f64 = s
                 .parse()
-                .map_err(|_| EdnError::InvalidNumber { offset: self.pos - s.len() })?;
+                .map_err(|_| EdnError::InvalidNumber { offset })?;
             visitor.visit_f64(f)
         } else {
-            let n: i64 = s
-                .parse()
-                .map_err(|_| EdnError::InvalidNumber { offset: self.pos - s.len() })?;
-            visitor.visit_i64(n)
+            match s.parse::<i64>() {
+                Ok(n) => visitor.visit_i64(n),
+                #[cfg(feature = "bignum")]
+                Err(_) => {
+                    let mut suffixed = s.to_string();
+                    suffixed.push('N');
+                    visitor.visit_string(suffixed)
+                }
+                #[cfg(not(feature = "bignum"))]
+                Err(_) => Err(EdnError::InvalidNumber { offset }),
+            }
         }
     }
 
@@ -1002,7 +1025,15 @@ impl<'a, 'de> VariantAccess<'de> for &'a mut EdnStreamDeserializer<'de> {
     type Error = EdnError;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
-        Ok(())
+        self.skip_ws()?;
+        let s = self.parse_symbol_str()?;
+        if s == "nil" {
+            Ok(())
+        } else {
+            Err(EdnError::Custom(
+                format!("unit variant expects nil payload, got {s}"),
+            ))
+        }
     }
 
     fn newtype_variant_seed<T: DeserializeSeed<'de>>(

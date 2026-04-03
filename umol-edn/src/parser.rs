@@ -14,6 +14,8 @@ use winnow::{LocatingSlice, Parser};
 use crate::config::{DuplicateKeyPolicy, ParseConfig};
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
 use crate::edn::{Edn, Keyword, Symbol};
+#[cfg(feature = "bignum")]
+use crate::edn::EdnBigDecimal;
 use crate::error::{unwrap_err, EdnError};
 
 type Input<'a> = LocatingSlice<&'a str>;
@@ -239,11 +241,36 @@ fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
 
     // Check for N/M suffix (bignum)
     if matches!(peek_byte(input), Some(b'N') | Some(b'M')) {
-        let _ = any.parse_next(input)?;
-        return Err(ErrMode::Cut(EdnError::UnsupportedFeature {
-            offset: start,
-            feature: "bignum",
-        }));
+        let suffix = any.parse_next(input)?;
+
+        #[cfg(not(feature = "bignum"))]
+        {
+            let _ = suffix;
+            return Err(ErrMode::Cut(EdnError::UnsupportedFeature {
+                offset: start,
+                feature: "bignum",
+            }));
+        }
+
+        #[cfg(feature = "bignum")]
+        {
+            let is_float = memchr::memchr3(b'.', b'e', b'E', num_str.as_bytes()).is_some();
+            return if suffix == 'N' {
+                if is_float {
+                    Err(ErrMode::Cut(EdnError::InvalidNumber { offset: start }))
+                } else {
+                    let n: num_bigint::BigInt = num_str
+                        .parse()
+                        .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
+                    Ok(Edn::BigInt(n))
+                }
+            } else {
+                let d: bigdecimal::BigDecimal = num_str
+                    .parse()
+                    .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
+                Ok(Edn::BigDecimal(EdnBigDecimal::new(d)))
+            };
+        }
     }
 
     // Reject leading zeros (007 is invalid, 0 is fine).
@@ -258,10 +285,18 @@ fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
             .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
         Ok(Edn::Float(f))
     } else {
-        let n: i64 = num_str
-            .parse()
-            .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
-        Ok(Edn::Int(n))
+        match num_str.parse::<i64>() {
+            Ok(n) => Ok(Edn::Int(n)),
+            #[cfg(feature = "bignum")]
+            Err(_) => {
+                let n: num_bigint::BigInt = num_str
+                    .parse()
+                    .map_err(|_| ErrMode::Cut(EdnError::InvalidNumber { offset: start }))?;
+                Ok(Edn::BigInt(n))
+            }
+            #[cfg(not(feature = "bignum"))]
+            Err(_) => Err(ErrMode::Cut(EdnError::InvalidNumber { offset: start })),
+        }
     }
 }
 
@@ -875,6 +910,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "bignum"))]
     #[rstest]
     #[case("12N", EdnError::UnsupportedFeature { offset: 0, feature: "bignum" })]
     #[case("12M", EdnError::UnsupportedFeature { offset: 0, feature: "bignum" })]
@@ -914,6 +950,7 @@ mod tests {
 
     // --- Integer overflow ---
 
+    #[cfg(not(feature = "bignum"))]
     #[test]
     fn test_read_string_error_integer_overflow() {
         let err = read_string("99999999999999999999").unwrap_err();
