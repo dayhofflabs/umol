@@ -120,6 +120,8 @@ impl PartialOrd for EdnMap<'_> {
 }
 
 impl Ord for EdnMap<'_> {
+    /// O(n log n) with allocation — sorts entries on each call. Used for
+    /// deterministic comparison of unordered maps, not intended for hot paths.
     fn cmp(&self, other: &Self) -> Ordering {
         let mut a: Vec<_> = self.0.iter().collect();
         let mut b: Vec<_> = other.0.iter().collect();
@@ -227,6 +229,8 @@ impl PartialOrd for EdnSet<'_> {
 }
 
 impl Ord for EdnSet<'_> {
+    /// O(n log n) with allocation — sorts elements on each call. Used for
+    /// deterministic comparison of unordered sets, not intended for hot paths.
     fn cmp(&self, other: &Self) -> Ordering {
         let mut a: Vec<_> = self.0.iter().collect();
         let mut b: Vec<_> = other.0.iter().collect();

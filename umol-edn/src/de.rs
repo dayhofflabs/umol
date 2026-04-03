@@ -375,7 +375,7 @@ impl<'de> MapAccess<'de> for EdnMapAccess<'de> {
         let v = self
             .pending_value
             .take()
-            .expect("next_value_seed called without preceding next_key_seed");
+            .ok_or_else(|| EdnError::Custom("next_value_seed called without preceding next_key_seed".into()))?;
         seed.deserialize(EdnDeserializer(v))
     }
 }
@@ -424,7 +424,7 @@ impl<'de> de::MapAccess<'de> for EdnStructMapAccess<'de> {
         let v = self
             .pending_value
             .take()
-            .expect("EdnStructMapAccess::next_value_seed called without preceding next_key_seed");
+            .ok_or_else(|| EdnError::Custom("next_value_seed called without preceding next_key_seed".into()))?;
         seed.deserialize(EdnDeserializer(v))
     }
 }
