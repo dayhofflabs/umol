@@ -4,6 +4,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use rstest::rstest;
 use serde::Deserialize;
@@ -85,7 +86,10 @@ fn test_s3_delimiters_no_whitespace() {
 
 #[test]
 fn test_s4_hash_is_not_delimiter() {
-    assert_eq!(parse("foo#bar").unwrap(), Edn::Symbol(Symbol::new("foo#bar")));
+    assert_eq!(
+        parse("foo#bar").unwrap(),
+        Edn::Symbol(Symbol::new("foo#bar"))
+    );
     assert_eq!(
         parse("[a#b]").unwrap(),
         Edn::Vector(vec![Edn::Symbol(Symbol::new("a#b"))].into())
@@ -145,7 +149,10 @@ fn test_s6_case_sensitive(#[case] input: &str) {
 #[case(r#""slash\\here""#, "slash\\here")]
 #[case(r#""quote\"here""#, "quote\"here")]
 fn test_s7_string_escapes(#[case] input: &str, #[case] expected: &str) {
-    assert_eq!(parse(input).unwrap(), Edn::Str(Cow::Owned(expected.to_string())));
+    assert_eq!(
+        parse(input).unwrap(),
+        Edn::Str(Cow::Owned(expected.to_string()))
+    );
 }
 
 #[rstest]
@@ -168,7 +175,10 @@ fn test_s7_string_clojure_escapes_rejected(#[case] input: &str) {
 #[case(r#""\u0041""#, "A")]
 #[case(r#""\u00e9""#, "é")]
 fn test_s7_string_unicode_escape(#[case] input: &str, #[case] expected: &str) {
-    assert_eq!(parse(input).unwrap(), Edn::Str(Cow::Owned(expected.to_string())));
+    assert_eq!(
+        parse(input).unwrap(),
+        Edn::Str(Cow::Owned(expected.to_string()))
+    );
     assert_eq!(stream::<String>(input).unwrap(), expected);
 }
 
@@ -176,7 +186,10 @@ fn test_s7_string_unicode_escape(#[case] input: &str, #[case] expected: &str) {
 #[case(r#""\b""#)]
 #[case(r#""\f""#)]
 fn test_s7_string_clojure_escapes_rejected_streaming(#[case] input: &str) {
-    assert!(stream::<String>(input).is_err(), "Edn streaming should reject {input}");
+    assert!(
+        stream::<String>(input).is_err(),
+        "Edn streaming should reject {input}"
+    );
 }
 
 #[rstest]
@@ -515,7 +528,6 @@ fn test_s11_bigint_parse(#[case] input: &str, #[case] expected: umol_edn::BigInt
 #[cfg(feature = "bignum")]
 #[test]
 fn test_s11_bigint_parse_large() {
-    use std::str::FromStr;
     let input = "99999999999999999999999999999N";
     let expected = umol_edn::BigInt::from_str("99999999999999999999999999999").unwrap();
     assert_eq!(parse(input).unwrap(), Edn::BigInt(expected));
@@ -586,10 +598,13 @@ fn test_s14_vector_streaming() {
 fn test_s13_s14_nested() {
     assert_eq!(
         parse("[[1 2] (3 4)]").unwrap(),
-        Edn::Vector(vec![
-            Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into()),
-            Edn::List(vec![Edn::Int(3), Edn::Int(4)].into()),
-        ].into())
+        Edn::Vector(
+            vec![
+                Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into()),
+                Edn::List(vec![Edn::Int(3), Edn::Int(4)].into()),
+            ]
+            .into()
+        )
     );
 }
 
@@ -635,7 +650,10 @@ fn test_s15_map_duplicate_key_last_wins() {
 fn test_s15_map_complex_keys() {
     let result = parse("{[1 2] :pair \"key\" :str}").unwrap();
     let mut expected = EdnMap::new();
-    expected.insert(Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into()), Edn::keyword("pair"));
+    expected.insert(
+        Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into()),
+        Edn::keyword("pair"),
+    );
     expected.insert(Edn::Str(Cow::Owned("key".to_string())), Edn::keyword("str"));
     assert_eq!(result, Edn::Map(expected));
 }
@@ -666,20 +684,32 @@ fn test_s16_set_empty() {
 fn test_s17_qualified_tag() {
     let result = parse("#myapp/Person {:name \"Alice\"}").unwrap();
     let mut inner = EdnMap::new();
-    inner.insert(Edn::keyword("name"), Edn::Str(Cow::Owned("Alice".to_string())));
-    assert_eq!(result, Edn::Tagged("myapp/Person".into(), Box::new(Edn::Map(inner))));
+    inner.insert(
+        Edn::keyword("name"),
+        Edn::Str(Cow::Owned("Alice".to_string())),
+    );
+    assert_eq!(
+        result,
+        Edn::Tagged("myapp/Person".into(), Box::new(Edn::Map(inner)))
+    );
 }
 
 #[test]
 fn test_s17_qualified_tag_streaming() {
-    assert_eq!(stream::<Vec<i64>>("#my/tag [1 2 3]").unwrap(), vec![1, 2, 3]);
+    assert_eq!(
+        stream::<Vec<i64>>("#my/tag [1 2 3]").unwrap(),
+        vec![1, 2, 3]
+    );
 }
 
 #[rstest]
 #[case("#foo 1")]
 #[case("#bar [1 2]")]
 fn test_s17c_bare_tag_rejected(#[case] input: &str) {
-    assert!(parse(input).is_err(), "Edn should reject bare tag in: {input}");
+    assert!(
+        parse(input).is_err(),
+        "Edn should reject bare tag in: {input}"
+    );
 }
 
 #[test]
@@ -694,8 +724,16 @@ fn test_s17_tag_without_value_error() {
 }
 
 #[rstest]
-#[case("#inst \"2024-01-01T00:00:00Z\"", "inst", Edn::Str(Cow::Borrowed("2024-01-01T00:00:00Z")))]
-#[case("#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"", "uuid", Edn::Str(Cow::Borrowed("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")))]
+#[case(
+    "#inst \"2024-01-01T00:00:00Z\"",
+    "inst",
+    Edn::Str(Cow::Borrowed("2024-01-01T00:00:00Z"))
+)]
+#[case(
+    "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"",
+    "uuid",
+    Edn::Str(Cow::Borrowed("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"))
+)]
 fn test_s17_builtin_tags_parse_without_features(
     #[case] input: &str,
     #[case] tag: &str,
@@ -712,7 +750,10 @@ fn test_s18_inst_accepted() {
     let val = parse("#inst \"2024-01-01T00:00:00Z\"").unwrap();
     assert_eq!(
         val,
-        Edn::Tagged("inst".into(), Box::new(Edn::Str(Cow::Borrowed("2024-01-01T00:00:00Z"))))
+        Edn::Tagged(
+            "inst".into(),
+            Box::new(Edn::Str(Cow::Borrowed("2024-01-01T00:00:00Z")))
+        )
     );
 }
 
@@ -724,7 +765,9 @@ fn test_s18_uuid_accepted() {
         val,
         Edn::Tagged(
             "uuid".into(),
-            Box::new(Edn::Str(Cow::Borrowed("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")))
+            Box::new(Edn::Str(Cow::Borrowed(
+                "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"
+            )))
         )
     );
 }
@@ -942,12 +985,18 @@ fn test_error_trailing_content_streaming() {
 
 #[test]
 fn test_error_empty_input() {
-    assert!(matches!(parse("").unwrap_err(), EdnError::UnexpectedEof { .. }));
+    assert!(matches!(
+        parse("").unwrap_err(),
+        EdnError::UnexpectedEof { .. }
+    ));
 }
 
 #[test]
 fn test_error_whitespace_only() {
-    assert!(matches!(parse("   ").unwrap_err(), EdnError::UnexpectedEof { .. }));
+    assert!(matches!(
+        parse("   ").unwrap_err(),
+        EdnError::UnexpectedEof { .. }
+    ));
 }
 
 #[rstest]
@@ -965,4 +1014,3 @@ fn test_error_deep_nesting() {
     let input = "[".repeat(depth) + &"]".repeat(depth);
     assert!(parse(&input).is_ok());
 }
-

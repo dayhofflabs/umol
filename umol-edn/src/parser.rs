@@ -1,6 +1,7 @@
 //! Winnow-based EDN parser.
 
 use std::borrow::Cow;
+use std::cell::Cell;
 
 use memchr::memchr2;
 
@@ -21,6 +22,36 @@ use crate::error::{unwrap_err, EdnError};
 type Input<'a> = LocatingSlice<&'a str>;
 type E = ErrMode<EdnError>;
 type PResult<T> = Result<T, E>;
+
+const MAX_DEPTH: u16 = 128;
+
+struct ParseCtx<'c> {
+    config: &'c ParseConfig,
+    depth: Cell<u16>,
+}
+
+impl<'c> ParseCtx<'c> {
+    fn new(config: &'c ParseConfig) -> Self {
+        Self {
+            config,
+            depth: Cell::new(MAX_DEPTH),
+        }
+    }
+
+    fn enter_scope(&self, offset: usize) -> PResult<()> {
+        let d = self.depth.get().checked_sub(1).ok_or_else(|| {
+            ErrMode::Cut(EdnError::Custom(format!(
+                "recursion limit exceeded at offset {offset}"
+            )))
+        })?;
+        self.depth.set(d);
+        Ok(())
+    }
+
+    fn leave_scope(&self) {
+        self.depth.set(self.depth.get() + 1);
+    }
+}
 
 /// Get the remaining input as a `&str`.
 #[inline(always)]
@@ -45,9 +76,10 @@ pub fn parse_value<'a>(
     input: &'a str,
     config: &ParseConfig,
 ) -> Result<(Edn<'a>, &'a str), EdnError> {
+    let ctx = ParseCtx::new(config);
     let mut located = LocatingSlice::new(input);
-    ws_and_comments(&mut located, config).map_err(unwrap_err)?;
-    let val = edn_value(config)
+    ws_and_comments(&mut located, &ctx);
+    let val = edn_value(&ctx)
         .parse_next(&mut located)
         .map_err(unwrap_err)?;
     let remainder = rest(&located);
@@ -60,8 +92,9 @@ pub fn parse_value_strict<'a>(
     config: &ParseConfig,
 ) -> Result<Edn<'a>, EdnError> {
     let (val, remaining) = parse_value(input, config)?;
+    let ctx = ParseCtx::new(config);
     let mut loc = LocatingSlice::new(remaining);
-    ws_and_comments(&mut loc, config).ok();
+    ws_and_comments(&mut loc, &ctx);
     let after = rest(&loc);
     if !after.is_empty() {
         let trailing_offset = input.len() - after.len();
@@ -77,14 +110,15 @@ pub fn parse_all<'a>(
     input: &'a str,
     config: &ParseConfig,
 ) -> Result<Vec<Edn<'a>>, EdnError> {
+    let ctx = ParseCtx::new(config);
     let mut located = LocatingSlice::new(input);
     let mut values = Vec::new();
     loop {
-        ws_and_comments(&mut located, config).ok();
+        ws_and_comments(&mut located, &ctx);
         if peek_byte(&located).is_none() {
             break;
         }
-        let val = edn_value(config)
+        let val = edn_value(&ctx)
             .parse_next(&mut located)
             .map_err(unwrap_err)?;
         values.push(val);
@@ -98,52 +132,49 @@ fn is_ws(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | ',')
 }
 
-fn ws_and_comments<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<()> {
+fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) {
     loop {
-        take_while(0.., is_ws).parse_next(input)?;
+        let _: PResult<_> = take_while(0.., is_ws).parse_next(input);
         match peek_byte(input) {
             Some(b';') => {
-                take_while(0.., |c: char| c != '\n').parse_next(input)?;
-                opt('\n').parse_next(input)?;
+                let _: PResult<_> = take_while(0.., |c: char| c != '\n').parse_next(input);
+                let _: PResult<_> = opt('\n').parse_next(input);
             }
             Some(b'#') if rest(input).starts_with("#_") => {
-                let _ = "#_".parse_next(input)?;
-                ws_and_comments(input, config).ok();
-                // Ignore errors: the value is discarded, so tag validation
-                // failures (e.g. invalid #inst date) are irrelevant.
-                let _ = edn_value(config).parse_next(input);
+                let _: PResult<_> = "#_".parse_next(input);
+                ws_and_comments(input, ctx);
+                let _ = edn_value(ctx).parse_next(input);
             }
             _ => break,
         }
     }
-    Ok(())
 }
 
 // --- Top-level value dispatch ---
 
 fn edn_value<'a, 'b>(
-    config: &'b ParseConfig,
+    ctx: &'b ParseCtx<'_>,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
-        ws_and_comments(input, config).ok();
-        edn_value_dispatch(input, config)
+        ws_and_comments(input, ctx);
+        edn_value_dispatch(input, ctx)
     }
 }
 
 /// Dispatch to the correct value parser. Caller must skip whitespace first.
 #[inline(always)]
-fn edn_value_dispatch<'a>(input: &mut Input<'a>, config: &ParseConfig) -> PResult<Edn<'a>> {
+fn edn_value_dispatch<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) -> PResult<Edn<'a>> {
     let offset = input.current_token_start();
     let b = peek_byte(input)
         .ok_or(ErrMode::Backtrack(EdnError::UnexpectedEof { offset }))?;
     match b {
-        b'(' => edn_list(config).parse_next(input),
-        b'[' => edn_vector(config).parse_next(input),
-        b'{' => edn_map(config).parse_next(input),
-        b'#' => edn_dispatch(config).parse_next(input),
+        b'(' => edn_list(ctx).parse_next(input),
+        b'[' => edn_vector(ctx).parse_next(input),
+        b'{' => edn_map(ctx).parse_next(input),
+        b'#' => edn_dispatch(ctx).parse_next(input),
         b':' => edn_keyword(input),
         b'"' => edn_string().parse_next(input),
         b'\\' => edn_char().parse_next(input),
@@ -473,74 +504,80 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
 // --- Collections ---
 
 fn edn_list<'a, 'b>(
-    config: &'b ParseConfig,
+    ctx: &'b ParseCtx<'_>,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '('.parse_next(input)?;
+        ctx.enter_scope(input.current_token_start())?;
         let mut items = EdnSeq::new();
         loop {
-            ws_and_comments(input, config).ok();
+            ws_and_comments(input, ctx);
             match peek_byte(input) {
                 None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
                 Some(b')') => {
                     let _ = ')'.parse_next(input)?;
+                    ctx.leave_scope();
                     return Ok(Edn::List(items));
                 }
-                _ => items.push(edn_value_dispatch(input, config)?),
+                _ => items.push(edn_value_dispatch(input, ctx)?),
             }
         }
     }
 }
 
 fn edn_vector<'a, 'b>(
-    config: &'b ParseConfig,
+    ctx: &'b ParseCtx<'_>,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '['.parse_next(input)?;
+        ctx.enter_scope(input.current_token_start())?;
         let mut items = EdnSeq::new();
         loop {
-            ws_and_comments(input, config).ok();
+            ws_and_comments(input, ctx);
             match peek_byte(input) {
                 None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
                 Some(b']') => {
                     let _ = ']'.parse_next(input)?;
+                    ctx.leave_scope();
                     return Ok(Edn::Vector(items));
                 }
-                _ => items.push(edn_value_dispatch(input, config)?),
+                _ => items.push(edn_value_dispatch(input, ctx)?),
             }
         }
     }
 }
 
 fn edn_map<'a, 'b>(
-    config: &'b ParseConfig,
+    ctx: &'b ParseCtx<'_>,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '{'.parse_next(input)?;
+        ctx.enter_scope(input.current_token_start())?;
         let mut map = EdnMap::new();
         loop {
-            ws_and_comments(input, config).ok();
+            ws_and_comments(input, ctx);
             match peek_byte(input) {
                 None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
                 Some(b'}') => {
                     let _ = '}'.parse_next(input)?;
+                    ctx.leave_scope();
                     return Ok(Edn::Map(map));
                 }
                 _ => {
                     let key_offset = input.current_token_start();
-                    let key = edn_value_dispatch(input, config)?;
-                    ws_and_comments(input, config).ok();
-                    let val = edn_value_dispatch(input, config)?;
-                    if config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
+                    let key = edn_value_dispatch(input, ctx)?;
+                    ws_and_comments(input, ctx);
+                    let val = edn_value_dispatch(input, ctx)?;
+                    if ctx.config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
                         return Err(ErrMode::Cut(EdnError::DuplicateKey { offset: key_offset }));
                     }
                     map.insert(key, val);
@@ -551,23 +588,25 @@ where
 }
 
 fn edn_set<'a, 'b>(
-    config: &'b ParseConfig,
+    ctx: &'b ParseCtx<'_>,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '{'.parse_next(input)?;
+        ctx.enter_scope(input.current_token_start())?;
         let mut set = EdnSet::new();
         loop {
-            ws_and_comments(input, config).ok();
+            ws_and_comments(input, ctx);
             match peek_byte(input) {
                 None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
                 Some(b'}') => {
                     let _ = '}'.parse_next(input)?;
+                    ctx.leave_scope();
                     return Ok(Edn::Set(set));
                 }
-                _ => { set.insert(edn_value_dispatch(input, config)?); }
+                _ => { set.insert(edn_value_dispatch(input, ctx)?); }
             }
         }
     }
@@ -576,7 +615,7 @@ where
 // --- # dispatch ---
 
 fn edn_dispatch<'a, 'b>(
-    config: &'b ParseConfig,
+    ctx: &'b ParseCtx<'_>,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
@@ -586,12 +625,12 @@ where
         let b = peek_byte(input)
             .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }))?;
         match b {
-            b'{' => edn_set(config).parse_next(input),
+            b'{' => edn_set(ctx).parse_next(input),
             b'_' => {
                 let _ = '_'.parse_next(input)?;
-                ws_and_comments(input, config).ok();
-                let _ = edn_value(config).parse_next(input)?;
-                edn_value(config).parse_next(input)
+                ws_and_comments(input, ctx);
+                let _ = edn_value(ctx).parse_next(input)?;
+                edn_value(ctx).parse_next(input)
             }
             _ => {
                 let offset = input.current_token_start();
@@ -602,7 +641,7 @@ where
 
                 // Reject bare (unqualified) tags unless registered or built-in.
                 if !tag.contains('/')
-                    && config.tag_readers.get(tag).is_none()
+                    && ctx.config.tag_readers.get(tag).is_none()
                     && !BUILTIN_TAGS.contains(&tag)
                 {
                     return Err(ErrMode::Cut(EdnError::InvalidTag {
@@ -611,10 +650,10 @@ where
                     }));
                 }
 
-                ws_and_comments(input, config).ok();
-                let val = edn_value(config).parse_next(input)?;
+                ws_and_comments(input, ctx);
+                let val = edn_value(ctx).parse_next(input)?;
 
-                match config.tag_readers.get(tag) {
+                match ctx.config.tag_readers.get(tag) {
                     Some(reader) => reader(val).map_err(ErrMode::Cut),
                     None => Ok(Edn::Tagged(tag.to_string(), Box::new(val))),
                 }
@@ -1099,5 +1138,34 @@ mod tests {
     fn test_read_string_error_formfeed_backspace() {
         assert!(read_string("\\formfeed").is_err());
         assert!(read_string("\\backspace").is_err());
+    }
+
+    #[test]
+    fn test_read_string_depth_limit() {
+        let depth = super::MAX_DEPTH as usize;
+        let open: String = "[".repeat(depth + 1);
+        let close: String = "]".repeat(depth + 1);
+        let input = format!("{open}1{close}");
+        let err = read_string(&input).unwrap_err();
+        assert!(err.to_string().contains("recursion limit"), "{err}");
+    }
+
+    #[test]
+    fn test_read_string_at_depth_limit() {
+        let depth = super::MAX_DEPTH as usize;
+        let open: String = "[".repeat(depth);
+        let close: String = "]".repeat(depth);
+        let input = format!("{open}1{close}");
+        assert!(read_string(&input).is_ok());
+    }
+
+    #[test]
+    fn test_read_string_discard_depth_limit() {
+        // Deeply nested collections inside a discard are still caught.
+        let depth = super::MAX_DEPTH as usize;
+        let open: String = "[".repeat(depth + 1);
+        let close: String = "]".repeat(depth + 1);
+        let input = format!("[#_ {open}1{close} 2]");
+        assert!(read_string(&input).is_err());
     }
 }

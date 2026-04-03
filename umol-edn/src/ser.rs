@@ -1,5 +1,7 @@
 //! Serde `Serializer` that writes compact EDN.
 
+use std::fmt::Write;
+
 use serde::ser::{
     SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
     SerializeTupleStruct, SerializeTupleVariant,
@@ -69,7 +71,8 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         self.serialize_i64(i64::from(v))
     }
     fn serialize_i64(self, v: i64) -> Result<(), Self::Error> {
-        self.output += &v.to_string();
+        let mut buf = itoa::Buffer::new();
+        self.output.push_str(buf.format(v));
         Ok(())
     }
 
@@ -83,7 +86,8 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         self.serialize_u64(u64::from(v))
     }
     fn serialize_u64(self, v: u64) -> Result<(), Self::Error> {
-        self.output += &v.to_string();
+        let mut buf = itoa::Buffer::new();
+        self.output.push_str(buf.format(v));
         Ok(())
     }
 
@@ -92,10 +96,13 @@ impl<'a> Serializer for &'a mut EdnSerializer {
     }
     fn serialize_f64(self, v: f64) -> Result<(), Self::Error> {
         if v.is_nan() || v.is_infinite() {
-            return Err(EdnError::Custom("EDN cannot represent NaN or Infinity".to_string()));
+            return Err(EdnError::Custom(
+                "EDN cannot represent NaN or Infinity".into(),
+            ));
         }
-        let s = v.to_string();
-        self.output += &s;
+        let start = self.output.len();
+        write!(self.output, "{v}").unwrap();
+        let s = &self.output[start..];
         if !s.contains('.') && !s.contains('e') && !s.contains('E') {
             self.output += ".0";
         }
@@ -103,8 +110,19 @@ impl<'a> Serializer for &'a mut EdnSerializer {
     }
 
     fn serialize_char(self, v: char) -> Result<(), Self::Error> {
-        self.output.push('\\');
-        self.output.push(v);
+        match v {
+            '\n' => self.output.push_str("\\newline"),
+            '\r' => self.output.push_str("\\return"),
+            ' ' => self.output.push_str("\\space"),
+            '\t' => self.output.push_str("\\tab"),
+            c if (c as u32) < 0x20 || c == '\u{7F}' => {
+                write!(self.output, "\\u{:04X}", c as u32).unwrap();
+            }
+            c => {
+                self.output.push('\\');
+                self.output.push(c);
+            }
+        }
         Ok(())
     }
 
@@ -367,6 +385,8 @@ impl SerializeStructVariant for &mut EdnSerializer {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use rstest::rstest;
     use serde::Serialize;
 
@@ -536,7 +556,6 @@ mod tests {
 
     #[test]
     fn test_serialize_map() {
-        use std::collections::HashMap;
         let mut m = HashMap::new();
         m.insert("a", 1);
         m.insert("b", 2);

@@ -48,8 +48,9 @@ impl fmt::Display for Edn<'_> {
 }
 
 fn format_float(f: &mut fmt::Formatter<'_>, v: f64) -> fmt::Result {
-    // EDN has no syntax for NaN/Inf — these values cannot be serialized.
-    assert!(!v.is_nan() && v.is_finite(), "EDN cannot represent NaN or Infinity");
+    if v.is_nan() || !v.is_finite() {
+        return Err(fmt::Error);
+    }
     let s = format!("{v}");
     if s.contains('.') || s.contains('e') || s.contains('E') {
         write!(f, "{s}")

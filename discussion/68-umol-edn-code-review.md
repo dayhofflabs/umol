@@ -33,6 +33,32 @@ Highest-risk issues:
 
 These are not cosmetic issues; they can cause incorrect behavior, silent data loss, and broken user expectations.
 
+## Fix Response to Original Findings (Follow-up)
+
+Status legend:
+
+- `Resolved`: concern addressed in code and tests.
+- `Partially resolved`: some work done, but residual issue remains.
+- `Not resolved`: original concern still present.
+- `Superseded`: original concern removed, but replaced by a different risk.
+
+| Original finding | Status | Follow-up comment |
+| --- | --- | --- |
+| P0-1 Float `Eq`/`Hash` mismatch | `Resolved` | `Edn` now distinguishes NaN payloads consistently in `cmp` + `hash`, with dedicated tests in `edn.rs`. |
+| P0-2 Tagged unit payload dropped | `Resolved` | `unit_variant` now requires `nil` payload and errors otherwise; tests cover error cases. |
+| P0-3 `bignum` claimed but unimplemented | `Resolved` | `bignum` paths exist in parser/streaming and pass under `--features bignum`. |
+| P1-1 Built-in tag behavior mismatch | `Partially resolved` | Tree parser now permits bare built-ins as `Tagged`, but streaming path still rejects unqualified built-ins unless a reader is registered. |
+| P1-2 BTree vs hash storage docs mismatch | `Resolved` | Spec now states hash-based storage and explains deterministic formatting separately. |
+| P1-3 Macro/parser divergence on special floats/chars | `Not resolved` | Macro still supports values/parser forms that diverge from reader/serializer behavior. |
+| P2-1 Struct key handling | `Resolved` | Behavior is now explicit and tested for both value-tree and streaming deserialization pathways. |
+| P2-2 Avoidable `deserialize_any` allocations | `Partially resolved` | Significant improvements landed, but there are still hot-path allocation opportunities in streaming/value conversion edges. |
+| P2-3 `get(&str)` keyword-only alloc | `Resolved` | API renamed to `get_keyword`; hidden allocation concern reduced by borrowed keyword lookup path. |
+| P2-4 Expensive collection `Ord` | `Accepted debt` | Cost is now documented; implementation remains intentionally allocation-heavy for deterministic compare semantics. |
+| P2-5 `expect(...)` panics in map access | `Resolved` | Panics were replaced with error returns. |
+| P3-1 `unwrap_err` offset quality | `Partially resolved` | Offset handling improved, but `Incomplete` mapping still has ambiguity risk depending on parser context. |
+| P3-2 `unreachable!()` in `cmp` | `Superseded` | Panic was removed; fallback now returns `Ordering::Equal`, which avoids panic but introduces a potential silent-ordering risk if invariants drift. |
+| P3-3 README feature drift | `Partially resolved` | Feature table now includes `bignum`, but description still says "not yet implemented", which is stale. |
+
 ## Severity Legend
 
 - `P0`: correctness/safety contract breach; can produce wrong behavior now.
@@ -42,7 +68,7 @@ These are not cosmetic issues; they can cause incorrect behavior, silent data lo
 
 ## Findings
 
-### P0-1: `Eq` and `Hash` are inconsistent for `Edn::Float`
+### P0-1 (`Resolved`): `Eq` and `Hash` are inconsistent for `Edn::Float`
 
 **Evidence**
 
@@ -67,7 +93,7 @@ With `total_cmp`, NaNs compare equal in ordering terms, but `to_bits()` differs 
 
 ---
 
-### P0-2: Tagged unit variant deserialization discards payload silently
+### P0-2 (`Resolved`): Tagged unit variant deserialization discards payload silently
 
 **Evidence**
 
@@ -89,7 +115,7 @@ Input like `#Variant 123` can deserialize into a unit enum variant without error
 
 ---
 
-### P0-3: `bignum` is claimed but not implemented
+### P0-3 (`Resolved`): `bignum` is claimed but not implemented
 
 **Evidence**
 
@@ -116,7 +142,7 @@ Pick one and enforce consistently:
 
 ---
 
-### P1-1: Spec contradiction for built-in unqualified tags without features
+### P1-1 (`Partially resolved`): Spec contradiction for built-in unqualified tags without features
 
 **Evidence**
 
@@ -142,7 +168,7 @@ Either:
 
 ---
 
-### P1-2: Spec says BTree deterministic ordering; code uses hash collections
+### P1-2 (`Resolved`): Spec says BTree deterministic ordering; code uses hash collections
 
 **Evidence**
 
@@ -168,7 +194,7 @@ Either:
 
 ---
 
-### P1-3: Macro/parser behavior diverges on special floats and char names
+### P1-3 (`Not resolved`): Macro/parser behavior diverges on special floats and char names
 
 **Evidence**
 
@@ -193,7 +219,7 @@ Two official construction paths (`read_string` vs `edn!`) produce different valu
 
 ---
 
-### P2-1: Struct deserialization silently ignores non-string-like map keys
+### P2-1 (`Resolved`): Struct deserialization silently ignores non-string-like map keys
 
 **Evidence**
 
@@ -210,7 +236,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P2-2: Avoidable allocations in `deserialize_any`
+### P2-2 (`Partially resolved`): Avoidable allocations in `deserialize_any`
 
 **Evidence**
 
@@ -228,7 +254,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P2-3: `Edn::get(&str)` is keyword-only and allocates every call
+### P2-3 (`Resolved`): `Edn::get(&str)` is keyword-only and allocates every call
 
 **Evidence**
 
@@ -246,7 +272,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P2-4: Collection `Ord` implementations are expensive
+### P2-4 (`Accepted debt`): Collection `Ord` implementations are expensive
 
 **Evidence**
 
@@ -263,7 +289,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P2-5: Panics in serde map accessors (`expect(...)`)
+### P2-5 (`Resolved`): Panics in serde map accessors (`expect(...)`)
 
 **Evidence**
 
@@ -279,7 +305,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P3-1: `unwrap_err` loses offset context on incomplete input
+### P3-1 (`Partially resolved`): `unwrap_err` loses offset context on incomplete input
 
 **Evidence**
 
@@ -295,7 +321,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P3-2: `unreachable!()` in `Edn::cmp` is a maintenance landmine
+### P3-2 (`Superseded`): `unreachable!()` in `Edn::cmp` is a maintenance landmine
 
 **Evidence**
 
@@ -311,7 +337,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P3-3: Documentation drift in README feature table
+### P3-3 (`Partially resolved`): Documentation drift in README feature table
 
 **Evidence**
 
@@ -375,3 +401,52 @@ Missing tests that should be added before further refactors:
 - Malformed tagged inputs can be accepted silently.
 - Users will continue to build against contradictory docs/spec behavior.
 - Macro/parser divergence can continue to produce non-serializable values and panic paths.
+
+## Fresh Adversarial Findings (Second Pass)
+
+This section intentionally ignores prior findings and reports only current-code risks.
+
+### P0
+
+1. **Unsafe lifetime cast in map lookups (`collections.rs`)**
+   - `EdnMap::get` and `contains_key` use raw pointer lifetime widening:
+     - `unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) }`
+   - This is a soundness hazard: correctness depends on undocumented lifetime/layout invariants that the type system does not enforce.
+
+2. **Discard parser swallows parse errors (`parser.rs`)**
+   - `ws_and_comments` ignores all errors when parsing discarded form after `#_`.
+   - This can desynchronize parser state and hide malformed discarded forms.
+
+3. **Streaming discard skip-string escape bug (`streaming.rs`)**
+   - `skip_string` always skips escape as backslash + one byte.
+   - `\uXXXX` escapes are not skipped correctly in discard/ignored paths.
+
+### P1
+
+1. **Tree vs streaming mismatch for built-in bare tags**
+   - Tree parser allows bare `inst`/`uuid` fallback to `Tagged`.
+   - Streaming parser rejects unqualified tags unless a reader is registered.
+
+2. **`DuplicateKeyPolicy` not applied in streaming map path**
+   - Tree parse enforces duplicate key policy.
+   - Streaming map accessor has no duplicate-key enforcement semantics.
+
+3. **README bignum statement is stale**
+   - README still says `bignum` is "not yet implemented" while implementation/tests exist.
+
+### P2
+
+1. **`Ord` fallback can silently equate distinct variants (`edn.rs`)**
+   - `cmp` fallback now returns `Ordering::Equal` on invariant drift path.
+   - This avoids panic but can silently violate ordering semantics if variant matching diverges.
+
+2. **`parse_all` ignores whitespace/comment parser errors (`parser.rs`)**
+   - Uses `.ok()` in loop, suppressing errors that should propagate.
+
+### Evidence references for second pass
+
+- `umol-edn/src/collections.rs` (`EdnMap::get`, `contains_key`)
+- `umol-edn/src/parser.rs` (`ws_and_comments`, `edn_dispatch`, `parse_all`)
+- `umol-edn/src/streaming.rs` (`skip_string`, `skip_tag_if_present`, map access path)
+- `umol-edn/src/edn.rs` (`cmp` fallback)
+- `umol-edn/README.md` (feature table entry for `bignum`)

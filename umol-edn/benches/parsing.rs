@@ -66,7 +66,7 @@ fn bench_parse_atoms(c: &mut Criterion) {
 fn bench_parse_collections(c: &mut Criterion) {
     let keyword_input = keyword_heavy();
     let nested_50 = deeply_nested(50);
-    let nested_200 = deeply_nested(200);
+    let nested_100 = deeply_nested(100);
 
     let mut group = c.benchmark_group("parse_collections");
     group.bench_function("molecule_small", |b| {
@@ -81,8 +81,8 @@ fn bench_parse_collections(c: &mut Criterion) {
     group.bench_function("nested_50", |b| {
         b.iter(|| read_string(black_box(&nested_50)))
     });
-    group.bench_function("nested_200", |b| {
-        b.iter(|| read_string(black_box(&nested_200)))
+    group.bench_function("nested_100", |b| {
+        b.iter(|| read_string(black_box(&nested_100)))
     });
     group.finish();
 }

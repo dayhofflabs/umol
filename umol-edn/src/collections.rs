@@ -304,7 +304,7 @@ impl<'a> Deref for EdnSeq<'a> {
 
 impl<'a> From<Vec<Edn<'a>>> for EdnSeq<'a> {
     fn from(v: Vec<Edn<'a>>) -> Self {
-        Self(v.into_iter().collect())
+        Self(v)
     }
 }
 

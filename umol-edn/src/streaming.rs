@@ -191,11 +191,17 @@ impl<'de> EdnStreamDeserializer<'de> {
         if !bytes[self.pos].is_ascii_digit() {
             return Err(EdnError::InvalidNumber { offset: start });
         }
+        let digit_start = self.pos;
         while self.pos < bytes.len() && bytes[self.pos].is_ascii_digit() {
             self.pos += 1;
         }
+        let digit_len = self.pos - digit_start;
+        let has_dot = self.pos < bytes.len() && bytes[self.pos] == b'.';
+        if digit_len > 1 && bytes[digit_start] == b'0' && !has_dot {
+            return Err(EdnError::InvalidNumber { offset: start });
+        }
         // optional .digits
-        if self.pos < bytes.len() && bytes[self.pos] == b'.' {
+        if has_dot {
             self.pos += 1;
             while self.pos < bytes.len() && bytes[self.pos].is_ascii_digit() {
                 self.pos += 1;
@@ -1062,6 +1068,8 @@ impl<'a, 'de> VariantAccess<'de> for &'a mut EdnStreamDeserializer<'de> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use rstest::rstest;
     use serde::Deserialize;
@@ -1182,7 +1190,6 @@ mod tests {
 
     #[test]
     fn test_streaming_hashmap() {
-        use std::collections::HashMap;
         let m: HashMap<String, i64> = streaming_from_str("{:a 1 :b 2}").unwrap();
         assert_eq!(m.len(), 2);
         assert_eq!(m["a"], 1);
