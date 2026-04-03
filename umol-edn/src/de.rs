@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::hash_map::IntoIter as HashMapIntoIter;
+use std::collections::hash_set::IntoIter as HashSetIntoIter;
 use std::marker::PhantomData;
 
 use serde::de::{
@@ -14,7 +15,7 @@ use crate::config::ParseConfig;
 use crate::edn::Edn;
 use crate::error::EdnError;
 use crate::reader::Reader;
-use crate::streaming::EdnStreamDeserializer;
+use crate::streaming::{visit_cow_str, EdnStreamDeserializer};
 
 /// Deserialize a Rust value from an EDN string.
 ///
@@ -98,14 +99,11 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
                 Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
                 Cow::Owned(o) => visitor.visit_string(o),
             },
-            Edn::Keyword(k) => visitor.visit_string(k.as_str().to_string()),
-            Edn::Symbol(s) => visitor.visit_string(s.as_str().to_string()),
+            Edn::Keyword(k) => visit_cow_str(visitor, k.into_cow()),
+            Edn::Symbol(s) => visit_cow_str(visitor, s.into_cow()),
             Edn::List(v) | Edn::Vector(v) => visitor.visit_seq(EdnSeqAccess::new(v)),
             Edn::Map(m) => visitor.visit_map(EdnMapAccess::new(m)),
-            Edn::Set(s) => {
-                let v: EdnSeq<'de> = s.into_iter().collect();
-                visitor.visit_seq(EdnSeqAccess::new(v))
-            }
+            Edn::Set(s) => visitor.visit_seq(EdnSetSeqAccess { iter: s.into_iter() }),
             Edn::Tagged(_tag, inner) => EdnDeserializer(*inner).deserialize_any(visitor),
         }
     }
@@ -293,12 +291,9 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
 
     fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
-            Edn::Keyword(k) => visitor.visit_string(k.as_str().to_string()),
-            Edn::Symbol(s) => visitor.visit_string(s.as_str().to_string()),
-            Edn::Str(s) => match s {
-                Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
-                Cow::Owned(o) => visitor.visit_string(o),
-            },
+            Edn::Keyword(k) => visit_cow_str(visitor, k.into_cow()),
+            Edn::Symbol(s) => visit_cow_str(visitor, s.into_cow()),
+            Edn::Str(s) => visit_cow_str(visitor, s),
             // Non-string keys: convert to string so serde handles them as
             // unknown field names, consistent with the streaming path.
             other => visitor.visit_string(other.to_string()),
@@ -333,6 +328,26 @@ impl<'de> EdnSeqAccess<'de> {
 }
 
 impl<'de> SeqAccess<'de> for EdnSeqAccess<'de> {
+    type Error = EdnError;
+
+    fn next_element_seed<T: DeserializeSeed<'de>>(
+        &mut self,
+        seed: T,
+    ) -> Result<Option<T::Value>, Self::Error> {
+        match self.iter.next() {
+            Some(edn) => seed.deserialize(EdnDeserializer(edn)).map(Some),
+            None => Ok(None),
+        }
+    }
+}
+
+// --- SetSeqAccess ---
+
+struct EdnSetSeqAccess<'de> {
+    iter: HashSetIntoIter<Edn<'de>>,
+}
+
+impl<'de> SeqAccess<'de> for EdnSetSeqAccess<'de> {
     type Error = EdnError;
 
     fn next_element_seed<T: DeserializeSeed<'de>>(

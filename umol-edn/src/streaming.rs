@@ -429,7 +429,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 }
 
-fn visit_cow_str<'de, V: Visitor<'de>>(visitor: V, s: Cow<'de, str>) -> Result<V::Value, EdnError> {
+pub(crate) fn visit_cow_str<'de, V: Visitor<'de>>(visitor: V, s: Cow<'de, str>) -> Result<V::Value, EdnError> {
     match s {
         Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
         Cow::Owned(o) => visitor.visit_string(o),

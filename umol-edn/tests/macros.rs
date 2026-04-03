@@ -116,7 +116,7 @@ fn test_set() {
 fn test_nested() {
     let result = edn!({:items [1 2 3] :meta {:ok true}});
     assert!(result.is_map());
-    assert_eq!(result.get("items").unwrap().as_vector().unwrap().len(), 3);
+    assert_eq!(result.get_keyword("items").unwrap().as_vector().unwrap().len(), 3);
 }
 
 #[test]

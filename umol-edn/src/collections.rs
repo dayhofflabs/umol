@@ -37,11 +37,15 @@ impl<'a> EdnMap<'a> {
         self.0.remove(key)
     }
 
-    pub fn get(&self, key: &Edn<'a>) -> Option<&Edn<'a>> {
+    pub fn get<'k>(&self, key: &Edn<'k>) -> Option<&Edn<'a>> {
+        // Edn's Hash/Eq are content-based and lifetime-independent.
+        // Widen the key reference to 'a so FxHashMap::get accepts it.
+        let key: &Edn<'a> = unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) };
         self.0.get(key)
     }
 
-    pub fn contains_key(&self, key: &Edn<'a>) -> bool {
+    pub fn contains_key<'k>(&self, key: &Edn<'k>) -> bool {
+        let key: &Edn<'a> = unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) };
         self.0.contains_key(key)
     }
 

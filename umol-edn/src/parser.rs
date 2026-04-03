@@ -1060,9 +1060,9 @@ mod tests {
     #[test]
     fn test_edn_get() {
         let val = read_string("{:name \"Alice\" :age 30}").unwrap();
-        assert_eq!(val.get("name").unwrap().as_str(), Some("Alice"));
-        assert_eq!(val.get("age").unwrap().as_i64(), Some(30));
-        assert!(val.get("missing").is_none());
+        assert_eq!(val.get_keyword("name").unwrap().as_str(), Some("Alice"));
+        assert_eq!(val.get_keyword("age").unwrap().as_i64(), Some(30));
+        assert!(val.get_keyword("missing").is_none());
     }
 
     #[test]

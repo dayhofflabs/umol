@@ -47,6 +47,10 @@ impl<'a> Keyword<'a> {
         &self.0
     }
 
+    pub fn into_cow(self) -> Cow<'a, str> {
+        self.0
+    }
+
     pub fn into_owned(self) -> Keyword<'static> {
         Keyword(Cow::Owned(self.0.into_owned()))
     }
@@ -115,6 +119,10 @@ impl<'a> Symbol<'a> {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    pub fn into_cow(self) -> Cow<'a, str> {
+        self.0
     }
 
     pub fn into_owned(self) -> Symbol<'static> {
@@ -468,9 +476,9 @@ impl<'a> Edn<'a> {
     // --- Collection access ---
 
     /// Look up a keyword in a map by its string name.
-    pub fn get(&self, key: &str) -> Option<&Edn<'a>> {
+    pub fn get_keyword(&self, key: &str) -> Option<&Edn<'a>> {
         match self {
-            Edn::Map(m) => m.get(&Edn::Keyword(Keyword::owned(key.to_string()))),
+            Edn::Map(m) => m.get(&Edn::Keyword(Keyword::new(key))),
             _ => None,
         }
     }
