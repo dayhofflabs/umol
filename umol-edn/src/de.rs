@@ -292,7 +292,17 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     }
 
     fn deserialize_identifier<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
-        self.deserialize_str(visitor)
+        match self.0 {
+            Edn::Keyword(k) => visitor.visit_string(k.as_str().to_string()),
+            Edn::Symbol(s) => visitor.visit_string(s.as_str().to_string()),
+            Edn::Str(s) => match s {
+                Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
+                Cow::Owned(o) => visitor.visit_string(o),
+            },
+            // Non-string keys: convert to string so serde handles them as
+            // unknown field names, consistent with the streaming path.
+            other => visitor.visit_string(other.to_string()),
+        }
     }
 
     fn deserialize_bytes<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value, Self::Error> {
@@ -403,17 +413,12 @@ impl<'de> de::MapAccess<'de> for EdnStructMapAccess<'de> {
         &mut self,
         seed: K,
     ) -> Result<Option<K::Value>, Self::Error> {
-        loop {
-            match self.iter.next() {
-                Some((k, v)) => match &k {
-                    Edn::Keyword(_) | Edn::Symbol(_) | Edn::Str(_) => {
-                        self.pending_value = Some(v);
-                        return seed.deserialize(EdnDeserializer(k)).map(Some);
-                    }
-                    _ => continue,
-                },
-                None => return Ok(None),
+        match self.iter.next() {
+            Some((k, v)) => {
+                self.pending_value = Some(v);
+                seed.deserialize(EdnDeserializer(k)).map(Some)
             }
+            None => Ok(None),
         }
     }
 
@@ -672,10 +677,27 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_struct_ignores_non_string_keys() {
+    fn test_deserialize_struct_non_string_key() {
+        // Non-string keys are stringified and treated as unknown fields by serde.
+        let expected = Point { x: 1.0, y: 2.0 };
+
         let val = read_string("{:x 1.0 12 99 :y 2.0}").unwrap();
-        let p: Point = Point::deserialize(EdnDeserializer(val)).unwrap();
-        assert_eq!(p, Point { x: 1.0, y: 2.0 });
+        assert_eq!(Point::deserialize(EdnDeserializer(val)).unwrap(), expected);
+        assert_eq!(from_str::<Point>("{:x 1.0 12 99 :y 2.0}").unwrap(), expected);
+    }
+
+    #[test]
+    fn test_deserialize_struct_non_string_key_denied() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        #[serde(deny_unknown_fields)]
+        struct Strict {
+            x: f64,
+            y: f64,
+        }
+
+        let val = read_string("{:x 1.0 12 99 :y 2.0}").unwrap();
+        assert!(Strict::deserialize(EdnDeserializer(val)).is_err());
+        assert!(from_str::<Strict>("{:x 1.0 12 99 :y 2.0}").is_err());
     }
 
     #[test]
