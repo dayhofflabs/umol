@@ -10,7 +10,7 @@ use serde::Deserialize;
 use umol_edn::config::{DuplicateKeyPolicy, ParseConfig, TagReaders};
 use umol_edn::edn::{Edn, Symbol};
 use umol_edn::error::EdnError;
-use umol_edn::{from_str_with, read_all_with, read_string_with, EdnMap, EdnSet};
+use umol_edn::{from_str, from_str_with, read_all_with, read_string_with, EdnMap, EdnSet};
 
 fn cfg() -> ParseConfig {
     ParseConfig::default()
@@ -1063,4 +1063,29 @@ fn test_error_deep_nesting() {
     let depth = 100;
     let input = "[".repeat(depth) + &"]".repeat(depth);
     assert!(parse(&input).is_ok());
+}
+
+// ============================================================================
+// Regression
+// ============================================================================
+
+/// Regression: fuzzer-found infinite loop in skip_atom with null bytes inside discard+collection.
+#[test]
+fn test_error_deser_null_bytes_no_hang() {
+    let input = "#_(#!V(\0\0\0\0\u{00ff}##";
+    let _ = from_str::<Vec<i64>>(input);
+}
+
+/// Regression: fuzzer-found panic in skip_string with trailing backslash at EOF.
+#[test]
+fn test_error_deser_truncated_string_escape() {
+    let input = "#_\"\\";
+    let _ = from_str::<Vec<i64>>(input);
+}
+
+/// Regression: fuzzer-found panic slicing &str at non-char-boundary in \u escape parsing.
+#[test]
+fn test_error_deser_unicode_escape_multibyte_boundary() {
+    let input = "\"\u{005c}u2\0`\u{07a0}";
+    let _ = from_str::<String>(input);
 }

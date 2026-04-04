@@ -27,7 +27,7 @@
 | [23-valence-states-2025-04-19.md](23-valence-states-2025-04-19.md)                                                               | Completed     | 2026-03-15   |
 | [24-mol-file-parsing-2025-06-16.md](24-mol-file-parsing-2025-06-16.md)                                                           | Completed     | 2026-02-17   |
 | [25-ctab-properties-2025-07-03.md](25-ctab-properties-2025-07-03.md)                                                             | Completed     | 2026-02-17   |
-| [25-geometric-models-2025-06-29.md](25-geometric-models-2025-06-29.md)                                                           | Active        | 2026-02-17   |
+| [25-geometric-models-2025-06-29.md](25-geometric-models-2025-06-29.md)                                                           | Outdated      | 2026-02-17   |
 | [26-ctab-parser-status-2025-07-03.md](26-ctab-parser-status-2025-07-03.md)                                                       | Completed     | 2026-02-17   |
 | [27-ctab-parser-todos-2025-07-03.md](27-ctab-parser-todos-2025-07-03.md)                                                         | Completed     | 2026-02-17   |
 | [28-intermediate-representation-2025-08-18.md](28-intermediate-representation-2025-08-18.md)                                     | Active        | 2026-02-17   |
@@ -70,4 +70,7 @@
 | [65-umol-error-handling-2026-03-31.md](65-umol-error-handling-2026-03-31.md)                                                     | Completed     | 2026-03-31   |
 | [66-edn-spec-conformance-2026-04-01.md](66-edn-spec-conformance-2026-04-01.md)                                                   | Completed     | 2026-04-01   |
 | [67-atomref-serialization-roundtrip-2026-04-02.md](67-atomref-serialization-roundtrip-2026-04-02.md)                             | Active        | 2026-04-02   |
-| [68-umol-edn-code-review.md](68-umol-edn-code-review.md)                                                                         | Complete      | 2026-04-03   |
+| [68-umol-edn-code-review-2026-04-02.md](68-umol-edn-code-review-2026-04-02.md)                                                   | Completed     | 2026-04-03   |
+| [69-umol-geometric-design-2026-04-04.md](69-umol-geometric-design-2026-04-04.md)                                                 | Active        | 2026-04-04   |
+| [70-bond-perception-2026-04-04.md](70--bond-perception-2026-04-04.md)                                                            | Completed     | 2026-04-04   |
+| [71-distance-geometry-plan-2026-04-04](71-distance-geometry-plan-2026-04-04)                                                     | Active        | 2026-04-04   |

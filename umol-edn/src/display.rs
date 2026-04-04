@@ -25,7 +25,9 @@ impl fmt::Display for Edn<'_> {
             Edn::Vector(items) => format_seq(f, "[", "]", items),
             Edn::Map(m) => {
                 write!(f, "{{")?;
-                for (i, (k, v)) in m.iter().enumerate() {
+                let mut entries: Vec<_> = m.iter().collect();
+                entries.sort_by_key(|(k, _)| *k);
+                for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }
@@ -35,7 +37,9 @@ impl fmt::Display for Edn<'_> {
             }
             Edn::Set(s) => {
                 write!(f, "#{{")?;
-                for (i, v) in s.iter().enumerate() {
+                let mut elems: Vec<_> = s.iter().collect();
+                elems.sort();
+                for (i, v) in elems.iter().enumerate() {
                     if i > 0 {
                         write!(f, " ")?;
                     }

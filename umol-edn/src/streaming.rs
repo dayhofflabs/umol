@@ -319,7 +319,8 @@ impl<'de> EdnStreamDeserializer<'de> {
                             if self.pos + 4 > bytes.len() {
                                 return Err(EdnError::InvalidEscape { offset: esc_offset });
                             }
-                            let hex = &self.input[self.pos..self.pos + 4];
+                            let hex = from_utf8(&bytes[self.pos..self.pos + 4])
+                                .map_err(|_| EdnError::InvalidEscape { offset: esc_offset })?;
                             let cp = u32::from_str_radix(hex, 16)
                                 .map_err(|_| EdnError::InvalidEscape { offset: esc_offset })?;
                             let ch = char::from_u32(cp)
@@ -422,11 +423,13 @@ impl<'de> EdnStreamDeserializer<'de> {
                     }
                     // Skip escape: backslash + escaped content
                     self.pos += 1; // skip backslash
-                    if self.pos < bytes.len() && bytes[self.pos] == b'u' {
+                    if self.pos >= bytes.len() {
+                        return Err(EdnError::UnexpectedEof { offset: self.pos });
+                    }
+                    if bytes[self.pos] == b'u' {
                         // \uXXXX — skip u + 4 hex digits
-                        self.pos += 5;
+                        self.pos = (self.pos + 5).min(bytes.len());
                     } else {
-                        // \n, \t, \r, \\, \" — single char
                         self.pos += 1;
                     }
                 }
@@ -439,8 +442,15 @@ impl<'de> EdnStreamDeserializer<'de> {
         if self.pos >= bytes.len() {
             return Err(EdnError::UnexpectedEof { offset: self.pos });
         }
+        let start = self.pos;
         while self.pos < bytes.len() && is_symbol_char(bytes[self.pos] as char) {
             self.pos += 1;
+        }
+        if self.pos == start {
+            return Err(EdnError::UnexpectedToken {
+                offset: self.pos,
+                found: bytes[self.pos] as char,
+            });
         }
         Ok(())
     }

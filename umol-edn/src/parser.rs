@@ -435,12 +435,12 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         let bytes = s.as_bytes();
 
         // Fast path: single character followed by non-symbol-char or EOF.
-        if let Some(&first) = bytes.first() {
+        if let Some(&_first) = bytes.first() {
             let second = bytes.get(1).copied();
             let single_char = second.is_none()
                 || !is_symbol_char(second.unwrap() as char)
                 || is_ws_byte(second.unwrap());
-            if single_char && first != b'u' {
+            if single_char {
                 let c = s.chars().next().unwrap();
                 if c.is_whitespace() {
                     return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
@@ -452,7 +452,7 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
             return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: char_offset }));
         }
 
-        // Unicode escape \uNNNN
+        // Unicode escape \uNNNN — only reached when \u is followed by symbol chars.
         if bytes[0] == b'u' {
             let _ = 'u'.parse_next(input)?;
             let hex: &str = take_while(4..=4, |c: char| c.is_ascii_hexdigit())
