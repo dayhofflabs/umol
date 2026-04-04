@@ -17,21 +17,21 @@ pub mod ser;
 #[cfg(feature = "serde")]
 pub(crate) mod streaming;
 
+#[cfg(feature = "bignum")]
+pub use bigdecimal::BigDecimal;
+pub use collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
 pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 #[cfg(feature = "serde")]
 pub use de::{from_str, from_str_with, from_value, EdnDeserializer, StreamDeserializer};
-pub use collections::{EdnMap, EdnSeq, EdnSet};
-pub use edn::{Edn, Keyword, Symbol};
 #[cfg(feature = "bignum")]
 pub use edn::EdnBigDecimal;
-#[cfg(feature = "bignum")]
-pub use num_bigint::BigInt;
-#[cfg(feature = "bignum")]
-pub use bigdecimal::BigDecimal;
+pub use edn::{Edn, Keyword, Symbol};
 pub use error::EdnError;
 pub use formatter::EdnFormatter;
 #[cfg(feature = "serde")]
 pub use formatter::{to_string_pretty, to_string_pretty_with};
+#[cfg(feature = "bignum")]
+pub use num_bigint::BigInt;
 pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
 #[cfg(feature = "serde")]
 pub use ser::to_string;

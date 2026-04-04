@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::{fmt, iter};
 
-use crate::collections::{EdnMap, EdnSeq, EdnSet};
+use crate::collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
 
 #[cfg(feature = "bignum")]
 use bigdecimal::BigDecimal;
@@ -487,7 +487,7 @@ impl<'a> Edn<'a> {
     /// Look up a keyword in a map by its string name.
     pub fn get_keyword(&self, key: &str) -> Option<&Edn<'a>> {
         match self {
-            Edn::Map(m) => m.get(&Edn::Keyword(Keyword::new(key))),
+            Edn::Map(m) => m.get_ref(EdnKeyRef::keyword(key)),
             _ => None,
         }
     }

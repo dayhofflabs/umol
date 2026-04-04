@@ -476,3 +476,152 @@ Adversarial review focused on correctness, performance, unnecessary complexity, 
 | 3.4 | `TagReaders` uses linear search | Low | `Vec<(Box<str>, TagFn)>` with `iter().find()`. O(n) per lookup. Only 2 built-in tags; becomes a concern only with many custom readers. |
 | 4.1 | `Edn::iter()` silently returns empty for non-collections | Low | Convenience method. Returning `Option<Iterator>` would force `unwrap` at every call site. Current behavior is consistent with Clojure's `seq` on non-sequentials returning nil. `edn.rs:487-493` |
 | 4.4 | No `FromStr` impl for `Edn` | Low | Resolved: `impl FromStr for Edn<'static>` delegates to `read_string` + `into_owned`. `edn.rs:272-278` |
+
+## Appendix: Targeted Safe Redesign for Map/Set Key Lookup
+
+Goal: remove lifetime-cast `unsafe` from `EdnMap` lookup while preserving practical performance and keeping map/set behavior symmetric.
+
+Constraints from maintainer:
+
+- No backward-compat requirement.
+- All acceptable EDN key kinds should be treated uniformly.
+- Map/set lookup APIs should remain aligned.
+- MSRV: 1.65.
+- Acceptable performance target: no more than 10% regression for maps with fewer than 1000 elements.
+
+### Proposed API surface
+
+#### New borrowed key view
+
+Introduce an internal/public borrowed key representation:
+
+```rust
+pub enum EdnKeyRef<'k> {
+    Nil,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Char(char),
+    Str(&'k str),
+    Keyword(&'k str),
+    Symbol(&'k str),
+    List(&'k [Edn<'k>]),
+    Vector(&'k [Edn<'k>]),
+    Map(&'k EdnMap<'k>),
+    Set(&'k EdnSet<'k>),
+    Tagged(&'k str, &'k Edn<'k>),
+    #[cfg(feature = "bignum")]
+    BigInt(&'k num_bigint::BigInt),
+    #[cfg(feature = "bignum")]
+    BigDecimal(&'k crate::edn::EdnBigDecimal),
+}
+```
+
+Conversions:
+
+```rust
+impl<'k> From<&'k Edn<'k>> for EdnKeyRef<'k> { ... }
+```
+
+Convenience constructors:
+
+```rust
+impl<'k> EdnKeyRef<'k> {
+    pub fn keyword(s: &'k str) -> Self { ... }
+    pub fn symbol(s: &'k str) -> Self { ... }
+    pub fn str_(s: &'k str) -> Self { ... }
+}
+```
+
+#### Map/set lookup methods
+
+Replace unsafe-generic methods with explicit safe forms:
+
+```rust
+impl<'a> EdnMap<'a> {
+    pub fn get_exact(&self, key: &Edn<'a>) -> Option<&Edn<'a>>;
+    pub fn contains_exact(&self, key: &Edn<'a>) -> bool;
+
+    pub fn get_ref(&self, key: EdnKeyRef<'_>) -> Option<&Edn<'a>>;
+    pub fn contains_ref(&self, key: EdnKeyRef<'_>) -> bool;
+}
+
+impl<'a> EdnSet<'a> {
+    pub fn contains_exact(&self, value: &Edn<'a>) -> bool;
+    pub fn contains_ref(&self, value: EdnKeyRef<'_>) -> bool;
+}
+```
+
+Keep existing ergonomic helpers in `Edn`:
+
+- `get_keyword` should call `get_ref(EdnKeyRef::keyword(...))`.
+- Add `contains_keyword` analog if useful.
+
+### Implementation strategy (safe only)
+
+1. Implement shared key semantics helpers:
+
+   - `fn key_ref_eq_edn(lhs: EdnKeyRef<'_>, rhs: &Edn<'_>) -> bool`
+   - `fn key_ref_hash<H: Hasher>(k: EdnKeyRef<'_>, state: &mut H)`
+
+   These must mirror existing `Edn` `Eq`/`Hash` semantics exactly.
+
+2. Implement `get_ref`/`contains_ref` in one of two ways:
+
+   - Preferred: hash-table borrowed lookup API if available on current hasher map.
+   - Fallback: iterate entries and use `key_ref_eq_edn`.
+
+3. Remove all pointer-cast unsafe code from map contains/get.
+
+4. Mirror behavior in set lookup via same helpers.
+
+### Rollout steps
+
+1. Add `EdnKeyRef` and conversion helpers.
+2. Add new `*_exact` + `*_ref` methods to map and set.
+3. Move all internal call sites (`get_keyword`, parser tests, etc.) to `*_ref`.
+4. Remove unsafe methods.
+5. Run full tests under:
+   - default features
+   - `--features bignum`
+6. Add benchmarks and enforce acceptance gate.
+
+### Benchmark plan and acceptance gate
+
+Use Criterion with map sizes: `8, 32, 128, 512, 1024`.
+
+Scenarios:
+
+- keyword-heavy lookups
+- mixed scalar keys
+- mixed composite keys (vector/map/tagged keys)
+- hit/miss mixes: `80/20` and `20/80`
+
+Compare:
+
+- baseline (pre-redesign unsafe version)
+- redesign safe version
+
+Acceptance:
+
+- For `n < 1000`, regression must be <= 10% in throughput/latency on representative workloads.
+
+### Test additions required
+
+1. Cross-lifetime lookup parity:
+   - value inserted with one lifetime, queried via borrowed temporary key representation.
+2. Map/set symmetry:
+   - for each key kind, `contains_ref` returns same answer as `*_exact`.
+3. Eq/hash parity:
+   - `EdnKeyRef` compare/hash behavior consistent with owning `Edn`.
+4. Edge cases:
+   - NaN payload behavior
+   - `+0.0` vs `-0.0`
+   - tagged keys
+   - bignum keys (feature-gated)
+
+### Non-goals (this redesign)
+
+- No global string interning.
+- No change to parser architecture.
+- No backward-compat shims unless needed for migration convenience.

@@ -1,16 +1,166 @@
 //! EDN collection newtypes: EdnMap, EdnSet, EdnSeq.
 
 use std::cmp::Ordering;
-use std::collections::hash_map::{IntoIter as HashMapIntoIter, Iter as HashMapIter};
-use std::collections::hash_set::{IntoIter as HashSetIntoIter, Iter as HashSetIter};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::slice::Iter as SliceIter;
 use std::vec::IntoIter as VecIntoIter;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use hashbrown::hash_map::{IntoIter as HashMapIntoIter, Iter as HashMapIter};
+use hashbrown::hash_set::{IntoIter as HashSetIntoIter, Iter as HashSetIter};
+use hashbrown::{HashMap, HashSet};
 
 use crate::edn::Edn;
+
+// ---------------------------------------------------------------------------
+// EdnKeyRef — borrowed key view for cross-lifetime lookups
+// ---------------------------------------------------------------------------
+
+/// Borrowed key representation for looking up values in [`EdnMap`] and [`EdnSet`]
+/// without constructing an owned [`Edn`] or matching its lifetime parameter.
+pub enum EdnKeyRef<'k> {
+    Nil,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Char(char),
+    Str(&'k str),
+    Keyword(&'k str),
+    Symbol(&'k str),
+    List(&'k [Edn<'k>]),
+    Vector(&'k [Edn<'k>]),
+    Map(&'k EdnMap<'k>),
+    Set(&'k EdnSet<'k>),
+    Tagged(&'k str, &'k Edn<'k>),
+    #[cfg(feature = "bignum")]
+    BigInt(&'k num_bigint::BigInt),
+    #[cfg(feature = "bignum")]
+    BigDecimal(&'k crate::edn::EdnBigDecimal),
+}
+
+impl<'k> EdnKeyRef<'k> {
+    pub fn keyword(s: &'k str) -> Self {
+        Self::Keyword(s)
+    }
+
+    pub fn symbol(s: &'k str) -> Self {
+        Self::Symbol(s)
+    }
+
+    pub fn str_(s: &'k str) -> Self {
+        Self::Str(s)
+    }
+}
+
+impl<'k> From<&'k Edn<'k>> for EdnKeyRef<'k> {
+    fn from(edn: &'k Edn<'k>) -> Self {
+        match edn {
+            Edn::Nil => Self::Nil,
+            Edn::Bool(b) => Self::Bool(*b),
+            Edn::Int(n) => Self::Int(*n),
+            Edn::Float(f) => Self::Float(*f),
+            Edn::Char(c) => Self::Char(*c),
+            Edn::Str(s) => Self::Str(s),
+            Edn::Keyword(k) => Self::Keyword(k.as_str()),
+            Edn::Symbol(s) => Self::Symbol(s.as_str()),
+            Edn::List(v) => Self::List(v),
+            Edn::Vector(v) => Self::Vector(v),
+            Edn::Map(m) => Self::Map(m),
+            Edn::Set(s) => Self::Set(s),
+            Edn::Tagged(tag, inner) => Self::Tagged(tag, inner),
+            #[cfg(feature = "bignum")]
+            Edn::BigInt(n) => Self::BigInt(n),
+            #[cfg(feature = "bignum")]
+            Edn::BigDecimal(d) => Self::BigDecimal(d),
+        }
+    }
+}
+
+/// Discriminant byte, must match `variant_ord` in `edn.rs` exactly.
+fn key_ref_variant_ord(k: &EdnKeyRef<'_>) -> u8 {
+    match k {
+        EdnKeyRef::Nil => 0,
+        EdnKeyRef::Bool(_) => 1,
+        EdnKeyRef::Int(_) => 2,
+        #[cfg(feature = "bignum")]
+        EdnKeyRef::BigInt(_) => 3,
+        EdnKeyRef::Float(_) => 4,
+        #[cfg(feature = "bignum")]
+        EdnKeyRef::BigDecimal(_) => 5,
+        EdnKeyRef::Char(_) => 6,
+        EdnKeyRef::Str(_) => 7,
+        EdnKeyRef::Keyword(_) => 8,
+        EdnKeyRef::Symbol(_) => 9,
+        EdnKeyRef::List(_) => 10,
+        EdnKeyRef::Vector(_) => 11,
+        EdnKeyRef::Map(_) => 12,
+        EdnKeyRef::Set(_) => 13,
+        EdnKeyRef::Tagged(_, _) => 14,
+    }
+}
+
+impl Hash for EdnKeyRef<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        key_ref_variant_ord(self).hash(state);
+        match self {
+            Self::Nil => {}
+            Self::Bool(b) => b.hash(state),
+            Self::Int(n) => n.hash(state),
+            #[cfg(feature = "bignum")]
+            Self::BigInt(n) => n.hash(state),
+            Self::Float(f) => f.to_bits().hash(state),
+            #[cfg(feature = "bignum")]
+            Self::BigDecimal(d) => d.hash(state),
+            Self::Char(c) => c.hash(state),
+            Self::Str(s) => s.hash(state),
+            Self::Keyword(s) => s.hash(state),
+            Self::Symbol(s) => s.hash(state),
+            Self::List(v) => {
+                v.len().hash(state);
+                for item in *v {
+                    item.hash(state);
+                }
+            }
+            Self::Vector(v) => {
+                v.len().hash(state);
+                for item in *v {
+                    item.hash(state);
+                }
+            }
+            Self::Map(m) => m.hash(state),
+            Self::Set(s) => s.hash(state),
+            Self::Tagged(tag, inner) => {
+                tag.hash(state);
+                (*inner).hash(state);
+            }
+        }
+    }
+}
+
+impl hashbrown::Equivalent<Edn<'_>> for EdnKeyRef<'_> {
+    fn equivalent(&self, other: &Edn<'_>) -> bool {
+        match (self, other) {
+            (Self::Nil, Edn::Nil) => true,
+            (Self::Bool(a), Edn::Bool(b)) => a == b,
+            (Self::Int(a), Edn::Int(b)) => a == b,
+            #[cfg(feature = "bignum")]
+            (Self::BigInt(a), Edn::BigInt(b)) => *a == b,
+            (Self::Float(a), Edn::Float(b)) => a.to_bits() == b.to_bits(),
+            #[cfg(feature = "bignum")]
+            (Self::BigDecimal(a), Edn::BigDecimal(b)) => *a == b,
+            (Self::Char(a), Edn::Char(b)) => a == b,
+            (Self::Str(a), Edn::Str(b)) => *a == &**b,
+            (Self::Keyword(a), Edn::Keyword(b)) => *a == b.as_str(),
+            (Self::Symbol(a), Edn::Symbol(b)) => *a == b.as_str(),
+            (Self::List(a), Edn::List(b)) => *a == &**b,
+            (Self::Vector(a), Edn::Vector(b)) => *a == &**b,
+            (Self::Map(a), Edn::Map(b)) => *a == b,
+            (Self::Set(a), Edn::Set(b)) => *a == b,
+            (Self::Tagged(ta, va), Edn::Tagged(tb, vb)) => *ta == &**tb && *va == &**vb,
+            _ => false,
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // EdnMap
@@ -18,15 +168,15 @@ use crate::edn::Edn;
 
 /// An unordered map of EDN values.
 #[derive(Clone, Debug)]
-pub struct EdnMap<'a>(FxHashMap<Edn<'a>, Edn<'a>>);
+pub struct EdnMap<'a>(HashMap<Edn<'a>, Edn<'a>>);
 
 impl<'a> EdnMap<'a> {
     pub fn new() -> Self {
-        Self(FxHashMap::default())
+        Self(HashMap::new())
     }
 
     pub fn with_capacity(cap: usize) -> Self {
-        Self(FxHashMap::with_capacity_and_hasher(cap, Default::default()))
+        Self(HashMap::with_capacity(cap))
     }
 
     pub fn insert(&mut self, key: Edn<'a>, value: Edn<'a>) -> Option<Edn<'a>> {
@@ -37,19 +187,20 @@ impl<'a> EdnMap<'a> {
         self.0.remove(key)
     }
 
-    pub fn get<'k>(&self, key: &Edn<'k>) -> Option<&Edn<'a>> {
-        // SAFETY: Edn's Hash and Eq implementations are purely content-based and
-        // never inspect the lifetime parameter 'a. The Cow<'a, str> fields inside
-        // Edn compare/hash by string content regardless of whether they borrow or
-        // own. This cast is sound as long as Hash/Eq remain lifetime-independent.
-        let key: &Edn<'a> = unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) };
+    pub fn get(&self, key: &Edn<'a>) -> Option<&Edn<'a>> {
         self.0.get(key)
     }
 
-    pub fn contains_key<'k>(&self, key: &Edn<'k>) -> bool {
-        // SAFETY: same invariant as `get` — Hash/Eq are lifetime-independent.
-        let key: &Edn<'a> = unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) };
+    pub fn contains_key(&self, key: &Edn<'a>) -> bool {
         self.0.contains_key(key)
+    }
+
+    pub fn get_ref(&self, key: EdnKeyRef<'_>) -> Option<&Edn<'a>> {
+        self.0.get(&key)
+    }
+
+    pub fn contains_ref(&self, key: EdnKeyRef<'_>) -> bool {
+        self.0.contains_key(&key)
     }
 
     pub fn len(&self) -> usize {
@@ -160,11 +311,11 @@ impl Hash for EdnMap<'_> {
 
 /// An unordered set of EDN values.
 #[derive(Clone, Debug)]
-pub struct EdnSet<'a>(FxHashSet<Edn<'a>>);
+pub struct EdnSet<'a>(HashSet<Edn<'a>>);
 
 impl<'a> EdnSet<'a> {
     pub fn new() -> Self {
-        Self(FxHashSet::default())
+        Self(HashSet::new())
     }
 
     pub fn insert(&mut self, value: Edn<'a>) -> bool {
@@ -173,6 +324,10 @@ impl<'a> EdnSet<'a> {
 
     pub fn contains(&self, value: &Edn<'a>) -> bool {
         self.0.contains(value)
+    }
+
+    pub fn contains_ref(&self, value: EdnKeyRef<'_>) -> bool {
+        self.0.contains(&value)
     }
 
     pub fn len(&self) -> usize {
@@ -363,5 +518,189 @@ impl Hash for EdnSeq<'_> {
         for item in &self.0 {
             item.hash(state);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::edn::{Keyword, Symbol};
+    use hashbrown::Equivalent;
+    use rstest::rstest;
+    use std::borrow::Cow;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+
+    fn hash_edn(v: &Edn<'_>) -> u64 {
+        let mut h = DefaultHasher::new();
+        v.hash(&mut h);
+        h.finish()
+    }
+
+    fn hash_key_ref(v: &EdnKeyRef<'_>) -> u64 {
+        let mut h = DefaultHasher::new();
+        v.hash(&mut h);
+        h.finish()
+    }
+
+    // -- Eq/Hash parity: EdnKeyRef must produce identical hashes and match Edn --
+
+    #[rstest]
+    #[case::nil(Edn::Nil)]
+    #[case::bool_true(Edn::Bool(true))]
+    #[case::bool_false(Edn::Bool(false))]
+    #[case::int(Edn::Int(77))]
+    #[case::int_neg(Edn::Int(-1))]
+    #[case::float(Edn::Float(3.14))]
+    #[case::float_zero(Edn::Float(0.0))]
+    #[case::float_neg_zero(Edn::Float(-0.0))]
+    #[case::char(Edn::Char('x'))]
+    #[case::str(Edn::Str(Cow::Borrowed("hello")))]
+    #[case::keyword(Edn::Keyword(Keyword::new("foo")))]
+    #[case::symbol(Edn::Symbol(Symbol::new("bar")))]
+    #[case::list(Edn::List(EdnSeq::from(vec![Edn::Int(1), Edn::Int(2)])))]
+    #[case::vector(Edn::Vector(EdnSeq::from(vec![Edn::Bool(true)])))]
+    #[case::tagged(Edn::Tagged(Cow::Borrowed("my/tag"), Box::new(Edn::Int(5))))]
+    fn test_edn_key_ref_hash_parity(#[case] edn: Edn<'_>) {
+        let key_ref = EdnKeyRef::from(&edn);
+        assert_eq!(hash_edn(&edn), hash_key_ref(&key_ref));
+        assert!(key_ref.equivalent(&edn));
+    }
+
+    #[test]
+    fn test_edn_key_ref_hash_parity_map() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("a"), Edn::Int(1));
+        let edn = Edn::Map(m);
+        let key_ref = EdnKeyRef::from(&edn);
+        assert_eq!(hash_edn(&edn), hash_key_ref(&key_ref));
+        assert!(key_ref.equivalent(&edn));
+    }
+
+    #[test]
+    fn test_edn_key_ref_hash_parity_set() {
+        let mut s = EdnSet::new();
+        s.insert(Edn::Int(1));
+        s.insert(Edn::Int(2));
+        let edn = Edn::Set(s);
+        let key_ref = EdnKeyRef::from(&edn);
+        assert_eq!(hash_edn(&edn), hash_key_ref(&key_ref));
+        assert!(key_ref.equivalent(&edn));
+    }
+
+    // -- Float edge cases --
+
+    #[test]
+    fn test_edn_key_ref_nan_payload() {
+        let nan1 = Edn::Float(f64::from_bits(0x7FF8_0000_0000_0001));
+        let nan2 = Edn::Float(f64::from_bits(0x7FF8_0000_0000_0002));
+        let ref1 = EdnKeyRef::from(&nan1);
+        let ref2 = EdnKeyRef::from(&nan2);
+        assert!(ref1.equivalent(&nan1));
+        assert!(!ref1.equivalent(&nan2));
+        assert_ne!(hash_key_ref(&ref1), hash_key_ref(&ref2));
+    }
+
+    #[test]
+    fn test_edn_key_ref_pos_neg_zero() {
+        let pos = Edn::Float(0.0);
+        let neg = Edn::Float(-0.0);
+        let ref_pos = EdnKeyRef::from(&pos);
+        let ref_neg = EdnKeyRef::from(&neg);
+        assert!(ref_pos.equivalent(&pos));
+        assert!(!ref_pos.equivalent(&neg));
+        assert_ne!(hash_key_ref(&ref_pos), hash_key_ref(&ref_neg));
+    }
+
+    // -- Cross-lifetime lookup --
+
+    #[test]
+    fn test_edn_map_get_ref_cross_lifetime() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("name"), Edn::Str(Cow::Owned("Alice".into())));
+        m.insert(Edn::Int(10), Edn::Bool(true));
+
+        {
+            let key = String::from("name");
+            assert_eq!(
+                m.get_ref(EdnKeyRef::keyword(&key)),
+                Some(&Edn::Str(Cow::Owned("Alice".into())))
+            );
+        }
+        assert_eq!(m.get_ref(EdnKeyRef::Int(10)), Some(&Edn::Bool(true)));
+        assert!(m.get_ref(EdnKeyRef::keyword("missing")).is_none());
+    }
+
+    #[test]
+    fn test_edn_set_contains_ref_cross_lifetime() {
+        let mut s = EdnSet::new();
+        s.insert(Edn::keyword("x"));
+        s.insert(Edn::Int(7));
+
+        {
+            let key = String::from("x");
+            assert!(s.contains_ref(EdnKeyRef::keyword(&key)));
+        }
+        assert!(s.contains_ref(EdnKeyRef::Int(7)));
+        assert!(!s.contains_ref(EdnKeyRef::keyword("y")));
+    }
+
+    // -- Map/set symmetry: get/contains and get_ref/contains_ref agree --
+
+    #[rstest]
+    #[case::nil(Edn::Nil)]
+    #[case::bool(Edn::Bool(false))]
+    #[case::int(Edn::Int(99))]
+    #[case::float(Edn::Float(2.718))]
+    #[case::char(Edn::Char('z'))]
+    #[case::str(Edn::Str(Cow::Borrowed("test")))]
+    #[case::keyword(Edn::Keyword(Keyword::new("k")))]
+    #[case::symbol(Edn::Symbol(Symbol::new("s")))]
+    fn test_edn_map_get_ref_agrees_with_get(#[case] key: Edn<'static>) {
+        let mut m = EdnMap::new();
+        m.insert(key.clone(), Edn::Int(1));
+
+        let key_ref = EdnKeyRef::from(&key);
+        assert_eq!(m.get(&key), m.get_ref(key_ref));
+    }
+
+    #[rstest]
+    #[case::nil(Edn::Nil)]
+    #[case::bool(Edn::Bool(true))]
+    #[case::int(Edn::Int(0))]
+    #[case::float(Edn::Float(1.0))]
+    #[case::keyword(Edn::Keyword(Keyword::new("k")))]
+    fn test_edn_set_contains_ref_agrees_with_contains(#[case] val: Edn<'static>) {
+        let mut s = EdnSet::new();
+        s.insert(val.clone());
+
+        let key_ref = EdnKeyRef::from(&val);
+        assert_eq!(s.contains(&val), s.contains_ref(key_ref));
+    }
+
+    // -- Convenience constructors --
+
+    #[test]
+    fn test_edn_key_ref_constructors() {
+        let m = {
+            let mut m = EdnMap::new();
+            m.insert(Edn::keyword("a"), Edn::Int(1));
+            m.insert(Edn::symbol("b"), Edn::Int(2));
+            m.insert(Edn::string("c"), Edn::Int(3));
+            m
+        };
+
+        assert_eq!(m.get_ref(EdnKeyRef::keyword("a")), Some(&Edn::Int(1)));
+        assert_eq!(m.get_ref(EdnKeyRef::symbol("b")), Some(&Edn::Int(2)));
+        assert_eq!(m.get_ref(EdnKeyRef::str_("c")), Some(&Edn::Int(3)));
+    }
+
+    // -- Non-equivalent variants return false --
+
+    #[test]
+    fn test_edn_key_ref_cross_variant_not_equivalent() {
+        let int = Edn::Int(1);
+        let float = Edn::Float(1.0);
+        let ref_int = EdnKeyRef::from(&int);
+        assert!(!ref_int.equivalent(&float));
     }
 }

@@ -2,7 +2,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use serde::Deserialize;
-use umol_edn::{from_str, read_all, read_string, EdnFormatter};
+use umol_edn::{from_str, read_all, read_string, Edn, EdnFormatter, EdnKeyRef, EdnMap};
 
 const MOLECULE_SMALL: &str = r#"{:atoms [C O] :bonds [["0" "1" :single]]}"#;
 
@@ -190,6 +190,76 @@ fn bench_serde(c: &mut Criterion) {
     group.finish();
 }
 
+fn make_keyword_map(n: usize) -> (EdnMap<'static>, Vec<String>) {
+    let mut m = EdnMap::with_capacity(n);
+    let mut keys = Vec::with_capacity(n);
+    for i in 0..n {
+        let k = format!("key-{i}");
+        m.insert(Edn::keyword(&k).into_owned(), Edn::Int(i as i64));
+        keys.push(k);
+    }
+    (m, keys)
+}
+
+fn make_mixed_map(n: usize) -> (EdnMap<'static>, Vec<Edn<'static>>) {
+    let mut m = EdnMap::with_capacity(n);
+    let mut keys = Vec::with_capacity(n);
+    for i in 0..n {
+        let key = match i % 3 {
+            0 => Edn::keyword(&format!("k-{i}")).into_owned(),
+            1 => Edn::Int(i as i64),
+            _ => Edn::Str(format!("s-{i}").into()),
+        };
+        m.insert(key.clone(), Edn::Int(i as i64));
+        keys.push(key);
+    }
+    (m, keys)
+}
+
+fn bench_map_lookup(c: &mut Criterion) {
+    let mut group = c.benchmark_group("map_lookup");
+
+    for &size in &[8, 32, 128, 512, 1024] {
+        let (kw_map, kw_keys) = make_keyword_map(size);
+        let (mixed_map, mixed_keys) = make_mixed_map(size);
+
+        group.bench_function(&format!("get_keyword_{size}"), |b| {
+            b.iter(|| {
+                for k in &kw_keys {
+                    black_box(kw_map.get_ref(EdnKeyRef::keyword(k)));
+                }
+            })
+        });
+
+        group.bench_function(&format!("get_ref_mixed_{size}"), |b| {
+            b.iter(|| {
+                for k in &mixed_keys {
+                    black_box(mixed_map.get_ref(EdnKeyRef::from(k)));
+                }
+            })
+        });
+
+        group.bench_function(&format!("get_exact_mixed_{size}"), |b| {
+            b.iter(|| {
+                for k in &mixed_keys {
+                    black_box(mixed_map.get(k));
+                }
+            })
+        });
+
+        let miss_keys: Vec<String> = (0..size).map(|i| format!("miss-{i}")).collect();
+        group.bench_function(&format!("get_ref_miss_{size}"), |b| {
+            b.iter(|| {
+                for k in &miss_keys {
+                    black_box(kw_map.get_ref(EdnKeyRef::keyword(k)));
+                }
+            })
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parse_atoms,
@@ -198,5 +268,6 @@ criterion_group!(
     bench_roundtrip,
     bench_display,
     bench_serde,
+    bench_map_lookup,
 );
 criterion_main!(benches);

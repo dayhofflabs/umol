@@ -1,8 +1,8 @@
 //! Serde `Deserializer` for `Edn` values.
 
 use std::borrow::Cow;
-use std::collections::hash_map::IntoIter as HashMapIntoIter;
-use std::collections::hash_set::IntoIter as HashSetIntoIter;
+use hashbrown::hash_map::IntoIter as HashMapIntoIter;
+use hashbrown::hash_set::IntoIter as HashSetIntoIter;
 use std::marker::PhantomData;
 
 use serde::de::{

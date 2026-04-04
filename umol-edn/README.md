@@ -21,7 +21,7 @@ With the `macros` feature, construct `Edn` values using EDN syntax directly:
 use umol_edn::edn;
 
 let val = edn!({:name "Alice" :age 30});
-assert_eq!(val.get("name").unwrap().as_str(), Some("Alice"));
+assert_eq!(val.get_keyword("name").unwrap().as_str(), Some("Alice"));
 
 let v = edn!([1 2 3 :keyword ns/sym #my/tag "value"]);
 ```
@@ -40,7 +40,7 @@ Parse EDN into an `Edn` value tree, then inspect or traverse it:
 use umol_edn::{read_string, Edn};
 
 let val = read_string("{:name \"Alice\" :age 30}").unwrap();
-assert_eq!(val.get("name").unwrap().as_str(), Some("Alice"));
+assert_eq!(val.get_keyword("name").unwrap().as_str(), Some("Alice"));
 ```
 
 ### Streaming serde deserialization
