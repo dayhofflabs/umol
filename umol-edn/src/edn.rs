@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::{fmt, iter};
 
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
@@ -265,6 +266,14 @@ pub enum Edn<'a> {
 impl Default for Edn<'_> {
     fn default() -> Self {
         Edn::Nil
+    }
+}
+
+impl FromStr for Edn<'static> {
+    type Err = crate::error::EdnError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        crate::read_string(s).map(Edn::into_owned)
     }
 }
 

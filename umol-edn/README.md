@@ -78,7 +78,7 @@ let edn = to_string_pretty(&vec![1, 2, 3]).unwrap(); // formatted with newlines
 | `chrono` | `#inst` tag reader producing `chrono::DateTime<Utc>`      |
 | `uuid`   | `#uuid` tag reader producing `uuid::Uuid`                 |
 | `macros` | Proc-macro `edn!` with bare EDN syntax                    |
-| `bignum` | `N`/`M` suffix for BigInt/BigDecimal (not yet implemented)|
+| `bignum` | `N`/`M` suffix for BigInt/BigDecimal                      |
 
 ## License
 

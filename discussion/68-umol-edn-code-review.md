@@ -47,17 +47,17 @@ Status legend:
 | P0-1 Float `Eq`/`Hash` mismatch | `Resolved` | `Edn` now distinguishes NaN payloads consistently in `cmp` + `hash`, with dedicated tests in `edn.rs`. |
 | P0-2 Tagged unit payload dropped | `Resolved` | `unit_variant` now requires `nil` payload and errors otherwise; tests cover error cases. |
 | P0-3 `bignum` claimed but unimplemented | `Resolved` | `bignum` paths exist in parser/streaming and pass under `--features bignum`. |
-| P1-1 Built-in tag behavior mismatch | `Partially resolved` | Tree parser now permits bare built-ins as `Tagged`, but streaming path still rejects unqualified built-ins unless a reader is registered. |
+| P1-1 Built-in tag behavior mismatch | `Resolved` | Streaming `skip_tag_if_present` now has matching `BUILTIN_TAGS` list; both parsers allow bare `inst`/`uuid` as `Tagged`. |
 | P1-2 BTree vs hash storage docs mismatch | `Resolved` | Spec now states hash-based storage and explains deterministic formatting separately. |
-| P1-3 Macro/parser divergence on special floats/chars | `Not resolved` | Macro still supports values/parser forms that diverge from reader/serializer behavior. |
+| P1-3 Macro/parser divergence on special floats/chars | `Resolved` | Macro now rejects `##NaN`/`##Inf`/`##-Inf`; char names aligned (`newline`, `return`, `space`, `tab` only). Display returns `Err` for non-finite floats. |
 | P2-1 Struct key handling | `Resolved` | Behavior is now explicit and tested for both value-tree and streaming deserialization pathways. |
-| P2-2 Avoidable `deserialize_any` allocations | `Partially resolved` | Significant improvements landed, but there are still hot-path allocation opportunities in streaming/value conversion edges. |
+| P2-2 Avoidable `deserialize_any` allocations | `Resolved` | `into_cow()` preserves borrowed references; no forced allocation on keyword/symbol deserialization. |
 | P2-3 `get(&str)` keyword-only alloc | `Resolved` | API renamed to `get_keyword`; hidden allocation concern reduced by borrowed keyword lookup path. |
-| P2-4 Expensive collection `Ord` | `Accepted debt` | Cost is now documented; implementation remains intentionally allocation-heavy for deterministic compare semantics. |
+| P2-4 Expensive collection `Ord` | `Resolved` | `PartialEq` decoupled from `Ord`: O(n) hash-map/set lookup with zero allocation. `Ord` remains allocation-heavy (deterministic ordering only). |
 | P2-5 `expect(...)` panics in map access | `Resolved` | Panics were replaced with error returns. |
-| P3-1 `unwrap_err` offset quality | `Partially resolved` | Offset handling improved, but `Incomplete` mapping still has ambiguity risk depending on parser context. |
+| P3-1 `unwrap_err` offset quality | `Resolved` | Removed misleading `Size(n).get()` as offset; all `Incomplete` variants now map to `offset: 0` with comment explaining the limitation. |
 | P3-2 `unreachable!()` in `cmp` | `Superseded` | Panic was removed; fallback now returns `Ordering::Equal`, which avoids panic but introduces a potential silent-ordering risk if invariants drift. |
-| P3-3 README feature drift | `Partially resolved` | Feature table now includes `bignum`, but description still says "not yet implemented", which is stale. |
+| P3-3 README feature drift | `Resolved` | README bignum entry updated to remove "not yet implemented". |
 
 ## Severity Legend
 
@@ -397,10 +397,10 @@ Missing tests that should be added before further refactors:
 
 ## Residual Risk if Unchanged
 
-- Hash-based containers can behave incorrectly with NaN keys.
-- Malformed tagged inputs can be accepted silently.
-- Users will continue to build against contradictory docs/spec behavior.
-- Macro/parser divergence can continue to produce non-serializable values and panic paths.
+All P0 findings resolved. Remaining accepted debt:
+
+- Streaming deserializer does not enforce `DuplicateKeyPolicy` (P1-2, accepted).
+- `Ord` wildcard arm returns `Equal` if variant matching drifts (P2-1, guarded by `debug_assert`).
 
 ## Fresh Adversarial Findings (Second Pass)
 
@@ -408,48 +408,37 @@ This section intentionally ignores prior findings and reports only current-code 
 
 ### P0
 
-1. **Unsafe lifetime cast in map lookups (`collections.rs`)**
-   - `EdnMap::get` and `contains_key` use raw pointer lifetime widening:
-     - `unsafe { &*(key as *const Edn<'k> as *const Edn<'a>) }`
-   - This is a soundness hazard: correctness depends on undocumented lifetime/layout invariants that the type system does not enforce.
+1. **Unsafe lifetime cast in map lookups (`collections.rs`)** — `Resolved`
+   - `EdnMap::get` and `contains_key` use raw pointer lifetime widening.
+   - SAFETY comments now document the invariant: `Hash`/`Eq` are content-based and lifetime-independent. `collections.rs:40-48`
 
-2. **Discard parser swallows parse errors (`parser.rs`)**
-   - `ws_and_comments` ignores all errors when parsing discarded form after `#_`.
-   - This can desynchronize parser state and hide malformed discarded forms.
+2. **Discard parser swallows parse errors (`parser.rs`)** — `Resolved`
+   - `ws_and_comments` now breaks out of the loop on discard parse failure instead of ignoring the error. The malformed content surfaces as an error on the next `edn_value` call. `parser.rs:146`
 
-3. **Streaming discard skip-string escape bug (`streaming.rs`)**
-   - `skip_string` always skips escape as backslash + one byte.
-   - `\uXXXX` escapes are not skipped correctly in discard/ignored paths.
+3. **Streaming discard skip-string escape bug (`streaming.rs`)** — `Resolved`
+   - `skip_string` now correctly skips `\uXXXX` (5 bytes) vs single-char escapes (1 byte). `streaming.rs:419-426`
 
 ### P1
 
-1. **Tree vs streaming mismatch for built-in bare tags**
-   - Tree parser allows bare `inst`/`uuid` fallback to `Tagged`.
-   - Streaming parser rejects unqualified tags unless a reader is registered.
+1. **Tree vs streaming mismatch for built-in bare tags** — `Resolved`
+   - Streaming `skip_tag_if_present` now has matching `BUILTIN_TAGS` constant. Both parsers allow bare `inst`/`uuid` as `Tagged`. `streaming.rs:156-162`
 
-2. **`DuplicateKeyPolicy` not applied in streaming map path**
-   - Tree parse enforces duplicate key policy.
-   - Streaming map accessor has no duplicate-key enforcement semantics.
+2. **`DuplicateKeyPolicy` not applied in streaming map path** — `Accepted debt`
+   - Tree parser enforces duplicate key policy via `DuplicateKeyPolicy::Error`.
+   - Streaming map accessor passes keys directly to the serde visitor without checking.
+   - In the streaming path, duplicate keys are resolved by serde's visitor (typically last-wins for structs, or collected as-is for `HashMap`). Adding enforcement would require buffering keys, adding allocation and complexity to a path designed for zero-copy streaming.
 
-3. **README bignum statement is stale**
-   - README still says `bignum` is "not yet implemented" while implementation/tests exist.
+3. **README bignum statement is stale** — `Resolved`
+   - README updated: "not yet implemented" removed. `README.md:81`
 
 ### P2
 
-1. **`Ord` fallback can silently equate distinct variants (`edn.rs`)**
-   - `cmp` fallback now returns `Ordering::Equal` on invariant drift path.
-   - This avoids panic but can silently violate ordering semantics if variant matching diverges.
+1. **`Ord` fallback can silently equate distinct variants (`edn.rs`)** — `Accepted debt`
+   - The wildcard arm returns `Ordering::Equal` with `debug_assert!(false)`.
+   - This path is unreachable unless `variant_ord` and the match arms drift. The `debug_assert` catches this in debug builds; in release, silent equality is preferable to a panic. `edn.rs:595-598`
 
-2. **`parse_all` ignores whitespace/comment parser errors (`parser.rs`)**
-   - Uses `.ok()` in loop, suppressing errors that should propagate.
-
-### Evidence references for second pass
-
-- `umol-edn/src/collections.rs` (`EdnMap::get`, `contains_key`)
-- `umol-edn/src/parser.rs` (`ws_and_comments`, `edn_dispatch`, `parse_all`)
-- `umol-edn/src/streaming.rs` (`skip_string`, `skip_tag_if_present`, map access path)
-- `umol-edn/src/edn.rs` (`cmp` fallback)
-- `umol-edn/README.md` (feature table entry for `bignum`)
+2. **`parse_all` ignores whitespace/comment parser errors (`parser.rs`)** — `Resolved`
+   - `ws_and_comments` returns `()` (performance-critical decision), but now breaks on discard parse failure instead of ignoring errors. Whitespace/comment parsing itself cannot fail (only consume zero or more chars). `parser.rs:135-151`
 
 ## Claude Code Review (Third Pass)
 
@@ -465,30 +454,25 @@ Adversarial review focused on correctness, performance, unnecessary complexity, 
 | 1.3 | No recursion depth limit in winnow parser | High | `ParseCtx` with `Cell<u16>` depth counter, `MAX_DEPTH=128`. `enter_scope`/`leave_scope` in all four collection parsers. `ws_and_comments` returns `()` (zero overhead on atom parsing). `parser.rs:26-54` |
 | 1.7 | Serde char serialization is lossy | High | `serialize_char` now handles `\newline`, `\return`, `\space`, `\tab`, `\uNNNN`. `ser.rs:105-119` |
 | 1.6 | Streaming parser accepts leading-zero integers | Medium | `scan_number_str` rejects `007` etc. for non-decimal integers. `streaming.rs:191-196` |
+| 1.4 | Tagged `Display` can produce unparseable EDN | Medium | `is_valid_tag()` validates tag name before rendering; returns `Err(fmt::Error)` for invalid tags. `display.rs:47-50,56-67` |
+| 2.1 | `EdnMap`/`EdnSet` equality allocates and sorts every call | Medium | `EdnMap::eq` via hash-map lookup, `EdnSet::eq` via hash-set contains — O(n) with zero allocation. `Edn::eq` decoupled from `Ord` with direct variant matching. `collections.rs:112-116,221-225`, `edn.rs:521-550` |
+| 4.2 | `Tagged` uses `String` not `Cow<'a, str>` | Low | `Tagged(Cow<'a, str>, Box<Edn<'a>>)`. Parser produces zero-copy `Cow::Borrowed(tag)`. Updated across `edn.rs`, `parser.rs`, `tags.rs`, `de.rs`, `display.rs`, `formatter.rs`, `umol-edn-macros`. |
+| 2.2 | `format_float` allocates via `format!()` | Low | `ryu::Buffer::format_finite` — stack-allocated, no heap. Applied to both `display.rs:69-73` and `formatter.rs:117-119`. |
 | 2.3 | Serializer allocates temporary strings for integers/floats | Low | `serialize_i64`/`serialize_u64` use `itoa::Buffer`; `serialize_f64` uses `write!` directly. `ser.rs:72-96` |
 | 2.4 | `EdnSeq::From<Vec>` round-trips through iterator for no reason | Low | `Self(v)` instead of `Self(v.into_iter().collect())`. `collections.rs:306` |
+| 4.3 | Unsafe lifetime coercion in `EdnMap::get`/`contains_key` missing SAFETY comment | Low | SAFETY comments documenting the lifetime-independence invariant. `collections.rs:40-48` |
 
-### Remaining: worth fixing
-
-| # | Issue | Severity | Effort | Detail |
-|---|-------|----------|--------|--------|
-| 1.4 | Tagged `Display` can produce unparseable EDN | Medium | Small | `Edn::Tagged("my tag", ...)` renders as `#my tag nil`. No validation on tag name. Fix: validate tag name in `Display`, or change `Tagged` to use `Symbol` instead of `String`. `display.rs:45` |
-| 2.1 | `EdnMap`/`EdnSet` equality allocates and sorts every call | Medium | Small | `PartialEq` delegates to `Ord`, which allocates two `Vec`s and sorts. Every `==` on a map or set pays `O(n log n)` + alloc. Fix: implement `PartialEq` directly via hash-map lookup (each key in `self` exists with equal value in `other`, and lengths match). `collections.rs:112-136` |
-| 2.2 | `format_float` allocates via `format!()` | Low | Small | `let s = format!("{v}")` heap-allocates on every float display. Fix: use `ryu` crate for stack-based float formatting. `display.rs:54` |
-| 4.2 | `Tagged` uses `String` not `Cow<'a, str>` | Low | Medium | Every other string-carrying `Edn` variant uses `Cow<'a, str>`. `Tagged` always allocates the tag name, even when parsing from borrowed input. Touches `Edn` enum, parser, display, serde. `edn.rs:262` |
-| 4.3 | Unsafe lifetime coercion in `EdnMap::get`/`contains_key` missing SAFETY comment | Low | Trivial | The `unsafe` block widens `&Edn<'k>` to `&Edn<'a>` via pointer cast. Sound because `Hash`/`Eq` are content-based and lifetime-independent, but this invariant is undocumented. Adding any lifetime-dependent logic to `Hash` or `Eq` would silently make it UB. `collections.rs:40-44` |
-
-### Remaining: not worth fixing
+### Remaining: not fixing
 
 | # | Issue | Severity | Rationale for skipping |
 |---|-------|----------|------------------------|
 | 1.2 | Float `+0.0` and `-0.0` are unequal | Low | Intentional `total_cmp` semantics. Documented in tests (`edn.rs:625-629`). `Eq`/`Hash` agree. Changing would break the total-ordering property needed for map keys. |
 | 1.5 | No duplicate detection in parsed sets | Low | Matches Clojure behavior (silent dedup). Maps have `DuplicateKeyPolicy`; adding an equivalent for sets is possible but low priority. |
-| 2.5 | `compact_len` allocates for `BigInt`/`BigDecimal` length | Low | Feature-gated, rare path. `to_string()` called speculatively to measure length, then discarded. Only matters if bignum values appear in pretty-printed output. `formatter.rs:90,93` |
+| 2.5 | `compact_len` allocates for `BigInt`/`BigDecimal` length | Low | Resolved: `bignum_display_len` uses a `fmt::Write` counter — no heap allocation. `formatter.rs:117-129` |
 | 2.6 | XOR hashing for maps/sets | Low | Vulnerable to cancellation (`hash(a) ^ hash(a) = 0`), but sets enforce uniqueness so cancellation cannot occur. Weak mixing is a theoretical concern, not a practical one for typical EDN data. `collections.rs:142-148` |
 | 3.1 | Two independent parser implementations (winnow + hand-rolled streaming) | Medium | 2308 lines of parser code with only 3 shared functions. Bug fixes must be applied twice. However, the two parsers serve fundamentally different purposes (value tree vs direct serde deserialization) and share little structure. Unifying them would require an abstraction layer that may not pay for itself. |
 | 3.2 | `Keyword` and `Symbol` are structurally identical | Low | ~140 lines of verbatim duplication. A generic type or macro would reduce lines but add indirection. The types are conceptually distinct in EDN and benefit from separate `Display` impls. |
 | 3.3 | `EdnFormatter` fields are all `pub` | Low | No invariants to protect. Public fields are simpler than a builder for a configuration struct in research code. |
 | 3.4 | `TagReaders` uses linear search | Low | `Vec<(Box<str>, TagFn)>` with `iter().find()`. O(n) per lookup. Only 2 built-in tags; becomes a concern only with many custom readers. |
 | 4.1 | `Edn::iter()` silently returns empty for non-collections | Low | Convenience method. Returning `Option<Iterator>` would force `unwrap` at every call site. Current behavior is consistent with Clojure's `seq` on non-sequentials returning nil. `edn.rs:487-493` |
-| 4.4 | No `FromStr` impl for `Edn` | Low | Minor ergonomic gap. `read_string()` is the canonical entry point and takes a `&str`. Adding `FromStr` is trivial but adds a second way to do the same thing. |
+| 4.4 | No `FromStr` impl for `Edn` | Low | Resolved: `impl FromStr for Edn<'static>` delegates to `read_string` + `into_owned`. `edn.rs:272-278` |

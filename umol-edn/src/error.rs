@@ -92,10 +92,8 @@ pub(crate) fn unwrap_err(e: ErrMode<EdnError>) -> EdnError {
     match e {
         ErrMode::Backtrack(e) | ErrMode::Cut(e) => e,
         // Incomplete means the parser needs more input — treat as EOF.
-        // No precise offset is available from winnow's Incomplete variant.
-        ErrMode::Incomplete(winnow::error::Needed::Size(n)) => EdnError::UnexpectedEof {
-            offset: n.get(),
-        },
+        // No precise offset is available from winnow's Incomplete variant;
+        // report 0 (callers that know the input length can improve this).
         ErrMode::Incomplete(_) => EdnError::UnexpectedEof { offset: 0 },
     }
 }

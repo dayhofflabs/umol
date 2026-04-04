@@ -87,10 +87,10 @@ fn compact_len(edn: &Edn<'_>, limit: usize) -> Option<usize> {
         Edn::Bool(false) => Some(5),
         Edn::Int(n) => Some(itoa_len(*n)),
         #[cfg(feature = "bignum")]
-        Edn::BigInt(n) => Some(n.to_string().len() + 1),
+        Edn::BigInt(n) => Some(bignum_display_len(n) + 1),
         Edn::Float(v) => Some(format_float_len(*v)),
         #[cfg(feature = "bignum")]
-        Edn::BigDecimal(d) => Some(d.to_string().len() + 1),
+        Edn::BigDecimal(d) => Some(bignum_display_len(d.as_inner()) + 1),
         Edn::Char(c) => Some(display_char_len(*c)),
         Edn::Str(s) => Some(display_string_len(s)),
         Edn::Keyword(k) => Some(1 + k.as_str().len()), // :name
@@ -112,6 +112,21 @@ fn compact_len(edn: &Edn<'_>, limit: usize) -> Option<usize> {
 fn itoa_len(n: i64) -> usize {
     let mut buf = itoa::Buffer::new();
     buf.format(n).len()
+}
+
+#[cfg(feature = "bignum")]
+fn bignum_display_len(v: &impl std::fmt::Display) -> usize {
+    use std::fmt::Write;
+    struct Counter(usize);
+    impl Write for Counter {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            self.0 += s.len();
+            Ok(())
+        }
+    }
+    let mut c = Counter(0);
+    write!(c, "{v}").unwrap();
+    c.0
 }
 
 fn format_float_len(v: f64) -> usize {

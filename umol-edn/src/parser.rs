@@ -143,7 +143,9 @@ fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) {
             Some(b'#') if rest(input).starts_with("#_") => {
                 let _: PResult<_> = "#_".parse_next(input);
                 ws_and_comments(input, ctx);
-                let _ = edn_value(ctx).parse_next(input);
+                if edn_value(ctx).parse_next(input).is_err() {
+                    break;
+                }
             }
             _ => break,
         }

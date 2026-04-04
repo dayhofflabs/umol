@@ -153,7 +153,11 @@ impl<'de> EdnStreamDeserializer<'de> {
             self.pos += 1;
             let offset = self.pos;
             let tag = self.parse_symbol_str()?;
-            if !tag.contains('/') && self.tag_readers.get(tag).is_none() {
+            const BUILTIN_TAGS: &[&str] = &["inst", "uuid"];
+            if !tag.contains('/')
+                && self.tag_readers.get(tag).is_none()
+                && !BUILTIN_TAGS.contains(&tag)
+            {
                 return Err(EdnError::InvalidTag {
                     offset,
                     tag: tag.to_string(),
@@ -416,8 +420,15 @@ impl<'de> EdnStreamDeserializer<'de> {
                         self.pos += 1;
                         return Ok(());
                     }
-                    // Skip escape: backslash + one char
-                    self.pos += 2;
+                    // Skip escape: backslash + escaped content
+                    self.pos += 1; // skip backslash
+                    if self.pos < bytes.len() && bytes[self.pos] == b'u' {
+                        // \uXXXX — skip u + 4 hex digits
+                        self.pos += 5;
+                    } else {
+                        // \n, \t, \r, \\, \" — single char
+                        self.pos += 1;
+                    }
                 }
             }
         }
