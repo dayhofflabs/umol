@@ -1220,4 +1220,743 @@ mod tests {
         let err = streaming_from_str::<i64>("").unwrap_err();
         assert!(matches!(err, EdnError::UnexpectedEof { .. }));
     }
+
+    // -- Narrow integer types --
+
+    #[rstest]
+    #[case("7", 7i8)]
+    #[case("-1", -1i8)]
+    fn test_streaming_i8(#[case] input: &str, #[case] expected: i8) {
+        assert_eq!(streaming_from_str::<i8>(input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_streaming_i8_error() {
+        assert!(streaming_from_str::<i8>("200").is_err());
+    }
+
+    #[rstest]
+    #[case("300", 300i16)]
+    fn test_streaming_i16(#[case] input: &str, #[case] expected: i16) {
+        assert_eq!(streaming_from_str::<i16>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("100000", 100000i32)]
+    fn test_streaming_i32(#[case] input: &str, #[case] expected: i32) {
+        assert_eq!(streaming_from_str::<i32>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("7", 7u8)]
+    fn test_streaming_u8(#[case] input: &str, #[case] expected: u8) {
+        assert_eq!(streaming_from_str::<u8>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("1000", 1000u16)]
+    fn test_streaming_u16(#[case] input: &str, #[case] expected: u16) {
+        assert_eq!(streaming_from_str::<u16>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("100000", 100000u32)]
+    fn test_streaming_u32(#[case] input: &str, #[case] expected: u32) {
+        assert_eq!(streaming_from_str::<u32>(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case("100", 100u64)]
+    fn test_streaming_u64(#[case] input: &str, #[case] expected: u64) {
+        assert_eq!(streaming_from_str::<u64>(input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_streaming_u64_error() {
+        assert!(streaming_from_str::<u64>("-1").is_err());
+    }
+
+    #[test]
+    fn test_streaming_f32() {
+        let v = streaming_from_str::<f32>("3.14").unwrap();
+        assert!((v - 3.14f32).abs() < 1e-5);
+    }
+
+    // -- Char --
+
+    #[rstest]
+    #[case(r"\a", 'a')]
+    #[case(r"\newline", '\n')]
+    #[case(r"\return", '\r')]
+    #[case(r"\space", ' ')]
+    #[case(r"\tab", '\t')]
+    #[case(r"\u0041", 'A')]
+    fn test_streaming_char(#[case] input: &str, #[case] expected: char) {
+        assert_eq!(streaming_from_str::<char>(input).unwrap(), expected);
+    }
+
+    // -- str / string --
+
+    #[test]
+    fn test_streaming_str_keyword() {
+        let s: String = streaming_from_str(":foo").unwrap();
+        assert_eq!(s, "foo");
+    }
+
+    #[test]
+    fn test_streaming_str_symbol() {
+        let s: String = streaming_from_str("bar").unwrap();
+        assert_eq!(s, "bar");
+    }
+
+    // -- Unit --
+
+    #[test]
+    fn test_streaming_unit() {
+        assert_eq!(streaming_from_str::<()>("nil").unwrap(), ());
+    }
+
+    #[test]
+    fn test_streaming_unit_error() {
+        assert!(streaming_from_str::<()>("true").is_err());
+    }
+
+    #[test]
+    fn test_streaming_unit_struct() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Marker;
+        assert_eq!(streaming_from_str::<Marker>("nil").unwrap(), Marker);
+    }
+
+    // -- Newtype struct --
+
+    #[test]
+    fn test_streaming_newtype_struct() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Wrapper(i64);
+        assert_eq!(streaming_from_str::<Wrapper>("7").unwrap(), Wrapper(7));
+    }
+
+    // -- Tuple struct --
+
+    #[test]
+    fn test_streaming_tuple_struct() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Pair(i64, i64);
+        assert_eq!(streaming_from_str::<Pair>("[3 4]").unwrap(), Pair(3, 4));
+    }
+
+    // -- Tagged literal --
+
+    #[test]
+    fn test_streaming_tagged_seq() {
+        let v: Vec<i64> = streaming_from_str("#my/tag [1 2 3]").unwrap();
+        assert_eq!(v, vec![1, 2, 3]);
+    }
+
+    // -- Enum via string --
+
+    #[test]
+    fn test_streaming_enum_via_string() {
+        assert_eq!(streaming_from_str::<Color>(r#""red""#).unwrap(), Color::Red);
+    }
+
+    // -- Enum tagged variants --
+
+    #[derive(Deserialize, Debug, PartialEq)]
+    enum Shape {
+        Circle(f64),
+        Rect(f64, f64),
+        Named { w: f64, h: f64 },
+    }
+
+    #[rstest]
+    #[case("#Circle 5.0", Shape::Circle(5.0))]
+    #[case("#Rect [1.0 2.0]", Shape::Rect(1.0, 2.0))]
+    #[case("#Named {:w 3.0 :h 4.0}", Shape::Named { w: 3.0, h: 4.0 })]
+    fn test_streaming_enum_tagged(#[case] input: &str, #[case] expected: Shape) {
+        assert_eq!(streaming_from_str::<Shape>(input).unwrap(), expected);
+    }
+
+    #[derive(Deserialize, Debug, PartialEq)]
+    enum UnitEnum { Red }
+
+    #[test]
+    fn test_streaming_tagged_unit_variant() {
+        assert_eq!(streaming_from_str::<UnitEnum>("#Red nil").unwrap(), UnitEnum::Red);
+    }
+
+    #[test]
+    fn test_streaming_tagged_unit_variant_error() {
+        assert!(streaming_from_str::<UnitEnum>("#Red 5").is_err());
+    }
+
+    // -- Map: nil as empty --
+
+    #[test]
+    fn test_streaming_map_nil() {
+        let m: HashMap<String, i64> = streaming_from_str("nil").unwrap();
+        assert!(m.is_empty());
+    }
+
+    #[test]
+    fn test_streaming_map_error() {
+        assert!(streaming_from_str::<HashMap<String, i64>>("123").is_err());
+    }
+
+    // -- Comments and discards --
+
+    #[test]
+    fn test_streaming_comment() {
+        let v: i64 = streaming_from_str("; comment\n7").unwrap();
+        assert_eq!(v, 7);
+    }
+
+    #[test]
+    fn test_streaming_discard() {
+        let v: Vec<i64> = streaming_from_str("[#_ 99 1 2]").unwrap();
+        assert_eq!(v, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_streaming_discard_nested() {
+        let v: Vec<i64> = streaming_from_str("[#_ [1 2 3] 4]").unwrap();
+        assert_eq!(v, vec![4]);
+    }
+
+    #[test]
+    fn test_streaming_discard_tagged() {
+        let v: Vec<i64> = streaming_from_str("[#_ #my/tag [1] 5]").unwrap();
+        assert_eq!(v, vec![5]);
+    }
+
+    #[test]
+    fn test_streaming_discard_string_with_escapes() {
+        let v: i64 = streaming_from_str(r#"#_ "hello\n\"world\u0041" 7"#).unwrap();
+        assert_eq!(v, 7);
+    }
+
+    #[test]
+    fn test_streaming_discard_set() {
+        let v: i64 = streaming_from_str("#_ #{1 2} 7").unwrap();
+        assert_eq!(v, 7);
+    }
+
+    #[test]
+    fn test_streaming_discard_map() {
+        let v: i64 = streaming_from_str("#_ {:a 1} 7").unwrap();
+        assert_eq!(v, 7);
+    }
+
+    #[test]
+    fn test_streaming_discard_char() {
+        let v: i64 = streaming_from_str(r"#_ \a 7").unwrap();
+        assert_eq!(v, 7);
+    }
+
+    #[test]
+    fn test_streaming_discard_keyword() {
+        let v: i64 = streaming_from_str("#_ :foo 7").unwrap();
+        assert_eq!(v, 7);
+    }
+
+    // -- ignored_any --
+
+    #[test]
+    fn test_streaming_ignored_any() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Sparse {
+            x: i64,
+        }
+        let s: Sparse = streaming_from_str("{:x 1 :y 2 :z 3}").unwrap();
+        assert_eq!(s, Sparse { x: 1 });
+    }
+
+    // -- +/- as symbol prefix --
+
+    #[test]
+    fn test_streaming_plus_symbol() {
+        let s: String = streaming_from_str("+foo").unwrap();
+        assert_eq!(s, "+foo");
+    }
+
+    #[test]
+    fn test_streaming_minus_symbol() {
+        let s: String = streaming_from_str("-bar").unwrap();
+        assert_eq!(s, "-bar");
+    }
+
+    // -- Bool error --
+
+    #[test]
+    fn test_streaming_bool_error() {
+        assert!(streaming_from_str::<bool>("nil").is_err());
+    }
+
+    // -- Bytes error --
+
+    #[test]
+    fn test_streaming_bytes_error() {
+        assert!(streaming_from_str::<&[u8]>(r#""data""#).is_err());
+    }
+
+    // -- Identifier --
+
+    #[test]
+    fn test_streaming_identifier() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Kv {
+            name: String,
+        }
+        let kv: Kv = streaming_from_str(r#"{:name "Alice"}"#).unwrap();
+        assert_eq!(kv, Kv { name: "Alice".into() });
+    }
+
+    // -- String with escapes in parse_string slow path --
+
+    #[test]
+    fn test_streaming_string_unicode_escape() {
+        let s: String = streaming_from_str(r#""\u0041\u0042""#).unwrap();
+        assert_eq!(s, "AB");
+    }
+
+    #[test]
+    fn test_streaming_string_all_escapes() {
+        let s: String = streaming_from_str(r#""\t\r\n\\\"""#).unwrap();
+        assert_eq!(s, "\t\r\n\\\"");
+    }
+
+    // -- Leading-zero rejection --
+
+    #[test]
+    fn test_streaming_leading_zero_error() {
+        assert!(streaming_from_str::<i64>("007").is_err());
+    }
+
+    // -- Seq error (not a collection) --
+
+    #[test]
+    fn test_streaming_seq_error() {
+        assert!(streaming_from_str::<Vec<i64>>("123").is_err());
+    }
+
+    // -- List --
+
+    #[test]
+    fn test_streaming_list() {
+        let v: Vec<i64> = streaming_from_str("(1 2 3)").unwrap();
+        assert_eq!(v, vec![1, 2, 3]);
+    }
+
+    // -- Number parsing edge cases --
+
+    #[test]
+    fn test_streaming_float_exponent() {
+        let v: f64 = streaming_from_str("1.5e2").unwrap();
+        assert!((v - 150.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_streaming_float_neg_exponent() {
+        let v: f64 = streaming_from_str("3E-1").unwrap();
+        assert!((v - 0.3).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_streaming_float_dot_only() {
+        let v: f64 = streaming_from_str("1.0").unwrap();
+        assert!((v - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_streaming_signed_number() {
+        let v: f64 = streaming_from_str("+3.14").unwrap();
+        assert!((v - 3.14).abs() < 1e-10);
+        let v: f64 = streaming_from_str("-2.5").unwrap();
+        assert!((v + 2.5).abs() < 1e-10);
+    }
+
+    // -- Tagged literal rejection --
+
+    #[test]
+    fn test_streaming_unqualified_tag_error() {
+        assert!(streaming_from_str::<String>("#unknown 5").is_err());
+    }
+
+    // -- Builtin tags --
+
+    #[test]
+    fn test_streaming_builtin_tag_inst() {
+        let s: String = streaming_from_str(r#"#inst "2024-01-01T00:00:00Z""#).unwrap();
+        assert_eq!(s, "2024-01-01T00:00:00Z");
+    }
+
+    // -- skip_tag_if_present in typed paths --
+
+    #[test]
+    fn test_streaming_tagged_bool() {
+        let v: bool = streaming_from_str("#my/tag true").unwrap();
+        assert!(v);
+    }
+
+    #[test]
+    fn test_streaming_tagged_i64() {
+        let v: i64 = streaming_from_str("#my/tag 7").unwrap();
+        assert_eq!(v, 7);
+    }
+
+    #[test]
+    fn test_streaming_tagged_f64() {
+        let v: f64 = streaming_from_str("#my/tag 3.14").unwrap();
+        assert!((v - 3.14).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_streaming_tagged_string() {
+        let v: String = streaming_from_str(r#"#my/tag "hello""#).unwrap();
+        assert_eq!(v, "hello");
+    }
+
+    #[test]
+    fn test_streaming_tagged_option() {
+        let v: Option<i64> = streaming_from_str("#my/tag nil").unwrap();
+        assert_eq!(v, None);
+    }
+
+    #[test]
+    fn test_streaming_tagged_vec() {
+        let v: Vec<i64> = streaming_from_str("#my/tag [1 2]").unwrap();
+        assert_eq!(v, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_streaming_tagged_struct() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Pt { x: i64 }
+        let v: Pt = streaming_from_str("#my/tag {:x 5}").unwrap();
+        assert_eq!(v, Pt { x: 5 });
+    }
+
+    // -- Char literal edge cases --
+
+    #[test]
+    fn test_streaming_char_multibyte() {
+        let v: char = streaming_from_str(r"\ü").unwrap();
+        assert_eq!(v, 'ü');
+    }
+
+    #[test]
+    fn test_streaming_char_literal_error() {
+        assert!(streaming_from_str::<char>(r"\invalid").is_err());
+    }
+
+    // -- Deserialize identifier --
+
+    #[test]
+    fn test_streaming_identifier_string_key() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct M {
+            #[serde(rename = "key")]
+            key: i64,
+        }
+        let m: M = streaming_from_str(r#"{"key" 5}"#).unwrap();
+        assert_eq!(m, M { key: 5 });
+    }
+
+    #[test]
+    fn test_streaming_identifier_symbol_key() {
+        let m: HashMap<String, i64> = streaming_from_str("{foo 1}").unwrap();
+        assert_eq!(m["foo"], 1);
+    }
+
+    // -- Nested discard --
+
+    #[test]
+    fn test_streaming_double_discard() {
+        let v: i64 = streaming_from_str("#_ #_ 1 2 3").unwrap();
+        assert_eq!(v, 3);
+    }
+
+    // -- Enum edge cases --
+
+    #[test]
+    fn test_streaming_enum_discard() {
+        assert_eq!(
+            streaming_from_str::<Color>("#_ :blue :red").unwrap(),
+            Color::Red
+        );
+    }
+
+    // -- Struct with optional / nil field --
+
+    #[test]
+    fn test_streaming_struct_nil() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Opt { x: Option<i64> }
+        let v: Opt = streaming_from_str("nil").unwrap();
+        assert_eq!(v, Opt { x: None });
+    }
+
+    // -- ignored_any with various shapes --
+
+    #[test]
+    fn test_streaming_ignored_set() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct S { x: i64 }
+        let s: S = streaming_from_str("{:x 1 :y #{1 2 3}}").unwrap();
+        assert_eq!(s, S { x: 1 });
+    }
+
+    #[test]
+    fn test_streaming_ignored_map() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct S { x: i64 }
+        let s: S = streaming_from_str("{:x 1 :y {:a 1}}").unwrap();
+        assert_eq!(s, S { x: 1 });
+    }
+
+    #[test]
+    fn test_streaming_ignored_tagged() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct S { x: i64 }
+        let s: S = streaming_from_str("{:x 1 :y #my/tag [1]}").unwrap();
+        assert_eq!(s, S { x: 1 });
+    }
+
+    #[test]
+    fn test_streaming_ignored_list() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct S { x: i64 }
+        let s: S = streaming_from_str("{:x 1 :y (1 2)}").unwrap();
+        assert_eq!(s, S { x: 1 });
+    }
+
+    // -- seq error for non-collection top-level --
+
+    #[test]
+    fn test_streaming_seq_eof() {
+        assert!(streaming_from_str::<Vec<i64>>("").is_err());
+    }
+
+    // -- String parse edge cases --
+
+    #[test]
+    fn test_streaming_string_eof_in_escape() {
+        assert!(streaming_from_str::<String>(r#""hello\"#).is_err());
+    }
+
+    #[test]
+    fn test_streaming_string_invalid_escape() {
+        assert!(streaming_from_str::<String>(r#""\z""#).is_err());
+    }
+
+    #[test]
+    fn test_streaming_string_invalid_unicode_escape() {
+        assert!(streaming_from_str::<String>(r#""\uZZZZ""#).is_err());
+    }
+
+    // -- Keyword edge case --
+
+    #[test]
+    fn test_streaming_keyword_slash_error() {
+        assert!(streaming_from_str::<String>(":/foo").is_err());
+    }
+
+    // -- deserialize_any paths via untagged enum --
+
+    #[derive(Deserialize, Debug, PartialEq)]
+    #[serde(untagged)]
+    enum Val {
+        Nil,
+        Bool(bool),
+        Int(i64),
+        Float(f64),
+        Str(String),
+        Vec(Vec<Val>),
+        Map(std::collections::HashMap<String, Val>),
+    }
+
+    #[rstest]
+    #[case("nil", Val::Nil)]
+    #[case("true", Val::Bool(true))]
+    #[case("false", Val::Bool(false))]
+    #[case("7", Val::Int(7))]
+    #[case("-3", Val::Int(-3))]
+    #[case("3.14", Val::Float(3.14))]
+    #[case(r#""hello""#, Val::Str("hello".into()))]
+    fn test_streaming_any_atom(#[case] input: &str, #[case] expected: Val) {
+        let v: Val = streaming_from_str(input).unwrap();
+        assert_eq!(v, expected);
+    }
+
+    #[test]
+    fn test_streaming_any_keyword() {
+        let v: Val = streaming_from_str(":foo").unwrap();
+        assert_eq!(v, Val::Str("foo".into()));
+    }
+
+    #[test]
+    fn test_streaming_any_symbol() {
+        let v: Val = streaming_from_str("my-sym").unwrap();
+        assert_eq!(v, Val::Str("my-sym".into()));
+    }
+
+    #[test]
+    fn test_streaming_any_vector() {
+        let v: Val = streaming_from_str("[1 2]").unwrap();
+        assert_eq!(v, Val::Vec(vec![Val::Int(1), Val::Int(2)]));
+    }
+
+    #[test]
+    fn test_streaming_any_list() {
+        let v: Val = streaming_from_str("(1 2)").unwrap();
+        assert_eq!(v, Val::Vec(vec![Val::Int(1), Val::Int(2)]));
+    }
+
+    #[test]
+    fn test_streaming_any_map() {
+        let v: Val = streaming_from_str(r#"{"a" 1}"#).unwrap();
+        let mut expected = std::collections::HashMap::new();
+        expected.insert("a".into(), Val::Int(1));
+        assert_eq!(v, Val::Map(expected));
+    }
+
+    #[test]
+    fn test_streaming_any_char() {
+        let v: char = streaming_from_str(r"\x").unwrap();
+        assert_eq!(v, 'x');
+    }
+
+    #[test]
+    fn test_streaming_any_positive_number() {
+        let v: Val = streaming_from_str("+5").unwrap();
+        assert_eq!(v, Val::Int(5));
+    }
+
+    #[test]
+    fn test_streaming_any_negative_number() {
+        let v: Val = streaming_from_str("-3.5").unwrap();
+        assert_eq!(v, Val::Float(-3.5));
+    }
+
+    #[test]
+    fn test_streaming_any_plus_symbol() {
+        let v: Val = streaming_from_str("+").unwrap();
+        assert_eq!(v, Val::Str("+".into()));
+    }
+
+    #[test]
+    fn test_streaming_any_set() {
+        let v: Val = streaming_from_str("#{1 2}").unwrap();
+        if let Val::Vec(items) = v {
+            assert_eq!(items.len(), 2);
+        } else {
+            panic!("expected Vec");
+        }
+    }
+
+    #[test]
+    fn test_streaming_any_discard() {
+        let v: Val = streaming_from_str("#_ 99 7").unwrap();
+        assert_eq!(v, Val::Int(7));
+    }
+
+    #[test]
+    fn test_streaming_any_tagged() {
+        let v: Val = streaming_from_str(r#"#my/tag "hello""#).unwrap();
+        assert_eq!(v, Val::Str("hello".into()));
+    }
+
+    #[test]
+    fn test_streaming_any_unqualified_tag_error() {
+        assert!(streaming_from_str::<Val>("#bad 5").is_err());
+    }
+
+    // -- Typed deserialize error paths --
+
+    #[test]
+    fn test_streaming_i16_error() {
+        assert!(streaming_from_str::<i16>("40000").is_err());
+    }
+
+    #[test]
+    fn test_streaming_i32_error() {
+        assert!(streaming_from_str::<i32>("3000000000").is_err());
+    }
+
+    #[test]
+    fn test_streaming_u8_error() {
+        assert!(streaming_from_str::<u8>("300").is_err());
+    }
+
+    #[test]
+    fn test_streaming_u16_error() {
+        assert!(streaming_from_str::<u16>("70000").is_err());
+    }
+
+    #[test]
+    fn test_streaming_u32_error() {
+        assert!(streaming_from_str::<u32>("5000000000").is_err());
+    }
+
+    // -- Typed deserialize with tags --
+
+    #[test]
+    fn test_streaming_tagged_char() {
+        let v: char = streaming_from_str(r"#my/tag \z").unwrap();
+        assert_eq!(v, 'z');
+    }
+
+    #[test]
+    fn test_streaming_tagged_unit() {
+        let v: () = streaming_from_str("#my/tag nil").unwrap();
+        assert_eq!(v, ());
+    }
+
+    // -- Exponent sign edge case --
+
+    #[test]
+    fn test_streaming_exponent_plus() {
+        let v: f64 = streaming_from_str("1e+2").unwrap();
+        assert!((v - 100.0).abs() < 1e-10);
+    }
+
+    // -- recursion limit --
+
+    #[test]
+    fn test_streaming_recursion_limit() {
+        let deep = "[".repeat(200) + &"]".repeat(200);
+        assert!(streaming_from_str::<Val>(&deep).is_err());
+    }
+
+    // -- Number as f64 via deserialize_f64 --
+
+    #[test]
+    fn test_streaming_f64_integer_input() {
+        let v: f64 = streaming_from_str("7").unwrap();
+        assert!((v - 7.0).abs() < 1e-10);
+    }
+
+    // -- char: string-as-char fallback --
+
+    #[test]
+    fn test_streaming_char_from_string() {
+        let v: char = streaming_from_str(r#""x""#).unwrap();
+        assert_eq!(v, 'x');
+    }
+
+    // -- str via symbol --
+
+    #[test]
+    fn test_streaming_str_via_symbol() {
+        let v: &str = streaming_from_str("foo").unwrap();
+        assert_eq!(v, "foo");
+    }
+
+    // -- map error: not map or nil --
+
+    #[test]
+    fn test_streaming_map_error_eof() {
+        assert!(streaming_from_str::<HashMap<String, i64>>("").is_err());
+    }
 }

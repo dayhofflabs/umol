@@ -219,6 +219,8 @@ impl fmt::Display for EdnBigDecimal {
 // Edn enum
 // ---------------------------------------------------------------------------
 
+/// Discriminant for cross-variant comparison. List and Vector share the same
+/// ordinal: the EDN spec defines sequence equality across container types.
 fn variant_ord(v: &Edn<'_>) -> u8 {
     match v {
         Edn::Nil => 0,
@@ -233,17 +235,17 @@ fn variant_ord(v: &Edn<'_>) -> u8 {
         Edn::Str(_) => 7,
         Edn::Keyword(_) => 8,
         Edn::Symbol(_) => 9,
-        Edn::List(_) => 10,
-        Edn::Vector(_) => 11,
-        Edn::Map(_) => 12,
-        Edn::Set(_) => 13,
-        Edn::Tagged(_, _) => 14,
+        Edn::List(_) | Edn::Vector(_) => 10,
+        Edn::Map(_) => 11,
+        Edn::Set(_) => 12,
+        Edn::Tagged(_, _) => 13,
     }
 }
 
 /// An EDN value.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Edn<'a> {
+    #[default]
     Nil,
     Bool(bool),
     Int(i64),
@@ -261,12 +263,6 @@ pub enum Edn<'a> {
     Map(EdnMap<'a>),
     Set(EdnSet<'a>),
     Tagged(Cow<'a, str>, Box<Edn<'a>>),
-}
-
-impl Default for Edn<'_> {
-    fn default() -> Self {
-        Edn::Nil
-    }
 }
 
 impl FromStr for Edn<'static> {
@@ -547,8 +543,7 @@ impl PartialEq for Edn<'_> {
             (Edn::Str(a), Edn::Str(b)) => a == b,
             (Edn::Keyword(a), Edn::Keyword(b)) => a == b,
             (Edn::Symbol(a), Edn::Symbol(b)) => a == b,
-            (Edn::List(a), Edn::List(b)) => a == b,
-            (Edn::Vector(a), Edn::Vector(b)) => a == b,
+            (Edn::List(a) | Edn::Vector(a), Edn::List(b) | Edn::Vector(b)) => a == b,
             (Edn::Map(a), Edn::Map(b)) => a == b,
             (Edn::Set(a), Edn::Set(b)) => a == b,
             (Edn::Tagged(ta, va), Edn::Tagged(tb, vb)) => ta == tb && va == vb,
@@ -587,8 +582,7 @@ impl Ord for Edn<'_> {
             (Edn::Str(a), Edn::Str(b)) => a.cmp(b),
             (Edn::Keyword(a), Edn::Keyword(b)) => a.cmp(b),
             (Edn::Symbol(a), Edn::Symbol(b)) => a.cmp(b),
-            (Edn::List(a), Edn::List(b)) => a.cmp(b),
-            (Edn::Vector(a), Edn::Vector(b)) => a.cmp(b),
+            (Edn::List(a) | Edn::Vector(a), Edn::List(b) | Edn::Vector(b)) => a.cmp(b),
             (Edn::Map(a), Edn::Map(b)) => a.cmp(b),
             (Edn::Set(a), Edn::Set(b)) => a.cmp(b),
             (Edn::Tagged(ta, va), Edn::Tagged(tb, vb)) => ta.cmp(tb).then_with(|| va.cmp(vb)),
@@ -616,8 +610,7 @@ impl Hash for Edn<'_> {
             Edn::Str(s) => s.hash(state),
             Edn::Keyword(k) => k.hash(state),
             Edn::Symbol(s) => s.hash(state),
-            Edn::List(v) => v.hash(state),
-            Edn::Vector(v) => v.hash(state),
+            Edn::List(v) | Edn::Vector(v) => v.hash(state),
             Edn::Map(m) => m.hash(state),
             Edn::Set(s) => s.hash(state),
             Edn::Tagged(tag, inner) => {
@@ -689,5 +682,305 @@ mod tests {
         }
         assert_eq!(hash_bd(&a), hash_bd(&b));
         assert_eq!(hash_bd(&b), hash_bd(&c));
+    }
+
+    // -- Default, FromStr --
+
+    #[test]
+    fn test_edn_default() {
+        assert_eq!(Edn::default(), Edn::Nil);
+    }
+
+    #[test]
+    fn test_edn_from_str() {
+        use std::str::FromStr;
+        let v: Edn<'static> = Edn::from_str("[1 2]").unwrap();
+        assert!(v.is_vector());
+        assert!(Edn::from_str("[invalid").is_err());
+    }
+
+    // -- Symbol methods --
+
+    #[test]
+    fn test_symbol_owned() {
+        let s = Symbol::owned("foo".into());
+        assert_eq!(s.as_str(), "foo");
+    }
+
+    #[test]
+    fn test_symbol_name_namespace() {
+        let s = Symbol::namespaced("ns", "bar");
+        assert_eq!(s.name(), "bar");
+        assert_eq!(s.namespace(), Some("ns"));
+
+        let s = Symbol::new("simple");
+        assert_eq!(s.name(), "simple");
+        assert_eq!(s.namespace(), None);
+    }
+
+    #[test]
+    fn test_symbol_into_owned() {
+        let s = Symbol::new("hello");
+        let owned: Symbol<'static> = s.into_owned();
+        assert_eq!(owned.as_str(), "hello");
+    }
+
+    #[test]
+    fn test_symbol_ord() {
+        let a = Symbol::new("alpha");
+        let b = Symbol::new("beta");
+        assert!(a < b);
+        assert_eq!(a.partial_cmp(&b), Some(Ordering::Less));
+    }
+
+    // -- Keyword into_owned, ordering --
+
+    #[test]
+    fn test_keyword_into_owned() {
+        let k = Keyword::new("key");
+        let owned: Keyword<'static> = k.into_owned();
+        assert_eq!(owned.as_str(), "key");
+    }
+
+    #[test]
+    fn test_keyword_ord() {
+        let a = Keyword::new("alpha");
+        let b = Keyword::new("beta");
+        assert!(a < b);
+        assert_eq!(a.partial_cmp(&b), Some(Ordering::Less));
+    }
+
+    // -- Type checks --
+
+    #[test]
+    fn test_edn_is_checks() {
+        assert!(Edn::Nil.is_nil());
+        assert!(Edn::Bool(true).is_bool());
+        assert!(Edn::Int(1).is_int());
+        assert!(Edn::Float(1.0).is_float());
+        assert!(Edn::Char('x').is_char());
+        assert!(Edn::Str(Cow::Borrowed("s")).is_str());
+        assert!(Edn::Keyword(Keyword::new("k")).is_keyword());
+        assert!(Edn::Symbol(Symbol::new("s")).is_symbol());
+        assert!(Edn::List(vec![].into()).is_list());
+        assert!(Edn::Vector(vec![].into()).is_vector());
+        assert!(Edn::Map(crate::collections::EdnMap::new()).is_map());
+        assert!(Edn::Set(crate::collections::EdnSet::new()).is_set());
+        assert!(Edn::Tagged(Cow::Borrowed("t"), Box::new(Edn::Nil)).is_tagged());
+
+        assert!(!Edn::Nil.is_bool());
+        assert!(!Edn::Int(1).is_float());
+    }
+
+    // -- Accessors --
+
+    #[test]
+    fn test_edn_as_bool() {
+        assert_eq!(Edn::Bool(true).as_bool(), Some(true));
+        assert_eq!(Edn::Nil.as_bool(), None);
+    }
+
+    #[test]
+    fn test_edn_as_i64() {
+        assert_eq!(Edn::Int(7).as_i64(), Some(7));
+        assert_eq!(Edn::Bool(true).as_i64(), None);
+    }
+
+    #[test]
+    fn test_edn_as_f64() {
+        assert_eq!(Edn::Float(3.14).as_f64(), Some(3.14));
+        assert_eq!(Edn::Int(5).as_f64(), Some(5.0));
+        assert_eq!(Edn::Bool(true).as_f64(), None);
+    }
+
+    #[test]
+    fn test_edn_as_char() {
+        assert_eq!(Edn::Char('z').as_char(), Some('z'));
+        assert_eq!(Edn::Nil.as_char(), None);
+    }
+
+    #[test]
+    fn test_edn_as_str() {
+        assert_eq!(Edn::Str(Cow::Borrowed("hi")).as_str(), Some("hi"));
+        assert_eq!(Edn::Nil.as_str(), None);
+    }
+
+    #[test]
+    fn test_edn_as_keyword() {
+        let k = Edn::Keyword(Keyword::new("k"));
+        assert!(k.as_keyword().is_some());
+        assert!(Edn::Nil.as_keyword().is_none());
+    }
+
+    #[test]
+    fn test_edn_as_symbol() {
+        let s = Edn::Symbol(Symbol::new("s"));
+        assert!(s.as_symbol().is_some());
+        assert!(Edn::Nil.as_symbol().is_none());
+    }
+
+    #[test]
+    fn test_edn_as_list() {
+        let l = Edn::List(vec![Edn::Int(1)].into());
+        assert!(l.as_list().is_some());
+        assert!(Edn::Nil.as_list().is_none());
+    }
+
+    #[test]
+    fn test_edn_as_vector() {
+        let v = Edn::Vector(vec![Edn::Int(1)].into());
+        assert!(v.as_vector().is_some());
+        assert!(Edn::Nil.as_vector().is_none());
+    }
+
+    #[test]
+    fn test_edn_as_map() {
+        let m = Edn::Map(crate::collections::EdnMap::new());
+        assert!(m.as_map().is_some());
+        assert!(Edn::Nil.as_map().is_none());
+    }
+
+    #[test]
+    fn test_edn_as_set() {
+        let s = Edn::Set(crate::collections::EdnSet::new());
+        assert!(s.as_set().is_some());
+        assert!(Edn::Nil.as_set().is_none());
+    }
+
+    // -- Numeric narrowing --
+
+    #[test]
+    fn test_edn_numeric_narrowing() {
+        let v = Edn::Int(200);
+        assert_eq!(v.as_u8(), Some(200));
+        assert_eq!(v.as_u16(), Some(200));
+        assert_eq!(v.as_u32(), Some(200));
+        assert_eq!(v.as_u64(), Some(200));
+        assert_eq!(v.as_i8(), None); // 200 out of range
+        assert_eq!(v.as_i16(), Some(200));
+        assert_eq!(v.as_i32(), Some(200));
+
+        assert_eq!(Edn::Int(-1).as_u64(), None);
+    }
+
+    // -- get_keyword on non-map --
+
+    #[test]
+    fn test_edn_get_keyword_non_map() {
+        assert!(Edn::Nil.get_keyword("x").is_none());
+    }
+
+    // -- iter --
+
+    #[test]
+    fn test_edn_iter_set() {
+        let mut s = crate::collections::EdnSet::new();
+        s.insert(Edn::Int(1));
+        s.insert(Edn::Int(2));
+        let edn = Edn::Set(s);
+        assert_eq!(edn.iter().count(), 2);
+    }
+
+    #[test]
+    fn test_edn_iter_non_collection() {
+        assert_eq!(Edn::Int(5).iter().count(), 0);
+    }
+
+    // -- into_owned --
+
+    #[test]
+    fn test_edn_into_owned() {
+        let values: Vec<Edn<'_>> = vec![
+            Edn::Nil,
+            Edn::Bool(true),
+            Edn::Int(7),
+            Edn::Float(3.14),
+            Edn::Char('x'),
+            Edn::Str(Cow::Borrowed("hello")),
+            Edn::Keyword(Keyword::new("k")),
+            Edn::Symbol(Symbol::new("s")),
+            Edn::List(vec![Edn::Int(1)].into()),
+            Edn::Vector(vec![Edn::Int(2)].into()),
+            Edn::Map(crate::collections::EdnMap::new()),
+            Edn::Set(crate::collections::EdnSet::new()),
+            Edn::Tagged(Cow::Borrowed("tag"), Box::new(Edn::Nil)),
+        ];
+        for v in values {
+            let cloned = v.clone();
+            let owned: Edn<'static> = v.into_owned();
+            assert_eq!(owned, cloned);
+        }
+    }
+
+    // -- Ord across variants and within variants --
+
+    #[test]
+    fn test_edn_ord_cross_variant() {
+        assert!(Edn::Nil < Edn::Bool(false));
+        assert!(Edn::Bool(true) < Edn::Int(0));
+        assert!(Edn::Int(0) < Edn::Float(0.0));
+    }
+
+    #[test]
+    fn test_edn_ord_same_variant() {
+        assert!(Edn::Bool(false) < Edn::Bool(true));
+        assert!(Edn::Int(1) < Edn::Int(2));
+        assert!(Edn::Float(1.0) < Edn::Float(2.0));
+        assert!(Edn::Char('a') < Edn::Char('b'));
+        assert!(Edn::Str(Cow::Borrowed("a")) < Edn::Str(Cow::Borrowed("b")));
+        assert!(Edn::Keyword(Keyword::new("a")) < Edn::Keyword(Keyword::new("b")));
+        assert!(Edn::Symbol(Symbol::new("a")) < Edn::Symbol(Symbol::new("b")));
+    }
+
+    #[test]
+    fn test_edn_partial_ord() {
+        assert_eq!(
+            Edn::Int(1).partial_cmp(&Edn::Int(2)),
+            Some(Ordering::Less)
+        );
+    }
+
+    #[test]
+    fn test_edn_ord_list_vector() {
+        let l1 = Edn::List(vec![Edn::Int(1)].into());
+        let l2 = Edn::List(vec![Edn::Int(2)].into());
+        assert!(l1 < l2);
+
+        let v1 = Edn::Vector(vec![Edn::Int(1)].into());
+        let v2 = Edn::Vector(vec![Edn::Int(2)].into());
+        assert!(v1 < v2);
+    }
+
+    #[test]
+    fn test_edn_ord_tagged() {
+        let t1 = Edn::Tagged(Cow::Borrowed("a"), Box::new(Edn::Int(1)));
+        let t2 = Edn::Tagged(Cow::Borrowed("b"), Box::new(Edn::Int(1)));
+        assert!(t1 < t2);
+
+        let t3 = Edn::Tagged(Cow::Borrowed("a"), Box::new(Edn::Int(2)));
+        assert!(t1 < t3);
+    }
+
+    // -- PartialEq across variants --
+
+    #[test]
+    fn test_edn_eq_cross_variant_false() {
+        assert_ne!(Edn::Int(0), Edn::Float(0.0));
+        assert_ne!(Edn::Nil, Edn::Bool(false));
+        assert_ne!(
+            Edn::Str(Cow::Borrowed("foo")),
+            Edn::Keyword(Keyword::new("foo"))
+        );
+    }
+
+    // -- PartialEq within each variant --
+
+    #[test]
+    fn test_edn_eq_tagged() {
+        let a = Edn::Tagged(Cow::Borrowed("t"), Box::new(Edn::Int(1)));
+        let b = Edn::Tagged(Cow::Borrowed("t"), Box::new(Edn::Int(1)));
+        let c = Edn::Tagged(Cow::Borrowed("t"), Box::new(Edn::Int(2)));
+        assert_eq!(a, b);
+        assert_ne!(a, c);
     }
 }

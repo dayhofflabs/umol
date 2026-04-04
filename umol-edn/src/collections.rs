@@ -91,11 +91,10 @@ fn key_ref_variant_ord(k: &EdnKeyRef<'_>) -> u8 {
         EdnKeyRef::Str(_) => 7,
         EdnKeyRef::Keyword(_) => 8,
         EdnKeyRef::Symbol(_) => 9,
-        EdnKeyRef::List(_) => 10,
-        EdnKeyRef::Vector(_) => 11,
-        EdnKeyRef::Map(_) => 12,
-        EdnKeyRef::Set(_) => 13,
-        EdnKeyRef::Tagged(_, _) => 14,
+        EdnKeyRef::List(_) | EdnKeyRef::Vector(_) => 10,
+        EdnKeyRef::Map(_) => 11,
+        EdnKeyRef::Set(_) => 12,
+        EdnKeyRef::Tagged(_, _) => 13,
     }
 }
 
@@ -115,13 +114,7 @@ impl Hash for EdnKeyRef<'_> {
             Self::Str(s) => s.hash(state),
             Self::Keyword(s) => s.hash(state),
             Self::Symbol(s) => s.hash(state),
-            Self::List(v) => {
-                v.len().hash(state);
-                for item in *v {
-                    item.hash(state);
-                }
-            }
-            Self::Vector(v) => {
+            Self::List(v) | Self::Vector(v) => {
                 v.len().hash(state);
                 for item in *v {
                     item.hash(state);
@@ -152,8 +145,7 @@ impl hashbrown::Equivalent<Edn<'_>> for EdnKeyRef<'_> {
             (Self::Str(a), Edn::Str(b)) => *a == &**b,
             (Self::Keyword(a), Edn::Keyword(b)) => *a == b.as_str(),
             (Self::Symbol(a), Edn::Symbol(b)) => *a == b.as_str(),
-            (Self::List(a), Edn::List(b)) => *a == &**b,
-            (Self::Vector(a), Edn::Vector(b)) => *a == &**b,
+            (Self::List(a) | Self::Vector(a), Edn::List(b) | Edn::Vector(b)) => *a == &**b,
             (Self::Map(a), Edn::Map(b)) => *a == b,
             (Self::Set(a), Edn::Set(b)) => *a == b,
             (Self::Tagged(ta, va), Edn::Tagged(tb, vb)) => *ta == &**tb && *va == &**vb,
@@ -702,5 +694,155 @@ mod tests {
         let float = Edn::Float(1.0);
         let ref_int = EdnKeyRef::from(&int);
         assert!(!ref_int.equivalent(&float));
+    }
+
+    // -- EdnMap: remove, contains_ref, keys, values, into_owned, trait impls --
+
+    #[test]
+    fn test_edn_map_remove() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("a"), Edn::Int(1));
+        assert_eq!(m.remove(&Edn::keyword("a")), Some(Edn::Int(1)));
+        assert_eq!(m.remove(&Edn::keyword("a")), None);
+    }
+
+    #[test]
+    fn test_edn_map_contains_ref() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("x"), Edn::Int(1));
+        assert!(m.contains_ref(EdnKeyRef::keyword("x")));
+        assert!(!m.contains_ref(EdnKeyRef::keyword("y")));
+    }
+
+    #[test]
+    fn test_edn_map_keys_values() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::Int(1), Edn::Bool(true));
+        assert_eq!(m.keys().count(), 1);
+        assert_eq!(m.values().count(), 1);
+    }
+
+    #[test]
+    fn test_edn_map_into_owned() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("k"), Edn::Str(Cow::Borrowed("v")));
+        let owned: EdnMap<'static> = m.into_owned();
+        assert_eq!(owned.len(), 1);
+    }
+
+    #[test]
+    fn test_edn_map_default() {
+        let m: EdnMap<'_> = EdnMap::default();
+        assert!(m.is_empty());
+    }
+
+    #[test]
+    fn test_edn_map_ref_into_iter() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::Int(1), Edn::Int(2));
+        let count = (&m).into_iter().count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_edn_map_from_iter() {
+        let m: EdnMap<'_> = vec![
+            (Edn::Int(1), Edn::Bool(true)),
+            (Edn::Int(2), Edn::Bool(false)),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(m.len(), 2);
+    }
+
+    #[test]
+    fn test_edn_map_ord() {
+        let mut m1 = EdnMap::new();
+        m1.insert(Edn::Int(1), Edn::Int(10));
+        let mut m2 = EdnMap::new();
+        m2.insert(Edn::Int(2), Edn::Int(20));
+        assert!(m1 < m2);
+        assert_eq!(m1.partial_cmp(&m2), Some(std::cmp::Ordering::Less));
+    }
+
+    // -- EdnSet: is_empty, into_owned, Default, trait impls, Ord --
+
+    #[test]
+    fn test_edn_set_is_empty() {
+        let s = EdnSet::new();
+        assert!(s.is_empty());
+        let mut s2 = EdnSet::new();
+        s2.insert(Edn::Int(1));
+        assert!(!s2.is_empty());
+    }
+
+    #[test]
+    fn test_edn_set_default() {
+        let s: EdnSet<'_> = EdnSet::default();
+        assert!(s.is_empty());
+    }
+
+    #[test]
+    fn test_edn_set_ref_into_iter() {
+        let mut s = EdnSet::new();
+        s.insert(Edn::Int(1));
+        s.insert(Edn::Int(2));
+        let count = (&s).into_iter().count();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn test_edn_set_from_iter() {
+        let s: EdnSet<'_> = vec![Edn::Int(1), Edn::Int(2)].into_iter().collect();
+        assert_eq!(s.len(), 2);
+    }
+
+    #[test]
+    fn test_edn_set_ord() {
+        let mut s1 = EdnSet::new();
+        s1.insert(Edn::Int(1));
+        let mut s2 = EdnSet::new();
+        s2.insert(Edn::Int(2));
+        assert!(s1 < s2);
+        assert_eq!(s1.partial_cmp(&s2), Some(std::cmp::Ordering::Less));
+    }
+
+    // -- EdnSeq: len, is_empty, Default, FromIterator, ref IntoIterator, PartialOrd --
+
+    #[test]
+    fn test_edn_seq_len_is_empty() {
+        let s = EdnSeq::new();
+        assert_eq!(s.len(), 0);
+        assert!(s.is_empty());
+        let mut s2 = EdnSeq::new();
+        s2.push(Edn::Int(1));
+        assert_eq!(s2.len(), 1);
+        assert!(!s2.is_empty());
+    }
+
+    #[test]
+    fn test_edn_seq_default() {
+        let s: EdnSeq<'_> = EdnSeq::default();
+        assert!(s.is_empty());
+    }
+
+    #[test]
+    fn test_edn_seq_from_iter() {
+        let s: EdnSeq<'_> = vec![Edn::Int(1), Edn::Int(2)].into_iter().collect();
+        assert_eq!(s.len(), 2);
+    }
+
+    #[test]
+    fn test_edn_seq_ref_into_iter() {
+        let s: EdnSeq<'_> = vec![Edn::Int(1)].into();
+        let count = (&s).into_iter().count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_edn_seq_partial_ord() {
+        let a: EdnSeq<'_> = vec![Edn::Int(1)].into();
+        let b: EdnSeq<'_> = vec![Edn::Int(2)].into();
+        assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less));
     }
 }

@@ -56,7 +56,7 @@ impl<'c> ParseCtx<'c> {
 /// Get the remaining input as a `&str`.
 #[inline(always)]
 fn rest<'a>(input: &Input<'a>) -> &'a str {
-    *input.as_ref()
+    input.as_ref()
 }
 
 /// Peek at the next byte without consuming.
@@ -402,7 +402,7 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
                             let cp = u32::from_str_radix(hex, 16)
                                 .map_err(|_| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
                             let ch = char::from_u32(cp)
-                                .ok_or_else(|| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
+                                .ok_or(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
                             result.push(ch);
                         }
                         _ => return Err(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset })),
@@ -461,7 +461,7 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
             let cp = u32::from_str_radix(hex, 16)
                 .map_err(|_| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
             let ch =
-                char::from_u32(cp).ok_or_else(|| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
+                char::from_u32(cp).ok_or(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
             return Ok(Edn::Char(ch));
         }
 
@@ -474,10 +474,9 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         ];
 
         for &(name, ch) in NAMED {
-            if s.starts_with(name) {
-                let after = &s[name.len()..];
+            if let Some(after) = s.strip_prefix(name) {
                 let terminates = after.is_empty()
-                    || after.as_bytes().first().map_or(true, |&b| {
+                    || after.as_bytes().first().is_none_or(|&b| {
                         !is_symbol_char(b as char) || is_ws_byte(b)
                     });
                 if terminates {

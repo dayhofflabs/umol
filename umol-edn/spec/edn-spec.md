@@ -207,7 +207,31 @@ for data-carrying variants (`#Circle 3.14`, `#Rect [1.0 2.0]`,
 (`:red`). A tagged literal `#Tag value` deserialized as a unit variant requires
 the payload to be `nil`; non-nil payloads are rejected.
 
-## 16. Ambiguity resolutions
+## 16. Equality
+
+Per the EDN spec, equality is defined per type:
+
+- `nil`, booleans, strings, characters, symbols: equal when same type and same
+  representation.
+- Integers and floats: equal only when same magnitude, type, and precision.
+  `Int(1)` is never equal to `Float(1.0)`.
+- **Sequences:** Lists and vectors are equal to other sequences with the same
+  elements in the same order, regardless of container type. `(1 2 3)` equals
+  `[1 2 3]`. Both use `EdnSeq` internally and share the same `Hash`
+  discriminant.
+- Sets: equal when they contain the same elements.
+- Maps: equal when they have the same key-value entries.
+- Tagged elements: equal when the tag and inner value are equal.
+
+**`#inst` equality:** The EDN spec requires `#inst` elements to be equal when
+they designate the same timestamp per RFC-3339 (e.g., `Z` and `+00:00` are
+equivalent). umol-edn compares the string representation of the inner value, not
+the parsed timestamp. This means `#inst "2024-01-01T00:00:00Z"` is not equal to
+`#inst "2024-01-01T00:00:00+00:00"`. This is a known minor deviation; semantic
+comparison would require the `chrono` feature to influence equality, which would
+make `PartialEq` behavior depend on a feature flag.
+
+## 17. Ambiguity resolutions
 
 Summary of decisions on underspecified areas of the EDN spec:
 
@@ -223,6 +247,7 @@ Summary of decisions on underspecified areas of the EDN spec:
 | `-0` / `-0.0`                         | Valid                                         | 5, 6    |
 | `/` as symbol                         | Valid                                         | 10      |
 | Non-string map keys in structs        | Stringified; serde handles as unknown fields  | 13      |
+| `#inst` equality                      | String comparison, not semantic timestamp      | 16      |
 
 ## Round-tripping
 

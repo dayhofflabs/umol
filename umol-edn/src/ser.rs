@@ -562,4 +562,98 @@ mod tests {
         let s = to_string(&m).unwrap();
         assert!(s == r#"{"a" 1 "b" 2}"# || s == r#"{"b" 2 "a" 1}"#);
     }
+
+    #[rstest]
+    #[case(7i8, "7")]
+    #[case(-1i8, "-1")]
+    fn test_serialize_i8(#[case] input: i8, #[case] expected: &str) {
+        assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(300i16, "300")]
+    #[case(-300i16, "-300")]
+    fn test_serialize_i16(#[case] input: i16, #[case] expected: &str) {
+        assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(100000i32, "100000")]
+    fn test_serialize_i32(#[case] input: i32, #[case] expected: &str) {
+        assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(7u8, "7")]
+    #[case(255u8, "255")]
+    fn test_serialize_u8(#[case] input: u8, #[case] expected: &str) {
+        assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(1000u16, "1000")]
+    fn test_serialize_u16(#[case] input: u16, #[case] expected: &str) {
+        assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case(100000u32, "100000")]
+    fn test_serialize_u32(#[case] input: u32, #[case] expected: &str) {
+        assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_serialize_f32() {
+        let s = to_string(&3.14f32).unwrap();
+        assert!(s.starts_with("3.14"));
+    }
+
+    #[rstest]
+    #[case('\n', "\\newline")]
+    #[case('\r', "\\return")]
+    #[case(' ', "\\space")]
+    #[case('\t', "\\tab")]
+    #[case('x', "\\x")]
+    fn test_serialize_char_special(#[case] input: char, #[case] expected: &str) {
+        assert_eq!(to_string(&input).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_serialize_char_control() {
+        let s = to_string(&'\x01').unwrap();
+        assert_eq!(s, "\\u0001");
+        let s = to_string(&'\x7F').unwrap();
+        assert_eq!(s, "\\u007F");
+    }
+
+    #[test]
+    fn test_serialize_string_carriage_return() {
+        assert_eq!(to_string(&"a\rb").unwrap(), r#""a\rb""#);
+    }
+
+    #[test]
+    fn test_serialize_string_backslash() {
+        assert_eq!(to_string(&r"a\b").unwrap(), r#""a\\b""#);
+    }
+
+    #[test]
+    fn test_serialize_bytes_error() {
+        use serde::Serializer;
+        let mut ser = crate::ser::EdnSerializer::new();
+        assert!((&mut ser).serialize_bytes(b"data").is_err());
+    }
+
+    #[test]
+    fn test_serialize_unit_struct() {
+        #[derive(Serialize)]
+        struct Marker;
+        assert_eq!(to_string(&Marker).unwrap(), "nil");
+    }
+
+    #[test]
+    fn test_serialize_tuple_struct() {
+        #[derive(Serialize)]
+        struct Pair(i64, i64);
+        assert_eq!(to_string(&Pair(3, 4)).unwrap(), "[3 4]");
+    }
 }

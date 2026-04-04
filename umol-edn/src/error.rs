@@ -3,6 +3,10 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+#[cfg(feature = "serde")]
+use serde::de::Error as SerdeDeError;
+#[cfg(feature = "serde")]
+use serde::ser::Error as SerdeSerError;
 use winnow::error::{ErrMode, ParserError};
 use winnow::stream::Location;
 use winnow::LocatingSlice;
@@ -10,18 +14,45 @@ use winnow::LocatingSlice;
 /// EDN parsing/formatting error.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EdnError {
-    UnexpectedEof { offset: usize },
-    UnexpectedToken { offset: usize, found: char },
-    InvalidNumber { offset: usize },
-    InvalidEscape { offset: usize },
-    InvalidCharLiteral { offset: usize },
-    InvalidSymbol { offset: usize },
-    DuplicateKey { offset: usize },
-    InvalidTag { offset: usize, tag: String },
-    InvalidInst { reason: String },
-    InvalidUuid { reason: String },
-    TrailingContent { offset: usize },
-    UnsupportedFeature { offset: usize, feature: &'static str },
+    UnexpectedEof {
+        offset: usize,
+    },
+    UnexpectedToken {
+        offset: usize,
+        found: char,
+    },
+    InvalidNumber {
+        offset: usize,
+    },
+    InvalidEscape {
+        offset: usize,
+    },
+    InvalidCharLiteral {
+        offset: usize,
+    },
+    InvalidSymbol {
+        offset: usize,
+    },
+    DuplicateKey {
+        offset: usize,
+    },
+    InvalidTag {
+        offset: usize,
+        tag: String,
+    },
+    InvalidInst {
+        reason: String,
+    },
+    InvalidUuid {
+        reason: String,
+    },
+    TrailingContent {
+        offset: usize,
+    },
+    UnsupportedFeature {
+        offset: usize,
+        feature: &'static str,
+    },
     Custom(String),
 }
 
@@ -99,14 +130,14 @@ pub(crate) fn unwrap_err(e: ErrMode<EdnError>) -> EdnError {
 }
 
 #[cfg(feature = "serde")]
-impl serde::de::Error for EdnError {
+impl SerdeDeError for EdnError {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         EdnError::Custom(msg.to_string())
     }
 }
 
 #[cfg(feature = "serde")]
-impl serde::ser::Error for EdnError {
+impl SerdeSerError for EdnError {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         EdnError::Custom(msg.to_string())
     }

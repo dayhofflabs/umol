@@ -35,7 +35,7 @@ impl TagReaders {
     /// Register a tag reader. The tag should not include `#`.
     pub fn insert(&mut self, tag: impl Into<String>, f: TagFn) {
         let tag: String = tag.into();
-        if let Some(entry) = self.readers.iter_mut().find(|(k, _)| &**k == &*tag) {
+        if let Some(entry) = self.readers.iter_mut().find(|(k, _)| **k == *tag) {
             entry.1 = f;
         } else {
             self.readers.push((tag.into_boxed_str(), f));
@@ -61,17 +61,8 @@ impl Default for TagReaders {
 }
 
 /// Parser configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ParseConfig {
     pub duplicate_keys: DuplicateKeyPolicy,
     pub tag_readers: TagReaders,
-}
-
-impl Default for ParseConfig {
-    fn default() -> Self {
-        ParseConfig {
-            duplicate_keys: DuplicateKeyPolicy::default(),
-            tag_readers: TagReaders::default(),
-        }
-    }
 }
