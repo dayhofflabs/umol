@@ -100,11 +100,11 @@ impl<'a> Serializer for &'a mut EdnSerializer {
                 "EDN cannot represent NaN or Infinity".into(),
             ));
         }
-        let start = self.output.len();
-        write!(self.output, "{v}").unwrap();
-        let s = &self.output[start..];
+        let mut buf = zmij::Buffer::new();
+        let s = buf.format_finite(v);
+        self.output.push_str(s);
         if !s.contains('.') && !s.contains('e') && !s.contains('E') {
-            self.output += ".0";
+            self.output.push_str(".0");
         }
         Ok(())
     }

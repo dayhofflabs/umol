@@ -70,7 +70,7 @@ fn format_float(f: &mut fmt::Formatter<'_>, v: f64) -> fmt::Result {
     if v.is_nan() || !v.is_finite() {
         return Err(fmt::Error);
     }
-    let mut buf = ryu::Buffer::new();
+    let mut buf = zmij::Buffer::new();
     f.write_str(buf.format_finite(v))
 }
 

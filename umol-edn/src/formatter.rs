@@ -130,7 +130,7 @@ fn bignum_display_len(v: &impl std::fmt::Display) -> usize {
 }
 
 fn format_float_len(v: f64) -> usize {
-    let mut buf = ryu::Buffer::new();
+    let mut buf = zmij::Buffer::new();
     buf.format_finite(v).len()
 }
 

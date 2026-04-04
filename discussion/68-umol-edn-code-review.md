@@ -47,7 +47,7 @@ Status legend:
 | P0-1 Float `Eq`/`Hash` mismatch | `Resolved` | `Edn` now distinguishes NaN payloads consistently in `cmp` + `hash`, with dedicated tests in `edn.rs`. |
 | P0-2 Tagged unit payload dropped | `Resolved` | `unit_variant` now requires `nil` payload and errors otherwise; tests cover error cases. |
 | P0-3 `bignum` claimed but unimplemented | `Resolved` | `bignum` paths exist in parser/streaming and pass under `--features bignum`. |
-| P1-1 Built-in tag behavior mismatch | `Resolved` | Streaming `skip_tag_if_present` now has matching `BUILTIN_TAGS` list; both parsers allow bare `inst`/`uuid` as `Tagged`. |
+| P1-1 Built-in tag behavior mismatch | `Resolved` | Both parsers have matching `BUILTIN_TAGS`; `inst`/`uuid` parse as `Tagged(...)` without features, with validation when features are on. Spec text aligned. |
 | P1-2 BTree vs hash storage docs mismatch | `Resolved` | Spec now states hash-based storage and explains deterministic formatting separately. |
 | P1-3 Macro/parser divergence on special floats/chars | `Resolved` | Macro now rejects `##NaN`/`##Inf`/`##-Inf`; char names aligned (`newline`, `return`, `space`, `tab` only). Display returns `Err` for non-finite floats. |
 | P2-1 Struct key handling | `Resolved` | Behavior is now explicit and tested for both value-tree and streaming deserialization pathways. |
@@ -142,7 +142,7 @@ Pick one and enforce consistently:
 
 ---
 
-### P1-1 (`Partially resolved`): Spec contradiction for built-in unqualified tags without features
+### P1-1 (`Resolved`): Spec contradiction for built-in unqualified tags without features
 
 **Evidence**
 
@@ -159,12 +159,12 @@ Feature-off behavior for `#inst`/`#uuid` is documented one way and implemented a
 - Behavioral surprises in production with feature toggles.
 - Tests/docs confusion.
 
-**Fix direction**
+**Resolution**
 
-Either:
-
-- Update parser behavior to allow these bare built-ins as plain `Tagged`, or
-- Update spec/docs to state they are rejected unless feature-enabled reader exists.
+Both parsers now have `BUILTIN_TAGS = ["inst", "uuid"]` allowing these tags through as
+`Tagged(tag, value)` even without the corresponding feature. With the feature enabled,
+the registered tag reader validates the payload. Spec text at `edn-spec.md:198-202`
+accurately describes this behavior.
 
 ---
 
@@ -194,7 +194,7 @@ Either:
 
 ---
 
-### P1-3 (`Not resolved`): Macro/parser behavior diverges on special floats and char names
+### P1-3 (`Resolved`): Macro/parser behavior diverges on special floats and char names
 
 **Evidence**
 
@@ -337,7 +337,7 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 ---
 
-### P3-3 (`Partially resolved`): Documentation drift in README feature table
+### P3-3 (`Resolved`): Documentation drift in README feature table
 
 **Evidence**
 
@@ -347,9 +347,10 @@ Malformed config input may deserialize successfully with fields omitted, instead
 
 - Confusing crate capability signaling.
 
-**Fix direction**
+**Resolution**
 
-- Sync README with real feature surface after resolving `bignum` implementation status.
+README feature table now lists all five features (`serde`, `chrono`, `uuid`, `macros`,
+`bignum`) matching `Cargo.toml`.
 
 ## Test Coverage Gaps
 
@@ -409,8 +410,7 @@ This section intentionally ignores prior findings and reports only current-code 
 ### P0
 
 1. **Unsafe lifetime cast in map lookups (`collections.rs`)** — `Resolved`
-   - `EdnMap::get` and `contains_key` use raw pointer lifetime widening.
-   - SAFETY comments now document the invariant: `Hash`/`Eq` are content-based and lifetime-independent. `collections.rs:40-48`
+   - Unsafe pointer casts removed entirely. `EdnMap`/`EdnSet` now use `hashbrown::HashMap`/`HashSet` with the `Equivalent` trait. Cross-lifetime lookups go through `EdnKeyRef` + `get_ref`/`contains_ref`.
 
 2. **Discard parser swallows parse errors (`parser.rs`)** — `Resolved`
    - `ws_and_comments` now breaks out of the loop on discard parse failure instead of ignoring the error. The malformed content surfaces as an error on the next `edn_value` call. `parser.rs:146`
@@ -457,10 +457,10 @@ Adversarial review focused on correctness, performance, unnecessary complexity, 
 | 1.4 | Tagged `Display` can produce unparseable EDN | Medium | `is_valid_tag()` validates tag name before rendering; returns `Err(fmt::Error)` for invalid tags. `display.rs:47-50,56-67` |
 | 2.1 | `EdnMap`/`EdnSet` equality allocates and sorts every call | Medium | `EdnMap::eq` via hash-map lookup, `EdnSet::eq` via hash-set contains — O(n) with zero allocation. `Edn::eq` decoupled from `Ord` with direct variant matching. `collections.rs:112-116,221-225`, `edn.rs:521-550` |
 | 4.2 | `Tagged` uses `String` not `Cow<'a, str>` | Low | `Tagged(Cow<'a, str>, Box<Edn<'a>>)`. Parser produces zero-copy `Cow::Borrowed(tag)`. Updated across `edn.rs`, `parser.rs`, `tags.rs`, `de.rs`, `display.rs`, `formatter.rs`, `umol-edn-macros`. |
-| 2.2 | `format_float` allocates via `format!()` | Low | `ryu::Buffer::format_finite` — stack-allocated, no heap. Applied to both `display.rs:69-73` and `formatter.rs:117-119`. |
-| 2.3 | Serializer allocates temporary strings for integers/floats | Low | `serialize_i64`/`serialize_u64` use `itoa::Buffer`; `serialize_f64` uses `write!` directly. `ser.rs:72-96` |
+| 2.2 | `format_float` allocates via `format!()` | Low | `zmij::Buffer::format_finite` — stack-allocated, no heap. Applied to `display.rs`, `formatter.rs`, and `ser.rs`. |
+| 2.3 | Serializer allocates temporary strings for integers/floats | Low | `serialize_i64`/`serialize_u64` use `itoa::Buffer`; `serialize_f64` uses `zmij::Buffer`. `ser.rs:72-96` |
 | 2.4 | `EdnSeq::From<Vec>` round-trips through iterator for no reason | Low | `Self(v)` instead of `Self(v.into_iter().collect())`. `collections.rs:306` |
-| 4.3 | Unsafe lifetime coercion in `EdnMap::get`/`contains_key` missing SAFETY comment | Low | SAFETY comments documenting the lifetime-independence invariant. `collections.rs:40-48` |
+| 4.3 | Unsafe lifetime coercion in `EdnMap::get`/`contains_key` | Low | Unsafe removed. Switched to `hashbrown::HashMap` with `Equivalent` trait; cross-lifetime lookups via `EdnKeyRef`. |
 
 ### Remaining: not fixing
 
