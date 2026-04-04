@@ -7,6 +7,8 @@ members = [
     "umol-fuzz",
     "umol-geometric",
     "umol-graph",
+    "umol-msym",
+    "umol-msym-sys",
     "umol-params",
 ]
 exclude = ["fuzz"]

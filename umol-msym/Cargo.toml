@@ -1,0 +1,13 @@
+[package]
+name = "umol-msym"
+version = "0.1.0"
+edition = "2021"
+description = "Ergonomic Rust wrapper for libmsym (molecular symmetry)"
+license = "MIT"
+
+[dependencies]
+umol-msym-sys = { path = "../umol-msym-sys" }
+thiserror = "2"
+
+[dev-dependencies]
+rstest = "0.25"

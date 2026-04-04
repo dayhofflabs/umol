@@ -1,0 +1,10 @@
+[package]
+name = "umol-msym-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Raw FFI bindings to libmsym (molecular symmetry)"
+license = "MIT"
+links = "msym"
+
+[build-dependencies]
+cc = "1"
