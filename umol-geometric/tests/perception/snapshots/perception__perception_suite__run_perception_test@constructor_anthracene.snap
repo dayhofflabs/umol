@@ -1,0 +1,31 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: D2h
+order: 8
+equivalence_sets:
+  - - C(0)
+    - C(1)
+  - - H(2)
+    - H(3)
+  - - C(4)
+    - C(5)
+    - C(6)
+    - C(7)
+  - - C(8)
+    - C(9)
+    - C(10)
+    - C(11)
+  - - C(12)
+    - C(13)
+    - C(14)
+    - C(15)
+  - - H(16)
+    - H(17)
+    - H(18)
+    - H(19)
+  - - H(20)
+    - H(21)
+    - H(22)
+    - H(23)

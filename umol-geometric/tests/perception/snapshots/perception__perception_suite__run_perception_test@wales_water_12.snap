@@ -1,0 +1,6 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+error_code: -14
+error: "Error determining symmetry operations: Symmetric polyhedron not at center of mass. Vector length: 1.015376e-03 > 1.000000e-03 (zero threshold)"

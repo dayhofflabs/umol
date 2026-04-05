@@ -1,0 +1,19 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: Oh
+order: 48
+equivalence_sets:
+  - - B(0)
+    - B(1)
+    - B(2)
+    - B(3)
+    - B(4)
+    - B(5)
+  - - H(6)
+    - H(7)
+    - H(8)
+    - H(9)
+    - H(10)
+    - H(11)

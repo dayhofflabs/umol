@@ -1,0 +1,11 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: Td
+order: 24
+equivalence_sets:
+  - - P(0)
+    - P(1)
+    - P(2)
+    - P(3)

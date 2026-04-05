@@ -13,6 +13,21 @@ pub struct SymmetryResult {
     pub centers: Vec<SymmetryCenter>,
 }
 
+fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
+    let equivalence_sets = centers
+        .iter()
+        .map(|c| EquivalenceSet {
+            centers: vec![c.clone()],
+            max_error: 0.0,
+        })
+        .collect();
+    SymmetryResult {
+        group: PointGroup::c1(),
+        equivalence_sets,
+        centers: centers.to_vec(),
+    }
+}
+
 /// Detect point group symmetry of a set of atoms.
 ///
 /// Centers must have positions in Angstroms (libmsym convention).
@@ -23,7 +38,13 @@ pub fn detect_symmetry(
     let mut ctx = Context::new()?;
     ctx.set_elements(centers)?;
     ctx.set_thresholds(&thresholds)?;
-    ctx.find_symmetry()?;
+    match ctx.find_symmetry() {
+        Ok(()) => {}
+        Err(e) if e.code == umol_msym_sys::MSYM_POINT_GROUP_ERROR => {
+            return Ok(c1_result(centers));
+        }
+        Err(e) => return Err(e),
+    }
 
     let group = PointGroup::from_context(&ctx)?;
     let equivalence_sets = ctx.equivalence_sets()?;
@@ -47,7 +68,13 @@ pub fn symmetrize(
     let mut ctx = Context::new()?;
     ctx.set_elements(centers)?;
     ctx.set_thresholds(&thresholds)?;
-    ctx.find_symmetry()?;
+    match ctx.find_symmetry() {
+        Ok(()) => {}
+        Err(e) if e.code == umol_msym_sys::MSYM_POINT_GROUP_ERROR => {
+            return Ok(c1_result(centers));
+        }
+        Err(e) => return Err(e),
+    }
     ctx.symmetrize_elements()?;
     // Re-detect to repopulate the character table (cleared by symmetrize_elements)
     ctx.find_symmetry()?;

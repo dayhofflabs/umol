@@ -1,0 +1,24 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: Td
+order: 24
+equivalence_sets:
+  - - C(0)
+  - - C(1)
+    - C(2)
+    - C(3)
+    - C(4)
+  - - H(5)
+    - H(6)
+    - H(7)
+    - H(8)
+    - H(9)
+    - H(10)
+    - H(11)
+    - H(12)
+    - H(13)
+    - H(14)
+    - H(15)
+    - H(16)

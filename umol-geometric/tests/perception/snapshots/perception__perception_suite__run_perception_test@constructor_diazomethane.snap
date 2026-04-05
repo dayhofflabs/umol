@@ -1,0 +1,12 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: C2v
+order: 4
+equivalence_sets:
+  - - H(0)
+    - C(1)
+  - - H(2)
+  - - N(3)
+  - - N(4)

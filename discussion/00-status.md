@@ -75,3 +75,4 @@
 | [70-bond-perception-2026-04-04.md](70--bond-perception-2026-04-04.md)                                                            | Completed     | 2026-04-04   |
 | [71-distance-geometry-plan-2026-04-04](71-distance-geometry-plan-2026-04-04)                                                     | Active        | 2026-04-04   |
 | [72-msym-integration-2026-04-04.md](72-msym-integration-2026-04-04.md)                                                           | Active        | 2026-04-04   |  
+| [73-molecule-symmetry-collection-2026-04-04.md](73-molecule-symmetry-collection-2026-04-04.md)                                   | Active        | 2026-04-04   |

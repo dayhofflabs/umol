@@ -1,0 +1,9 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: C0v
+order: 2
+equivalence_sets:
+  - - Cl(0)
+  - - H(1)

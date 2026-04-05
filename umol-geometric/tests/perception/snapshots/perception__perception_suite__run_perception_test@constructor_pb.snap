@@ -1,0 +1,19 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: Ih
+order: 120
+equivalence_sets:
+  - - Pb(0)
+    - Pb(1)
+    - Pb(2)
+    - Pb(3)
+    - Pb(4)
+    - Pb(5)
+    - Pb(6)
+    - Pb(7)
+    - Pb(8)
+    - Pb(9)
+    - Pb(10)
+    - Pb(11)

@@ -1,0 +1,13 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: D3d
+order: 12
+equivalence_sets:
+  - - S(0)
+    - S(1)
+    - S(2)
+    - S(3)
+    - S(4)
+    - S(5)

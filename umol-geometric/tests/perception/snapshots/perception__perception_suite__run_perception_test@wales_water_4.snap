@@ -1,0 +1,19 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: S4
+order: 4
+equivalence_sets:
+  - - O(0)
+    - H(1)
+    - H(2)
+    - H(3)
+  - - O(4)
+    - H(5)
+    - O(6)
+    - H(7)
+  - - H(8)
+    - O(9)
+    - H(10)
+    - H(11)

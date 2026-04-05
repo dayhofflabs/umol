@@ -1,0 +1,42 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: C3
+order: 3
+equivalence_sets:
+  - - C(0)
+  - - H(1)
+  - - C(2)
+    - C(3)
+    - C(4)
+  - - C(5)
+    - C(6)
+    - C(7)
+  - - H(8)
+    - H(9)
+    - H(10)
+  - - H(11)
+    - H(12)
+    - C(13)
+  - - C(14)
+    - C(15)
+    - C(16)
+  - - C(17)
+    - C(18)
+    - H(19)
+  - - H(20)
+    - H(21)
+    - H(22)
+  - - H(23)
+    - C(24)
+    - C(25)
+  - - C(26)
+    - C(27)
+    - C(28)
+  - - C(29)
+    - H(30)
+    - H(31)
+  - - H(32)
+    - H(33)
+    - H(34)

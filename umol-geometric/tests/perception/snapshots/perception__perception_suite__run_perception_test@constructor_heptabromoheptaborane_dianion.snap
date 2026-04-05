@@ -1,0 +1,21 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: D5h
+order: 20
+equivalence_sets:
+  - - B(0)
+    - B(1)
+    - B(2)
+    - B(3)
+    - B(4)
+  - - B(5)
+    - B(6)
+  - - Br(7)
+    - Br(8)
+  - - Br(9)
+    - Br(10)
+    - Br(11)
+    - Br(12)
+    - Br(13)

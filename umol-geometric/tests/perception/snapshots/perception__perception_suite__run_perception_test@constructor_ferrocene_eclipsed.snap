@@ -1,0 +1,28 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: D5h
+order: 20
+equivalence_sets:
+  - - Fe(0)
+  - - C(1)
+    - C(2)
+    - C(3)
+    - C(4)
+    - C(5)
+    - H(6)
+    - H(7)
+    - H(8)
+    - H(9)
+    - H(10)
+  - - C(11)
+    - C(12)
+    - C(13)
+    - C(14)
+    - C(15)
+    - H(16)
+    - H(17)
+    - H(18)
+    - H(19)
+    - H(20)

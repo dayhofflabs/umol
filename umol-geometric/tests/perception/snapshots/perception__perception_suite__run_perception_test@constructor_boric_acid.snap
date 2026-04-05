@@ -1,0 +1,14 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: C3h
+order: 6
+equivalence_sets:
+  - - B(0)
+  - - O(1)
+    - O(2)
+    - O(3)
+  - - H(4)
+    - H(5)
+    - H(6)

@@ -1,0 +1,15 @@
+---
+source: umol-geometric/tests/perception/mod.rs
+expression: result
+---
+point_group: C3v
+order: 6
+equivalence_sets:
+  - - C(0)
+  - - C(1)
+  - - H(2)
+    - H(3)
+    - H(4)
+  - - Cl(5)
+    - Cl(6)
+    - Cl(7)
