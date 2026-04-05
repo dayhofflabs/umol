@@ -12,7 +12,6 @@ use umol_data::spin::SpinMultiplicity;
 use umol_data::units::Length;
 
 use crate::molecule::Molecule;
-use crate::point_group::C1;
 
 /// Error type for XYZ parsing.
 #[derive(Debug)]
@@ -40,7 +39,7 @@ impl fmt::Display for ParseError {
 
 impl Error for ParseError {}
 
-/// Parse an XYZ string into a `Molecule<C1>` with charge and multiplicity provided.
+/// Parse an XYZ string into a `Molecule` with charge and multiplicity provided.
 ///
 /// Coordinates are in Angstroms (converted to Bohr internally).
 /// Charge and spin multiplicity default to 0 and singlet.
@@ -48,7 +47,7 @@ pub fn parse_xyz_with(
     input: &str,
     charge: i32,
     multiplicity: SpinMultiplicity,
-) -> Result<(Molecule<C1>, String), ParseError> {
+) -> Result<(Molecule, String), ParseError> {
     let mut lines = input.lines();
 
     let count_line = lines.next().ok_or(ParseError::UnexpectedEof)?;
@@ -102,8 +101,8 @@ pub fn parse_xyz_with(
     Ok((mol, comment))
 }
 
-/// Parse an XYZ string into a `Molecule<C1>` with default charge and multiplicity.
-pub fn parse_xyz(input: &str) -> Result<(Molecule<C1>, String), ParseError> {
+/// Parse an XYZ string into a `Molecule` with default charge and multiplicity.
+pub fn parse_xyz(input: &str) -> Result<(Molecule, String), ParseError> {
     parse_xyz_with(input, 0, SpinMultiplicity::Singlet)
 }
 

@@ -1,6 +1,8 @@
+use std::f64::consts::PI;
 use std::ffi::CStr;
 use std::fmt;
 
+use nalgebra::Matrix3;
 use umol_msym_sys as ffi;
 
 // ---------------------------------------------------------------------------
@@ -39,7 +41,7 @@ impl From<ffi::msym_geometry_t> for Geometry {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PointGroupType {
+pub enum PointGroupKind {
     Kh,
     K,
     Ci,
@@ -60,7 +62,7 @@ pub enum PointGroupType {
     Ih,
 }
 
-impl From<ffi::msym_point_group_type_t> for PointGroupType {
+impl From<ffi::msym_point_group_type_t> for PointGroupKind {
     fn from(t: ffi::msym_point_group_type_t) -> Self {
         match t {
             ffi::MSYM_POINT_GROUP_TYPE_Kh => Self::Kh,
@@ -86,7 +88,7 @@ impl From<ffi::msym_point_group_type_t> for PointGroupType {
     }
 }
 
-impl PointGroupType {
+impl PointGroupKind {
     pub(crate) fn to_ffi(self) -> ffi::msym_point_group_type_t {
         match self {
             Self::Kh => ffi::MSYM_POINT_GROUP_TYPE_Kh,
@@ -116,7 +118,7 @@ impl PointGroupType {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SymmetryOperationType {
+pub enum SymmetryOpKind {
     Identity,
     ProperRotation,
     ImproperRotation,
@@ -124,7 +126,7 @@ pub enum SymmetryOperationType {
     Inversion,
 }
 
-impl From<ffi::msym_symmetry_operation_type_t> for SymmetryOperationType {
+impl From<ffi::msym_symmetry_operation_type_t> for SymmetryOpKind {
     fn from(t: ffi::msym_symmetry_operation_type_t) -> Self {
         match t {
             ffi::MSYM_SYMMETRY_OPERATION_TYPE_PROPER_ROTATION => Self::ProperRotation,
@@ -137,14 +139,14 @@ impl From<ffi::msym_symmetry_operation_type_t> for SymmetryOperationType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SymmetryOperationOrientation {
+pub enum SymmetryOpOrientation {
     None,
     Horizontal,
     Vertical,
     Dihedral,
 }
 
-impl From<ffi::msym_symmetry_operation_orientation_t> for SymmetryOperationOrientation {
+impl From<ffi::msym_symmetry_operation_orientation_t> for SymmetryOpOrientation {
     fn from(o: ffi::msym_symmetry_operation_orientation_t) -> Self {
         match o {
             ffi::MSYM_SYMMETRY_OPERATION_ORIENTATION_HORIZONTAL => Self::Horizontal,
@@ -155,25 +157,70 @@ impl From<ffi::msym_symmetry_operation_orientation_t> for SymmetryOperationOrien
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct SymmetryOperation {
-    pub type_: SymmetryOperationType,
+#[derive(Debug, Clone)]
+pub struct SymmetryOp {
+    pub kind: SymmetryOpKind,
     pub order: i32,
     pub power: i32,
-    pub orientation: SymmetryOperationOrientation,
+    pub orientation: SymmetryOpOrientation,
     pub vector: [f64; 3],
     pub class: i32,
+    pub matrix: Matrix3<f64>,
 }
 
-impl From<&ffi::msym_symmetry_operation_t> for SymmetryOperation {
+impl SymmetryOp {
+    fn compute_matrix(
+        kind: SymmetryOpKind,
+        order: i32,
+        power: i32,
+        v: [f64; 3],
+    ) -> Matrix3<f64> {
+        match kind {
+            SymmetryOpKind::Identity => Matrix3::identity(),
+            SymmetryOpKind::Inversion => -Matrix3::identity(),
+            SymmetryOpKind::Reflection => reflection_matrix(v),
+            SymmetryOpKind::ProperRotation => {
+                rotation_matrix(v, 2.0 * PI * power as f64 / order as f64)
+            }
+            SymmetryOpKind::ImproperRotation => {
+                let rot = rotation_matrix(v, 2.0 * PI * power as f64 / order as f64);
+                reflection_matrix(v) * rot
+            }
+        }
+    }
+}
+
+/// Rotation matrix via Rodrigues' formula: R(n, θ) = cosθ·I + (1-cosθ)·nnᵀ + sinθ·[n]×
+fn rotation_matrix(axis: [f64; 3], theta: f64) -> Matrix3<f64> {
+    let n = nalgebra::Vector3::new(axis[0], axis[1], axis[2]).normalize();
+    let c = theta.cos();
+    let s = theta.sin();
+    let t = 1.0 - c;
+    Matrix3::new(
+        t * n.x * n.x + c,       t * n.x * n.y - s * n.z, t * n.x * n.z + s * n.y,
+        t * n.x * n.y + s * n.z, t * n.y * n.y + c,       t * n.y * n.z - s * n.x,
+        t * n.x * n.z - s * n.y, t * n.y * n.z + s * n.x, t * n.z * n.z + c,
+    )
+}
+
+/// Reflection matrix through plane with normal n: R = I - 2nnᵀ
+fn reflection_matrix(normal: [f64; 3]) -> Matrix3<f64> {
+    let n = nalgebra::Vector3::new(normal[0], normal[1], normal[2]).normalize();
+    Matrix3::identity() - 2.0 * n * n.transpose()
+}
+
+impl From<&ffi::msym_symmetry_operation_t> for SymmetryOp {
     fn from(op: &ffi::msym_symmetry_operation_t) -> Self {
+        let kind = op.type_.into();
+        let matrix = Self::compute_matrix(kind, op.order, op.power, op.v);
         Self {
-            type_: op.type_.into(),
+            kind,
             order: op.order,
             power: op.power,
             orientation: op.orientation.into(),
             vector: op.v,
             class: op.cla,
+            matrix,
         }
     }
 }
@@ -183,14 +230,14 @@ impl From<&ffi::msym_symmetry_operation_t> for SymmetryOperation {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-pub struct SymmetryElement {
+pub struct SymmetryCenter {
     pub atomic_number: i32,
     pub mass: f64,
     pub position: [f64; 3],
     pub name: String,
 }
 
-impl SymmetryElement {
+impl SymmetryCenter {
     pub(crate) fn to_ffi(&self) -> ffi::msym_element_t {
         let mut name = [0i8; 4];
         for (i, &b) in self.name.as_bytes().iter().take(3).enumerate() {
@@ -253,7 +300,7 @@ impl Thresholds {
         }
     }
 
-    pub(crate) fn to_ffi(&self) -> ffi::msym_thresholds_t {
+    pub(crate) fn to_ffi(self) -> ffi::msym_thresholds_t {
         ffi::msym_thresholds_t {
             zero: self.zero,
             geometry: self.geometry,
@@ -291,7 +338,7 @@ impl fmt::Display for Irrep {
 pub struct CharacterTable {
     pub irreps: Vec<Irrep>,
     pub class_sizes: Vec<i32>,
-    pub class_operations: Vec<SymmetryOperation>,
+    pub class_operations: Vec<SymmetryOp>,
     pub characters: Vec<Vec<f64>>,
     pub order: usize,
 }
@@ -302,8 +349,8 @@ impl CharacterTable {
 
         let class_sizes = std::slice::from_raw_parts(ct.classc, d).to_vec();
 
-        let class_operations: Vec<SymmetryOperation> = (0..d)
-            .map(|i| SymmetryOperation::from(&**ct.sops.add(i)))
+        let class_operations: Vec<SymmetryOp> = (0..d)
+            .map(|i| SymmetryOp::from(&**ct.sops.add(i)))
             .collect();
 
         let species = std::slice::from_raw_parts(ct.s, d);
@@ -385,7 +432,7 @@ impl CharacterTable {
 
 #[derive(Debug, Clone)]
 pub struct EquivalenceSet {
-    pub elements: Vec<SymmetryElement>,
+    pub centers: Vec<SymmetryCenter>,
     pub max_error: f64,
 }
 
@@ -394,14 +441,14 @@ pub struct EquivalenceSet {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BasisType {
+pub enum BasisKind {
     RealSphericalHarmonic,
     Cartesian,
 }
 
 #[derive(Debug, Clone)]
 pub struct BasisFunction {
-    pub type_: BasisType,
+    pub kind: BasisKind,
     pub element_index: usize,
     pub n: i32,
     pub l: i32,

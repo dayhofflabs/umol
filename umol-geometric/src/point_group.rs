@@ -1,10 +1,3 @@
-//! Point group data for Born-Oppenheimer model
+//! Point group symmetry (re-exported from umol-msym).
 
-/// Marker trait for point group symmetry types:w
-pub trait PointGroup {}
-
-/// Trivial point group (no symmetry).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct C1;
-impl PointGroup for C1 {}
-
+pub use umol_msym::PointGroup;

@@ -59,7 +59,7 @@ impl Context {
     // Elements
     // -------------------------------------------------------------------
 
-    pub fn set_elements(&mut self, elements: &[SymmetryElement]) -> Result<(), Error> {
+    pub fn set_elements(&mut self, elements: &[SymmetryCenter]) -> Result<(), Error> {
         self.character_table = None;
         let mut ffi_elements: Vec<ffi::msym_element_t> =
             elements.iter().map(|e| e.to_ffi()).collect();
@@ -68,12 +68,12 @@ impl Context {
         })
     }
 
-    pub fn elements(&self) -> Result<Vec<SymmetryElement>, Error> {
+    pub fn elements(&self) -> Result<Vec<SymmetryCenter>, Error> {
         let mut len: c_int = 0;
         let mut ptr = std::ptr::null_mut();
         error::check(unsafe { ffi::msymGetElements(self.ctx, &mut len, &mut ptr) })?;
         let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
-        Ok(slice.iter().map(SymmetryElement::from_ffi).collect())
+        Ok(slice.iter().map(SymmetryCenter::from_ffi).collect())
     }
 
     // -------------------------------------------------------------------
@@ -94,7 +94,7 @@ impl Context {
     // Point group queries
     // -------------------------------------------------------------------
 
-    pub fn point_group(&self) -> Result<(PointGroupType, i32), Error> {
+    pub fn point_group(&self) -> Result<(PointGroupKind, i32), Error> {
         let mut pg_type: ffi::msym_point_group_type_t = 0;
         let mut n: c_int = 0;
         error::check(unsafe { ffi::msymGetPointGroupType(self.ctx, &mut pg_type, &mut n) })?;
@@ -117,7 +117,7 @@ impl Context {
         error::check(unsafe { ffi::msymSetPointGroupByName(self.ctx, cname.as_ptr()) })
     }
 
-    pub fn set_point_group(&mut self, type_: PointGroupType, n: i32) -> Result<(), Error> {
+    pub fn set_point_group(&mut self, type_: PointGroupKind, n: i32) -> Result<(), Error> {
         self.character_table = None;
         error::check(unsafe { ffi::msymSetPointGroupByType(self.ctx, type_.to_ffi(), n) })
     }
@@ -126,12 +126,12 @@ impl Context {
     // Symmetry operations
     // -------------------------------------------------------------------
 
-    pub fn symmetry_operations(&self) -> Result<Vec<SymmetryOperation>, Error> {
+    pub fn symmetry_operations(&self) -> Result<Vec<SymmetryOp>, Error> {
         let mut len: c_int = 0;
         let mut ptr = std::ptr::null();
         error::check(unsafe { ffi::msymGetSymmetryOperations(self.ctx, &mut len, &mut ptr) })?;
         let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
-        Ok(slice.iter().map(SymmetryOperation::from).collect())
+        Ok(slice.iter().map(SymmetryOp::from).collect())
     }
 
     // -------------------------------------------------------------------
@@ -190,9 +190,9 @@ impl Context {
             .map(|es| {
                 let elems = unsafe { std::slice::from_raw_parts(es.elements, es.length as usize) };
                 EquivalenceSet {
-                    elements: elems
+                    centers: elems
                         .iter()
-                        .map(|e| SymmetryElement::from_ffi(unsafe { &**e }))
+                        .map(|e| SymmetryCenter::from_ffi(unsafe { &**e }))
                         .collect(),
                     max_error: es.err,
                 }
@@ -231,7 +231,7 @@ impl Context {
     // Element generation (from asymmetric unit)
     // -------------------------------------------------------------------
 
-    pub fn generate_elements(&mut self, asymmetric_unit: &[SymmetryElement]) -> Result<(), Error> {
+    pub fn generate_elements(&mut self, asymmetric_unit: &[SymmetryCenter]) -> Result<(), Error> {
         self.character_table = None;
         let mut ffi_elements: Vec<ffi::msym_element_t> =
             asymmetric_unit.iter().map(|e| e.to_ffi()).collect();
@@ -250,21 +250,21 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
-    fn water() -> Vec<SymmetryElement> {
+    fn water() -> Vec<SymmetryCenter> {
         vec![
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 8,
                 mass: 15.999,
                 position: [0.0, 0.0, 0.117_370_3],
                 name: "O".into(),
             },
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
                 position: [0.0, 0.757_160_4, -0.469_481_2],
                 name: "H".into(),
             },
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
                 position: [0.0, -0.757_160_4, -0.469_481_2],
@@ -273,33 +273,33 @@ mod tests {
         ]
     }
 
-    fn methane() -> Vec<SymmetryElement> {
+    fn methane() -> Vec<SymmetryCenter> {
         vec![
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 6,
                 mass: 12.011,
                 position: [0.0, 0.0, 0.0],
                 name: "C".into(),
             },
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
                 position: [0.629_118_5, 0.629_118_5, 0.629_118_5],
                 name: "H".into(),
             },
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
                 position: [-0.629_118_5, -0.629_118_5, 0.629_118_5],
                 name: "H".into(),
             },
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
                 position: [-0.629_118_5, 0.629_118_5, -0.629_118_5],
                 name: "H".into(),
             },
-            SymmetryElement {
+            SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
                 position: [0.629_118_5, -0.629_118_5, -0.629_118_5],
@@ -309,11 +309,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(water(), PointGroupType::Cnv, 2, "C2v")]
-    #[case(methane(), PointGroupType::Td, 3, "Td")]
+    #[case(water(), PointGroupKind::Cnv, 2, "C2v")]
+    #[case(methane(), PointGroupKind::Td, 3, "Td")]
     fn test_context_find_symmetry(
-        #[case] elements: Vec<SymmetryElement>,
-        #[case] expected_type: PointGroupType,
+        #[case] elements: Vec<SymmetryCenter>,
+        #[case] expected_type: PointGroupKind,
         #[case] expected_n: i32,
         #[case] expected_name: &str,
     ) {
@@ -331,7 +331,7 @@ mod tests {
     #[case(water(), 4)]   // C2v: E, C2, σv, σv'
     #[case(methane(), 24)] // Td: 24 operations
     fn test_context_symmetry_operations(
-        #[case] elements: Vec<SymmetryElement>,
+        #[case] elements: Vec<SymmetryCenter>,
         #[case] expected_count: usize,
     ) {
         let mut ctx = Context::new().unwrap();

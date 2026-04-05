@@ -11,7 +11,6 @@ use crate::algorithms::optimization::{
     lagrangian_relaxation, Constraint, LagrangianConfig, Variable,
 };
 use crate::molecule::Molecule;
-use crate::point_group::PointGroup;
 
 /// Maximum bond order considered.
 const MAX_ORDER: usize = 3;
@@ -118,8 +117,8 @@ pub struct BondPerceptionResult {
 }
 
 /// Perceive bonds from a 3D molecular geometry using Lagrangian relaxation.
-pub fn perceive_bonds<G: PointGroup>(
-    mol: &Molecule<G>,
+pub fn perceive_bonds(
+    mol: &Molecule,
     config: &BondPerceptionConfig,
 ) -> BondPerceptionResult {
     let n = mol.atom_count();
