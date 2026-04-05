@@ -21,7 +21,7 @@ pub struct Molecule {
     charge: i32,
     multiplicity: SpinMultiplicity,
 
-    group: PointGroup,
+    group: &'static PointGroup,
     /// Atom index orbits under symmetry operations. Each inner vec is one equivalence set.
     equivalence_sets: Vec<Vec<usize>>,
     /// One permutation per symmetry operation: atom_permutations[op][i] = j means
@@ -63,8 +63,8 @@ impl Molecule {
     }
 
     /// Point group.
-    pub fn point_group(&self) -> &PointGroup {
-        &self.group
+    pub fn point_group(&self) -> &'static PointGroup {
+        self.group
     }
 
     /// Equivalence sets (atom index orbits under symmetry operations).
@@ -166,7 +166,7 @@ impl Molecule {
         let coords = self.cartesian_coords();
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(coords, &result.group.operations, &self.elements);
+            compute_atom_permutations(coords, result.group.operations(), &self.elements);
 
         Ok(Molecule {
             elements: self.elements.clone(),
@@ -191,7 +191,7 @@ impl Molecule {
 
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(&matrix, &result.group.operations, &self.elements);
+            compute_atom_permutations(&matrix, result.group.operations(), &self.elements);
 
         Ok(Molecule {
             elements: self.elements.clone(),
@@ -466,10 +466,10 @@ mod tests {
         #[case] expected_ops: usize,
         #[case] expected_eq_sets: usize,
     ) {
-        let thresholds = Thresholds::defaults();
+        let thresholds = Thresholds::default();
         let sym = m.perceive_symmetry(thresholds).unwrap();
-        assert_eq!(sym.point_group().name, expected_group);
-        assert_eq!(sym.point_group().order, expected_ops);
+        assert_eq!(sym.point_group().to_string(), expected_group);
+        assert_eq!(sym.point_group().order(), expected_ops);
         assert_eq!(sym.equivalence_sets().len(), expected_eq_sets);
         assert_eq!(sym.atom_permutations().len(), expected_ops);
 
@@ -488,10 +488,10 @@ mod tests {
 
     #[rstest]
     fn test_molecule_symmetrize() {
-        let thresholds = Thresholds::defaults();
+        let thresholds = Thresholds::default();
         let m = symmetric_water();
         let sym = m.symmetrize(thresholds).unwrap();
-        assert_eq!(sym.point_group().name, "C2v");
+        assert_eq!(sym.point_group().to_string(), "C2v");
         // Symmetrized coordinates should be more symmetric than input
         let coords = sym.cartesian_coords();
         // y-coordinates of the two H atoms should be exactly opposite

@@ -8,9 +8,8 @@ mod types;
 
 pub use detect::{detect_symmetry, symmetrize, SymmetryResult};
 pub use error::Error;
-pub use point_group::PointGroup;
+pub use point_group::{Irrep, PointGroup};
 pub use types::{
-    BasisFunction, BasisKind, CharacterTable, EquivalenceSet, Geometry, Irrep, PointGroupKind,
-    Salc, SubrepresentationSpace, SymmetryCenter, SymmetryOp, SymmetryOpKind,
+    EquivalenceSet, Geometry, SchoenfliesLabel, SymmetryCenter, SymmetryOp, SymmetryOpKind,
     SymmetryOpOrientation, Thresholds,
 };

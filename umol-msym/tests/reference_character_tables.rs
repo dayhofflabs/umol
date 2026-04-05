@@ -2,7 +2,7 @@ mod reference_tables_data;
 
 use reference_tables_data::{reference_table, ReferenceTable};
 use rstest::rstest;
-use umol_msym::{detect_symmetry, CharacterTable, PointGroup, SymmetryCenter, Thresholds};
+use umol_msym::{detect_symmetry, PointGroup, SymmetryCenter, Thresholds};
 
 // Reference character tables from http://gernot-katzers-spice-pages.com/character_tables/
 
@@ -26,34 +26,35 @@ fn make_centers(
 
 /// Compare character tables independent of class ordering and irrep ordering.
 fn compare_character_tables(
-    group: &str,
-    msym_ct: &CharacterTable,
+    group_name: &str,
+    pg: &'static PointGroup,
     reference: &ReferenceTable,
 ) {
     assert_eq!(
-        msym_ct.order, reference.order,
-        "{group}: order mismatch (msym={}, reference={})",
-        msym_ct.order, reference.order
+        pg.order(), reference.order,
+        "{group_name}: order mismatch (msym={}, reference={})",
+        pg.order(), reference.order
     );
 
+    let irreps = pg.irreps();
     assert_eq!(
-        msym_ct.irreps.len(),
+        irreps.len(),
         reference.irrep_names.len(),
-        "{group}: irrep count mismatch (msym={}, reference={}). \
+        "{group_name}: irrep count mismatch (msym={}, reference={}). \
          msym: {:?}, reference: {:?}",
-        msym_ct.irreps.len(),
+        irreps.len(),
         reference.irrep_names.len(),
-        msym_ct.irreps.iter().map(|ir| &ir.name).collect::<Vec<_>>(),
+        irreps.iter().map(|ir| ir.symbol()).collect::<Vec<_>>(),
         reference.irrep_names,
     );
 
-    let mut msym_sizes = msym_ct.class_sizes.clone();
+    let mut msym_sizes = pg.class_sizes().to_vec();
     let mut ref_sizes = reference.class_sizes.clone();
     msym_sizes.sort();
     ref_sizes.sort();
     assert_eq!(
         msym_sizes, ref_sizes,
-        "{group}: class size multisets differ"
+        "{group_name}: class size multisets differ"
     );
 
     fn irrep_fingerprint(class_sizes: &[i32], characters: &[f64]) -> Vec<(i32, i64)> {
@@ -66,10 +67,9 @@ fn compare_character_tables(
         pairs
     }
 
-    let msym_fingerprints: Vec<Vec<(i32, i64)>> = msym_ct
-        .irreps
+    let msym_fingerprints: Vec<Vec<(i32, i64)>> = irreps
         .iter()
-        .map(|ir| irrep_fingerprint(&msym_ct.class_sizes, &msym_ct.characters[ir.index]))
+        .map(|ir| irrep_fingerprint(pg.class_sizes(), ir.characters()))
         .collect();
 
     let ref_fingerprints: Vec<Vec<(i32, i64)>> = reference
@@ -81,8 +81,8 @@ fn compare_character_tables(
     let mut matched_ref: Vec<bool> = vec![false; reference.irrep_names.len()];
 
     for (mi, msym_fp) in msym_fingerprints.iter().enumerate() {
-        let msym_name = &msym_ct.irreps[mi].name;
-        let msym_dim = msym_ct.irreps[mi].dimension;
+        let msym_symbol = irreps[mi].symbol();
+        let msym_dim = irreps[mi].dimension();
 
         let match_idx = ref_fingerprints
             .iter()
@@ -97,12 +97,12 @@ fn compare_character_tables(
 
                 assert_eq!(
                     msym_dim, ref_dim,
-                    "{group}: dimension mismatch for msym '{msym_name}' ↔ reference '{ref_name}'"
+                    "{group_name}: dimension mismatch for msym '{msym_symbol}' ↔ reference '{ref_name}'"
                 );
             }
             None => {
                 panic!(
-                    "{group}: msym irrep '{msym_name}' (dim={msym_dim}) has no matching \
+                    "{group_name}: msym irrep '{msym_symbol}' (dim={msym_dim}) has no matching \
                      reference irrep by character fingerprint.\n\
                      msym fingerprint: {msym_fp:?}\n\
                      reference fingerprints: {ref_fingerprints:?}"
@@ -259,16 +259,16 @@ fn allene() -> Vec<SymmetryCenter> {
 #[case("Oh", sf6())]
 #[case("Ih", icosahedron())]
 fn test_character_table_vs_reference(#[case] group: &str, #[case] elements: Vec<SymmetryCenter>) {
-    let result = detect_symmetry(&elements, Thresholds::defaults()).unwrap();
+    let result = detect_symmetry(&elements, Thresholds::default()).unwrap();
     let reference = reference_table(group).unwrap();
 
     assert_eq!(
-        result.group.name, group,
+        result.group.to_string(), group,
         "Expected {group}, detected {}",
-        result.group.name
+        result.group
     );
 
-    compare_character_tables(group, &result.group.character_table, &reference);
+    compare_character_tables(group, result.group, &reference);
 }
 
 /// Groups where we construct by Schoenflies name (no specific molecule needed).
@@ -303,5 +303,5 @@ fn test_character_table_by_name_vs_reference(#[case] group: &str) {
     };
 
     let reference = reference_table(group).unwrap();
-    compare_character_tables(group, &pg.character_table, &reference);
+    compare_character_tables(group, pg, &reference);
 }

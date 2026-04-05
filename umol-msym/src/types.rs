@@ -1,9 +1,178 @@
 use std::f64::consts::PI;
 use std::ffi::CStr;
 use std::fmt;
+use std::os::raw::c_int;
 
 use nalgebra::Matrix3;
 use umol_msym_sys as ffi;
+
+// ---------------------------------------------------------------------------
+// Schoenflies label
+// ---------------------------------------------------------------------------
+
+/// Structured Schoenflies symbol identifying a point group.
+///
+/// The rotational axis order is encoded on the variant for families that take it.
+/// Cubic, icosahedral, and continuous groups carry no parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SchoenfliesLabel {
+    Ci,
+    Cs,
+    Cn(u32),
+    Cnh(u32),
+    Cnv(u32),
+    Sn(u32),
+    Dn(u32),
+    Dnh(u32),
+    Dnd(u32),
+    T,
+    Td,
+    Th,
+    O,
+    Oh,
+    I,
+    Ih,
+    Coov,
+    Dooh,
+    K,
+    Kh,
+}
+
+impl SchoenfliesLabel {
+    pub(crate) fn from_ffi(t: ffi::msym_point_group_type_t, n: c_int) -> Self {
+        let n = n as u32;
+        match t {
+            ffi::MSYM_POINT_GROUP_TYPE_Kh => Self::Kh,
+            ffi::MSYM_POINT_GROUP_TYPE_K => Self::K,
+            ffi::MSYM_POINT_GROUP_TYPE_Ci => Self::Ci,
+            ffi::MSYM_POINT_GROUP_TYPE_Cs => Self::Cs,
+            ffi::MSYM_POINT_GROUP_TYPE_Cn => Self::Cn(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Cnh => Self::Cnh(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Cnv => Self::Cnv(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Dn => Self::Dn(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Dnh => Self::Dnh(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Dnd => Self::Dnd(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Sn => Self::Sn(n),
+            ffi::MSYM_POINT_GROUP_TYPE_T => Self::T,
+            ffi::MSYM_POINT_GROUP_TYPE_Td => Self::Td,
+            ffi::MSYM_POINT_GROUP_TYPE_Th => Self::Th,
+            ffi::MSYM_POINT_GROUP_TYPE_O => Self::O,
+            ffi::MSYM_POINT_GROUP_TYPE_Oh => Self::Oh,
+            ffi::MSYM_POINT_GROUP_TYPE_I => Self::I,
+            ffi::MSYM_POINT_GROUP_TYPE_Ih => Self::Ih,
+            _ => Self::Ci,
+        }
+    }
+
+    pub(crate) fn to_ffi(self) -> (ffi::msym_point_group_type_t, c_int) {
+        match self {
+            Self::Kh => (ffi::MSYM_POINT_GROUP_TYPE_Kh, 0),
+            Self::K => (ffi::MSYM_POINT_GROUP_TYPE_K, 0),
+            Self::Ci => (ffi::MSYM_POINT_GROUP_TYPE_Ci, 0),
+            Self::Cs => (ffi::MSYM_POINT_GROUP_TYPE_Cs, 0),
+            Self::Cn(n) => (ffi::MSYM_POINT_GROUP_TYPE_Cn, n as c_int),
+            Self::Cnh(n) => (ffi::MSYM_POINT_GROUP_TYPE_Cnh, n as c_int),
+            Self::Cnv(n) => (ffi::MSYM_POINT_GROUP_TYPE_Cnv, n as c_int),
+            Self::Sn(n) => (ffi::MSYM_POINT_GROUP_TYPE_Sn, n as c_int),
+            Self::Dn(n) => (ffi::MSYM_POINT_GROUP_TYPE_Dn, n as c_int),
+            Self::Dnh(n) => (ffi::MSYM_POINT_GROUP_TYPE_Dnh, n as c_int),
+            Self::Dnd(n) => (ffi::MSYM_POINT_GROUP_TYPE_Dnd, n as c_int),
+            Self::T => (ffi::MSYM_POINT_GROUP_TYPE_T, 3),
+            Self::Td => (ffi::MSYM_POINT_GROUP_TYPE_Td, 3),
+            Self::Th => (ffi::MSYM_POINT_GROUP_TYPE_Th, 3),
+            Self::O => (ffi::MSYM_POINT_GROUP_TYPE_O, 4),
+            Self::Oh => (ffi::MSYM_POINT_GROUP_TYPE_Oh, 4),
+            Self::I => (ffi::MSYM_POINT_GROUP_TYPE_I, 5),
+            Self::Ih => (ffi::MSYM_POINT_GROUP_TYPE_Ih, 5),
+            Self::Coov => (ffi::MSYM_POINT_GROUP_TYPE_Cnv, 0),
+            Self::Dooh => (ffi::MSYM_POINT_GROUP_TYPE_Dnh, 0),
+        }
+    }
+
+    /// Parse a Schoenflies symbol string (e.g. "C2v", "Td", "D6h").
+    pub fn parse(s: &str) -> Option<Self> {
+        // Fixed groups (no axis order parameter)
+        match s {
+            "Ci" => return Some(Self::Ci),
+            "Cs" => return Some(Self::Cs),
+            "T" => return Some(Self::T),
+            "Td" => return Some(Self::Td),
+            "Th" => return Some(Self::Th),
+            "O" => return Some(Self::O),
+            "Oh" => return Some(Self::Oh),
+            "I" => return Some(Self::I),
+            "Ih" => return Some(Self::Ih),
+            "Kh" => return Some(Self::Kh),
+            "K" => return Some(Self::K),
+            _ => {}
+        }
+
+        // Parametric groups: extract family prefix, number, and optional suffix
+        if let Some(rest) = s.strip_prefix('C') {
+            parse_parametric(rest, |n, suffix| match suffix {
+                "" => Some(Self::Cn(n)),
+                "h" => Some(Self::Cnh(n)),
+                "v" => Some(Self::Cnv(n)),
+                _ => None,
+            })
+        } else if let Some(rest) = s.strip_prefix('D') {
+            parse_parametric(rest, |n, suffix| match suffix {
+                "" => Some(Self::Dn(n)),
+                "h" => Some(Self::Dnh(n)),
+                "d" => Some(Self::Dnd(n)),
+                _ => None,
+            })
+        } else if let Some(rest) = s.strip_prefix('S') {
+            parse_parametric(rest, |n, suffix| match suffix {
+                "" => Some(Self::Sn(n)),
+                _ => None,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// Parse "3v" into (3, "v"), "6h" into (6, "h"), "2" into (2, ""), etc.
+fn parse_parametric<F>(s: &str, f: F) -> Option<SchoenfliesLabel>
+where
+    F: FnOnce(u32, &str) -> Option<SchoenfliesLabel>,
+{
+    let digit_end = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    if digit_end == 0 {
+        return None;
+    }
+    let n: u32 = s[..digit_end].parse().ok()?;
+    let suffix = &s[digit_end..];
+    f(n, suffix)
+}
+
+impl fmt::Display for SchoenfliesLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ci => write!(f, "Ci"),
+            Self::Cs => write!(f, "Cs"),
+            Self::Cn(n) => write!(f, "C{n}"),
+            Self::Cnh(n) => write!(f, "C{n}h"),
+            Self::Cnv(n) => write!(f, "C{n}v"),
+            Self::Sn(n) => write!(f, "S{n}"),
+            Self::Dn(n) => write!(f, "D{n}"),
+            Self::Dnh(n) => write!(f, "D{n}h"),
+            Self::Dnd(n) => write!(f, "D{n}d"),
+            Self::T => write!(f, "T"),
+            Self::Td => write!(f, "Td"),
+            Self::Th => write!(f, "Th"),
+            Self::O => write!(f, "O"),
+            Self::Oh => write!(f, "Oh"),
+            Self::I => write!(f, "I"),
+            Self::Ih => write!(f, "Ih"),
+            Self::Coov => write!(f, "C∞v"),
+            Self::Dooh => write!(f, "D∞h"),
+            Self::K => write!(f, "K"),
+            Self::Kh => write!(f, "Kh"),
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Geometry
@@ -32,83 +201,6 @@ impl From<ffi::msym_geometry_t> for Geometry {
             ffi::MSYM_GEOMETRY_POLYHEDRAL_OBLATE => Self::PolyhedralOblate,
             ffi::MSYM_GEOMETRY_ASSYMETRIC => Self::Asymmetric,
             _ => Self::Unknown,
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Point group type
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PointGroupKind {
-    Kh,
-    K,
-    Ci,
-    Cs,
-    Cn,
-    Cnh,
-    Cnv,
-    Dn,
-    Dnh,
-    Dnd,
-    Sn,
-    T,
-    Td,
-    Th,
-    O,
-    Oh,
-    I,
-    Ih,
-}
-
-impl From<ffi::msym_point_group_type_t> for PointGroupKind {
-    fn from(t: ffi::msym_point_group_type_t) -> Self {
-        match t {
-            ffi::MSYM_POINT_GROUP_TYPE_Kh => Self::Kh,
-            ffi::MSYM_POINT_GROUP_TYPE_K => Self::K,
-            ffi::MSYM_POINT_GROUP_TYPE_Ci => Self::Ci,
-            ffi::MSYM_POINT_GROUP_TYPE_Cs => Self::Cs,
-            ffi::MSYM_POINT_GROUP_TYPE_Cn => Self::Cn,
-            ffi::MSYM_POINT_GROUP_TYPE_Cnh => Self::Cnh,
-            ffi::MSYM_POINT_GROUP_TYPE_Cnv => Self::Cnv,
-            ffi::MSYM_POINT_GROUP_TYPE_Dn => Self::Dn,
-            ffi::MSYM_POINT_GROUP_TYPE_Dnh => Self::Dnh,
-            ffi::MSYM_POINT_GROUP_TYPE_Dnd => Self::Dnd,
-            ffi::MSYM_POINT_GROUP_TYPE_Sn => Self::Sn,
-            ffi::MSYM_POINT_GROUP_TYPE_T => Self::T,
-            ffi::MSYM_POINT_GROUP_TYPE_Td => Self::Td,
-            ffi::MSYM_POINT_GROUP_TYPE_Th => Self::Th,
-            ffi::MSYM_POINT_GROUP_TYPE_O => Self::O,
-            ffi::MSYM_POINT_GROUP_TYPE_Oh => Self::Oh,
-            ffi::MSYM_POINT_GROUP_TYPE_I => Self::I,
-            ffi::MSYM_POINT_GROUP_TYPE_Ih => Self::Ih,
-            _ => Self::Ci, // unreachable in practice
-        }
-    }
-}
-
-impl PointGroupKind {
-    pub(crate) fn to_ffi(self) -> ffi::msym_point_group_type_t {
-        match self {
-            Self::Kh => ffi::MSYM_POINT_GROUP_TYPE_Kh,
-            Self::K => ffi::MSYM_POINT_GROUP_TYPE_K,
-            Self::Ci => ffi::MSYM_POINT_GROUP_TYPE_Ci,
-            Self::Cs => ffi::MSYM_POINT_GROUP_TYPE_Cs,
-            Self::Cn => ffi::MSYM_POINT_GROUP_TYPE_Cn,
-            Self::Cnh => ffi::MSYM_POINT_GROUP_TYPE_Cnh,
-            Self::Cnv => ffi::MSYM_POINT_GROUP_TYPE_Cnv,
-            Self::Dn => ffi::MSYM_POINT_GROUP_TYPE_Dn,
-            Self::Dnh => ffi::MSYM_POINT_GROUP_TYPE_Dnh,
-            Self::Dnd => ffi::MSYM_POINT_GROUP_TYPE_Dnd,
-            Self::Sn => ffi::MSYM_POINT_GROUP_TYPE_Sn,
-            Self::T => ffi::MSYM_POINT_GROUP_TYPE_T,
-            Self::Td => ffi::MSYM_POINT_GROUP_TYPE_Td,
-            Self::Th => ffi::MSYM_POINT_GROUP_TYPE_Th,
-            Self::O => ffi::MSYM_POINT_GROUP_TYPE_O,
-            Self::Oh => ffi::MSYM_POINT_GROUP_TYPE_Oh,
-            Self::I => ffi::MSYM_POINT_GROUP_TYPE_I,
-            Self::Ih => ffi::MSYM_POINT_GROUP_TYPE_Ih,
         }
     }
 }
@@ -280,14 +372,16 @@ pub struct Thresholds {
     pub orthogonalization: f64,
 }
 
-impl Thresholds {
-    pub fn defaults() -> Self {
+impl Default for Thresholds {
+    fn default() -> Self {
         unsafe {
             let t = ffi::msymGetDefaultThresholds();
             Self::from_ffi(&*t)
         }
     }
+}
 
+impl Thresholds {
     pub(crate) fn from_ffi(t: &ffi::msym_thresholds_t) -> Self {
         Self {
             zero: t.zero,
@@ -314,32 +408,26 @@ impl Thresholds {
 }
 
 // ---------------------------------------------------------------------------
-// Irreducible representation
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Irrep {
-    pub name: String,
-    pub dimension: i32,
-    pub index: usize,
-}
-
-impl fmt::Display for Irrep {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.name)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Character table
+// Irreducible representation (internal storage)
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-pub struct CharacterTable {
-    pub irreps: Vec<Irrep>,
+pub(crate) struct IrrepData {
+    pub symbol: String,
+    pub dimension: i32,
+    pub index: usize,
+    pub characters: Vec<f64>,
+}
+
+// ---------------------------------------------------------------------------
+// Character table (internal)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub(crate) struct CharacterTable {
+    pub irrep_data: Vec<IrrepData>,
     pub class_sizes: Vec<i32>,
     pub class_operations: Vec<SymmetryOp>,
-    pub characters: Vec<Vec<f64>>,
     pub order: usize,
 }
 
@@ -354,75 +442,29 @@ impl CharacterTable {
             .collect();
 
         let species = std::slice::from_raw_parts(ct.s, d);
-        let irreps: Vec<Irrep> = species
+        let table_ptr = ct.table as *const f64;
+
+        let irrep_data: Vec<IrrepData> = species
             .iter()
             .enumerate()
-            .map(|(i, s)| Irrep {
-                name: CStr::from_ptr(s.name.as_ptr())
+            .map(|(i, s)| IrrepData {
+                symbol: CStr::from_ptr(s.name.as_ptr())
                     .to_string_lossy()
                     .into_owned(),
                 dimension: s.d,
                 index: i,
+                characters: std::slice::from_raw_parts(table_ptr.add(i * d), d).to_vec(),
             })
-            .collect();
-
-        let table_ptr = ct.table as *const f64;
-        let characters: Vec<Vec<f64>> = (0..d)
-            .map(|i| std::slice::from_raw_parts(table_ptr.add(i * d), d).to_vec())
             .collect();
 
         let order = class_sizes.iter().sum::<i32>() as usize;
 
         Self {
-            irreps,
+            irrep_data,
             class_sizes,
             class_operations,
-            characters,
             order,
         }
-    }
-
-    pub fn direct_product(&self, a: &Irrep, b: &Irrep) -> Vec<(Irrep, u32)> {
-        let d = self.irreps.len();
-        let h = self.order as f64;
-
-        // χ_{a⊗b}(R) = χ_a(R) · χ_b(R)
-        let product_chars: Vec<f64> = (0..d)
-            .map(|c| self.characters[a.index][c] * self.characters[b.index][c])
-            .collect();
-
-        // Decompose: n_i = (1/h) Σ_c |C_c| · χ_i(c)* · χ_{a⊗b}(c)
-        let mut result = Vec::new();
-        for irrep in &self.irreps {
-            let n: f64 = (0..d)
-                .map(|c| {
-                    self.class_sizes[c] as f64 * self.characters[irrep.index][c] * product_chars[c]
-                })
-                .sum::<f64>()
-                / h;
-            let n_rounded = n.round() as u32;
-            if n_rounded > 0 {
-                result.push((irrep.clone(), n_rounded));
-            }
-        }
-        result
-    }
-
-    pub fn contains_totally_symmetric(&self, a: &Irrep, b: &Irrep, c: &Irrep) -> bool {
-        let d = self.irreps.len();
-        let h = self.order as f64;
-
-        // n_{A1} in a⊗b⊗c = (1/h) Σ_c |C_c| · χ_a(c) · χ_b(c) · χ_c(c)
-        let n: f64 = (0..d)
-            .map(|cls| {
-                self.class_sizes[cls] as f64
-                    * self.characters[a.index][cls]
-                    * self.characters[b.index][cls]
-                    * self.characters[c.index][cls]
-            })
-            .sum::<f64>()
-            / h;
-        n.round() as u32 > 0
     }
 }
 
@@ -436,44 +478,3 @@ pub struct EquivalenceSet {
     pub max_error: f64,
 }
 
-// ---------------------------------------------------------------------------
-// Basis function
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BasisKind {
-    RealSphericalHarmonic,
-    Cartesian,
-}
-
-#[derive(Debug, Clone)]
-pub struct BasisFunction {
-    pub kind: BasisKind,
-    pub element_index: usize,
-    pub n: i32,
-    pub l: i32,
-    pub m: i32,
-    pub name: String,
-}
-
-// ---------------------------------------------------------------------------
-// SALC
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub struct Salc {
-    pub irrep: Irrep,
-    pub dimension: i32,
-    pub coefficients: Vec<Vec<f64>>,
-    pub basis_indices: Vec<usize>,
-}
-
-// ---------------------------------------------------------------------------
-// Subrepresentation space
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-pub struct SubrepresentationSpace {
-    pub irrep: Irrep,
-    pub salcs: Vec<Salc>,
-}

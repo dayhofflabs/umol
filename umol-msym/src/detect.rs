@@ -4,9 +4,9 @@ use crate::point_group::PointGroup;
 use crate::types::{EquivalenceSet, SymmetryCenter, Thresholds};
 
 /// Result of symmetry detection or symmetrization.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SymmetryResult {
-    pub group: PointGroup,
+    pub group: &'static PointGroup,
     pub equivalence_sets: Vec<EquivalenceSet>,
     /// Atom positions after processing. Same as input for `detect_symmetry`,
     /// snapped to exact symmetry for `symmetrize`.
@@ -110,9 +110,9 @@ mod tests {
         #[case] expected_eq_sets: usize,
     ) {
         let centers = make_centers(zs, masses, positions);
-        let result = detect_symmetry(&centers, Thresholds::defaults()).unwrap();
-        assert_eq!(result.group.name, expected_group);
-        assert_eq!(result.group.order, expected_order);
+        let result = detect_symmetry(&centers, Thresholds::default()).unwrap();
+        assert_eq!(result.group.to_string(), expected_group);
+        assert_eq!(result.group.order(), expected_order);
         assert_eq!(result.equivalence_sets.len(), expected_eq_sets);
         assert_eq!(result.centers.len(), centers.len());
     }
@@ -124,8 +124,8 @@ mod tests {
             &[15.999, 1.008, 1.008],
             &[[0.0, 0.0, 0.117], [0.0, 0.757, -0.469], [0.0, -0.757, -0.469]],
         );
-        let result = symmetrize(&centers, Thresholds::defaults()).unwrap();
-        assert_eq!(result.group.name, "C2v");
+        let result = symmetrize(&centers, Thresholds::default()).unwrap();
+        assert_eq!(result.group.to_string(), "C2v");
         assert_eq!(result.centers.len(), 3);
 
         // H atoms should have exactly opposite y coordinates after symmetrization

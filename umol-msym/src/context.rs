@@ -94,11 +94,11 @@ impl Context {
     // Point group queries
     // -------------------------------------------------------------------
 
-    pub fn point_group(&self) -> Result<(PointGroupKind, i32), Error> {
+    pub fn point_group(&self) -> Result<SchoenfliesLabel, Error> {
         let mut pg_type: ffi::msym_point_group_type_t = 0;
         let mut n: c_int = 0;
         error::check(unsafe { ffi::msymGetPointGroupType(self.ctx, &mut pg_type, &mut n) })?;
-        Ok((pg_type.into(), n))
+        Ok(SchoenfliesLabel::from_ffi(pg_type, n))
     }
 
     pub fn point_group_name(&self) -> Result<String, Error> {
@@ -117,9 +117,10 @@ impl Context {
         error::check(unsafe { ffi::msymSetPointGroupByName(self.ctx, cname.as_ptr()) })
     }
 
-    pub fn set_point_group(&mut self, type_: PointGroupKind, n: i32) -> Result<(), Error> {
+    pub fn set_point_group(&mut self, label: SchoenfliesLabel) -> Result<(), Error> {
         self.character_table = None;
-        error::check(unsafe { ffi::msymSetPointGroupByType(self.ctx, type_.to_ffi(), n) })
+        let (pg_type, n) = label.to_ffi();
+        error::check(unsafe { ffi::msymSetPointGroupByType(self.ctx, pg_type, n) })
     }
 
     // -------------------------------------------------------------------
@@ -309,21 +310,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case(water(), PointGroupKind::Cnv, 2, "C2v")]
-    #[case(methane(), PointGroupKind::Td, 3, "Td")]
+    #[case(water(), SchoenfliesLabel::Cnv(2), "C2v")]
+    #[case(methane(), SchoenfliesLabel::Td, "Td")]
     fn test_context_find_symmetry(
         #[case] elements: Vec<SymmetryCenter>,
-        #[case] expected_type: PointGroupKind,
-        #[case] expected_n: i32,
+        #[case] expected_label: SchoenfliesLabel,
         #[case] expected_name: &str,
     ) {
         let mut ctx = Context::new().unwrap();
         ctx.set_elements(&elements).unwrap();
         ctx.find_symmetry().unwrap();
 
-        let (pg_type, n) = ctx.point_group().unwrap();
-        assert_eq!(pg_type, expected_type);
-        assert_eq!(n, expected_n);
+        assert_eq!(ctx.point_group().unwrap(), expected_label);
         assert_eq!(ctx.point_group_name().unwrap(), expected_name);
     }
 
@@ -349,52 +347,17 @@ mod tests {
         let ct = ctx.character_table().unwrap();
 
         // C2v has 4 irreps: A1, A2, B1, B2
-        assert_eq!(ct.irreps.len(), 4);
+        assert_eq!(ct.irrep_data.len(), 4);
         assert_eq!(ct.order, 4);
 
-        let names: Vec<&str> = ct.irreps.iter().map(|ir| ir.name.as_str()).collect();
-        assert!(names.contains(&"A1"));
-        assert!(names.contains(&"A2"));
-        assert!(names.contains(&"B1"));
-        assert!(names.contains(&"B2"));
+        let symbols: Vec<&str> = ct.irrep_data.iter().map(|ir| ir.symbol.as_str()).collect();
+        assert!(symbols.contains(&"A1"));
+        assert!(symbols.contains(&"A2"));
+        assert!(symbols.contains(&"B1"));
+        assert!(symbols.contains(&"B2"));
 
-        // All irreps in C2v are 1-dimensional
-        for irrep in &ct.irreps {
-            assert_eq!(irrep.dimension, 1);
+        for ir in &ct.irrep_data {
+            assert_eq!(ir.dimension, 1);
         }
-    }
-
-    #[rstest]
-    fn test_character_table_direct_product() {
-        let mut ctx = Context::new().unwrap();
-        ctx.set_elements(&water()).unwrap();
-        ctx.find_symmetry().unwrap();
-        let ct = ctx.character_table().unwrap();
-
-        let b1 = ct.irreps.iter().find(|ir| ir.name == "B1").unwrap();
-        let b2 = ct.irreps.iter().find(|ir| ir.name == "B2").unwrap();
-
-        // B1 ⊗ B2 = A2 in C2v
-        let product = ct.direct_product(b1, b2);
-        assert_eq!(product.len(), 1);
-        assert_eq!(product[0].0.name, "A2");
-        assert_eq!(product[0].1, 1);
-    }
-
-    #[rstest]
-    fn test_character_table_contains_totally_symmetric() {
-        let mut ctx = Context::new().unwrap();
-        ctx.set_elements(&water()).unwrap();
-        ctx.find_symmetry().unwrap();
-        let ct = ctx.character_table().unwrap();
-
-        let a1 = ct.irreps.iter().find(|ir| ir.name == "A1").unwrap();
-        let b1 = ct.irreps.iter().find(|ir| ir.name == "B1").unwrap();
-        let b2 = ct.irreps.iter().find(|ir| ir.name == "B2").unwrap();
-
-        // A1 ⊗ B1 ⊗ B1 contains A1 (dipole-allowed if operator transforms as B1)
-        assert!(ct.contains_totally_symmetric(a1, b1, b1));
-        // A1 ⊗ B1 ⊗ B2 does not contain A1
-        assert!(!ct.contains_totally_symmetric(a1, b1, b2));
     }
 }
