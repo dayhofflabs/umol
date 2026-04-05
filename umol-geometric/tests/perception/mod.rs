@@ -79,7 +79,7 @@ fn run_perception_test(file_path: &Path) {
 }
 
 // Bump to force recompile when data files change (rstest evaluates globs at compile time).
-const _REFRESH: u32 = 3;
+const _REFRESH: u32 = 11;
 
 #[rstest]
 fn test_perception(#[files("tests/perception/data/**/*.xyz")] file_path: PathBuf) {
