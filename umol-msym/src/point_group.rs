@@ -1147,6 +1147,10 @@ mod tests {
     #[case(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::None, "S4")]
     #[case(SymmetryOpKind::ImproperRotation, 4, 3, SymmetryOpOrientation::None, "S4³")]
     #[case(SymmetryOpKind::ImproperRotation, 10, 7, SymmetryOpOrientation::None, "S10⁷")]
+    #[case(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Vertical, "C2'")]
+    #[case(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Dihedral, "C2''")]
+    #[case(SymmetryOpKind::ProperRotation, 3, 2, SymmetryOpOrientation::Vertical, "C3'²")]
+    #[case(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::Vertical, "S4'")]
     fn test_symmetry_op_display(
         #[case] kind: SymmetryOpKind,
         #[case] order: i32,

@@ -322,13 +322,23 @@ impl fmt::Display for SymmetryOp {
             }
             SymmetryOpKind::ProperRotation => {
                 write!(f, "C{}", self.order)?;
+                write_prime_suffix(f, self.orientation)?;
                 write_superscript_power(f, self.power)
             }
             SymmetryOpKind::ImproperRotation => {
                 write!(f, "S{}", self.order)?;
+                write_prime_suffix(f, self.orientation)?;
                 write_superscript_power(f, self.power)
             }
         }
+    }
+}
+
+fn write_prime_suffix(f: &mut fmt::Formatter<'_>, orientation: SymmetryOpOrientation) -> fmt::Result {
+    match orientation {
+        SymmetryOpOrientation::Vertical => write!(f, "'"),
+        SymmetryOpOrientation::Dihedral => write!(f, "''"),
+        _ => Ok(()),
     }
 }
 

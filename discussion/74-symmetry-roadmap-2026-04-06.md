@@ -5,29 +5,50 @@
 Implemented:
 - Point group detection via libmsym (finite groups + C∞v/D∞h)
 - Character tables with class representatives and irrep characters
+- Character table display (`CharacterTableDisplay`)
 - Irrep algebra: direct product, reduce, symmetric square, antisymmetric square
 - Selection rules: electric dipole, magnetic dipole, Raman, contains_totally_symmetric
 - Translation/rotation/quadratic irreps
 - SALCs for arbitrary basis functions
 - Symmetry coordinates (3N DOF → trans/rot/vib by irrep)
 - Equivalence sets and atom permutations
+- SymmetryOp: Display (`E`, `C3²`, `σv`, `S4³`, `i`), `transform_point`, `is_proper`
+- PointGroup queries: `is_chiral`, `has_inversion`, `is_abelian`, `is_cyclic`, `is_cubic`, `has_complex_irreps`, `principal_axis_order`, `totally_symmetric_irrep`
+- `Irrep::is_gerade()` for both finite and linear centrosymmetric groups
+- `SymmetryOp::class` as `usize` with documented indexing semantics
+- `generate_symmetry_images` (build molecule from asymmetric unit + group)
+- Real representation treatment: complex conjugate irreps fused into real 2D reps (standard QC convention)
 
-## Near-term: structural improvements
+## Near-term: display tables
 
-### SymmetryOp labels
-SymmetryOp carries kind/order/power but has no Display. Need string labels: `E`, `C3²`, `σv`, `σh`, `S4³`, `i`. Required for character table formatting.
+### Operation multiplication table
+Display the Cayley table for a point group: rows and columns are operations, cells show the product. Requires operation composition (matrix multiply + identify resulting operation). Useful for pedagogy and verification.
 
-### Character table formatter
-Pretty-print a character table given the group. Depends on SymmetryOp labels.
+### Irrep direct product table
+Display all pairwise direct products of irreps. Compact table format: row × column → decomposition. All data is already available via `direct_product()`.
 
-### Chirality query
-`PointGroup::is_chiral() -> bool` — true iff the group contains no improper operations. Trivial.
+## Near-term: continuous symmetry measures and symmetrize_to
 
-### SymmetryOp::orientation cleanup
-`Horizontal`/`Vertical`/`Dihedral`/`None` is a libmsym-ism attached to all operations but only meaningful for reflections. Consider restricting to reflection operations or documenting the semantics.
+### Motivation
+`symmetrize()` detects the group and snaps to it. `symmetrize_to()` should snap to a *user-specified* group. This requires measuring how far a structure is from a given symmetry — Avnir's Continuous Symmetry Measures (CSM).
 
-### SymmetryOp::class typing
-Currently `i32`. Should be a newtype or at minimum documented as indexing into `class_sizes`/`class_reps`/`Irrep::characters`.
+### Two functions
+
+- `symmetry_measure(centers, group) -> f64` — CSM distance to nearest G-symmetric structure. No modification.
+- `symmetrize_to(centers, group, threshold) -> Result<SymmetryResult>` — project onto nearest G-symmetric structure. Fail if CSM > threshold.
+
+### Algorithm
+
+1. Assign atom permutations under each operation of G (approximate nearest-neighbor matching, not exact).
+2. For each atom i, compute symmetry-averaged position: p̃_i = (1/h) Σ_R R⁻¹ p_{R(i)}.
+3. CSM = Σ |p_i - p̃_i|² / Σ |p_i - center|² (normalized).
+4. The p̃_i are the nearest G-symmetric structure.
+
+### Relation to existing code
+
+- `symmetrize()` uses libmsym (exact mapping from detected group) — unchanged.
+- `symmetrize_to()` uses CSM projection (approximate mapping to specified group) — new algorithm.
+- `generate_symmetry_images()` builds a molecule from an asymmetric unit — unchanged.
 
 ## Medium-term: subgroups and correlation
 
