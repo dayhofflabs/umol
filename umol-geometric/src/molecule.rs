@@ -6,7 +6,7 @@ use umol_data::spin::SpinMultiplicity;
 use umol_data::units::{Angle, Length};
 use umol_msym::{
     compute_salcs as compute_salcs_raw, detect_symmetry, symmetrize as symmetrize_centers,
-    symmetrize_to as symmetrize_to_centers, BasisFunction, BasisKind, CartesianAxis,
+    generate_symmetry_images as generate_image_centers, BasisFunction, BasisKind, CartesianAxis,
     EquivalenceSet, Error as SymmetryError, Irrep, PointGroup, SalcBasis, SchoenfliesLabel,
     SymmetryCenter, SymmetryOp, Thresholds,
 };
@@ -234,7 +234,7 @@ impl Molecule {
     /// Generate a full molecule from an asymmetric unit and a target point group.
     ///
     /// Positions are in Angstroms, relative to the molecular center (origin).
-    pub fn symmetrize_to(
+    pub fn generate_symmetry_images(
         label: SchoenfliesLabel,
         elements: &[Element],
         positions_angstrom: &[[f64; 3]],
@@ -251,7 +251,7 @@ impl Molecule {
             })
             .collect();
 
-        let result = symmetrize_to_centers(label, &centers, thresholds)?;
+        let result = generate_image_centers(label, &centers, thresholds)?;
 
         let gen_elements: Vec<Element> = result
             .centers

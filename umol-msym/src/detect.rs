@@ -98,7 +98,7 @@ pub fn symmetrize(
 /// Atoms in the asymmetric unit must be positioned relative to the molecular
 /// center of mass (the origin). On-axis atoms will generate fewer copies than
 /// general-position atoms. Centers must have positions in Angstroms.
-pub fn symmetrize_to(
+pub fn generate_symmetry_images(
     label: SchoenfliesLabel,
     asymmetric_unit: &[SymmetryCenter],
     thresholds: Thresholds,
@@ -289,7 +289,7 @@ mod tests {
         &[1], &[1.008],  &[[2.48, 0.0, 0.0]],
         "D6h", 12
     )]
-    fn test_symmetrize_to(
+    fn test_generate_symmetry_images(
         #[case] label: SchoenfliesLabel,
         #[case] zs1: &[i32],
         #[case] ms1: &[f64],
@@ -302,7 +302,7 @@ mod tests {
     ) {
         let mut asym = make_centers(zs1, ms1, ps1);
         asym.extend(make_centers(zs2, ms2, ps2));
-        let result = symmetrize_to(label, &asym, Thresholds::default()).unwrap();
+        let result = generate_symmetry_images(label, &asym, Thresholds::default()).unwrap();
         assert_eq!(result.group.to_string(), expected_group);
         assert_eq!(result.centers.len(), expected_atoms);
     }
