@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::error::Error;
 use crate::point_group::PointGroup;
-use crate::types::{EquivalenceSet, SymmetryCenter, Thresholds};
+use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, Thresholds};
 
 /// Result of symmetry detection or symmetrization.
 #[derive(Debug)]
@@ -36,7 +36,7 @@ pub fn detect_symmetry(
     thresholds: Thresholds,
 ) -> Result<SymmetryResult, Error> {
     let mut ctx = Context::new()?;
-    ctx.set_elements(centers)?;
+    ctx.set_centers(centers)?;
     ctx.set_thresholds(&thresholds)?;
     match ctx.find_symmetry() {
         Ok(()) => {}
@@ -48,7 +48,7 @@ pub fn detect_symmetry(
 
     let group = PointGroup::from_context(&ctx)?;
     let equivalence_sets = ctx.equivalence_sets()?;
-    let centers = ctx.elements()?;
+    let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
@@ -66,7 +66,7 @@ pub fn symmetrize(
     thresholds: Thresholds,
 ) -> Result<SymmetryResult, Error> {
     let mut ctx = Context::new()?;
-    ctx.set_elements(centers)?;
+    ctx.set_centers(centers)?;
     ctx.set_thresholds(&thresholds)?;
     match ctx.find_symmetry() {
         Ok(()) => {}
@@ -75,13 +75,45 @@ pub fn symmetrize(
         }
         Err(e) => return Err(e),
     }
-    ctx.symmetrize_elements()?;
-    // Re-detect to repopulate the character table (cleared by symmetrize_elements)
+    let group = PointGroup::from_context(&ctx)?;
+    let equivalence_sets = ctx.equivalence_sets()?;
+    ctx.symmetrize_centers()?;
+    let centers = ctx.centers()?;
+
+    Ok(SymmetryResult {
+        group,
+        equivalence_sets,
+        centers,
+    })
+}
+
+/// Generate a full molecule from an asymmetric unit and a target point group.
+///
+/// The asymmetric unit atoms are replicated by the group operations.
+/// Centers must have positions in Angstroms (libmsym convention).
+/// Generate a full molecule from an asymmetric unit and a target point group.
+///
+/// Atoms in the asymmetric unit must be positioned relative to the molecular
+/// center of mass (the origin). On-axis atoms will generate fewer copies than
+/// general-position atoms. Centers must have positions in Angstroms.
+pub fn symmetrize_to(
+    label: SchoenfliesLabel,
+    asymmetric_unit: &[SymmetryCenter],
+    thresholds: Thresholds,
+) -> Result<SymmetryResult, Error> {
+    let mut ctx = Context::new()?;
+    ctx.set_thresholds(&thresholds)?;
+    // Set asymmetric unit to establish center of mass in the context.
+    // Then override center of mass to origin so generation works correctly.
+    ctx.set_centers(asymmetric_unit)?;
+    ctx.set_center_of_mass([0.0, 0.0, 0.0])?;
+    ctx.set_point_group(label)?;
+    ctx.generate_centers(asymmetric_unit)?;
     ctx.find_symmetry()?;
 
     let group = PointGroup::from_context(&ctx)?;
     let equivalence_sets = ctx.equivalence_sets()?;
-    let centers = ctx.elements()?;
+    let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
@@ -159,5 +191,42 @@ mod tests {
         let y1 = result.centers[1].position[1];
         let y2 = result.centers[2].position[1];
         assert!((y1 + y2).abs() < 1e-10, "H atoms not symmetric: {y1} vs {y2}");
+    }
+
+    #[rstest]
+    #[case(
+        SchoenfliesLabel::Cnv(2),
+        &[8], &[15.999], &[[0.0, 0.0, 0.117]],
+        &[1],  &[1.008], &[[0.0, 0.757, -0.469]],
+        "C2v", 3
+    )]
+    #[case(
+        SchoenfliesLabel::Td,
+        &[6], &[12.011], &[[0.0, 0.0, 0.0]],
+        &[1], &[1.008],  &[[0.629, 0.629, 0.629]],
+        "Td", 5
+    )]
+    #[case(
+        SchoenfliesLabel::Dnh(6),
+        &[6], &[12.011], &[[1.4, 0.0, 0.0]],
+        &[1], &[1.008],  &[[2.48, 0.0, 0.0]],
+        "D6h", 12
+    )]
+    fn test_symmetrize_to(
+        #[case] label: SchoenfliesLabel,
+        #[case] zs1: &[i32],
+        #[case] ms1: &[f64],
+        #[case] ps1: &[[f64; 3]],
+        #[case] zs2: &[i32],
+        #[case] ms2: &[f64],
+        #[case] ps2: &[[f64; 3]],
+        #[case] expected_group: &str,
+        #[case] expected_atoms: usize,
+    ) {
+        let mut asym = make_centers(zs1, ms1, ps1);
+        asym.extend(make_centers(zs2, ms2, ps2));
+        let result = symmetrize_to(label, &asym, Thresholds::default()).unwrap();
+        assert_eq!(result.group.to_string(), expected_group);
+        assert_eq!(result.centers.len(), expected_atoms);
     }
 }

@@ -56,19 +56,19 @@ impl Context {
     }
 
     // -------------------------------------------------------------------
-    // Elements
+    // Centers (atoms with positions and masses)
     // -------------------------------------------------------------------
 
-    pub fn set_elements(&mut self, elements: &[SymmetryCenter]) -> Result<(), Error> {
+    pub fn set_centers(&mut self, centers: &[SymmetryCenter]) -> Result<(), Error> {
         self.character_table = None;
-        let mut ffi_elements: Vec<ffi::msym_element_t> =
-            elements.iter().map(|e| e.to_ffi()).collect();
+        let mut ffi_elems: Vec<ffi::msym_element_t> =
+            centers.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
-            ffi::msymSetElements(self.ctx, ffi_elements.len() as c_int, ffi_elements.as_mut_ptr())
+            ffi::msymSetElements(self.ctx, ffi_elems.len() as c_int, ffi_elems.as_mut_ptr())
         })
     }
 
-    pub fn elements(&self) -> Result<Vec<SymmetryCenter>, Error> {
+    pub fn centers(&self) -> Result<Vec<SymmetryCenter>, Error> {
         let mut len: c_int = 0;
         let mut ptr = std::ptr::null_mut();
         error::check(unsafe { ffi::msymGetElements(self.ctx, &mut len, &mut ptr) })?;
@@ -159,6 +159,11 @@ impl Context {
         Ok(v)
     }
 
+    pub fn set_center_of_mass(&mut self, v: [f64; 3]) -> Result<(), Error> {
+        let mut v = v;
+        error::check(unsafe { ffi::msymSetCenterOfMass(self.ctx, v.as_mut_ptr()) })
+    }
+
     pub fn radius(&self) -> Result<f64, Error> {
         let mut r = 0.0f64;
         error::check(unsafe { ffi::msymGetRadius(self.ctx, &mut r) })?;
@@ -205,7 +210,7 @@ impl Context {
     // Symmetrization
     // -------------------------------------------------------------------
 
-    pub fn symmetrize_elements(&mut self) -> Result<f64, Error> {
+    pub fn symmetrize_centers(&mut self) -> Result<f64, Error> {
         self.character_table = None;
         let mut err = 0.0f64;
         error::check(unsafe { ffi::msymSymmetrizeElements(self.ctx, &mut err) })?;
@@ -229,18 +234,18 @@ impl Context {
     }
 
     // -------------------------------------------------------------------
-    // Element generation (from asymmetric unit)
+    // Center generation (from asymmetric unit)
     // -------------------------------------------------------------------
 
-    pub fn generate_elements(&mut self, asymmetric_unit: &[SymmetryCenter]) -> Result<(), Error> {
+    pub fn generate_centers(&mut self, asymmetric_unit: &[SymmetryCenter]) -> Result<(), Error> {
         self.character_table = None;
-        let mut ffi_elements: Vec<ffi::msym_element_t> =
+        let mut ffi_elems: Vec<ffi::msym_element_t> =
             asymmetric_unit.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
             ffi::msymGenerateElements(
                 self.ctx,
-                ffi_elements.len() as c_int,
-                ffi_elements.as_mut_ptr(),
+                ffi_elems.len() as c_int,
+                ffi_elems.as_mut_ptr(),
             )
         })
     }
@@ -318,7 +323,7 @@ mod tests {
         #[case] expected_name: &str,
     ) {
         let mut ctx = Context::new().unwrap();
-        ctx.set_elements(&elements).unwrap();
+        ctx.set_centers(&elements).unwrap();
         ctx.find_symmetry().unwrap();
 
         assert_eq!(ctx.point_group().unwrap(), expected_label);
@@ -333,7 +338,7 @@ mod tests {
         #[case] expected_count: usize,
     ) {
         let mut ctx = Context::new().unwrap();
-        ctx.set_elements(&elements).unwrap();
+        ctx.set_centers(&elements).unwrap();
         ctx.find_symmetry().unwrap();
         assert_eq!(ctx.symmetry_operations().unwrap().len(), expected_count);
     }
@@ -341,7 +346,7 @@ mod tests {
     #[rstest]
     fn test_context_character_table() {
         let mut ctx = Context::new().unwrap();
-        ctx.set_elements(&water()).unwrap();
+        ctx.set_centers(&water()).unwrap();
         ctx.find_symmetry().unwrap();
 
         let ct = ctx.character_table().unwrap();

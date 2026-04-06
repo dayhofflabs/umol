@@ -5,8 +5,9 @@ use umol_data::element::Element;
 use umol_data::spin::SpinMultiplicity;
 use umol_data::units::{Angle, Length};
 use umol_msym::{
-    detect_symmetry, symmetrize as symmetrize_centers, EquivalenceSet, Error as SymmetryError,
-    PointGroup, SymmetryCenter, SymmetryOp, Thresholds,
+    detect_symmetry, symmetrize as symmetrize_centers, symmetrize_to as symmetrize_to_centers,
+    EquivalenceSet, Error as SymmetryError, PointGroup, SchoenfliesLabel, SymmetryCenter,
+    SymmetryOp, Thresholds,
 };
 
 use crate::coordinates::Coordinates;
@@ -198,6 +199,53 @@ impl Molecule {
             coords: Coordinates::Cartesian(matrix),
             charge: self.charge,
             multiplicity: self.multiplicity,
+            group: result.group,
+            equivalence_sets: eq_sets,
+            atom_permutations,
+        })
+    }
+
+    /// Generate a full molecule from an asymmetric unit and a target point group.
+    ///
+    /// Positions are in Angstroms, relative to the molecular center (origin).
+    pub fn symmetrize_to(
+        label: SchoenfliesLabel,
+        elements: &[Element],
+        positions_angstrom: &[[f64; 3]],
+    ) -> Result<Molecule, SymmetryError> {
+        let centers: Vec<SymmetryCenter> = elements
+            .iter()
+            .zip(positions_angstrom)
+            .map(|(&elem, &pos)| SymmetryCenter {
+                atomic_number: elem.atomic_number() as i32,
+                mass: elem.mass(),
+                position: pos,
+                name: String::new(),
+            })
+            .collect();
+
+        let result = symmetrize_to_centers(label, &centers, Thresholds::default())?;
+
+        let gen_elements: Vec<Element> = result
+            .centers
+            .iter()
+            .map(|c| Element::from_atomic_number(c.atomic_number as u8).unwrap())
+            .collect();
+
+        let n = result.centers.len();
+        let matrix = DMatrix::from_fn(3, n, |r, c| {
+            Length::angstrom(result.centers[c].position[r]).as_bohr()
+        });
+
+        let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
+        let atom_permutations =
+            compute_atom_permutations(&matrix, result.group.operations(), &gen_elements);
+
+        Ok(Molecule {
+            elements: gen_elements,
+            coords: Coordinates::Cartesian(matrix),
+            charge: 0,
+            multiplicity: SpinMultiplicity::Singlet,
             group: result.group,
             equivalence_sets: eq_sets,
             atom_permutations,

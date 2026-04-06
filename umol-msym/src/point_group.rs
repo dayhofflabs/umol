@@ -162,18 +162,36 @@ impl PointGroup {
         debug_assert!(std::ptr::eq(a.group, self));
         debug_assert!(std::ptr::eq(b.group, self));
 
+        let product_chars: Vec<f64> = a
+            .data
+            .characters
+            .iter()
+            .zip(&b.data.characters)
+            .map(|(ca, cb)| ca * cb)
+            .collect();
+        self.reduce(&product_chars)
+    }
+
+    /// Reduce a representation (given by its class characters) into irreps with multiplicities.
+    ///
+    /// `characters` must have one entry per conjugacy class, in the same order as the
+    /// character table. Returns irreps with non-zero multiplicity.
+    pub fn reduce(&'static self, characters: &[f64]) -> Vec<(Irrep, u32)> {
         let ct = &self.character_table;
         let d = ct.irrep_data.len();
+        assert_eq!(
+            characters.len(),
+            d,
+            "expected {} class characters, got {}",
+            d,
+            characters.len()
+        );
         let h = ct.order as f64;
-
-        let product_chars: Vec<f64> = (0..d)
-            .map(|c| a.data.characters[c] * b.data.characters[c])
-            .collect();
 
         let mut result = Vec::new();
         for ir_data in &ct.irrep_data {
             let n: f64 = (0..d)
-                .map(|c| ct.class_sizes[c] as f64 * ir_data.characters[c] * product_chars[c])
+                .map(|c| ct.class_sizes[c] as f64 * ir_data.characters[c] * characters[c])
                 .sum::<f64>()
                 / h;
             let n_rounded = n.round() as u32;
@@ -188,6 +206,81 @@ impl PointGroup {
             }
         }
         result
+    }
+
+    /// Irreps spanned by the translational degrees of freedom (x, y, z).
+    ///
+    /// Characters computed from traces of the 3×3 operation matrices.
+    pub fn translation_irreps(&'static self) -> Vec<(Irrep, u32)> {
+        let ct = &self.character_table;
+        let chars: Vec<f64> = ct
+            .class_operations
+            .iter()
+            .map(|op| op.matrix.trace())
+            .collect();
+        self.reduce(&chars)
+    }
+
+    /// Irreps spanned by the rotational degrees of freedom (Rx, Ry, Rz).
+    ///
+    /// Pseudovector representation: χ_rot(R) = det(M_R) · tr(M_R).
+    pub fn rotation_irreps(&'static self) -> Vec<(Irrep, u32)> {
+        let ct = &self.character_table;
+        let chars: Vec<f64> = ct
+            .class_operations
+            .iter()
+            .map(|op| op.matrix.determinant() * op.matrix.trace())
+            .collect();
+        self.reduce(&chars)
+    }
+
+    /// Irreps of the symmetric square of the vector representation (x², y², z², xy, xz, yz).
+    ///
+    /// Used for Raman and electric quadrupole selection rules.
+    fn quadratic_irreps(&'static self) -> Vec<(Irrep, u32)> {
+        let ct = &self.character_table;
+        let chars: Vec<f64> = ct
+            .class_operations
+            .iter()
+            .map(|op| {
+                let tr = op.matrix.trace();
+                let tr2 = (op.matrix * op.matrix).trace();
+                (tr * tr + tr2) / 2.0
+            })
+            .collect();
+        self.reduce(&chars)
+    }
+
+    /// Electric dipole transition allowed? Checks Γ_i ⊗ Γ(x,y,z) ⊗ Γ_f ⊃ A1.
+    pub fn electric_dipole_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
+        debug_assert!(std::ptr::eq(initial.group, self));
+        debug_assert!(std::ptr::eq(final_.group, self));
+        self.translation_irreps()
+            .iter()
+            .any(|(gamma_t, _)| self.contains_totally_symmetric(initial, *gamma_t, final_))
+    }
+
+    /// Magnetic dipole transition allowed? Checks Γ_i ⊗ Γ(Rx,Ry,Rz) ⊗ Γ_f ⊃ A1.
+    pub fn magnetic_dipole_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
+        debug_assert!(std::ptr::eq(initial.group, self));
+        debug_assert!(std::ptr::eq(final_.group, self));
+        self.rotation_irreps()
+            .iter()
+            .any(|(gamma_r, _)| self.contains_totally_symmetric(initial, *gamma_r, final_))
+    }
+
+    /// Raman transition allowed? Checks Γ_i ⊗ Γ(x²,y²,...,yz) ⊗ Γ_f ⊃ A1.
+    pub fn raman_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
+        debug_assert!(std::ptr::eq(initial.group, self));
+        debug_assert!(std::ptr::eq(final_.group, self));
+        self.quadratic_irreps()
+            .iter()
+            .any(|(gamma_q, _)| self.contains_totally_symmetric(initial, *gamma_q, final_))
+    }
+
+    /// Electric quadrupole transition allowed? Same basis as Raman (symmetric square).
+    pub fn electric_quadrupole_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
+        self.raman_allowed(initial, final_)
     }
 
     /// Whether a ⊗ b ⊗ c contains the totally symmetric representation.
@@ -297,9 +390,9 @@ impl PointGroup {
             },
         ];
 
-        ctx.set_elements(&seeds)?;
+        ctx.set_centers(&seeds)?;
         ctx.set_point_group_by_name(name)?;
-        ctx.generate_elements(&seeds)?;
+        ctx.generate_centers(&seeds)?;
         ctx.find_symmetry()?;
 
         let detected = ctx.point_group_name()?;
@@ -545,5 +638,132 @@ mod tests {
         let b1 = g.irrep("B1").unwrap();
         assert_eq!(a1_first, a1_second);
         assert_ne!(a1_first, b1);
+    }
+
+    // --- reduce ---
+
+    #[rstest]
+    #[case("C2v", &[4.0, 0.0, 0.0, 0.0], &[("A1", 1), ("A2", 1), ("B1", 1), ("B2", 1)])]
+    #[case("C2v", &[1.0, 1.0, 1.0, 1.0], &[("A1", 1)])]
+    #[case("C1",  &[7.0], &[("A", 7)])]
+    fn test_point_group_reduce(
+        #[case] group: &str,
+        #[case] characters: &[f64],
+        #[case] expected: &[(&str, u32)],
+    ) {
+        let g = PointGroup::from_schoenflies(group).unwrap();
+        let result = g.reduce(characters);
+        let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
+        assert_eq!(actual, expected);
+    }
+
+    /// Roundtrip: build characters from known irrep multiplicities, reduce, verify.
+    #[rstest]
+    #[case("C2v", &[("A1", 2), ("B2", 3)])]
+    #[case("Td",  &[("A1", 1), ("E", 1), ("T2", 3)])]
+    #[case("Oh",  &[("Eg", 2), ("T1u", 1)])]
+    fn test_point_group_reduce_roundtrip(
+        #[case] group: &str,
+        #[case] composition: &[(&str, u32)],
+    ) {
+        let g = PointGroup::from_schoenflies(group).unwrap();
+        let n_classes = g.class_sizes().len();
+        let mut chars = vec![0.0; n_classes];
+        for &(sym, mult) in composition {
+            let ir = g.irrep(sym).unwrap();
+            for (c, ch) in ir.characters().iter().enumerate() {
+                chars[c] += mult as f64 * ch;
+            }
+        }
+        let result = g.reduce(&chars);
+        let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
+        let expected: Vec<(&str, u32)> = composition.to_vec();
+        assert_eq!(actual, expected);
+    }
+
+    // --- translation_irreps / rotation_irreps ---
+
+    #[rstest]
+    #[case("C2v", &[("A1", 1), ("B1", 1), ("B2", 1)])]
+    #[case("Td",  &[("T2", 1)])]
+    #[case("C1",  &[("A", 3)])]
+    fn test_point_group_translation_irreps(
+        #[case] group: &str,
+        #[case] expected: &[(&str, u32)],
+    ) {
+        let g = PointGroup::from_schoenflies(group).unwrap();
+        let result = g.translation_irreps();
+        let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case("C2v", &[("A2", 1), ("B1", 1), ("B2", 1)])]
+    #[case("Td",  &[("T1", 1)])]
+    #[case("C1",  &[("A", 3)])]
+    fn test_point_group_rotation_irreps(
+        #[case] group: &str,
+        #[case] expected: &[(&str, u32)],
+    ) {
+        let g = PointGroup::from_schoenflies(group).unwrap();
+        let result = g.rotation_irreps();
+        let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case("C2v")]
+    #[case("Td")]
+    #[case("Oh")]
+    #[case("D3h")]
+    #[case("C1")]
+    fn test_point_group_trans_rot_dimensions(#[case] group: &str) {
+        let g = PointGroup::from_schoenflies(group).unwrap();
+        let trans_dim: u32 = g
+            .translation_irreps()
+            .iter()
+            .map(|(ir, n)| ir.dimension() as u32 * n)
+            .sum();
+        let rot_dim: u32 = g
+            .rotation_irreps()
+            .iter()
+            .map(|(ir, n)| ir.dimension() as u32 * n)
+            .sum();
+        assert_eq!(trans_dim, 3);
+        assert_eq!(rot_dim, 3);
+    }
+
+    // --- selection rules ---
+
+    fn ir_active_symbols(g: &'static PointGroup) -> Vec<String> {
+        let a1 = g.irreps()[0];
+        g.irreps()
+            .into_iter()
+            .filter(|ir| g.electric_dipole_allowed(a1, *ir))
+            .map(|ir| ir.symbol().to_owned())
+            .collect()
+    }
+
+    fn raman_active_symbols(g: &'static PointGroup) -> Vec<String> {
+        let a1 = g.irreps()[0];
+        g.irreps()
+            .into_iter()
+            .filter(|ir| g.raman_allowed(a1, *ir))
+            .map(|ir| ir.symbol().to_owned())
+            .collect()
+    }
+
+    #[rstest]
+    #[case("C1",  &["A"],                  &["A"])]
+    #[case("C2v", &["A1", "B1", "B2"],     &["A1", "A2", "B1", "B2"])]
+    #[case("Td",  &["T2"],                 &["A1", "E", "T2"])]
+    fn test_point_group_ir_active(
+        #[case] group: &str,
+        #[case] expected_ir: &[&str],
+        #[case] expected_raman: &[&str],
+    ) {
+        let g = PointGroup::from_schoenflies(group).unwrap();
+        assert_eq!(ir_active_symbols(g), expected_ir);
+        assert_eq!(raman_active_symbols(g), expected_raman);
     }
 }
