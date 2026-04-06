@@ -1,3 +1,4 @@
+use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
 use crate::context::Context;
 use crate::error::Error;
 use crate::point_group::PointGroup;
@@ -122,11 +123,66 @@ pub fn symmetrize_to(
     })
 }
 
+/// Compute symmetry-adapted linear combinations (SALCs) for a set of basis functions.
+///
+/// Centers and basis functions must be consistent: each `BasisFunction::atom_index`
+/// must be a valid index into `centers`. Symmetry is detected first, then basis
+/// functions are projected onto the irreps of the detected point group.
+pub fn compute_salcs(
+    centers: &[SymmetryCenter],
+    basis: &[BasisFunction],
+    thresholds: Thresholds,
+) -> Result<SalcBasis, Error> {
+    let mut ctx = Context::new()?;
+    ctx.set_centers(centers)?;
+    ctx.set_thresholds(&thresholds)?;
+    ctx.find_symmetry()?;
+
+    let group = PointGroup::from_context(&ctx)?;
+    ctx.set_basis_functions(basis)?;
+
+    let l = basis.len();
+    let (coefficients, species) = ctx.salcs(l)?;
+
+    let irreps = group.irreps();
+    let zero_thresh = thresholds.zero;
+
+    // Group SALCs by irrep
+    let mut irrep_salcs: Vec<Vec<Salc>> = vec![Vec::new(); irreps.len()];
+
+    for (salc_idx, &species_idx) in species.iter().enumerate() {
+        let row = &coefficients[salc_idx * l..(salc_idx + 1) * l];
+        let sparse: Vec<(usize, f64)> = row
+            .iter()
+            .enumerate()
+            .filter(|(_, &c)| c.abs() > zero_thresh)
+            .map(|(j, &c)| (j, c))
+            .collect();
+        if sparse.is_empty() {
+            continue;
+        }
+        irrep_salcs[species_idx as usize].push(Salc { coefficients: sparse });
+    }
+
+    let irrep_bases: Vec<IrrepBasis> = irreps
+        .into_iter()
+        .zip(irrep_salcs)
+        .filter(|(_, salcs)| !salcs.is_empty())
+        .map(|(irrep, salcs)| IrrepBasis { irrep, salcs })
+        .collect();
+
+    Ok(SalcBasis {
+        basis_functions: basis.to_vec(),
+        irreps: irrep_bases,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::basis::{BasisKind, CartesianAxis};
 
     fn make_centers(
         atomic_numbers: &[i32],
@@ -228,5 +284,109 @@ mod tests {
         let result = symmetrize_to(label, &asym, Thresholds::default()).unwrap();
         assert_eq!(result.group.to_string(), expected_group);
         assert_eq!(result.centers.len(), expected_atoms);
+    }
+
+    fn s_basis(n_atoms: usize) -> Vec<BasisFunction> {
+        (0..n_atoms)
+            .map(|i| BasisFunction {
+                atom_index: i,
+                kind: BasisKind::RealSphericalHarmonic,
+                n: 1,
+                l: 0,
+                m: 0,
+            })
+            .collect()
+    }
+
+    fn displacement_basis(n_atoms: usize) -> Vec<BasisFunction> {
+        let axes = [
+            (CartesianAxis::X, 1),
+            (CartesianAxis::Y, -1),
+            (CartesianAxis::Z, 0),
+        ];
+        (0..n_atoms)
+            .flat_map(|i| {
+                axes.iter().map(move |&(axis, m)| BasisFunction {
+                    atom_index: i,
+                    kind: BasisKind::Displacement(axis),
+                    n: 2,
+                    l: 1,
+                    m,
+                })
+            })
+            .collect()
+    }
+
+    #[rstest]
+    #[case(
+        &[8, 1, 1],
+        &[15.999, 1.008, 1.008],
+        &[[0.0, 0.0, 0.117], [0.0, 0.757, -0.469], [0.0, -0.757, -0.469]],
+        3, &["A1", "A1", "B1"]
+    )]
+    #[case(
+        &[6, 1, 1, 1, 1],
+        &[12.011, 1.008, 1.008, 1.008, 1.008],
+        &[[0.0, 0.0, 0.0], [0.629, 0.629, 0.629], [-0.629, -0.629, 0.629],
+          [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]],
+        5, &["A1", "A1", "T2", "T2", "T2"]
+    )]
+    fn test_compute_salcs_s_basis(
+        #[case] zs: &[i32],
+        #[case] masses: &[f64],
+        #[case] positions: &[[f64; 3]],
+        #[case] expected_total: usize,
+        #[case] expected_salc_irreps: &[&str],
+    ) {
+        let centers = make_centers(zs, masses, positions);
+        let basis = s_basis(centers.len());
+        let result = compute_salcs(&centers, &basis, Thresholds::default()).unwrap();
+
+        let total: usize = result.irreps.iter().map(|ib| ib.salcs.len()).sum();
+        assert_eq!(total, expected_total);
+
+        let mut salc_symbols: Vec<String> = result
+            .irreps
+            .iter()
+            .flat_map(|ib| {
+                std::iter::repeat_n(ib.irrep.symbol().to_owned(), ib.salcs.len())
+            })
+            .collect();
+        salc_symbols.sort();
+        let mut expected: Vec<&str> = expected_salc_irreps.to_vec();
+        expected.sort();
+        assert_eq!(salc_symbols, expected);
+    }
+
+    #[rstest]
+    fn test_compute_salcs_displacement_basis() {
+        let centers = make_centers(
+            &[8, 1, 1],
+            &[15.999, 1.008, 1.008],
+            &[[0.0, 0.0, 0.117], [0.0, 0.757, -0.469], [0.0, -0.757, -0.469]],
+        );
+        let basis = displacement_basis(centers.len());
+        let result = compute_salcs(&centers, &basis, Thresholds::default()).unwrap();
+
+        let total: usize = result.irreps.iter().map(|ib| ib.salcs.len()).sum();
+        assert_eq!(total, 9); // 3N = 9
+
+        // Verify orthogonality: SALC rows should be orthonormal
+        for ib in &result.irreps {
+            for (i, s1) in ib.salcs.iter().enumerate() {
+                for (j, s2) in ib.salcs.iter().enumerate() {
+                    let dot: f64 = s1.coefficients.iter().map(|&(k, c1)| {
+                        s2.coefficients.iter()
+                            .find(|&&(k2, _)| k2 == k)
+                            .map_or(0.0, |&(_, c2)| c1 * c2)
+                    }).sum();
+                    if i == j {
+                        assert!((dot - 1.0).abs() < 1e-8, "SALC {i} not normalized: {dot}");
+                    } else {
+                        assert!(dot.abs() < 1e-8, "SALCs {i},{j} not orthogonal: {dot}");
+                    }
+                }
+            }
+        }
     }
 }

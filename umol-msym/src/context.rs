@@ -3,8 +3,38 @@ use std::os::raw::c_int;
 
 use umol_msym_sys as ffi;
 
+use crate::basis::BasisFunction;
 use crate::error::{self, Error};
 use crate::types::*;
+
+/// Generate the orbital name string libmsym expects (e.g. "1s", "1px", "2d1+").
+fn orbital_name(n: i32, l: i32, m: i32) -> [i8; 8] {
+    let s = match l {
+        0 => format!("{n}s"),
+        1 => {
+            let axis = match m {
+                1 => "x",
+                -1 => "y",
+                0 => "z",
+                _ => "?",
+            };
+            format!("{n}p{axis}")
+        }
+        _ => {
+            let shell = (b'f' - 3 + l as u8
+                + if l >= 5 { 1 } else { 0 }
+                + if l >= 10 { 1 } else { 0 }
+                + if l >= 12 { 1 } else { 0 }) as char;
+            let sign = if m > 0 { "+" } else if m < 0 { "-" } else { "" };
+            format!("{n}{shell}{}{sign}", m.unsigned_abs())
+        }
+    };
+    let mut name = [0i8; 8];
+    for (i, &b) in s.as_bytes().iter().take(7).enumerate() {
+        name[i] = b as i8;
+    }
+    name
+}
 
 pub struct Context {
     ctx: ffi::msym_context,
@@ -231,6 +261,84 @@ impl Context {
             ffi::msymGetAlignmentTransform(self.ctx, transform.as_mut_ptr())
         })?;
         Ok(transform)
+    }
+
+    // -------------------------------------------------------------------
+    // Basis functions and SALCs
+    // -------------------------------------------------------------------
+
+    pub fn set_basis_functions(&mut self, basis: &[BasisFunction]) -> Result<(), Error> {
+        let mut elem_len: c_int = 0;
+        let mut elem_ptr = std::ptr::null_mut();
+        error::check(unsafe { ffi::msymGetElements(self.ctx, &mut elem_len, &mut elem_ptr) })?;
+
+        let mut ffi_basis: Vec<ffi::msym_basis_function_t> = basis
+            .iter()
+            .map(|bf| {
+                assert!(
+                    (bf.atom_index as c_int) < elem_len,
+                    "atom_index {} out of range ({})",
+                    bf.atom_index,
+                    elem_len
+                );
+                let element = unsafe { elem_ptr.add(bf.atom_index) };
+                let type_ = match bf.kind {
+                    crate::basis::BasisKind::Cartesian => {
+                        ffi::MSYM_BASIS_TYPE_CARTESIAN
+                    }
+                    _ => ffi::MSYM_BASIS_TYPE_REAL_SPHERICAL_HARMONIC,
+                };
+                let name = orbital_name(bf.n, bf.l, bf.m);
+                ffi::msym_basis_function_t {
+                    id: std::ptr::null_mut(),
+                    type_,
+                    element,
+                    f: ffi::msym_basis_function_union_t {
+                        rsh: ffi::msym_real_spherical_harmonic_t {
+                            n: bf.n,
+                            l: bf.l,
+                            m: bf.m,
+                        },
+                    },
+                    name,
+                }
+            })
+            .collect();
+
+        error::check(unsafe {
+            ffi::msymSetBasisFunctions(
+                self.ctx,
+                ffi_basis.len() as c_int,
+                ffi_basis.as_mut_ptr(),
+            )
+        })
+    }
+
+    pub fn generate_subrepresentation_spaces(&mut self) -> Result<(), Error> {
+        error::check(unsafe { ffi::msymGenerateSubrepresentationSpaces(self.ctx) })
+    }
+
+    /// Returns (coefficients, species_indices) where coefficients is an l×l row-major
+    /// matrix and species_indices maps each SALC row to an irrep index in the
+    /// character table.
+    pub fn salcs(&self, basis_count: usize) -> Result<(Vec<f64>, Vec<i32>), Error> {
+        let l = basis_count as c_int;
+        let mut coefficients = vec![0.0f64; (l * l) as usize];
+        let mut species = vec![0i32; l as usize];
+        let mut partner: Vec<ffi::msym_partner_function_t> =
+            (0..l).map(|_| ffi::msym_partner_function_t { i: 0, d: 0 }).collect();
+
+        error::check(unsafe {
+            ffi::msymGetSALCs(
+                self.ctx,
+                l,
+                coefficients.as_mut_ptr(),
+                species.as_mut_ptr(),
+                partner.as_mut_ptr(),
+            )
+        })?;
+
+        Ok((coefficients, species))
     }
 
     // -------------------------------------------------------------------
