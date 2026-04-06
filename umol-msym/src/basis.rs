@@ -15,8 +15,8 @@ pub enum BasisKind {
     Displacement(CartesianAxis),
     /// Real spherical harmonic Y_l^m centered on an atom.
     RealSphericalHarmonic,
-    /// Cartesian multinomial x^i y^j z^k centered on an atom.
-    Cartesian,
+    /// Cartesian harmonic (symmetric multinomials x^i y^j z^k) centered on an atom.
+    CartesianHarmonic,
 }
 
 #[derive(Debug, Clone)]

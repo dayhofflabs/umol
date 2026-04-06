@@ -2,13 +2,11 @@ use std::f64::consts::PI;
 use std::ffi::CStr;
 use std::fmt;
 use std::os::raw::c_int;
+use std::ptr;
+use std::slice;
 
 use nalgebra::Matrix3;
 use umol_msym_sys as ffi;
-
-// ---------------------------------------------------------------------------
-// Schoenflies label
-// ---------------------------------------------------------------------------
 
 /// Structured Schoenflies symbol identifying a point group.
 ///
@@ -48,8 +46,10 @@ impl SchoenfliesLabel {
             ffi::MSYM_POINT_GROUP_TYPE_Cs => Self::Cs,
             ffi::MSYM_POINT_GROUP_TYPE_Cn => Self::Cn(n),
             ffi::MSYM_POINT_GROUP_TYPE_Cnh => Self::Cnh(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Cnv if n == 0 => Self::Coov,
             ffi::MSYM_POINT_GROUP_TYPE_Cnv => Self::Cnv(n),
             ffi::MSYM_POINT_GROUP_TYPE_Dn => Self::Dn(n),
+            ffi::MSYM_POINT_GROUP_TYPE_Dnh if n == 0 => Self::Dooh,
             ffi::MSYM_POINT_GROUP_TYPE_Dnh => Self::Dnh(n),
             ffi::MSYM_POINT_GROUP_TYPE_Dnd => Self::Dnd(n),
             ffi::MSYM_POINT_GROUP_TYPE_Sn => Self::Sn(n),
@@ -104,6 +104,8 @@ impl SchoenfliesLabel {
             "Ih" => return Some(Self::Ih),
             "Kh" => return Some(Self::Kh),
             "K" => return Some(Self::K),
+            "C∞v" | "Coov" | "C0v" => return Some(Self::Coov),
+            "D∞h" | "Dooh" | "D0h" => return Some(Self::Dooh),
             _ => {}
         }
 
@@ -174,10 +176,6 @@ impl fmt::Display for SchoenfliesLabel {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Geometry
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Geometry {
     Unknown,
@@ -204,10 +202,6 @@ impl From<ffi::msym_geometry_t> for Geometry {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Symmetry operation
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SymmetryOpKind {
@@ -256,11 +250,23 @@ pub struct SymmetryOp {
     pub power: i32,
     pub orientation: SymmetryOpOrientation,
     pub vector: [f64; 3],
-    pub class: i32,
+    /// Conjugacy class index: indexes into `PointGroup::class_sizes()`,
+    /// `PointGroup::class_reps()`, and `Irrep::characters()`.
+    pub class: usize,
     pub matrix: Matrix3<f64>,
 }
 
 impl SymmetryOp {
+    pub fn is_proper(&self) -> bool {
+        matches!(self.kind, SymmetryOpKind::Identity | SymmetryOpKind::ProperRotation)
+    }
+
+    pub fn transform_point(&self, p: [f64; 3]) -> [f64; 3] {
+        let v = nalgebra::Vector3::new(p[0], p[1], p[2]);
+        let r = self.matrix * v;
+        [r.x, r.y, r.z]
+    }
+
     fn compute_matrix(
         kind: SymmetryOpKind,
         order: i32,
@@ -301,6 +307,45 @@ fn reflection_matrix(normal: [f64; 3]) -> Matrix3<f64> {
     Matrix3::identity() - 2.0 * n * n.transpose()
 }
 
+impl fmt::Display for SymmetryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            SymmetryOpKind::Identity => write!(f, "E"),
+            SymmetryOpKind::Inversion => write!(f, "i"),
+            SymmetryOpKind::Reflection => {
+                match self.orientation {
+                    SymmetryOpOrientation::Horizontal => write!(f, "σh"),
+                    SymmetryOpOrientation::Vertical => write!(f, "σv"),
+                    SymmetryOpOrientation::Dihedral => write!(f, "σd"),
+                    SymmetryOpOrientation::None => write!(f, "σ"),
+                }
+            }
+            SymmetryOpKind::ProperRotation => {
+                write!(f, "C{}", self.order)?;
+                write_superscript_power(f, self.power)
+            }
+            SymmetryOpKind::ImproperRotation => {
+                write!(f, "S{}", self.order)?;
+                write_superscript_power(f, self.power)
+            }
+        }
+    }
+}
+
+fn write_superscript_power(f: &mut fmt::Formatter<'_>, power: i32) -> fmt::Result {
+    if power > 1 {
+        for ch in power.to_string().chars() {
+            let sup = match ch {
+                '0' => '⁰', '1' => '¹', '2' => '²', '3' => '³', '4' => '⁴',
+                '5' => '⁵', '6' => '⁶', '7' => '⁷', '8' => '⁸', '9' => '⁹',
+                _ => ch,
+            };
+            write!(f, "{sup}")?;
+        }
+    }
+    Ok(())
+}
+
 impl From<&ffi::msym_symmetry_operation_t> for SymmetryOp {
     fn from(op: &ffi::msym_symmetry_operation_t) -> Self {
         let kind = op.type_.into();
@@ -311,15 +356,11 @@ impl From<&ffi::msym_symmetry_operation_t> for SymmetryOp {
             power: op.power,
             orientation: op.orientation.into(),
             vector: op.v,
-            class: op.cla,
+            class: op.cla as usize,
             matrix,
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Element (atom)
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub struct SymmetryCenter {
@@ -336,7 +377,7 @@ impl SymmetryCenter {
             name[i] = b as i8;
         }
         ffi::msym_element_t {
-            id: std::ptr::null_mut(),
+            id: ptr::null_mut(),
             m: self.mass,
             v: self.position,
             n: self.atomic_number,
@@ -357,19 +398,17 @@ impl SymmetryCenter {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Thresholds
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Copy)]
 pub struct Thresholds {
     pub zero: f64,
     pub geometry: f64,
     pub angle: f64,
     pub equivalence: f64,
-    pub eigfact: f64,
+    pub jacobi: f64,
     pub permutation: f64,
     pub orthogonalization: f64,
+    /// SVD singular value cutoff for symmetry coordinate projection.
+    pub projection: f64,
 }
 
 impl Default for Thresholds {
@@ -388,9 +427,10 @@ impl Thresholds {
             geometry: t.geometry,
             angle: t.angle,
             equivalence: t.equivalence,
-            eigfact: t.eigfact,
+            jacobi: t.eigfact,
             permutation: t.permutation,
             orthogonalization: t.orthogonalization,
+            projection: 1e-8,
         }
     }
 
@@ -400,34 +440,44 @@ impl Thresholds {
             geometry: self.geometry,
             angle: self.angle,
             equivalence: self.equivalence,
-            eigfact: self.eigfact,
+            eigfact: self.jacobi,
             permutation: self.permutation,
             orthogonalization: self.orthogonalization,
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Irreducible representation (internal storage)
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone)]
 pub(crate) struct IrrepData {
     pub symbol: String,
     pub dimension: i32,
     pub index: usize,
+    /// Character values per conjugacy class. Empty for linear groups.
     pub characters: Vec<f64>,
+    /// Angular momentum quantum number (λ) for linear group irreps.
+    pub lambda: Option<u32>,
+    /// σ_v parity for Σ irreps of linear groups: true = Σ+, false = Σ-.
+    pub sigma_v: Option<bool>,
+    /// Gerade/ungerade for D∞h irreps.
+    pub gerade: Option<bool>,
 }
 
-// ---------------------------------------------------------------------------
-// Character table (internal)
-// ---------------------------------------------------------------------------
+#[derive(Debug)]
+pub(crate) enum PointGroupKind {
+    Finite {
+        order: usize,
+        ops: Vec<SymmetryOp>,
+        class_sizes: Vec<i32>,
+        class_reps: Vec<SymmetryOp>,
+    },
+    Linear,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct CharacterTable {
     pub irrep_data: Vec<IrrepData>,
     pub class_sizes: Vec<i32>,
-    pub class_operations: Vec<SymmetryOp>,
+    pub class_reps: Vec<SymmetryOp>,
     pub order: usize,
 }
 
@@ -435,13 +485,13 @@ impl CharacterTable {
     pub(crate) unsafe fn from_ffi(ct: &ffi::msym_character_table_t) -> Self {
         let d = ct.d as usize;
 
-        let class_sizes = std::slice::from_raw_parts(ct.classc, d).to_vec();
+        let class_sizes = slice::from_raw_parts(ct.classc, d).to_vec();
 
-        let class_operations: Vec<SymmetryOp> = (0..d)
+        let class_reps: Vec<SymmetryOp> = (0..d)
             .map(|i| SymmetryOp::from(&**ct.sops.add(i)))
             .collect();
 
-        let species = std::slice::from_raw_parts(ct.s, d);
+        let species = slice::from_raw_parts(ct.s, d);
         let table_ptr = ct.table as *const f64;
 
         let irrep_data: Vec<IrrepData> = species
@@ -453,7 +503,10 @@ impl CharacterTable {
                     .into_owned(),
                 dimension: s.d,
                 index: i,
-                characters: std::slice::from_raw_parts(table_ptr.add(i * d), d).to_vec(),
+                characters: slice::from_raw_parts(table_ptr.add(i * d), d).to_vec(),
+                lambda: None,
+                sigma_v: None,
+                gerade: None,
             })
             .collect();
 
@@ -462,15 +515,11 @@ impl CharacterTable {
         Self {
             irrep_data,
             class_sizes,
-            class_operations,
+            class_reps,
             order,
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Equivalence set
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
 pub struct EquivalenceSet {

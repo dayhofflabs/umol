@@ -1,9 +1,11 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
+use std::ptr;
+use std::slice;
 
 use umol_msym_sys as ffi;
 
-use crate::basis::BasisFunction;
+use crate::basis::{BasisFunction, BasisKind};
 use crate::error::{self, Error};
 use crate::types::*;
 
@@ -52,10 +54,6 @@ impl Drop for Context {
 }
 
 impl Context {
-    // -------------------------------------------------------------------
-    // Construction
-    // -------------------------------------------------------------------
-
     pub fn new() -> Result<Self, Error> {
         let ctx = unsafe { ffi::msymCreateContext() };
         if ctx.is_null() {
@@ -70,24 +68,16 @@ impl Context {
         })
     }
 
-    // -------------------------------------------------------------------
-    // Thresholds
-    // -------------------------------------------------------------------
-
     pub fn set_thresholds(&mut self, t: &Thresholds) -> Result<(), Error> {
         let ft = t.to_ffi();
         error::check(unsafe { ffi::msymSetThresholds(self.ctx, &ft) })
     }
 
     pub fn thresholds(&self) -> Result<Thresholds, Error> {
-        let mut ptr = std::ptr::null();
+        let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetThresholds(self.ctx, &mut ptr) })?;
         Ok(Thresholds::from_ffi(unsafe { &*ptr }))
     }
-
-    // -------------------------------------------------------------------
-    // Centers (atoms with positions and masses)
-    // -------------------------------------------------------------------
 
     pub fn set_centers(&mut self, centers: &[SymmetryCenter]) -> Result<(), Error> {
         self.character_table = None;
@@ -100,29 +90,28 @@ impl Context {
 
     pub fn centers(&self) -> Result<Vec<SymmetryCenter>, Error> {
         let mut len: c_int = 0;
-        let mut ptr = std::ptr::null_mut();
+        let mut ptr = ptr::null_mut();
         error::check(unsafe { ffi::msymGetElements(self.ctx, &mut len, &mut ptr) })?;
-        let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
+        let slice = unsafe { slice::from_raw_parts(ptr, len as usize) };
         Ok(slice.iter().map(SymmetryCenter::from_ffi).collect())
     }
-
-    // -------------------------------------------------------------------
-    // Symmetry detection
-    // -------------------------------------------------------------------
 
     pub fn find_symmetry(&mut self) -> Result<(), Error> {
         self.character_table = None;
         error::check(unsafe { ffi::msymFindSymmetry(self.ctx) })?;
-        // Cache the character table
-        let mut ct_ptr = std::ptr::null();
+
+        // Linear molecules have no finite character table
+        let label = self.point_group()?;
+        if matches!(label, SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh) {
+            return Ok(());
+        }
+
+        // Cache the character table for finite groups
+        let mut ct_ptr = ptr::null();
         error::check(unsafe { ffi::msymGetCharacterTable(self.ctx, &mut ct_ptr) })?;
         self.character_table = Some(unsafe { CharacterTable::from_ffi(&*ct_ptr) });
         Ok(())
     }
-
-    // -------------------------------------------------------------------
-    // Point group queries
-    // -------------------------------------------------------------------
 
     pub fn point_group(&self) -> Result<SchoenfliesLabel, Error> {
         let mut pg_type: ffi::msym_point_group_type_t = 0;
@@ -134,7 +123,7 @@ impl Context {
     pub fn point_group_name(&self) -> Result<String, Error> {
         let mut buf = [0i8; 16];
         error::check(unsafe { ffi::msymGetPointGroupName(self.ctx, 16, buf.as_mut_ptr()) })?;
-        let name = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) };
+        let name = unsafe { CStr::from_ptr(buf.as_ptr()) };
         Ok(name.to_string_lossy().into_owned())
     }
 
@@ -153,29 +142,17 @@ impl Context {
         error::check(unsafe { ffi::msymSetPointGroupByType(self.ctx, pg_type, n) })
     }
 
-    // -------------------------------------------------------------------
-    // Symmetry operations
-    // -------------------------------------------------------------------
-
     pub fn symmetry_operations(&self) -> Result<Vec<SymmetryOp>, Error> {
         let mut len: c_int = 0;
-        let mut ptr = std::ptr::null();
+        let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetSymmetryOperations(self.ctx, &mut len, &mut ptr) })?;
-        let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
+        let slice = unsafe { slice::from_raw_parts(ptr, len as usize) };
         Ok(slice.iter().map(SymmetryOp::from).collect())
     }
-
-    // -------------------------------------------------------------------
-    // Character table
-    // -------------------------------------------------------------------
 
     pub fn character_table(&self) -> Option<&CharacterTable> {
         self.character_table.as_ref()
     }
-
-    // -------------------------------------------------------------------
-    // Geometry
-    // -------------------------------------------------------------------
 
     pub fn geometry(&self) -> Result<Geometry, Error> {
         let mut g: ffi::msym_geometry_t = 0;
@@ -212,19 +189,15 @@ impl Context {
         Ok(eigvec)
     }
 
-    // -------------------------------------------------------------------
-    // Equivalence sets
-    // -------------------------------------------------------------------
-
     pub fn equivalence_sets(&self) -> Result<Vec<EquivalenceSet>, Error> {
         let mut len: c_int = 0;
-        let mut ptr = std::ptr::null();
+        let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetEquivalenceSets(self.ctx, &mut len, &mut ptr) })?;
-        let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
+        let slice = unsafe { slice::from_raw_parts(ptr, len as usize) };
         Ok(slice
             .iter()
             .map(|es| {
-                let elems = unsafe { std::slice::from_raw_parts(es.elements, es.length as usize) };
+                let elems = unsafe { slice::from_raw_parts(es.elements, es.length as usize) };
                 EquivalenceSet {
                     centers: elems
                         .iter()
@@ -236,20 +209,12 @@ impl Context {
             .collect())
     }
 
-    // -------------------------------------------------------------------
-    // Symmetrization
-    // -------------------------------------------------------------------
-
     pub fn symmetrize_centers(&mut self) -> Result<f64, Error> {
         self.character_table = None;
         let mut err = 0.0f64;
         error::check(unsafe { ffi::msymSymmetrizeElements(self.ctx, &mut err) })?;
         Ok(err)
     }
-
-    // -------------------------------------------------------------------
-    // Alignment
-    // -------------------------------------------------------------------
 
     pub fn align_axes(&mut self) -> Result<(), Error> {
         error::check(unsafe { ffi::msymAlignAxes(self.ctx) })
@@ -263,13 +228,9 @@ impl Context {
         Ok(transform)
     }
 
-    // -------------------------------------------------------------------
-    // Basis functions and SALCs
-    // -------------------------------------------------------------------
-
     pub fn set_basis_functions(&mut self, basis: &[BasisFunction]) -> Result<(), Error> {
         let mut elem_len: c_int = 0;
-        let mut elem_ptr = std::ptr::null_mut();
+        let mut elem_ptr = ptr::null_mut();
         error::check(unsafe { ffi::msymGetElements(self.ctx, &mut elem_len, &mut elem_ptr) })?;
 
         let mut ffi_basis: Vec<ffi::msym_basis_function_t> = basis
@@ -283,14 +244,14 @@ impl Context {
                 );
                 let element = unsafe { elem_ptr.add(bf.atom_index) };
                 let type_ = match bf.kind {
-                    crate::basis::BasisKind::Cartesian => {
+                    BasisKind::CartesianHarmonic => {
                         ffi::MSYM_BASIS_TYPE_CARTESIAN
                     }
                     _ => ffi::MSYM_BASIS_TYPE_REAL_SPHERICAL_HARMONIC,
                 };
                 let name = orbital_name(bf.n, bf.l, bf.m);
                 ffi::msym_basis_function_t {
-                    id: std::ptr::null_mut(),
+                    id: ptr::null_mut(),
                     type_,
                     element,
                     f: ffi::msym_basis_function_union_t {
@@ -340,10 +301,6 @@ impl Context {
 
         Ok((coefficients, species))
     }
-
-    // -------------------------------------------------------------------
-    // Center generation (from asymmetric unit)
-    // -------------------------------------------------------------------
 
     pub fn generate_centers(&mut self, asymmetric_unit: &[SymmetryCenter]) -> Result<(), Error> {
         self.character_table = None;

@@ -13,3 +13,6 @@ thiserror = "2"
 
 [dev-dependencies]
 rstest = "0.25"
+
+[lints.clippy]
+absolute_paths = "warn"

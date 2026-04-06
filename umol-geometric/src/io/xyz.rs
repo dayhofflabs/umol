@@ -113,7 +113,7 @@ pub fn format_xyz<W: Write>(mol: &Molecule, comment: &str, w: &mut W) -> fmt::Re
     let n = mol.atom_count();
     writeln!(w, "{n}")?;
     writeln!(w, "{comment}")?;
-    let m = mol.cartesian_coords();
+    let m = mol.cartesian_coordinates();
     for i in 0..n {
         let x = Length::bohr(m[(0, i)]).as_angstrom();
         let y = Length::bohr(m[(1, i)]).as_angstrom();

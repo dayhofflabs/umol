@@ -1,6 +1,7 @@
 use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
 use crate::context::Context;
 use crate::error::Error;
+use crate::linear;
 use crate::point_group::PointGroup;
 use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, Thresholds};
 
@@ -139,6 +140,12 @@ pub fn compute_salcs(
     ctx.find_symmetry()?;
 
     let group = PointGroup::from_context(&ctx)?;
+
+    if group.is_linear() {
+        let aligned = ctx.centers()?;
+        return Ok(linear::compute_salcs(&aligned, basis, group, thresholds.equivalence));
+    }
+
     ctx.set_basis_functions(basis)?;
 
     let l = basis.len();
@@ -215,6 +222,20 @@ mod tests {
         &[[0.0, 0.0, 0.0], [0.629, 0.629, 0.629], [-0.629, -0.629, 0.629],
           [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]],
         "Td", 24, 2
+    )]
+    // HCl (C∞v)
+    #[case(
+        &[17, 1],
+        &[35.453, 1.008],
+        &[[0.0, 0.0, 0.0], [0.0, 0.0, 1.275]],
+        "C∞v", 0, 2
+    )]
+    // CO₂ (D∞h)
+    #[case(
+        &[8, 6, 8],
+        &[15.999, 12.011, 15.999],
+        &[[0.0, 0.0, -1.16], [0.0, 0.0, 0.0], [0.0, 0.0, 1.16]],
+        "D∞h", 0, 2
     )]
     fn test_detect_symmetry(
         #[case] zs: &[i32],
@@ -331,6 +352,20 @@ mod tests {
           [-0.629, 0.629, -0.629], [0.629, -0.629, -0.629]],
         5, &["A1", "A1", "T2", "T2", "T2"]
     )]
+    // HCl (C∞v): 2 atoms → 2 Σ+ SALCs
+    #[case(
+        &[17, 1],
+        &[35.453, 1.008],
+        &[[0.0, 0.0, 0.0], [0.0, 0.0, 1.275]],
+        2, &["Σ+", "Σ+"]
+    )]
+    // CO₂ (D∞h): 3 atoms → 2 Σ+g + 1 Σ+u
+    #[case(
+        &[8, 6, 8],
+        &[15.999, 12.011, 15.999],
+        &[[0.0, 0.0, -1.16], [0.0, 0.0, 0.0], [0.0, 0.0, 1.16]],
+        3, &["Σ+g", "Σ+g", "Σ+u"]
+    )]
     fn test_compute_salcs_s_basis(
         #[case] zs: &[i32],
         #[case] masses: &[f64],
@@ -358,20 +393,7 @@ mod tests {
         assert_eq!(salc_symbols, expected);
     }
 
-    #[rstest]
-    fn test_compute_salcs_displacement_basis() {
-        let centers = make_centers(
-            &[8, 1, 1],
-            &[15.999, 1.008, 1.008],
-            &[[0.0, 0.0, 0.117], [0.0, 0.757, -0.469], [0.0, -0.757, -0.469]],
-        );
-        let basis = displacement_basis(centers.len());
-        let result = compute_salcs(&centers, &basis, Thresholds::default()).unwrap();
-
-        let total: usize = result.irreps.iter().map(|ib| ib.salcs.len()).sum();
-        assert_eq!(total, 9); // 3N = 9
-
-        // Verify orthogonality: SALC rows should be orthonormal
+    fn assert_salcs_orthonormal(result: &SalcBasis) {
         for ib in &result.irreps {
             for (i, s1) in ib.salcs.iter().enumerate() {
                 for (j, s2) in ib.salcs.iter().enumerate() {
@@ -388,5 +410,42 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[rstest]
+    // Water (C2v): 3N=9 displacement SALCs
+    #[case(
+        &[8, 1, 1],
+        &[15.999, 1.008, 1.008],
+        &[[0.0, 0.0, 0.117], [0.0, 0.757, -0.469], [0.0, -0.757, -0.469]],
+        9
+    )]
+    // HCl (C∞v): 3N=6 displacement SALCs: 2Σ+ (z) + 2Π (x,y)
+    #[case(
+        &[17, 1],
+        &[35.453, 1.008],
+        &[[0.0, 0.0, 0.0], [0.0, 0.0, 1.275]],
+        6
+    )]
+    // CO₂ (D∞h): 3N=9 displacement SALCs
+    #[case(
+        &[8, 6, 8],
+        &[15.999, 12.011, 15.999],
+        &[[0.0, 0.0, -1.16], [0.0, 0.0, 0.0], [0.0, 0.0, 1.16]],
+        9
+    )]
+    fn test_compute_salcs_displacement_basis(
+        #[case] zs: &[i32],
+        #[case] masses: &[f64],
+        #[case] positions: &[[f64; 3]],
+        #[case] expected_total: usize,
+    ) {
+        let centers = make_centers(zs, masses, positions);
+        let basis = displacement_basis(centers.len());
+        let result = compute_salcs(&centers, &basis, Thresholds::default()).unwrap();
+
+        let total: usize = result.irreps.iter().map(|ib| ib.salcs.len()).sum();
+        assert_eq!(total, expected_total);
+        assert_salcs_orthonormal(&result);
     }
 }

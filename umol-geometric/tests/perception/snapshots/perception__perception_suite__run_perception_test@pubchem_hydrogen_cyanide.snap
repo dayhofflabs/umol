@@ -2,8 +2,8 @@
 source: umol-geometric/tests/perception/mod.rs
 expression: result
 ---
-point_group: C0v
-order: 2
+point_group: C∞v
+order: 0
 equivalence_sets:
   - - N(0)
   - - C(1)
