@@ -5,7 +5,6 @@ use umol_data::{Element, SpinMultiplicity, SpinStateError};
 
 use super::aromaticity::AromaticityError;
 use super::kekule::KekulizationError;
-use super::molecule::topology::TopologyExportError;
 use super::transform::TransformError;
 use crate::diagnostics::Diagnostic;
 use crate::table_ir::bond::BondOrder;
@@ -22,8 +21,6 @@ pub enum GraphIrError {
     Kekulization(#[from] KekulizationError),
     #[error(transparent)]
     Transform(#[from] TransformError),
-    #[error(transparent)]
-    TopologyExport(#[from] TopologyExportError),
 }
 
 impl From<ResolutionError> for Diagnostic {

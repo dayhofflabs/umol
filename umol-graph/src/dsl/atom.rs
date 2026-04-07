@@ -23,7 +23,7 @@ use super::predicates::{
 use super::value::ValueAst;
 
 /// Parsed atom-string AST
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AtomAst {
     pub element: ElementExpr,
     pub isotope_mass: Option<IsotopeExpr>,

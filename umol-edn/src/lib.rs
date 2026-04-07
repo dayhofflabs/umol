@@ -13,6 +13,8 @@ pub mod tags;
 #[cfg(feature = "serde")]
 pub mod de;
 #[cfg(feature = "serde")]
+pub mod keyword_serde;
+#[cfg(feature = "serde")]
 pub mod ser;
 #[cfg(feature = "serde")]
 pub(crate) mod streaming;
@@ -33,6 +35,8 @@ pub use formatter::{to_string_pretty, to_string_pretty_with};
 #[cfg(feature = "bignum")]
 pub use num_bigint::BigInt;
 pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
+#[cfg(feature = "serde")]
+pub use keyword_serde::EdnKeyword;
 #[cfg(feature = "serde")]
 pub use ser::to_string;
 

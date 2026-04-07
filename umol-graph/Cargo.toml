@@ -71,6 +71,7 @@ umol = { path = "../umol", version = "0.1.0" }
 umol-data = { path = "../umol-data", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3"] }
+bimap = { version = "0.6.3", features = ["serde"] }
 
 [build-dependencies]
 walkdir = "2.5.0"

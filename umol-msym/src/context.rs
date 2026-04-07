@@ -1,7 +1,7 @@
+#![allow(unused)]
 use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
-use std::ptr;
-use std::slice;
+use std::{ptr, slice};
 
 use umol_msym_sys as ffi;
 
@@ -23,11 +23,18 @@ fn orbital_name(n: i32, l: i32, m: i32) -> [i8; 8] {
             format!("{n}p{axis}")
         }
         _ => {
-            let shell = (b'f' - 3 + l as u8
+            let shell = (b'f' - 3
+                + l as u8
                 + if l >= 5 { 1 } else { 0 }
                 + if l >= 10 { 1 } else { 0 }
                 + if l >= 12 { 1 } else { 0 }) as char;
-            let sign = if m > 0 { "+" } else if m < 0 { "-" } else { "" };
+            let sign = if m > 0 {
+                "+"
+            } else if m < 0 {
+                "-"
+            } else {
+                ""
+            };
             format!("{n}{shell}{}{sign}", m.unsigned_abs())
         }
     };
@@ -81,8 +88,7 @@ impl Context {
 
     pub fn set_centers(&mut self, centers: &[SymmetryCenter]) -> Result<(), Error> {
         self.character_table = None;
-        let mut ffi_elems: Vec<ffi::msym_element_t> =
-            centers.iter().map(|e| e.to_ffi()).collect();
+        let mut ffi_elems: Vec<ffi::msym_element_t> = centers.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
             ffi::msymSetElements(self.ctx, ffi_elems.len() as c_int, ffi_elems.as_mut_ptr())
         })
@@ -222,9 +228,7 @@ impl Context {
 
     pub fn alignment_transform(&self) -> Result<[[f64; 3]; 3], Error> {
         let mut transform = [[0.0f64; 3]; 3];
-        error::check(unsafe {
-            ffi::msymGetAlignmentTransform(self.ctx, transform.as_mut_ptr())
-        })?;
+        error::check(unsafe { ffi::msymGetAlignmentTransform(self.ctx, transform.as_mut_ptr()) })?;
         Ok(transform)
     }
 
@@ -244,9 +248,7 @@ impl Context {
                 );
                 let element = unsafe { elem_ptr.add(bf.atom_index) };
                 let type_ = match bf.kind {
-                    BasisKind::CartesianHarmonic => {
-                        ffi::MSYM_BASIS_TYPE_CARTESIAN
-                    }
+                    BasisKind::CartesianHarmonic => ffi::MSYM_BASIS_TYPE_CARTESIAN,
                     _ => ffi::MSYM_BASIS_TYPE_REAL_SPHERICAL_HARMONIC,
                 };
                 let n = bf.ffi_n();
@@ -268,11 +270,7 @@ impl Context {
             .collect();
 
         error::check(unsafe {
-            ffi::msymSetBasisFunctions(
-                self.ctx,
-                ffi_basis.len() as c_int,
-                ffi_basis.as_mut_ptr(),
-            )
+            ffi::msymSetBasisFunctions(self.ctx, ffi_basis.len() as c_int, ffi_basis.as_mut_ptr())
         })
     }
 
@@ -287,8 +285,9 @@ impl Context {
         let l = basis_count as c_int;
         let mut coefficients = vec![0.0f64; (l * l) as usize];
         let mut species = vec![0i32; l as usize];
-        let mut partner: Vec<ffi::msym_partner_function_t> =
-            (0..l).map(|_| ffi::msym_partner_function_t { i: 0, d: 0 }).collect();
+        let mut partner: Vec<ffi::msym_partner_function_t> = (0..l)
+            .map(|_| ffi::msym_partner_function_t { i: 0, d: 0 })
+            .collect();
 
         error::check(unsafe {
             ffi::msymGetSALCs(
@@ -308,19 +307,16 @@ impl Context {
         let mut ffi_elems: Vec<ffi::msym_element_t> =
             asymmetric_unit.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
-            ffi::msymGenerateElements(
-                self.ctx,
-                ffi_elems.len() as c_int,
-                ffi_elems.as_mut_ptr(),
-            )
+            ffi::msymGenerateElements(self.ctx, ffi_elems.len() as c_int, ffi_elems.as_mut_ptr())
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     fn water() -> Vec<SymmetryCenter> {
         vec![
@@ -397,7 +393,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(water(), 4)]   // C2v: E, C2, σv, σv'
+    #[case(water(), 4)] // C2v: E, C2, σv, σv'
     #[case(methane(), 24)] // Td: 24 operations
     fn test_context_symmetry_operations(
         #[case] elements: Vec<SymmetryCenter>,

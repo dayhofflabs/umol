@@ -20,12 +20,14 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, EdnError> {
 /// Serializer that writes EDN into a `String`.
 pub struct EdnSerializer {
     output: String,
+    keyword_mode: bool,
 }
 
 impl EdnSerializer {
     fn new() -> Self {
         Self {
             output: String::new(),
+            keyword_mode: false,
         }
     }
 }
@@ -127,7 +129,13 @@ impl<'a> Serializer for &'a mut EdnSerializer {
     }
 
     fn serialize_str(self, v: &str) -> Result<(), Self::Error> {
-        write_escaped_str(&mut self.output, v);
+        if self.keyword_mode {
+            self.keyword_mode = false;
+            self.output.push(':');
+            self.output += v;
+        } else {
+            write_escaped_str(&mut self.output, v);
+        }
         Ok(())
     }
 
@@ -166,9 +174,15 @@ impl<'a> Serializer for &'a mut EdnSerializer {
 
     fn serialize_newtype_struct<T: ?Sized + Serialize>(
         self,
-        _name: &'static str,
+        name: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
+        if name == crate::keyword_serde::KEYWORD_TOKEN {
+            self.keyword_mode = true;
+            let result = value.serialize(&mut *self);
+            self.keyword_mode = false;
+            return result;
+        }
         value.serialize(self)
     }
 

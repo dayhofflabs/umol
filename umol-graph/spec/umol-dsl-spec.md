@@ -39,10 +39,11 @@ A **bond literal** in **full** form is **`#bond "`** *bond-string* **`"`** (**§
 
 **EDN `#atom` / `#bond` vs `#` inside the string.** The **reader dispatch** tokens **`#atom`** and **`#bond`** apply to the whole literal. **Inside** the quoted **atom-string** or **bond-string**, **`#`** starts a **predicate tag** (**§7.3**, **§7.5**). The two uses are **not** the same syntactic class (analogy: section headings **`#`** vs **`##`** in Markdown).
 
-**`:atoms`** **MAY** be either:
+**`:atoms`** is a **vector** of atom entries. Each entry is either:
 
-- a **map** from **keyword** to atom literal (**authoring** surface), or  
-- a **vector** of atom literals (**canonical** indexed form).
+- an atom literal (string),
+- an alias reference (keyword matching a key in **`:atom-aliases`**), or
+- an inline-tagged entry **`[`** *keyword* *atom-entry* **`]`** — a 2-element vector where the first element is a keyword tag and the second is an atom literal or alias reference.
 
 **`:bonds`** is a **vector** of bond entries (**§4**). Other optional keys are listed in **§4**.
 
@@ -78,26 +79,29 @@ molecule-map ::=
     [:aromatic     aromatic-list]
     [:multicenter  multicenter-list]
     [:noncovalent  noncovalent-list]
-    [:aliases      alias-map]
+    [:atom-aliases alias-list]
     [:charge       int | nil]
     [:spin         spin-literal | nil]
     [:expect   { :charge int :multiplicity keyword }]
     [:guards   [ logic-expr* ]]
   }
 
-alias-map       ::= [ keyword #atom "atom-string" ]*
+alias-list      ::= [ keyword #atom "atom-string" ]*
 
-atom-collection ::= { keyword → atom-spec }+
-                  | [ atom-spec* ]
+atom-collection ::= [ atom-entry* ]
 
-atom-spec ::= #atom "atom-string" | keyword
+atom-entry ::= #atom "atom-string"
+             | keyword
+             | [ keyword atom-entry ]
 
 covalent-bond-list ::= [ covalent-bond-entry* ]
 dative-bond-list   ::= [ dative-bond-entry* ]
 
-covalent-bond-entry ::= { [:id keyword] :a keyword :b keyword :bond bond-spec }
-                      | [ keyword keyword bond-spec ]
-dative-bond-entry   ::= { [:id keyword] :donor keyword :acceptor keyword :bond bond-spec }
+atom-ref ::= int | keyword
+
+covalent-bond-entry ::= { [:id keyword] :a atom-ref :b atom-ref :bond bond-spec }
+                      | [ atom-ref atom-ref bond-spec ]
+dative-bond-entry   ::= { [:id keyword] :donor atom-ref :acceptor atom-ref :bond bond-spec }
 
 bond-spec ::= #bond "bond-string" | bond-keyword
 
@@ -112,24 +116,24 @@ noncovalent-entry ::= { [:id keyword] :a keyword :b keyword :bond noncovalent-sp
 noncovalent-spec ::= bond-spec
 ```
 
-**`:id`**. Each structural entry **MAY** include **`:id`** with an EDN **keyword** value. When present, **`:id`** values **MUST** be **pairwise distinct** across **all** entries in the **same** **molecule map** (every list combined) and **MUST** be distinct from all aliases.
+**`:id`**. Each structural entry **MAY** include **`:id`** with an EDN **keyword** value. When present, **`:id`** values **MUST** be **pairwise distinct** across **all** entries in the **same** **molecule map** (every list combined).
 
-**`:aliases`**. The **`alias-map`** defines named atom shorthands scoped to the enclosing molecule map. Each value **MUST** be a **`#atom`** tagged literal. An **`atom-spec`** that is a bare **keyword** (not a **`#atom`** tagged literal) is an alias reference and **MUST** resolve to a key in **`:aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error.
+**Keyword namespace disjointness.** All keyword-shaped identifiers within a single molecule definition — atom tags, atom alias names, structural entry **`:id`** values, and future keyword namespaces (bond alias names, aromatic system tags) — **MUST** be drawn from **mutually disjoint** namespaces. No two identifier kinds **MAY** share a keyword name within the same molecule map. Alias names **MUST NOT** be valid element symbols (**§7.4**).
 
-**Endpoints.** Every atom site referenced from a structural relation **MUST** exist under **`:atoms`**:
+**`:atom-aliases`**. The **`alias-list`** defines named atom shorthands scoped to the enclosing molecule map. It is a flat vector of alternating keyword/atom-spec pairs. Each value **MUST** be a **`#atom`** tagged literal. An **`atom-entry`** that is a bare **keyword** (not a **`#atom`** tagged literal and not in a **`[tag entry]`** position) is an alias reference and **MUST** resolve to a key in **`:atom-aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error. Alias definitions **MUST** be bijective: no two alias names **MAY** map to the same atom definition.
+
+**Inline tags.** An **`atom-entry`** of the form **`[`** *keyword* *atom-entry* **`]`** assigns the keyword as a **tag** to the atom at that position. Tags enable symbolic reference from bond endpoints (instead of positional index). Tagged and untagged entries **MAY** be freely mixed within the same **`:atoms`** vector.
+
+**Endpoints.** Every atom site referenced from a structural relation **MUST** exist under **`:atoms`**, either by positional index (integer) or by tag name (keyword):
 
 - **`covalent-bond-entry`** **`:a`** and **`:b`**
 - **`dative-bond-entry`** **`:donor`** and **`:acceptor`**
 - **`noncovalent-entry`** **`:a`** and **`:b`**
-- every keyword in an **`aromatic-entry`** or **`multicenter-entry`** **`:atoms`** vector
+- every reference in an **`aromatic-entry`** or **`multicenter-entry`** **`:atoms`** vector
 
-In the **named** **`:atoms`** form, each endpoint keyword **MUST** be a **key** of the map. **Authoring** **MAY** use arbitrary site keywords; nothing requires a **vector** **`:atoms`** or index-shaped names.
+**Positional index endpoints.** Let **`n`** be the length of **`:atoms`**. An integer endpoint **`i`** with **0 ≤ i < n** denotes the atom at position **`i`**. A keyword endpoint denotes the atom at the position tagged with that keyword.
 
-**Vector `:atoms` and endpoint keywords.** Let **`n`** be the length of **`:atoms`**. When **`:atoms`** is a **vector** and bond-like entries (or **`aromatic-entry`** / **`multicenter-entry`** member lists) refer to sites **by index**, each such reference **MUST** be a keyword whose **name** is the **decimal** index **`i`** with **0 ≤ i < n**, with **no leading zeros** (e.g. **`:0`**, **`:1`**, **`:10`** — not **`:01`**), denoting the atom literal at position **`i`**. **`:bonds`** **`:id`** values and other non-endpoint keywords are **not** restricted to this pattern. This rule **does not** prescribe **canonical serialization** (map vs vector, or choice of names); it only constrains how **index-shaped** keywords line up with a **vector** **`:atoms`**. Future sugar (**`:path`**, **`:ring`**, …) **MAY** expand into the same vector + **`:k`** endpoint convention.
-
-**Rationale:** **`:0`** … **`:{n-1}`** minimize noise next to **`#atom`**. If **EDN** tooling rejects digit-leading keyword names, this convention **MAY** be revised (e.g. **`:_{i}`** or **`:i/0`**) in a later spec revision.
-
-**Empty molecule.** The **vector** **`atom-collection`** **MAY** have length **0** (**`[]`**). The **map** form **MUST** contain at least one atom (**`+`** in the grammar). If **`:atoms`** is empty, **`:bonds`** **MUST** be **`[]`**, and **`:dative`**, **`:aromatic`**, **`:multicenter`**, and **`:noncovalent`** **MUST** be absent or **empty** lists — no bond-like entry **MAY** name a site that is not in **`:atoms`**.
+**Empty molecule.** The **`atom-collection`** **MAY** have length **0** (**`[]`**). If **`:atoms`** is empty, **`:bonds`** **MUST** be **`[]`**, and **`:dative`**, **`:aromatic`**, **`:multicenter`**, and **`:noncovalent`** **MUST** be absent or **empty** lists — no bond-like entry **MAY** name a site that is not in **`:atoms`**.
 
 **`aromatic-entry`** and **`multicenter-entry`** **MAY** include additional keys (**`:electrons`**, **`:charge`**, **`:spin`**, …) when specified here or by an implementation; those fields are **not** fully normative in this revision beyond **`:id`** and **`:atoms`**.
 
@@ -512,16 +516,16 @@ Precedence of **`mult-op`** over **`add-op`** unchanged. **Membership** **`::`**
 
 ## 8. Molecule map examples (non-normative)
 
-Examples use the **named** **`:atoms`** form. Bond entries show **`:id`** as required.
+Examples use the vector **`:atoms`** form with inline tags. Bond entries show **`:id`** where useful.
 
 ### 8.1 Methanol (CH₃OH) — Ground, L1
 
 ```clojure
-{:atoms {:C  #atom "C#h3"
-         :O  #atom "O#h1"
-         :H  #atom "H"}
- :bonds [{:id :b1 :a :C :b :O :bond :single}
-         {:id :b2 :a :O :b :H :bond :single}]}
+{:atoms [[:C  #atom "C#h3"]
+         [:O  #atom "O#h1"]
+         [:H  #atom "H"]]
+ :bonds [[:C :O :single]
+         [:O :H :single]]}
 ```
 
 The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one wishes to name). Implicit H counts on **`C`** (**`#h3`**) and **`O`** (**`#h1`**) already account for the remaining hydrogens.
@@ -529,25 +533,19 @@ The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one
 ### 8.2 Indole — Ground, L1, aromatic ring
 
 ```clojure
-{:atoms {:N   #atom "N#h1"
-         :C2  #atom "C"
-         :C3  #atom "C"
-         :C3a #atom "C"
-         :C4  #atom "C#h1"
-         :C5  #atom "C#h1"
-         :C6  #atom "C#h1"
-         :C7  #atom "C#h1"
-         :C7a #atom "C"}
- :bonds [{:id :b1 :a :N   :b :C2  :bond :single}
-         {:id :b2 :a :C2  :b :C3  :bond :double}
-         {:id :b3 :a :C3  :b :C3a :bond :single}
-         {:id :b4 :a :C3a :b :C7a :bond :single}
-         {:id :b5 :a :C7a :b :N   :bond :single}
-         {:id :b6 :a :C3a :b :C4  :bond :single}
-         {:id :b7 :a :C4  :b :C5  :bond :double}
-         {:id :b8 :a :C5  :b :C6  :bond :single}
-         {:id :b9 :a :C6  :b :C7  :bond :double}
-         {:id :b10 :a :C7  :b :C7a :bond :single}]
+{:atoms [[:N   #atom "N#h1"]
+         [:C2  #atom "C"]
+         [:C3  #atom "C"]
+         [:C3a #atom "C"]
+         [:C4  #atom "C#h1"]
+         [:C5  #atom "C#h1"]
+         [:C6  #atom "C#h1"]
+         [:C7  #atom "C#h1"]
+         [:C7a #atom "C"]]
+ :bonds [[:N :C2 :single] [:C2 :C3 :double] [:C3 :C3a :single]
+         [:C3a :C7a :single] [:C7a :N :single] [:C3a :C4 :single]
+         [:C4 :C5 :double] [:C5 :C6 :single] [:C6 :C7 :double]
+         [:C7 :C7a :single]]
  :aromatic [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a]}
             {:id :ar2 :atoms [:C3a :C4 :C5 :C6 :C7 :C7a]}]}
 ```
@@ -559,9 +557,9 @@ Covalent bonds carry the σ-skeleton orders; the aromatic π system is expressed
 Match any carbon with at least two implicit hydrogens that is directly bonded to a nitrogen:
 
 ```clojure
-{:atoms {:C #atom "C#h(?h >= 2)"
-         :N #atom "N"}
- :bonds [{:id :b1 :a :C :b :N :bond :single}]}
+{:atoms [[:C #atom "C#h(?h >= 2)"]
+         [:N #atom "N"]]
+ :bonds [[:C :N :single]]}
 ```
 
 **`(?h >= 2)`** is a **`bool-expr`** payload on **`#h`**; **`?h`** is bound to the matched atom's implicit H count.
@@ -571,12 +569,12 @@ Match any carbon with at least two implicit hydrogens that is directly bonded to
 Replace a primary amine carbon (C with three H and bonded to NH₂) with a quaternary carbon (no H, same bond to nitrogen):
 
 ```clojure
-{:lhs {:atoms {:C #atom "C#h3"
-               :N #atom "N#h2"}
-       :bonds [{:id :b1 :a :C :b :N :bond :single}]}
- :rhs {:atoms {:C #atom "C#h0"
-               :N #atom "N#h2"}
-       :bonds [{:id :b1 :a :C :b :N :bond :single}]}}
+{:lhs {:atoms [[:C #atom "C#h3"]
+               [:N #atom "N#h2"]]
+       :bonds [[:C :N :single]]}
+ :rhs {:atoms [[:C #atom "C#h0"]
+               [:N #atom "N#h2"]]
+       :bonds [[:C :N :single]]}}
 ```
 
 (The **`:lhs`** / **`:rhs`** wrapping is a rule-level convention, not a molecule map key — not normative here.)

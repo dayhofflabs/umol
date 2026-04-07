@@ -1,8 +1,7 @@
 //! GraphIR molecule representation using typed atoms and bonds
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use indexmap::IndexMap;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
@@ -21,16 +20,9 @@ use crate::atom::AromaticValence;
 use crate::dsl::ast::ToAst;
 use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::molecule::{
-    AromaticSystem as AstAromaticSystem, AtomRef, Atoms, BondSpec,
-    CovalentBond as AstCovalentBond, DativeBond as AstDativeBond, MoleculeAst,
-    MulticenterBond as AstMulticenterBond, NoncovalentBond as AstNoncovalentBond,
-};
-
-pub mod topology;
-
-use topology::{
-    DativeProjection, MulticenterProjection, NoncovalentProjection, TopologyEdge, TopologyGraph,
-    TopologyNodeRef, TopologyProjection,
+    AromaticSystem as AromaticSystemAst, AtomRef, Atoms, BondSpec,
+    LocalizedBond as LocalizedBondAst, DativeBond as DativeBondAst, MoleculeAst,
+    MulticenterBond as MulticenterBondAst, NoncovalentBond as NoncovalentBondAst,
 };
 
 pub type AtomIndex = NodeIndex<u32>;
@@ -229,105 +221,6 @@ impl Molecule {
 
     pub fn spin(&self) -> SpinState {
         self.spin
-    }
-
-    // Topology
-    pub fn topology_graph(&self, projection: TopologyProjection) -> TopologyGraph {
-        TopologyGraph::from_molecule(self, projection)
-    }
-
-    pub fn topology_canonical_bfs(&self, projection: TopologyProjection) -> Vec<NodeIndex> {
-        self.topology_graph(projection).canonical_bfs()
-    }
-
-    pub(crate) fn topology_nodes(&self) -> impl Iterator<Item = AtomIndex> + '_ {
-        self.atom_indices()
-    }
-
-    pub(crate) fn topology_edges(
-        &self,
-        projection: TopologyProjection,
-    ) -> impl Iterator<Item = TopologyEdge> + '_ {
-        let mut edges = Vec::new();
-
-        for i in self.bond_indices() {
-            if let Some((a, b)) = self.bond_atom_indices(i) {
-                edges.push(topology::TopologyEdge::Edge {
-                    node_ref: TopologyNodeRef::Bond(i),
-                    a,
-                    b,
-                });
-            }
-        }
-
-        if projection.dative == DativeProjection::Undirected {
-            for i in self.dative_bond_indices() {
-                if let Some(b) = self.dative_bond(i) {
-                    edges.push(topology::TopologyEdge::Edge {
-                        node_ref: TopologyNodeRef::DativeBond(i),
-                        a: b.donor(),
-                        b: b.acceptor(),
-                    });
-                }
-            }
-        }
-
-        if projection.noncovalent == NoncovalentProjection::Undirected {
-            for i in self.noncovalent_bond_indices() {
-                if let Some(b) = self.noncovalent_bond(i) {
-                    edges.push(topology::TopologyEdge::Edge {
-                        node_ref: TopologyNodeRef::NoncovalentBond(i),
-                        a: b.a(),
-                        b: b.b(),
-                    });
-                }
-            }
-        }
-
-        match projection.multicenter {
-            MulticenterProjection::Skip => {}
-            MulticenterProjection::CliqueExpansion => {
-                for i in self.multicenter_bonds_indices() {
-                    if let Some(mc) = self.multicenter_bond(i) {
-                        let mut seen = HashSet::new();
-                        let atoms: Vec<AtomIndex> = mc
-                            .all_atoms()
-                            .into_iter()
-                            .filter(|a| seen.insert(*a))
-                            .collect();
-                        for x in 0..atoms.len() {
-                            for y in (x + 1)..atoms.len() {
-                                edges.push(topology::TopologyEdge::Edge {
-                                    node_ref: TopologyNodeRef::MulticenterBond(i),
-                                    a: atoms[x],
-                                    b: atoms[y],
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            MulticenterProjection::IncidenceNode => {
-                for i in self.multicenter_bonds_indices() {
-                    if let Some(mc) = self.multicenter_bond(i) {
-                        let mut seen = HashSet::new();
-                        let atoms: Vec<AtomIndex> = mc
-                            .all_atoms()
-                            .into_iter()
-                            .filter(|a| seen.insert(*a))
-                            .collect();
-                        if !atoms.is_empty() {
-                            edges.push(topology::TopologyEdge::Hyperedge {
-                                node_ref: TopologyNodeRef::MulticenterBond(i),
-                                atoms,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        edges.into_iter()
     }
 
     pub fn biconnected_components(&self) -> Vec<Vec<AtomIndex>> {
@@ -583,31 +476,23 @@ impl Molecule {
 
 impl ToAst<MoleculeAst> for Molecule {
     fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
-        let mut label_map: IndexMap<AtomIndex, String> = IndexMap::new();
         let mut atom_vec = Vec::new();
 
         for idx in self.atom_indices() {
-            let label = idx.index().to_string();
             let atom_ast = self.atom(idx).unwrap().to_ast(&cfg.atom);
-            label_map.insert(idx, label);
             atom_vec.push(atom_ast);
         }
 
         let label = |idx: AtomIndex| -> AtomRef {
-            AtomRef(
-                label_map
-                    .get(&idx)
-                    .cloned()
-                    .unwrap_or_else(|| idx.index().to_string()),
-            )
+            AtomRef::Index(idx.index())
         };
 
-        let bonds: Vec<AstCovalentBond> = self
+        let bonds: Vec<LocalizedBondAst> = self
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
                 let bond_ast = self.bond(bi).unwrap().to_ast(&cfg.bond);
-                AstCovalentBond {
+                LocalizedBondAst {
                     id: None,
                     a: label(a),
                     b: label(b),
@@ -616,9 +501,9 @@ impl ToAst<MoleculeAst> for Molecule {
             })
             .collect();
 
-        let dative_bonds: Vec<AstDativeBond> = self
+        let dative_bonds: Vec<DativeBondAst> = self
             .dative_bonds()
-            .map(|db| AstDativeBond {
+            .map(|db| DativeBondAst {
                 id: None,
                 donor: label(db.donor()),
                 acceptor: label(db.acceptor()),
@@ -632,25 +517,25 @@ impl ToAst<MoleculeAst> for Molecule {
             })
             .collect();
 
-        let aromatic_systems: Vec<AstAromaticSystem> = self
+        let aromatic_systems: Vec<AromaticSystemAst> = self
             .aromatic_systems()
-            .map(|sys| AstAromaticSystem {
+            .map(|sys| AromaticSystemAst {
                 id: None,
                 atoms: sys.atoms().map(&label).collect(),
             })
             .collect();
 
-        let multicenter_bonds: Vec<AstMulticenterBond> = self
+        let multicenter_bonds: Vec<MulticenterBondAst> = self
             .multicenter_bonds()
-            .map(|mc| AstMulticenterBond {
+            .map(|mc| MulticenterBondAst {
                 id: None,
                 atoms: mc.all_atoms().into_iter().map(&label).collect(),
             })
             .collect();
 
-        let noncovalent_bonds: Vec<AstNoncovalentBond> = self
+        let noncovalent_bonds: Vec<NoncovalentBondAst> = self
             .noncovalent_bonds()
-            .map(|nc| AstNoncovalentBond {
+            .map(|nc| NoncovalentBondAst {
                 id: None,
                 a: label(nc.a()),
                 b: label(nc.b()),
@@ -659,7 +544,7 @@ impl ToAst<MoleculeAst> for Molecule {
             .collect();
 
         MoleculeAst {
-            atoms: Atoms::Indexed(atom_vec),
+            atoms: Atoms::indexed(atom_vec),
             bonds,
             dative_bonds,
             aromatic_systems,

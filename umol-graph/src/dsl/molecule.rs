@@ -1,16 +1,17 @@
 //! Molecule map DSL: parser and AST
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
-use std::ops::Deref;
 use std::str::FromStr;
 
+use bimap::BiMap;
 use indexmap::IndexMap;
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
-use serde::ser::{self, SerializeMap, SerializeSeq, Serializer};
+use serde::ser::{self, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
-use umol_edn::{Edn, EdnDeserializer, EdnMap};
+use umol_edn::EdnKeyword;
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
@@ -18,48 +19,57 @@ use super::bond::{parse_bond_dsl, BondAst};
 use super::config::MoleculeDslConfig;
 use super::error::ParseError;
 
-/// Atom reference in bond endpoints: deserializes from integer, string, or keyword.
-/// Serializes as integer when the value is a valid `usize`, otherwise as string.
+/// Atom reference in bond endpoints.
+///
+/// `Index(n)` references an atom by positional index (serializes as integer).
+/// `Tag(s)` references a named atom by tag (serializes as EDN keyword via `EdnKeyword`).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AtomRef(pub String);
+pub enum AtomRef {
+    Index(usize),
+    Tag(String),
+}
 
-impl Deref for AtomRef {
-    type Target = str;
-    fn deref(&self) -> &str {
-        &self.0
+impl AtomRef {
+    pub fn name(&self) -> Cow<'_, str> {
+        match self {
+            AtomRef::Index(n) => Cow::Owned(n.to_string()),
+            AtomRef::Tag(s) => Cow::Borrowed(s),
+        }
     }
 }
 
 impl fmt::Display for AtomRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        match self {
+            AtomRef::Index(n) => write!(f, "{n}"),
+            AtomRef::Tag(s) => f.write_str(s),
+        }
+    }
+}
+
+impl From<usize> for AtomRef {
+    fn from(n: usize) -> Self {
+        AtomRef::Index(n)
     }
 }
 
 impl From<String> for AtomRef {
     fn from(s: String) -> Self {
-        AtomRef(s)
+        AtomRef::Tag(s)
     }
 }
 
 impl From<&str> for AtomRef {
     fn from(s: &str) -> Self {
-        AtomRef(s.to_string())
-    }
-}
-
-impl PartialEq<&str> for AtomRef {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
+        AtomRef::Tag(s.to_string())
     }
 }
 
 impl Serialize for AtomRef {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if let Ok(n) = self.0.parse::<usize>() {
-            serializer.serialize_u64(n as u64)
-        } else {
-            serializer.serialize_str(&self.0)
+        match self {
+            AtomRef::Index(n) => serializer.serialize_u64(*n as u64),
+            AtomRef::Tag(s) => EdnKeyword::new(s).serialize(serializer),
         }
     }
 }
@@ -76,36 +86,74 @@ impl<'de> Visitor<'de> for AtomRefVisitor {
     type Value = AtomRef;
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("an atom reference (integer, string, or keyword)")
+        f.write_str("an atom reference (integer or keyword/string tag)")
     }
 
     fn visit_i64<E: de::Error>(self, v: i64) -> Result<AtomRef, E> {
-        Ok(AtomRef(v.to_string()))
+        let n = usize::try_from(v).map_err(|_| de::Error::custom("negative atom index"))?;
+        Ok(AtomRef::Index(n))
     }
 
     fn visit_u64<E: de::Error>(self, v: u64) -> Result<AtomRef, E> {
-        Ok(AtomRef(v.to_string()))
+        Ok(AtomRef::Index(v as usize))
     }
 
     fn visit_str<E: de::Error>(self, v: &str) -> Result<AtomRef, E> {
-        Ok(AtomRef(v.to_string()))
+        Ok(AtomRef::Tag(v.to_string()))
     }
 
     fn visit_string<E: de::Error>(self, v: String) -> Result<AtomRef, E> {
-        Ok(AtomRef(v))
+        Ok(AtomRef::Tag(v))
     }
 }
 
-/// `:atoms` - either a named map or an indexed vector
+/// Atom collection: a positional list of atoms with optional tags and aliases.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Atoms {
-    Named(IndexMap<String, AtomAst>),
-    Indexed(Vec<AtomAst>),
+pub struct Atoms {
+    pub entries: Vec<AtomAst>,
+    pub tags: IndexMap<String, usize>,
+    pub aliases: BiMap<String, AtomAst>,
 }
 
 impl Default for Atoms {
     fn default() -> Self {
-        Self::Indexed(vec![])
+        Self {
+            entries: vec![],
+            tags: IndexMap::new(),
+            aliases: BiMap::new(),
+        }
+    }
+}
+
+impl Atoms {
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn indexed(entries: Vec<AtomAst>) -> Self {
+        Self {
+            entries,
+            tags: IndexMap::new(),
+            aliases: BiMap::new(),
+        }
+    }
+
+    pub fn named(entries: IndexMap<String, AtomAst>) -> Self {
+        let tags: IndexMap<String, usize> = entries
+            .keys()
+            .enumerate()
+            .map(|(i, k)| (k.clone(), i))
+            .collect();
+        let atom_vec = entries.into_values().collect();
+        Self {
+            entries: atom_vec,
+            tags,
+            aliases: BiMap::new(),
+        }
     }
 }
 
@@ -120,7 +168,7 @@ pub enum BondSpec {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CovalentBond {
+pub struct LocalizedBond {
     pub id: Option<String>,
     pub a: AtomRef,
     pub b: AtomRef,
@@ -163,7 +211,7 @@ pub struct NoncovalentBond {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct MoleculeAst {
     pub atoms: Atoms,
-    pub bonds: Vec<CovalentBond>,
+    pub bonds: Vec<LocalizedBond>,
     pub dative_bonds: Vec<DativeBond>,
     pub aromatic_systems: Vec<AromaticSystem>,
     pub multicenter_bonds: Vec<MulticenterBond>,
@@ -174,6 +222,41 @@ pub struct MoleculeAst {
 
 impl DslAst for MoleculeAst {
     type Config = MoleculeDslConfig;
+}
+
+/// DSL formatting metadata extracted during AST→Builder conversion.
+/// Travels alongside MoleculeBuilder, NOT inside Molecule (which is a semantic object).
+#[derive(Clone, Debug, Default)]
+pub struct Metadata {
+    pub atom_tags: IndexMap<usize, String>,
+    pub atom_aliases: BiMap<String, AtomAst>,
+}
+
+impl Metadata {
+    pub fn extract(atoms: &Atoms) -> Self {
+        let atom_tags: IndexMap<usize, String> = atoms
+            .tags
+            .iter()
+            .map(|(name, &pos)| (pos, name.clone()))
+            .collect();
+        Self {
+            atom_tags,
+            atom_aliases: atoms.aliases.clone(),
+        }
+    }
+
+    pub fn apply(&self, atoms_entries: Vec<AtomAst>) -> Atoms {
+        let tags: IndexMap<String, usize> = self
+            .atom_tags
+            .iter()
+            .map(|(&pos, name)| (name.clone(), pos))
+            .collect();
+        Atoms {
+            entries: atoms_entries,
+            tags,
+            aliases: self.atom_aliases.clone(),
+        }
+    }
 }
 
 // Serde: BondSpec
@@ -208,22 +291,31 @@ impl<'de> Deserialize<'de> for BondSpec {
 // Serde: Atoms
 impl Serialize for Atoms {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            Atoms::Named(map) => {
-                let mut m = serializer.serialize_map(Some(map.len()))?;
-                for (label, atom) in map {
-                    m.serialize_entry(label, atom)?;
+        let tag_for_pos: IndexMap<usize, &str> = self
+            .tags
+            .iter()
+            .map(|(name, &pos)| (pos, name.as_str()))
+            .collect();
+
+        let mut s = serializer.serialize_seq(Some(self.entries.len()))?;
+        for (i, atom) in self.entries.iter().enumerate() {
+            let alias_name = self.aliases.get_by_right(atom);
+            if let Some(tag) = tag_for_pos.get(&i) {
+                // Tagged entry: [:tag <def-or-alias>]
+                if let Some(alias) = alias_name {
+                    s.serialize_element(&(EdnKeyword::new(*tag), EdnKeyword::new(alias)))?;
+                } else {
+                    s.serialize_element(&(EdnKeyword::new(*tag), atom))?;
                 }
-                m.end()
-            }
-            Atoms::Indexed(vec) => {
-                let mut s = serializer.serialize_seq(Some(vec.len()))?;
-                for atom in vec {
-                    s.serialize_element(atom)?;
-                }
-                s.end()
+            } else if let Some(alias) = alias_name {
+                // Aliased entry (no tag): emit alias name as keyword
+                s.serialize_element(&EdnKeyword::new(alias))?;
+            } else {
+                // Plain entry
+                s.serialize_element(atom)?;
             }
         }
+        s.end()
     }
 }
 
@@ -239,7 +331,7 @@ impl<'de> Visitor<'de> for AtomsVisitor {
     type Value = Atoms;
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a map or vector of atoms")
+        f.write_str("a vector of atoms")
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Atoms, A::Error> {
@@ -247,7 +339,7 @@ impl<'de> Visitor<'de> for AtomsVisitor {
         while let Some((label, atom)) = map.next_entry::<String, AtomAst>()? {
             named.insert(label, atom);
         }
-        Ok(Atoms::Named(named))
+        Ok(Atoms::named(named))
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Atoms, A::Error> {
@@ -255,16 +347,16 @@ impl<'de> Visitor<'de> for AtomsVisitor {
         while let Some(atom) = seq.next_element::<AtomAst>()? {
             atoms.push(atom);
         }
-        Ok(Atoms::Indexed(atoms))
+        Ok(Atoms::indexed(atoms))
     }
 
     fn visit_unit<E: de::Error>(self) -> Result<Atoms, E> {
-        Ok(Atoms::Indexed(vec![]))
+        Ok(Atoms::default())
     }
 }
 
-// Serde: CovalentBond
-impl Serialize for CovalentBond {
+// Serde: LocalizedBond
+impl Serialize for LocalizedBond {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         if self.id.is_none() {
             // Shorthand: [:a :b :bond-spec]
@@ -275,7 +367,7 @@ impl Serialize for CovalentBond {
             ser::SerializeTuple::end(t)
         } else {
             // Map form: {:id :b1 :a :0 :b :1 :bond :single}
-            let mut m = serializer.serialize_struct("CovalentBond", 4)?;
+            let mut m = serializer.serialize_struct("LocalizedBond", 4)?;
             if let Some(id) = &self.id {
                 ser::SerializeStruct::serialize_field(&mut m, "id", id)?;
             }
@@ -287,22 +379,22 @@ impl Serialize for CovalentBond {
     }
 }
 
-impl<'de> Deserialize<'de> for CovalentBond {
+impl<'de> Deserialize<'de> for LocalizedBond {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(CovalentBondVisitor)
+        deserializer.deserialize_any(LocalizedBondVisitor)
     }
 }
 
-struct CovalentBondVisitor;
+struct LocalizedBondVisitor;
 
-impl<'de> Visitor<'de> for CovalentBondVisitor {
-    type Value = CovalentBond;
+impl<'de> Visitor<'de> for LocalizedBondVisitor {
+    type Value = LocalizedBond;
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("a bond vector [:a :b :spec] or map {:a :A :b :B :bond :spec}")
     }
 
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<CovalentBond, A::Error> {
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<LocalizedBond, A::Error> {
         let a: AtomRef = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(0, &"3-element vector"))?;
@@ -312,7 +404,7 @@ impl<'de> Visitor<'de> for CovalentBondVisitor {
         let bond: BondSpec = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(2, &"3-element vector"))?;
-        Ok(CovalentBond {
+        Ok(LocalizedBond {
             id: None,
             a,
             b,
@@ -320,7 +412,7 @@ impl<'de> Visitor<'de> for CovalentBondVisitor {
         })
     }
 
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<CovalentBond, A::Error> {
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<LocalizedBond, A::Error> {
         let mut id = None;
         let mut a = None;
         let mut b = None;
@@ -336,7 +428,7 @@ impl<'de> Visitor<'de> for CovalentBondVisitor {
                 }
             }
         }
-        Ok(CovalentBond {
+        Ok(LocalizedBond {
             id,
             a: a.ok_or_else(|| de::Error::missing_field("a"))?,
             b: b.ok_or_else(|| de::Error::missing_field("b"))?,
@@ -348,7 +440,7 @@ impl<'de> Visitor<'de> for CovalentBondVisitor {
 // Serde: MoleculeAst
 impl Serialize for MoleculeAst {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        // Count fields: atoms + bonds are always present
+        let has_aliases = !self.atoms.aliases.is_empty();
         let mut count = 2;
         if !self.dative_bonds.is_empty() {
             count += 1;
@@ -366,6 +458,9 @@ impl Serialize for MoleculeAst {
             count += 1;
         }
         if self.spin.is_some() {
+            count += 1;
+        }
+        if has_aliases {
             count += 1;
         }
 
@@ -390,7 +485,35 @@ impl Serialize for MoleculeAst {
         if let Some(spin) = &self.spin {
             ser::SerializeStruct::serialize_field(&mut m, "spin", &spin.to_string())?;
         }
+        if has_aliases {
+            let alias_vec: Vec<AliasEntry<'_>> = self
+                .atoms
+                .aliases
+                .iter()
+                .flat_map(|(name, atom)| {
+                    [
+                        AliasEntry::Name(EdnKeyword::new(name)),
+                        AliasEntry::Def(atom),
+                    ]
+                })
+                .collect();
+            ser::SerializeStruct::serialize_field(&mut m, "atom-aliases", &alias_vec)?;
+        }
         ser::SerializeStruct::end(m)
+    }
+}
+
+enum AliasEntry<'a> {
+    Name(EdnKeyword),
+    Def(&'a AtomAst),
+}
+
+impl Serialize for AliasEntry<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            AliasEntry::Name(kw) => kw.serialize(serializer),
+            AliasEntry::Def(atom) => atom.serialize(serializer),
+        }
     }
 }
 
@@ -425,7 +548,7 @@ impl<'de> Visitor<'de> for MoleculeAstVisitor {
         while let Some(key) = map.next_key::<String>()? {
             match key.as_str() {
                 "atoms" => atoms = Some(map.next_value::<Atoms>()?),
-                "bonds" => bonds = Some(map.next_value::<Vec<CovalentBond>>()?),
+                "bonds" => bonds = Some(map.next_value::<Vec<LocalizedBond>>()?),
                 "dative" => dative_bonds = Some(map.next_value::<Vec<DativeBond>>()?),
                 "aromatic" => aromatic_systems = Some(map.next_value::<Vec<AromaticSystem>>()?),
                 "multicenter" => {
@@ -468,38 +591,17 @@ impl<'de> Visitor<'de> for MoleculeAstVisitor {
     }
 }
 
-// Alias resolution (post-deserialization)
-
-/// Pre-validate atom strings at the EDN level so parse errors get proper types.
-fn validate_edn_atom_strings(top: &Edn<'_>) -> Result<(), ParseError> {
-    let Edn::Map(map) = top else { return Ok(()) };
-    let Some(atoms) = map.get(&Edn::keyword("atoms")) else {
-        return Ok(());
-    };
-    let values: Box<dyn Iterator<Item = &Edn<'_>>> = match atoms {
-        Edn::Map(m) => Box::new(m.values()),
-        Edn::Vector(v) => Box::new(v.iter()),
-        _ => return Ok(()),
-    };
-    for v in values {
-        if let Edn::Str(s) = v {
-            parse_atom_dsl(s)?;
-        }
-    }
-    Ok(())
-}
-
 fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
-    let atom_labels: HashSet<String> = match &ast.atoms {
-        Atoms::Named(m) => m.keys().cloned().collect(),
-        Atoms::Indexed(v) => (0..v.len()).map(|i| i.to_string()).collect(),
-    };
+    let mut atom_labels: HashSet<String> = (0..ast.atoms.entries.len())
+        .map(|i| i.to_string())
+        .collect();
+    for tag in ast.atoms.tags.keys() {
+        atom_labels.insert(tag.clone());
+    }
 
     let mut seen_ids: HashSet<&str> = HashSet::new();
-    if let Atoms::Named(m) = &ast.atoms {
-        for label in m.keys() {
-            seen_ids.insert(label.as_str());
-        }
+    for tag in ast.atoms.tags.keys() {
+        seen_ids.insert(tag.as_str());
     }
     for id in ast
         .bonds
@@ -515,11 +617,12 @@ fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
         }
     }
 
-    let check = |label: &str| -> Result<(), ParseError> {
-        if atom_labels.contains(label) {
+    let check = |atom_ref: &AtomRef| -> Result<(), ParseError> {
+        let label = atom_ref.name();
+        if atom_labels.contains(label.as_ref()) {
             Ok(())
         } else {
-            Err(ParseError::InvalidAtomIndex(label.to_string()))
+            Err(ParseError::InvalidAtomIndex(label.into_owned()))
         }
     };
 
@@ -549,136 +652,235 @@ fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
     Ok(())
 }
 
+// MoleculeInput: streaming read adapter
+
+/// Raw atom entry collected during streaming deserialization.
+#[derive(Clone, Debug)]
+enum AtomEntryInput {
+    Str(String),
+    Tagged(String, Box<AtomEntryInput>),
+}
+
+impl<'de> Deserialize<'de> for AtomEntryInput {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(AtomEntryInputVisitor)
+    }
+}
+
+struct AtomEntryInputVisitor;
+
+impl<'de> Visitor<'de> for AtomEntryInputVisitor {
+    type Value = AtomEntryInput;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("an atom definition string, alias keyword, or [:tag def] vector")
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<AtomEntryInput, E> {
+        Ok(AtomEntryInput::Str(v.to_string()))
+    }
+
+    fn visit_string<E: de::Error>(self, v: String) -> Result<AtomEntryInput, E> {
+        Ok(AtomEntryInput::Str(v))
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<AtomEntryInput, A::Error> {
+        let tag: String = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(0, &"2-element [tag def] vector"))?;
+        let entry: AtomEntryInput = seq
+            .next_element()?
+            .ok_or_else(|| de::Error::invalid_length(1, &"2-element [tag def] vector"))?;
+        Ok(AtomEntryInput::Tagged(tag, Box::new(entry)))
+    }
+}
+
+/// Intermediate struct for streaming deserialization of the molecule DSL.
+/// Collects raw strings and defers alias resolution to `into_ast()`.
+struct MoleculeInput {
+    atoms: Vec<AtomEntryInput>,
+    bonds: Vec<LocalizedBond>,
+    dative_bonds: Vec<DativeBond>,
+    aromatic_systems: Vec<AromaticSystem>,
+    multicenter_bonds: Vec<MulticenterBond>,
+    noncovalent_bonds: Vec<NoncovalentBond>,
+    atom_aliases: Vec<String>,
+    charge: Option<i64>,
+    spin: Option<SpinState>,
+}
+
+impl<'de> Deserialize<'de> for MoleculeInput {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(MoleculeInputVisitor)
+    }
+}
+
+struct MoleculeInputVisitor;
+
+impl<'de> Visitor<'de> for MoleculeInputVisitor {
+    type Value = MoleculeInput;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("a molecule map with :atoms and :bonds")
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<MoleculeInput, A::Error> {
+        let mut atoms = None;
+        let mut bonds = None;
+        let mut dative_bonds = None;
+        let mut aromatic_systems = None;
+        let mut multicenter_bonds = None;
+        let mut noncovalent_bonds = None;
+        let mut charge = None;
+        let mut spin = None;
+        let mut atom_aliases = None;
+
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "atoms" => atoms = Some(map.next_value::<Vec<AtomEntryInput>>()?),
+                "bonds" => bonds = Some(map.next_value::<Vec<LocalizedBond>>()?),
+                "dative" => dative_bonds = Some(map.next_value::<Vec<DativeBond>>()?),
+                "aromatic" => aromatic_systems = Some(map.next_value::<Vec<AromaticSystem>>()?),
+                "multicenter" => {
+                    multicenter_bonds = Some(map.next_value::<Vec<MulticenterBond>>()?)
+                }
+                "noncovalent" => {
+                    noncovalent_bonds = Some(map.next_value::<Vec<NoncovalentBond>>()?)
+                }
+                "charge" => charge = map.next_value::<Option<i64>>()?,
+                "spin" => {
+                    let s: Option<String> = map.next_value()?;
+                    spin = match s {
+                        Some(ref s) => Some(
+                            SpinState::from_str(s).map_err(|e| de::Error::custom(e.to_string()))?,
+                        ),
+                        None => None,
+                    };
+                }
+                "atom-aliases" | "aliases" => atom_aliases = Some(map.next_value::<Vec<String>>()?),
+                _ => {
+                    let _ = map.next_value::<de::IgnoredAny>()?;
+                }
+            }
+        }
+
+        let atoms = atoms.ok_or_else(|| de::Error::missing_field("atoms"))?;
+        let bonds = bonds.ok_or_else(|| de::Error::missing_field("bonds"))?;
+
+        Ok(MoleculeInput {
+            atoms,
+            bonds,
+            dative_bonds: dative_bonds.unwrap_or_default(),
+            aromatic_systems: aromatic_systems.unwrap_or_default(),
+            multicenter_bonds: multicenter_bonds.unwrap_or_default(),
+            noncovalent_bonds: noncovalent_bonds.unwrap_or_default(),
+            atom_aliases: atom_aliases.unwrap_or_default(),
+            charge,
+            spin,
+        })
+    }
+}
+
+impl MoleculeInput {
+    fn into_ast(self) -> Result<MoleculeAst, ParseError> {
+        // 1. Build alias table from flat vector [name, def, name, def, ...]
+        let raw_aliases = &self.atom_aliases;
+        if raw_aliases.len() % 2 != 0 {
+            return Err(ParseError::WrongFieldType {
+                field: "atom-aliases".to_string(),
+                expected: "flat vector of keyword/atom-spec pairs (even length)".to_string(),
+            });
+        }
+        let mut alias_table: IndexMap<String, String> = IndexMap::new();
+        for pair in raw_aliases.chunks(2) {
+            let name = &pair[0];
+            let def = &pair[1];
+            if alias_table.contains_key(name) {
+                return Err(ParseError::DuplicateId(name.clone()));
+            }
+            alias_table.insert(name.clone(), def.clone());
+        }
+
+        // 2. Process atom entries: resolve aliases, extract tags
+        let mut entries = Vec::new();
+        let mut tags: IndexMap<String, usize> = IndexMap::new();
+        let mut aliases_bimap: bimap::BiMap<String, AtomAst> = bimap::BiMap::new();
+
+        for entry in self.atoms {
+            let pos = entries.len();
+            let (tag, atom_str) = Self::resolve_entry(entry, &alias_table)?;
+
+            let atom_ast = parse_atom_dsl(&atom_str)?;
+
+            if let Some(tag_name) = tag {
+                if tags.contains_key(&tag_name) {
+                    return Err(ParseError::DuplicateId(tag_name));
+                }
+                tags.insert(tag_name, pos);
+            }
+
+            entries.push(atom_ast);
+        }
+
+        // 3. Build BiMap from alias definitions
+        for (name, def) in &alias_table {
+            let atom_ast = parse_atom_dsl(def)?;
+            aliases_bimap.insert(name.clone(), atom_ast);
+        }
+
+        // 4. Validate tag/alias name disjointness
+        for tag_name in tags.keys() {
+            if alias_table.contains_key(tag_name) {
+                return Err(ParseError::DuplicateId(tag_name.clone()));
+            }
+        }
+
+        let ast = MoleculeAst {
+            atoms: Atoms {
+                entries,
+                tags,
+                aliases: aliases_bimap,
+            },
+            bonds: self.bonds,
+            dative_bonds: self.dative_bonds,
+            aromatic_systems: self.aromatic_systems,
+            multicenter_bonds: self.multicenter_bonds,
+            noncovalent_bonds: self.noncovalent_bonds,
+            charge: self.charge,
+            spin: self.spin,
+        };
+
+        validate(&ast)?;
+        Ok(ast)
+    }
+
+    fn resolve_entry(
+        entry: AtomEntryInput,
+        alias_table: &IndexMap<String, String>,
+    ) -> Result<(Option<String>, String), ParseError> {
+        match entry {
+            AtomEntryInput::Str(s) => {
+                if let Some(def) = alias_table.get(&s) {
+                    Ok((None, def.clone()))
+                } else {
+                    Ok((None, s))
+                }
+            }
+            AtomEntryInput::Tagged(tag, inner) => {
+                let (_, atom_str) = Self::resolve_entry(*inner, alias_table)?;
+                Ok((Some(tag), atom_str))
+            }
+        }
+    }
+}
+
 // FromStr / Display / parse_molecule_dsl
 
-/// Parse a molecule AST from an EDN string.
-///
-/// Alias resolution happens at the EDN level before serde deserialization:
-/// keyword references (`:alias`) in the atoms section are replaced with their
-/// atom string definitions from the `:aliases` vector.
+/// Parse a molecule AST from an EDN string using streaming deserialization.
 pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
-    let top = umol_edn::read_string(input)?;
-
-    // Pre-check: must be a map
-    if !matches!(&top, Edn::Map(_)) {
-        return Err(ParseError::EdnParse(
-            "expected EDN map for top level".to_string(),
-        ));
-    }
-
-    let top = resolve_edn_aliases(top)?;
-
-    // Pre-check: required keys
-    if let Edn::Map(ref m) = top {
-        if !m.contains_key(&Edn::keyword("atoms")) {
-            return Err(ParseError::MissingKey(":atoms".to_string()));
-        }
-        if !m.contains_key(&Edn::keyword("bonds")) {
-            return Err(ParseError::MissingKey(":bonds".to_string()));
-        }
-    }
-
-    // Pre-validate atom strings so parse errors surface with proper types
-    validate_edn_atom_strings(&top)?;
-
-    let ast = MoleculeAst::deserialize(EdnDeserializer(top)).map_err(ParseError::from)?;
-
-    validate(&ast)?;
-    Ok(ast)
-}
-
-/// Resolve `:aliases` at the EDN level. Replaces keyword references in `:atoms`
-/// with their atom string definitions, then removes the `:aliases` key.
-fn resolve_edn_aliases(top: Edn<'_>) -> Result<Edn<'_>, ParseError> {
-    let Edn::Map(mut map) = top else {
-        return Ok(top);
-    };
-
-    let aliases_key = Edn::keyword("aliases");
-    let alias_map = if let Some(aliases_edn) = map.remove(&aliases_key) {
-        parse_edn_aliases(&aliases_edn)?
-    } else {
-        IndexMap::new()
-    };
-
-    let atoms_key = Edn::keyword("atoms");
-    if let Some(atoms) = map.remove(&atoms_key) {
-        let resolved = resolve_atoms_aliases(atoms, &alias_map)?;
-        map.insert(atoms_key, resolved);
-    }
-
-    Ok(Edn::Map(map))
-}
-
-fn parse_edn_aliases<'e>(edn: &Edn<'e>) -> Result<IndexMap<String, Edn<'e>>, ParseError> {
-    let Edn::Vector(v) = edn else {
-        return Err(ParseError::WrongFieldType {
-            field: "aliases".to_string(),
-            expected: "flat vector of keyword/atom-spec pairs".to_string(),
-        });
-    };
-    if v.len() % 2 != 0 {
-        return Err(ParseError::WrongFieldType {
-            field: "aliases".to_string(),
-            expected: "flat vector of keyword/atom-spec pairs (even length)".to_string(),
-        });
-    }
-    let mut aliases = IndexMap::new();
-    for pair in v.chunks(2) {
-        let Edn::Keyword(k) = &pair[0] else {
-            return Err(ParseError::EdnParse(
-                "expected keyword as alias name".to_string(),
-            ));
-        };
-        let name = k.as_str().to_string();
-        if aliases.contains_key(&name) {
-            return Err(ParseError::DuplicateId(name));
-        }
-        aliases.insert(name, pair[1].clone());
-    }
-    Ok(aliases)
-}
-
-fn resolve_atoms_aliases<'e>(
-    atoms: Edn<'e>,
-    aliases: &IndexMap<String, Edn<'e>>,
-) -> Result<Edn<'e>, ParseError> {
-    match atoms {
-        Edn::Map(m) => {
-            let mut resolved = EdnMap::new();
-            for (k, v) in m {
-                let v = resolve_one_atom(v, aliases)?;
-                if let Edn::Keyword(ref kw) = k {
-                    if aliases.contains_key(kw.as_str()) {
-                        return Err(ParseError::DuplicateId(kw.as_str().to_string()));
-                    }
-                }
-                resolved.insert(k, v);
-            }
-            Ok(Edn::Map(resolved))
-        }
-        Edn::Vector(items) => {
-            let resolved = items
-                .into_iter()
-                .map(|e| resolve_one_atom(e, aliases))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Edn::Vector(resolved.into()))
-        }
-        other => Ok(other),
-    }
-}
-
-fn resolve_one_atom<'e>(
-    edn: Edn<'e>,
-    aliases: &IndexMap<String, Edn<'e>>,
-) -> Result<Edn<'e>, ParseError> {
-    match &edn {
-        Edn::Keyword(k) => aliases
-            .get(k.as_str())
-            .cloned()
-            .ok_or_else(|| ParseError::UnknownAlias(k.as_str().to_string())),
-        _ => Ok(edn),
-    }
+    let mol_input: MoleculeInput =
+        umol_edn::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    mol_input.into_ast()
 }
 
 impl FromStr for MoleculeAst {
@@ -700,51 +902,68 @@ impl fmt::Display for MoleculeAst {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::{e, spin, Element};
+    use umol_data::{e, Element};
 
     use super::super::predicates::{ElementExpr, HydrogenExpr};
     use super::super::value::ValueAst;
+    use super::super::ast::{FromAst, ToAst};
     use super::*;
+    use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
     #[rstest]
     #[case::empty(r#"{:atoms [] :bonds []}"#, MoleculeAst::default())]
-    #[case::atom(r#"{:atoms ["C"] :bonds []}"#, MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(C))]), ..Default::default() })]
-    #[case::atom_id(r#"{:atoms {:C "C"} :bonds []}"#, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(), AtomAst::from_element(e!(C)))])), ..Default::default() })]
-    #[case::atom_dsl(r#"{:atoms {:C "C #h4"} :bonds []}"#, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(),
-        AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None, implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))), charge: None, lone_pairs: None, unpaired_electrons: None,
-        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None, })])), ..Default::default() })]
-    #[case::bond(r#"{:atoms ["N" "N"] :bonds [[0 1 :triple]]}"#, MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![CovalentBond { id: None, a: "0".into(), b: "1".into(), bond: BondSpec::Triple }], ..Default::default() })]
-    #[case::bond_atom_ids(r#"{:atoms {:C "C" :O "O"} :bonds [[:C :O :single]]}"#,
-        MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(), AtomAst::from_element(e!(C))), ("O".to_string(), AtomAst::from_element(e!(O)))])),
-        bonds: vec![CovalentBond { id: None, a: "C".into(), b: "O".into(), bond: BondSpec::Single }], ..Default::default() })]
+    #[case::atom(r#"{:atoms ["C"] :bonds []}"#, MoleculeAst { atoms: Atoms::indexed(vec![AtomAst::from_element(e!(C))]), ..Default::default() })]
+    #[case::atom_tagged(
+        r#"{:atoms [[:C "C"]] :bonds []}"#,
+        MoleculeAst {
+            atoms: Atoms { entries: vec![AtomAst::from_element(e!(C))], tags: IndexMap::from([("C".to_string(), 0)]), aliases: bimap::BiMap::new() },
+            ..Default::default()
+        }
+    )]
+    #[case::bond(r#"{:atoms ["N" "N"] :bonds [[0 1 :triple]]}"#, MoleculeAst { atoms: Atoms::indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
+        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Triple }], ..Default::default() })]
+    #[case::bond_with_tags(
+        r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#,
+        MoleculeAst {
+            atoms: Atoms { entries: vec![AtomAst::from_element(e!(C)), AtomAst::from_element(e!(O))], tags: IndexMap::from([("C".to_string(), 0), ("O".to_string(), 1)]), aliases: bimap::BiMap::new() },
+            bonds: vec![LocalizedBond { id: None, a: AtomRef::Tag("C".into()), b: AtomRef::Tag("O".into()), bond: BondSpec::Single }],
+            ..Default::default()
+        }
+    )]
     #[case::bond_id(r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a 0 :b 1 :bond :single}]}"#,
-        MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))]),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "0".into(), b: "1".into(), bond: BondSpec::Single }], ..Default::default() })]
-    #[case::bond_id_atom_ids(r#"{:atoms {:C "C" :O "O"} :bonds [{:id :b1 :a :C :b :O :bond :single}]}"#,
-        MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(), AtomAst::from_element(e!(C))), ("O".to_string(), AtomAst::from_element(e!(O)))])),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".into(), b: "O".into(), bond: BondSpec::Single }], ..Default::default() })]
-    #[case::bond_dsl(r#"{:atoms {:C "C" :O "O"} :bonds [{:id :b1 :a :C :b :O :bond "2"}]}"#,
-        MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(), AtomAst::from_element(e!(C))), ("O".to_string(), AtomAst::from_element(e!(O)))])),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".into(), b: "O".into(), bond: BondSpec::Literal(BondAst { order: ValueAst::Lit(2), charge: None,
-        unpaired_electrons: None, multiplicity: None }) }], ..Default::default() })]
-    #[case::charge(r#"{:atoms {:F "F#c-"} :bonds [] :charge -1}"#, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("F".to_string(), 
-        AtomAst { element: ElementExpr::Lit(Element::F), isotope_mass: None, implicit_hydrogens: None, charge: Some(ValueAst::Lit(-1)), lone_pairs: None, unpaired_electrons: None,
-        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None, })])), charge: Some(-1), ..Default::default() })]
-    #[case::spin(r##"{:atoms {:N "N #u3"} :bonds [] :spin "#u3"}"##, MoleculeAst { atoms: Atoms::Named(IndexMap::from([("N".to_string(),
-        AtomAst { element: ElementExpr::Lit(Element::N), isotope_mass: None, implicit_hydrogens: None, charge: None, lone_pairs: None, unpaired_electrons: Some(ValueAst::Lit(3)),
-        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None, })])), spin: Some(spin!("#u3 #s4")), ..Default::default() })]
-    #[case::alias_named(r#"{:atoms {:C :ch} :bonds [] :aliases [:ch "C #h1"]}"#,
-        MoleculeAst { atoms: Atoms::Named(IndexMap::from([("C".to_string(),
-        AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None, implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None,
-        unpaired_electrons: None, multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None })])), ..Default::default() })]
+        MoleculeAst { atoms: Atoms::indexed(vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))]),
+        bonds: vec![LocalizedBond { id: Some("b1".to_string()), a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Single }], ..Default::default() })]
+    #[case::charge(
+        r#"{:atoms [[:F "F#c-"]] :bonds [] :charge -1}"#,
+        MoleculeAst {
+            atoms: Atoms { entries: vec![AtomAst { element: ElementExpr::Lit(Element::F), isotope_mass: None, implicit_hydrogens: None, charge: Some(ValueAst::Lit(-1)), lone_pairs: None, unpaired_electrons: None,
+                multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }],
+                tags: IndexMap::from([("F".to_string(), 0)]), aliases: bimap::BiMap::new() },
+            charge: Some(-1), ..Default::default()
+        }
+    )]
     #[case::alias_indexed(r#"{:atoms [:ch] :bonds [] :aliases [:ch "C #h1"]}"#,
-        MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
+        MoleculeAst { atoms: Atoms { entries: vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
         implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
-        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }]), ..Default::default() })]
+        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }],
+        tags: IndexMap::new(), aliases: bimap::BiMap::from_iter([("ch".to_string(), AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
+        implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
+        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None })]) },
+        ..Default::default() })]
     #[case::alias_reused(r#"{:atoms [:n :n] :bonds [[0 1 :single]] :aliases [:n "N"]}"#,
-        MoleculeAst { atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![CovalentBond { id: None, a: "0".into(), b: "1".into(), bond: BondSpec::Single }], ..Default::default() })]
+        MoleculeAst { atoms: Atoms { entries: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
+        tags: IndexMap::new(), aliases: bimap::BiMap::from_iter([("n".to_string(), AtomAst::from_element(e!(N)))]) },
+        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Single }], ..Default::default() })]
+    #[case::alias_tagged(
+        r#"{:atoms [[:C :ch]] :bonds [] :aliases [:ch "C #h1"]}"#,
+        MoleculeAst { atoms: Atoms { entries: vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
+        implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
+        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None }],
+        tags: IndexMap::from([("C".to_string(), 0)]), aliases: bimap::BiMap::from_iter([("ch".to_string(), AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
+        implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), charge: None, lone_pairs: None, unpaired_electrons: None,
+        multiplicity: None, valence: None, donated_pairs: None, accepted_pairs: None, aromatic_valence: None, multicenter_valence: None })]) },
+        ..Default::default() }
+    )]
     fn test_parse_molecule_dsl(#[case] input: &str, #[case] expected: MoleculeAst) {
         let result = parse_molecule_dsl(input);
         assert!(
@@ -758,68 +977,44 @@ mod tests {
 
     #[test]
     fn test_parse_molecule_dsl_dative() {
-        let result = parse_molecule_dsl(
-            r#"{:atoms {:B "B #h3" :N "N #h3"}
+        let ast = parse_molecule_dsl(
+            r#"{:atoms [[:B "B #h3"] [:N "N #h3"]]
                 :bonds []
                 :dative [{:id :d1 :donor :N :acceptor :B :bond :single}]}"#,
         )
         .unwrap();
-        assert_eq!(
-            result.dative_bonds,
-            vec![DativeBond {
-                id: Some("d1".to_string()),
-                donor: "N".into(),
-                acceptor: "B".into(),
-                bond: BondSpec::Single,
-            }]
-        );
+        assert_eq!(ast.dative_bonds.len(), 1);
+        assert_eq!(ast.dative_bonds[0].donor, AtomRef::Tag("N".into()));
+        assert_eq!(ast.dative_bonds[0].acceptor, AtomRef::Tag("B".into()));
     }
 
     #[test]
     fn test_parse_molecule_dsl_aromatic() {
-        let result = parse_molecule_dsl(
-            r#"{:atoms {:C1 :ch :C2 :ch :C3 :ch :C4 :ch :C5 :ch :C6 :ch}
+        let ast = parse_molecule_dsl(
+            r#"{:atoms [[:C1 :ch] [:C2 :ch] [:C3 :ch] [:C4 :ch] [:C5 :ch] [:C6 :ch]]
                 :bonds [[:C1 :C2 :single] [:C2 :C3 :single] [:C3 :C4 :single] [:C4 :C5 :single] [:C5 :C6 :single] [:C6 :C1 :single]]
                 :aromatic [{:id :ar1 :atoms [:C1 :C2 :C3 :C4 :C5 :C6]}]
                 :aliases [:ch "C #h1 #v2 #a1"]}"#,
         )
         .unwrap();
-        assert_eq!(result.aromatic_systems.len(), 1);
-        assert_eq!(result.aromatic_systems[0].id, Some("ar1".to_string()));
-        let refs: Vec<AtomRef> = vec!["C1".into(), "C2".into(), "C3".into(), "C4".into(), "C5".into(), "C6".into()];
-        assert_eq!(result.aromatic_systems[0].atoms, refs);
+        assert_eq!(ast.aromatic_systems.len(), 1);
+        assert_eq!(ast.aromatic_systems[0].id, Some("ar1".to_string()));
+        let refs: Vec<AtomRef> = vec![
+            AtomRef::Tag("C1".into()),
+            AtomRef::Tag("C2".into()),
+            AtomRef::Tag("C3".into()),
+            AtomRef::Tag("C4".into()),
+            AtomRef::Tag("C5".into()),
+            AtomRef::Tag("C6".into()),
+        ];
+        assert_eq!(ast.aromatic_systems[0].atoms, refs);
     }
 
     #[rstest]
     #[case::empty(MoleculeAst::default())]
-    #[case::named_atoms(MoleculeAst {
-        atoms: Atoms::Named(IndexMap::from([
-            ("C".to_string(), AtomAst::from_element(e!(C))),
-            ("O".to_string(), AtomAst::from_element(e!(O))),
-        ])),
-        bonds: vec![CovalentBond { id: None, a: "C".into(), b: "O".into(), bond: BondSpec::Single }],
-        ..Default::default()
-    })]
     #[case::indexed_atoms(MoleculeAst {
-        atoms: Atoms::Indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![CovalentBond { id: None, a: "0".into(), b: "1".into(), bond: BondSpec::Triple }],
-        ..Default::default()
-    })]
-    #[case::bond_with_id(MoleculeAst {
-        atoms: Atoms::Named(IndexMap::from([
-            ("C".to_string(), AtomAst::from_element(e!(C))),
-            ("O".to_string(), AtomAst::from_element(e!(O))),
-        ])),
-        bonds: vec![CovalentBond { id: Some("b1".to_string()), a: "C".into(), b: "O".into(), bond: BondSpec::Double }],
-        ..Default::default()
-    })]
-    #[case::dative(MoleculeAst {
-        atoms: Atoms::Named(IndexMap::from([
-            ("B".to_string(), AtomAst::from_element(e!(B))),
-            ("N".to_string(), AtomAst::from_element(e!(N))),
-        ])),
-        bonds: vec![],
-        dative_bonds: vec![DativeBond { id: Some("d1".to_string()), donor: "N".into(), acceptor: "B".into(), bond: BondSpec::Single }],
+        atoms: Atoms::indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
+        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Triple }],
         ..Default::default()
     })]
     fn test_molecule_ast_json_roundtrip(#[case] ast: MoleculeAst) {
@@ -829,28 +1024,72 @@ mod tests {
         assert_eq!(ast, back);
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::non_map("3", ParseError::EdnParse("expected EDN map for top level".to_string()))]
-    #[case::missing_atoms(r#"{:bonds []}"#, ParseError::MissingKey(":atoms".to_string()))]
-    #[case::missing_bonds(r#"{:atoms {:C "C"}}"#, ParseError::MissingKey(":bonds".to_string()))]
-    #[case::unknown_endpoint(r#"{:atoms {:C "C"} :bonds [{:id :b1 :a :C :b :X :bond :single}]}"#, ParseError::InvalidAtomIndex("X".to_string()))]
-    #[case::duplicate_id(r#"{:atoms {:C "C" :O "O" :N "N"} :bonds [{:id :b1 :a :C :b :O :bond :single} {:id :b1 :a :O :b :N :bond :single}]}"#,
-        ParseError::DuplicateId("b1".to_string()))]
-    #[case::bad_atom_string(r##"{:atoms {:X "#h3"} :bonds []}"##, ParseError::InvalidElement("#h3".to_string()))]
-    #[case::unknown_alias(r#"{:atoms {:C :ch} :bonds []}"#, ParseError::UnknownAlias("ch".to_string()))]
-    #[case::trailing_content(r#"{:atoms {:C "C"} :bonds []} :extra :junk"#, ParseError::EdnParse("trailing content at byte 28".to_string()))]
-    #[case::duplicate_atom_bond_id(r#"{:atoms {:b1 "C" :O "O"} :bonds [{:id :b1 :a :b1 :b :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
-    #[case::duplicate_bond_dative_id(r#"{:atoms {:C "C" :O "O"} :bonds [{:id :b1 :a :C :b :O :bond :single}] :dative [{:id :b1 :donor :C :acceptor :O :bond :single}]}"#, ParseError::DuplicateId("b1".to_string()))]
-    #[case::duplicate_id_alias(r#"{:aliases [:C "N"] :atoms {:C "C"} :bonds []}"#, ParseError::DuplicateId("C".to_string()))]
-    #[case::duplicate_alias(r#"{:aliases [:ch "C #h1" :ch "C #h2"] :atoms [] :bonds []}"#, ParseError::DuplicateId("ch".to_string()))]
-    fn test_parse_molecule_map_invalid(#[case] input: &str, #[case] expected: ParseError) {
-        let result = parse_molecule_dsl(input);
+    #[case::non_map("3")]
+    #[case::missing_atoms(r#"{:bonds []}"#)]
+    #[case::missing_bonds(r#"{:atoms ["C"]}"#)]
+    #[case::unknown_endpoint(r#"{:atoms [[:C "C"]] :bonds [{:id :b1 :a :C :b :X :bond :single}]}"#)]
+    #[case::bad_atom_string(r##"{:atoms ["#h3"] :bonds []}"##)]
+    #[case::trailing_content(r#"{:atoms ["C"] :bonds []} :extra :junk"#)]
+    #[case::duplicate_tag(r#"{:atoms [[:C "C"] [:C "O"]] :bonds []}"#)]
+    #[case::duplicate_alias(r#"{:aliases [:ch "C #h1" :ch "C #h2"] :atoms [] :bonds []}"#)]
+    fn test_parse_molecule_dsl_invalid(#[case] input: &str) {
         assert!(
-            result.is_err(),
-            "{input:?} should fail, got {:?}",
-            result.unwrap()
+            parse_molecule_dsl(input).is_err(),
+            "{input:?} should fail but succeeded"
         );
-        assert_eq!(result.unwrap_err(), expected, "for input {input:?}");
+    }
+
+    #[rstest]
+    #[case::plain_vector(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
+    #[case::tagged_vector(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
+    #[case::alias_vector(r#"{:atoms [:ch :ch "O"] :bonds [[0 2 :single]] :aliases [:ch "C #h1"]}"#)]
+    #[case::mixed(
+        r#"{:atoms [:ch [:ring-O :ch] "O"] :bonds [[0 :ring-O :single]] :aliases [:ch "C #h1"]}"#
+    )]
+    fn test_edn_roundtrip(#[case] input: &str) {
+        let ast1 = parse_molecule_dsl(input).unwrap();
+        let edn = ast1.to_string();
+        let ast2 = parse_molecule_dsl(&edn).unwrap();
+        assert_eq!(ast1.atoms.entries, ast2.atoms.entries);
+        assert_eq!(ast1.bonds, ast2.bonds);
+    }
+
+    #[test]
+    fn test_builder_metadata_roundtrip() {
+        let ast =
+            parse_molecule_dsl(r#"{:atoms [[:C "C #h3"] [:O "O #h1"]] :bonds [[:C :O :single]]}"#)
+                .unwrap();
+
+        let cfg = MoleculeDslConfig::zeroed();
+        let (builder, meta) = MoleculeBuilder::from_ast_with_metadata(ast.clone(), &cfg).unwrap();
+        let ast2 = builder.to_ast_with_metadata(&meta, &cfg);
+
+        assert_eq!(ast.atoms.entries.len(), ast2.atoms.entries.len());
+        assert!(ast2.atoms.tags.contains_key("C"));
+        assert!(ast2.atoms.tags.contains_key("O"));
+        assert_eq!(ast2.bonds[0].a, AtomRef::Tag("C".into()));
+        assert_eq!(ast2.bonds[0].b, AtomRef::Tag("O".into()));
+    }
+
+    #[test]
+    fn test_builder_no_metadata_produces_indexed() {
+        let ast =
+            parse_molecule_dsl(r#"{:atoms [[:C "C #h3"] [:O "O #h1"]] :bonds [[:C :O :single]]}"#)
+                .unwrap();
+
+        let cfg = MoleculeDslConfig::zeroed();
+        let builder = MoleculeBuilder::from_ast(ast, &cfg).unwrap();
+        let ast2 = builder.to_ast(&cfg);
+
+        assert_eq!(ast2.bonds[0].a, AtomRef::Index(0));
+        assert_eq!(ast2.bonds[0].b, AtomRef::Index(1));
+        assert!(ast2.atoms.tags.is_empty());
+    }
+
+    #[test]
+    fn test_alias_tag_disjointness_error() {
+        let result = parse_molecule_dsl(r#"{:atoms [[:ch "C"]] :bonds [] :aliases [:ch "C #h1"]}"#);
+        assert!(result.is_err(), "alias and tag with same name should fail");
     }
 }
