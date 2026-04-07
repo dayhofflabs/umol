@@ -500,9 +500,9 @@ umol-geometric
 - Atom permutations: computed in Rust from operation matrices + positions.
 - Reference character table validation: 44 groups from Katzer, 18 comparison tests passing.
 - Unit tests: 21 in umol-msym, 29 in umol-geometric, 18 integration (reference comparison). Total: 68.
+- `PointGroup::reduce()` — reduce arbitrary representation characters into irreps
 
 ### Not yet implemented
-- `PointGroup::reduce()` — reduce arbitrary representation characters into irreps
 - `PointGroup::translation_irreps()`, `rotation_irreps()` — from 3×3 matrix traces
 - Selection rules: `electric_dipole_allowed()`, `raman_allowed()`, `magnetic_dipole_allowed()`, `electric_quadrupole_allowed()`
 - Context methods for basis functions: `set_basis_functions()`, `subrepresentation_spaces()`, `salcs()` — FFI bindings exist in umol-msym-sys but not wrapped
