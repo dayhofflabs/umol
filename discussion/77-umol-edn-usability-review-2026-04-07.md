@@ -116,6 +116,67 @@ re-exported piecemeal at the crate root. The crate root should be the
 `use umol_edn::edn::Edn` and `use umol_edn::Edn` both work, which doubles
 the API surface.
 
+## Serde path limitations are structural, not implementation gaps
+
+Most of the serde-path shortcomings listed in §1 cannot be fixed inside
+`umol-edn` because they are limits of serde's data model, not of our
+serializer. Worth recording so future contributors don't try to "fix"
+them by reaching deeper into the serializer.
+
+### Hard limits of serde's data model
+
+Serde has no slot for:
+- sets (only seq / map)
+- arbitrary tags (only "newtype struct" and "enum variant" — both attach a
+  *compile-time-known* name, not a runtime tag)
+- distinct symbol vs keyword vs string (all collapse to `&str` on the wire)
+- arbitrary-precision numbers (only fixed-width primitives)
+- `char` distinct from a one-char string (serde has `char`, but most
+  `Deserializer`s blur it)
+
+A user's `Serialize` / `Deserialize` impl on an arbitrary Rust type cannot
+signal "this is a set, not a vec" or "tag this with `#foo`" through the
+standard serde traits — the traits don't have those slots. No work inside
+`umol-edn` recovers these for arbitrary user types.
+
+### Escape hatches that already exist
+
+1. **Newtype tokens** — the `KEYWORD_TOKEN` trick `umol-edn` uses for
+   `EdnKeyword` is generalizable. Define a wrapper (`EdnSet<T>`,
+   `EdnTagged<T>`, `EdnBigInt`, …), give it a magic newtype name, and the
+   serializer intercepts it. This recovers full fidelity *if the user opts
+   into the wrapper type*. It is how `serde_json::Number`, `serde_bytes`,
+   and `time::serde` all work.
+2. **`Edn` as the universal type** — users who need full fidelity skip
+   serde and work with `Edn` directly.
+
+### What is fixable inside `umol-edn`
+
+- More wrapper newtypes: `EdnSymbol`, `EdnSet<T>`, `EdnTagged<Tag, T>`,
+  `EdnBigInt`, `EdnBigDecimal` — each with serde impls that round-trip via
+  newtype tokens.
+- Document the wrapper pattern so users know it exists.
+- A derive macro (`#[derive(EdnSerialize)]`) that *augments* serde with
+  EDN-specific attributes (`#[edn(tag = "Point")]`, `#[edn(set)]`) — the
+  same approach `serde_with` takes for `serde_json` edge cases.
+
+### What is not fixable
+
+- Making a *plain* `HashSet<T>` serialize as an EDN set. Serde calls
+  `serialize_seq` for it; the serializer cannot distinguish `HashSet` from
+  `Vec` at that point.
+- Making a user's enum variant emit as an arbitrary runtime `#tag`. Serde
+  already owns enum encoding and reserves it for its own dispatch.
+- Faithful round-trip of `Edn` itself through the serde traits without
+  losing tag/set/bignum information — unless `Edn` becomes its own
+  wrapper-token graph, which is exactly what `to_value` / `from_value`
+  already are.
+
+The gap is structural to serde, not to `umol-edn`. The wrapper-newtype
+pattern can close most of it for users willing to opt in. The "transparent"
+gap — serde-deriving an arbitrary Rust type and getting full EDN semantics
+for free — cannot be closed without leaving serde's data model.
+
 ## Suggested priority order
 
 1. Document the serde-vs-tree feature matrix (sets, tags, big numbers,
