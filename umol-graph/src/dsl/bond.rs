@@ -19,7 +19,7 @@ use super::predicates::{bond_order, bond_predicate, BondPredicate};
 use super::value::ValueAst;
 
 /// Parsed bond-string AST
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: Option<ValueAst>,
@@ -128,15 +128,34 @@ impl Display for BondAst {
     }
 }
 
+/// Built-in bond keyword aliases (:single, :double, :triple, :quadruple).
+pub fn builtin_bond_aliases() -> bimap::BiMap<String, BondAst> {
+    bimap::BiMap::from_iter([
+        ("single".into(), BondAst::from_order(1)),
+        ("double".into(), BondAst::from_order(2)),
+        ("triple".into(), BondAst::from_order(3)),
+        ("quadruple".into(), BondAst::from_order(4)),
+    ])
+}
+
 impl Serialize for BondAst {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+        let aliases = builtin_bond_aliases();
+        if let Some(name) = aliases.get_by_right(self) {
+            umol_edn::EdnKeyword::new(name).serialize(serializer)
+        } else {
+            serializer.serialize_str(&self.to_string())
+        }
     }
 }
 
 impl<'de> Deserialize<'de> for BondAst {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
+        let aliases = builtin_bond_aliases();
+        if let Some(ast) = aliases.get_by_left(&s) {
+            return Ok(ast.clone());
+        }
         parse_bond_dsl(&s).map_err(DeError::custom)
     }
 }

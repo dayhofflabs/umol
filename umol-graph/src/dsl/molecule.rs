@@ -15,7 +15,7 @@ use umol_edn::EdnKeyword;
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
-use super::bond::{parse_bond_dsl, BondAst};
+use super::bond::BondAst;
 use super::config::MoleculeDslConfig;
 use super::error::ParseError;
 
@@ -157,22 +157,12 @@ impl Atoms {
     }
 }
 
-/// `:bond` value on a bond entry: parsed bond-string or keyword shorthand
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BondSpec {
-    Literal(BondAst),
-    Single,
-    Double,
-    Triple,
-    Quadruple,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalizedBond {
     pub id: Option<String>,
     pub a: AtomRef,
     pub b: AtomRef,
-    pub bond: BondSpec,
+    pub bond: BondAst,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,7 +171,7 @@ pub struct DativeBond {
     pub id: Option<String>,
     pub donor: AtomRef,
     pub acceptor: AtomRef,
-    pub bond: BondSpec,
+    pub bond: BondAst,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -204,7 +194,7 @@ pub struct NoncovalentBond {
     pub id: Option<String>,
     pub a: AtomRef,
     pub b: AtomRef,
-    pub bond: BondSpec,
+    pub bond: BondAst,
 }
 
 /// Parsed molecule map AST
@@ -255,35 +245,6 @@ impl Metadata {
             entries: atoms_entries,
             tags,
             aliases: self.atom_aliases.clone(),
-        }
-    }
-}
-
-// Serde: BondSpec
-impl Serialize for BondSpec {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            BondSpec::Single => serializer.serialize_unit_variant("BondSpec", 0, "single"),
-            BondSpec::Double => serializer.serialize_unit_variant("BondSpec", 1, "double"),
-            BondSpec::Triple => serializer.serialize_unit_variant("BondSpec", 2, "triple"),
-            BondSpec::Quadruple => serializer.serialize_unit_variant("BondSpec", 3, "quadruple"),
-            BondSpec::Literal(ast) => ast.serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for BondSpec {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        match s.as_str() {
-            "single" => Ok(BondSpec::Single),
-            "double" => Ok(BondSpec::Double),
-            "triple" => Ok(BondSpec::Triple),
-            "quadruple" => Ok(BondSpec::Quadruple),
-            other => {
-                let ast = parse_bond_dsl(other).map_err(de::Error::custom)?;
-                Ok(BondSpec::Literal(ast))
-            }
         }
     }
 }
@@ -401,7 +362,7 @@ impl<'de> Visitor<'de> for LocalizedBondVisitor {
         let b: AtomRef = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(1, &"3-element vector"))?;
-        let bond: BondSpec = seq
+        let bond: BondAst = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(2, &"3-element vector"))?;
         Ok(LocalizedBond {
@@ -422,7 +383,7 @@ impl<'de> Visitor<'de> for LocalizedBondVisitor {
                 "id" => id = Some(map.next_value::<String>()?),
                 "a" => a = Some(map.next_value::<AtomRef>()?),
                 "b" => b = Some(map.next_value::<AtomRef>()?),
-                "bond" => bond = Some(map.next_value::<BondSpec>()?),
+                "bond" => bond = Some(map.next_value::<BondAst>()?),
                 _ => {
                     let _ = map.next_value::<de::IgnoredAny>()?;
                 }
@@ -921,18 +882,18 @@ mod tests {
         }
     )]
     #[case::bond(r#"{:atoms ["N" "N"] :bonds [[0 1 :triple]]}"#, MoleculeAst { atoms: Atoms::indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Triple }], ..Default::default() })]
+        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondAst::from_order(3) }], ..Default::default() })]
     #[case::bond_with_tags(
         r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#,
         MoleculeAst {
             atoms: Atoms { entries: vec![AtomAst::from_element(e!(C)), AtomAst::from_element(e!(O))], tags: IndexMap::from([("C".to_string(), 0), ("O".to_string(), 1)]), aliases: bimap::BiMap::new() },
-            bonds: vec![LocalizedBond { id: None, a: AtomRef::Tag("C".into()), b: AtomRef::Tag("O".into()), bond: BondSpec::Single }],
+            bonds: vec![LocalizedBond { id: None, a: AtomRef::Tag("C".into()), b: AtomRef::Tag("O".into()), bond: BondAst::from_order(1) }],
             ..Default::default()
         }
     )]
     #[case::bond_id(r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a 0 :b 1 :bond :single}]}"#,
         MoleculeAst { atoms: Atoms::indexed(vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))]),
-        bonds: vec![LocalizedBond { id: Some("b1".to_string()), a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Single }], ..Default::default() })]
+        bonds: vec![LocalizedBond { id: Some("b1".to_string()), a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondAst::from_order(1) }], ..Default::default() })]
     #[case::charge(
         r#"{:atoms [[:F "F#c-"]] :bonds [] :charge -1}"#,
         MoleculeAst {
@@ -953,7 +914,7 @@ mod tests {
     #[case::alias_reused(r#"{:atoms [:n :n] :bonds [[0 1 :single]] :aliases [:n "N"]}"#,
         MoleculeAst { atoms: Atoms { entries: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
         tags: IndexMap::new(), aliases: bimap::BiMap::from_iter([("n".to_string(), AtomAst::from_element(e!(N)))]) },
-        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Single }], ..Default::default() })]
+        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondAst::from_order(1) }], ..Default::default() })]
     #[case::alias_tagged(
         r#"{:atoms [[:C :ch]] :bonds [] :aliases [:ch "C #h1"]}"#,
         MoleculeAst { atoms: Atoms { entries: vec![AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: None,
@@ -1014,7 +975,7 @@ mod tests {
     #[case::empty(MoleculeAst::default())]
     #[case::indexed_atoms(MoleculeAst {
         atoms: Atoms::indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondSpec::Triple }],
+        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondAst::from_order(3) }],
         ..Default::default()
     })]
     fn test_molecule_ast_json_roundtrip(#[case] ast: MoleculeAst) {

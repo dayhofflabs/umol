@@ -31,10 +31,11 @@ use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::config::{BondDslConfig, MoleculeDslConfig};
+use crate::dsl::bond::BondAst;
+use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::error::{LoweringError, ParseError};
 use crate::dsl::molecule::{
-    parse_molecule_dsl, AromaticSystem as AromaticSystemAst, AtomRef, Atoms, BondSpec,
+    parse_molecule_dsl, AromaticSystem as AromaticSystemAst, AtomRef, Atoms,
     DativeBond as DativeBondAst, LocalizedBond as LocalizedBondAst, Metadata, MoleculeAst,
     MulticenterBond as MulticenterBondAst, NoncovalentBond as NoncovalentBondAst,
 };
@@ -1174,37 +1175,17 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
                 .ok_or_else(|| LoweringError::UnknownLabel(key.into_owned()))
         };
 
-        let lower_bond_spec =
-            |spec: BondSpec, cfg: &BondDslConfig| -> Result<BondPattern, LoweringError> {
-                match spec {
-                    BondSpec::Single => Ok(BondPattern::new(1)),
-                    BondSpec::Double => Ok(BondPattern::new(2)),
-                    BondSpec::Triple => Ok(BondPattern::new(3)),
-                    BondSpec::Quadruple => Ok(BondPattern::new(4)),
-                    BondSpec::Literal(ast) => BondPattern::from_ast(ast, cfg),
-                }
-            };
-
         for bond in ast.bonds {
             let a = resolve(&bond.a)?;
             let b = resolve(&bond.b)?;
-            let pattern = lower_bond_spec(bond.bond, &cfg.bond)?;
+            let pattern = BondPattern::from_ast(bond.bond, &cfg.bond)?;
             builder.add_bond_unchecked(a, b, pattern);
         }
 
         for db in ast.dative_bonds {
             let donor = resolve(&db.donor)?;
             let acceptor = resolve(&db.acceptor)?;
-            let order = match db.bond {
-                BondSpec::Single => 1,
-                BondSpec::Double => 2,
-                BondSpec::Triple => 3,
-                BondSpec::Quadruple => 4,
-                BondSpec::Literal(ast) => {
-                    let pat = BondPattern::from_ast(ast, &cfg.bond)?;
-                    pat.order()
-                }
-            };
+            let order = BondPattern::from_ast(db.bond, &cfg.bond)?.order();
             builder.add_dative_bond(DativeBond::new(donor, acceptor, order));
         }
 
@@ -1272,12 +1253,11 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
-                let bond_ast = self.bond(bi).unwrap().to_ast(&cfg.bond);
                 LocalizedBondAst {
                     id: None,
                     a: label(a),
                     b: label(b),
-                    bond: BondSpec::Literal(bond_ast),
+                    bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
                 }
             })
             .collect();
@@ -1288,13 +1268,8 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
                 id: None,
                 donor: label(db.donor()),
                 acceptor: label(db.acceptor()),
-                bond: match db.order() {
-                    1 => BondSpec::Single,
-                    2 => BondSpec::Double,
-                    3 => BondSpec::Triple,
-                    4 => BondSpec::Quadruple,
-                    _ => BondSpec::Single,
-                },
+                // TODO: missing other bond fields
+                bond: BondAst::from_order(db.order()),
             })
             .collect();
 
@@ -1320,7 +1295,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
                 id: None,
                 a: label(nc.a()),
                 b: label(nc.b()),
-                bond: BondSpec::Single,
+                bond: BondAst::from_order(1),
             })
             .collect();
 
@@ -1368,12 +1343,11 @@ impl MoleculeBuilder {
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
-                let bond_ast = self.bond(bi).unwrap().to_ast(&cfg.bond);
                 LocalizedBondAst {
                     id: None,
                     a: label(a),
                     b: label(b),
-                    bond: BondSpec::Literal(bond_ast),
+                    bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
                 }
             })
             .collect();
@@ -1384,13 +1358,7 @@ impl MoleculeBuilder {
                 id: None,
                 donor: label(db.donor()),
                 acceptor: label(db.acceptor()),
-                bond: match db.order() {
-                    1 => BondSpec::Single,
-                    2 => BondSpec::Double,
-                    3 => BondSpec::Triple,
-                    4 => BondSpec::Quadruple,
-                    _ => BondSpec::Single,
-                },
+                bond: BondAst::from_order(db.order()),
             })
             .collect();
 
@@ -1416,7 +1384,7 @@ impl MoleculeBuilder {
                 id: None,
                 a: label(nc.a()),
                 b: label(nc.b()),
-                bond: BondSpec::Single,
+                bond: BondAst::from_order(1),
             })
             .collect();
 

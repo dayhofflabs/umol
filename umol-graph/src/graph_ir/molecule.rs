@@ -19,8 +19,9 @@ use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::dsl::ast::ToAst;
 use crate::dsl::config::MoleculeDslConfig;
+use crate::dsl::bond::BondAst;
 use crate::dsl::molecule::{
-    AromaticSystem as AromaticSystemAst, AtomRef, Atoms, BondSpec,
+    AromaticSystem as AromaticSystemAst, AtomRef, Atoms,
     LocalizedBond as LocalizedBondAst, DativeBond as DativeBondAst, MoleculeAst,
     MulticenterBond as MulticenterBondAst, NoncovalentBond as NoncovalentBondAst,
 };
@@ -491,12 +492,11 @@ impl ToAst<MoleculeAst> for Molecule {
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
-                let bond_ast = self.bond(bi).unwrap().to_ast(&cfg.bond);
                 LocalizedBondAst {
                     id: None,
                     a: label(a),
                     b: label(b),
-                    bond: BondSpec::Literal(bond_ast),
+                    bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
                 }
             })
             .collect();
@@ -507,13 +507,7 @@ impl ToAst<MoleculeAst> for Molecule {
                 id: None,
                 donor: label(db.donor()),
                 acceptor: label(db.acceptor()),
-                bond: match db.order() {
-                    1 => BondSpec::Single,
-                    2 => BondSpec::Double,
-                    3 => BondSpec::Triple,
-                    4 => BondSpec::Quadruple,
-                    _ => BondSpec::Single,
-                },
+                bond: BondAst::from_order(db.order()),
             })
             .collect();
 
@@ -539,7 +533,7 @@ impl ToAst<MoleculeAst> for Molecule {
                 id: None,
                 a: label(nc.a()),
                 b: label(nc.b()),
-                bond: BondSpec::Single,
+                bond: BondAst::from_order(1),
             })
             .collect();
 
