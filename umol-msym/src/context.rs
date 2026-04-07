@@ -249,14 +249,15 @@ impl Context {
                     }
                     _ => ffi::MSYM_BASIS_TYPE_REAL_SPHERICAL_HARMONIC,
                 };
-                let name = orbital_name(bf.n, bf.l, bf.m);
+                let n = bf.ffi_n();
+                let name = orbital_name(n, bf.l, bf.m);
                 ffi::msym_basis_function_t {
                     id: ptr::null_mut(),
                     type_,
                     element,
                     f: ffi::msym_basis_function_union_t {
                         rsh: ffi::msym_real_spherical_harmonic_t {
-                            n: bf.n,
+                            n,
                             l: bf.l,
                             m: bf.m,
                         },

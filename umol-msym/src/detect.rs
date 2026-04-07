@@ -312,7 +312,7 @@ mod tests {
             .map(|i| BasisFunction {
                 atom_index: i,
                 kind: BasisKind::RealSphericalHarmonic,
-                n: 1,
+                shell_index: 1,
                 l: 0,
                 m: 0,
             })
@@ -330,7 +330,7 @@ mod tests {
                 axes.iter().map(move |&(axis, m)| BasisFunction {
                     atom_index: i,
                     kind: BasisKind::Displacement(axis),
-                    n: 2,
+                    shell_index: 2,
                     l: 1,
                     m,
                 })

@@ -23,9 +23,31 @@ pub enum BasisKind {
 pub struct BasisFunction {
     pub atom_index: usize,
     pub kind: BasisKind,
-    pub n: i32,
+    /// Index among shells of the same l on the same atom (0 = first, 1 = second, ...).
+    /// Translated to the principal quantum number n = l + 1 + shell_index at the FFI boundary.
+    pub shell_index: u32,
     pub l: i32,
     pub m: i32,
+}
+
+impl BasisFunction {
+    /// All 2l+1 real spherical harmonic components of a single shell.
+    pub fn shell(atom_index: usize, shell_index: u32, l: i32) -> Vec<BasisFunction> {
+        (-l..=l)
+            .map(|m| BasisFunction {
+                atom_index,
+                kind: BasisKind::RealSphericalHarmonic,
+                shell_index,
+                l,
+                m,
+            })
+            .collect()
+    }
+
+    /// Principal quantum number for libmsym FFI (n = l + 1 + shell_index).
+    pub(crate) fn ffi_n(&self) -> i32 {
+        self.l + 1 + self.shell_index as i32
+    }
 }
 
 /// One symmetry-adapted linear combination, sparse in the basis function indices.

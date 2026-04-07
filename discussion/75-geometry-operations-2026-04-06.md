@@ -9,3 +9,4 @@ umol lacks a general geometric transformation type that can be applied to molecu
 nalgebra provides `Isometry3` for SE(3). Question is whether to use it directly or wrap it in a umol-geometric type that connects to `Molecule`.
 
 - Should add explicit method to transform molecule into principal axes system.
+- Add RMSD measures

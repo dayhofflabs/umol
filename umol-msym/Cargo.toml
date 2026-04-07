@@ -7,7 +7,6 @@ license = "MIT"
 
 [dependencies]
 umol-msym-sys = { path = "../umol-msym-sys" }
-umol-data = { path = "../umol-data", version = "0.1.0" }
 nalgebra = "0.34.0"
 thiserror = "2"
 

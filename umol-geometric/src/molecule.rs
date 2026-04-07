@@ -388,23 +388,7 @@ impl Molecule {
         let dim3n = 3 * n;
         let centers = self.to_symmetry_centers();
 
-        // Build displacement basis
-        let axes = [
-            (CartesianAxis::X, 1),
-            (CartesianAxis::Y, -1),
-            (CartesianAxis::Z, 0),
-        ];
-        let basis: Vec<BasisFunction> = (0..n)
-            .flat_map(|i| {
-                axes.iter().map(move |&(axis, m)| BasisFunction {
-                    atom_index: i,
-                    kind: BasisKind::Displacement(axis),
-                    n: 2,
-                    l: 1,
-                    m,
-                })
-            })
-            .collect();
+        let basis = self.displacement_basis();
 
         let salc_basis = compute_salcs_raw(&centers, &basis, thresholds)
             .expect("linear SALC computation failed");
@@ -441,6 +425,70 @@ impl Molecule {
             gamma_vib,
             coordinates,
         }
+    }
+
+    /// Permutation basis (N functions, one per atom, l=0).
+    ///
+    /// Suitable for reducing the atomic permutation representation into irreps
+    /// via `salc_basis`.
+    pub fn permutation_basis(&self) -> Vec<BasisFunction> {
+        (0..self.atom_count())
+            .map(|i| BasisFunction {
+                atom_index: i,
+                kind: BasisKind::Atom,
+                shell_index: 0,
+                l: 0,
+                m: 0,
+            })
+            .collect()
+    }
+
+    /// Cartesian displacement basis (3N functions) for this molecule.
+    ///
+    /// Produces x, y, z displacement functions on each atom. These are the l=1
+    /// basis functions that decompose into translation, rotation, and vibration.
+    pub fn displacement_basis(&self) -> Vec<BasisFunction> {
+        let axes = [
+            (CartesianAxis::X, 1),
+            (CartesianAxis::Y, -1),
+            (CartesianAxis::Z, 0),
+        ];
+        (0..self.atom_count())
+            .flat_map(|i| {
+                axes.iter().map(move |&(axis, m)| BasisFunction {
+                    atom_index: i,
+                    kind: BasisKind::Displacement(axis),
+                    shell_index: 0,
+                    l: 1,
+                    m,
+                })
+            })
+            .collect()
+    }
+
+    /// AO basis from per-element shell specifications.
+    ///
+    /// Each entry in `shell_spec` maps an element to its shells as `(l, count)` pairs.
+    /// Example: `mol.ao_basis(&[(O, &[(0, 2), (1, 1)]), (H, &[(0, 1)])])`
+    pub fn ao_basis(&self, shell_spec: &[(Element, &[(u32, u32)])]) -> Vec<BasisFunction> {
+        self.elements
+            .iter()
+            .enumerate()
+            .flat_map(|(atom_index, elem)| {
+                let shells = shell_spec
+                    .iter()
+                    .find(|(e, _)| e == elem)
+                    .unwrap_or_else(|| panic!("no shell spec for {elem}"))
+                    .1;
+                let mut shell_index_by_l = std::collections::HashMap::<u32, u32>::new();
+                shells.iter().flat_map(move |&(l, count)| {
+                    let base = *shell_index_by_l.entry(l).or_insert(0);
+                    shell_index_by_l.insert(l, base + count);
+                    (0..count)
+                        .flat_map(move |i| BasisFunction::shell(atom_index, base + i, l as i32))
+                })
+            })
+            .collect()
     }
 
     /// Compute symmetry-adapted linear combinations (SALCs) for a set of basis functions.
@@ -990,16 +1038,7 @@ mod tests {
         #[case] expected_irreps: &[&str],
     ) {
         let sym = m.perceive_symmetry(Thresholds::default()).unwrap();
-        let basis: Vec<BasisFunction> = (0..sym.atom_count())
-            .map(|i| BasisFunction {
-                atom_index: i,
-                kind: BasisKind::RealSphericalHarmonic,
-                n: 1,
-                l: 0,
-                m: 0,
-            })
-            .collect();
-        let result = sym.salc_basis(&basis, Thresholds::default()).unwrap();
+        let result = sym.salc_basis(&sym.permutation_basis(), Thresholds::default()).unwrap();
 
         let total: usize = result.irreps.iter().map(|ib| ib.salcs.len()).sum();
         assert_eq!(total, expected_total);
