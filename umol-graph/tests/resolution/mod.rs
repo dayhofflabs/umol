@@ -13,7 +13,7 @@ use umol_graph::dsl::ast::{FromAst, ToAst};
 use umol_graph::dsl::config::{
     ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
 };
-use umol_edn::{from_str as edn_from_str, to_string as edn_to_string};
+use umol_edn::{from_str as edn_from_str, to_string_pretty as edn_to_string_pretty};
 use umol_graph::dsl::molecule::MoleculeAst;
 use umol_graph::graph_ir::config_data::ValenceTable;
 use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
@@ -142,7 +142,7 @@ fn run_conformance_test(file_path: &Path) {
     settings.set_snapshot_path(base.join("snapshots"));
     settings.set_snapshot_suffix(format!("{}_{}", source_dir, filename));
     settings.bind(|| {
-        assert_snapshot!(edn_to_string(&results).unwrap());
+        assert_snapshot!(edn_to_string_pretty(&results).unwrap());
     });
 }
 

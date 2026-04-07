@@ -1,5 +1,49 @@
 ---
 source: umol-graph/tests/resolution/mod.rs
-expression: edn_to_string(&results).unwrap()
+expression: edn_to_string_pretty(&results).unwrap()
 ---
-{:atom-typing {:success true :output {:atoms ["C#v4" "O#n2#v2" "O#h#n2#v" "C#h2#v2" "C#h2#v2" "C#v4" "O#n2#v2" "O#h#n2#v"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "2"] [5 7 "1"]] :charge 0 :spin "#u0 #s1"}} :counts {:success true :output {:atoms ["C#v4" "O#n2#v2" "O#h#n2#v" "C#h2#v2" "C#h2#v2" "C#v4" "O#n2#v2" "O#h#n2#v"] :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "2"] [5 7 "1"]] :charge 0 :spin "#u0 #s1"}}}
+{
+  :atom-typing {
+    :output {
+      :atoms [
+        "C#v4"
+        "O#n2#v2"
+        "O#h#n2#v"
+        "C#h2#v2"
+        "C#h2#v2"
+        "C#v4"
+        "O#n2#v2"
+        "O#h#n2#v"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :single]
+        [0 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :double]
+        [5 7 :single]]
+      :charge 0
+      :spin "#u0 #s1"}
+    :success true}
+  :counts {
+    :output {
+      :atoms [
+        "C#v4"
+        "O#n2#v2"
+        "O#h#n2#v"
+        "C#h2#v2"
+        "C#h2#v2"
+        "C#v4"
+        "O#n2#v2"
+        "O#h#n2#v"]
+      :bonds [
+        [0 1 :double]
+        [0 2 :single]
+        [0 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :double]
+        [5 7 :single]]
+      :charge 0
+      :spin "#u0 #s1"}
+    :success true}}

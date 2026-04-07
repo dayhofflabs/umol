@@ -1,9 +1,14 @@
 //! Configurable EDN formatter (pretty-printing).
 
+#[cfg(feature = "serde")]
+use serde::Serialize;
+
 use crate::collections::EdnMap;
 use crate::edn::Edn;
 #[cfg(feature = "serde")]
-use crate::{error::EdnError, reader::read_string, ser::to_string};
+use crate::error::EdnError;
+#[cfg(feature = "serde")]
+use crate::ser;
 
 /// Configurable EDN formatter.
 #[derive(Clone, Debug)]
@@ -345,21 +350,19 @@ fn write_set(out: &mut String, items: &[&Edn<'_>], fmt: &EdnFormatter, depth: us
     out.push('}');
 }
 
-/// Serialize a serde value to a pretty-printed EDN string.
+/// Serialize a serde value to a pretty-printed EDN string with default formatting.
 #[cfg(feature = "serde")]
-pub fn to_string_pretty<T: serde::Serialize>(value: &T) -> Result<String, EdnError> {
-    to_string_pretty_with(value, &EdnFormatter::default())
+pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, EdnError> {
+    ser::to_string_pretty(value)
 }
 
-/// Serialize a serde value to an EDN string with custom formatting.
+/// Serialize a serde value to a formatted EDN string.
 #[cfg(feature = "serde")]
-pub fn to_string_pretty_with<T: serde::Serialize>(
+pub fn to_string_with<T: Serialize>(
     value: &T,
     fmt: &EdnFormatter,
 ) -> Result<String, EdnError> {
-    let compact = to_string(value)?;
-    let edn = read_string(&compact)?;
-    Ok(edn.to_string_with(fmt))
+    ser::to_string_with(value, fmt)
 }
 
 #[cfg(test)]
@@ -370,6 +373,7 @@ mod tests {
 
     use crate::collections::EdnMap;
     use crate::edn::{Edn, Keyword};
+    use crate::reader::read_string;
     use super::*;
 
     fn fmt_default() -> EdnFormatter {
@@ -592,7 +596,7 @@ mod tests {
         }
 
         #[test]
-        fn test_to_string_pretty_with_narrow() {
+        fn test_to_string_with_narrow() {
             let mol = Molecule {
                 atoms: vec!["C".into(), "O".into(), "H".into()],
                 bonds: vec![("0".into(), "1".into(), "single".into())],
@@ -601,7 +605,7 @@ mod tests {
                 line_width: Some(30),
                 ..Default::default()
             };
-            let result = to_string_pretty_with(&mol, &fmt).unwrap();
+            let result = to_string_with(&mol, &fmt).unwrap();
             assert!(result.contains('\n'));
         }
     }

@@ -10,6 +10,8 @@ use hashbrown::hash_map::{IntoIter as HashMapIntoIter, Iter as HashMapIter};
 use hashbrown::hash_set::{IntoIter as HashSetIntoIter, Iter as HashSetIter};
 use hashbrown::{HashMap, HashSet};
 
+#[cfg(feature = "bignum")]
+use crate::edn::EdnBigDecimal;
 use crate::edn::Edn;
 
 // ---------------------------------------------------------------------------
@@ -35,7 +37,7 @@ pub enum EdnKeyRef<'k> {
     #[cfg(feature = "bignum")]
     BigInt(&'k num_bigint::BigInt),
     #[cfg(feature = "bignum")]
-    BigDecimal(&'k crate::edn::EdnBigDecimal),
+    BigDecimal(&'k EdnBigDecimal),
 }
 
 impl<'k> EdnKeyRef<'k> {

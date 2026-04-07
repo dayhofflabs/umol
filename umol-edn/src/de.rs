@@ -14,7 +14,7 @@ use crate::collections::{EdnMap, EdnSeq, EdnSeqIntoIter};
 use crate::config::ParseConfig;
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::reader::Reader;
+use crate::reader::{default_config, Reader};
 use crate::streaming::{visit_cow_str, EdnStreamDeserializer};
 
 /// Deserialize a Rust value from an EDN string.
@@ -22,7 +22,7 @@ use crate::streaming::{visit_cow_str, EdnStreamDeserializer};
 /// Uses a streaming deserializer that parses directly into the target type
 /// without building an intermediate `Edn` value tree.
 pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
-    from_str_with(s, crate::reader::default_config())
+    from_str_with(s, default_config())
 }
 
 /// Deserialize a Rust value from an EDN string using a custom config.
@@ -515,7 +515,9 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use super::*;
-    use crate::{from_str, read_string};
+    use crate::collections::{EdnMap, EdnSet};
+    use crate::edn::{Keyword, Symbol};
+    use crate::{from_str, from_value, read_string, to_string};
 
     #[rstest]
     #[case("12", 12i64)]
@@ -791,7 +793,7 @@ mod tests {
     #[case(Shape::Rect(1.0, 2.0), "#Rect [1.0 2.0]")]
     #[case(Shape::Named { width: 5.0, height: 10.0 }, "#Named {:width 5.0 :height 10.0}")]
     fn test_enum_tagged_roundtrip(#[case] value: Shape, #[case] expected_edn: &str) {
-        let serialized = crate::to_string(&value).unwrap();
+        let serialized = to_string(&value).unwrap();
         assert_eq!(serialized, expected_edn);
         let deserialized: Shape = from_str(&serialized).unwrap();
         assert_eq!(deserialized, value);
@@ -821,25 +823,25 @@ mod tests {
 
     #[test]
     fn test_from_value_set_as_vec() {
-        let mut s = crate::collections::EdnSet::new();
+        let mut s = EdnSet::new();
         s.insert(Edn::Int(1));
         s.insert(Edn::Int(2));
         s.insert(Edn::Int(3));
-        let v: Vec<i64> = crate::from_value(Edn::Set(s)).unwrap();
+        let v: Vec<i64> = from_value(Edn::Set(s)).unwrap();
         assert_eq!(v.len(), 3);
     }
 
     #[test]
     fn test_from_value_map() {
         let val = read_string(r#"{"x" 1 "y" 2}"#).unwrap();
-        let m: HashMap<String, i64> = crate::from_value(val).unwrap();
+        let m: HashMap<String, i64> = from_value(val).unwrap();
         assert_eq!(m["x"], 1);
         assert_eq!(m["y"], 2);
     }
 
     #[test]
     fn test_from_value_map_error() {
-        let err = crate::from_value::<HashMap<String, i64>>(Edn::Int(5));
+        let err = from_value::<HashMap<String, i64>>(Edn::Int(5));
         assert!(err.is_err());
     }
 
@@ -847,93 +849,93 @@ mod tests {
     #[case(7i64, 7i8)]
     #[case(-1, -1i8)]
     fn test_from_value_i8(#[case] input: i64, #[case] expected: i8) {
-        assert_eq!(crate::from_value::<i8>(Edn::Int(input)).unwrap(), expected);
+        assert_eq!(from_value::<i8>(Edn::Int(input)).unwrap(), expected);
     }
 
     #[test]
     fn test_from_value_i8_error() {
-        assert!(crate::from_value::<i8>(Edn::Int(200)).is_err());
-        assert!(crate::from_value::<i8>(Edn::Bool(true)).is_err());
+        assert!(from_value::<i8>(Edn::Int(200)).is_err());
+        assert!(from_value::<i8>(Edn::Bool(true)).is_err());
     }
 
     #[rstest]
     #[case(300i64, 300i16)]
     fn test_from_value_i16(#[case] input: i64, #[case] expected: i16) {
-        assert_eq!(crate::from_value::<i16>(Edn::Int(input)).unwrap(), expected);
+        assert_eq!(from_value::<i16>(Edn::Int(input)).unwrap(), expected);
     }
 
     #[test]
     fn test_from_value_i16_error() {
-        assert!(crate::from_value::<i16>(Edn::Int(40000)).is_err());
+        assert!(from_value::<i16>(Edn::Int(40000)).is_err());
     }
 
     #[test]
     fn test_from_value_i32() {
-        assert_eq!(crate::from_value::<i32>(Edn::Int(100000)).unwrap(), 100000);
+        assert_eq!(from_value::<i32>(Edn::Int(100000)).unwrap(), 100000);
     }
 
     #[test]
     fn test_from_value_i32_error() {
-        assert!(crate::from_value::<i32>(Edn::Int(i64::MAX)).is_err());
+        assert!(from_value::<i32>(Edn::Int(i64::MAX)).is_err());
     }
 
     #[test]
     fn test_from_value_u16() {
-        assert_eq!(crate::from_value::<u16>(Edn::Int(1000)).unwrap(), 1000u16);
+        assert_eq!(from_value::<u16>(Edn::Int(1000)).unwrap(), 1000u16);
     }
 
     #[test]
     fn test_from_value_u32() {
-        assert_eq!(crate::from_value::<u32>(Edn::Int(100000)).unwrap(), 100000u32);
+        assert_eq!(from_value::<u32>(Edn::Int(100000)).unwrap(), 100000u32);
     }
 
     #[test]
     fn test_from_value_u64() {
-        assert_eq!(crate::from_value::<u64>(Edn::Int(100)).unwrap(), 100u64);
+        assert_eq!(from_value::<u64>(Edn::Int(100)).unwrap(), 100u64);
     }
 
     #[test]
     fn test_from_value_u64_error() {
-        assert!(crate::from_value::<u64>(Edn::Int(-1)).is_err());
-        assert!(crate::from_value::<u64>(Edn::Bool(true)).is_err());
+        assert!(from_value::<u64>(Edn::Int(-1)).is_err());
+        assert!(from_value::<u64>(Edn::Bool(true)).is_err());
     }
 
     #[test]
     fn test_from_value_f32() {
-        let v = crate::from_value::<f32>(Edn::Float(3.14)).unwrap();
+        let v = from_value::<f32>(Edn::Float(3.14)).unwrap();
         assert!((v - 3.14f32).abs() < 1e-5);
-        let v = crate::from_value::<f32>(Edn::Int(7)).unwrap();
+        let v = from_value::<f32>(Edn::Int(7)).unwrap();
         assert!((v - 7.0f32).abs() < 1e-5);
     }
 
     #[test]
     fn test_from_value_f32_error() {
-        assert!(crate::from_value::<f32>(Edn::Bool(true)).is_err());
+        assert!(from_value::<f32>(Edn::Bool(true)).is_err());
     }
 
     #[test]
     fn test_from_value_f64_error() {
-        assert!(crate::from_value::<f64>(Edn::Bool(true)).is_err());
+        assert!(from_value::<f64>(Edn::Bool(true)).is_err());
     }
 
     #[test]
     fn test_from_value_string() {
         use std::borrow::Cow;
-        let v = crate::from_value::<String>(Edn::Str(Cow::Owned("hello".into()))).unwrap();
+        let v = from_value::<String>(Edn::Str(Cow::Owned("hello".into()))).unwrap();
         assert_eq!(v, "hello");
     }
 
     #[test]
     fn test_from_value_bytes_error() {
         let val = read_string("nil").unwrap();
-        assert!(crate::from_value::<&[u8]>(val).is_err());
+        assert!(from_value::<&[u8]>(val).is_err());
     }
 
     #[test]
     fn test_from_value_unit_struct() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Marker;
-        assert_eq!(crate::from_value::<Marker>(Edn::Nil).unwrap(), Marker);
+        assert_eq!(from_value::<Marker>(Edn::Nil).unwrap(), Marker);
     }
 
     #[test]
@@ -941,12 +943,11 @@ mod tests {
         #[derive(Debug, Deserialize, PartialEq)]
         struct Pair(i64, i64);
         let val = read_string("[3 4]").unwrap();
-        assert_eq!(crate::from_value::<Pair>(val).unwrap(), Pair(3, 4));
+        assert_eq!(from_value::<Pair>(val).unwrap(), Pair(3, 4));
     }
 
     #[test]
     fn test_from_value_enum_via_symbol() {
-        use crate::edn::Symbol;
         let val = Edn::Symbol(Symbol::new("red"));
         assert_eq!(Color::deserialize(EdnDeserializer(val)).unwrap(), Color::Red);
     }
@@ -964,13 +965,13 @@ mod tests {
         struct Opt {
             x: Option<i64>,
         }
-        let val = crate::from_value::<Opt>(Edn::Nil).unwrap();
+        let val = from_value::<Opt>(Edn::Nil).unwrap();
         assert_eq!(val, Opt { x: None });
     }
 
     #[test]
     fn test_from_value_struct_error_non_map() {
-        assert!(crate::from_value::<Point>(Edn::Int(5)).is_err());
+        assert!(from_value::<Point>(Edn::Int(5)).is_err());
     }
 
     #[test]
@@ -986,63 +987,61 @@ mod tests {
 
     #[test]
     fn test_from_value_bool() {
-        assert_eq!(crate::from_value::<bool>(Edn::Bool(true)).unwrap(), true);
-        assert_eq!(crate::from_value::<bool>(Edn::Bool(false)).unwrap(), false);
+        assert_eq!(from_value::<bool>(Edn::Bool(true)).unwrap(), true);
+        assert_eq!(from_value::<bool>(Edn::Bool(false)).unwrap(), false);
     }
 
     #[test]
     fn test_from_value_i64() {
-        assert_eq!(crate::from_value::<i64>(Edn::Int(99)).unwrap(), 99i64);
+        assert_eq!(from_value::<i64>(Edn::Int(99)).unwrap(), 99i64);
     }
 
     #[test]
     fn test_from_value_char() {
-        assert_eq!(crate::from_value::<char>(Edn::Char('z')).unwrap(), 'z');
+        assert_eq!(from_value::<char>(Edn::Char('z')).unwrap(), 'z');
     }
 
     #[test]
     fn test_from_value_unit() {
-        assert_eq!(crate::from_value::<()>(Edn::Nil).unwrap(), ());
+        assert_eq!(from_value::<()>(Edn::Nil).unwrap(), ());
     }
 
     #[test]
     fn test_from_value_vec_from_list() {
         let val = read_string("(1 2 3)").unwrap();
-        let v: Vec<i64> = crate::from_value(val).unwrap();
+        let v: Vec<i64> = from_value(val).unwrap();
         assert_eq!(v, vec![1, 2, 3]);
     }
 
     #[test]
     fn test_from_value_vec_from_vector() {
         let val = read_string("[4 5]").unwrap();
-        let v: Vec<i64> = crate::from_value(val).unwrap();
+        let v: Vec<i64> = from_value(val).unwrap();
         assert_eq!(v, vec![4, 5]);
     }
 
     #[test]
     fn test_from_value_keyword_as_string() {
-        use crate::edn::Keyword;
-        let v = crate::from_value::<String>(Edn::Keyword(Keyword::new("hello"))).unwrap();
+        let v = from_value::<String>(Edn::Keyword(Keyword::new("hello"))).unwrap();
         assert_eq!(v, "hello");
     }
 
     #[test]
     fn test_from_value_symbol_as_string() {
-        use crate::edn::Symbol;
-        let v = crate::from_value::<String>(Edn::Symbol(Symbol::new("world"))).unwrap();
+        let v = from_value::<String>(Edn::Symbol(Symbol::new("world"))).unwrap();
         assert_eq!(v, "world");
     }
 
     #[test]
     fn test_from_value_float() {
-        let v = crate::from_value::<f64>(Edn::Float(2.718)).unwrap();
+        let v = from_value::<f64>(Edn::Float(2.718)).unwrap();
         assert!((v - 2.718).abs() < 1e-10);
     }
 
     #[test]
     fn test_from_value_option_some() {
         assert_eq!(
-            crate::from_value::<Option<i64>>(Edn::Int(7)).unwrap(),
+            from_value::<Option<i64>>(Edn::Int(7)).unwrap(),
             Some(7)
         );
     }
@@ -1050,7 +1049,7 @@ mod tests {
     #[test]
     fn test_from_value_option_none() {
         assert_eq!(
-            crate::from_value::<Option<i64>>(Edn::Nil).unwrap(),
+            from_value::<Option<i64>>(Edn::Nil).unwrap(),
             None
         );
     }
@@ -1058,7 +1057,7 @@ mod tests {
     #[test]
     fn test_from_value_tuple() {
         let val = read_string("[1 2]").unwrap();
-        let t: (i64, i64) = crate::from_value(val).unwrap();
+        let t: (i64, i64) = from_value(val).unwrap();
         assert_eq!(t, (1, 2));
     }
 
@@ -1079,7 +1078,7 @@ mod tests {
 
     #[test]
     fn test_from_value_tagged_struct_enum() {
-        let mut m = crate::collections::EdnMap::new();
+        let mut m = EdnMap::new();
         m.insert(Edn::keyword("width"), Edn::Float(3.0));
         m.insert(Edn::keyword("height"), Edn::Float(4.0));
         let val = Edn::Tagged(Cow::Borrowed("Named"), Box::new(Edn::Map(m)));
@@ -1102,7 +1101,7 @@ mod tests {
 
     #[test]
     fn test_from_value_enum_fallback() {
-        assert!(crate::from_value::<Color>(Edn::Int(0)).is_err());
+        assert!(from_value::<Color>(Edn::Int(0)).is_err());
     }
 
     #[test]
@@ -1118,21 +1117,21 @@ mod tests {
 
     #[test]
     fn test_from_value_map_nil() {
-        let m: HashMap<String, i64> = crate::from_value(Edn::Nil).unwrap();
+        let m: HashMap<String, i64> = from_value(Edn::Nil).unwrap();
         assert!(m.is_empty());
     }
 
     #[test]
     fn test_from_value_byte_buf_error() {
         let val = Edn::Str(Cow::Borrowed("data"));
-        assert!(crate::from_value::<Vec<u8>>(val).is_err());
+        assert!(from_value::<Vec<u8>>(val).is_err());
     }
 
     #[test]
     fn test_from_value_newtype_struct_2() {
         #[derive(Debug, Deserialize, PartialEq)]
         struct W(i64);
-        assert_eq!(crate::from_value::<W>(Edn::Int(9)).unwrap(), W(9));
+        assert_eq!(from_value::<W>(Edn::Int(9)).unwrap(), W(9));
     }
 
     #[test]
@@ -1140,6 +1139,6 @@ mod tests {
         #[derive(Debug, Deserialize, PartialEq)]
         struct P(i64, i64);
         let val = read_string("[5 6]").unwrap();
-        assert_eq!(crate::from_value::<P>(val).unwrap(), P(5, 6));
+        assert_eq!(from_value::<P>(val).unwrap(), P(5, 6));
     }
 }

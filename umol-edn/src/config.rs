@@ -2,6 +2,10 @@
 
 use crate::edn::Edn;
 use crate::error::EdnError;
+#[cfg(feature = "chrono")]
+use crate::tags::read_inst;
+#[cfg(feature = "uuid")]
+use crate::tags::read_uuid;
 
 /// Behavior on duplicate map keys.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -53,9 +57,9 @@ impl Default for TagReaders {
     fn default() -> Self {
         let mut r = Self::empty();
         #[cfg(feature = "chrono")]
-        r.insert("inst", crate::tags::read_inst);
+        r.insert("inst", read_inst);
         #[cfg(feature = "uuid")]
-        r.insert("uuid", crate::tags::read_uuid);
+        r.insert("uuid", read_uuid);
         r
     }
 }

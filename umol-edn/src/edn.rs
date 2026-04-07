@@ -7,6 +7,8 @@ use std::str::FromStr;
 use std::{fmt, iter};
 
 use crate::collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
+use crate::error::EdnError;
+use crate::reader::read_string;
 
 #[cfg(feature = "bignum")]
 use bigdecimal::BigDecimal;
@@ -266,10 +268,10 @@ pub enum Edn<'a> {
 }
 
 impl FromStr for Edn<'static> {
-    type Err = crate::error::EdnError;
+    type Err = EdnError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        crate::read_string(s).map(Edn::into_owned)
+        read_string(s).map(Edn::into_owned)
     }
 }
 
@@ -764,8 +766,8 @@ mod tests {
         assert!(Edn::Symbol(Symbol::new("s")).is_symbol());
         assert!(Edn::List(vec![].into()).is_list());
         assert!(Edn::Vector(vec![].into()).is_vector());
-        assert!(Edn::Map(crate::collections::EdnMap::new()).is_map());
-        assert!(Edn::Set(crate::collections::EdnSet::new()).is_set());
+        assert!(Edn::Map(EdnMap::new()).is_map());
+        assert!(Edn::Set(EdnSet::new()).is_set());
         assert!(Edn::Tagged(Cow::Borrowed("t"), Box::new(Edn::Nil)).is_tagged());
 
         assert!(!Edn::Nil.is_bool());
@@ -835,14 +837,14 @@ mod tests {
 
     #[test]
     fn test_edn_as_map() {
-        let m = Edn::Map(crate::collections::EdnMap::new());
+        let m = Edn::Map(EdnMap::new());
         assert!(m.as_map().is_some());
         assert!(Edn::Nil.as_map().is_none());
     }
 
     #[test]
     fn test_edn_as_set() {
-        let s = Edn::Set(crate::collections::EdnSet::new());
+        let s = Edn::Set(EdnSet::new());
         assert!(s.as_set().is_some());
         assert!(Edn::Nil.as_set().is_none());
     }
@@ -874,7 +876,7 @@ mod tests {
 
     #[test]
     fn test_edn_iter_set() {
-        let mut s = crate::collections::EdnSet::new();
+        let mut s = EdnSet::new();
         s.insert(Edn::Int(1));
         s.insert(Edn::Int(2));
         let edn = Edn::Set(s);
@@ -901,8 +903,8 @@ mod tests {
             Edn::Symbol(Symbol::new("s")),
             Edn::List(vec![Edn::Int(1)].into()),
             Edn::Vector(vec![Edn::Int(2)].into()),
-            Edn::Map(crate::collections::EdnMap::new()),
-            Edn::Set(crate::collections::EdnSet::new()),
+            Edn::Map(EdnMap::new()),
+            Edn::Set(EdnSet::new()),
             Edn::Tagged(Cow::Borrowed("tag"), Box::new(Edn::Nil)),
         ];
         for v in values {

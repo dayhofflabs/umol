@@ -79,6 +79,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::{from_str, to_string};
 
     #[test]
     fn test_edn_keyword_display() {
@@ -101,7 +102,7 @@ mod tests {
     #[test]
     fn test_edn_keyword_serialize_edn() {
         let kw = EdnKeyword::new("foo");
-        let edn = crate::to_string(&kw).unwrap();
+        let edn = to_string(&kw).unwrap();
         assert_eq!(edn, ":foo");
     }
 
@@ -115,7 +116,7 @@ mod tests {
     #[test]
     fn test_edn_keyword_in_vec() {
         let v = vec![EdnKeyword::new("a"), EdnKeyword::new("b")];
-        let edn = crate::to_string(&v).unwrap();
+        let edn = to_string(&v).unwrap();
         assert_eq!(edn, "[:a :b]");
     }
 
@@ -130,26 +131,26 @@ mod tests {
             tag: EdnKeyword::new("foo"),
             value: 5,
         };
-        let edn = crate::to_string(&w).unwrap();
+        let edn = to_string(&w).unwrap();
         assert_eq!(edn, "{:tag :foo :value 5}");
     }
 
     #[test]
     fn test_edn_keyword_nested_in_tuple() {
         let t = (EdnKeyword::new("x"), 10i64, EdnKeyword::new("y"));
-        let edn = crate::to_string(&t).unwrap();
+        let edn = to_string(&t).unwrap();
         assert_eq!(edn, "[:x 10 :y]");
     }
 
     #[test]
     fn test_edn_keyword_deserialize_from_edn_keyword() {
-        let kw: EdnKeyword = crate::from_str(":foo").unwrap();
+        let kw: EdnKeyword = from_str(":foo").unwrap();
         assert_eq!(&*kw, "foo");
     }
 
     #[test]
     fn test_edn_keyword_deserialize_from_edn_string() {
-        let kw: EdnKeyword = crate::from_str(r#""bar""#).unwrap();
+        let kw: EdnKeyword = from_str(r#""bar""#).unwrap();
         assert_eq!(&*kw, "bar");
     }
 }

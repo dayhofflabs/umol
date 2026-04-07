@@ -1,5 +1,19 @@
 ---
 source: umol-graph/tests/resolution/mod.rs
-expression: edn_to_string(&results).unwrap()
+expression: edn_to_string_pretty(&results).unwrap()
 ---
-{:atom-typing {:success true :output {:atoms ["Si#u#v3" "H#v" "H#v" "H#v"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :charge 0 :spin "#u1 #s2"}} :counts {:success true :output {:atoms ["Si#u#v3" "H#v" "H#v" "H#v"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :charge 0 :spin "#u1 #s2"}}}
+{
+  :atom-typing {
+    :output {
+      :atoms ["Si#u#v3" "H#v" "H#v" "H#v"]
+      :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]
+      :charge 0
+      :spin "#u1 #s2"}
+    :success true}
+  :counts {
+    :output {
+      :atoms ["Si#u#v3" "H#v" "H#v" "H#v"]
+      :bonds [[0 1 :single] [0 2 :single] [0 3 :single]]
+      :charge 0
+      :spin "#u1 #s2"}
+    :success true}}

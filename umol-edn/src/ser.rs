@@ -1,5 +1,8 @@
-//! Serde `Serializer` that writes compact EDN.
+//! Serde `Serializer` for EDN. The compact path writes directly to a `String`;
+//! the tree path builds an `Edn<'static>` so the size-aware formatter can lay
+//! it out.
 
+use std::borrow::Cow;
 use std::fmt::Write;
 
 use serde::ser::{
@@ -8,7 +11,15 @@ use serde::ser::{
 };
 use serde::{Serialize, Serializer};
 
+use crate::collections::{EdnMap, EdnSeq};
+use crate::edn::{Edn, Keyword};
 use crate::error::EdnError;
+use crate::formatter::EdnFormatter;
+use crate::keyword_serde::KEYWORD_TOKEN;
+
+// ---------------------------------------------------------------------------
+// Public entry points
+// ---------------------------------------------------------------------------
 
 /// Serialize a value to a compact EDN string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, EdnError> {
@@ -17,18 +28,47 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, EdnError> {
     Ok(ser.output)
 }
 
-/// Serializer that writes EDN into a `String`.
+/// Serialize a value into an `Edn<'static>` tree.
+pub fn to_value<T: Serialize>(value: &T) -> Result<Edn<'static>, EdnError> {
+    let mut ser = EdnTreeSerializer { keyword_mode: false };
+    value.serialize(&mut ser)
+}
+
+/// Serialize a value to a pretty-printed EDN string with default formatting.
+pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, EdnError> {
+    to_string_with(value, &EdnFormatter::default())
+}
+
+/// Serialize a value to an EDN string formatted with `fmt`. Builds an
+/// `Edn<'static>` and lays it out with [`Edn::to_string_with`], so the
+/// formatter's width and compaction settings apply uniformly.
+pub fn to_string_with<T: Serialize>(value: &T, fmt: &EdnFormatter) -> Result<String, EdnError> {
+    let edn = to_value(value)?;
+    Ok(edn.to_string_with(fmt))
+}
+
+// ---------------------------------------------------------------------------
+// Compact string serializer
+// ---------------------------------------------------------------------------
+
+/// Serializer that writes compact EDN into a `String`.
 pub struct EdnSerializer {
     output: String,
     keyword_mode: bool,
 }
 
 impl EdnSerializer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             output: String::new(),
             keyword_mode: false,
         }
+    }
+}
+
+impl Default for EdnSerializer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -177,7 +217,7 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         name: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
-        if name == crate::keyword_serde::KEYWORD_TOKEN {
+        if name == KEYWORD_TOKEN {
             self.keyword_mode = true;
             let result = value.serialize(&mut *self);
             self.keyword_mode = false;
@@ -256,8 +296,6 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         Ok(self)
     }
 }
-
-// --- Compound trait impls ---
 
 impl SerializeSeq for &mut EdnSerializer {
     type Ok = ();
@@ -397,6 +435,376 @@ impl SerializeStructVariant for &mut EdnSerializer {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tree serializer (builds Edn<'static>)
+// ---------------------------------------------------------------------------
+
+/// Serializer that materializes a value as an `Edn<'static>` so the size-aware
+/// formatter can lay it out. Used by `to_value`, `to_string_pretty`, and
+/// `to_string_with`.
+pub struct EdnTreeSerializer {
+    keyword_mode: bool,
+}
+
+fn nan_or_inf_error() -> EdnError {
+    EdnError::Custom("EDN cannot represent NaN or Infinity".into())
+}
+
+impl<'a> Serializer for &'a mut EdnTreeSerializer {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+    type SerializeSeq = TreeSeqSerializer<'a>;
+    type SerializeTuple = TreeSeqSerializer<'a>;
+    type SerializeTupleStruct = TreeSeqSerializer<'a>;
+    type SerializeTupleVariant = TreeVariantSeqSerializer<'a>;
+    type SerializeMap = TreeMapSerializer<'a>;
+    type SerializeStruct = TreeStructSerializer<'a>;
+    type SerializeStructVariant = TreeVariantStructSerializer<'a>;
+
+    fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Bool(v))
+    }
+
+    fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Int(i64::from(v)))
+    }
+    fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Int(i64::from(v)))
+    }
+    fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Int(i64::from(v)))
+    }
+    fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Int(v))
+    }
+
+    fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Int(i64::from(v)))
+    }
+    fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Int(i64::from(v)))
+    }
+    fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Int(i64::from(v)))
+    }
+    fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
+        i64::try_from(v)
+            .map(Edn::Int)
+            .map_err(|_| EdnError::Custom(format!("u64 value {v} exceeds i64 range")))
+    }
+
+    fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
+        self.serialize_f64(f64::from(v))
+    }
+    fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
+        if v.is_nan() || v.is_infinite() {
+            return Err(nan_or_inf_error());
+        }
+        Ok(Edn::Float(v))
+    }
+
+    fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Char(v))
+    }
+
+    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
+        if self.keyword_mode {
+            self.keyword_mode = false;
+            Ok(Edn::Keyword(Keyword::owned(v.to_string())))
+        } else {
+            Ok(Edn::Str(Cow::Owned(v.to_string())))
+        }
+    }
+
+    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
+        Err(EdnError::Custom("bytes not supported".to_string()))
+    }
+
+    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Nil)
+    }
+
+    fn serialize_some<T: ?Sized + Serialize>(self, value: &T) -> Result<Self::Ok, Self::Error> {
+        value.serialize(self)
+    }
+
+    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Nil)
+    }
+
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Nil)
+    }
+
+    fn serialize_unit_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Keyword(Keyword::owned(variant.to_string())))
+    }
+
+    fn serialize_newtype_struct<T: ?Sized + Serialize>(
+        self,
+        name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        if name == KEYWORD_TOKEN {
+            self.keyword_mode = true;
+            let result = value.serialize(&mut *self);
+            self.keyword_mode = false;
+            return result;
+        }
+        value.serialize(self)
+    }
+
+    fn serialize_newtype_variant<T: ?Sized + Serialize>(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        let inner = value.serialize(&mut *self)?;
+        Ok(Edn::Tagged(
+            Cow::Owned(variant.to_string()),
+            Box::new(inner),
+        ))
+    }
+
+    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        Ok(TreeSeqSerializer {
+            ser: self,
+            items: Vec::with_capacity(len.unwrap_or(0)),
+        })
+    }
+
+    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        Ok(TreeSeqSerializer {
+            ser: self,
+            items: Vec::with_capacity(len),
+        })
+    }
+
+    fn serialize_tuple_struct(
+        self,
+        _name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        self.serialize_tuple(len)
+    }
+
+    fn serialize_tuple_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        Ok(TreeVariantSeqSerializer {
+            ser: self,
+            tag: variant,
+            items: Vec::with_capacity(len),
+        })
+    }
+
+    fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Ok(TreeMapSerializer {
+            ser: self,
+            map: EdnMap::with_capacity(len.unwrap_or(0)),
+            next_key: None,
+        })
+    }
+
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        Ok(TreeStructSerializer {
+            ser: self,
+            map: EdnMap::with_capacity(len),
+        })
+    }
+
+    fn serialize_struct_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        variant: &'static str,
+        len: usize,
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        Ok(TreeVariantStructSerializer {
+            ser: self,
+            tag: variant,
+            map: EdnMap::with_capacity(len),
+        })
+    }
+}
+
+pub struct TreeSeqSerializer<'a> {
+    ser: &'a mut EdnTreeSerializer,
+    items: Vec<Edn<'static>>,
+}
+
+impl SerializeSeq for TreeSeqSerializer<'_> {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+
+    fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+        let v = value.serialize(&mut *self.ser)?;
+        self.items.push(v);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Vector(EdnSeq::from(self.items)))
+    }
+}
+
+impl SerializeTuple for TreeSeqSerializer<'_> {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+
+    fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+        let v = value.serialize(&mut *self.ser)?;
+        self.items.push(v);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Vector(EdnSeq::from(self.items)))
+    }
+}
+
+impl SerializeTupleStruct for TreeSeqSerializer<'_> {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+        let v = value.serialize(&mut *self.ser)?;
+        self.items.push(v);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Vector(EdnSeq::from(self.items)))
+    }
+}
+
+pub struct TreeVariantSeqSerializer<'a> {
+    ser: &'a mut EdnTreeSerializer,
+    tag: &'static str,
+    items: Vec<Edn<'static>>,
+}
+
+impl SerializeTupleVariant for TreeVariantSeqSerializer<'_> {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+
+    fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+        let v = value.serialize(&mut *self.ser)?;
+        self.items.push(v);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Tagged(
+            Cow::Owned(self.tag.to_string()),
+            Box::new(Edn::Vector(EdnSeq::from(self.items))),
+        ))
+    }
+}
+
+pub struct TreeMapSerializer<'a> {
+    ser: &'a mut EdnTreeSerializer,
+    map: EdnMap<'static>,
+    next_key: Option<Edn<'static>>,
+}
+
+impl SerializeMap for TreeMapSerializer<'_> {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+
+    fn serialize_key<T: ?Sized + Serialize>(&mut self, key: &T) -> Result<(), Self::Error> {
+        self.next_key = Some(key.serialize(&mut *self.ser)?);
+        Ok(())
+    }
+
+    fn serialize_value<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+        let key = self
+            .next_key
+            .take()
+            .expect("serialize_value called without serialize_key");
+        let v = value.serialize(&mut *self.ser)?;
+        self.map.insert(key, v);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Map(self.map))
+    }
+}
+
+pub struct TreeStructSerializer<'a> {
+    ser: &'a mut EdnTreeSerializer,
+    map: EdnMap<'static>,
+}
+
+impl SerializeStruct for TreeStructSerializer<'_> {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+
+    fn serialize_field<T: ?Sized + Serialize>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error> {
+        let v = value.serialize(&mut *self.ser)?;
+        self.map
+            .insert(Edn::Keyword(Keyword::owned(key.to_string())), v);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Map(self.map))
+    }
+}
+
+pub struct TreeVariantStructSerializer<'a> {
+    ser: &'a mut EdnTreeSerializer,
+    tag: &'static str,
+    map: EdnMap<'static>,
+}
+
+impl SerializeStructVariant for TreeVariantStructSerializer<'_> {
+    type Ok = Edn<'static>;
+    type Error = EdnError;
+
+    fn serialize_field<T: ?Sized + Serialize>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error> {
+        let v = value.serialize(&mut *self.ser)?;
+        self.map
+            .insert(Edn::Keyword(Keyword::owned(key.to_string())), v);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Edn::Tagged(
+            Cow::Owned(self.tag.to_string()),
+            Box::new(Edn::Map(self.map)),
+        ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -404,7 +812,12 @@ mod tests {
     use rstest::rstest;
     use serde::Serialize;
 
+    use crate::edn::Edn;
+    use crate::keyword_serde::EdnKeyword;
+    use crate::reader::read_string;
+    use crate::ser::{to_string_pretty, to_string_with, to_value, EdnSerializer};
     use crate::to_string;
+    use crate::EdnFormatter;
 
     #[rstest]
     #[case(true, "true")]
@@ -653,7 +1066,7 @@ mod tests {
     #[test]
     fn test_serialize_bytes_error() {
         use serde::Serializer;
-        let mut ser = crate::ser::EdnSerializer::new();
+        let mut ser = EdnSerializer::new();
         assert!((&mut ser).serialize_bytes(b"data").is_err());
     }
 
@@ -669,5 +1082,115 @@ mod tests {
         #[derive(Serialize)]
         struct Pair(i64, i64);
         assert_eq!(to_string(&Pair(3, 4)).unwrap(), "[3 4]");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tree serializer / pretty path
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_to_value_primitives() {
+        assert_eq!(to_value(&true).unwrap(), Edn::Bool(true));
+        assert_eq!(to_value(&12i64).unwrap(), Edn::Int(12));
+        assert_eq!(to_value(&1.5f64).unwrap(), Edn::Float(1.5));
+        assert_eq!(to_value(&None::<i64>).unwrap(), Edn::Nil);
+    }
+
+    #[test]
+    fn test_to_value_struct_is_map() {
+        let p = Point { x: 1.0, y: 2.0 };
+        let edn = to_value(&p).unwrap();
+        assert_eq!(edn.as_map().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_to_value_keyword_newtype() {
+        let kw = EdnKeyword::new("foo");
+        let edn = to_value(&kw).unwrap();
+        assert_eq!(edn.as_keyword().unwrap().as_str(), "foo");
+    }
+
+    #[test]
+    fn test_to_value_unit_variant_is_keyword() {
+        let edn = to_value(&Color::Red).unwrap();
+        assert_eq!(edn.as_keyword().unwrap().as_str(), "red");
+    }
+
+    #[test]
+    fn test_to_value_newtype_variant_is_tagged() {
+        let edn = to_value(&Shape::Circle(5.0)).unwrap();
+        assert!(edn.is_tagged());
+    }
+
+    #[test]
+    fn test_to_value_tuple_variant_is_tagged_vector() {
+        let edn = to_value(&Tagged::Pair(1, 2)).unwrap();
+        let (tag, inner) = match edn {
+            Edn::Tagged(t, i) => (t, i),
+            _ => panic!("expected tagged"),
+        };
+        assert_eq!(&*tag, "Pair");
+        assert!(inner.is_vector());
+    }
+
+    #[test]
+    fn test_to_string_pretty_short_struct_inline() {
+        let p = Point { x: 1.0, y: 2.0 };
+        assert_eq!(to_string_pretty(&p).unwrap(), "{:x 1.0 :y 2.0}");
+    }
+
+    #[test]
+    fn test_to_string_pretty_short_nested_inline() {
+        let n = Nested {
+            point: Point { x: 3.0, y: 4.0 },
+            label: "origin".into(),
+        };
+        assert_eq!(
+            to_string_pretty(&n).unwrap(),
+            r#"{:label "origin" :point {:x 3.0 :y 4.0}}"#,
+        );
+    }
+
+    #[test]
+    fn test_to_string_pretty_short_keyword_vec_inline() {
+        let v = vec![EdnKeyword::new("a"), EdnKeyword::new("b")];
+        assert_eq!(to_string_pretty(&v).unwrap(), "[:a :b]");
+    }
+
+    #[test]
+    fn test_to_string_pretty_long_vec_wraps() {
+        let v: Vec<i64> = (0..50).collect();
+        let s = to_string_pretty(&v).unwrap();
+        assert!(s.contains('\n'));
+    }
+
+    /// Pretty-printing serde values must converge with parsing the compact form
+    /// and re-formatting the resulting `Edn` tree. This guards against the two
+    /// pretty-print paths drifting apart.
+    #[test]
+    fn test_pretty_path_matches_parse_then_format() {
+        #[derive(Serialize)]
+        struct Mol {
+            atoms: Vec<String>,
+            bonds: Vec<(i64, i64, String)>,
+            charge: i64,
+        }
+        let mol = Mol {
+            atoms: vec!["C".into(), "O".into(), "H".into()],
+            bonds: vec![(0, 1, "single".into()), (1, 2, "double".into())],
+            charge: -1,
+        };
+        let fmt = EdnFormatter {
+            line_width: Some(30),
+            ..Default::default()
+        };
+
+        let via_tree = to_string_with(&mol, &fmt).unwrap();
+
+        let compact = to_string(&mol).unwrap();
+        let parsed = read_string(&compact).unwrap();
+        let via_parse = parsed.to_string_with(&fmt);
+
+        assert_eq!(via_tree, via_parse);
     }
 }
