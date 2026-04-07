@@ -136,3 +136,66 @@ deserialization would need a third variant or a unified representation. Validati
 must prevent collisions between explicit integer keys and positional indices.
 
 Not yet designed. Deferred until the core roundtrip machinery is in place.
+
+---
+
+## Implementation summary (2026-04-07)
+
+The decisions above were revisited during implementation. Strategy B was adopted
+instead of A, after examining `serde_json::RawValue` as prior art.
+
+### Strategy B: `EdnKeyword` sentinel in `umol-edn`
+
+- `EdnKeyword(String)` type in `umol-edn`, modeled after `serde_json::RawValue`.
+- Serializes via `serialize_newtype_struct("$edn::keyword", &self.0)`.
+- `EdnSerializer` recognizes the sentinel, sets a `keyword_mode` flag, emits `:keyword`.
+- Non-EDN serializers see a transparent string. No coupling to molecule domain code.
+- `EdnKeyword` is never stored in domain types — constructed ephemerally at the serde boundary.
+
+### `AtomRef` enum
+
+- `AtomRef { Index(usize), Tag(String) }` — `Tag` holds plain `String`, not `EdnKeyword`.
+- Serialize: `Index(n)` → integer, `Tag(s)` → ephemeral `EdnKeyword(s)` → `:keyword`.
+- Deserialize: `visit_i64/u64` → `Index`, `visit_str` → `Tag`.
+- `parse::<usize>()` heuristic eliminated.
+
+### `Atoms` struct (replaces enum)
+
+- `Atoms { entries: Vec<AtomAst>, tags: IndexMap<String, usize>, aliases: BiMap<String, AtomAst> }`.
+- Vector-only `:atoms` format. Map form dropped.
+- Inline tags: `[:tag-name "atom-def"]` in the vector.
+- Aliases roundtrippable via `BiMap` reverse lookup (`get_by_right`). `AtomAst` derives `Hash`.
+
+### Streaming read path
+
+- `MoleculeInput` adapter: stream-deserialized via `EdnStreamDeserializer`, no Edn tree.
+- `AtomEntryInput` enum: `Str(String)` | `Tagged(String, Box<AtomEntryInput>)`.
+- `into_ast()` pipeline: alias resolution via table lookup, tag extraction, validation.
+- `:aliases` / `:atom-aliases` both accepted on read.
+
+### `BondSpec` eliminated
+
+- `BondSpec` enum removed. All bond fields are `BondAst` directly.
+- Built-in bond aliases (`:single` → order 1, etc.) handled via `builtin_bond_aliases()` `BiMap`.
+- `BondAst::Serialize` checks alias table, emits `EdnKeyword` for known aliases.
+- `lower_bond_spec` match arms in `from_ast` collapsed to `BondPattern::from_ast(bond, cfg)`.
+
+### `Metadata` struct
+
+- `Metadata { atom_tags, atom_aliases }` — formatting metadata separate from `Molecule`.
+- `from_ast_with_metadata()` returns `(MoleculeBuilder, Metadata)`.
+- `to_ast_with_metadata(&meta)` reconstructs tags and aliases.
+- `Molecule` stays clean — no DSL formatting concerns.
+
+### Spec and validation
+
+- `:atoms` vector-only format, inline tags, `atom-ref ::= int | keyword`.
+- Keyword namespace disjointness: tags, alias names, bond IDs must be mutually distinct.
+- Alias names must not shadow element symbols.
+- Topology graph module removed (premature, unused).
+
+### Mixed-key atom maps (resolved)
+
+The open question about mixed integer/keyword keys was resolved differently:
+inline tags `[:tag "def"]` within a vector, not mixed-key maps. Tags are optional
+per-atom — no need to tag every atom.
