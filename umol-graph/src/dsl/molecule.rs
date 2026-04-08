@@ -1174,6 +1174,115 @@ impl ToEdn for AtomRef {
     }
 }
 
+impl ToEdn for LocalizedBond {
+    fn to_edn(&self) -> Edn<'_> {
+        match &self.id {
+            None => Edn::Vector(
+                vec![self.a.to_edn(), self.b.to_edn(), self.bond.to_edn()].into(),
+            ),
+            Some(id) => {
+                let mut m = umol_edn::EdnMap::with_capacity(4);
+                m.insert(Edn::keyword("id"), id.to_edn());
+                m.insert(Edn::keyword("a"), self.a.to_edn());
+                m.insert(Edn::keyword("b"), self.b.to_edn());
+                m.insert(Edn::keyword("bond"), self.bond.to_edn());
+                Edn::Map(m)
+            }
+        }
+    }
+}
+
+impl ToEdn for Atoms {
+    fn to_edn(&self) -> Edn<'_> {
+        let tag_for_pos: IndexMap<usize, &str> = self
+            .tags
+            .iter()
+            .map(|(name, &pos)| (pos, name.as_str()))
+            .collect();
+
+        let mut elems = Vec::with_capacity(self.entries.len());
+        for (i, atom) in self.entries.iter().enumerate() {
+            let alias_name = self.aliases.get_by_right(atom);
+            let entry = if let Some(tag) = tag_for_pos.get(&i) {
+                let def_edn = if let Some(alias) = alias_name {
+                    Edn::keyword(alias)
+                } else {
+                    atom.to_edn()
+                };
+                Edn::Vector(vec![Edn::keyword(*tag), def_edn].into())
+            } else if let Some(alias) = alias_name {
+                Edn::keyword(alias)
+            } else {
+                atom.to_edn()
+            };
+            elems.push(entry);
+        }
+        Edn::Vector(elems.into())
+    }
+}
+
+impl ToEdn for MoleculeAst {
+    fn to_edn(&self) -> Edn<'_> {
+        let has_aliases = !self.atoms.aliases.is_empty();
+        let mut count = 2;
+        if !self.dative_bonds.is_empty() {
+            count += 1;
+        }
+        if !self.aromatic_systems.is_empty() {
+            count += 1;
+        }
+        if !self.multicenter_bonds.is_empty() {
+            count += 1;
+        }
+        if !self.noncovalent_bonds.is_empty() {
+            count += 1;
+        }
+        if self.charge.is_some() {
+            count += 1;
+        }
+        if self.spin.is_some() {
+            count += 1;
+        }
+        if has_aliases {
+            count += 1;
+        }
+
+        let mut m = umol_edn::EdnMap::with_capacity(count);
+        m.insert(Edn::keyword("atoms"), self.atoms.to_edn());
+        m.insert(Edn::keyword("bonds"), self.bonds.to_edn());
+        if !self.dative_bonds.is_empty() {
+            m.insert(Edn::keyword("dative"), self.dative_bonds.to_edn());
+        }
+        if !self.aromatic_systems.is_empty() {
+            m.insert(Edn::keyword("aromatic"), self.aromatic_systems.to_edn());
+        }
+        if !self.multicenter_bonds.is_empty() {
+            m.insert(Edn::keyword("multicenter"), self.multicenter_bonds.to_edn());
+        }
+        if !self.noncovalent_bonds.is_empty() {
+            m.insert(Edn::keyword("noncovalent"), self.noncovalent_bonds.to_edn());
+        }
+        if let Some(charge) = self.charge {
+            m.insert(Edn::keyword("charge"), Edn::Int(charge));
+        }
+        if let Some(spin) = &self.spin {
+            m.insert(
+                Edn::keyword("spin"),
+                Edn::Str(std::borrow::Cow::Owned(spin.to_string())),
+            );
+        }
+        if has_aliases {
+            let mut alias_elems = Vec::with_capacity(self.atoms.aliases.len() * 2);
+            for (name, atom) in self.atoms.aliases.iter() {
+                alias_elems.push(Edn::keyword(name));
+                alias_elems.push(atom.to_edn());
+            }
+            m.insert(Edn::keyword("atom-aliases"), Edn::Vector(alias_elems.into()));
+        }
+        Edn::Map(m)
+    }
+}
+
 impl<'de> FromEdn<'de> for AtomEntryInput {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
         match edn {
@@ -1325,8 +1434,7 @@ impl<'de> FromEdn<'de> for MoleculeInput {
 
 impl fmt::Display for MoleculeAst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = umol_edn::to_string(self).map_err(|_| fmt::Error)?;
-        f.write_str(&s)
+        write!(f, "{}", self.to_edn())
     }
 }
 
@@ -1589,5 +1697,45 @@ mod tests {
         let edn = umol_edn::ToEdn::to_edn(&bond);
         let back = NoncovalentBond::from_edn(&edn).unwrap();
         assert_eq!(bond, back);
+    }
+
+    #[rstest]
+    #[case::shorthand(LocalizedBond {
+        id: None,
+        a: AtomRef::Index(0),
+        b: AtomRef::Index(1),
+        bond: BondAst::from_order(2),
+    })]
+    #[case::with_id(LocalizedBond {
+        id: Some(EdnKeyword::new("b1")),
+        a: AtomRef::Tag("C1".into()),
+        b: AtomRef::Tag("C2".into()),
+        bond: BondAst::from_order(1),
+    })]
+    fn test_localized_bond_to_edn_roundtrip(#[case] bond: LocalizedBond) {
+        let edn = umol_edn::ToEdn::to_edn(&bond);
+        let back = LocalizedBond::from_edn(&edn).unwrap();
+        assert_eq!(bond, back);
+    }
+
+    /// `MoleculeAst::to_edn` output round-trips through the native parser
+    /// (`parse_molecule_dsl_tree`), proving the encoder agrees with the
+    /// decoder for all supported field shapes.
+    #[rstest]
+    #[case::plain(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
+    #[case::tagged(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
+    #[case::aliased(r#"{:atoms [:ch :ch "O"] :bonds [[0 2 :single]] :aliases [:ch "C #h1"]}"#)]
+    #[case::charge_spin(r##"{:atoms ["C"] :bonds [] :charge -1 :spin "#u1"}"##)]
+    #[case::dative(
+        r#"{:atoms [[:N "N"] [:B "B"]] :bonds [[:N :B :single]] :dative [{:donor :N :acceptor :B :bond :single}]}"#
+    )]
+    #[case::aromatic(
+        r#"{:atoms [[:C1 "C"] [:C2 "C"]] :bonds [[:C1 :C2 :single]] :aromatic [{:id :ar1 :atoms [:C1 :C2]}]}"#
+    )]
+    fn test_molecule_ast_to_edn_roundtrip(#[case] input: &str) {
+        let ast = parse_molecule_dsl_tree(input).unwrap();
+        let edn = umol_edn::ToEdn::to_edn(&ast);
+        let back = MoleculeInput::from_edn(&edn).unwrap().into_ast().unwrap();
+        assert_eq!(ast, back);
     }
 }
