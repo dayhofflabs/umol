@@ -53,7 +53,41 @@ pub enum EdnError {
         offset: usize,
         feature: &'static str,
     },
+    /// Required map field absent. Raised by `FromEdn` impls and the
+    /// `EdnMapHelper` builder.
+    MissingField {
+        key: String,
+        path: Vec<String>,
+    },
+    /// Strict-mode finalize found a key the consumer did not consume.
+    UnknownField {
+        key: String,
+        path: Vec<String>,
+    },
+    /// Wrong `Edn` variant for the requested type. `expected` and `got` are
+    /// short discriminator strings (e.g. `"map"`, `"keyword"`, `"int"`).
+    TypeMismatch {
+        expected: &'static str,
+        got: &'static str,
+        path: Vec<String>,
+    },
+    /// Numeric value did not fit the target type.
+    OutOfRange {
+        value: String,
+        target: &'static str,
+        path: Vec<String>,
+    },
     Custom(String),
+}
+
+/// Format a `path` slice as a dotted EDN access path for error messages.
+/// Empty path renders as `<root>`.
+fn fmt_path(path: &[String]) -> String {
+    if path.is_empty() {
+        "<root>".to_string()
+    } else {
+        path.join("")
+    }
 }
 
 impl fmt::Display for EdnError {
@@ -94,6 +128,34 @@ impl fmt::Display for EdnError {
             }
             EdnError::UnsupportedFeature { offset, feature } => {
                 write!(f, "unsupported feature '{feature}' at byte {offset}")
+            }
+            EdnError::MissingField { key, path } => {
+                write!(f, "missing required field '{key}' at {}", fmt_path(path))
+            }
+            EdnError::UnknownField { key, path } => {
+                write!(f, "unknown field '{key}' at {}", fmt_path(path))
+            }
+            EdnError::TypeMismatch {
+                expected,
+                got,
+                path,
+            } => {
+                write!(
+                    f,
+                    "type mismatch at {}: expected {expected}, got {got}",
+                    fmt_path(path)
+                )
+            }
+            EdnError::OutOfRange {
+                value,
+                target,
+                path,
+            } => {
+                write!(
+                    f,
+                    "value '{value}' out of range for {target} at {}",
+                    fmt_path(path)
+                )
             }
             EdnError::Custom(msg) => write!(f, "{msg}"),
         }

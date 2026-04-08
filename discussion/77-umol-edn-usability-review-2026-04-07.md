@@ -52,6 +52,14 @@ Two cleaner alternatives:
 - Keep it but provide an `EdnOwned = Edn<'static>` alias and an
   `into_owned()` everywhere, prominently documented.
 
+**Decision (2026-04-07): keep the lifetime.** Owned-only loses the
+zero-copy substring story, which becomes load-bearing once `FromEdn::
+from_edn_str` overrides start being written for hot types — that
+optimization path needs to borrow from the source buffer, not clone out
+of it. The native trait pair will be `FromEdn<'de>` / `ToEdn`, parallel
+to toml-spanner's `Item<'de>`. Add an `EdnOwned = Edn<'static>` alias and
+make `into_owned()` discoverable, but do not drop `'a`.
+
 ### 3. `to_value` requires constructing the full tree
 
 This is the cost that motivates keeping a separate compact serde path. The

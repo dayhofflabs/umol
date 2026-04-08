@@ -6,6 +6,7 @@ mod display;
 pub mod edn;
 pub mod error;
 pub mod formatter;
+pub mod native;
 pub mod parser;
 pub mod reader;
 pub mod tags;
@@ -30,6 +31,7 @@ pub use edn::EdnBigDecimal;
 pub use edn::{Edn, Keyword, Symbol};
 pub use error::EdnError;
 pub use formatter::EdnFormatter;
+pub use native::{FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 pub use formatter::{to_string_pretty, to_string_with};
 #[cfg(feature = "bignum")]
