@@ -714,8 +714,13 @@ fn test_bare_tag_rejected(#[case] input: &str) {
 }
 
 #[test]
-fn test_bare_tag_rejected_streaming() {
-    assert!(stream::<i64>("#foo 1").is_err());
+fn test_bare_tag_passes_through_serde() {
+    // The serde path opts into permissive tag handling so foreign types using
+    // `#Variant` for enum dispatch round-trip without tag-reader registration.
+    // Under `deserialize_any`, the tag is stripped and the inner value is
+    // returned. Native `read_string` callers stay strict (see
+    // `test_bare_tag_rejected`).
+    assert_eq!(stream::<i64>("#foo 1").unwrap(), 1);
 }
 
 #[test]

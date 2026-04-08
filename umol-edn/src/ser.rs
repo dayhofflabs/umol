@@ -15,7 +15,7 @@ use crate::collections::{EdnMap, EdnSeq};
 use crate::edn::{Edn, Keyword};
 use crate::error::EdnError;
 use crate::formatter::EdnFormatter;
-use crate::keyword_serde::KEYWORD_TOKEN;
+use crate::serde_tokens::{KEYWORD_TOKEN, SYMBOL_TOKEN};
 
 // ---------------------------------------------------------------------------
 // Public entry points
@@ -30,7 +30,10 @@ pub fn to_string<T: Serialize>(value: &T) -> Result<String, EdnError> {
 
 /// Serialize a value into an `Edn<'static>` tree.
 pub fn to_value<T: Serialize>(value: &T) -> Result<Edn<'static>, EdnError> {
-    let mut ser = EdnTreeSerializer { keyword_mode: false };
+    let mut ser = EdnTreeSerializer {
+        keyword_mode: false,
+        symbol_mode: false,
+    };
     value.serialize(&mut ser)
 }
 
@@ -55,6 +58,7 @@ pub fn to_string_with<T: Serialize>(value: &T, fmt: &EdnFormatter) -> Result<Str
 pub struct EdnSerializer {
     output: String,
     keyword_mode: bool,
+    symbol_mode: bool,
 }
 
 impl EdnSerializer {
@@ -62,6 +66,7 @@ impl EdnSerializer {
         Self {
             output: String::new(),
             keyword_mode: false,
+            symbol_mode: false,
         }
     }
 }
@@ -173,6 +178,9 @@ impl<'a> Serializer for &'a mut EdnSerializer {
             self.keyword_mode = false;
             self.output.push(':');
             self.output += v;
+        } else if self.symbol_mode {
+            self.symbol_mode = false;
+            self.output += v;
         } else {
             write_escaped_str(&mut self.output, v);
         }
@@ -217,13 +225,21 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         name: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
-        if name == KEYWORD_TOKEN {
-            self.keyword_mode = true;
-            let result = value.serialize(&mut *self);
-            self.keyword_mode = false;
-            return result;
+        match name {
+            KEYWORD_TOKEN => {
+                self.keyword_mode = true;
+                let result = value.serialize(&mut *self);
+                self.keyword_mode = false;
+                result
+            }
+            SYMBOL_TOKEN => {
+                self.symbol_mode = true;
+                let result = value.serialize(&mut *self);
+                self.symbol_mode = false;
+                result
+            }
+            _ => value.serialize(self),
         }
-        value.serialize(self)
     }
 
     fn serialize_newtype_variant<T: ?Sized + Serialize>(
@@ -444,6 +460,7 @@ impl SerializeStructVariant for &mut EdnSerializer {
 /// `to_string_with`.
 pub struct EdnTreeSerializer {
     keyword_mode: bool,
+    symbol_mode: bool,
 }
 
 fn nan_or_inf_error() -> EdnError {
@@ -511,6 +528,9 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
         if self.keyword_mode {
             self.keyword_mode = false;
             Ok(Edn::Keyword(Keyword::owned(v.to_string())))
+        } else if self.symbol_mode {
+            self.symbol_mode = false;
+            Ok(Edn::Symbol(crate::edn::Symbol::owned(v.to_string())))
         } else {
             Ok(Edn::Str(Cow::Owned(v.to_string())))
         }
@@ -550,13 +570,21 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
         name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
-        if name == KEYWORD_TOKEN {
-            self.keyword_mode = true;
-            let result = value.serialize(&mut *self);
-            self.keyword_mode = false;
-            return result;
+        match name {
+            KEYWORD_TOKEN => {
+                self.keyword_mode = true;
+                let result = value.serialize(&mut *self);
+                self.keyword_mode = false;
+                result
+            }
+            SYMBOL_TOKEN => {
+                self.symbol_mode = true;
+                let result = value.serialize(&mut *self);
+                self.symbol_mode = false;
+                result
+            }
+            _ => value.serialize(self),
         }
-        value.serialize(self)
     }
 
     fn serialize_newtype_variant<T: ?Sized + Serialize>(

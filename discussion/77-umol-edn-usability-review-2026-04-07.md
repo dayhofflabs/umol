@@ -671,3 +671,128 @@ Phase 3 lands.
    `Deserialize` impls in `umol-graph`.
 4. Decide whether to drop the `serde` feature flag from `umol-edn`
    entirely, or keep it as a maintained escape hatch.
+
+## Phase 3.5: serde compat layer redesign (2026-04-08)
+
+Items 1–3 of the Phase 3 next-steps list are done. Item 4 — the fate of
+the `serde` feature — is the topic of this section.
+
+### Framing
+
+The molecule DSL no longer goes through serde, so the serde feature has
+no internal consumer. Its purpose is now exclusively external: let users
+who bring serde-derived foreign types read/write EDN. The decision rule
+that drove the redesign is **feature parity with the native path or
+nothing**. Shipping a serde layer that lossily handles half the EDN data
+model — keywords yes, sets and tagged literals no — is the
+clojure-reader trap and is rejected.
+
+### Architectural constraint: tree-walking only
+
+The serde compat layer routes exclusively through
+`Reader → Edn → EdnDeserializer`. The streaming serde
+`Deserializer` impl on `EdnStreamDeserializer` is deleted entirely.
+Consequences:
+
+- One deserialize path to maintain instead of two. Every wrapper lands
+  in `de.rs` only, not also in `streaming.rs`.
+- `streaming.rs` becomes pure native primitives — every
+  `#[cfg(feature = "serde")]` gate (27 sites, ~1500 LoC) goes away.
+- `from_str_with(s, &ParseConfig)` keeps working because tag readers
+  and parse config flow through `Reader`.
+- Serde users pay one full pass over the input to build the `Edn` tree
+  before deserialization. Phase 2.5 already showed native fused beats
+  serde streaming on every input, so the casual-serde audience is not
+  the audience that needs the fast path. Anyone who does have peak
+  performance writes `FromEdn` directly.
+
+### Required wrappers
+
+Lossless feature parity requires one serde-reachable type per EDN
+construct that does not have a native serde shape. The pattern is the
+existing `EdnKeyword` newtype-token trick generalized to a dispatch
+table over multiple tokens.
+
+| EDN variant | Wrapper | State |
+|---|---|---|
+| Nil, Bool, Int, Float, Char, Str | native serde | done |
+| Vector | `Vec<T>` (also accepts `Edn::List` for ergonomics) | done |
+| Map | `HashMap` / `BTreeMap` / struct | done |
+| Keyword | `Keyword` (current `EdnKeyword`, renamed) | exists |
+| Symbol | `Symbol` | new |
+| List | `List<T>` (strict opt-in for `Edn::List`) | new |
+| Set | `Set<T>` | new |
+| Tagged (enum-shaped) | `enum E { Variant(T) }` | exists |
+| Tagged (dynamic) | `Tagged<T> { tag: String, value: T }` | new |
+| BigInt | `BigInt` (cfg `bignum`) | new |
+| BigDecimal | `BigDecimal` (cfg `bignum`) | new |
+| Dynamic-typed lossless | `umol_edn::Value` | new |
+
+Each wrapper claims a token name (`$edn::symbol`, `$edn::set`, …); the
+serializer's `serialize_newtype_struct` and the deserializer's
+`deserialize_newtype_struct` dispatch on the name and emit/consume the
+correct `Edn` variant. Wrong-source-type errors at the boundary
+(asking for `Symbol` from `Edn::Keyword` errors loudly).
+
+### Implementation order
+
+```
+Phase 0 (delete streaming serde, reroute from_str)
+   │
+Phase 1 (generalize KEYWORD_TOKEN dispatch into a table)
+   │
+Phase 2 — wrappers, simplest first to validate the dispatch:
+   ├─ 2.1 Symbol         (mirror of Keyword)
+   ├─ 2.2 Set<T>         (first generic wrapper)
+   ├─ 2.3 List<T>        (Vec<T> stays lenient on read)
+   ├─ 2.4 Tagged<T>      (two-field tuple-struct token, the hard one)
+   └─ 2.5 BigInt/Decimal (cfg-gated)
+   │
+Phase 3 (umol_edn::Value lossless mirror — mechanism TBD; may fall back
+         to non-serde if serde-stable plumbing is too ugly)
+   │
+Phase 4 (parity test matrix: variant × wrapper × ser/de path)
+   │
+Phase 5 (re-exports under crate root, drop from_str_with, docs)
+```
+
+Phase 0 is reversible cleanup that should not change observable
+behavior. Phase 1 generalizes the existing keyword dispatch. Phase 2
+wrappers are mutually independent and can land as separate commits.
+Phase 3 is the only step with an unproven mechanism (see "Open risks"
+below).
+
+### Net effect on the codebase
+
+| Item | LoC delta |
+|---|---|
+| Delete streaming serde Deserializer in `streaming.rs` | −1500 |
+| Six wrapper modules | +300 |
+| Token dispatch in `de.rs` | +150 |
+| Token dispatch in `ser.rs` (compact + tree) | +250 |
+| `umol_edn::Value` mirror + impls | +300 |
+| Parity test matrix | +300 |
+| Docs | +50 |
+| **Net** | **−150** |
+
+End state: ~3500 LoC of serde compat (down from ~4250), single
+tree-walking path, feature parity with native.
+
+### Open risks
+
+- **Phase 0 may surface latent test failures** if any current `from_str`
+  test passes through the streaming path but fails through the tree
+  path. Such failures are bugs to fix in `from_value`, not reasons to
+  preserve the streaming path.
+- **`umol_edn::Value` plumbing** needs a way to hand a fully-formed
+  `Edn` to a serde visitor without losing variant information. Three
+  candidate mechanisms (custom byte carrier, thread-local side channel,
+  downcast) all have problems. If none works cleanly, `Value` becomes a
+  non-serde type and dynamic-typed users go through `Reader` directly.
+- **`Tagged<T>` vs enum-variant tagged** must coexist without
+  collision. They are reached through distinct serde calls
+  (`deserialize_newtype_struct` vs `deserialize_enum`), so they should
+  not interfere, but this is an untested assumption until Phase 2.4.
+- **Wrapper composition with serde attributes** (`#[serde(default)]`,
+  `#[serde(rename)]`, `#[serde(flatten)]`) must hold up. Phase 4
+  spot-check.

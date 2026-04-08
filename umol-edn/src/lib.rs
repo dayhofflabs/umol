@@ -11,6 +11,7 @@ pub mod native;
 pub mod parser;
 pub mod reader;
 pub mod streaming;
+pub mod symbol_owned;
 pub mod tags;
 
 #[cfg(feature = "serde")]
@@ -19,6 +20,10 @@ pub mod de;
 pub mod keyword_serde;
 #[cfg(feature = "serde")]
 pub mod ser;
+#[cfg(feature = "serde")]
+pub mod serde_tokens;
+#[cfg(feature = "serde")]
+pub mod symbol_serde;
 
 #[cfg(feature = "bignum")]
 pub use bigdecimal::BigDecimal;
@@ -31,6 +36,7 @@ pub use error::EdnError;
 pub use formatter::EdnFormatter;
 pub use keyword_owned::EdnKeyword;
 pub use native::{EdnMapHelper, FromEdn, ToEdn};
+pub use symbol_owned::EdnSymbol;
 #[cfg(feature = "serde")]
 pub use formatter::{to_string_pretty, to_string_with};
 #[cfg(feature = "bignum")]

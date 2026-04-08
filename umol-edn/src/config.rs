@@ -69,4 +69,10 @@ impl Default for TagReaders {
 pub struct ParseConfig {
     pub duplicate_keys: DuplicateKeyPolicy,
     pub tag_readers: TagReaders,
+    /// When `true`, bare tags that are neither registered in `tag_readers` nor
+    /// built-in pass through as `Edn::Tagged(tag, inner)` instead of erroring.
+    /// The serde compatibility path enables this so foreign types using `#Tag`
+    /// for enum variants round-trip without forcing every variant into the tag
+    /// reader registry. Native EDN consumers stay strict by default.
+    pub allow_unknown_tags: bool,
 }

@@ -14,23 +14,39 @@ use crate::collections::{EdnMap, EdnSeq, EdnSeqIntoIter};
 use crate::config::ParseConfig;
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::reader::{default_config, Reader};
-use crate::streaming::{visit_cow_str, EdnStreamDeserializer};
+use crate::reader::{default_config, read_string_with, Reader};
 
 /// Deserialize a Rust value from an EDN string.
 ///
-/// Uses a streaming deserializer that parses directly into the target type
-/// without building an intermediate `Edn` value tree.
+/// Parses the input into an `Edn` tree, then walks the tree through
+/// `EdnDeserializer`. Hot types should implement `FromEdn` directly and use
+/// `from_edn_str` for single-pass parser-deserializer fusion; this serde
+/// path is for foreign types whose `Deserialize` impl we do not control.
 pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
     from_str_with(s, default_config())
 }
 
 /// Deserialize a Rust value from an EDN string using a custom config.
+///
+/// The serde path always parses with `allow_unknown_tags = true` so that
+/// foreign types using `#Variant` for enum dispatch round-trip without
+/// requiring tag-reader registration. Other config fields are honored as-is.
 pub fn from_str_with<'a, T: Deserialize<'a>>(s: &'a str, config: &ParseConfig) -> Result<T, EdnError> {
-    let mut de = EdnStreamDeserializer::with_config(s, config);
-    let val = T::deserialize(&mut de)?;
-    de.expect_eof()?;
-    Ok(val)
+    let mut serde_config = config.clone();
+    serde_config.allow_unknown_tags = true;
+    let edn = read_string_with(s, &serde_config)?;
+    from_value(edn)
+}
+
+/// Helper for serde visitors: visit a borrowed-or-owned string from `Cow`.
+pub(crate) fn visit_cow_str<'de, V: Visitor<'de>>(
+    visitor: V,
+    s: Cow<'de, str>,
+) -> Result<V::Value, EdnError> {
+    match s {
+        Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
+        Cow::Owned(o) => visitor.visit_string(o),
+    }
 }
 
 /// Deserialize a Rust value from a pre-parsed `Edn` value.
@@ -117,10 +133,18 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
 
     fn deserialize_newtype_struct<V: Visitor<'de>>(
         self,
-        _name: &'static str,
+        name: &'static str,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        visitor.visit_newtype_struct(self)
+        match name {
+            crate::serde_tokens::SYMBOL_TOKEN => match self.0 {
+                Edn::Symbol(s) => visit_cow_str(visitor, s.into_cow()),
+                other => Err(EdnError::Custom(format!(
+                    "expected symbol, got {other:?}"
+                ))),
+            },
+            _ => visitor.visit_newtype_struct(self),
+        }
     }
 
     fn deserialize_enum<V: Visitor<'de>>(

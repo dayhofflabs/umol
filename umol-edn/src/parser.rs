@@ -641,7 +641,9 @@ where
                 const BUILTIN_TAGS: &[&str] = &["inst", "uuid"];
 
                 // Reject bare (unqualified) tags unless registered or built-in.
-                if !tag.contains('/')
+                // The serde path opts out via `allow_unknown_tags`.
+                if !ctx.config.allow_unknown_tags
+                    && !tag.contains('/')
                     && ctx.config.tag_readers.get(tag).is_none()
                     && !BUILTIN_TAGS.contains(&tag)
                 {

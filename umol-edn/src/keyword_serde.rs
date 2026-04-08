@@ -11,8 +11,7 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::keyword_owned::EdnKeyword;
-
-pub const KEYWORD_TOKEN: &str = "$edn::keyword";
+use crate::serde_tokens::KEYWORD_TOKEN;
 
 impl Serialize for EdnKeyword {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
