@@ -1,8 +1,13 @@
-//! Proc macro for constructing `Edn` values from EDN syntax.
+//! Proc macros for `umol-edn`: the `edn!` literal constructor and the
+//! `#[derive(FromEdn)]` / `#[derive(ToEdn)]` derives.
+
+mod derive_from_edn;
+mod derive_to_edn;
 
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro2::{Delimiter, TokenTree};
 use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
 
 #[proc_macro]
 pub fn edn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -15,6 +20,22 @@ pub fn edn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             quote! { compile_error!(#err) }.into()
         }
     }
+}
+
+#[proc_macro_derive(FromEdn, attributes(edn))]
+pub fn derive_from_edn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    derive_from_edn::expand(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(ToEdn, attributes(edn))]
+pub fn derive_to_edn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    derive_to_edn::expand(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
 }
 
 fn parse_value(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String> {

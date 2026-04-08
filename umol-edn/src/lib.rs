@@ -6,6 +6,7 @@ mod display;
 pub mod edn;
 pub mod error;
 pub mod formatter;
+pub mod keyword_owned;
 pub mod native;
 pub mod parser;
 pub mod reader;
@@ -33,14 +34,13 @@ pub use edn::EdnBigDecimal;
 pub use edn::{Edn, Keyword, Symbol};
 pub use error::EdnError;
 pub use formatter::EdnFormatter;
+pub use keyword_owned::EdnKeyword;
 pub use native::{EdnMapHelper, FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 pub use formatter::{to_string_pretty, to_string_with};
 #[cfg(feature = "bignum")]
 pub use num_bigint::BigInt;
 pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
-#[cfg(feature = "serde")]
-pub use keyword_serde::EdnKeyword;
 #[cfg(feature = "serde")]
 pub use ser::to_string;
 
@@ -54,4 +54,4 @@ macro_rules! edn {
 }
 
 #[cfg(feature = "macros")]
-pub use umol_edn_macros::edn;
+pub use umol_edn_macros::{edn, FromEdn, ToEdn};

@@ -1,76 +1,28 @@
-//! General-purpose EDN keyword type for serde roundtrips.
+//! Serde Serialize/Deserialize impls for [`EdnKeyword`].
 //!
-//! `EdnKeyword` preserves the keyword/string distinction through serde
-//! boundaries, modeled after `serde_json::RawValue`. When serialized via
-//! `EdnSerializer`, it emits `:keyword` syntax. Non-EDN serializers see
-//! a transparent string.
-
-use std::fmt;
-use std::ops::Deref;
+//! `EdnKeyword` lives in [`crate::keyword_owned`] (always available); the
+//! impls in this file are only compiled with the `serde` feature. When
+//! serialized via `EdnSerializer`, an `EdnKeyword` emits `:keyword`
+//! syntax via the `KEYWORD_TOKEN` newtype-struct trick. Non-EDN
+//! serializers see a transparent string.
 
 use serde::de::Deserializer;
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
+use crate::keyword_owned::EdnKeyword;
+
 pub const KEYWORD_TOKEN: &str = "$edn::keyword";
-
-/// A string value that serializes as an EDN keyword (`:name`) rather than
-/// a quoted string (`"name"`) when used with `EdnSerializer`.
-///
-/// Non-EDN serializers treat it as a plain string.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EdnKeyword(String);
-
-impl EdnKeyword {
-    pub fn new(s: impl Into<String>) -> Self {
-        Self(s.into())
-    }
-
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-}
-
-impl Deref for EdnKeyword {
-    type Target = str;
-    fn deref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl AsRef<str> for EdnKeyword {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for EdnKeyword {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, ":{}", self.0)
-    }
-}
-
-impl From<String> for EdnKeyword {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl From<&str> for EdnKeyword {
-    fn from(s: &str) -> Self {
-        Self(s.to_string())
-    }
-}
 
 impl Serialize for EdnKeyword {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_newtype_struct(KEYWORD_TOKEN, &self.0)
+        serializer.serialize_newtype_struct(KEYWORD_TOKEN, self.as_str())
     }
 }
 
 impl<'de> Deserialize<'de> for EdnKeyword {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        String::deserialize(deserializer).map(EdnKeyword)
+        String::deserialize(deserializer).map(EdnKeyword::new)
     }
 }
 
@@ -80,24 +32,6 @@ mod tests {
 
     use super::*;
     use crate::{from_str, to_string};
-
-    #[test]
-    fn test_edn_keyword_display() {
-        assert_eq!(EdnKeyword::new("foo").to_string(), ":foo");
-    }
-
-    #[test]
-    fn test_edn_keyword_deref() {
-        let kw = EdnKeyword::new("bar");
-        assert_eq!(&*kw, "bar");
-    }
-
-    #[rstest]
-    #[case(EdnKeyword::new("a"), EdnKeyword::new("a"), true)]
-    #[case(EdnKeyword::new("a"), EdnKeyword::new("b"), false)]
-    fn test_edn_keyword_eq(#[case] a: EdnKeyword, #[case] b: EdnKeyword, #[case] equal: bool) {
-        assert_eq!(a == b, equal);
-    }
 
     #[test]
     fn test_edn_keyword_serialize_edn() {
@@ -142,15 +76,22 @@ mod tests {
         assert_eq!(edn, "[:x 10 :y]");
     }
 
+    #[rstest]
+    #[case(EdnKeyword::new("a"), EdnKeyword::new("a"), true)]
+    #[case(EdnKeyword::new("a"), EdnKeyword::new("b"), false)]
+    fn test_edn_keyword_eq(#[case] a: EdnKeyword, #[case] b: EdnKeyword, #[case] equal: bool) {
+        assert_eq!(a == b, equal);
+    }
+
     #[test]
     fn test_edn_keyword_deserialize_from_edn_keyword() {
         let kw: EdnKeyword = from_str(":foo").unwrap();
-        assert_eq!(&*kw, "foo");
+        assert_eq!(kw.as_str(), "foo");
     }
 
     #[test]
     fn test_edn_keyword_deserialize_from_edn_string() {
         let kw: EdnKeyword = from_str(r#""bar""#).unwrap();
-        assert_eq!(&*kw, "bar");
+        assert_eq!(kw.as_str(), "bar");
     }
 }
