@@ -169,6 +169,27 @@ impl<'de> Deserialize<'de> for AtomAst {
     }
 }
 
+impl<'de> umol_edn::FromEdn<'de> for AtomAst {
+    fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::EdnError> {
+        match edn {
+            umol_edn::Edn::Str(s) => {
+                parse_atom_dsl(s).map_err(|e| umol_edn::EdnError::Custom(e.to_string()))
+            }
+            other => Err(umol_edn::EdnError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl umol_edn::ToEdn for AtomAst {
+    fn to_edn(&self) -> umol_edn::Edn<'_> {
+        umol_edn::Edn::Str(std::borrow::Cow::Owned(self.to_string()))
+    }
+}
+
 /// Parse a complete atom-string
 pub fn parse_atom_dsl(input: &str) -> Result<AtomAst, ParseError> {
     all_consuming(atom_dsl)

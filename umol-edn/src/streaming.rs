@@ -932,6 +932,98 @@ impl<'de> EdnStreamDeserializer<'de> {
 }
 
 // ---------------------------------------------------------------------------
+// Public streaming API for non-serde callers (FromEdn fusion overrides).
+// ---------------------------------------------------------------------------
+
+impl<'de> EdnStreamDeserializer<'de> {
+    /// Current byte offset into the input.
+    #[inline]
+    pub fn position(&self) -> usize {
+        self.pos
+    }
+
+    /// Skip whitespace and return the next byte without consuming.
+    #[inline]
+    pub fn peek_byte(&mut self) -> Result<Option<u8>, EdnError> {
+        self.skip_ws()?;
+        Ok(self.peek())
+    }
+
+    /// Skip whitespace and consume `expected`. Errors if it does not match.
+    pub fn consume_byte(&mut self, expected: u8) -> Result<(), EdnError> {
+        self.skip_ws()?;
+        match self.peek() {
+            Some(b) if b == expected => {
+                self.pos += 1;
+                Ok(())
+            }
+            other => Err(unexpected_or_eof(self.pos, other)),
+        }
+    }
+
+    /// Skip whitespace; consume `expected` if present, returning whether it matched.
+    pub fn try_consume_byte(&mut self, expected: u8) -> Result<bool, EdnError> {
+        self.skip_ws()?;
+        if self.peek() == Some(expected) {
+            self.pos += 1;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Read a keyword (`:foo`) at the current position; returns its name without `:`.
+    pub fn read_keyword_name(&mut self) -> Result<Cow<'de, str>, EdnError> {
+        self.skip_ws()?;
+        if self.peek() != Some(b':') {
+            return Err(unexpected_or_eof(self.pos, self.peek()));
+        }
+        self.parse_keyword_name()
+    }
+
+    /// Read a string literal at the current position.
+    pub fn read_string(&mut self) -> Result<Cow<'de, str>, EdnError> {
+        self.skip_ws()?;
+        if self.peek() != Some(b'"') {
+            return Err(unexpected_or_eof(self.pos, self.peek()));
+        }
+        self.parse_string()
+    }
+
+    /// Read either a string literal or a keyword name (DSL convention for atom names).
+    pub fn read_string_or_keyword(&mut self) -> Result<Cow<'de, str>, EdnError> {
+        self.skip_ws()?;
+        match self.peek() {
+            Some(b'"') => self.parse_string(),
+            Some(b':') => self.parse_keyword_name(),
+            other => Err(unexpected_or_eof(self.pos, other)),
+        }
+    }
+
+    /// Read a signed 64-bit integer.
+    pub fn read_i64(&mut self) -> Result<i64, EdnError> {
+        self.skip_ws()?;
+        self.parse_number_i64()
+    }
+
+    /// Skip an arbitrary EDN value at the current position.
+    pub fn read_skip_value(&mut self) -> Result<(), EdnError> {
+        self.skip_value()
+    }
+}
+
+#[inline]
+fn unexpected_or_eof(offset: usize, b: Option<u8>) -> EdnError {
+    match b {
+        Some(b) => EdnError::UnexpectedToken {
+            offset,
+            found: b as char,
+        },
+        None => EdnError::UnexpectedEof { offset },
+    }
+}
+
+// ---------------------------------------------------------------------------
 // SeqAccessor
 // ---------------------------------------------------------------------------
 

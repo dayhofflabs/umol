@@ -354,6 +354,30 @@ impl<'a> Edn<'a> {
         matches!(self, Edn::Tagged(_, _))
     }
 
+    /// Short discriminator string for the variant. Used by `FromEdn` impls
+    /// in `TypeMismatch` error messages.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Edn::Nil => "nil",
+            Edn::Bool(_) => "bool",
+            Edn::Int(_) => "int",
+            #[cfg(feature = "bignum")]
+            Edn::BigInt(_) => "bigint",
+            Edn::Float(_) => "float",
+            #[cfg(feature = "bignum")]
+            Edn::BigDecimal(_) => "bigdecimal",
+            Edn::Char(_) => "char",
+            Edn::Str(_) => "string",
+            Edn::Keyword(_) => "keyword",
+            Edn::Symbol(_) => "symbol",
+            Edn::List(_) => "list",
+            Edn::Vector(_) => "vector",
+            Edn::Map(_) => "map",
+            Edn::Set(_) => "set",
+            Edn::Tagged(_, _) => "tagged",
+        }
+    }
+
     // --- Narrowing accessors ---
 
     pub fn as_bool(&self) -> Option<bool> {

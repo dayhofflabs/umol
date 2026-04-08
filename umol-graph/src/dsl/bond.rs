@@ -160,6 +160,38 @@ impl<'de> Deserialize<'de> for BondAst {
     }
 }
 
+impl<'de> umol_edn::FromEdn<'de> for BondAst {
+    fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::EdnError> {
+        let s: &str = match edn {
+            umol_edn::Edn::Str(s) => s,
+            umol_edn::Edn::Keyword(k) => k.as_str(),
+            other => {
+                return Err(umol_edn::EdnError::TypeMismatch {
+                    expected: "string or keyword",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let aliases = builtin_bond_aliases();
+        if let Some(ast) = aliases.get_by_left(s) {
+            return Ok(ast.clone());
+        }
+        parse_bond_dsl(s).map_err(|e| umol_edn::EdnError::Custom(e.to_string()))
+    }
+}
+
+impl umol_edn::ToEdn for BondAst {
+    fn to_edn(&self) -> umol_edn::Edn<'_> {
+        let aliases = builtin_bond_aliases();
+        if let Some(name) = aliases.get_by_right(self) {
+            umol_edn::Edn::Keyword(umol_edn::Keyword::owned(name.clone()))
+        } else {
+            umol_edn::Edn::Str(std::borrow::Cow::Owned(self.to_string()))
+        }
+    }
+}
+
 /// Parse a bond subgrammar string
 pub fn parse_bond_dsl(input: &str) -> Result<BondAst, ParseError> {
     all_consuming(bond_dsl)

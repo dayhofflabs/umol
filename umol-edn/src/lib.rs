@@ -26,12 +26,14 @@ pub use collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
 pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 #[cfg(feature = "serde")]
 pub use de::{from_str, from_str_with, from_value, EdnDeserializer, StreamDeserializer};
+#[cfg(feature = "serde")]
+pub use streaming::EdnStreamDeserializer;
 #[cfg(feature = "bignum")]
 pub use edn::EdnBigDecimal;
 pub use edn::{Edn, Keyword, Symbol};
 pub use error::EdnError;
 pub use formatter::EdnFormatter;
-pub use native::{FromEdn, ToEdn};
+pub use native::{EdnMapHelper, FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 pub use formatter::{to_string_pretty, to_string_with};
 #[cfg(feature = "bignum")]

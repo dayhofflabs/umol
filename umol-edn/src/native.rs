@@ -57,29 +57,7 @@ use bigdecimal::BigDecimal;
 #[cfg(feature = "bignum")]
 use num_bigint::BigInt;
 
-/// Short discriminator string for an `Edn` variant, used in `TypeMismatch`
-/// error messages.
-fn edn_kind(edn: &Edn<'_>) -> &'static str {
-    match edn {
-        Edn::Nil => "nil",
-        Edn::Bool(_) => "bool",
-        Edn::Int(_) => "int",
-        #[cfg(feature = "bignum")]
-        Edn::BigInt(_) => "bigint",
-        Edn::Float(_) => "float",
-        #[cfg(feature = "bignum")]
-        Edn::BigDecimal(_) => "bigdecimal",
-        Edn::Char(_) => "char",
-        Edn::Str(_) => "string",
-        Edn::Keyword(_) => "keyword",
-        Edn::Symbol(_) => "symbol",
-        Edn::List(_) => "list",
-        Edn::Vector(_) => "vector",
-        Edn::Map(_) => "map",
-        Edn::Set(_) => "set",
-        Edn::Tagged(_, _) => "tagged",
-    }
-}
+// Variant discriminator strings come from `Edn::kind()`.
 
 /// Build `Self` from an EDN value.
 ///
@@ -263,7 +241,7 @@ impl<'de> FromEdn<'de> for bool {
             Edn::Bool(b) => Ok(*b),
             other => Err(EdnError::TypeMismatch {
                 expected: "bool",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -296,7 +274,7 @@ macro_rules! impl_int {
                         }),
                         other => Err(EdnError::TypeMismatch {
                             expected: "int",
-                            got: edn_kind(other),
+                            got: other.kind(),
                             path: Vec::new(),
                         }),
                     }
@@ -320,7 +298,7 @@ impl<'de> FromEdn<'de> for f64 {
             Edn::Float(f) => Ok(*f),
             other => Err(EdnError::TypeMismatch {
                 expected: "float",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -339,7 +317,7 @@ impl<'de> FromEdn<'de> for f32 {
             Edn::Float(f) => Ok(*f as f32),
             other => Err(EdnError::TypeMismatch {
                 expected: "float",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -358,7 +336,7 @@ impl<'de> FromEdn<'de> for char {
             Edn::Char(c) => Ok(*c),
             other => Err(EdnError::TypeMismatch {
                 expected: "char",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -377,7 +355,7 @@ impl<'de> FromEdn<'de> for String {
             Edn::Str(s) => Ok(s.to_string()),
             other => Err(EdnError::TypeMismatch {
                 expected: "string",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -404,7 +382,7 @@ impl<'de> FromEdn<'de> for Cow<'de, str> {
             Edn::Str(s) => Ok(s.clone()),
             other => Err(EdnError::TypeMismatch {
                 expected: "string",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -446,7 +424,7 @@ impl<'de, T: FromEdn<'de>> FromEdn<'de> for Vec<T> {
             other => {
                 return Err(EdnError::TypeMismatch {
                     expected: "vector",
-                    got: edn_kind(other),
+                    got: other.kind(),
                     path: Vec::new(),
                 });
             }
@@ -470,7 +448,7 @@ impl<'de, T: FromEdn<'de>, const N: usize> FromEdn<'de> for [T; N] {
             other => {
                 return Err(EdnError::TypeMismatch {
                     expected: "vector",
-                    got: edn_kind(other),
+                    got: other.kind(),
                     path: Vec::new(),
                 });
             }
@@ -509,7 +487,7 @@ macro_rules! impl_tuple {
                     other => {
                         return Err(EdnError::TypeMismatch {
                             expected: "vector",
-                            got: edn_kind(other),
+                            got: other.kind(),
                             path: Vec::new(),
                         });
                     }
@@ -549,7 +527,7 @@ where
             other => {
                 return Err(EdnError::TypeMismatch {
                     expected: "map",
-                    got: edn_kind(other),
+                    got: other.kind(),
                     path: Vec::new(),
                 });
             }
@@ -585,7 +563,7 @@ where
             other => {
                 return Err(EdnError::TypeMismatch {
                     expected: "map",
-                    got: edn_kind(other),
+                    got: other.kind(),
                     path: Vec::new(),
                 });
             }
@@ -620,7 +598,7 @@ where
             other => {
                 return Err(EdnError::TypeMismatch {
                     expected: "set",
-                    got: edn_kind(other),
+                    got: other.kind(),
                     path: Vec::new(),
                 });
             }
@@ -649,7 +627,7 @@ where
             other => {
                 return Err(EdnError::TypeMismatch {
                     expected: "set",
-                    got: edn_kind(other),
+                    got: other.kind(),
                     path: Vec::new(),
                 });
             }
@@ -690,7 +668,7 @@ impl<'de> FromEdn<'de> for Keyword<'de> {
             Edn::Keyword(k) => Ok(k.clone()),
             other => Err(EdnError::TypeMismatch {
                 expected: "keyword",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -709,7 +687,7 @@ impl<'de> FromEdn<'de> for Symbol<'de> {
             Edn::Symbol(s) => Ok(s.clone()),
             other => Err(EdnError::TypeMismatch {
                 expected: "symbol",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -728,7 +706,7 @@ impl<'de> FromEdn<'de> for EdnMap<'de> {
             Edn::Map(m) => Ok(m.clone()),
             other => Err(EdnError::TypeMismatch {
                 expected: "map",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -747,7 +725,7 @@ impl<'de> FromEdn<'de> for EdnSet<'de> {
             Edn::Set(s) => Ok(s.clone()),
             other => Err(EdnError::TypeMismatch {
                 expected: "set",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -770,7 +748,7 @@ impl<'de> FromEdn<'de> for EdnSeq<'de> {
             Edn::Vector(s) | Edn::List(s) => Ok(s.clone()),
             other => Err(EdnError::TypeMismatch {
                 expected: "vector",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -791,7 +769,7 @@ impl<'de> FromEdn<'de> for BigInt {
             Edn::Int(n) => Ok(BigInt::from(*n)),
             other => Err(EdnError::TypeMismatch {
                 expected: "bigint",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }
@@ -812,7 +790,7 @@ impl<'de> FromEdn<'de> for BigDecimal {
             Edn::BigDecimal(d) => Ok(d.as_inner().clone()),
             other => Err(EdnError::TypeMismatch {
                 expected: "bigdecimal",
-                got: edn_kind(other),
+                got: other.kind(),
                 path: Vec::new(),
             }),
         }

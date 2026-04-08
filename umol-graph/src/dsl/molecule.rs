@@ -11,7 +11,7 @@ use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{self, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
-use umol_edn::EdnKeyword;
+use umol_edn::{Edn, EdnError, EdnKeyword, EdnMapHelper, EdnStreamDeserializer, FromEdn};
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
@@ -837,10 +837,16 @@ impl MoleculeInput {
 
 // FromStr / Display / parse_molecule_dsl
 
-/// Parse a molecule AST from an EDN string using streaming deserialization.
+/// Parse a molecule AST from an EDN string.
+///
+/// Uses the native single-pass parser-fusion path (no `Edn` tree, no
+/// serde data model). See `discussion/77-umol-edn-usability-review-2026-04-07.md`
+/// "Phase 2.5 measurement" for the architectural decision.
 pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAst, ParseError> {
-    let mol_input: MoleculeInput =
-        umol_edn::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    let mut de = EdnStreamDeserializer::new(input);
+    let mol_input =
+        read_molecule_input(&mut de).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    de.expect_eof().map_err(|e| ParseError::EdnParse(e.to_string()))?;
     mol_input.into_ast()
 }
 
@@ -849,6 +855,548 @@ impl FromStr for MoleculeAst {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_molecule_dsl(s)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Alternative parsing paths (kept for benchmarking and regression detection).
+// ---------------------------------------------------------------------------
+
+/// Parse via serde streaming. Retained for benchmark comparison only.
+pub fn parse_molecule_dsl_serde(input: &str) -> Result<MoleculeAst, ParseError> {
+    let mol_input: MoleculeInput =
+        umol_edn::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    mol_input.into_ast()
+}
+
+/// Parse via native `FromEdn` walking an intermediate `Edn` tree.
+/// Retained for benchmark comparison only.
+pub fn parse_molecule_dsl_tree(input: &str) -> Result<MoleculeAst, ParseError> {
+    let tree =
+        umol_edn::read_string(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    let mol_input = MoleculeInput::from_edn(&tree)
+        .map_err(|e| ParseError::EdnParse(e.to_string()))?;
+    mol_input.into_ast()
+}
+
+fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<MoleculeInput, EdnError> {
+    de.consume_byte(b'{')?;
+
+    let mut atoms: Option<Vec<AtomEntryInput>> = None;
+    let mut bonds: Option<Vec<LocalizedBond>> = None;
+    let mut dative_bonds: Vec<DativeBond> = Vec::new();
+    let mut aromatic_systems: Vec<AromaticSystem> = Vec::new();
+    let mut multicenter_bonds: Vec<MulticenterBond> = Vec::new();
+    let mut noncovalent_bonds: Vec<NoncovalentBond> = Vec::new();
+    let mut charge: Option<i64> = None;
+    let mut spin: Option<SpinState> = None;
+    let mut atom_aliases: Vec<String> = Vec::new();
+
+    loop {
+        if de.try_consume_byte(b'}')? {
+            break;
+        }
+        let key = de.read_keyword_name()?;
+        match key.as_ref() {
+            "atoms" => atoms = Some(read_seq(de, read_atom_entry)?),
+            "bonds" => bonds = Some(read_seq(de, read_localized_bond)?),
+            "dative" => dative_bonds = read_seq(de, read_dative_bond)?,
+            "aromatic" => aromatic_systems = read_seq(de, read_aromatic_system)?,
+            "multicenter" => multicenter_bonds = read_seq(de, read_multicenter_bond)?,
+            "noncovalent" => noncovalent_bonds = read_seq(de, read_noncovalent_bond)?,
+            "charge" => charge = Some(de.read_i64()?),
+            "spin" => {
+                let s = de.read_string_or_keyword()?;
+                spin = Some(
+                    SpinState::from_str(s.as_ref())
+                        .map_err(|e| EdnError::Custom(e.to_string()))?,
+                );
+            }
+            "atom-aliases" | "aliases" => {
+                atom_aliases = read_seq(de, |d| {
+                    d.read_string_or_keyword().map(|c| c.into_owned())
+                })?;
+            }
+            _ => de.read_skip_value()?,
+        }
+    }
+
+    let atoms = atoms.ok_or_else(|| EdnError::Custom("missing field: atoms".to_string()))?;
+    let bonds = bonds.ok_or_else(|| EdnError::Custom("missing field: bonds".to_string()))?;
+
+    Ok(MoleculeInput {
+        atoms,
+        bonds,
+        dative_bonds,
+        aromatic_systems,
+        multicenter_bonds,
+        noncovalent_bonds,
+        atom_aliases,
+        charge,
+        spin,
+    })
+}
+
+fn read_seq<T, F>(
+    de: &mut EdnStreamDeserializer<'_>,
+    mut element: F,
+) -> Result<Vec<T>, EdnError>
+where
+    F: FnMut(&mut EdnStreamDeserializer<'_>) -> Result<T, EdnError>,
+{
+    de.consume_byte(b'[')?;
+    let mut out = Vec::new();
+    loop {
+        if de.try_consume_byte(b']')? {
+            return Ok(out);
+        }
+        out.push(element(de)?);
+    }
+}
+
+fn read_atom_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomEntryInput, EdnError> {
+    match de.peek_byte()? {
+        Some(b'"') | Some(b':') => {
+            let s = de.read_string_or_keyword()?;
+            Ok(AtomEntryInput::Str(s.into_owned()))
+        }
+        Some(b'[') => {
+            de.consume_byte(b'[')?;
+            let tag = de.read_string_or_keyword()?.into_owned();
+            let inner = read_atom_entry(de)?;
+            de.consume_byte(b']')?;
+            Ok(AtomEntryInput::Tagged(tag, Box::new(inner)))
+        }
+        other => Err(unexpected(de.position(), other)),
+    }
+}
+
+fn read_atom_ref(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomRef, EdnError> {
+    match de.peek_byte()? {
+        Some(b':') => Ok(AtomRef::Tag(de.read_keyword_name()?.into_owned())),
+        Some(b'"') => Ok(AtomRef::Tag(de.read_string()?.into_owned())),
+        Some(b) if b.is_ascii_digit() || b == b'-' || b == b'+' => {
+            let n = de.read_i64()?;
+            let idx = usize::try_from(n).map_err(|_| EdnError::OutOfRange {
+                value: n.to_string(),
+                target: "AtomRef::Index",
+                path: Vec::new(),
+            })?;
+            Ok(AtomRef::Index(idx))
+        }
+        other => Err(unexpected(de.position(), other)),
+    }
+}
+
+fn read_bond_spec(de: &mut EdnStreamDeserializer<'_>) -> Result<BondAst, EdnError> {
+    let s = de.read_string_or_keyword()?;
+    let aliases = super::bond::builtin_bond_aliases();
+    if let Some(ast) = aliases.get_by_left(s.as_ref()) {
+        return Ok(ast.clone());
+    }
+    BondAst::from_str(s.as_ref()).map_err(|e| EdnError::Custom(e.to_string()))
+}
+
+fn read_localized_bond(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<LocalizedBond, EdnError> {
+    match de.peek_byte()? {
+        Some(b'[') => {
+            de.consume_byte(b'[')?;
+            let a = read_atom_ref(de)?;
+            let b = read_atom_ref(de)?;
+            let bond = read_bond_spec(de)?;
+            de.consume_byte(b']')?;
+            Ok(LocalizedBond { id: None, a, b, bond })
+        }
+        Some(b'{') => {
+            let (id, a, b, bond, _, _) =
+                read_endpoint_bond_map(de, EndpointBondKind::Localized)?;
+            Ok(LocalizedBond { id, a, b, bond })
+        }
+        other => Err(unexpected(de.position(), other)),
+    }
+}
+
+fn read_dative_bond(de: &mut EdnStreamDeserializer<'_>) -> Result<DativeBond, EdnError> {
+    let (id, donor, acceptor, bond, _, _) =
+        read_endpoint_bond_map(de, EndpointBondKind::Dative)?;
+    Ok(DativeBond {
+        id,
+        donor,
+        acceptor,
+        bond,
+    })
+}
+
+fn read_noncovalent_bond(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<NoncovalentBond, EdnError> {
+    let (id, a, b, bond, _, _) =
+        read_endpoint_bond_map(de, EndpointBondKind::Noncovalent)?;
+    Ok(NoncovalentBond { id, a, b, bond })
+}
+
+fn read_aromatic_system(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<AromaticSystem, EdnError> {
+    let (id, atoms) = read_atoms_bond_map(de)?;
+    Ok(AromaticSystem { id, atoms })
+}
+
+fn read_multicenter_bond(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<MulticenterBond, EdnError> {
+    let (id, atoms) = read_atoms_bond_map(de)?;
+    Ok(MulticenterBond { id, atoms })
+}
+
+#[derive(Copy, Clone)]
+enum EndpointBondKind {
+    Localized,
+    Dative,
+    Noncovalent,
+}
+
+impl EndpointBondKind {
+    fn first_key(self) -> &'static str {
+        match self {
+            EndpointBondKind::Dative => "donor",
+            _ => "a",
+        }
+    }
+    fn second_key(self) -> &'static str {
+        match self {
+            EndpointBondKind::Dative => "acceptor",
+            _ => "b",
+        }
+    }
+}
+
+/// Read a map with `:id? :a :b :bond` (or donor/acceptor for dative).
+fn read_endpoint_bond_map(
+    de: &mut EdnStreamDeserializer<'_>,
+    kind: EndpointBondKind,
+) -> Result<(Option<String>, AtomRef, AtomRef, BondAst, (), ()), EdnError> {
+    de.consume_byte(b'{')?;
+    let mut id: Option<String> = None;
+    let mut a: Option<AtomRef> = None;
+    let mut b: Option<AtomRef> = None;
+    let mut bond: Option<BondAst> = None;
+    let first_key = kind.first_key();
+    let second_key = kind.second_key();
+
+    loop {
+        if de.try_consume_byte(b'}')? {
+            break;
+        }
+        let key = de.read_keyword_name()?;
+        let key_ref = key.as_ref();
+        if key_ref == "id" {
+            id = Some(de.read_string_or_keyword()?.into_owned());
+        } else if key_ref == first_key {
+            a = Some(read_atom_ref(de)?);
+        } else if key_ref == second_key {
+            b = Some(read_atom_ref(de)?);
+        } else if key_ref == "bond" {
+            bond = Some(read_bond_spec(de)?);
+        } else {
+            de.read_skip_value()?;
+        }
+    }
+
+    let a = a.ok_or_else(|| EdnError::Custom(format!("missing field: {}", first_key)))?;
+    let b = b.ok_or_else(|| EdnError::Custom(format!("missing field: {}", second_key)))?;
+    let bond = bond.ok_or_else(|| EdnError::Custom("missing field: bond".to_string()))?;
+    Ok((id, a, b, bond, (), ()))
+}
+
+/// Read a map with `:id? :atoms` (aromatic / multicenter).
+fn read_atoms_bond_map(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<(Option<String>, Vec<AtomRef>), EdnError> {
+    de.consume_byte(b'{')?;
+    let mut id: Option<String> = None;
+    let mut atoms: Option<Vec<AtomRef>> = None;
+    loop {
+        if de.try_consume_byte(b'}')? {
+            break;
+        }
+        let key = de.read_keyword_name()?;
+        match key.as_ref() {
+            "id" => id = Some(de.read_string_or_keyword()?.into_owned()),
+            "atoms" => atoms = Some(read_seq(de, read_atom_ref)?),
+            _ => de.read_skip_value()?,
+        }
+    }
+    let atoms = atoms.ok_or_else(|| EdnError::Custom("missing field: atoms".to_string()))?;
+    Ok((id, atoms))
+}
+
+fn unexpected(offset: usize, b: Option<u8>) -> EdnError {
+    match b {
+        Some(b) => EdnError::UnexpectedToken {
+            offset,
+            found: b as char,
+        },
+        None => EdnError::UnexpectedEof { offset },
+    }
+}
+
+impl<'de> FromEdn<'de> for AtomRef {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        match edn {
+            Edn::Int(n) => {
+                let idx = usize::try_from(*n).map_err(|_| EdnError::OutOfRange {
+                    value: n.to_string(),
+                    target: "AtomRef::Index",
+                    path: Vec::new(),
+                })?;
+                Ok(AtomRef::Index(idx))
+            }
+            Edn::Keyword(k) => Ok(AtomRef::Tag(k.as_str().to_string())),
+            Edn::Str(s) => Ok(AtomRef::Tag(s.to_string())),
+            other => Err(EdnError::TypeMismatch {
+                expected: "int or keyword",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl<'de> FromEdn<'de> for AtomEntryInput {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        match edn {
+            Edn::Str(s) => Ok(AtomEntryInput::Str(s.to_string())),
+            Edn::Keyword(k) => Ok(AtomEntryInput::Str(k.as_str().to_string())),
+            Edn::Vector(v) | Edn::List(v) => {
+                if v.len() != 2 {
+                    return Err(EdnError::Custom(format!(
+                        "atom entry vector must have length 2, got {}",
+                        v.len()
+                    )));
+                }
+                let tag = match &v[0] {
+                    Edn::Keyword(k) => k.as_str().to_string(),
+                    Edn::Str(s) => s.to_string(),
+                    other => {
+                        return Err(EdnError::TypeMismatch {
+                            expected: "keyword (atom tag)",
+                            got: other.kind(),
+                            path: Vec::new(),
+                        });
+                    }
+                };
+                let inner = AtomEntryInput::from_edn(&v[1])?;
+                Ok(AtomEntryInput::Tagged(tag, Box::new(inner)))
+            }
+            other => Err(EdnError::TypeMismatch {
+                expected: "string, keyword, or [tag def] vector",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl<'de> FromEdn<'de> for LocalizedBond {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        match edn {
+            Edn::Vector(v) | Edn::List(v) => {
+                if v.len() != 3 {
+                    return Err(EdnError::Custom(format!(
+                        "bond shorthand vector must have length 3, got {}",
+                        v.len()
+                    )));
+                }
+                Ok(LocalizedBond {
+                    id: None,
+                    a: AtomRef::from_edn(&v[0])?,
+                    b: AtomRef::from_edn(&v[1])?,
+                    bond: BondAst::from_edn(&v[2])?,
+                })
+            }
+            Edn::Map(m) => {
+                let id = read_optional_id(m)?;
+                let mut h = EdnMapHelper::new(m);
+                let a: AtomRef = h.required("a")?;
+                let b: AtomRef = h.required("b")?;
+                let bond: BondAst = h.required("bond")?;
+                Ok(LocalizedBond { id, a, b, bond })
+            }
+            other => Err(EdnError::TypeMismatch {
+                expected: "bond vector or map",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl<'de> FromEdn<'de> for DativeBond {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        let m = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(EdnError::TypeMismatch {
+                    expected: "dative bond map",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let id = read_optional_id(m)?;
+        let mut h = EdnMapHelper::new(m);
+        let donor: AtomRef = h.required("donor")?;
+        let acceptor: AtomRef = h.required("acceptor")?;
+        let bond: BondAst = h.required("bond")?;
+        Ok(DativeBond {
+            id,
+            donor,
+            acceptor,
+            bond,
+        })
+    }
+}
+
+impl<'de> FromEdn<'de> for AromaticSystem {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        let m = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(EdnError::TypeMismatch {
+                    expected: "aromatic system map",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let id = read_optional_id(m)?;
+        let mut h = EdnMapHelper::new(m);
+        let atoms: Vec<AtomRef> = h.required("atoms")?;
+        Ok(AromaticSystem { id, atoms })
+    }
+}
+
+impl<'de> FromEdn<'de> for MulticenterBond {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        let m = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(EdnError::TypeMismatch {
+                    expected: "multicenter bond map",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let id = read_optional_id(m)?;
+        let mut h = EdnMapHelper::new(m);
+        let atoms: Vec<AtomRef> = h.required("atoms")?;
+        Ok(MulticenterBond { id, atoms })
+    }
+}
+
+impl<'de> FromEdn<'de> for NoncovalentBond {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        let m = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(EdnError::TypeMismatch {
+                    expected: "noncovalent bond map",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let id = read_optional_id(m)?;
+        let mut h = EdnMapHelper::new(m);
+        let a: AtomRef = h.required("a")?;
+        let b: AtomRef = h.required("b")?;
+        let bond: BondAst = h.required("bond")?;
+        Ok(NoncovalentBond { id, a, b, bond })
+    }
+}
+
+/// Read a flat alias vector entry as `String`. Accepts both keyword and
+/// string forms — keywords for alias names, strings for atom-spec defs.
+fn alias_entry_to_string(edn: &Edn<'_>) -> Result<String, EdnError> {
+    match edn {
+        Edn::Keyword(k) => Ok(k.as_str().to_string()),
+        Edn::Str(s) => Ok(s.to_string()),
+        other => Err(EdnError::TypeMismatch {
+            expected: "keyword or string in alias vector",
+            got: other.kind(),
+            path: Vec::new(),
+        }),
+    }
+}
+
+/// Read an `id` field that may appear in the DSL as either a keyword
+/// (`:b1` — idiomatic) or a string (`"b1"`).
+fn read_optional_id(map: &umol_edn::EdnMap<'_>) -> Result<Option<String>, EdnError> {
+    match map.get_ref(umol_edn::EdnKeyRef::keyword("id")) {
+        Some(edn) => alias_entry_to_string(edn).map(Some),
+        None => Ok(None),
+    }
+}
+
+impl<'de> FromEdn<'de> for MoleculeInput {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        let m = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(EdnError::TypeMismatch {
+                    expected: "molecule map",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let mut h = EdnMapHelper::new(m);
+        let atoms: Vec<AtomEntryInput> = h.required("atoms")?;
+        let bonds: Vec<LocalizedBond> = h.required("bonds")?;
+        let dative_bonds: Vec<DativeBond> = h.optional("dative")?.unwrap_or_default();
+        let aromatic_systems: Vec<AromaticSystem> =
+            h.optional("aromatic")?.unwrap_or_default();
+        let multicenter_bonds: Vec<MulticenterBond> =
+            h.optional("multicenter")?.unwrap_or_default();
+        let noncovalent_bonds: Vec<NoncovalentBond> =
+            h.optional("noncovalent")?.unwrap_or_default();
+        let charge: Option<i64> = h.optional("charge")?;
+        let spin_str: Option<String> = h.optional("spin")?;
+        let spin = match spin_str {
+            Some(s) => Some(SpinState::from_str(&s).map_err(|e| EdnError::Custom(e.to_string()))?),
+            None => None,
+        };
+
+        // atom-aliases: a flat vector alternating keyword/string entries.
+        // Read as Vec<Edn> and project each element to a String via the
+        // helper. Falls back to the legacy `aliases` key for compatibility
+        // with the existing serde path's tolerance.
+        let alias_edn: Option<Vec<Edn<'_>>> = h
+            .optional("atom-aliases")?
+            .or(h.optional("aliases")?);
+        let atom_aliases = match alias_edn {
+            Some(v) => v
+                .iter()
+                .map(alias_entry_to_string)
+                .collect::<Result<Vec<_>, _>>()?,
+            None => Vec::new(),
+        };
+
+        Ok(MoleculeInput {
+            atoms,
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            atom_aliases,
+            charge,
+            spin,
+        })
     }
 }
 
@@ -1052,5 +1600,25 @@ mod tests {
     fn test_alias_tag_disjointness_error() {
         let result = parse_molecule_dsl(r#"{:atoms [[:ch "C"]] :bonds [] :aliases [:ch "C #h1"]}"#);
         assert!(result.is_err(), "alias and tag with same name should fail");
+    }
+
+    /// All three parsing paths (canonical fused, serde streaming, native
+    /// tree) must produce identical ASTs on every accepted input.
+    #[rstest]
+    #[case::empty(r#"{:atoms [] :bonds []}"#)]
+    #[case::plain_atoms(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
+    #[case::tagged_atoms(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
+    #[case::bond_id(r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a 0 :b 1 :bond :single}]}"#)]
+    #[case::charge(r#"{:atoms [[:F "F#c-"]] :bonds [] :charge -1}"#)]
+    #[case::aliases(r#"{:atoms [:ch :ch] :bonds [[0 1 :single]] :aliases [:ch "C #h1"]}"#)]
+    #[case::dative(
+        r#"{:atoms [[:B "B #h3"] [:N "N #h3"]] :bonds [] :dative [{:id :d1 :donor :N :acceptor :B :bond :single}]}"#
+    )]
+    fn test_parse_molecule_dsl_path_parity(#[case] input: &str) {
+        let canonical = parse_molecule_dsl(input).unwrap();
+        let serde_ast = parse_molecule_dsl_serde(input).unwrap();
+        let tree_ast = parse_molecule_dsl_tree(input).unwrap();
+        assert_eq!(canonical, serde_ast);
+        assert_eq!(canonical, tree_ast);
     }
 }

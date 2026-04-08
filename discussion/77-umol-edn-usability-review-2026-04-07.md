@@ -613,3 +613,61 @@ This clarifies what "remove the direct serde path" actually means:
 6. **Arena-allocated `Edn` nodes — demoted.** Only worthwhile if (1)
    succeeds and parse throughput becomes the dominant remaining cost. The
    benchmarks in §3 already suggest it isn't.
+
+## Phase 2.5 measurement: fusion override closes the gap (2026-04-08)
+
+The load-bearing experiment from §1 of the priority order has been run on
+`MoleculeAst`, comparing three paths against the same five
+chemistry-realistic inputs:
+
+| Sample          | Serde stream | Native tree  | Native fused | Fused vs serde |
+|-----------------|--------------|--------------|--------------|----------------|
+| empty           | 179 ns       | 475 ns       | 103 ns       | −42%           |
+| water           | 2.67 µs      | 3.07 µs      | 2.47 µs      | −7%            |
+| tagged_ethanol  | 3.43 µs      | 3.94 µs      | 3.18 µs      | −7%            |
+| aliased_benzene | 8.72 µs      | 9.63 µs      | 8.76 µs      | ±0%            |
+| c20_chain       | 21.63 µs     | 23.29 µs     | 20.67 µs     | −4%            |
+
+- **Native tree path** (the default `FromEdn` walking an `Edn` value) is
+  7–17% slower than serde streaming on chemistry-realistic inputs and
+  +167% on the trivial `empty` case. Cost is one allocation per `Edn`
+  node plus a second walk to project to native types.
+- **Native fused path** (`from_edn_str` override using
+  `EdnStreamDeserializer`'s exposed primitives directly, no `Edn` tree)
+  matches or beats serde on every input. The fusion is fully expressible
+  with the public API added in this phase: `peek_byte`, `consume_byte`,
+  `try_consume_byte`, `read_keyword_name`, `read_string`,
+  `read_string_or_keyword`, `read_i64`, `read_skip_value`, `position`.
+
+### Decision
+
+Commit to the native `FromEdn` / `ToEdn` architecture. The fusion result
+demonstrates that:
+
+1. The default tree path is fast enough for cold types (within 17% of
+   serde on realistic inputs) and ergonomic enough to author by hand or
+   generate from a derive.
+2. Hot types can opt into a hand-written or macro-generated `from_edn_str`
+   override that beats serde streaming without depending on serde's data
+   model.
+3. The combination removes the structural objection to native traits:
+   "fast paths require serde". They don't.
+
+Whether `umol-edn` keeps the `serde` feature as an opt-in escape hatch
+for external consumers is a secondary question, deferred until after
+Phase 3 lands.
+
+### Next steps (Phase 3)
+
+1. Promote `parse_molecule_dsl_fused` to be the canonical
+   `parse_molecule_dsl` entry point; retire the serde-coupled
+   `MoleculeInput` deserialize visitors that are now redundant.
+2. Design and prototype a `#[derive(FromEdn, ToEdn)]` macro that
+   generates the equivalent of the hand-written fusion code from struct
+   definitions. Target: have it produce code competitive with the
+   hand-written `parse_molecule_dsl_fused`.
+3. Extend the macro to cover the remaining DSL types (`AtomAst`,
+   `BondAst`, `MoleculeAst` field-by-field) and remove the manual
+   `Deserialize` impls in `umol-graph`.
+4. Decide whether to drop the `serde` feature flag from `umol-edn`
+   entirely, or keep it as a maintained escape hatch.

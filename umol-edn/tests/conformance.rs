@@ -4,6 +4,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use rstest::rstest;
 use serde::Deserialize;

@@ -95,3 +95,7 @@ harness = false
 [[bench]]
 name = "smiles_parsing"
 harness = false
+
+[[bench]]
+name = "molecule_dsl_parsing"
+harness = false
