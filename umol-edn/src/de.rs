@@ -517,7 +517,9 @@ mod tests {
     use super::*;
     use crate::collections::{EdnMap, EdnSet};
     use crate::edn::{Keyword, Symbol};
-    use crate::{from_str, from_value, read_string, to_string};
+    use crate::de::{from_str, from_value};
+    use crate::ser::to_string;
+    use crate::read_string;
 
     #[rstest]
     #[case("12", 12i64)]

@@ -31,7 +31,8 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::{from_str, to_string};
+    use crate::de::from_str;
+    use crate::ser::to_string;
 
     #[test]
     fn test_edn_keyword_serialize_edn() {

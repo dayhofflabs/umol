@@ -11,7 +11,8 @@ use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{self, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
-use umol_edn::{Edn, EdnError, EdnKeyword, EdnMapHelper, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::streaming::EdnStreamDeserializer;
+use umol_edn::{Edn, EdnError, EdnKeyword, EdnMapHelper, FromEdn, ToEdn};
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
@@ -865,7 +866,7 @@ impl FromStr for MoleculeAst {
 /// Parse via serde streaming. Retained for benchmark comparison only.
 pub fn parse_molecule_dsl_serde(input: &str) -> Result<MoleculeAst, ParseError> {
     let mol_input: MoleculeInput =
-        umol_edn::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+        umol_edn::de::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
     mol_input.into_ast()
 }
 
@@ -1716,6 +1717,46 @@ mod tests {
         let edn = umol_edn::ToEdn::to_edn(&bond);
         let back = LocalizedBond::from_edn(&edn).unwrap();
         assert_eq!(bond, back);
+    }
+
+    /// Derived `from_edn_str` (fused parser) must agree with the tree-walking
+    /// `from_edn` path on every accepted input.
+    #[rstest]
+    #[case::dative(r#"{:id :d1 :donor :N :acceptor :B :bond :single}"#)]
+    #[case::dative_no_id(r#"{:donor 0 :acceptor 1 :bond :single}"#)]
+    fn test_dative_bond_from_edn_str_parity(#[case] input: &str) {
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = DativeBond::from_edn(&tree).unwrap();
+        let via_fused = DativeBond::from_edn_str(input).unwrap();
+        assert_eq!(via_tree, via_fused);
+    }
+
+    #[rstest]
+    #[case::aromatic_with_id(r#"{:id :ar1 :atoms [:C1 :C2 :C3]}"#)]
+    #[case::aromatic_empty(r#"{:atoms []}"#)]
+    fn test_aromatic_system_from_edn_str_parity(#[case] input: &str) {
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = AromaticSystem::from_edn(&tree).unwrap();
+        let via_fused = AromaticSystem::from_edn_str(input).unwrap();
+        assert_eq!(via_tree, via_fused);
+    }
+
+    #[rstest]
+    #[case::multi(r#"{:id :m1 :atoms [0 1 2 3]}"#)]
+    fn test_multicenter_bond_from_edn_str_parity(#[case] input: &str) {
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = MulticenterBond::from_edn(&tree).unwrap();
+        let via_fused = MulticenterBond::from_edn_str(input).unwrap();
+        assert_eq!(via_tree, via_fused);
+    }
+
+    #[rstest]
+    #[case::noncov(r#"{:a 0 :b 3 :bond :single}"#)]
+    fn test_noncovalent_bond_from_edn_str_parity(#[case] input: &str) {
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = NoncovalentBond::from_edn(&tree).unwrap();
+        let via_fused = NoncovalentBond::from_edn_str(input).unwrap();
+        assert_eq!(via_tree, via_fused);
     }
 
     /// `MoleculeAst::to_edn` output round-trips through the native parser

@@ -2,10 +2,9 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde::{Deserialize, Serialize};
-use umol_edn::{
-    from_str, from_value, read_all, read_string, Edn, EdnFormatter, EdnKeyRef, EdnMap,
-    StreamDeserializer,
-};
+use umol_edn::de::{from_str, from_value, StreamDeserializer};
+use umol_edn::ser::to_string;
+use umol_edn::{read_all, read_string, Edn, EdnFormatter, EdnKeyRef, EdnMap};
 
 const MOLECULE_SMALL: &str = r#"{:atoms [C O] :bonds [["0" "1" :single]]}"#;
 
@@ -179,7 +178,7 @@ fn bench_deserialize(c: &mut Criterion) {
     group.bench_function("tree_then_struct", |b| {
         b.iter(|| {
             let edn = read_string(black_box(MOLECULE_SMALL)).unwrap();
-            umol_edn::from_value::<MoleculeProxy>(edn).unwrap()
+            from_value::<MoleculeProxy>(edn).unwrap()
         })
     });
 
@@ -187,7 +186,7 @@ fn bench_deserialize(c: &mut Criterion) {
     group.bench_function("from_value_only", |b| {
         b.iter(|| {
             let val = black_box(&edn).clone();
-            umol_edn::from_value::<MoleculeProxy>(val).unwrap()
+            from_value::<MoleculeProxy>(val).unwrap()
         })
     });
 
@@ -223,7 +222,7 @@ fn bench_serialize(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("serialize");
     group.bench_function("to_string_small", |b| {
-        b.iter(|| umol_edn::to_string(black_box(&proxy)).unwrap())
+        b.iter(|| to_string(black_box(&proxy)).unwrap())
     });
 
     let large_proxy = MoleculeProxy {
@@ -233,7 +232,7 @@ fn bench_serialize(c: &mut Criterion) {
             .collect(),
     };
     group.bench_function("to_string_large", |b| {
-        b.iter(|| umol_edn::to_string(black_box(&large_proxy)).unwrap())
+        b.iter(|| to_string(black_box(&large_proxy)).unwrap())
     });
 
     group.finish();

@@ -1,24 +1,33 @@
-//! Streaming serde Deserializer that parses EDN directly into Rust types
-//! without building an intermediate `Edn` value tree.
+//! Streaming EDN reader.
+//!
+//! `EdnStreamDeserializer` exposes byte-level primitives for fused
+//! `FromEdn::from_edn_str` overrides; with the `serde` feature it also
+//! implements `serde::Deserializer<'de>`.
 
 use std::borrow::Cow;
 use std::str::from_utf8;
 
+#[cfg(feature = "serde")]
 use serde::de::{
     self, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
 
-use crate::config::{ParseConfig, TagReaders};
+use crate::config::ParseConfig;
+#[cfg(feature = "serde")]
+use crate::config::TagReaders;
 use crate::error::EdnError;
 use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
 
+#[cfg(feature = "serde")]
 const MAX_DEPTH: u16 = 128;
 
 pub struct EdnStreamDeserializer<'de> {
     input: &'de str,
     pos: usize,
     scratch: Vec<u8>,
+    #[cfg(feature = "serde")]
     depth: u16,
+    #[cfg(feature = "serde")]
     tag_readers: TagReaders,
 }
 
@@ -27,13 +36,15 @@ impl<'de> EdnStreamDeserializer<'de> {
         Self::with_config(input, &ParseConfig::default())
     }
 
-    pub fn with_config(input: &'de str, config: &ParseConfig) -> Self {
+    pub fn with_config(input: &'de str, _config: &ParseConfig) -> Self {
         Self {
             input,
             pos: 0,
             scratch: Vec::new(),
+            #[cfg(feature = "serde")]
             depth: MAX_DEPTH,
-            tag_readers: config.tag_readers.clone(),
+            #[cfg(feature = "serde")]
+            tag_readers: _config.tag_readers.clone(),
         }
     }
 
@@ -92,6 +103,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         self.skip_ws()
     }
 
+    #[cfg(feature = "serde")]
     fn enter_scope(&mut self) -> Result<(), EdnError> {
         self.depth = self.depth.checked_sub(1).ok_or_else(|| {
             EdnError::Custom("recursion limit exceeded".to_string())
@@ -99,6 +111,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         Ok(())
     }
 
+    #[cfg(feature = "serde")]
     fn leave_scope(&mut self) {
         self.depth += 1;
     }
@@ -142,6 +155,7 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     /// Skip a `#tag` prefix if present. Rejects bare (unqualified) tags unless registered.
     /// Recurses for nested tags like `#a #b value`.
+    #[cfg(feature = "serde")]
     #[inline]
     fn skip_tag_if_present(&mut self) -> Result<(), EdnError> {
         let bytes = self.input.as_bytes();
@@ -175,6 +189,7 @@ impl<'de> EdnStreamDeserializer<'de> {
             .map_err(|_| EdnError::InvalidNumber { offset: self.pos - s.len() })
     }
 
+    #[cfg(feature = "serde")]
     fn parse_number_f64(&mut self) -> Result<f64, EdnError> {
         let s = self.scan_number_str()?;
         s.parse::<f64>()
@@ -232,6 +247,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         Ok(&self.input[start..self.pos])
     }
 
+    #[cfg(feature = "serde")]
     fn parse_number_any<V: Visitor<'de>>(
         &mut self,
         visitor: V,
@@ -350,6 +366,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     /// Visit a string value, using borrowed str for no-escape case.
+    #[cfg(feature = "serde")]
     fn parse_string_visitor<V: Visitor<'de>>(
         &mut self,
         visitor: V,
@@ -456,6 +473,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 }
 
+#[cfg(feature = "serde")]
 pub(crate) fn visit_cow_str<'de, V: Visitor<'de>>(visitor: V, s: Cow<'de, str>) -> Result<V::Value, EdnError> {
     match s {
         Cow::Borrowed(b) => visitor.visit_borrowed_str(b),
@@ -467,6 +485,7 @@ pub(crate) fn visit_cow_str<'de, V: Visitor<'de>>(visitor: V, s: Cow<'de, str>) 
 // Deserializer trait
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "serde")]
 impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
     type Error = EdnError;
 
@@ -873,6 +892,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut EdnStreamDeserializer<'de> {
 // Character literal parsing
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "serde")]
 impl<'de> EdnStreamDeserializer<'de> {
     fn parse_char_literal(&mut self) -> Result<char, EdnError> {
         let offset = self.pos;
@@ -1010,6 +1030,16 @@ impl<'de> EdnStreamDeserializer<'de> {
     pub fn read_skip_value(&mut self) -> Result<(), EdnError> {
         self.skip_value()
     }
+
+    /// Return the source slice spanning one EDN value at the current position.
+    /// Whitespace is skipped before measuring; the returned slice contains the
+    /// raw EDN form of one value (atom, list, vector, map, set, or tagged).
+    pub fn read_value_slice(&mut self) -> Result<&'de str, EdnError> {
+        self.skip_ws()?;
+        let start = self.pos;
+        self.skip_value()?;
+        Ok(&self.input[start..self.pos])
+    }
 }
 
 #[inline]
@@ -1027,12 +1057,14 @@ fn unexpected_or_eof(offset: usize, b: Option<u8>) -> EdnError {
 // SeqAccessor
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "serde")]
 struct SeqAccessor<'a, 'de> {
     de: &'a mut EdnStreamDeserializer<'de>,
     closing: u8,
     first: bool,
 }
 
+#[cfg(feature = "serde")]
 impl<'a, 'de> SeqAccess<'de> for SeqAccessor<'a, 'de> {
     type Error = EdnError;
 
@@ -1059,11 +1091,13 @@ impl<'a, 'de> SeqAccess<'de> for SeqAccessor<'a, 'de> {
 // MapAccessor
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "serde")]
 struct MapAccessor<'a, 'de> {
     de: &'a mut EdnStreamDeserializer<'de>,
     first: bool,
 }
 
+#[cfg(feature = "serde")]
 impl<'a, 'de> MapAccess<'de> for MapAccessor<'a, 'de> {
     type Error = EdnError;
 
@@ -1097,8 +1131,10 @@ impl<'a, 'de> MapAccess<'de> for MapAccessor<'a, 'de> {
 // EmptyMapAccessor (for nil → empty map)
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "serde")]
 struct EmptyMapAccessor;
 
+#[cfg(feature = "serde")]
 impl<'de> MapAccess<'de> for EmptyMapAccessor {
     type Error = EdnError;
 
@@ -1121,11 +1157,13 @@ impl<'de> MapAccess<'de> for EmptyMapAccessor {
 // Tagged enum access (for #Variant value round-tripping)
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "serde")]
 struct StreamingTaggedEnumAccess<'a, 'de> {
     de: &'a mut EdnStreamDeserializer<'de>,
     tag: &'de str,
 }
 
+#[cfg(feature = "serde")]
 impl<'a, 'de> EnumAccess<'de> for StreamingTaggedEnumAccess<'a, 'de> {
     type Error = EdnError;
     type Variant = &'a mut EdnStreamDeserializer<'de>;
@@ -1140,6 +1178,7 @@ impl<'a, 'de> EnumAccess<'de> for StreamingTaggedEnumAccess<'a, 'de> {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'a, 'de> VariantAccess<'de> for &'a mut EdnStreamDeserializer<'de> {
     type Error = EdnError;
 
@@ -1179,7 +1218,7 @@ impl<'a, 'de> VariantAccess<'de> for &'a mut EdnStreamDeserializer<'de> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "serde"))]
 mod tests {
     use std::collections::HashMap;
 

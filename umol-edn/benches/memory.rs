@@ -13,7 +13,8 @@ use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
-use umol_edn::{from_str, from_value, read_string};
+use umol_edn::de::{from_str, from_value};
+use umol_edn::read_string;
 
 // ---------------------------------------------------------------------------
 // Tracking allocator

@@ -231,7 +231,8 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use umol_edn::{from_str as edn_from_str, to_string as edn_to_string};
+    use umol_edn::de::from_str as edn_from_str;
+    use umol_edn::ser::to_string as edn_to_string;
 
     #[rstest]
     #[case::zeroed(MoleculeDslConfig::zeroed(),

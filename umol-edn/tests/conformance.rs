@@ -11,7 +11,8 @@ use serde::Deserialize;
 use umol_edn::config::{DuplicateKeyPolicy, ParseConfig, TagReaders};
 use umol_edn::edn::{Edn, Symbol};
 use umol_edn::error::EdnError;
-use umol_edn::{from_str, from_str_with, read_all_with, read_string_with, EdnMap, EdnSet};
+use umol_edn::de::{from_str, from_str_with};
+use umol_edn::{read_all_with, read_string_with, EdnMap, EdnSet};
 
 fn cfg() -> ParseConfig {
     ParseConfig::default()

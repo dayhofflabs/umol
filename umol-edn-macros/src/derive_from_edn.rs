@@ -1,8 +1,8 @@
 //! `#[derive(FromEdn)]` proc macro for named structs.
 //!
-//! Generates an `impl FromEdn<'de>` that walks an `Edn::Map`, calling
-//! `EdnMapHelper::required` / `optional` for each field. The default
-//! field rules are:
+//! Generates an `impl FromEdn<'de>` providing both `from_edn` (tree walk) and
+//! `from_edn_str` (parser-deserializer fusion via `EdnStreamDeserializer`).
+//! Default field rules:
 //!
 //! - `Option<T>` → optional, missing key yields `None`.
 //! - `Vec<T>`    → optional, missing key yields `Vec::new()`.
@@ -10,6 +10,11 @@
 //!
 //! Field key naming: Rust `snake_case` is converted to EDN `kebab-case`
 //! by default. Override with `#[edn(rename = "...")]`.
+//!
+//! The fused `from_edn_str` opens the `{` map, walks key/value pairs once,
+//! slices each value, and recursively dispatches to `T::from_edn_str` so the
+//! whole subtree skips intermediate `Edn` allocation when every nested type
+//! also overrides `from_edn_str`.
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -32,6 +37,9 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
     };
 
     let mut bindings = Vec::new();
+    let mut stream_decls = Vec::new();
+    let mut stream_arms = Vec::new();
+    let mut stream_finals = Vec::new();
     let mut field_idents = Vec::new();
 
     for field in &fields {
@@ -40,7 +48,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
         let key = field_info.key;
         let kind = field_info.kind;
 
-        let binding = match kind {
+        let binding = match &kind {
             FieldKind::Option(inner) => quote! {
                 let #ident: ::std::option::Option<#inner> = h.optional(#key)?;
             },
@@ -54,8 +62,59 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
             },
         };
 
+        let missing_msg = format!("missing field: {}", key);
+        let (decl, arm, final_bind) = match &kind {
+            FieldKind::Option(inner) => (
+                quote! {
+                    let mut #ident: ::std::option::Option<#inner> = ::std::option::Option::None;
+                },
+                quote! {
+                    #key => {
+                        let __slice = __de.read_value_slice()?;
+                        #ident = ::std::option::Option::Some(
+                            <#inner as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?,
+                        );
+                    }
+                },
+                quote! {},
+            ),
+            FieldKind::Vec(inner) => (
+                quote! {
+                    let mut #ident: ::std::vec::Vec<#inner> = ::std::vec::Vec::new();
+                },
+                quote! {
+                    #key => {
+                        let __slice = __de.read_value_slice()?;
+                        #ident = <::std::vec::Vec<#inner> as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?;
+                    }
+                },
+                quote! {},
+            ),
+            FieldKind::Required(ty) => (
+                quote! {
+                    let mut #ident: ::std::option::Option<#ty> = ::std::option::Option::None;
+                },
+                quote! {
+                    #key => {
+                        let __slice = __de.read_value_slice()?;
+                        #ident = ::std::option::Option::Some(
+                            <#ty as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?,
+                        );
+                    }
+                },
+                quote! {
+                    let #ident = #ident.ok_or_else(|| ::umol_edn::EdnError::Custom(
+                        #missing_msg.to_string(),
+                    ))?;
+                },
+            ),
+        };
+
         field_idents.push(ident);
         bindings.push(binding);
+        stream_decls.push(decl);
+        stream_arms.push(arm);
+        stream_finals.push(final_bind);
     }
 
     let expected_label = format!("{} map", struct_name);
@@ -79,6 +138,29 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
                 };
                 let mut h = ::umol_edn::EdnMapHelper::new(m);
                 #(#bindings)*
+                ::std::result::Result::Ok(Self {
+                    #(#field_idents),*
+                })
+            }
+
+            fn from_edn_str(
+                input: &'de str,
+            ) -> ::std::result::Result<Self, ::umol_edn::EdnError> {
+                let mut __de = ::umol_edn::streaming::EdnStreamDeserializer::new(input);
+                #(#stream_decls)*
+                __de.consume_byte(b'{')?;
+                loop {
+                    if __de.try_consume_byte(b'}')? {
+                        break;
+                    }
+                    let __key = __de.read_keyword_name()?;
+                    match __key.as_ref() {
+                        #(#stream_arms)*
+                        _ => __de.read_skip_value()?,
+                    }
+                }
+                __de.expect_eof()?;
+                #(#stream_finals)*
                 ::std::result::Result::Ok(Self {
                     #(#field_idents),*
                 })

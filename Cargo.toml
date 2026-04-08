@@ -4,14 +4,13 @@ members = [
     "umol-data",
     "umol-edn",
     "umol-edn-macros",
-    "umol-fuzz",
     "umol-geometric",
     "umol-graph",
     "umol-msym",
     "umol-msym-sys",
     "umol-params",
 ]
-exclude = ["fuzz"]
+exclude = ["umol-edn/fuzz", "umol-graph/fuzz"]
 resolver = "2"
 
 [profile.bench]
