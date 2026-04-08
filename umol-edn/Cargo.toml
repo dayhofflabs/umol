@@ -45,3 +45,8 @@ umol-edn = { path = ".", features = ["serde", "macros"] }
 name = "parsing"
 harness = false
 
+[[bench]]
+name = "memory"
+harness = false
+required-features = ["serde"]
+

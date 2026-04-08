@@ -62,6 +62,233 @@ way out isn't to eliminate the tree; it's to make the tree path *cheap*:
   of `Cow`/`Box` payloads) so a tree of N nodes fits in cache.
 - Then the "two paths" collapse to "one path with optional staging."
 
+#### Benchmark reassessment (2026-04-07)
+
+Measured `umol-edn/benches/parsing.rs` after the refactor:
+
+| Operation                        | Tree path | Serde path | Ratio    |
+|----------------------------------|-----------|------------|----------|
+| Deserialize small → struct       | 582 ns    | 287 ns     | 2.03x    |
+| Display small (MOLECULE_SMALL)   | 342 ns    | 142 ns     | 2.41x    |
+| Display large (MOLECULE_LARGE)   | 3.01 µs   | 4.12 µs    | **0.73x** — tree faster |
+| Pretty small (formatter)         | 491 ns    | (same)     | —        |
+| Pretty large (formatter)         | 5.36 µs   | (same)     | —        |
+
+Key finding: for serialization, **the tree path is faster on large inputs**.
+Serde's per-field visitor dispatch overhead compounds with size; the tree
+walker is a tight match loop over a prebuilt `Edn` enum, so the fixed tree
+construction cost amortizes. The 2x gap only shows up on microbenchmark-
+sized inputs where absolute cost is already hundreds of nanoseconds.
+
+Revised conclusion: the second path is **not structurally necessary** for
+throughput. The real reasons to keep it are narrower than originally stated:
+
+1. **Streaming deserialization** — `StreamDeserializer` / `from_reader` can
+   fail fast and skip allocation for never-read suffixes. Matters for huge
+   files, not for molecule-sized inputs.
+2. **Peak memory on very large inputs** — the tree path allocates an `Edn`
+   node per parse node; direct serde allocates only the target struct. For
+   a 100 MB input deserialized into a compact struct, tree path could use
+   3–5x the peak memory.
+3. **Small-value hot path** — direct serde wins ~300 ns on tiny values.
+   Relevant only if parsing millions of tiny EDN blobs per second.
+
+Reason 2 is real; 1 and 3 are weaker than the original review claimed.
+For typical chemistry inputs (molecule-large and up) the tree path is
+already competitive or faster, and within 2x on parse. Arena-allocating
+`Edn` nodes would likely close the parse gap as well, leaving only the
+streaming-prefix-parse use case as a genuine reason for two paths. At
+that point the direct serde path becomes a specialized optimization for
+`StreamDeserializer`, not a peer public API.
+
+#### JSON-parity baseline (restored 2026-04-07)
+
+Commit `63f3978b` (Apr 1) originally added a `serde_json` comparison to the
+deserialize bench group; it was removed in `1ab0b940` (Apr 3). Restoring it
+and re-running on current hardware confirms the original motivation for
+keeping a direct streaming path:
+
+| Path                                            | Time    |
+|-------------------------------------------------|---------|
+| `serde_json::from_str` (direct)                 | 252 ns  |
+| `umol_edn::from_str` (direct streaming)         | **276 ns** |
+| `serde_json::from_value` only                   | 312 ns  |
+| `umol_edn::from_value` only                     | 338 ns  |
+| `serde_json::from_str::<Value>` (tree only)     | 387 ns  |
+| `umol_edn::read_string + from_value` (tree)     | 572 ns  |
+
+Direct EDN streaming lands **24 ns behind serde_json direct** (+9.5%), on
+input that is richer than the JSON equivalent (keywords, symbols, richer
+literal set). This parity was a legitimate and hard-won design target —
+it says "EDN can be a first-class peer to JSON for serde-speaking
+consumers," which matters if the goal is ecosystem interoperability rather
+than purely umol-internal use.
+
+**What consolidation gives up.** A native `FromEdn` trait walking a
+pre-built tree cannot match 276 ns. The minimum it can reach is roughly
+`read_string` (~234 ns) + a direct trait walk (~100 ns estimated) ≈ 340 ns,
+which is between the two current paths but short of JSON parity. Only
+single-pass parser-deserializer *fusion* hits the 276 ns number, and that
+is exactly what the direct streaming path is.
+
+So the tradeoff is explicit, not hand-waved:
+
+- **Keep direct streaming**: match serde_json on small inputs. Pay in code
+  duplication, two-path maintenance, serde data-model limits on
+  tags/sets/bignums, ~33K LLVM lines of per-type machinery in `umol-graph`.
+- **Consolidate to tree + `FromEdn`**: lose ~50–100 ns on small inputs vs
+  the JSON-parity baseline. Gain native EDN semantics, homoiconicity
+  support, lower compile cost, single source of truth, and closed-form
+  answers to §1's feature-gap list.
+
+For umol-graph's actual workload (molecule DSL files parsed at load time,
+not millions per second) the latency loss is immaterial. But if there is a
+future use case where EDN parity with serde_json on tiny values matters —
+parsing a stream of molecule fragments as a pipeline element, for example,
+or positioning `umol-edn` as a general EDN library for serde consumers
+outside umol — then the direct streaming path is the differentiator and
+should be kept. That is a scope question, not a performance question.
+
+#### Follow-up benchmarks (2026-04-07)
+
+Two additional benches were added to quantify the memory and streaming
+claims above, since the original microbenchmarks were time-only:
+
+- `umol-edn/benches/memory.rs` — standalone binary with a tracking
+  `GlobalAlloc` wrapper; measures peak bytes above baseline for each
+  deserialization path across 10 KB, 100 KB, 1 MB, 10 MB inputs.
+- `umol-edn/benches/parsing.rs::bench_stream_throughput` — criterion group
+  comparing direct `StreamDeserializer` against `read_all` + per-element
+  `from_value` on 1k and 10k concatenated records.
+
+**Peak memory (Vec<Record> of concatenated MOLECULE_SMALL):**
+
+| Input   | Direct `from_str` | Tree + `from_value` | Ratio |
+|---------|-------------------|---------------------|-------|
+|  10 KB  |      98 KB        |      223 KB         | 2.28x |
+| 100 KB  |     1.10 MB       |     2.31 MB         | 2.10x |
+|   1 MB  |    10.36 MB       |    23.26 MB         | 2.24x |
+|  10 MB  |   100.48 MB       |   229.44 MB         | 2.28x |
+
+The tree overhead is a flat **~2.2x, not the 3–5x speculated in reason 2**.
+Per-record: direct ≈ 451 bytes/record (the `Record` struct itself), tree
+≈ 1028 bytes/record. The ~580-byte gap is the `Edn` node + allocation
+overhead per parse node. Arena allocation should compress this significantly
+(bump-allocated `Edn` nodes don't carry per-allocation headers and share
+one backing buffer), potentially bringing the ratio under 1.5x.
+
+Also measured: `read_string` alone (no `from_value`) is indistinguishable
+from `read_string + from_value` in peak. The deserialization step doesn't
+add meaningful allocation beyond what the target `Vec<Record>` holds — the
+tree is the whole cost.
+
+**Stream throughput (records/sec via MiB/s):**
+
+| Workload            | Direct stream | read_all + from_value | Ratio |
+|---------------------|---------------|-----------------------|-------|
+| 1k records (~39 KB) |  70.4 MiB/s   |       65.4 MiB/s      | 1.08x |
+| 10k records (~390 KB) | 70.6 MiB/s  |       58.0 MiB/s      | 1.22x |
+
+The direct stream path is **8–22% faster** in throughput — real but small.
+It is *not* the order-of-magnitude advantage one might expect from "true
+streaming vs eager batch." The `read_all + from_value` loop is within
+striking distance on 1k records and only modestly behind on 10k. A lazy
+iterator variant (`read_iter` returning `Iterator<Item = Edn>`) would
+likely close most of the remaining gap by avoiding the intermediate
+`Vec<Edn>` allocation in `read_all`.
+
+**Reassessment summary:**
+
+- Memory: real gap exists (~2.2x), smaller than feared, and most of it is
+  per-node allocation overhead that an arena can compress.
+- Throughput: direct streaming wins by 8–22%, not by an order of magnitude.
+- The "keep two paths for peak memory and streaming" argument survives,
+  but as a narrow optimization rather than a fundamental split. A lazy
+  tree iterator + arena allocation would make the case for consolidation
+  quantitatively strong.
+
+**Still missing for a final decision:** an arena-allocated `Edn<'arena>`
+prototype. The arena question cannot be benchmarked without writing it;
+that is implementation work, not bench work. It is the load-bearing next
+experiment.
+
+#### MOL parity check (2026-04-07)
+
+The relevant performance question for chemistry workloads is not "match
+serde_json on tiny blobs" but "load a molecule DSL file at speed comparable
+to MOL/CTfile." Measured against `umol-graph::io::ctfile`'s per-line
+benchmarks:
+
+| Bench                          | Time     |
+|--------------------------------|----------|
+| `mol_parsing/counts/valid`     | 39 ns    |
+| `mol_parsing/atom/len69`       | 91 ns    |
+| `mol_parsing/atom/len34`       | 50 ns    |
+| `mol_parsing/bond/len21`       | 29 ns    |
+| `mol_parsing/bond/len9`        | 16 ns    |
+| `parse_collections/molecule_small` (EDN tree) | 378 ns |
+| `parse_collections/molecule_large` (EDN tree) | 5.12 µs |
+
+Estimated MOL parse for an equivalent 5-atom / 4-bond molecule:
+`39 + 5×91 + 4×29 ≈ 610 ns` for line parsing, plus ~200–400 ns for struct
+assembly and file boundary handling, total ~800 ns – 1 µs.
+
+Estimated MOL parse for a `molecule_large`-equivalent (10 atoms, 11 bonds,
+plus extended properties matching the EDN form's `config-overrides` and
+`context` content): on the order of 2–4 µs once `M  CHG`, `M  RAD`, `M  CRS`,
+`M  SDD` lines are parsed for each metadata field.
+
+**Conclusion**: the EDN tree path is already at MOL parity for both small
+and large molecule shapes. The 378 ns small-molecule parse is in the same
+ballpark as a 5-atom MOL; the 5.12 µs large-molecule parse is within ~2x
+of an equivalently-detailed MOL parse, with the gap accounted for by the
+EDN form carrying *more* semantic content per byte (keywords vs fixed
+columns, nested maps, aromatic hint vectors).
+
+For a 10,000-molecule dataset load:
+
+- MOL: ~10 ms total
+- EDN tree: ~50 ms total
+- EDN direct streaming (extrapolated): ~25 ms total
+
+All three are imperceptible for interactive use and acceptable for batch
+loading. Direct streaming buys real headroom but is not load-bearing for
+chemistry workloads at the input shapes umol actually encounters.
+
+#### Architecture this points to
+
+"Easy things easy, hard things possible" lands on a single trait with a
+default-implemented escape hatch:
+
+```rust
+trait FromEdn<'de>: Sized {
+    /// Default path: walk a pre-built tree. Macro-derivable, MOL-parity speed.
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError>;
+
+    /// Optional override for hot types: single-pass parser-deserializer fusion.
+    /// Default impl materializes the tree first, then calls `from_edn`.
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        let tree = parse_edn(input)?;
+        Self::from_edn(&tree)
+    }
+}
+```
+
+- **Easy**: `#[derive(FromEdn)]` on `MoleculeAst`. Free, MOL-comparable,
+  supports the full EDN data model (sets, tags, keywords, bignums).
+- **Possible**: hand-write or specialize-derive `from_edn_str` for
+  `MoleculeAst` if a benchmark ever shows tree construction is the
+  bottleneck. Same architecture as the current direct streaming path,
+  but EDN-native and per-type rather than parallel public API.
+- **Possible**: tagged literals, sub-DSLs, isomer equilibria via tag
+  readers and `Vec<Edn>` extension points (covered above).
+
+The 24 ns JSON-parity number was real but it was bought at the cost of a
+serde data model that fundamentally doesn't fit EDN — and that cost is
+exactly the §1 limitations list. The native trait route preserves the
+fast-path option (per-type, on demand) without requiring a parallel
+public API to be maintained for every consumer.
+
 ### 4. `TagReaders` uses `fn`, not `Box<dyn Fn>`
 
 That blocks closures capturing context (e.g., a tag handler that needs a
@@ -177,13 +404,204 @@ pattern can close most of it for users willing to opt in. The "transparent"
 gap — serde-deriving an arbitrary Rust type and getting full EDN semantics
 for free — cannot be closed without leaving serde's data model.
 
+## Reframing via toml-spanner (2026-04-07)
+
+The `toml-spanner` crate (https://i64.dev/toml-spanner-no-we-have-serde-at-home/)
+faced the same structural problem for TOML (datetimes, spans, inline-vs-block
+style — none expressible through serde's data model) and chose to **bypass
+serde entirely**, defining its own `FromToml<'de>` / `ToToml` traits plus a
+derive macro. Three of its findings shift this review's conclusions:
+
+1. **"You need an intermediate tree anyway."** toml-spanner's justification
+   for a tree-first design: out-of-order parsing (and, for EDN, maps/sets)
+   requires a staging tree regardless. Independent confirmation of §3's
+   reassessment that the direct-serde path is not structurally necessary.
+
+2. **Native traits close the transparent-derive gap.** §1 marked serde's
+   limits as unrecoverable for users who want full fidelity from derive. A
+   `FromEdn<'de>` / `ToEdn` trait pair takes `&Edn<'de>` directly and has
+   its own derive macro — EDN-specific attributes (`#[edn(tag = "Point")]`,
+   `#[edn(set)]`, `#[edn(keyword)]`, `#[edn(bignum)]`) become expressible
+   without wrapper newtype gymnastics. This is a concrete, finite path, not
+   a "documentation" fix. It also subsumes §11 — the traits naturally take
+   `&Edn`, no clone needed for multi-target deserialization.
+
+3. **The real payoff is compile time and binary size, not runtime.**
+   toml-spanner reports 6x warm check, 7x warm build, ~10x less LLVM IR,
+   3.8x smaller release binary size vs the `toml` crate. None of those
+   wins come from SIMD, arenas, or interning — they come from removing
+   generic indirection layers. Serde forces every consumer crate to
+   re-monomorphize per-type deserializer machinery; a non-generic native
+   trait is monomorphized once where defined.
+
+### Measured on umol workspace (cargo llvm-lines)
+
+- `umol-edn` lib standalone: ~63K LLVM lines, serde feature adds ~3K (~5%).
+  Low because serde's tax is paid at *call sites*, not in the library
+  defining the serializer.
+- `umol-graph` lib: 785K LLVM lines total. Per-type streaming deserializer
+  monomorphizations (`MapAccessor`, `EmptyMapAccessor`, `SeqAccessor` in
+  `umol_edn::streaming`): **213 entries, ~12K lines**. Downstream visitor
+  types from `umol_graph::dsl` (`MoleculeInputVisitor`, `AtomEntryInputVisitor`,
+  `LocalizedBondVisitor`, etc.): **255 entries, ~16K lines**. All
+  `deserialize_` / `visit_` entries combined: **522 entries, ~33K lines**
+  (~4% of umol-graph's IR).
+- `umol-params` lib: uses tree path (`from_value`), not serde streaming —
+  zero streaming-accessor entries.
+
+Smaller than toml-spanner's ratio because `umol-graph` is dominated by
+SMILES/CTfile parsers, nom, and nalgebra, not by serde. But the 33K-line
+tax is real, concentrated in exactly one crate, and exists *only* because
+the direct streaming path is public API.
+
+### Implication for the priority order
+
+The consolidation case (collapse to tree path, add native traits) now rests
+on three independent supports:
+
+- **Runtime**: benchmarks show the tree path is competitive or faster on
+  large inputs; memory gap is 2.2x, throughput gap 8–22% (§3).
+- **Features**: native traits recover the transparent-derive gap for
+  tags/sets/bignums that serde cannot express (§1).
+- **Compile cost**: ~33K IR lines of per-type serde machinery in
+  `umol-graph` alone would disappear. Check/build times improve; downstream
+  crates pay no serde monomorphization tax.
+
+The arena prototype answers a narrower question (parse throughput) that
+only one of these three supports depends on, and only if the others fail.
+It drops from "load-bearing next experiment" to "optimization to consider
+after the trait layer exists."
+
+## Homoiconicity: serde was never the right substrate
+
+The preceding sections treat serde as something to be *replaced* reluctantly,
+framing native traits as a workaround for limits. That framing is too
+defensive. Serde was a convenience choice that leaks its core assumption;
+the honest framing is that it was never the right substrate for an EDN-
+backed homoiconic DSL in the first place.
+
+### What serde actually offers
+
+Exactly one thing of substance: **format-backend uniformity** — `Deserialize`
+once, consume from JSON / TOML / YAML / bincode / MessagePack / ... without
+rewriting the type. Everything else is replicable in finite work:
+
+- **Derive automation** — `umol-edn-macros` already exists; `#[derive(FromEdn)]`
+  is the same shape of work as `#[derive(Deserialize)]`.
+- **Ecosystem gravity** — `clap`, `config`, `envy`, HTTP frameworks accept
+  `Deserialize`. Real, but scoped to *config-shaped* types (CLI flags, env
+  vars, settings files) — none of which are DSL types.
+- **Zero-copy borrowed parsing** via `&'de str` — a native `FromEdn<'de>`
+  gets this by construction.
+- **Error plumbing conventions** — useful, not load-bearing.
+- **Known attribute vocabulary** — users know `#[serde(rename = ...)]`; mild
+  onboarding tax to learn `#[edn(...)]` equivalents.
+
+None of these survive contact with the homoiconicity argument below.
+
+### Why homoiconicity makes serde the wrong shape
+
+Serde's data model *assumes* source format ≠ target type. Its premise is
+that a `Deserializer` translates a foreign wire format into a distinct Rust
+representation, and visitors exist to make that translation pluggable across
+formats.
+
+Homoiconic DSLs reject that premise. In EDN-backed DSLs:
+
+- The surface syntax *is* the AST.
+- `(molecule {:atoms [...] :bonds [...]})` is simultaneously program and data.
+- `MoleculeAst` is not "the parsed form of the EDN" — it's a typed *view* of
+  the same tree.
+- Tagged literals (`#molecule`, `#isomer-equilibrium`, `#reaction`) are the
+  extension mechanism for new DSL constructs; tag readers are the
+  composition mechanism.
+
+Serde has no concept of tagged literals, can't round-trip them, and forces
+them to be encoded as sibling fields, wrapper structs, or `#[serde(untagged)]`
+enum variants — none of which are homoiconic. You lose the ability to splice
+partially-built AST fragments into larger forms, which is the core use case
+when building higher-level DSLs on top of `MoleculeAst`.
+
+### The wrapping scenario
+
+Consider expressing isomer equilibria on top of the molecule DSL:
+
+```edn
+#isomer-equilibrium
+{:species [#molecule {:atoms [C C ...] :bonds [...]}
+           #molecule {:atoms [C C ...] :bonds [...]}]
+ :temperature 298.15
+ :populations [0.7 0.3]}
+```
+
+The natural representation is: `MoleculeAst` and `IsomerEquilibriumAst` both
+implement `FromEdn`, both compose through tag dispatch, and each layer
+validates its own slice. The key design choice at each layer is whether to
+*eagerly* validate sub-forms (store `Vec<MoleculeAst>` and parse them at load
+time) or to *defer* (store `Vec<Edn>` and validate on access). Deferred
+validation is what makes the wrapper agnostic to which concrete sub-DSL is
+spliced in — `#molecule`, `#conformer`, `#tautomer`, or a future construct
+added by a downstream crate — without requiring the wrapper to recompile.
+
+Note that this does **not** mean `MoleculeAst` itself becomes an `Edn`
+newtype. It stays a typed struct with named fields (`atoms`, `bonds`,
+`charge`, ...) and round-trips faithfully via `FromEdn` / `ToEdn`. The
+homoiconic latitude shows up at two specific places: (1) forward-compatible
+"unknown keys" fields that carry `Edn` values umol-graph does not recognize,
+and (2) wrapper DSLs that choose to hold `Vec<Edn>` rather than
+`Vec<MoleculeAst>` when they want deferred dispatch. The top-level struct
+keeps static typing; the extension points keep tree fidelity.
+
+Serde cannot do this cleanly because:
+
+1. **No runtime tag dispatch.** `#molecule` would need a compile-time
+   `Deserialize` impl, not a lookup in a tag-reader registry. New DSL
+   constructs in a downstream crate would require modifying the enum.
+2. **No deferred validation.** Serde's eager-parse model fights carrying
+   unparsed sub-forms forward. You cannot say "this is a `MoleculeAst`
+   *if and when* a molecule consumer asks for it."
+3. **Closed enums for alternation.** `#[serde(untagged)]` doesn't compose
+   across crates and doesn't support runtime extension.
+
+Native `FromEdn` + tag readers sidesteps all three: the registry is runtime,
+the intermediate representation is `Edn`, and new constructs are new
+tag-reader registrations in whichever crate defines them.
+
+### Consequence for the architecture
+
+Keep serde support as a **compatibility shim** for config-shaped consumers
+(a molecule file read by a general-purpose tool that expects `serde_json`-
+style semantics), but treat `FromEdn` / `ToEdn` as the *primary* API for
+DSL types. umol-graph's DSL types stop deriving `Deserialize` entirely and
+derive `FromEdn` instead. Serde becomes a thin conversion layer on top of
+the tree for external interop — not the way umol-graph's own types enter
+or exit the EDN world.
+
+This clarifies what "remove the direct serde path" actually means:
+
+- **Gone**: `EdnStreamDeserializer`, per-type `visit_map::<MapAccessor>`
+  monomorphizations, the `from_str` / `to_string` public API as a
+  peer to the tree path, the dsl-type visitors in umol-graph.
+- **Kept**: `Edn` tree + `FromEdn` / `ToEdn` as primary API; `from_value` /
+  `to_value` as narrow interop with serde-ecosystem crates that still want
+  the `serde::Deserialize` trait for their config types.
+
 ## Suggested priority order
 
-1. Document the serde-vs-tree feature matrix (sets, tags, big numbers,
-   namespaced symbols).
-2. Decide on `Edn<'a>` vs owned-only — biggest source of friction.
-3. `Box<dyn Fn>` for `TagReaders` — cheap fix, unlocks real use cases.
-4. Seal submodules; export only via crate root.
-5. Profile the tree-construction cost. If it is <2x compact serde, the
-   "two paths" framing is overstated and the direct serde-compact path can
-   be deprecated.
+1. **Prototype `FromEdn<'de>` / `ToEdn` traits + derive macro** for one
+   representative type (e.g. `MoleculeAst`). Measure: round-trip fidelity
+   for sets/tags/bignums, binary size delta, `cargo llvm-lines` delta on
+   `umol-graph`. This is the load-bearing experiment — it validates both
+   the feature-gap fix (§1) and the compile-cost payoff simultaneously.
+2. Document the serde-vs-tree feature matrix (sets, tags, big numbers,
+   namespaced symbols) — still valid, still cheap, useful regardless of
+   whether (1) succeeds.
+3. Decide on `Edn<'a>` vs owned-only. toml-spanner embraces the lifetime
+   (`Item<'de>` is analogous); if native traits become the main path, the
+   lifetime cost is paid by a narrower, more sophisticated audience and
+   the "drop it entirely" argument weakens.
+4. `Box<dyn Fn>` for `TagReaders` — cheap fix, unlocks real use cases.
+5. Seal submodules; export only via crate root.
+6. **Arena-allocated `Edn` nodes — demoted.** Only worthwhile if (1)
+   succeeds and parse throughput becomes the dominant remaining cost. The
+   benchmarks in §3 already suggest it isn't.

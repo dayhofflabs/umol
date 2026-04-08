@@ -1,8 +1,11 @@
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde::{Deserialize, Serialize};
-use umol_edn::{from_str, read_all, read_string, Edn, EdnFormatter, EdnKeyRef, EdnMap};
+use umol_edn::{
+    from_str, from_value, read_all, read_string, Edn, EdnFormatter, EdnKeyRef, EdnMap,
+    StreamDeserializer,
+};
 
 const MOLECULE_SMALL: &str = r#"{:atoms [C O] :bonds [["0" "1" :single]]}"#;
 
@@ -164,6 +167,8 @@ struct MoleculeProxy {
     bonds: Vec<(String, String, String)>,
 }
 
+const MOLECULE_SMALL_JSON: &str = r#"{"atoms":["C","O"],"bonds":[["0","1","single"]]}"#;
+
 fn bench_deserialize(c: &mut Criterion) {
     let mut group = c.benchmark_group("deserialize");
 
@@ -183,6 +188,26 @@ fn bench_deserialize(c: &mut Criterion) {
         b.iter(|| {
             let val = black_box(&edn).clone();
             umol_edn::from_value::<MoleculeProxy>(val).unwrap()
+        })
+    });
+
+    group.bench_function("json_from_str_struct", |b| {
+        b.iter(|| {
+            serde_json::from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL_JSON)).unwrap()
+        })
+    });
+
+    group.bench_function("json_parse_to_value", |b| {
+        b.iter(|| {
+            serde_json::from_str::<serde_json::Value>(black_box(MOLECULE_SMALL_JSON)).unwrap()
+        })
+    });
+
+    let json_val: serde_json::Value = serde_json::from_str(MOLECULE_SMALL_JSON).unwrap();
+    group.bench_function("json_value_to_struct", |b| {
+        b.iter(|| {
+            let val = black_box(&json_val).clone();
+            serde_json::from_value::<MoleculeProxy>(val).unwrap()
         })
     });
 
@@ -210,6 +235,62 @@ fn bench_serialize(c: &mut Criterion) {
     group.bench_function("to_string_large", |b| {
         b.iter(|| umol_edn::to_string(black_box(&large_proxy)).unwrap())
     });
+
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
+// Large-stream throughput: repeated independent top-level values
+// ---------------------------------------------------------------------------
+//
+// Question: does eager `read_all` + `from_value` match a true streaming
+// deserializer on throughput? If yes, the direct streaming path becomes a
+// specialized optimization rather than a necessary peer public API.
+
+fn many_molecules(count: usize) -> String {
+    let mut s = String::with_capacity(count * (MOLECULE_SMALL.len() + 1));
+    for _ in 0..count {
+        s.push_str(MOLECULE_SMALL);
+        s.push('\n');
+    }
+    s
+}
+
+fn bench_stream_throughput(c: &mut Criterion) {
+    let stream_1k = many_molecules(1_000);
+    let stream_10k = many_molecules(10_000);
+
+    let mut group = c.benchmark_group("stream_throughput");
+
+    for (label, stream) in [("1k", &stream_1k), ("10k", &stream_10k)] {
+        group.throughput(Throughput::Bytes(stream.len() as u64));
+
+        // Path A: direct streaming serde deserializer (never materializes full tree).
+        group.bench_function(format!("direct_stream_{label}"), |b| {
+            b.iter(|| {
+                let iter = StreamDeserializer::<MoleculeProxy>::new(black_box(stream));
+                let mut count = 0usize;
+                for r in iter {
+                    black_box(r.unwrap());
+                    count += 1;
+                }
+                count
+            })
+        });
+
+        // Path B: eager read_all -> from_value per element (tree-mediated, whole batch in memory).
+        group.bench_function(format!("read_all_then_from_value_{label}"), |b| {
+            b.iter(|| {
+                let all = read_all(black_box(stream)).unwrap();
+                let mut count = 0usize;
+                for v in all {
+                    black_box(from_value::<MoleculeProxy>(v).unwrap());
+                    count += 1;
+                }
+                count
+            })
+        });
+    }
 
     group.finish();
 }
@@ -299,6 +380,7 @@ criterion_group!(
     bench_roundtrip,
     bench_deserialize,
     bench_serialize,
+    bench_stream_throughput,
     bench_map_lookup,
 );
 criterion_main!(benches);
