@@ -143,6 +143,32 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
                     "expected symbol, got {other:?}"
                 ))),
             },
+            crate::serde_tokens::SET_TOKEN => match self.0 {
+                Edn::Set(s) => visitor.visit_seq(EdnSetSeqAccess { iter: s.into_iter() }),
+                other => Err(EdnError::Custom(format!(
+                    "expected set, got {other:?}"
+                ))),
+            },
+            crate::serde_tokens::LIST_TOKEN => match self.0 {
+                Edn::List(v) => visitor.visit_seq(EdnSeqAccess::new(v)),
+                other => Err(EdnError::Custom(format!(
+                    "expected list, got {other:?}"
+                ))),
+            },
+            #[cfg(feature = "bignum")]
+            crate::serde_tokens::BIGINT_TOKEN => match self.0 {
+                Edn::BigInt(n) => visitor.visit_string(n.to_string()),
+                other => Err(EdnError::Custom(format!(
+                    "expected bigint, got {other:?}"
+                ))),
+            },
+            #[cfg(feature = "bignum")]
+            crate::serde_tokens::BIGDECIMAL_TOKEN => match self.0 {
+                Edn::BigDecimal(d) => visitor.visit_string(d.as_inner().to_string()),
+                other => Err(EdnError::Custom(format!(
+                    "expected bigdecimal, got {other:?}"
+                ))),
+            },
             _ => visitor.visit_newtype_struct(self),
         }
     }
@@ -209,10 +235,21 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
 
     fn deserialize_tuple_struct<V: Visitor<'de>>(
         self,
-        _name: &'static str,
+        name: &'static str,
         _len: usize,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
+        if name == crate::serde_tokens::TAGGED_TOKEN {
+            return match self.0 {
+                Edn::Tagged(tag, inner) => visitor.visit_seq(EdnTaggedSeqAccess {
+                    tag: Some(tag),
+                    inner: Some(*inner),
+                }),
+                other => Err(EdnError::Custom(format!(
+                    "expected tagged literal, got {other:?}"
+                ))),
+            };
+        }
         self.deserialize_seq(visitor)
     }
 
@@ -382,6 +419,39 @@ impl<'de> SeqAccess<'de> for EdnSetSeqAccess<'de> {
             Some(edn) => seed.deserialize(EdnDeserializer(edn)).map(Some),
             None => Ok(None),
         }
+    }
+}
+
+// --- TaggedSeqAccess ---
+
+/// Two-step `SeqAccess` that yields the tag string, then the inner value of
+/// an `Edn::Tagged`. Used to deserialize `EdnTagged<T>` via the
+/// `serialize_tuple_struct(TAGGED_TOKEN, 2)` protocol.
+struct EdnTaggedSeqAccess<'de> {
+    tag: Option<std::borrow::Cow<'de, str>>,
+    inner: Option<Edn<'de>>,
+}
+
+impl<'de> SeqAccess<'de> for EdnTaggedSeqAccess<'de> {
+    type Error = EdnError;
+
+    fn next_element_seed<T: DeserializeSeed<'de>>(
+        &mut self,
+        seed: T,
+    ) -> Result<Option<T::Value>, Self::Error> {
+        if let Some(tag) = self.tag.take() {
+            return seed
+                .deserialize(EdnDeserializer(Edn::Str(tag)))
+                .map(Some);
+        }
+        if let Some(inner) = self.inner.take() {
+            return seed.deserialize(EdnDeserializer(inner)).map(Some);
+        }
+        Ok(None)
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        Some(self.tag.is_some() as usize + self.inner.is_some() as usize)
     }
 }
 

@@ -804,6 +804,27 @@ impl ToEdn for BigDecimal {
     }
 }
 
+#[cfg(feature = "bignum")]
+impl<'de> FromEdn<'de> for EdnBigDecimal {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+        match edn {
+            Edn::BigDecimal(d) => Ok(d.clone()),
+            other => Err(EdnError::TypeMismatch {
+                expected: "bigdecimal",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+#[cfg(feature = "bignum")]
+impl ToEdn for EdnBigDecimal {
+    fn to_edn(&self) -> Edn<'_> {
+        Edn::BigDecimal(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

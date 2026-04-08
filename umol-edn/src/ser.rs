@@ -4,6 +4,8 @@
 
 use std::borrow::Cow;
 use std::fmt::Write;
+#[cfg(feature = "bignum")]
+use std::str::FromStr;
 
 use serde::ser::{
     SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
@@ -15,7 +17,7 @@ use crate::collections::{EdnMap, EdnSeq};
 use crate::edn::{Edn, Keyword};
 use crate::error::EdnError;
 use crate::formatter::EdnFormatter;
-use crate::serde_tokens::{KEYWORD_TOKEN, SYMBOL_TOKEN};
+use crate::serde_tokens::{KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN};
 
 // ---------------------------------------------------------------------------
 // Public entry points
@@ -33,6 +35,12 @@ pub fn to_value<T: Serialize>(value: &T) -> Result<Edn<'static>, EdnError> {
     let mut ser = EdnTreeSerializer {
         keyword_mode: false,
         symbol_mode: false,
+        set_mode: false,
+        list_mode: false,
+        #[cfg(feature = "bignum")]
+        bigint_mode: false,
+        #[cfg(feature = "bignum")]
+        bigdec_mode: false,
     };
     value.serialize(&mut ser)
 }
@@ -59,6 +67,33 @@ pub struct EdnSerializer {
     output: String,
     keyword_mode: bool,
     symbol_mode: bool,
+    set_mode: bool,
+    list_mode: bool,
+    /// When set, the next `serialize_str` writes the inner string raw and
+    /// appends `'N'` (EDN bigint suffix).
+    #[cfg(feature = "bignum")]
+    bigint_mode: bool,
+    /// When set, the next `serialize_str` writes the inner string raw and
+    /// appends `'M'` (EDN bigdecimal suffix).
+    #[cfg(feature = "bignum")]
+    bigdec_mode: bool,
+    /// Tracks the active state of a tagged tuple-struct (`#tag value`) being
+    /// serialized via `serialize_tuple_struct(TAGGED_TOKEN, 2)`.
+    tagged_state: TaggedState,
+    /// Stack of close delimiters for active sequence contexts. Each
+    /// `serialize_seq`/`_tuple`/`_tuple_variant` pushes its close char and
+    /// the matching `end()` pops. This lets `#{...}` (set), `(...)` (list),
+    /// and `[...]` (vector) share a single `SerializeSeq` impl. The sentinel
+    /// `'\0'` means "no close delimiter" (used for tagged tuple structs).
+    close_stack: Vec<char>,
+}
+
+/// Position within a tagged tuple-struct serialization.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TaggedState {
+    None,
+    ExpectingTag,
+    ExpectingValue,
 }
 
 impl EdnSerializer {
@@ -67,6 +102,14 @@ impl EdnSerializer {
             output: String::new(),
             keyword_mode: false,
             symbol_mode: false,
+            set_mode: false,
+            list_mode: false,
+            #[cfg(feature = "bignum")]
+            bigint_mode: false,
+            #[cfg(feature = "bignum")]
+            bigdec_mode: false,
+            tagged_state: TaggedState::None,
+            close_stack: Vec::new(),
         }
     }
 }
@@ -182,6 +225,20 @@ impl<'a> Serializer for &'a mut EdnSerializer {
             self.symbol_mode = false;
             self.output += v;
         } else {
+            #[cfg(feature = "bignum")]
+            if self.bigint_mode {
+                self.bigint_mode = false;
+                self.output += v;
+                self.output.push('N');
+                return Ok(());
+            }
+            #[cfg(feature = "bignum")]
+            if self.bigdec_mode {
+                self.bigdec_mode = false;
+                self.output += v;
+                self.output.push('M');
+                return Ok(());
+            }
             write_escaped_str(&mut self.output, v);
         }
         Ok(())
@@ -225,6 +282,21 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         name: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
+        #[cfg(feature = "bignum")]
+        {
+            if name == crate::serde_tokens::BIGINT_TOKEN {
+                self.bigint_mode = true;
+                let result = value.serialize(&mut *self);
+                self.bigint_mode = false;
+                return result;
+            }
+            if name == crate::serde_tokens::BIGDECIMAL_TOKEN {
+                self.bigdec_mode = true;
+                let result = value.serialize(&mut *self);
+                self.bigdec_mode = false;
+                return result;
+            }
+        }
         match name {
             KEYWORD_TOKEN => {
                 self.keyword_mode = true;
@@ -236,6 +308,18 @@ impl<'a> Serializer for &'a mut EdnSerializer {
                 self.symbol_mode = true;
                 let result = value.serialize(&mut *self);
                 self.symbol_mode = false;
+                result
+            }
+            SET_TOKEN => {
+                self.set_mode = true;
+                let result = value.serialize(&mut *self);
+                self.set_mode = false;
+                result
+            }
+            LIST_TOKEN => {
+                self.list_mode = true;
+                let result = value.serialize(&mut *self);
+                self.list_mode = false;
                 result
             }
             _ => value.serialize(self),
@@ -256,21 +340,40 @@ impl<'a> Serializer for &'a mut EdnSerializer {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.output.push('[');
+        if self.set_mode {
+            self.set_mode = false;
+            self.output.push_str("#{");
+            self.close_stack.push('}');
+        } else if self.list_mode {
+            self.list_mode = false;
+            self.output.push('(');
+            self.close_stack.push(')');
+        } else {
+            self.output.push('[');
+            self.close_stack.push(']');
+        }
         Ok(self)
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         self.output.push('[');
+        self.close_stack.push(']');
         Ok(self)
     }
 
     fn serialize_tuple_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        self.serialize_tuple(len)
+        if name == TAGGED_TOKEN {
+            self.output.push('#');
+            self.tagged_state = TaggedState::ExpectingTag;
+            self.close_stack.push('\0');
+            Ok(self)
+        } else {
+            self.serialize_tuple(len)
+        }
     }
 
     fn serialize_tuple_variant(
@@ -283,6 +386,7 @@ impl<'a> Serializer for &'a mut EdnSerializer {
         self.output.push('#');
         self.output += variant;
         self.output += " [";
+        self.close_stack.push(']');
         Ok(self)
     }
 
@@ -313,19 +417,30 @@ impl<'a> Serializer for &'a mut EdnSerializer {
     }
 }
 
+/// Returns `true` if `output` is positioned at the start of a fresh sequence
+/// (i.e. the previous char is the open delimiter of a vector, set, or list).
+#[inline]
+fn at_seq_start(output: &str) -> bool {
+    matches!(output.as_bytes().last(), Some(b'[') | Some(b'{') | Some(b'('))
+}
+
 impl SerializeSeq for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
 
     fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
-        if !self.output.ends_with('[') {
+        if !at_seq_start(&self.output) {
             self.output.push(' ');
         }
         value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<(), Self::Error> {
-        self.output.push(']');
+        let close = self
+            .close_stack
+            .pop()
+            .expect("SerializeSeq::end without matching open");
+        self.output.push(close);
         Ok(())
     }
 }
@@ -335,14 +450,18 @@ impl SerializeTuple for &mut EdnSerializer {
     type Error = EdnError;
 
     fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
-        if !self.output.ends_with('[') {
+        if !at_seq_start(&self.output) {
             self.output.push(' ');
         }
         value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<(), Self::Error> {
-        self.output.push(']');
+        let close = self
+            .close_stack
+            .pop()
+            .expect("SerializeTuple::end without matching open");
+        self.output.push(close);
         Ok(())
     }
 }
@@ -352,14 +471,37 @@ impl SerializeTupleStruct for &mut EdnSerializer {
     type Error = EdnError;
 
     fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
-        if !self.output.ends_with('[') {
-            self.output.push(' ');
+        match self.tagged_state {
+            TaggedState::ExpectingTag => {
+                self.symbol_mode = true;
+                value.serialize(&mut **self)?;
+                self.symbol_mode = false;
+                self.output.push(' ');
+                self.tagged_state = TaggedState::ExpectingValue;
+                Ok(())
+            }
+            TaggedState::ExpectingValue => {
+                let result = value.serialize(&mut **self);
+                self.tagged_state = TaggedState::None;
+                result
+            }
+            TaggedState::None => {
+                if !at_seq_start(&self.output) {
+                    self.output.push(' ');
+                }
+                value.serialize(&mut **self)
+            }
         }
-        value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<(), Self::Error> {
-        self.output.push(']');
+        let close = self
+            .close_stack
+            .pop()
+            .expect("SerializeTupleStruct::end without matching open");
+        if close != '\0' {
+            self.output.push(close);
+        }
         Ok(())
     }
 }
@@ -369,14 +511,18 @@ impl SerializeTupleVariant for &mut EdnSerializer {
     type Error = EdnError;
 
     fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
-        if !self.output.ends_with('[') {
+        if !at_seq_start(&self.output) {
             self.output.push(' ');
         }
         value.serialize(&mut **self)
     }
 
     fn end(self) -> Result<(), Self::Error> {
-        self.output.push(']');
+        let close = self
+            .close_stack
+            .pop()
+            .expect("SerializeTupleVariant::end without matching open");
+        self.output.push(close);
         Ok(())
     }
 }
@@ -461,6 +607,24 @@ impl SerializeStructVariant for &mut EdnSerializer {
 pub struct EdnTreeSerializer {
     keyword_mode: bool,
     symbol_mode: bool,
+    set_mode: bool,
+    list_mode: bool,
+    #[cfg(feature = "bignum")]
+    bigint_mode: bool,
+    #[cfg(feature = "bignum")]
+    bigdec_mode: bool,
+}
+
+/// Sequence shape requested by the next `serialize_seq` call. Driven by the
+/// wrapper-token modes set on `EdnTreeSerializer`.
+#[derive(Clone, Copy)]
+enum SeqKind {
+    Vector,
+    Set,
+    List,
+    /// Tagged tuple struct: first element is the tag (serialized as a
+    /// symbol), second is the inner value. Produces `Edn::Tagged`.
+    Tagged,
 }
 
 fn nan_or_inf_error() -> EdnError {
@@ -527,13 +691,27 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         if self.keyword_mode {
             self.keyword_mode = false;
-            Ok(Edn::Keyword(Keyword::owned(v.to_string())))
-        } else if self.symbol_mode {
-            self.symbol_mode = false;
-            Ok(Edn::Symbol(crate::edn::Symbol::owned(v.to_string())))
-        } else {
-            Ok(Edn::Str(Cow::Owned(v.to_string())))
+            return Ok(Edn::Keyword(Keyword::owned(v.to_string())));
         }
+        if self.symbol_mode {
+            self.symbol_mode = false;
+            return Ok(Edn::Symbol(crate::edn::Symbol::owned(v.to_string())));
+        }
+        #[cfg(feature = "bignum")]
+        if self.bigint_mode {
+            self.bigint_mode = false;
+            return num_bigint::BigInt::from_str(v)
+                .map(Edn::BigInt)
+                .map_err(|e| EdnError::Custom(format!("invalid bigint {v:?}: {e}")));
+        }
+        #[cfg(feature = "bignum")]
+        if self.bigdec_mode {
+            self.bigdec_mode = false;
+            return bigdecimal::BigDecimal::from_str(v)
+                .map(|d| Edn::BigDecimal(crate::edn::EdnBigDecimal::new(d)))
+                .map_err(|e| EdnError::Custom(format!("invalid bigdecimal {v:?}: {e}")));
+        }
+        Ok(Edn::Str(Cow::Owned(v.to_string())))
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
@@ -570,6 +748,21 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
         name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error> {
+        #[cfg(feature = "bignum")]
+        {
+            if name == crate::serde_tokens::BIGINT_TOKEN {
+                self.bigint_mode = true;
+                let result = value.serialize(&mut *self);
+                self.bigint_mode = false;
+                return result;
+            }
+            if name == crate::serde_tokens::BIGDECIMAL_TOKEN {
+                self.bigdec_mode = true;
+                let result = value.serialize(&mut *self);
+                self.bigdec_mode = false;
+                return result;
+            }
+        }
         match name {
             KEYWORD_TOKEN => {
                 self.keyword_mode = true;
@@ -581,6 +774,18 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
                 self.symbol_mode = true;
                 let result = value.serialize(&mut *self);
                 self.symbol_mode = false;
+                result
+            }
+            SET_TOKEN => {
+                self.set_mode = true;
+                let result = value.serialize(&mut *self);
+                self.set_mode = false;
+                result
+            }
+            LIST_TOKEN => {
+                self.list_mode = true;
+                let result = value.serialize(&mut *self);
+                self.list_mode = false;
                 result
             }
             _ => value.serialize(self),
@@ -602,9 +807,19 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
     }
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        let kind = if self.set_mode {
+            self.set_mode = false;
+            SeqKind::Set
+        } else if self.list_mode {
+            self.list_mode = false;
+            SeqKind::List
+        } else {
+            SeqKind::Vector
+        };
         Ok(TreeSeqSerializer {
             ser: self,
             items: Vec::with_capacity(len.unwrap_or(0)),
+            kind,
         })
     }
 
@@ -612,15 +827,25 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
         Ok(TreeSeqSerializer {
             ser: self,
             items: Vec::with_capacity(len),
+            kind: SeqKind::Vector,
         })
     }
 
     fn serialize_tuple_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        self.serialize_tuple(len)
+        let kind = if name == TAGGED_TOKEN {
+            SeqKind::Tagged
+        } else {
+            SeqKind::Vector
+        };
+        Ok(TreeSeqSerializer {
+            ser: self,
+            items: Vec::with_capacity(len),
+            kind,
+        })
     }
 
     fn serialize_tuple_variant(
@@ -674,6 +899,43 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
 pub struct TreeSeqSerializer<'a> {
     ser: &'a mut EdnTreeSerializer,
     items: Vec<Edn<'static>>,
+    kind: SeqKind,
+}
+
+impl TreeSeqSerializer<'_> {
+    fn finish(self) -> Result<Edn<'static>, EdnError> {
+        match self.kind {
+            SeqKind::Vector => Ok(Edn::Vector(EdnSeq::from(self.items))),
+            SeqKind::List => Ok(Edn::List(EdnSeq::from(self.items))),
+            SeqKind::Set => {
+                let mut set = crate::collections::EdnSet::new();
+                for item in self.items {
+                    set.insert(item);
+                }
+                Ok(Edn::Set(set))
+            }
+            SeqKind::Tagged => {
+                let mut iter = self.items.into_iter();
+                let tag = match iter.next() {
+                    Some(Edn::Symbol(s)) => s.into_cow().into_owned(),
+                    Some(other) => {
+                        return Err(EdnError::Custom(format!(
+                            "tagged literal tag must be a symbol, got {other:?}"
+                        )));
+                    }
+                    None => {
+                        return Err(EdnError::Custom(
+                            "tagged literal missing tag".to_string(),
+                        ));
+                    }
+                };
+                let inner = iter
+                    .next()
+                    .ok_or_else(|| EdnError::Custom("tagged literal missing value".to_string()))?;
+                Ok(Edn::Tagged(Cow::Owned(tag), Box::new(inner)))
+            }
+        }
+    }
 }
 
 impl SerializeSeq for TreeSeqSerializer<'_> {
@@ -687,7 +949,7 @@ impl SerializeSeq for TreeSeqSerializer<'_> {
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Edn::Vector(EdnSeq::from(self.items)))
+        self.finish()
     }
 }
 
@@ -702,7 +964,7 @@ impl SerializeTuple for TreeSeqSerializer<'_> {
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Edn::Vector(EdnSeq::from(self.items)))
+        self.finish()
     }
 }
 
@@ -711,13 +973,20 @@ impl SerializeTupleStruct for TreeSeqSerializer<'_> {
     type Error = EdnError;
 
     fn serialize_field<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
-        let v = value.serialize(&mut *self.ser)?;
-        self.items.push(v);
+        if matches!(self.kind, SeqKind::Tagged) && self.items.is_empty() {
+            self.ser.symbol_mode = true;
+            let v = value.serialize(&mut *self.ser)?;
+            self.ser.symbol_mode = false;
+            self.items.push(v);
+        } else {
+            let v = value.serialize(&mut *self.ser)?;
+            self.items.push(v);
+        }
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Edn::Vector(EdnSeq::from(self.items)))
+        self.finish()
     }
 }
 
