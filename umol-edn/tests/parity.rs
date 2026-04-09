@@ -44,10 +44,6 @@ fn from_str_permissive<'a, T: serde::Deserialize<'a>>(s: &'a str) -> T {
 #[cfg(feature = "bignum")]
 use umol_edn::{EdnBigDecimal, EdnBigInt};
 
-// ---------------------------------------------------------------------------
-// EdnKeyword
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_parity_keyword_native_roundtrip() {
     let k = EdnKeyword::new("foo");
@@ -91,22 +87,15 @@ fn test_parity_keyword_json_fallback_is_string() {
 
 #[test]
 fn test_parity_keyword_native_rejects_string() {
-    // Native FromEdn is strict: a string is not a keyword.
     let edn = Edn::Str(std::borrow::Cow::Borrowed("not a keyword"));
     assert!(EdnKeyword::from_edn(&edn).is_err());
 }
 
 #[test]
 fn test_parity_keyword_serde_accepts_string_for_json_interop() {
-    // Serde Deserialize intentionally lenient: enables JSON round-trip
-    // where keywords are carried as strings.
     let kw: EdnKeyword = from_str(r#""bar""#).unwrap();
     assert_eq!(kw.as_str(), "bar");
 }
-
-// ---------------------------------------------------------------------------
-// EdnSymbol
-// ---------------------------------------------------------------------------
 
 #[test]
 fn test_parity_symbol_native_roundtrip() {
@@ -137,10 +126,6 @@ fn test_parity_symbol_rejects_keyword() {
     let result: Result<EdnSymbol, _> = from_str(":foo");
     assert!(result.is_err());
 }
-
-// ---------------------------------------------------------------------------
-// EdnList<T>
-// ---------------------------------------------------------------------------
 
 #[test]
 fn test_parity_list_native_roundtrip() {
@@ -189,10 +174,6 @@ fn test_parity_list_json_fallback_is_array() {
     assert_eq!(l, back);
 }
 
-// ---------------------------------------------------------------------------
-// EdnHashSet<T>
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_parity_set_native_roundtrip() {
     let s: EdnHashSet<i64> = [1i64, 2, 3].into_iter().collect();
@@ -222,10 +203,6 @@ fn test_parity_set_json_fallback_is_array() {
     let j = serde_json::to_string(&s).unwrap();
     assert_eq!(j, "[7]");
 }
-
-// ---------------------------------------------------------------------------
-// EdnTagged<T>
-// ---------------------------------------------------------------------------
 
 #[test]
 fn test_parity_tagged_native_roundtrip() {
@@ -268,10 +245,6 @@ fn test_parity_tagged_json_fallback_is_tuple() {
     assert_eq!(back, t);
 }
 
-// ---------------------------------------------------------------------------
-// EdnTagged<T> vs enum-variant tagged — coexistence in a single struct.
-// ---------------------------------------------------------------------------
-
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 enum Event {
     Click(i64),
@@ -306,10 +279,6 @@ fn test_parity_tagged_coexist_nested_variant() {
     let back: MixedTagged = from_str_permissive(&s);
     assert_eq!(v, back);
 }
-
-// ---------------------------------------------------------------------------
-// BigInt / BigDecimal (bignum feature)
-// ---------------------------------------------------------------------------
 
 #[cfg(feature = "bignum")]
 #[test]
@@ -355,10 +324,6 @@ fn test_parity_bigdecimal_serde_edn_roundtrip() {
     assert_eq!(d, back);
 }
 
-// ---------------------------------------------------------------------------
-// Value — dynamic-typed, lossless over EDN.
-// ---------------------------------------------------------------------------
-
 #[rstest]
 #[case("nil")]
 #[case("true")]
@@ -390,10 +355,6 @@ fn test_parity_value_as_field() {
     assert_eq!(v, back);
 }
 
-// ---------------------------------------------------------------------------
-// Wrapper composition with serde attributes.
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_parity_serde_default_on_wrapper() {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -402,7 +363,6 @@ fn test_parity_serde_default_on_wrapper() {
         #[serde(default)]
         kind: Option<EdnKeyword>,
     }
-    // Missing field defaults to None.
     let v: S = from_str(r#"{:name "x"}"#).unwrap();
     assert_eq!(
         v,
@@ -411,7 +371,6 @@ fn test_parity_serde_default_on_wrapper() {
             kind: None
         }
     );
-    // Present field round-trips.
     let v = S {
         name: "x".into(),
         kind: Some(EdnKeyword::new("active")),
@@ -484,10 +443,6 @@ fn test_parity_multiple_wrappers_in_one_struct() {
     assert_eq!(v, back);
 }
 
-// ---------------------------------------------------------------------------
-// HashMap with wrapper values.
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_parity_hashmap_string_to_wrapper() {
     let mut m: HashMap<String, EdnKeyword> = HashMap::new();
@@ -497,11 +452,6 @@ fn test_parity_hashmap_string_to_wrapper() {
     let back: HashMap<String, EdnKeyword> = from_str(&s).unwrap();
     assert_eq!(m, back);
 }
-
-// ---------------------------------------------------------------------------
-// Primitive round-trip via Edn variant (baseline coverage — primitives have
-// no wrapper, they go through native serde).
-// ---------------------------------------------------------------------------
 
 #[rstest]
 #[case::unit("nil", Edn::Nil)]

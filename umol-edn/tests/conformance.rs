@@ -4,6 +4,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+#[cfg(feature = "bignum")]
 use std::str::FromStr;
 
 use rstest::rstest;
@@ -25,10 +26,6 @@ fn parse(input: &str) -> Result<Edn<'_>, EdnError> {
 fn stream<'a, T: Deserialize<'a>>(input: &'a str) -> Result<T, EdnError> {
     from_str_with(input, &cfg())
 }
-
-// ============================================================================
-// Whitespace
-// ============================================================================
 
 #[rstest]
 #[case(" 1 ", Edn::Int(1))]
@@ -68,10 +65,6 @@ fn test_comma_in_collections_streaming() {
     assert_eq!(stream::<Vec<i64>>("[1, 2, 3]").unwrap(), vec![1, 2, 3]);
 }
 
-// ============================================================================
-// Delimiters
-// ============================================================================
-
 #[test]
 fn test_delimiters_no_whitespace() {
     assert_eq!(
@@ -80,10 +73,6 @@ fn test_delimiters_no_whitespace() {
     );
     assert_eq!(read_all_with("[1]2", &cfg()).unwrap().len(), 2);
 }
-
-// ============================================================================
-// Dispatch character
-// ============================================================================
 
 #[test]
 fn test_hash_is_not_delimiter() {
@@ -97,10 +86,6 @@ fn test_hash_is_not_delimiter() {
     );
 }
 
-// ============================================================================
-// Nil
-// ============================================================================
-
 #[test]
 fn test_nil() {
     assert_eq!(parse("nil").unwrap(), Edn::Nil);
@@ -110,10 +95,6 @@ fn test_nil() {
 fn test_nil_streaming() {
     assert_eq!(stream::<Option<i64>>("nil").unwrap(), None);
 }
-
-// ============================================================================
-// Booleans
-// ============================================================================
 
 #[rstest]
 #[case("true", Edn::Bool(true))]
@@ -136,10 +117,6 @@ fn test_booleans_streaming(#[case] input: &str, #[case] expected: bool) {
 fn test_case_sensitive(#[case] input: &str) {
     assert!(matches!(parse(input).unwrap(), Edn::Symbol(_)));
 }
-
-// ============================================================================
-// Strings
-// ============================================================================
 
 #[rstest]
 #[case(r#""""#, "")]
@@ -206,10 +183,6 @@ fn test_string_unterminated() {
     assert!(parse(r#""hello"#).is_err());
 }
 
-// ============================================================================
-// Characters
-// ============================================================================
-
 #[rstest]
 #[case(r"\a", 'a')]
 #[case(r"\Z", 'Z')]
@@ -248,10 +221,6 @@ fn test_termination() {
         Edn::Vector(vec![Edn::Char('a'), Edn::Int(1)].into())
     );
 }
-
-// ============================================================================
-// Symbols
-// ============================================================================
 
 #[rstest]
 #[case("foo", "foo")]
@@ -322,10 +291,6 @@ fn test_post_slash_digit_rejected() {
 fn test_post_slash_valid(#[case] input: &str) {
     assert!(parse(input).is_ok());
 }
-
-// ============================================================================
-// Keywords
-// ============================================================================
 
 #[rstest]
 #[case(":foo", "foo")]
@@ -399,10 +364,6 @@ fn test_bare_colon_error() {
     assert!(parse(": ").is_err());
 }
 
-// ============================================================================
-// Integers
-// ============================================================================
-
 #[rstest]
 #[case("0", 0)]
 #[case("1", 1)]
@@ -448,10 +409,6 @@ fn test_overflow() {
 fn test_bigint_suffix_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
-
-// ============================================================================
-// Floats
-// ============================================================================
 
 #[rstest]
 #[case("1.0", 1.0)]
@@ -512,17 +469,13 @@ fn test_bigdec_suffix_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
-// ============================================================================
-// BigInt and BigDecimal
-// ============================================================================
-
 #[cfg(feature = "bignum")]
 #[rstest]
-#[case("42N", umol_edn::BigInt::from(42))]
-#[case("0N", umol_edn::BigInt::from(0))]
-#[case("-1N", umol_edn::BigInt::from(-1))]
-#[case("+7N", umol_edn::BigInt::from(7))]
-fn test_bigint_parse(#[case] input: &str, #[case] expected: umol_edn::BigInt) {
+#[case("42N", num_bigint::BigInt::from(42))]
+#[case("0N", num_bigint::BigInt::from(0))]
+#[case("-1N", num_bigint::BigInt::from(-1))]
+#[case("+7N", num_bigint::BigInt::from(7))]
+fn test_bigint_parse(#[case] input: &str, #[case] expected: num_bigint::BigInt) {
     assert_eq!(parse(input).unwrap(), Edn::BigInt(expected));
 }
 
@@ -530,7 +483,7 @@ fn test_bigint_parse(#[case] input: &str, #[case] expected: umol_edn::BigInt) {
 #[test]
 fn test_bigint_parse_large() {
     let input = "99999999999999999999999999999N";
-    let expected = umol_edn::BigInt::from_str("99999999999999999999999999999").unwrap();
+    let expected = num_bigint::BigInt::from_str("99999999999999999999999999999").unwrap();
     assert_eq!(parse(input).unwrap(), Edn::BigInt(expected));
 }
 
@@ -576,10 +529,6 @@ fn test_bignum_roundtrip(#[case] input: &str) {
     let reparsed = parse(&rendered).unwrap();
     assert_eq!(parsed, reparsed);
 }
-
-// ============================================================================
-// Collections
-// ============================================================================
 
 #[rstest]
 #[case("()", Edn::List(vec![].into()))]
@@ -676,10 +625,6 @@ fn test_set() {
 fn test_set_empty() {
     assert_eq!(parse("#{}").unwrap(), Edn::Set(EdnSet::new()));
 }
-
-// ============================================================================
-// Tagged elements
-// ============================================================================
 
 #[test]
 fn test_qualified_tag() {
@@ -862,10 +807,6 @@ fn test_custom_reader_error_propagation() {
     assert!(read_string_with("#strict 1", &config).is_err());
 }
 
-// ============================================================================
-// Comments
-// ============================================================================
-
 #[rstest]
 #[case("; comment\n1", Edn::Int(1))]
 #[case("1 ; trailing", Edn::Int(1))]
@@ -886,10 +827,6 @@ fn test_comment_inside_vector() {
         Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into())
     );
 }
-
-// ============================================================================
-// Discard
-// ============================================================================
 
 #[test]
 fn test_discard() {
@@ -943,10 +880,6 @@ fn test_discard_only_content_error() {
     assert!(parse("#_ 1").is_err());
 }
 
-// ============================================================================
-// Equality
-// ============================================================================
-
 #[test]
 fn test_int_not_equal_to_float() {
     assert_ne!(Edn::Int(1), Edn::Float(1.0));
@@ -994,10 +927,6 @@ fn test_parsed_list_equals_parsed_vector() {
     assert_eq!(list, vector);
 }
 
-// ============================================================================
-// Round-trip
-// ============================================================================
-
 #[rstest]
 #[case("nil")]
 #[case("true")]
@@ -1032,10 +961,6 @@ fn test_roundtrip(#[case] input: &str) {
     let reparsed = parse(&rendered).unwrap();
     assert_eq!(parsed, reparsed);
 }
-
-// ============================================================================
-// Errors
-// ============================================================================
 
 #[test]
 fn test_error_trailing_content() {
@@ -1080,10 +1005,6 @@ fn test_error_deep_nesting() {
     let input = "[".repeat(depth) + &"]".repeat(depth);
     assert!(parse(&input).is_ok());
 }
-
-// ============================================================================
-// Regression
-// ============================================================================
 
 /// Regression: fuzzer-found infinite loop in skip_atom with null bytes inside discard+collection.
 #[test]

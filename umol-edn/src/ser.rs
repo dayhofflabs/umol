@@ -1110,7 +1110,7 @@ mod tests {
     use serde::Serialize;
 
     use crate::edn::Edn;
-    use crate::keyword_owned::EdnKeyword;
+    use crate::keyword::EdnKeyword;
     use crate::reader::read_string;
     use crate::ser::{to_string, to_string_pretty, to_string_with, to_value, EdnSerializer};
     use crate::EdnFormatter;

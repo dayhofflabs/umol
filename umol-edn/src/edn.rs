@@ -11,7 +11,9 @@ use crate::error::EdnError;
 use crate::reader::read_string;
 
 #[cfg(feature = "bignum")]
-use bigdecimal::BigDecimal;
+pub use crate::bigdecimal::EdnBigDecimal;
+#[cfg(feature = "bignum")]
+use ::bigdecimal::BigDecimal;
 #[cfg(feature = "bignum")]
 use num_bigint::BigInt;
 
@@ -162,64 +164,6 @@ impl fmt::Display for Symbol<'_> {
         write!(f, "{}", self.0)
     }
 }
-
-/// Newtype adding `Eq` to `BigDecimal`. The upstream crate omits `Eq` despite
-/// `BigDecimal` having no NaN-like values (reflexivity holds). Its `Hash` impl
-/// normalizes trailing zeros before hashing, consistent with `PartialEq`, so
-/// the `Eq` + `Hash` contract is satisfied.
-#[cfg(feature = "bignum")]
-#[derive(Clone, Debug, Hash)]
-pub struct EdnBigDecimal(BigDecimal);
-
-#[cfg(feature = "bignum")]
-impl EdnBigDecimal {
-    pub fn new(bd: BigDecimal) -> Self {
-        Self(bd)
-    }
-
-    pub fn into_inner(self) -> BigDecimal {
-        self.0
-    }
-
-    pub fn as_inner(&self) -> &BigDecimal {
-        &self.0
-    }
-}
-
-#[cfg(feature = "bignum")]
-impl PartialEq for EdnBigDecimal {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-#[cfg(feature = "bignum")]
-impl Eq for EdnBigDecimal {}
-
-#[cfg(feature = "bignum")]
-impl PartialOrd for EdnBigDecimal {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[cfg(feature = "bignum")]
-impl Ord for EdnBigDecimal {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
-
-#[cfg(feature = "bignum")]
-impl fmt::Display for EdnBigDecimal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Edn enum
-// ---------------------------------------------------------------------------
 
 /// Discriminant for cross-variant comparison. List and Vector share the same
 /// ordinal: the EDN spec defines sequence equality across container types.
@@ -682,32 +626,6 @@ mod tests {
         let neg = Edn::Float(-0.0);
         assert_ne!(pos, neg);
         assert_ne!(hash_of(&pos), hash_of(&neg));
-    }
-
-    /// Guards the assumption that BigDecimal's PartialEq and Hash are
-    /// consistent across representations of the same value. If this breaks
-    /// on a bigdecimal upgrade, EdnBigDecimal's Eq impl is unsound.
-    #[cfg(feature = "bignum")]
-    #[test]
-    fn test_edn_bigdecimal_eq_hash_across_scales() {
-        use bigdecimal::BigDecimal;
-        use std::str::FromStr;
-
-        let a = EdnBigDecimal::new(BigDecimal::from_str("1.0").unwrap());
-        let b = EdnBigDecimal::new(BigDecimal::from_str("1.00").unwrap());
-        let c = EdnBigDecimal::new(BigDecimal::from_str("1.000").unwrap());
-
-        assert_eq!(a, b);
-        assert_eq!(b, c);
-        assert_eq!(a, a); // reflexivity
-
-        fn hash_bd(v: &EdnBigDecimal) -> u64 {
-            let mut h = DefaultHasher::new();
-            v.hash(&mut h);
-            h.finish()
-        }
-        assert_eq!(hash_bd(&a), hash_bd(&b));
-        assert_eq!(hash_bd(&b), hash_bd(&c));
     }
 
     // -- Default, FromStr --

@@ -170,7 +170,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
             },
             crate::serde_tokens::VALUE_TOKEN => {
                 use crate::serde_tokens::*;
-                use crate::value_serde::{ValueCarrier, ValuePayload};
+                use crate::value::{ValueCarrier, ValuePayload};
                 match self.0 {
                     Edn::Keyword(k) => {
                         let carrier = ValueCarrier::new(

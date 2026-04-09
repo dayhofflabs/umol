@@ -47,10 +47,6 @@ fn many_values(count: usize) -> String {
         .join(" ")
 }
 
-// ---------------------------------------------------------------------------
-// Parsing
-// ---------------------------------------------------------------------------
-
 fn bench_parse_atoms(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse_atoms");
     group.bench_function("nil", |b| b.iter(|| read_string(black_box("nil"))));
@@ -109,10 +105,6 @@ fn bench_read_all(c: &mut Criterion) {
     group.finish();
 }
 
-// ---------------------------------------------------------------------------
-// Display / formatting
-// ---------------------------------------------------------------------------
-
 fn bench_display(c: &mut Criterion) {
     let edn_small = read_string(MOLECULE_SMALL).unwrap();
     let edn_large = read_string(MOLECULE_LARGE).unwrap();
@@ -156,10 +148,6 @@ fn bench_roundtrip(c: &mut Criterion) {
     });
     group.finish();
 }
-
-// ---------------------------------------------------------------------------
-// Serde deserialization
-// ---------------------------------------------------------------------------
 
 #[allow(dead_code)]
 #[derive(Deserialize, Serialize)]
@@ -215,10 +203,6 @@ fn bench_deserialize(c: &mut Criterion) {
     group.finish();
 }
 
-// ---------------------------------------------------------------------------
-// Serde serialization
-// ---------------------------------------------------------------------------
-
 fn bench_serialize(c: &mut Criterion) {
     let proxy = from_str::<MoleculeProxy>(MOLECULE_SMALL).unwrap();
 
@@ -239,14 +223,6 @@ fn bench_serialize(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ---------------------------------------------------------------------------
-// Large-stream throughput: repeated independent top-level values
-// ---------------------------------------------------------------------------
-//
-// Question: does eager `read_all` + `from_value` match a true streaming
-// deserializer on throughput? If yes, the direct streaming path becomes a
-// specialized optimization rather than a necessary peer public API.
 
 fn many_molecules(count: usize) -> String {
     let mut s = String::with_capacity(count * (MOLECULE_SMALL.len() + 1));
@@ -295,10 +271,6 @@ fn bench_stream_throughput(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ---------------------------------------------------------------------------
-// Map lookup
-// ---------------------------------------------------------------------------
 
 fn make_keyword_map(n: usize) -> (EdnMap<'static>, Vec<String>) {
     let mut m = EdnMap::with_capacity(n);
@@ -370,15 +342,6 @@ fn bench_map_lookup(c: &mut Criterion) {
     group.finish();
 }
 
-// ---------------------------------------------------------------------------
-// Phase 3–5 code paths: Value lossless mirror and serde wrappers
-// ---------------------------------------------------------------------------
-//
-// These exercise the carrier-pair dispatch in `value_serde.rs` and the
-// token-dispatch wrappers (`EdnKeyword`, `EdnSymbol`, `EdnList`,
-// `EdnHashSet`, `EdnTagged`). None of these paths are touched by the
-// benches above.
-
 const VALUE_MIXED: &str = r#"{:name :salt
                               :sym chem/NaCl
                               :list (1 2 3 4 5)
@@ -416,15 +379,12 @@ fn bench_value_serde(c: &mut Criterion) {
 
     let cfg = permissive_config();
 
-    // Carrier-pair dispatch: from_str_with -> Value via visit_newtype_struct
-    // + visit_enum for every EDN-specific variant in the payload.
     group.bench_function("from_str_mixed", |b| {
         b.iter(|| from_str_with::<Value>(black_box(VALUE_MIXED), &cfg).unwrap())
     });
 
     let value: Value = from_str_with(VALUE_MIXED, &cfg).unwrap();
 
-    // EdnRef walker: Serialize for Value dispatching through token arms.
     group.bench_function("to_string_mixed", |b| {
         b.iter(|| to_string(black_box(&value)).unwrap())
     });
@@ -437,8 +397,6 @@ fn bench_value_serde(c: &mut Criterion) {
         })
     });
 
-    // JSON fallback through the lossy-degrade path (keyword/symbol → Str,
-    // list/set → Vector, tagged → tuple).
     group.bench_function("json_to_string_mixed", |b| {
         b.iter(|| serde_json::to_string(black_box(&value)).unwrap())
     });
@@ -481,7 +439,6 @@ fn bench_wrappers_serde(c: &mut Criterion) {
         b.iter(|| to_string(black_box(&fixture)).unwrap())
     });
 
-    // Permissive parse needed for EdnTagged<String> with caller-chosen tag.
     let cfg = permissive_config();
 
     group.bench_function("deserialize_wrappers", |b| {
@@ -499,8 +456,6 @@ fn bench_wrappers_serde(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ---------------------------------------------------------------------------
 
 criterion_group!(
     benches,
