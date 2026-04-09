@@ -27,6 +27,12 @@ pub struct AtomTypeRegistry {
 /// Two-level TOML map: element symbol -> charge string -> atom list
 type AtomTypeRegistryToml = BTreeMap<String, BTreeMap<String, Vec<String>>>;
 
+impl Default for AtomTypeRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AtomTypeRegistry {
     pub fn new() -> Self {
         let mut reg = AtomTypeRegistry {
@@ -124,7 +130,7 @@ impl AtomTypeRegistry {
                 atom_types
                     .entry((element, None))
                     .or_default()
-                    .extend(atoms.into_iter());
+                    .extend(atoms);
             }
         }
         let mut reg = AtomTypeRegistry {
@@ -145,7 +151,7 @@ impl AtomTypeRegistry {
         self.atom_types
             .entry((atom.element(), Some(atom.charge())))
             .or_default()
-            .push(atom.clone());
+            .push(atom);
         self.atom_types
             .entry((atom.element(), None))
             .or_default()
@@ -260,9 +266,9 @@ impl ValenceTable {
     fn recompute_hash(&mut self) {
         let mut buf = String::new();
         for (element, entry) in &self.entries {
-            let _ = write!(
+            let _ = writeln!(
                 buf,
-                "{}:{:?}:{:?}\n",
+                "{}:{:?}:{:?}",
                 element,
                 entry.allowed_valences,
                 entry.allowed_aromatic_valences

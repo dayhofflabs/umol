@@ -525,7 +525,7 @@ impl FromAst<AtomAst> for AtomPattern {
             }
         };
 
-        let isotope_mass = match ast.isotope_mass.or_else(|| match cfg.isotope_mode {
+        let isotope_mass = match ast.isotope_mass.or(match cfg.isotope_mode {
             IsotopeMode::Natural => Some(IsotopeExpr::Natural),
             IsotopeMode::Required => None,
         }) {
@@ -541,7 +541,7 @@ impl FromAst<AtomAst> for AtomPattern {
             }
         };
 
-        let charge = match ast.charge.or_else(|| match cfg.charge_mode {
+        let charge = match ast.charge.or(match cfg.charge_mode {
             NumericMode::Zero => Some(ValueAst::Lit(0)),
             NumericMode::Required => None,
         }) {
@@ -556,7 +556,7 @@ impl FromAst<AtomAst> for AtomPattern {
         let implicit_hydrogens =
             match ast
                 .implicit_hydrogens
-                .or_else(|| match cfg.implicit_h_mode {
+                .or(match cfg.implicit_h_mode {
                     ImplicitHydrogenMode::Normal => Some(HydrogenExpr::Normal),
                     ImplicitHydrogenMode::Zero => Some(HydrogenExpr::Value(ValueAst::Lit(0))),
                     ImplicitHydrogenMode::Required => None,
@@ -579,7 +579,7 @@ impl FromAst<AtomAst> for AtomPattern {
         let aromatic_valence =
             match ast
                 .aromatic_valence
-                .or_else(|| match cfg.aromatic_valence_mode {
+                .or(match cfg.aromatic_valence_mode {
                     AromaticValenceMode::NotAromatic => Some(AromaticExpr::NotAromatic),
                     AromaticValenceMode::Aromatic => Some(AromaticExpr::Value(ValueAst::Wildcard)),
                     AromaticValenceMode::Required => None,
@@ -614,7 +614,7 @@ impl FromAst<AtomAst> for AtomPattern {
                         mode: &NumericMode,
                         field: &'static str|
          -> Result<Pattern<u8>, LoweringError> {
-            let v = v.or_else(|| match mode {
+            let v = v.or(match mode {
                 NumericMode::Zero => Some(ValueAst::Lit(0)),
                 NumericMode::Required => None,
             });

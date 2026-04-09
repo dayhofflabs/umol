@@ -146,6 +146,7 @@ pub fn kekulize(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dfs_kekulize(
     depth: usize,
     bond_order: &[usize],

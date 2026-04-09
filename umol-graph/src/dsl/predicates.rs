@@ -234,7 +234,7 @@ fn hydrogen_expr(i: &str) -> IResult<&str, HydrogenExpr, ParseError> {
         multispace0,
         alt((
             value(HydrogenExpr::Normal, tag("=")),
-            map(value_dsl, |v| HydrogenExpr::Value(v)),
+            map(value_dsl, HydrogenExpr::Value),
             success(HydrogenExpr::Value(ValueAst::Lit(1))),
         )),
     )
@@ -247,7 +247,7 @@ fn aromatic_valence_expr(i: &str) -> IResult<&str, AromaticExpr, ParseError> {
         alt((
             value(AromaticExpr::NotAromatic, tag("!")),
             value(AromaticExpr::Unspecified, tag("?")),
-            map(value_dsl, |v| AromaticExpr::Value(v)),
+            map(value_dsl, AromaticExpr::Value),
             success(AromaticExpr::Value(ValueAst::Lit(1))),
         )),
     )

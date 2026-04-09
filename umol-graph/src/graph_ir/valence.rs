@@ -142,7 +142,7 @@ fn counts_candidates(
             accepted_pairs,
             allow_implicit_hydrogens,
             builder.atom_has_normal_implicit_hydrogens(atom_index),
-            &atom,
+            atom,
         );
     }
 
@@ -164,10 +164,11 @@ fn counts_candidates(
         donated_pairs,
         accepted_pairs,
         AromaticValence::NotAromatic,
-        &atom,
+        atom,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_aromatic_spec(
     allowed_aromatic_valences: &[u8],
     element: Element,
@@ -263,6 +264,7 @@ fn infer_normal_aromatic_implicit_hydrogens(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_spec(
     element: Element,
     charge: i8,
@@ -288,6 +290,7 @@ fn build_spec(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn try_build_atom(
     element: Element,
     charge: i8,

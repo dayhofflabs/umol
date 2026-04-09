@@ -127,7 +127,7 @@ impl HueckelRuleAromaticity {
         if electron_count < 2 {
             return false;
         }
-        (electron_count - 2) % 4 == 0
+        (electron_count - 2).is_multiple_of(4)
     }
 
     fn ring_electron_count(&self, builder: &MoleculeBuilder, atoms: &[AtomIndex]) -> Option<u32> {

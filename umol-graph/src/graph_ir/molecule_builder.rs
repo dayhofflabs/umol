@@ -129,7 +129,7 @@ impl MoleculeBuilder {
             let atom = molecule.atom(atom_idx).expect("atom index must be valid");
             let new_idx = builder.add_atom(AtomPattern::from_atom(atom));
             builder
-                .set_atom_candidates(new_idx, SmallVec::from_elem(atom.clone(), 1))
+                .set_atom_candidates(new_idx, SmallVec::from_elem(*atom, 1))
                 .expect("newly added atom index must be valid");
             atom_map.insert(atom_idx, new_idx);
         }
@@ -425,8 +425,7 @@ impl MoleculeBuilder {
         self.resolution
             .atom_candidates
             .get(&index)
-            .map(|c| c.iter().next().map(getter))
-            .flatten()
+            .and_then(|c| c.iter().next().map(getter))
     }
 
     pub fn atom_valence(&self, index: AtomIndex) -> u8 {
@@ -899,8 +898,7 @@ impl MoleculeBuilder {
         index: AtomIndex,
     ) -> impl Iterator<Item = AromaticSystem> + '_ {
         self.aromatic_systems()
-            .filter(move |s| s.contains_atom(index))
-            .map(|s| s.clone())
+            .filter(move |s| s.contains_atom(index)).cloned()
     }
 
     // Atom-multicenter bond relationships
@@ -927,8 +925,7 @@ impl MoleculeBuilder {
         index: AtomIndex,
     ) -> impl Iterator<Item = MulticenterBond> + '_ {
         self.multicenter_bonds()
-            .filter(move |b| b.contains_atom(index))
-            .map(|b| b.clone())
+            .filter(move |b| b.contains_atom(index)).cloned()
     }
 
     // Atom-noncovalent bond relationships
@@ -1029,7 +1026,7 @@ impl MoleculeBuilder {
                 ));
             }
 
-            let atom = candidate.clone();
+            let atom = *candidate;
             let new_idx = graph.add_node(atom);
             index_map[old_idx.index()] = Some(new_idx);
         }
@@ -1194,7 +1191,7 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
             let atoms: Vec<AtomIndex> = sys
                 .atoms
                 .iter()
-                .map(|label| resolve(label))
+                .map(&resolve)
                 .collect::<Result<_, _>>()?;
             let contributions: Vec<AromaticContribution> = atoms
                 .into_iter()
@@ -1207,7 +1204,7 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
             let atoms: Vec<AtomIndex> = mc
                 .atoms
                 .iter()
-                .map(|label| resolve(label))
+                .map(&resolve)
                 .collect::<Result<_, _>>()?;
             let set = MulticenterSet::topology_only(atoms);
             builder.add_multicenter_bond(MulticenterBond::new(std::iter::once(set)));

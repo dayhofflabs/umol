@@ -747,7 +747,7 @@ impl MoleculeInput {
     fn into_ast(self) -> Result<MoleculeAst, ParseError> {
         // 1. Build alias table from flat vector [name, def, name, def, ...]
         let raw_aliases = &self.atom_aliases;
-        if raw_aliases.len() % 2 != 0 {
+        if !raw_aliases.len().is_multiple_of(2) {
             return Err(ParseError::WrongFieldType {
                 field: "atom-aliases".to_string(),
                 expected: "flat vector of keyword/atom-spec pairs (even length)".to_string(),
@@ -1210,7 +1210,7 @@ impl ToEdn for Atoms {
                 } else {
                     atom.to_edn()
                 };
-                Edn::Vector(vec![Edn::keyword(*tag), def_edn].into())
+                Edn::Vector(vec![Edn::keyword(tag), def_edn].into())
             } else if let Some(alias) = alias_name {
                 Edn::keyword(alias)
             } else {

@@ -415,8 +415,7 @@ impl Molecule {
         index: AtomIndex,
     ) -> impl Iterator<Item = AromaticSystem> + '_ {
         self.aromatic_systems()
-            .filter(move |s| s.contains_atom(index))
-            .map(|s| s.clone())
+            .filter(move |s| s.contains_atom(index)).cloned()
     }
 
     // Atom-multicenter bond relationships
@@ -443,8 +442,7 @@ impl Molecule {
         index: AtomIndex,
     ) -> impl Iterator<Item = MulticenterBond> + '_ {
         self.multicenter_bonds()
-            .filter(move |b| b.contains_atom(index))
-            .map(|b| b.clone())
+            .filter(move |b| b.contains_atom(index)).cloned()
     }
 
     // Atom-noncovalent bond relationships

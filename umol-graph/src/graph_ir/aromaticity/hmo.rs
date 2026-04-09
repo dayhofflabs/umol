@@ -200,7 +200,7 @@ impl HmoCalculator {
                 "zero pi-electrons".to_string(),
             ));
         }
-        if electron_count % 2 != 0 {
+        if !electron_count.is_multiple_of(2) {
             return Err(AromaticityError::HmoInvalidInput(
                 "open-shell pi-system (odd electron count) not supported by HMO".to_string(),
             ));

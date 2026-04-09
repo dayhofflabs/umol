@@ -112,7 +112,7 @@ impl Display for BondAst {
             }
         };
         let u: i32 = match &self.unpaired_electrons {
-            Some(ValueAst::Lit(u)) => *u as i32,
+            Some(ValueAst::Lit(u)) => *u,
             None => 0,
             _ => -1,
         };
@@ -217,7 +217,7 @@ pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, ParseError> {
         unpaired_electrons: None,
         multiplicity: None,
     };
-    update_bond_ast(&mut ast, preds).map_err(|e| Err::Error(e))?;
+    update_bond_ast(&mut ast, preds).map_err(Err::Error)?;
     Ok((remaining, ast))
 }
 

@@ -168,7 +168,7 @@ impl MulticenterBond {
                     .iter()
                     .map(|old_idx| index_map.get(old_idx).copied())
                     .collect::<Option<Vec<u32>>>()
-                    .map(|atoms| MulticenterSet::new(atoms))
+                    .map(MulticenterSet::new)
             })
             .collect::<Option<Vec<MulticenterSet>>>()?;
 

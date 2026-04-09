@@ -69,7 +69,7 @@ fn resolve_topology_with(
         let key = if a <= b { (a, b) } else { (b, a) };
         bond_pairs.entry(key).or_default().push(bond_index);
     }
-    for (_pair, indices) in &bond_pairs {
+    for indices in bond_pairs.values() {
         if indices.len() >= 2 {
             return Err(ResolutionError::TopologyParallelEdges(
                 indices[0].index() as u32,

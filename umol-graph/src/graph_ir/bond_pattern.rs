@@ -157,7 +157,7 @@ impl FromAst<BondAst> for BondPattern {
             _ => return Err(LoweringError::NonGround { field: "order" }),
         };
 
-        let charge = match ast.charge.or_else(|| match cfg.charge_mode {
+        let charge = match ast.charge.or(match cfg.charge_mode {
             NumericMode::Zero => Some(ValueAst::Lit(0)),
             NumericMode::Required => None,
         }) {

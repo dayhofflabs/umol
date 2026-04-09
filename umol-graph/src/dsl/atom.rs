@@ -210,7 +210,7 @@ pub fn atom_dsl(i: &str) -> IResult<&str, AtomAst, ParseError> {
     .parse(i)?;
 
     let mut ast = AtomAst::new(element);
-    update_atom_ast(&mut ast, preds).map_err(|e| Err::Error(e))?;
+    update_atom_ast(&mut ast, preds).map_err(Err::Error)?;
     Ok((remaining, ast))
 }
 
@@ -350,7 +350,7 @@ fn fmt_multiplicity(
         }
     };
     let u: i32 = match unpaired {
-        Some(ValueAst::Lit(u)) => *u as i32,
+        Some(ValueAst::Lit(u)) => *u,
         None => 0,
         _ => -1, // non-literal: can't determine derivability, always print
     };
