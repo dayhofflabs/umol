@@ -34,31 +34,31 @@
 //! - `macros` — re-exports `#[derive(FromEdn, ToEdn)]` and the `edn!` macro.
 
 #[cfg(feature = "bignum")]
-pub mod bigdecimal;
+pub(crate) mod bigdecimal;
 #[cfg(feature = "bignum")]
-pub mod bigint;
-pub mod collections;
-pub mod config;
+pub(crate) mod bigint;
+pub(crate) mod collections;
+pub(crate) mod config;
 mod display;
-pub mod edn;
-pub mod error;
-pub mod formatter;
-pub mod keyword;
-pub mod list;
-pub mod parser;
-pub mod reader;
-pub mod set;
-pub mod streaming;
-pub mod symbol;
-pub mod tagged;
-pub mod tags;
-pub mod traits;
-pub mod value;
+pub(crate) mod edn;
+pub(crate) mod error;
+pub(crate) mod formatter;
+pub(crate) mod keyword;
+pub(crate) mod list;
+pub(crate) mod parser;
+pub(crate) mod reader;
+pub(crate) mod set;
+pub(crate) mod streaming;
+pub(crate) mod symbol;
+pub(crate) mod tagged;
+pub(crate) mod tags;
+pub(crate) mod traits;
+pub(crate) mod value;
 
 #[cfg(feature = "serde")]
-pub mod de;
+pub(crate) mod de;
 #[cfg(feature = "serde")]
-pub mod ser;
+pub(crate) mod ser;
 #[cfg(feature = "serde")]
 pub(crate) mod serde_tokens;
 
@@ -69,8 +69,10 @@ pub use bigint::EdnBigInt;
 pub use collections::{EdnKeyRef, EdnMap, EdnMapHelper, EdnSeq, EdnSet};
 pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 #[cfg(feature = "serde")]
-pub use de::{from_str, from_str_with, from_value, EdnDeserializer};
-pub use edn::{Edn, Keyword, Symbol};
+pub use de::{
+    from_str, from_str_with, from_value, from_value_ref, EdnDeserializer, StreamDeserializer,
+};
+pub use edn::{Edn, EdnOwned, Keyword, Symbol};
 pub use error::{DeError, EdnError, ParseError, SerError};
 pub use formatter::FormatConfig;
 #[cfg(feature = "serde")]
@@ -81,8 +83,13 @@ pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader}
 #[cfg(feature = "serde")]
 pub use ser::{to_string, to_value, EdnSerializer};
 pub use set::EdnHashSet;
+pub use streaming::EdnStreamDeserializer;
 pub use symbol::EdnSymbol;
 pub use tagged::EdnTagged;
+#[cfg(feature = "chrono")]
+pub use tags::inst_to_edn;
+#[cfg(feature = "uuid")]
+pub use tags::uuid_to_edn;
 pub use traits::{FromEdn, ToEdn};
 #[cfg(feature = "macros")]
 pub use umol_edn_macros::{edn, FromEdn, ToEdn};

@@ -3,9 +3,7 @@
 use std::borrow::Cow;
 
 use rstest::rstest;
-use umol_edn::edn;
-use umol_edn::edn::{Edn, Symbol};
-use umol_edn::EdnMap;
+use umol_edn::{edn, Edn, EdnMap, Symbol};
 
 #[test]
 fn test_nil() {

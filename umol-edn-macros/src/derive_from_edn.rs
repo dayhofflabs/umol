@@ -147,7 +147,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
             fn from_edn_str(
                 input: &'de str,
             ) -> ::std::result::Result<Self, ::umol_edn::EdnError> {
-                let mut __de = ::umol_edn::streaming::EdnStreamDeserializer::new(input);
+                let mut __de = ::umol_edn::EdnStreamDeserializer::new(input);
                 #(#stream_decls)*
                 __de.consume_byte(b'{')?;
                 loop {

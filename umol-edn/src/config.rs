@@ -1,5 +1,8 @@
 //! Parser configuration.
 
+use std::fmt;
+use std::sync::Arc;
+
 use crate::edn::Edn;
 use crate::error::ParseError;
 #[cfg(feature = "chrono")]
@@ -16,16 +19,32 @@ pub enum DuplicateKeyPolicy {
 }
 
 /// A tag reader transforms the parsed value after a tag into an `Edn` value.
-pub type TagFn = fn(Edn) -> Result<Edn, ParseError>;
+///
+/// Stored as `Arc<dyn Fn>` so closures capturing external state (e.g. a
+/// registry of allowed tags) can be registered, and so that `ParseConfig`
+/// can keep its `Clone` impl.
+pub type TagFn =
+    Arc<dyn for<'a> Fn(Edn<'a>) -> Result<Edn<'a>, ParseError> + Send + Sync>;
 
 /// Registry of tag readers.
 ///
 /// When the parser encounters `#tag value`, it looks up `tag` in this registry.
 /// If found, the handler is called with the parsed value. If not found, the
 /// value is wrapped as `Edn::Tagged(tag, value)`.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TagReaders {
     readers: Vec<(Box<str>, TagFn)>,
+}
+
+impl fmt::Debug for TagReaders {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TagReaders")
+            .field(
+                "tags",
+                &self.readers.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            )
+            .finish()
+    }
 }
 
 impl TagReaders {
@@ -60,14 +79,17 @@ impl Default for TagReaders {
     fn default() -> Self {
         let mut r = Self::empty();
         #[cfg(feature = "chrono")]
-        r.insert("inst", read_inst);
+        r.insert("inst", Arc::new(read_inst));
         #[cfg(feature = "uuid")]
-        r.insert("uuid", read_uuid);
+        r.insert("uuid", Arc::new(read_uuid));
         r
     }
 }
 
 /// Parser configuration.
+///
+/// For *output* configuration (pretty-print width, map sorting, indentation),
+/// see [`crate::FormatConfig`].
 #[derive(Clone, Debug, Default)]
 pub struct ParseConfig {
     pub duplicate_keys: DuplicateKeyPolicy,

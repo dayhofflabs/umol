@@ -11,8 +11,9 @@ use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{self, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
-use umol_edn::streaming::EdnStreamDeserializer;
-use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMapHelper, FromEdn, ToEdn};
+use umol_edn::{
+    DeError, Edn, EdnError, EdnKeyword, EdnMapHelper, EdnStreamDeserializer, FromEdn, ToEdn,
+};
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
@@ -866,7 +867,7 @@ impl FromStr for MoleculeAst {
 /// Parse via serde streaming. Retained for benchmark comparison only.
 pub fn parse_molecule_dsl_serde(input: &str) -> Result<MoleculeAst, ParseError> {
     let mol_input: MoleculeInput =
-        umol_edn::de::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
+        umol_edn::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
     mol_input.into_ast()
 }
 

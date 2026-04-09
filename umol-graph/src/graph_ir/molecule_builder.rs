@@ -13,8 +13,7 @@ use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use umol_data::{SpinMultiplicity, SpinState};
-use umol_edn::de::from_str as edn_from_str;
-use umol_edn::ser::to_string as edn_to_string;
+use umol_edn::{from_str as edn_from_str, to_string as edn_to_string};
 
 use super::aromaticity::{AromaticContribution, AromaticSystem};
 use super::atom::Atom;

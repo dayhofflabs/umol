@@ -4,9 +4,7 @@ use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use proptest::prelude::*;
-use umol_edn::collections::{EdnMap, EdnSeq, EdnSet};
-use umol_edn::edn::{Edn, Keyword, Symbol};
-use umol_edn::read_string;
+use umol_edn::{read_string, Edn, EdnMap, EdnSeq, EdnSet, Keyword, Symbol};
 
 // Strategies
 

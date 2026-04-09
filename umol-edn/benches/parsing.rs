@@ -2,10 +2,10 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde::{Deserialize, Serialize};
-use umol_edn::de::StreamDeserializer;
 use umol_edn::{
-    from_str, from_str_with, from_value, read_all, read_string, to_string, Edn, FormatConfig,
-    EdnHashSet, EdnKeyRef, EdnKeyword, EdnList, EdnMap, EdnSymbol, EdnTagged, ParseConfig, Value,
+    from_str, from_str_with, from_value, read_all, read_string, to_string, Edn, EdnHashSet,
+    EdnKeyRef, EdnKeyword, EdnList, EdnMap, EdnSymbol, EdnTagged, FormatConfig, ParseConfig,
+    StreamDeserializer, Value,
 };
 
 const MOLECULE_SMALL: &str = r#"{:atoms [C O] :bonds [["0" "1" :single]]}"#;

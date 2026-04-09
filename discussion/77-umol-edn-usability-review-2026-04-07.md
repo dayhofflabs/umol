@@ -873,21 +873,208 @@ Audit against the current code, not the historical narrative.
 | # | Issue | Status |
 |---|---|---|
 | 1 | Two parallel paths leak through the type system | **Resolved** — Phase 3/3.5. Native `FromEdn` / `ToEdn` is the primary API; serde is an opt-in escape hatch with full wrapper parity. |
-| 2 | `Edn<'a>` lifetime is viral | **Decided** 2026-04-07: keep the lifetime. `EdnOwned = Edn<'static>` alias still not added — minor ergonomic gap. |
+| 2 | `Edn<'a>` lifetime is viral | **Resolved** 2026-04-08 — `pub type EdnOwned = Edn<'static>` added in `edn.rs`, re-exported at crate root, cross-linked from `Edn::into_owned`. |
 | 3 | `to_value` requires full tree | **Resolved** — Phase 2.5 fusion override exists; tree path competitive or faster on realistic inputs. |
-| 4 | `TagReaders` uses `fn`, not `Box<dyn Fn>` | **Open** — `config.rs` still `pub type TagFn = fn(Edn) -> Result<Edn, EdnError>;`. Closures capturing context can't be registered. |
-| 5 | `DuplicateKeyPolicy` missing `FirstWins` / `Merge` | **Open** — two-variant enum unchanged. Low priority. |
-| 6 | `ParseConfig` and formatter config are unrelated structs | **Partial** — `EdnFormatter` renamed to `FormatConfig` (2026-04-08). Still two independent structs; no umbrella `EdnConfig`, no cross-links in docs. |
-| 7 | `EdnError` opacity (no `kind()`, not split) | **Open** — blocked on the crate-wide error architecture work in `discussion/65-umol-error-handling-2026-03-31.md`. |
+| 4 | `TagReaders` uses `fn`, not `Box<dyn Fn>` | **Resolved** 2026-04-08 — `TagFn = Arc<dyn for<'a> Fn(Edn<'a>) -> Result<Edn<'a>, ParseError> + Send + Sync>`. Closures capturing external state can now be registered; `ParseConfig: Clone` preserved via `Arc`. |
+| 5 | `DuplicateKeyPolicy` missing `FirstWins` / `Merge` | **Deferred** — two-variant enum unchanged. Not adding speculative variants without a concrete use case. |
+| 6 | `ParseConfig` and formatter config are unrelated structs | **Resolved** 2026-04-08 — rustdoc cross-links added between `ParseConfig` and `FormatConfig`. No umbrella `EdnConfig` (rejected as unnecessary indirection). |
+| 7 | `EdnError` opacity (no `kind()`, not split) | **Resolved** 2026-04-08 — `EdnError` is now a dispatch enum wrapping `ParseError` / `DeError` / `SerError` with `#[from]` conversions (serde_json-style). Narrow sub-enums re-exported at the crate root; internal code constructs the narrow type and `?` lifts it. Delivers the crate-wide architecture from `discussion/65-umol-error-handling-2026-03-31.md`. |
 | 8 | `EdnMap` / `EdnSet` ordering undocumented | **Stale** — review assumed insertion order; `EdnMap` is a plain `hashbrown::HashMap` (truly unordered). Struct doc says "An unordered map of EDN values." Formatter defaults `sort_maps: true` / `sort_sets: true`. Effectively resolved. |
 | 9 | `edn!` macro uses runtime `read_string` | **Resolved** — `umol-edn-macros` exposes a `#[proc_macro]` `edn!`; parsing happens at compile time. |
-| 10 | No `Index` / `IndexMut` on `Edn` | **Open** — no `impl Index` in `src/`. `edn["key"]` / `edn[0]` still require manual tree walking. |
-| 11 | `from_value` consumes `Edn` | **Open** — `de.rs` still exposes `from_value<'a, T>(val: Edn<'a>)`; no `from_value_ref(&Edn)`. Friction is now limited to the serde compat path since the native `FromEdn` trait already takes `&Edn`. |
-| 12 | Module visibility — submodules leaking | **Open** — every non-serde module in `lib.rs` is still `pub mod`. `umol_edn::edn::Edn` and `umol_edn::Edn` both compile. Only `serde_tokens` was sealed to `pub(crate)` (2026-04-08). |
+| 10 | No `Index` / `IndexMut` on `Edn` | **Resolved** 2026-04-08 — `impl<'a> Index<&str> for Edn<'a>` and `impl<'a> Index<usize> for Edn<'a>` added. Missing keys, out-of-bounds indices, and type mismatches return `&Edn::Nil` (infallible, chainable). No `IndexMut`. |
+| 11 | `from_value` consumes `Edn` | **Resolved** 2026-04-08 (phase 1) — `from_value_ref(&Edn) -> T` added as a clone shim. Ergonomic API exists; zero-clone parallel deserializer deferred to a follow-up once profiling data justifies the code duplication. |
+| 12 | Module visibility — submodules leaking | **Resolved** 2026-04-08 — all submodules flipped to `pub(crate) mod`. `umol_edn::edn::Edn` no longer compiles; only the flat `umol_edn::` namespace is public. `tests/import_paths.rs` locks the surface. `umol-graph` consumers migrated; `#[derive(FromEdn)]` now generates `::umol_edn::EdnStreamDeserializer` instead of the submodule path. |
 
-**Load-bearing opens**: #4 (closures in tag readers), #10 (`Index`),
-#11 (`from_value_ref`), #12 (seal submodules).
+All review items are now **Resolved** (#1–#4, #6–#12) or **Deferred** (#5).
 
-**Low-priority opens**: #5, #6 (cross-link in docs is probably enough).
+## Phase 6: outstanding issues implementation plan (2026-04-08)
+
+With #7 resolved, the remaining issues fall into three tiers by cost and
+blast radius. The plan below proposes an order, a concrete change sketch
+for each, and the test that guards it.
+
+### Tier 1 — small, local, no API churn
+
+**#4: `TagFn` accepts `Box<dyn Fn>` closures.**
+
+- File: `umol-edn/src/config.rs`.
+- Change:
+  ```rust
+  pub type TagFn = Box<dyn Fn(Edn<'_>) -> Result<Edn<'_>, ParseError> + Send + Sync>;
+  ```
+  Registration site in `ParseConfig::tag_readers: HashMap<String, TagFn>`
+  already owns the value; swapping `fn` for `Box<dyn Fn>` is a type change
+  at the boundary, not a shape change.
+- Ripple: every `tag_readers.insert("foo", foo_reader)` site needs
+  `Box::new(foo_reader)`. Grep shows the built-in readers in
+  `src/tags.rs` and the test fixtures in `tests/conformance.rs` — single-
+  digit sites.
+- Lifetime caveat: the current `fn` pointer takes `Edn<'_>` for any
+  lifetime. A `Box<dyn Fn>` with an HRTB bound
+  (`for<'a> Fn(Edn<'a>) -> Result<Edn<'a>, ParseError>`) preserves that.
+  If HRTB gives trouble, fall back to
+  `Box<dyn for<'a> Fn(Edn<'a>) -> Result<Edn<'static>, ParseError> + Send + Sync>`
+  and let the reader call `into_owned()` — slightly less zero-copy, still
+  strictly more expressive than the current `fn`.
+- Test: add `test_tag_reader_captures_registry` in `conformance.rs` that
+  registers a closure capturing an `Arc<HashMap<&str, i64>>` and verifies
+  the captured state is reachable from the reader.
+- Estimated delta: ~30 LoC including test.
+
+**#10: `Index` / `IndexMut` on `Edn`.**
+
+- File: new `umol-edn/src/edn_index.rs` or appended to `src/edn.rs`.
+- Change: implement `Index<&str>` (map lookup by keyword name or string
+  key) and `Index<usize>` (vector/list lookup) returning `&Edn<'a>`,
+  with `&Edn::Nil` on miss — serde_json's convention. Do **not**
+  implement `IndexMut`; the tree is parse-output and mutation is rare
+  enough to not justify the API surface.
+  ```rust
+  impl<'a> Index<&str> for Edn<'a> {
+      type Output = Edn<'a>;
+      fn index(&self, key: &str) -> &Edn<'a> {
+          match self {
+              Edn::Map(m) => m.get(&EdnKeyRef::Keyword(key))
+                  .or_else(|| m.get(&EdnKeyRef::Str(key)))
+                  .unwrap_or(&Edn::Nil),
+              _ => &Edn::Nil,
+          }
+      }
+  }
+  impl<'a> Index<usize> for Edn<'a> {
+      type Output = Edn<'a>;
+      fn index(&self, i: usize) -> &Edn<'a> {
+          match self {
+              Edn::Vector(v) | Edn::List(v) => v.get(i).unwrap_or(&Edn::Nil),
+              _ => &Edn::Nil,
+          }
+      }
+  }
+  ```
+  Requires a `&'static Edn::Nil` — either a `const NIL: Edn<'static>` or
+  a `static NIL: Edn<'static> = Edn::Nil;`.
+- Risk: ambiguous key lookup when the same map has both `:foo` and
+  `"foo"`. Keyword-first matches Clojure's reader behavior for the common
+  "stringly-typed access from Rust" use case.
+- Test: `test_edn_index_map_keyword`, `test_edn_index_map_string`,
+  `test_edn_index_vector`, `test_edn_index_missing_returns_nil`,
+  `test_edn_index_wrong_type_returns_nil`.
+- Estimated delta: ~80 LoC including tests.
+
+**#11: `from_value_ref(&Edn)` alongside `from_value(Edn)`.**
+
+- File: `umol-edn/src/de.rs`.
+- Change: add
+  ```rust
+  pub fn from_value_ref<'a, T: Deserialize<'a>>(val: &Edn<'a>) -> Result<T, EdnError>
+  ```
+  that wraps `EdnDeserializer` over a borrow. The current
+  `EdnDeserializer` owns its `Edn`; splitting its input into `Edn<'a>` vs
+  `&'a Edn<'a>` means either (a) making `EdnDeserializer` generic over a
+  `&Edn` borrow lifetime, or (b) a second `EdnRefDeserializer` type. The
+  second is simpler and keeps the owned path hot.
+- The native `FromEdn` trait already takes `&Edn<'de>` so this gap is
+  limited to the serde compat layer. Scope is "convenience for the
+  narrowing audience that still uses serde."
+- Test: `test_from_value_ref_no_clone` deserializes the same `Edn` into
+  two different target types without cloning.
+- Estimated delta: ~60 LoC for the ref deserializer + delegation, ~20
+  LoC test.
+
+### Tier 2 — API surface reduction
+
+**#12: seal submodules; crate root is the only import path.**
+
+- File: `umol-edn/src/lib.rs` plus every consumer.
+- Change: flip `pub mod` → `pub(crate) mod` for each module that has
+  all of its intended public items already re-exported at the crate
+  root. Audit required: for each of the 19 modules, grep external
+  consumers for any `use umol_edn::<module>::` that imports an item not
+  on the crate-root re-export list. Two outcomes per module:
+  1. All consumers already import via crate root → seal the module.
+  2. Some consumer reaches into the module → either add the item to the
+     crate-root re-exports (preferred) or leave the module `pub` and
+     document it as an escape hatch.
+- Consumers to audit: `umol-graph`, `umol-params`, any other crate with
+  `umol_edn::` uses. Workspace grep once at the start.
+- Load-bearing subtlety: the serde path uses newtype tokens defined in
+  `serde_tokens` (already `pub(crate)`); the public wrappers
+  (`EdnKeyword`, `EdnSymbol`, `EdnSet`, `EdnTagged`, `EdnBigInt`,
+  `EdnBigDecimal`, `Value`) live in their own modules. Each wrapper's
+  crate-root re-export already exists per the Phase 5 outcome, so
+  sealing those modules should not break callers — the audit is
+  paperwork.
+- Test: compile umol-graph / umol-params; any missing re-export
+  surfaces as a compile error. Add a `tests/import_paths.rs` that
+  performs every intended import via the crate root and fails if an
+  import path disappears.
+- Estimated delta: ~20 LoC in `lib.rs`, variable in consumers (probably
+  small because the Phase 5 re-exports already cover the common case).
+
+### Tier 3 — lower priority, small
+
+**#2: add `EdnOwned = Edn<'static>` alias + `into_owned()` discoverability.**
+
+- File: `umol-edn/src/edn.rs` + re-export in `lib.rs`.
+- Change: `pub type EdnOwned = Edn<'static>;` plus a doc note on
+  `Edn::into_owned()` pointing at the alias. If `into_owned` does not
+  exist yet, add it — the `Cow<'a, str>` and nested-collection case is
+  mechanical.
+- Estimated delta: ~40 LoC if `into_owned` needs writing, ~5 LoC if
+  just aliasing.
+
+**#5: `DuplicateKeyPolicy::FirstWins` and `Merge(fn)`.**
+
+- File: `umol-edn/src/config.rs` + `src/parser.rs` where the policy is
+  consumed.
+- Change: extend the enum with `FirstWins` and
+  `Merge(Box<dyn Fn(Edn<'_>, Edn<'_>) -> Edn<'_>>)`. The parser already
+  branches on the current two variants; add two arms.
+- Risk: `Merge` closure storage in `ParseConfig` makes
+  `ParseConfig: !Clone` unless the closure is `Arc`-wrapped. Prefer
+  `Arc<dyn Fn>` for Clone-ability.
+- Test: table test in `parser.rs` with each policy against
+  `{:a 1 :a 2 :a 3}`.
+- Estimated delta: ~50 LoC.
+
+**#6: cross-link `ParseConfig` and `FormatConfig` in docs.**
+
+- Doc-only. Add a paragraph to each struct's rustdoc pointing at the
+  other, and a `use umol_edn::{ParseConfig, FormatConfig};` example at
+  the crate root. No umbrella struct — the doc says "cross-link is
+  probably enough" and a premature `EdnConfig` wrapper would just
+  add a layer of indirection.
+- Estimated delta: ~15 LoC of doc.
+
+### Suggested order
+
+1. **#7 follow-up**: already done — this Phase 6 section is the record.
+2. **#4** — Tier 1, independent, smallest, unblocks closure-capturing
+   tag handlers (real user request latent in the codebase).
+3. **#10** — Tier 1, independent, high ergonomic payoff for anyone
+   debugging via REPL / ad-hoc scripts.
+4. **#11** — Tier 1, depends on nothing else, narrow audience but
+   cheap.
+5. **#12** — Tier 2. Do after #4/#10/#11 so any new re-exports they
+   need are already at the crate root. Touch umol-graph and
+   umol-params in the same PR.
+6. **#2** — Tier 3. Drop in whenever a `'static` requirement surfaces
+   in a consumer.
+7. **#5** — Tier 3. Wait for an actual user request — speculative
+   until then.
+8. **#6** — Tier 3. Fold into the next doc pass.
+
+### What this plan explicitly does not do
+
+- No arena-allocated `Edn<'arena>`. The Phase 2.5 fusion result means
+  parse throughput is not the dominant remaining cost; arena lands
+  only if a future benchmark says otherwise.
+- No removal of the `serde` feature flag. Phase 3.5 committed to
+  keeping it as a maintained escape hatch with full wrapper parity.
+- No umbrella `EdnConfig` struct. Cross-links in docs are cheaper and
+  have been explicitly preferred above.
+- No changes to `EdnError` variants beyond the already-shipped split.
+  Adding `kind()` is redundant now that matching on
+  `EdnError::Parse(_)` / `De(_)` / `Ser(_)` is the idiomatic form.
 
 **Blocked**: #7 (waits on #65).

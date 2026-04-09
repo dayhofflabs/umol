@@ -22,12 +22,10 @@ use std::collections::HashMap;
 
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
-use umol_edn::config::ParseConfig;
-use umol_edn::de::{from_str, from_str_with};
-use umol_edn::edn::Edn;
-use umol_edn::ser::to_string;
-use umol_edn::traits::{FromEdn, ToEdn};
-use umol_edn::{EdnHashSet, EdnKeyword, EdnList, EdnSymbol, EdnTagged, Value};
+use umol_edn::{
+    from_str, from_str_with, to_string, Edn, EdnHashSet, EdnKeyword, EdnList, EdnSymbol, EdnTagged,
+    FromEdn, ParseConfig, ToEdn, Value,
+};
 
 /// Parse with `allow_unknown_tags = true`, for tests that exercise dynamic
 /// tags (`EdnTagged<T>` with caller-chosen tag names, `#Variant` enum

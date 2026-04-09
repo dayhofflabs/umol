@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
+use std::ops::Index;
 use std::str::FromStr;
 use std::{fmt, iter};
 
@@ -210,6 +211,13 @@ pub enum Edn<'a> {
     Set(EdnSet<'a>),
     Tagged(Cow<'a, str>, Box<Edn<'a>>),
 }
+
+/// Owned form of [`Edn`] with no borrowed data.
+///
+/// Produced by [`Edn::into_owned`] and by any deserializer that materializes
+/// its input before returning. Use this alias in signatures where the `'a`
+/// lifetime parameter is uninformative.
+pub type EdnOwned = Edn<'static>;
 
 impl FromStr for Edn<'static> {
     type Err = EdnError;
@@ -457,7 +465,8 @@ impl<'a> Edn<'a> {
         }
     }
 
-    pub fn into_owned(self) -> Edn<'static> {
+    /// Materialize any borrowed data and return an [`EdnOwned`].
+    pub fn into_owned(self) -> EdnOwned {
         match self {
             Edn::Nil => Edn::Nil,
             Edn::Bool(b) => Edn::Bool(b),
@@ -575,6 +584,38 @@ impl Hash for Edn<'_> {
                 tag.hash(state);
                 inner.hash(state);
             }
+        }
+    }
+}
+
+/// Sentinel used as the fallback return value for infallible indexing.
+///
+/// Has `'static` lifetime so `&EDN_NIL` coerces to `&Edn<'a>` for any `'a`.
+const EDN_NIL: Edn<'static> = Edn::Nil;
+
+/// Look up a value in a map by string key. Tries keyword `:key` first, then string `"key"`.
+/// Returns `&Edn::Nil` for missing keys or non-map values.
+impl<'a> Index<&str> for Edn<'a> {
+    type Output = Edn<'a>;
+
+    fn index(&self, key: &str) -> &Edn<'a> {
+        let Edn::Map(m) = self else { return &EDN_NIL };
+        if let Some(v) = m.get_ref(EdnKeyRef::Keyword(key)) {
+            return v;
+        }
+        m.get_ref(EdnKeyRef::Str(key)).unwrap_or(&EDN_NIL)
+    }
+}
+
+/// Look up an element in a vector or list by position.
+/// Returns `&Edn::Nil` for out-of-bounds indices or non-sequence values.
+impl<'a> Index<usize> for Edn<'a> {
+    type Output = Edn<'a>;
+
+    fn index(&self, i: usize) -> &Edn<'a> {
+        match self {
+            Edn::Vector(v) | Edn::List(v) => v.get(i).unwrap_or(&EDN_NIL),
+            _ => &EDN_NIL,
         }
     }
 }
@@ -888,5 +929,41 @@ mod tests {
         let c = Edn::Tagged(Cow::Borrowed("t"), Box::new(Edn::Int(2)));
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    use rstest::rstest;
+
+    #[rstest]
+    #[case::map_keyword(r#"{:a 1}"#, "a", "1")]
+    #[case::map_string(r#"{"a" 1}"#, "a", "1")]
+    #[case::map_keyword_preferred_over_string(r#"{:a 1 "a" 2}"#, "a", "1")]
+    #[case::map_missing(r#"{:a 1}"#, "b", "nil")]
+    #[case::map_namespaced_unreachable(r#"{:ns/a 1}"#, "a", "nil")]
+    #[case::wrong_type_vector("[1 2 3]", "a", "nil")]
+    #[case::wrong_type_nil("nil", "a", "nil")]
+    fn test_edn_index_str(#[case] input: &str, #[case] key: &str, #[case] expected: &str) {
+        let v = read_string(input).unwrap();
+        assert_eq!(v[key].to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::vector("[10 20 30]", 1, "20")]
+    #[case::list("(10 20 30)", 2, "30")]
+    #[case::vector_first("[10 20]", 0, "10")]
+    #[case::out_of_bounds("[10 20]", 5, "nil")]
+    #[case::wrong_type_map(r#"{:a 1}"#, 0, "nil")]
+    #[case::wrong_type_nil("nil", 0, "nil")]
+    fn test_edn_index_usize(#[case] input: &str, #[case] i: usize, #[case] expected: &str) {
+        let v = read_string(input).unwrap();
+        assert_eq!(v[i].to_string(), expected);
+    }
+
+    #[test]
+    fn test_edn_index_chained() {
+        let v = read_string(r#"{:users [{:name "alice"} {:name "bob"}]}"#).unwrap();
+        assert_eq!(v["users"][0]["name"].to_string(), r#""alice""#);
+        assert_eq!(v["users"][1]["name"].to_string(), r#""bob""#);
+        assert_eq!(v["users"][2]["name"].to_string(), "nil");
+        assert_eq!(v["missing"]["deep"][0].to_string(), "nil");
     }
 }

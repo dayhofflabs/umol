@@ -16,6 +16,9 @@ use crate::error::EdnError;
 use crate::ser;
 
 /// Layout knobs for [`Edn::to_string_with`] and the serde pretty path.
+///
+/// For *input* configuration (tag readers, duplicate key policy), see
+/// [`crate::ParseConfig`].
 #[derive(Clone, Debug)]
 pub struct FormatConfig {
     /// Indent string per nesting level.

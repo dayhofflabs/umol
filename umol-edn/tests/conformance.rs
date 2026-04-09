@@ -9,11 +9,10 @@ use std::str::FromStr;
 
 use rstest::rstest;
 use serde::Deserialize;
-use umol_edn::config::{DuplicateKeyPolicy, ParseConfig, TagReaders};
-use umol_edn::de::{from_str, from_str_with};
-use umol_edn::edn::{Edn, Symbol};
-use umol_edn::error::{EdnError, ParseError};
-use umol_edn::{read_all_with, read_string_with, EdnMap, EdnSet};
+use umol_edn::{
+    from_str, from_str_with, read_all_with, read_string_with, DuplicateKeyPolicy, Edn, EdnError,
+    EdnMap, EdnSet, ParseConfig, ParseError, Symbol, TagFn, TagReaders,
+};
 
 fn cfg() -> ParseConfig {
     ParseConfig::default()
@@ -743,9 +742,9 @@ fn test_uuid_invalid_rejected() {
 #[cfg(feature = "chrono")]
 #[test]
 fn test_inst_to_edn_roundtrip() {
-    use umol_edn::read_string;
+    use umol_edn::{inst_to_edn, read_string};
     let dt = chrono::DateTime::parse_from_rfc3339("2024-06-15T08:30:00+00:00").unwrap();
-    let edn_val = umol_edn::tags::inst_to_edn(&dt);
+    let edn_val = inst_to_edn(&dt);
     let printed = edn_val.to_string();
     let parsed = read_string(&printed).unwrap();
     assert_eq!(parsed, edn_val);
@@ -754,9 +753,9 @@ fn test_inst_to_edn_roundtrip() {
 #[cfg(feature = "uuid")]
 #[test]
 fn test_uuid_to_edn_roundtrip() {
-    use umol_edn::read_string;
+    use umol_edn::{read_string, uuid_to_edn};
     let id = uuid::Uuid::parse_str("f81d4fae-7dec-11d0-a765-00a0c91e6bf6").unwrap();
-    let edn_val = umol_edn::tags::uuid_to_edn(&id);
+    let edn_val = uuid_to_edn(&id);
     let printed = edn_val.to_string();
     let parsed = read_string(&printed).unwrap();
     assert_eq!(parsed, edn_val);
@@ -774,7 +773,7 @@ fn test_custom_reader_dispatch() {
         }
     }
     let mut readers = TagReaders::default();
-    readers.insert("double", double_reader);
+    readers.insert("double", std::sync::Arc::new(double_reader));
     let config = ParseConfig {
         tag_readers: readers,
         ..Default::default()
@@ -793,12 +792,34 @@ fn test_custom_reader_error_propagation() {
         })
     }
     let mut readers = TagReaders::default();
-    readers.insert("strict", strict_reader);
+    readers.insert("strict", std::sync::Arc::new(strict_reader));
     let config = ParseConfig {
         tag_readers: readers,
         ..Default::default()
     };
     assert!(read_string_with("#strict 1", &config).is_err());
+}
+
+#[test]
+fn test_tag_reader_captures_registry() {
+    let registry: std::sync::Arc<HashMap<&'static str, i64>> =
+        std::sync::Arc::new([("one", 1), ("two", 2)].into_iter().collect());
+    let captured = registry.clone();
+    let reader: TagFn = std::sync::Arc::new(move |edn| match edn {
+        Edn::Str(s) => Ok(Edn::Int(captured.get(s.as_ref()).copied().unwrap_or(-1))),
+        _ => Err(ParseError::InvalidTag {
+            offset: 0,
+            tag: "lookup".into(),
+        }),
+    });
+    let mut readers = TagReaders::default();
+    readers.insert("lookup", reader);
+    let config = ParseConfig {
+        tag_readers: readers,
+        ..Default::default()
+    };
+    let parsed = read_string_with(r#"#lookup "two""#, &config).unwrap();
+    assert_eq!(parsed, Edn::Int(2));
 }
 
 #[rstest]

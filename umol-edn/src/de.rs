@@ -56,7 +56,21 @@ pub(crate) fn visit_cow_str<'de, V: Visitor<'de>>(
 
 /// Deserialize a Rust value from a pre-parsed `Edn` value.
 pub fn from_value<'a, T: Deserialize<'a>>(val: Edn<'a>) -> Result<T, EdnError> {
-    T::deserialize(EdnDeserializer(val))}
+    T::deserialize(EdnDeserializer(val))
+}
+
+/// Deserialize a Rust value from a pre-parsed `Edn` value without consuming it.
+///
+/// Useful when the same `Edn` tree feeds multiple target types — e.g. an
+/// outer envelope is decoded, then individual fields are deserialized into
+/// several strongly-typed structs.
+///
+/// Currently implemented as a clone of the borrowed subtree followed by
+/// [`from_value`]. A zero-clone parallel deserializer is a possible future
+/// optimization, but the ergonomic API is the load-bearing piece.
+pub fn from_value_ref<'a, T: Deserialize<'a>>(val: &Edn<'a>) -> Result<T, EdnError> {
+    from_value(val.clone())
+}
 
 /// Streaming deserializer over multiple EDN values in a string.
 pub struct StreamDeserializer<'a, T> {
@@ -1345,5 +1359,28 @@ mod tests {
         struct P(i64, i64);
         let val = read_string("[5 6]").unwrap();
         assert_eq!(from_value::<P>(val).unwrap(), P(5, 6));
+    }
+
+    #[test]
+    fn test_from_value_ref_deserializes_twice() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Name {
+            name: String,
+        }
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Count {
+            count: i32,
+        }
+        let edn = read_string(r#"{:name "salt" :count 2}"#).unwrap();
+        let a: Name = from_value_ref(&edn).unwrap();
+        let b: Count = from_value_ref(&edn).unwrap();
+        assert_eq!(
+            a,
+            Name {
+                name: "salt".into()
+            }
+        );
+        assert_eq!(b, Count { count: 2 });
+        assert!(matches!(edn, Edn::Map(_)));
     }
 }
